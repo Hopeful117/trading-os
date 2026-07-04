@@ -19,7 +19,7 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    private UUID userId;
 
     @Column(nullable = false, unique = true)
     private String username;
@@ -27,5 +27,5 @@ public class User {
     @Column(nullable = false)
     private String password;
 
-    private boolean enabled;
+
 }

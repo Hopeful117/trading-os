@@ -16,7 +16,7 @@ import java.util.UUID;
 public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    private UUID accountId;
 
     @Column(nullable = false)
     private String name;
@@ -27,12 +27,13 @@ public class Account {
     @Column(nullable = false)
     private BigDecimal equity;
 
-    @Column(nullable = false)
-    private BigDecimal maxDrawdown;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "rules_id")
+    private Rules rules;
 
-    @Column(nullable = false)
-    private BigDecimal dailyLossLimit;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
 
-    private boolean active;
 }
 
