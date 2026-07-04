@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.service;
 
+import com.hope.trading.trading_core.dto.TradeRequest;
 import com.hope.trading.trading_core.exception.BrokenRulesException;
 import com.hope.trading.trading_core.helper.RiskResult;
 import com.hope.trading.trading_core.model.Account;
@@ -17,7 +18,10 @@ import java.math.BigDecimal;
 public class RiskEngineImpl implements RiskEngine {
     private final RulesRepository rulesRepository;
     @Override
-    public RiskResult assertTradeAllowed(Account account, Rules rules, BigDecimal riskAmount, BigDecimal todayPnl, int tradesToday) {
+    public RiskResult assertTradeAllowed(Account account, Rules rules, TradeRequest tradeRequest) {
+        BigDecimal riskAmount = tradeRequest.getRiskAmount();
+        BigDecimal todayPnl = tradeRequest.getTodayPnL();
+        int tradesToday = tradeRequest.getTradesToday();
         if (riskAmount.compareTo(
                 account.getBalance().multiply(rules.getMaxRiskPerTrade())
         ) > 0) {

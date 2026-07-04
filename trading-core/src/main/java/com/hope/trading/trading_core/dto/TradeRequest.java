@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 
 @Data
 public class TradeRequest {
-    private Account account;
     private String symbol;
     private TradeType type;
     private BigDecimal entryPrice;

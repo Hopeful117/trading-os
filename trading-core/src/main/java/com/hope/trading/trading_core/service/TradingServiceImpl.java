@@ -27,8 +27,7 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public Trade openTrade(TradeRequest tradeRequest) {
-        Account account = tradeRequest.getAccount();
+    public Trade openTrade(Account account, TradeRequest tradeRequest) {
         String symbol = tradeRequest.getSymbol();
         TradeType type = tradeRequest.getType();
         BigDecimal entryPrice = tradeRequest.getEntryPrice();
@@ -37,7 +36,7 @@ public class TradingServiceImpl implements TradingService {
         BigDecimal todayPnL = tradeRequest.getTodayPnL();
         int tradesToday = tradeRequest.getTradesToday();
 
-        RiskResult riskResult = riskEngine.assertTradeAllowed(account, account.getRules(), riskAmount, todayPnL, tradesToday);
+        RiskResult riskResult = riskEngine.assertTradeAllowed(account, account.getRules(),tradeRequest);
         if (!riskResult.isAllowed()) {
             throw new IllegalArgumentException("Trade not allowed: " + riskResult.getMessage());
         }
