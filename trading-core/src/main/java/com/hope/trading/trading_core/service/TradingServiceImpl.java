@@ -22,7 +22,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TradingServiceImpl implements TradingService {
     private final TradeRepository tradeRepository;
-    private final AccountRepository accountRepository;
+    private final AccountService accountService;
     private final RiskEngine riskEngine;
     private final TradingCalculatorService tradingCalculatorService;
     private final TradeRequestValidator validator;
@@ -31,8 +31,7 @@ public class TradingServiceImpl implements TradingService {
     @Override
     @Transactional
     public Trade openTrade(TradeRequest tradeRequest) {
-        Account account = accountRepository.findById(tradeRequest.getAccountId())
-                .orElseThrow(() -> new EntityNotFoundException("Account not found with id: " + tradeRequest.getAccountId()));
+        Account account = accountService.getAccountById(tradeRequest.getAccountId());
         validator.validate(tradeRequest);
 
         // 2. CALCULS
@@ -110,7 +109,7 @@ public class TradingServiceImpl implements TradingService {
                 account.getEquity().add(pnl)
         );
 
-        accountRepository.save(account);
+        accountService.updateEquity(account.getAccountId(), pnl);
 
         // 6. persist trade
         return tradeRepository.save(trade);

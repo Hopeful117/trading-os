@@ -21,7 +21,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
     private final TradeRepository tradeRepository;
-    private final AccountRepository accountRepository;
+    private final AccountService accountService;
 
     @Override
     public BigDecimal getTodayPnL(UUID accountId) {
@@ -75,7 +75,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public long getWinningTradeCount(UUID accountId) {
-        Assert.isTrue(accountRepository.existsById(accountId), "Account not found with ID: " + accountId);
+        Assert.isTrue(accountService.getAccountById(accountId) != null, "Account not found with ID: " + accountId);
         List<Trade> closedTrades = getClosedTrades(accountId);
         return closedTrades.stream()
                 .filter(trade -> trade.getPnl() != null && trade.getPnl().compareTo(BigDecimal.ZERO) > 0)
@@ -84,7 +84,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public long getLosingTradeCount(UUID accountId) {
-        Assert.isTrue(accountRepository.existsById(accountId), "Account not found with ID: " + accountId);
+        Assert.isTrue(accountService.getAccountById(accountId) != null, "Account not found with ID: " + accountId);
         List<Trade> closedTrades = getClosedTrades(accountId);
         return closedTrades.stream()
                 .filter(trade -> trade.getPnl() != null && trade.getPnl().compareTo(BigDecimal.ZERO) < 0)
@@ -93,7 +93,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public double getWinRate(UUID accountId) {
-        Assert.isTrue(accountRepository.existsById(accountId), "Account not found with ID: " + accountId);
+        Assert.isTrue(accountService.getAccountById(accountId) != null, "Account not found with ID: " + accountId);
         List<Trade> closedTrades = getClosedTrades(accountId);
         long winningTradeCount = closedTrades.stream()
                 .filter(trade -> trade.getPnl() != null && trade.getPnl().compareTo(BigDecimal.ZERO) > 0)
@@ -104,7 +104,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public BigDecimal getAverageWin(UUID accountId) {
-        Assert.isTrue(accountRepository.existsById(accountId), "Account not found with ID: " + accountId);
+        Assert.isTrue(accountService.getAccountById(accountId) != null, "Account not found with ID: " + accountId);
         List<Trade> closedTrades = getClosedTrades(accountId);
         BigDecimal totalWin = closedTrades.stream()
                 .filter(trade -> trade.getPnl() != null && trade.getPnl().compareTo(BigDecimal.ZERO) > 0)
@@ -118,7 +118,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public BigDecimal getAverageLoss(UUID accountId) {
-        Assert.isTrue(accountRepository.existsById(accountId), "Account not found with ID: " + accountId);
+        Assert.isTrue(accountService.getAccountById(accountId) != null, "Account not found with ID: " + accountId);
         List<Trade> closedTrades = getClosedTrades(accountId);
         BigDecimal totalLoss = closedTrades.stream()
                 .filter(trade -> trade.getPnl() != null && trade.getPnl().compareTo(BigDecimal.ZERO) < 0)
@@ -132,14 +132,12 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public BigDecimal getCurrentDrawdown(UUID accountId) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new EntityNotFoundException("Account not found with ID: " + accountId));
-        return account.getBalance().subtract(account.getEquity());
+        return accountService.getCurrentDrawdown(accountId);
     }
 
     @Override
     public BigDecimal getCurrentExposure(UUID accountId) {
-        Assert.isTrue(accountRepository.existsById(accountId), "Account not found with ID: " + accountId);
+        Assert.isTrue(accountService.getAccountById(accountId) != null, "Account not found with ID: " + accountId);
         List<Trade> openTrades = getOpenTrades(accountId);
             return openTrades.stream()
                 .map(trade -> trade.getEntryPrice().multiply(trade.getQuantity()))
@@ -156,8 +154,8 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public boolean hasReachedDailyLoss(UUID accountId) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new EntityNotFoundException("Account not found with ID: " + accountId));
+        Account account = accountService.getAccountById(accountId);
+        Assert.notNull(account, "Account not found with ID: " + accountId);
         BigDecimal dailyLossLimit = account.getRules().getMaxDailyLoss();
         BigDecimal totalLossToday = getTodayPnL(accountId).negate();
         return dailyLossLimit.compareTo(totalLossToday) <= 0;
