@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -147,11 +148,10 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public BigDecimal getRiskUsedToday(UUID accountId) {
-        Account account= accountRepository.findById(accountId)
-                .orElseThrow(() -> new EntityNotFoundException("Account not found with ID: " + accountId));
-        BigDecimal maxRiskPerTrade = account.getRules().getMaxRiskPerTrade();
-        int todayTradeCount = getTodayTradeCount(accountId);
-        return maxRiskPerTrade.multiply(BigDecimal.valueOf(todayTradeCount));
+        return getTodayTrades(accountId).stream()
+                .map(Trade::getRiskAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     @Override

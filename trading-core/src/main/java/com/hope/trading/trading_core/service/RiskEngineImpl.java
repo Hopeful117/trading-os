@@ -16,12 +16,18 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 @Slf4j
 public class RiskEngineImpl implements RiskEngine {
-    private final RulesRepository rulesRepository;
+    private final TradingCalculatorService tradingCalculatorService;
+    private final TradeAnalyticsService tradeAnalyticsService;
     @Override
     public RiskResult assertTradeAllowed(Account account, Rules rules, TradeRequest tradeRequest) {
-        BigDecimal riskAmount = tradeRequest.getRiskAmount();
-        BigDecimal todayPnl = tradeRequest.getTodayPnL();
-        int tradesToday = tradeRequest.getTradesToday();
+        BigDecimal riskAmount = tradingCalculatorService.calculateTradeRisk(
+
+                tradeRequest.getEntryPrice(),
+                tradeRequest.getStopLoss(),
+                tradeRequest.getQuantity()
+        );
+        BigDecimal todayPnl = tradeAnalyticsService.getTodayPnL(account.getAccountId());
+        int tradesToday = tradeAnalyticsService.getTodayTradeCount(account.getAccountId());
         if (riskAmount.compareTo(
                 account.getBalance().multiply(rules.getMaxRiskPerTrade())
         ) > 0) {

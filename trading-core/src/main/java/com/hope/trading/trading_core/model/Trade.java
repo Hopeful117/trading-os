@@ -2,10 +2,7 @@ package com.hope.trading.trading_core.model;
 
 import com.hope.trading.trading_core.helper.TradeType;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,9 +14,10 @@ import java.util.UUID;
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Trade {
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID tradeId;
 
     @Column(nullable = false)
@@ -42,6 +40,16 @@ public class Trade {
     private Instant openedAt;
 
     private Instant closedAt;
+
+    private BigDecimal stopLoss;
+
+    private BigDecimal takeProfit;
+
+    private BigDecimal riskAmount;
+
+    private BigDecimal rewardAmount;
+
+    private BigDecimal riskRewardRatio;
 
     @ManyToOne
     @JoinColumn(name = "account_id")

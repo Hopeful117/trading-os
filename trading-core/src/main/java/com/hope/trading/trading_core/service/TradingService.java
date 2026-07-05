@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public interface TradingService {
-    Trade openTrade (Account account,TradeRequest tradeRequest);
+    Trade openTrade (TradeRequest tradeRequest);
     Trade closeTrade (UUID tradeId,BigDecimal exitPrice);
 
 
