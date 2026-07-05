@@ -1,11 +1,9 @@
 package com.hope.trading.trading_core.service;
 
 import com.hope.trading.trading_core.dto.TradeRequest;
-import com.hope.trading.trading_core.exception.BrokenRulesException;
 import com.hope.trading.trading_core.helper.RiskResult;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Rules;
-import com.hope.trading.trading_core.repository.RulesRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

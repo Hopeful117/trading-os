@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.service;
 
 
+import com.hope.trading.trading_core.dto.TradingStatistics;
 import com.hope.trading.trading_core.model.Trade;
 
 import java.math.BigDecimal;
@@ -38,6 +39,8 @@ public interface TradeAnalyticsService {
     );
     List<Trade> getOpenTrades(UUID accountId);
     List<Trade> getClosedTrades(UUID accountId);
+
+    TradingStatistics getTradingStatistics(UUID accountId);
 
 
 

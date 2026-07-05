@@ -1,11 +1,13 @@
 package com.hope.trading.trading_core.service;
 
+import com.hope.trading.trading_core.dto.TradingStatistics;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
 import com.hope.trading.trading_core.helper.TimeUtils;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.TradeRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
@@ -180,5 +182,21 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
                 .filter(trade -> trade.getAccount().getAccountId().equals(accountId))
                 .filter(trade -> trade.getClosedAt() != null)
                 .toList();
+    }
+
+    @Override
+    public TradingStatistics getTradingStatistics(UUID accountId) {
+        return TradingStatistics.builder()
+                .todayPnL(getTodayPnL(accountId))
+                .totalPnL(getTotalPnL(accountId))
+                .todayTradeCount(getTodayTradeCount(accountId))
+                .openTradeCount(getOpenTradeCount(accountId))
+                .closedTradeCount(getClosedTradeCount(accountId))
+                .winRate(getWinRate(accountId))
+                .currentDrawdown(getCurrentDrawdown(accountId))
+                .currentExposure(getCurrentExposure(accountId))
+                .riskUsedToday(getRiskUsedToday(accountId))
+                .hasReachedDailyLoss(hasReachedDailyLoss(accountId))
+                .build();
     }
 }
