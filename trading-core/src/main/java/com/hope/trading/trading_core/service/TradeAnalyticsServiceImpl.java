@@ -27,21 +27,25 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public BigDecimal getTodayPnL(UUID accountId) {
-        return tradeRepository.findByAccountIdAndOpenedAtBetween(accountId, TimeUtils.startOfDay(), TimeUtils.endOfDay()).stream()
+        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(
+                accountId,
+                TimeUtils.startOfDay(),
+                TimeUtils.endOfDay()
+        ).stream()
                 .map(Trade::getPnl)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     @Override
     public BigDecimal getTotalPnL(UUID accountId) {
-        return tradeRepository.findAllByAccountId(accountId).stream()
+        return tradeRepository.findAllByAccount_AccountId(accountId).stream()
                 .map(Trade::getPnl)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     @Override
     public BigDecimal getOpenPnL(UUID accountId) {
-        return tradeRepository.findAllByAccountId(accountId).stream()
+        return tradeRepository.findAllByAccount_AccountId(accountId).stream()
                 .filter(trade -> trade.getClosedAt() == null)
                 .map(Trade::getPnl)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -49,7 +53,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public BigDecimal getClosedPnL(UUID accountId) {
-        return tradeRepository.findAllByAccountId(accountId).stream()
+        return tradeRepository.findAllByAccount_AccountId(accountId).stream()
                 .filter(trade -> trade.getClosedAt() != null)
                 .map(Trade::getPnl)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -57,22 +61,30 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public int getTodayTradeCount(UUID accountId) {
-        return tradeRepository.findByAccountIdAndOpenedAtBetween(accountId, TimeUtils.startOfDay(), TimeUtils.endOfDay()).size();
+        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(
+                accountId,
+                TimeUtils.startOfDay(),
+                TimeUtils.endOfDay()
+        ).size();
     }
 
     @Override
     public int getOpenTradeCount(UUID accountId) {
-        return tradeRepository.countByAccountIdAndClosedAtIsNull(accountId);
+        return tradeRepository.countByAccount_AccountIdAndClosedAtIsNull(accountId);
     }
 
     @Override
     public int getClosedTradeCount(UUID accountId) {
-        return tradeRepository.countByAccountIdAndClosedAtIsNotNull(accountId);
+        return tradeRepository.countByAccount_AccountIdAndClosedAtIsNotNull(accountId);
     }
 
     @Override
     public List<Trade> getTodayTrades(UUID accountId) {
-        return tradeRepository.findByAccountIdAndOpenedAtBetween(accountId, TimeUtils.startOfDay(), TimeUtils.endOfDay());
+        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(
+                accountId,
+                TimeUtils.startOfDay(),
+                TimeUtils.endOfDay()
+        );
     }
 
     @Override
@@ -165,13 +177,12 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public List<Trade> getTradesBetween(UUID accountId, Instant start, Instant end) {
-        return tradeRepository.findByAccountIdAndOpenedAtBetween(accountId, start, end);
+        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(accountId, start, end);
     }
 
     @Override
     public List<Trade> getOpenTrades(UUID accountId) {
-        return tradeRepository.findAll().stream()
-                .filter(trade -> trade.getAccount().getAccountId().equals(accountId))
+        return tradeRepository.findAllByAccount_AccountId(accountId).stream()
                 .filter(trade -> trade.getClosedAt() == null)
                 .toList();
     }

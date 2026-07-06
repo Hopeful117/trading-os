@@ -2,7 +2,9 @@ package com.hope.trading.trading_core.helper;
 
 import com.hope.trading.trading_core.dto.TradeDto;
 import com.hope.trading.trading_core.model.Trade;
+import org.springframework.stereotype.Component;
 
+@Component
 public class TradeMapper {
     public TradeDto toDto(Trade trade){
         return TradeDto.builder()

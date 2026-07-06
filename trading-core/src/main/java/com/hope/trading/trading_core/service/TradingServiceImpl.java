@@ -168,7 +168,7 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     public List<Trade> getTradesByFilters(UUID accountId, TradeType type, String symbol) {
-        return tradeRepository.findAllByAccountId(accountId).stream().filter(trade -> {
+        return tradeRepository.findAllByAccount_AccountId(accountId).stream().filter(trade -> {
             boolean matchesType = type == null || trade.getType() == type;
             boolean matchesSymbol = symbol == null || trade.getSymbol().equals(symbol);
             return matchesType && matchesSymbol;

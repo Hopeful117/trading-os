@@ -51,7 +51,7 @@ public class Trade {
 
     private BigDecimal riskRewardRatio;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "account_id")
     private Account account;
 }

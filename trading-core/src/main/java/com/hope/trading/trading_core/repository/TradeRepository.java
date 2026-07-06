@@ -8,14 +8,15 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TradeRepository extends JpaRepository<Trade, UUID> {
-    List<Trade> findByAccountIdAndOpenedAtBetween(
+    List<Trade> findByAccount_AccountIdAndOpenedAtBetween(
             UUID accountId,
             Instant start,
             Instant end
     );
-    List<Trade> findAllByAccountId(UUID accountId);
 
-    int countByAccountIdAndClosedAtIsNotNull(UUID accountId);
+    List<Trade> findAllByAccount_AccountId(UUID accountId);
 
-    int countByAccountIdAndClosedAtIsNull(UUID accountId);
+    int countByAccount_AccountIdAndClosedAtIsNotNull(UUID accountId);
+
+    int countByAccount_AccountIdAndClosedAtIsNull(UUID accountId);
 }
