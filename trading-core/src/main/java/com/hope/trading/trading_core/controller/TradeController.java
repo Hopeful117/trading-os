@@ -31,9 +31,9 @@ public class TradeController {
      * @return the created trade as a DTO
      */
     @PostMapping
-    public ResponseEntity<TradeDto> createTrade(TradeRequest tradeRequest) {
-        Trade trade = tradingService.openTrade(tradeRequest);
-        return ResponseEntity.ok(tradeMapper.toDto(trade));
+    public ResponseEntity<TradeDto> createTrade(@RequestBody TradeRequest tradeRequest) {
+        TradeDto trade = tradingService.openTrade(tradeRequest);
+        return ResponseEntity.ok(trade);
     }
 
     /**
@@ -44,7 +44,7 @@ public class TradeController {
 
     @GetMapping("/{tradeId}")
     public ResponseEntity<TradeDto> getTrade(@PathVariable UUID tradeId) {
-        return ResponseEntity.ok(tradeMapper.toDto(tradingService.getTradeById(tradeId)));
+        return ResponseEntity.ok(tradingService.getTradeById(tradeId));
     }
 
     /**
@@ -61,8 +61,8 @@ public class TradeController {
             @RequestParam(required = false) TradeType type,
             @RequestParam(required = false) String symbol
     ) {
-        List<Trade> trades = tradingService.getTradesByFilters(accountId, type, symbol);
-        return ResponseEntity.ok(trades.stream().map(tradeMapper::toDto).toList());
+        List<TradeDto> trades = tradingService.getTradesByFilters(accountId, type, symbol);
+        return ResponseEntity.ok(trades);
     }
 
     /**
@@ -73,8 +73,8 @@ public class TradeController {
      */
     @PostMapping("/{tradeId}/close")
     public ResponseEntity<TradeDto> closeTrade(@PathVariable UUID tradeId, @RequestParam BigDecimal exitPrice) {
-        Trade trade = tradingService.closeTrade(tradeId, exitPrice);
-        return ResponseEntity.ok(tradeMapper.toDto(trade));
+        TradeDto trade = tradingService.closeTrade(tradeId, exitPrice);
+        return ResponseEntity.ok(trade);
     }
 
     /**
@@ -90,8 +90,8 @@ public class TradeController {
             @RequestParam BigDecimal quantity,
             @RequestParam BigDecimal exitPrice
     ) {
-        Trade trade = tradingService.partialClose(tradeId, quantity, exitPrice);
-        return ResponseEntity.ok(tradeMapper.toDto(trade));
+        TradeDto trade = tradingService.partialClose(tradeId, quantity, exitPrice);
+        return ResponseEntity.ok(trade);
     }
 
     /**
@@ -105,8 +105,8 @@ public class TradeController {
             @PathVariable UUID tradeId,
             @RequestParam BigDecimal stopLoss
     ) {
-        Trade trade = tradingService.updateStopLoss(tradeId, stopLoss);
-        return ResponseEntity.ok(tradeMapper.toDto(trade));
+        TradeDto trade = tradingService.updateStopLoss(tradeId, stopLoss);
+        return ResponseEntity.ok(trade);
     }
 
     /**
@@ -120,7 +120,7 @@ public class TradeController {
             @PathVariable UUID tradeId,
             @RequestParam BigDecimal takeProfit
     ) {
-        Trade trade = tradingService.updateTakeProfit(tradeId, takeProfit);
-        return ResponseEntity.ok(tradeMapper.toDto(trade));
+        TradeDto trade = tradingService.updateTakeProfit(tradeId, takeProfit);
+        return ResponseEntity.ok(trade);
     }
 }

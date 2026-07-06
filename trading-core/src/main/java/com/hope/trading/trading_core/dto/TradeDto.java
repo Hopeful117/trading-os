@@ -42,4 +42,6 @@ public class TradeDto {
     private BigDecimal rewardAmount;
 
     private BigDecimal riskRewardRatio;
+
+
 }

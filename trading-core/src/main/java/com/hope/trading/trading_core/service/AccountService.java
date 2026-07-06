@@ -1,12 +1,17 @@
 package com.hope.trading.trading_core.service;
 
+import com.hope.trading.trading_core.dto.AccountDto;
+import com.hope.trading.trading_core.dto.AccountRequest;
 import com.hope.trading.trading_core.model.Account;
+import com.hope.trading.trading_core.model.Rules;
+import com.hope.trading.trading_core.model.User;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 public interface AccountService {
-    Account getAccountById(UUID accountId);
+    AccountDto getAccountById(UUID accountId);
     BigDecimal getBalance(UUID accountId);
 
     BigDecimal getEquity(UUID accountId);
@@ -14,6 +19,10 @@ public interface AccountService {
     void updateEquity(UUID accountId, BigDecimal pnl);
 
     BigDecimal getCurrentDrawdown(UUID accountId);
+
+    AccountDto createAccount(AccountRequest accountRequest);
+
+    List<AccountDto> getAllAccounts();
 
 
 

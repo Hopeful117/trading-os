@@ -24,6 +24,7 @@ import java.util.UUID;
 public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
     private final TradeRepository tradeRepository;
     private final AccountService accountService;
+    private final AccountRepository accountRepository;
 
     @Override
     public BigDecimal getTodayPnL(UUID accountId) {
@@ -168,7 +169,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public boolean hasReachedDailyLoss(UUID accountId) {
-        Account account = accountService.getAccountById(accountId);
+        Account account = accountRepository.findById(accountId).orElseThrow(() -> new EntityNotFoundException("Account not found with ID: " + accountId));
         Assert.notNull(account, "Account not found with ID: " + accountId);
         BigDecimal dailyLossLimit = account.getRules().getMaxDailyLoss();
         BigDecimal totalLossToday = getTodayPnL(accountId).negate();
