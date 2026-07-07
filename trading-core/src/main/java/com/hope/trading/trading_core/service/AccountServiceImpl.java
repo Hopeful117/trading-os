@@ -71,6 +71,7 @@ public class AccountServiceImpl implements AccountService {
         if (accountRequest.getUserId() != null) {
             User user = User.builder().userId(accountRequest.getUserId()).build();
             account.setUser(user);
+            user.addAccount(account);
         }
 
         account.setEquity(account.getBalance());

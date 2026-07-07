@@ -13,33 +13,25 @@ import java.math.BigDecimal;
 @Builder
 public class TradingStatistics {
 
+    // PnL
     private BigDecimal todayPnL;
-
     private BigDecimal totalPnL;
 
-    private int todayTrades;
-
+    // Activité
     private int todayTradeCount;
-
     private int openTradeCount;
-
     private int closedTradeCount;
 
-    private BigDecimal currentDrawdown;
-
-    private BigDecimal currentExposure;
-
+    // Performance
     private long winners;
-
     private long losers;
-
     private double winRate;
+    private BigDecimal averageWin;
+    private BigDecimal averageLoss;
 
-    private BigDecimal exposure;
-
-    private BigDecimal drawdown;
-
+    // Risque
+    private BigDecimal currentDrawdown;
+    private BigDecimal currentExposure;
     private BigDecimal riskUsedToday;
-
     private Boolean hasReachedDailyLoss;
 }
