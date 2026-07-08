@@ -32,6 +32,22 @@ services:
 
     restart: unless-stopped
 
+  broker-service:
+    build: ./broker-service
+    container_name: broker-service
+    environment:
+      KRAKEN_BASE_URL: ${KRAKEN_BASE_URL}
+      KRAKEN_API_KEY: ${KRAKEN_API_KEY}
+      KRAKEN_API_SECRET: ${KRAKEN_API_SECRET}
+
+    networks:
+      trading-network:
+
+    ports:
+      - "8082:8082"
+
+    restart: unless-stopped
+
 
 
   eureka-server:
