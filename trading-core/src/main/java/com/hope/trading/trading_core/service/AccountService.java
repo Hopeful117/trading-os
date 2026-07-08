@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.service;
 
+import com.hope.trading.trading_core.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.dto.AccountDto;
 import com.hope.trading.trading_core.dto.AccountRequest;
 import com.hope.trading.trading_core.model.Account;
@@ -12,7 +13,9 @@ import java.util.UUID;
 
 public interface AccountService {
     AccountDto getAccountById(UUID accountId);
-    BigDecimal getBalance(UUID accountId);
+    List<AccountBalanceDto> getAllBalances(UUID accountId);
+
+    BigDecimal getTotalBalance(UUID accountId);
 
     BigDecimal getEquity(UUID accountId);
 

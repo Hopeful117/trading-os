@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -19,13 +20,13 @@ public class AccountRequest {
     @NotBlank
     private String name;
 
-    @NotNull
-    @PositiveOrZero
-    private BigDecimal balance;
 
     @NotNull
     @PositiveOrZero
-    private BigDecimal equity;
+    private BigDecimal initialEquity;
+
+    private String baseCurrency;
+
 
     private UUID rulesId;
     private UUID userId;
