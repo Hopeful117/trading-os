@@ -29,4 +29,5 @@ public class AccountDto {
     private UUID rulesId;
 
     private UUID userId;
+
 }

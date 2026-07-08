@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.dto;
 
+import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -42,6 +43,8 @@ public class TradeDto {
     private BigDecimal rewardAmount;
 
     private BigDecimal riskRewardRatio;
+
+    private TradeStatus tradeStatus;
 
 
 }

@@ -25,6 +25,7 @@ public class TradeMapper {
                 .riskAmount(trade.getRiskAmount())
                 .rewardAmount(trade.getRewardAmount())
                 .riskRewardRatio(trade.getRiskRewardRatio())
+                .tradeStatus(trade.getTradeStatus())
                 .build();
     }
 

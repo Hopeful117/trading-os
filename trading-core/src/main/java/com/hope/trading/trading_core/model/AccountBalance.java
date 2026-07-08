@@ -12,6 +12,7 @@ import java.util.UUID;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
+@Table(name = "account-balance")
 public class AccountBalance {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)

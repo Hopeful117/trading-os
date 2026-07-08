@@ -3,14 +3,10 @@ package com.hope.trading.trading_core.helper;
 import com.hope.trading.trading_core.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.dto.AccountDto;
 import com.hope.trading.trading_core.dto.AccountRequest;
-import com.hope.trading.trading_core.model.Account;
-import com.hope.trading.trading_core.model.AccountBalance;
-import com.hope.trading.trading_core.model.Rules;
-import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.model.*;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.util.stream.Collectors;
 
 @Component
 public class AccountMapper {
@@ -41,6 +37,7 @@ public class AccountMapper {
                                     .map(this::toBalanceDto)
                                     .toList()
                     )
+
                     .build();
         }
 
@@ -53,6 +50,8 @@ public class AccountMapper {
                     .amount(balance.getAmount())
                     .build();
         }
+
+
 
 
         public Account toEntity(AccountRequest accountRequest) {

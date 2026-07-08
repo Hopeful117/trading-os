@@ -6,10 +6,7 @@ import com.hope.trading.trading_core.dto.TradeDto;
 import com.hope.trading.trading_core.dto.TradeRequest;
 import com.hope.trading.trading_core.exception.BrokenRulesException;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
-import com.hope.trading.trading_core.helper.AccountMapper;
-import com.hope.trading.trading_core.helper.RiskResult;
-import com.hope.trading.trading_core.helper.TradeMapper;
-import com.hope.trading.trading_core.helper.TradeType;
+import com.hope.trading.trading_core.helper.*;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.repository.AccountRepository;
@@ -56,7 +53,7 @@ public class TradingServiceImpl implements TradingService {
         TradeCalculation calc = tradingCalculatorService.calculate(tradeRequest,entryPrice,availableFunds);
 
         // 3. RISK CHECK
-        RiskResult result = riskEngine.assertTradeAllowed(account, account.getRules(), tradeRequest);
+        RiskResult result = riskEngine.assertTradeAllowed(account, account.getRules(), tradeRequest,entryPrice,availableFunds);
 
         if (!result.isAllowed()) {
             throw new BrokenRulesException(result.getMessage());
@@ -66,6 +63,8 @@ public class TradingServiceImpl implements TradingService {
         Trade trade = tradeMapper.toEntity(tradeRequest,calc);
         trade.setAccount(account);
         trade.setOpenedAt(Instant.now());
+        trade.setTradeStatus(TradeStatus.OPEN);
+        trade.setCurrentPrice(entryPrice);
 
         return tradeMapper.toDto(tradeRepository.save(trade));
 
@@ -87,6 +86,8 @@ public class TradingServiceImpl implements TradingService {
         // 3. update trade state
         trade.setExitPrice(exitPrice);
         trade.setClosedAt(Instant.now());
+        trade.setCurrentPrice(exitPrice);
+        trade.setTradeStatus(TradeStatus.CLOSED);
 
         // 4. calculate pnl (clean + stateless)
         BigDecimal pnl = tradingCalculatorService.calculatePnL(
@@ -139,11 +140,13 @@ public class TradingServiceImpl implements TradingService {
         // Update the trade's quantity and PnL
         trade.setQuantity(trade.getQuantity().subtract(quantity));
         trade.setPnl(trade.getPnl() == null ? pnl : trade.getPnl().add(pnl));
+        trade.setCurrentPrice(exitPrice);
 
         // If the remaining quantity is zero, mark the trade as closed
         if (trade.getQuantity().compareTo(BigDecimal.ZERO) == 0) {
             trade.setClosedAt(Instant.now());
             trade.setExitPrice(exitPrice);
+            trade.setTradeStatus(TradeStatus.CLOSED);
         }
 
         // Update account equity

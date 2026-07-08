@@ -2,6 +2,7 @@ package com.hope.trading.broker_service.httpClient;
 
 import com.hope.trading.broker_service.config.KrakenProperties;
 import com.hope.trading.broker_service.dto.KrakenAccountBalanceResponse;
+import com.hope.trading.broker_service.dto.KrakenOpenPositionResponse;
 import com.hope.trading.broker_service.dto.KrakenTickerResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -32,6 +33,15 @@ public class KrakenRestClientImpl implements KrakenHttpClient {
                 "/0/private/Balance",
                 new LinkedMultiValueMap<>(),
                 KrakenAccountBalanceResponse.class
+        );
+    }
+
+    @Override
+    public KrakenOpenPositionResponse getOpenPositions(){
+        return privatePost("/0/private/OpenPositions",
+                new LinkedMultiValueMap<>(),
+                KrakenOpenPositionResponse.class
+
         );
     }
 

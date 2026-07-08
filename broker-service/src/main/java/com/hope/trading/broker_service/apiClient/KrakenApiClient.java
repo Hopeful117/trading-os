@@ -29,6 +29,21 @@ public class KrakenApiClient implements BrokerProvider {
 
     @Override
     public List<Position> getOpenPositions() {
-        return List.of();
+        KrakenOpenPositionResponse response = httpClient.getOpenPositions();
+
+        if (response.getResults() == null || response.getResults().isEmpty()) {
+            return List.of();
+        }
+
+        return response.getResults()
+                .entrySet()
+                .stream()
+                .map(entry ->
+                        krakenMapper.toPosition(
+                                entry.getKey(),
+                                entry.getValue()
+                        )
+                )
+                .toList();
     }
 }

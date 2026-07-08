@@ -16,35 +16,65 @@ import java.math.BigDecimal;
 public class RiskEngineImpl implements RiskEngine {
     private final TradingCalculatorService tradingCalculatorService;
     private final TradeAnalyticsService tradeAnalyticsService;
-    @Override
-    public RiskResult assertTradeAllowed(Account account, Rules rules, TradeRequest tradeRequest) {
-        BigDecimal riskAmount = tradingCalculatorService.calculateTradeRisk(
+    private final AccountService accountService;
 
-                tradeRequest.getEntryPrice(),
-                tradeRequest.getStopLoss(),
-                tradeRequest.getQuantity()
-        );
-        BigDecimal todayPnl = tradeAnalyticsService.getTodayPnL(account.getAccountId());
-        int tradesToday = tradeAnalyticsService.getTodayTradeCount(account.getAccountId());
+    @Override
+    public RiskResult assertTradeAllowed(Account account, Rules rules, TradeRequest tradeRequest, BigDecimal entryPrice, BigDecimal availableBalance) {
+        BigDecimal riskAmount =
+                tradingCalculatorService.calculateTradeRisk(
+                        entryPrice,
+                        tradeRequest.getStopLoss(),
+                        tradeRequest.getQuantity()
+                );
+
+
+        BigDecimal todayPnl =
+                tradeAnalyticsService.getTodayPnL(
+                        account.getAccountId()
+                );
+
+
+        int tradesToday =
+                tradeAnalyticsService.getTodayTradeCount(
+                        account.getAccountId()
+                );
+
+
         if (riskAmount.compareTo(
-                account.getBalance().multiply(rules.getMaxRiskPerTrade())
+                availableBalance.multiply(
+                        rules.getMaxRiskPerTrade()
+                )
         ) > 0) {
-            return RiskResult.reject("Max risk per trade exceeded");
+
+            return RiskResult.reject(
+                    "Max risk per trade exceeded"
+            );
         }
+
 
         if (todayPnl.compareTo(
-                account.getBalance().multiply(rules.getMaxDailyLoss()).negate()
+                availableBalance.multiply(
+                        rules.getMaxDailyLoss()
+                ).negate()
         ) < 0) {
-            return RiskResult.reject("Daily loss limit exceeded");
+
+            return RiskResult.reject(
+                    "Daily loss limit exceeded"
+            );
         }
+
 
         if (rules.getMaxTradesPerDay() != null &&
                 tradesToday >= rules.getMaxTradesPerDay()) {
-            return RiskResult.reject("Max trades per day exceeded");
+
+            return RiskResult.reject(
+                    "Max trades per day exceeded"
+            );
         }
 
-        return RiskResult.allowed();
-    }
 
+        return RiskResult.allowed();
+
+    }
 }
 

@@ -31,6 +31,8 @@ public class Trade {
     @Column(nullable = false)
     private BigDecimal entryPrice;
 
+    private BigDecimal currentPrice;
+
     private BigDecimal exitPrice;
 
     @Column(nullable = false)

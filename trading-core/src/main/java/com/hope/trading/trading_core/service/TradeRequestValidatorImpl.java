@@ -19,9 +19,6 @@ public class TradeRequestValidatorImpl implements TradeRequestValidator {
             throw new IllegalArgumentException("Symbol is required");
         }
 
-        if (request.getEntryPrice() == null) {
-            throw new IllegalArgumentException("EntryPrice is required");
-        }
 
         if (request.getQuantity() == null) {
             throw new IllegalArgumentException("Quantity is required");
@@ -36,9 +33,7 @@ public class TradeRequestValidatorImpl implements TradeRequestValidator {
         }
 
 
-        if (request.getStopLoss().compareTo(request.getEntryPrice()) == 0) {
-            throw new IllegalArgumentException("StopLoss cannot equal entry price");
-        }
+
     }
 
 }
