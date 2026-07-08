@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.model;
 
+import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -10,7 +11,7 @@ import java.util.UUID;
 
 @Getter
 @Setter
-@Table(name = "trade")
+@Table(name = "trades")
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor
@@ -54,4 +55,8 @@ public class Trade {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "account_id")
     private Account account;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TradeStatus tradeStatus;
 }

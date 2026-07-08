@@ -57,17 +57,17 @@ public class TradingCalculatorServiceImpl implements TradingCalculatorService {
         return riskAmount.divide(unitRisk, 2, RoundingMode.HALF_UP);
     }
 
-    public TradeCalculation calculate(TradeRequest request,
+    public TradeCalculation calculate(TradeRequest request,BigDecimal entryPrice,
                                       BigDecimal maxRiskAmount) {
 
         BigDecimal risk = calculateTradeRisk(
-                request.getEntryPrice(),
+                entryPrice,
                 request.getStopLoss(),
                 request.getQuantity()
         );
 
         BigDecimal reward = calculateReward(
-                request.getEntryPrice(),
+                entryPrice,
                 request.getTakeProfit(),
                 request.getQuantity()
         );

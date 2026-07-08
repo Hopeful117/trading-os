@@ -19,7 +19,7 @@ public interface TradingCalculatorService {
             BigDecimal stopLoss,
             BigDecimal quantity
     );
-    TradeCalculation calculate(TradeRequest request, BigDecimal maxRiskAmount);
+    TradeCalculation calculate(TradeRequest request,BigDecimal entryPrice, BigDecimal maxRiskAmount);
 
     BigDecimal calculatePositionSize(BigDecimal riskAmount, BigDecimal entryPrice, BigDecimal stopLoss);
 

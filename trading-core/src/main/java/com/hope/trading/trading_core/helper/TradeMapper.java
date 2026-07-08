@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.helper;
 
+import com.hope.trading.trading_core.dto.TradeCalculation;
 import com.hope.trading.trading_core.dto.TradeDto;
 import com.hope.trading.trading_core.dto.TradeRequest;
 import com.hope.trading.trading_core.model.Trade;
@@ -7,7 +8,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class TradeMapper {
-    public TradeDto toDto(Trade trade){
+    public TradeDto toDto(Trade trade) {
+
         return TradeDto.builder()
                 .tradeId(trade.getTradeId())
                 .symbol(trade.getSymbol())
@@ -26,14 +28,19 @@ public class TradeMapper {
                 .build();
     }
 
-    public Trade toEntity(TradeRequest tradeRequest){
+
+    public Trade toEntity(TradeRequest tradeRequest, TradeCalculation calculation) {
+
         return Trade.builder()
                 .symbol(tradeRequest.getSymbol())
                 .type(tradeRequest.getType())
-                .entryPrice(tradeRequest.getEntryPrice())
+                .entryPrice(calculation.getEntryPrice())
                 .quantity(tradeRequest.getQuantity())
                 .stopLoss(tradeRequest.getStopLoss())
                 .takeProfit(tradeRequest.getTakeProfit())
+                .riskAmount(calculation.getRiskAmount())
+                .rewardAmount(calculation.getRewardAmount())
+                .riskRewardRatio(calculation.getRiskRewardRatio())
                 .build();
     }
 }

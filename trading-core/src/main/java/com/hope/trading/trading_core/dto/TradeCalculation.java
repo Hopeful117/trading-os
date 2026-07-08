@@ -10,6 +10,8 @@ import java.math.BigDecimal;
 @Builder
 @AllArgsConstructor
 public class TradeCalculation {
+    private BigDecimal entryPrice;
+
     private BigDecimal riskAmount;
 
     private BigDecimal rewardAmount;

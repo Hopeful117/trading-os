@@ -26,6 +26,10 @@ public interface AccountService {
     AccountDto createAccount(AccountRequest accountRequest);
 
     List<AccountDto> getAllAccounts();
+    BigDecimal getAvailableBalance(
+            UUID accountId,
+            String asset
+    );
 
 
 

@@ -177,6 +177,20 @@ public class AccountServiceImpl implements AccountService {
                 .toList();
     }
 
+    @Override
+    public BigDecimal getAvailableBalance(UUID accountId, String asset) {
+        Account account = findAccount(accountId);
+
+        return account.getBalances()
+                .stream()
+                .filter(balance ->
+                        balance.getAsset().equalsIgnoreCase(asset)
+                )
+                .map(AccountBalance::getAmount)
+                .findFirst()
+                .orElse(BigDecimal.ZERO);
+    }
+
 
     private Account findAccount(UUID accountId) {
 

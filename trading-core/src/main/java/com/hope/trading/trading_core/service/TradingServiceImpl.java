@@ -44,9 +44,16 @@ public class TradingServiceImpl implements TradingService {
                 .orElseThrow(() ->
                         new EntityNotFoundException("Account not found with id: " + tradeRequest.getAccountId()));
         validator.validate(tradeRequest);
+        BigDecimal availableFunds =
+                accountService.getAvailableBalance(
+                        account.getAccountId(),
+                        tradeRequest.getQuoteAsset()
+                );
+        BigDecimal entryPrice = null;
+        //remplacer par brokerService.getCurrentPrice(tradeRequest.getSymbol());
 
         // 2. CALCULS
-        TradeCalculation calc = tradingCalculatorService.calculate(tradeRequest, account.getBalance());
+        TradeCalculation calc = tradingCalculatorService.calculate(tradeRequest,entryPrice,availableFunds);
 
         // 3. RISK CHECK
         RiskResult result = riskEngine.assertTradeAllowed(account, account.getRules(), tradeRequest);
@@ -56,7 +63,7 @@ public class TradingServiceImpl implements TradingService {
         }
 
         // 4. DOMAIN OBJECT
-        Trade trade = tradeMapper.toEntity(tradeRequest);
+        Trade trade = tradeMapper.toEntity(tradeRequest,calc);
         trade.setAccount(account);
         trade.setOpenedAt(Instant.now());
 
