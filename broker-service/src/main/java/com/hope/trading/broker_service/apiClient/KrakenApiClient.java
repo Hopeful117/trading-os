@@ -1,9 +1,6 @@
 package com.hope.trading.broker_service.apiClient;
 
-import com.hope.trading.broker_service.dto.AccountInfo;
-import com.hope.trading.broker_service.dto.KrakenTickerResponse;
-import com.hope.trading.broker_service.dto.MarketPrice;
-import com.hope.trading.broker_service.dto.Position;
+import com.hope.trading.broker_service.dto.*;
 import com.hope.trading.broker_service.helper.KrakenMapper;
 import com.hope.trading.broker_service.httpClient.KrakenHttpClient;
 import lombok.RequiredArgsConstructor;
@@ -19,8 +16,9 @@ public class KrakenApiClient implements BrokerProvider {
     private final KrakenMapper krakenMapper;
 
     @Override
-    public AccountInfo getAccount() {
-        return null;
+    public AccountBalance getAccount() {
+        KrakenAccountBalanceResponse response = httpClient.getBalances();
+        return krakenMapper.toAccountBalance(response);
     }
 
     @Override

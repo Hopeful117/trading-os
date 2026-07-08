@@ -1,8 +1,6 @@
 package com.hope.trading.broker_service.helper;
 
-import com.hope.trading.broker_service.dto.KrakenTickerResponse;
-import com.hope.trading.broker_service.dto.KrakenTickerResult;
-import com.hope.trading.broker_service.dto.MarketPrice;
+import com.hope.trading.broker_service.dto.*;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -32,4 +30,13 @@ public class KrakenMapper {
                 .timestamp(Instant.now())
                 .build();
     }
+    public AccountBalance toAccountBalance(
+            KrakenAccountBalanceResponse response
+    ) {
+
+        return AccountBalance.builder()
+                .balances(response.getResult())
+                .build();
+    }
+
 }

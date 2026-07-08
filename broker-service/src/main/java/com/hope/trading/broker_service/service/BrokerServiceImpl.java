@@ -1,7 +1,7 @@
 package com.hope.trading.broker_service.service;
 
 import com.hope.trading.broker_service.apiClient.BrokerProvider;
-import com.hope.trading.broker_service.dto.AccountInfo;
+import com.hope.trading.broker_service.dto.AccountBalance;
 import com.hope.trading.broker_service.dto.MarketPrice;
 import com.hope.trading.broker_service.dto.Position;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,7 @@ public class BrokerServiceImpl implements BrokerService {
     private final BrokerProvider brokerProvider;
 
     @Override
-    public AccountInfo getAccount() {
+    public AccountBalance getBalance() {
         return brokerProvider.getAccount();
     }
 

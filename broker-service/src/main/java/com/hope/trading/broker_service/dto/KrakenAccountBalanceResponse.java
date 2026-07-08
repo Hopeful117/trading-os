@@ -6,15 +6,15 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
-@NoArgsConstructor
 @AllArgsConstructor
-public class AccountInfo {
-    private BigDecimal balance;
+@NoArgsConstructor
+public class KrakenAccountBalanceResponse {
+    private List<String> error;
 
-    private BigDecimal equity;
-
-    private String currency;
+    private Map<String, BigDecimal> result;
 }

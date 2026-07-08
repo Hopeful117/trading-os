@@ -1,6 +1,6 @@
 package com.hope.trading.broker_service.controller;
 
-import com.hope.trading.broker_service.dto.AccountInfo;
+import com.hope.trading.broker_service.dto.AccountBalance;
 import com.hope.trading.broker_service.dto.MarketPrice;
 import com.hope.trading.broker_service.dto.Position;
 import com.hope.trading.broker_service.service.BrokerService;
@@ -19,9 +19,9 @@ import java.util.List;
 public class BrokerController {
     private final BrokerService brokerService;
 
-    @GetMapping("/account")
-    public ResponseEntity<AccountInfo> getAccount(){
-        return ResponseEntity.ok(brokerService.getAccount());
+    @GetMapping("/balance")
+    public ResponseEntity<AccountBalance> getAccount(){
+        return ResponseEntity.ok(brokerService.getBalance());
     }
 
     @GetMapping("/positions")
