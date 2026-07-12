@@ -47,6 +47,8 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         synchronizeOpenTrades(account, snapshot);
 
         recalculateAccount(account);
+
+        accountRepository.save(account);
     }
 
     private Account synchronizeAccount(User user,BrokerAccountDto snapshot){
@@ -66,7 +68,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
         }
 
-        return accountRepository.save(account);
+        return account;
 
 
 
@@ -85,10 +87,9 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                             AccountBalance.builder()
                                     .asset(asset)
                                     .amount(amount)
-                                    .account(account)
                                     .build();
 
-                    account.getBalances().add(balance);
+                    account.addBalance(balance);
                 });
     }
     private void synchronizeOpenTrades(
@@ -110,13 +111,12 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                             .entryPrice(position.getEntryValue())
                             .quantity(position.getQuantity())
                             .tradeStatus(TradeStatus.OPEN)
-                            .account(account)
                             .build();
 
-                    account.getTrades().add(trade);
+                    account.addTrade(trade);
                 });
 
-        accountRepository.save(account);
+
 
     }
     // TODO : remplacer par un calcul basé sur la valorisation complète des actifs
@@ -161,7 +161,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         }
 
 
-        accountRepository.save(account);
+
     }
 
 

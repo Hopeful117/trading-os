@@ -95,21 +95,7 @@ public class AccountServiceImpl implements AccountService {
     }
 
 
-    @Override
-    @Transactional
-    public void createAccount(BrokerAccountDto brokerAccountDto,String username) {
-        User user=userRepository.findByUsername(username).orElseThrow(()->new EntityNotFoundException("User not found"));
-        if(accountRepository.existByUser_UserIdAndBroker(user.getUserId(), brokerAccountDto.getBroker())){
-            throw new DuplicateRessourceException("Account already exists");
-        }
 
-        Account account = accountMapper.toEntity(brokerAccountDto);
-
-            account.setUser(user);
-
-            user.addAccount(account);
-            accountRepository.save(account);
-        }
 
 
 

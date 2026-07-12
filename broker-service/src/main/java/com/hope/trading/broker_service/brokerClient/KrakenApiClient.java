@@ -1,4 +1,4 @@
-package com.hope.trading.broker_service.apiClient;
+package com.hope.trading.broker_service.brokerClient;
 
 import com.hope.trading.broker_service.dto.*;
 import com.hope.trading.broker_service.helper.KrakenMapper;
@@ -14,6 +14,16 @@ import java.util.List;
 public class KrakenApiClient implements BrokerProvider {
     private final KrakenHttpClient httpClient;
     private final KrakenMapper krakenMapper;
+
+    @Override
+    public String getBrokerName() {
+        return "KRAKEN";
+    }
+
+    @Override
+    public String getBaseCurrency(){
+        return "EUR";
+    }
 
     @Override
     public AccountBalance getBalance() {

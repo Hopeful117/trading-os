@@ -20,7 +20,6 @@ public interface AccountService {
 
     BigDecimal getCurrentDrawdown(UUID accountId);
 
-    void createAccount(BrokerAccountDto brokerAccountDto,String username);
 
     List<AccountDto> getAllUserAccounts(String username);
     BigDecimal getAvailableBalance(

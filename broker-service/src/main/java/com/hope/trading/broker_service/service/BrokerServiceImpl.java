@@ -1,7 +1,8 @@
 package com.hope.trading.broker_service.service;
 
-import com.hope.trading.broker_service.apiClient.BrokerProvider;
+import com.hope.trading.broker_service.brokerClient.BrokerProvider;
 import com.hope.trading.broker_service.dto.AccountBalance;
+import com.hope.trading.broker_service.dto.BrokerAccountDto;
 import com.hope.trading.broker_service.dto.MarketPrice;
 import com.hope.trading.broker_service.dto.Position;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,7 @@ public class BrokerServiceImpl implements BrokerService {
 
     @Override
     public AccountBalance getBalance() {
-        return brokerProvider.getAccount();
+        return brokerProvider.getBalance();
     }
 
     @Override
@@ -27,5 +28,17 @@ public class BrokerServiceImpl implements BrokerService {
     @Override
     public MarketPrice getMarketPrice(String symbol) {
         return brokerProvider.getMarketPrice(symbol);
+    }
+
+    @Override
+    public BrokerAccountDto getAccount() {
+
+        return BrokerAccountDto.builder()
+                .broker(brokerProvider.getBrokerName())
+                .baseCurrency(brokerProvider.getBaseCurrency())
+                .accountName("Main Account") // temporaire
+                .balances(getBalance())
+                .openTrades(getOpenPositions())
+                .build();
     }
 }

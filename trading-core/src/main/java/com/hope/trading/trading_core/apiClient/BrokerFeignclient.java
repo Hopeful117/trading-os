@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 )
 public interface BrokerFeignclient extends BrokerApiClient{
     @Override
-    @GetMapping("/broker/account")
+    @GetMapping("/api/v1/broker/account")
     BrokerAccountDto getAccount();
 
 }

@@ -31,18 +31,6 @@ public class AccountController {
     private final BrokerSynchronizationService brokerSynchronizationService;
     private final AccountMapper accountMapper;
 
-    /**
-     * Creates a new account based on the provided AccountRequest. The request is validated, and if successful, a new account is created and returned as an AccountDto.
-     * @param brokerAccountDto the request containing account details
-     * @return the created account as a DTO
-     */
-    @PostMapping
-    public ResponseEntity<?> createAccount(@RequestBody BrokerAccountDto brokerAccountDto, @AuthenticationPrincipal UserDetails userDetails) {
-
-        String username= userDetails.getUsername();
-        accountService.createAccount(brokerAccountDto,username);
-        return ResponseEntity.ok("User created successfully");
-    }
 
     /**
      * Fetch the account based on the provided account id

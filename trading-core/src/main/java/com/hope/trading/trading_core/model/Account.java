@@ -42,12 +42,13 @@ public class Account {
     private List<AccountBalance> balances = new ArrayList<>();
 
 
+    @Builder.Default
     @Column(nullable = false)
-    private BigDecimal peakEquity;
+    private BigDecimal peakEquity = BigDecimal.ZERO;
 
-
+    @Builder.Default
     @Column(nullable = false)
-    private BigDecimal equity;
+    private BigDecimal equity = BigDecimal.ZERO;
 
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -66,6 +67,17 @@ public class Account {
             mappedBy = "account"
     )
     private List<Trade> trades = new ArrayList<>();
+
+
+    public void addBalance(AccountBalance balance) {
+        balances.add(balance);
+        balance.setAccount(this);
+    }
+
+    public void addTrade(Trade trade){
+        trades.add(trade);
+        trade.setAccount(this);
+    }
 
 
 }

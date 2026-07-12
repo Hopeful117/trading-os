@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.model.*;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -67,7 +68,7 @@ public class AccountMapper {
                                 accountBalance.setAmount(entry.getValue());
                                 return accountBalance;
                         })
-                        .toList();
+                        .collect(Collectors.toCollection(ArrayList::new));
         }
 
 

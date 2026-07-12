@@ -1,6 +1,7 @@
 package com.hope.trading.broker_service.controller;
 
 import com.hope.trading.broker_service.dto.AccountBalance;
+import com.hope.trading.broker_service.dto.BrokerAccountDto;
 import com.hope.trading.broker_service.dto.MarketPrice;
 import com.hope.trading.broker_service.dto.Position;
 import com.hope.trading.broker_service.service.BrokerService;
@@ -20,7 +21,7 @@ public class BrokerController {
     private final BrokerService brokerService;
 
     @GetMapping("/balance")
-    public ResponseEntity<AccountBalance> getAccount(){
+    public ResponseEntity<AccountBalance> getBalance(){
         return ResponseEntity.ok(brokerService.getBalance());
     }
 
@@ -33,5 +34,10 @@ public class BrokerController {
     @GetMapping("/ticker/{symbol}")
     public ResponseEntity<MarketPrice> getTicker(@RequestParam String symbol){
         return ResponseEntity.ok(brokerService.getMarketPrice(symbol));
+    }
+
+    @GetMapping("/account")
+    public ResponseEntity<BrokerAccountDto> getAccount(){
+        return ResponseEntity.ok(brokerService.getAccount());
     }
 }

@@ -61,4 +61,5 @@ public class Trade {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TradeStatus tradeStatus;
+
 }
