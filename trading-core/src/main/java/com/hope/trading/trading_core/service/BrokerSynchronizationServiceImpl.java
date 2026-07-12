@@ -60,7 +60,9 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
         } else {
 
-            accountMapper.updateEntity(account,snapshot);
+            account.setBroker(snapshot.getBroker());
+            account.setName(snapshot.getAccountName());
+            account.setBaseCurrency(snapshot.getBaseCurrency());
 
         }
 

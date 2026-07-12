@@ -70,12 +70,7 @@ public class AccountMapper {
                         .toList();
         }
 
-    public void updateEntity(Account account, BrokerAccountDto snapshot) {
 
-        account.setBroker(snapshot.getBroker());
-        account.setName(snapshot.getAccountName());
-        account.setBaseCurrency(snapshot.getBaseCurrency());
-    }
 
     public AccountBalanceDto toAccountBalanceDto(List<AccountBalance> accountBalances) {
 
