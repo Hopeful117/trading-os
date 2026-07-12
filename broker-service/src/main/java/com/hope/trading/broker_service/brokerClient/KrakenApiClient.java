@@ -16,7 +16,7 @@ public class KrakenApiClient implements BrokerProvider {
     private final KrakenMapper krakenMapper;
 
     @Override
-    public AccountBalance getAccount() {
+    public AccountBalance getBalance() {
         KrakenAccountBalanceResponse response = httpClient.getBalances();
         return krakenMapper.toAccountBalance(response);
     }

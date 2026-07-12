@@ -1,10 +1,17 @@
 package com.hope.trading.trading_core.controller;
 
 import com.hope.trading.trading_core.dto.AccountDto;
-import com.hope.trading.trading_core.dto.AccountRequest;
+import com.hope.trading.trading_core.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.helper.AccountMapper;
+import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.service.AccountService;
+import com.hope.trading.trading_core.service.BrokerSynchronizationService;
+import com.hope.trading.trading_core.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,16 +28,20 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AccountController {
     private final AccountService accountService;
+    private final BrokerSynchronizationService brokerSynchronizationService;
+    private final AccountMapper accountMapper;
 
     /**
      * Creates a new account based on the provided AccountRequest. The request is validated, and if successful, a new account is created and returned as an AccountDto.
-     * @param accountRequest the request containing account details
+     * @param brokerAccountDto the request containing account details
      * @return the created account as a DTO
      */
     @PostMapping
-    public ResponseEntity<AccountDto> createAccount(@RequestBody AccountRequest accountRequest) {
-        AccountDto createdAccount = accountService.createAccount(accountRequest);
-        return ResponseEntity.ok(createdAccount);
+    public ResponseEntity<?> createAccount(@RequestBody BrokerAccountDto brokerAccountDto, @AuthenticationPrincipal UserDetails userDetails) {
+
+        String username= userDetails.getUsername();
+        accountService.createAccount(brokerAccountDto,username);
+        return ResponseEntity.ok("User created successfully");
     }
 
     /**
@@ -39,9 +50,9 @@ public class AccountController {
      * @return the account as a DTO
      */
     @GetMapping("/{accountId}")
-    public ResponseEntity<AccountDto> getAccount(@PathVariable UUID accountId) {
-        AccountDto accountDto = accountService.getAccountById(accountId);
-        return ResponseEntity.ok(accountDto);
+    public ResponseEntity<AccountDto> getAccount(@PathVariable UUID accountId,@AuthenticationPrincipal UserDetails userDetails) {
+        Account account = accountService.getAccountById(accountId);
+        return ResponseEntity.ok(accountMapper.toDto(account));
     }
 
     /**
@@ -49,8 +60,15 @@ public class AccountController {
      * @return a list of accounts as a DTO
      */
     @GetMapping
-    public ResponseEntity<List<AccountDto>> getAllAccounts() {
-        List<AccountDto> accounts = accountService.getAllAccounts();
+    public ResponseEntity<List<AccountDto>> getAllAccounts(@AuthenticationPrincipal UserDetails userDetails) {
+        List<AccountDto> accounts = accountService.getAllUserAccounts(userDetails.getUsername());
         return ResponseEntity.ok(accounts);
+    }
+
+    @PostMapping("/synchronize")
+    public ResponseEntity<?> synchronize(Authentication authentication){
+        brokerSynchronizationService.synchronize(authentication.getName());
+        return ResponseEntity.ok("Accounts synchronized successfully");
+
     }
 }

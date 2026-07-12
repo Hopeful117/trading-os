@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 @Data
 @Builder
@@ -13,7 +14,5 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class AccountBalanceDto {
 
-    private String asset;
-
-    private BigDecimal amount;
+    Map<String, BigDecimal> balances;
 }

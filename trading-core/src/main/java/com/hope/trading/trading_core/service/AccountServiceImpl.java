@@ -1,16 +1,14 @@
 package com.hope.trading.trading_core.service;
 
-import com.hope.trading.trading_core.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.dto.AccountDto;
-import com.hope.trading.trading_core.dto.AccountRequest;
+import com.hope.trading.trading_core.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.exception.DuplicateRessourceException;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
-import com.hope.trading.trading_core.model.Rules;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
-import com.hope.trading.trading_core.repository.RulesRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,35 +26,19 @@ public class AccountServiceImpl implements AccountService {
 
     private final AccountRepository accountRepository;
     private final AccountMapper accountMapper;
-    private final RulesRepository rulesRepository;
     private final UserRepository userRepository;
 
 
     @Override
-    @Transactional(readOnly = true)
-    public AccountDto getAccountById(UUID accountId) {
-
-        return accountMapper.toDto(findAccount(accountId));
+    public Account getAccountById(UUID accountId) {
+       return accountRepository.findById(accountId).orElseThrow(()->new EntityNotFoundException("account not found"));
     }
-
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<AccountBalanceDto> getAllBalances(UUID accountId) {
-
-        return findAccount(accountId)
-                .getBalances()
-                .stream()
-                .map(accountMapper::toBalanceDto)
-                .toList();
-    }
-
 
     @Override
     @Transactional(readOnly = true)
     public BigDecimal getTotalBalance(UUID accountId) {
 
-        return findAccount(accountId)
+        return getAccountById(accountId)
                 .getBalances()
                 .stream()
                 .map(AccountBalance::getAmount)
@@ -71,7 +53,7 @@ public class AccountServiceImpl implements AccountService {
     @Transactional(readOnly = true)
     public BigDecimal getEquity(UUID accountId) {
 
-        return findAccount(accountId)
+        return getAccountById(accountId)
                 .getEquity();
     }
 
@@ -79,7 +61,7 @@ public class AccountServiceImpl implements AccountService {
     @Override
     public void updateEquity(UUID accountId, BigDecimal pnl) {
 
-        Account account = findAccount(accountId);
+        Account account = getAccountById(accountId);
 
 
         BigDecimal newEquity =
@@ -105,7 +87,7 @@ public class AccountServiceImpl implements AccountService {
     @Transactional(readOnly = true)
     public BigDecimal getCurrentDrawdown(UUID accountId) {
 
-        Account account = findAccount(accountId);
+        Account account = getAccountById(accountId);
 
 
         return account.getPeakEquity()
@@ -114,64 +96,38 @@ public class AccountServiceImpl implements AccountService {
 
 
     @Override
-    public AccountDto createAccount(AccountRequest accountRequest) {
-
-        Account account = accountMapper.toEntity(accountRequest);
-
-
-        if (accountRequest.getRulesId() != null) {
-
-            Rules rules = rulesRepository.findById(accountRequest.getRulesId())
-                    .orElseThrow(() ->
-                            new EntityNotFoundException(
-                                    "Rules not found with id: "
-                                            + accountRequest.getRulesId()
-                            )
-                    );
-
-            account.setRules(rules);
+    @Transactional
+    public void createAccount(BrokerAccountDto brokerAccountDto,String username) {
+        User user=userRepository.findByUsername(username).orElseThrow(()->new EntityNotFoundException("User not found"));
+        if(accountRepository.existByUser_UserIdAndBroker(user.getUserId(), brokerAccountDto.getBroker())){
+            throw new DuplicateRessourceException("Account already exists");
         }
 
-
-        if (accountRequest.getUserId() != null) {
-
-            User user = userRepository.findById(accountRequest.getUserId())
-                    .orElseThrow(() ->
-                            new EntityNotFoundException(
-                                    "User not found with id: "
-                                            + accountRequest.getUserId()
-                            )
-                    );
-
+        Account account = accountMapper.toEntity(brokerAccountDto);
 
             account.setUser(user);
 
             user.addAccount(account);
+            accountRepository.save(account);
         }
 
 
-        BigDecimal initialEquity =
-                accountRequest.getInitialEquity() != null
-                        ? accountRequest.getInitialEquity()
-                        : BigDecimal.ZERO;
 
 
-        account.setEquity(initialEquity);
-
-        account.setPeakEquity(initialEquity);
 
 
-        return accountMapper.toDto(
-                accountRepository.save(account)
-        );
-    }
+
+
+
+
 
 
     @Override
     @Transactional(readOnly = true)
-    public List<AccountDto> getAllAccounts() {
+    public List<AccountDto> getAllUserAccounts(String username) {
+        User user = userRepository.findByUsername(username).orElseThrow(()->new EntityNotFoundException("User not found"));
 
-        return accountRepository.findAll()
+        return accountRepository.findAllByUser_UserId(user.getUserId())
                 .stream()
                 .map(accountMapper::toDto)
                 .toList();
@@ -179,7 +135,7 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     public BigDecimal getAvailableBalance(UUID accountId, String asset) {
-        Account account = findAccount(accountId);
+        Account account = getAccountById(accountId);
 
         return account.getBalances()
                 .stream()
@@ -192,14 +148,5 @@ public class AccountServiceImpl implements AccountService {
     }
 
 
-    private Account findAccount(UUID accountId) {
 
-        return accountRepository.findById(accountId)
-                .orElseThrow(() ->
-                        new EntityNotFoundException(
-                                "Account not found with id: "
-                                        + accountId
-                        )
-                );
-    }
 }

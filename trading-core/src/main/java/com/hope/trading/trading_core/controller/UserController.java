@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.config.CustomUserDetailsService;
 import com.hope.trading.trading_core.config.JwtService;
 import com.hope.trading.trading_core.dto.*;
 import com.hope.trading.trading_core.helper.UserMapper;
+import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,9 +37,9 @@ public class UserController {
      * @return user as a DTO
      */
     @PostMapping("/register")
-    public ResponseEntity<UserDto> createUser(@RequestBody @Valid UserRequest userRequest) {
-        UserDto userDto = userService.createUser(userRequest);
-        return ResponseEntity.ok(userDto);
+    public ResponseEntity<?> createUser(@RequestBody @Valid UserRequest userRequest) {
+        userService.createUser(userRequest);
+        return ResponseEntity.ok("User successfully created");
     }
 
     @PostMapping("/login")
@@ -60,8 +61,8 @@ public class UserController {
      * @return user as a DTO
      */
     @GetMapping("/{id}")
-    public ResponseEntity<UserDto> getUser(@PathVariable UUID id) {
-        UserDto userDto = userService.getUserById(id);
-        return ResponseEntity.ok(userDto);
+    public ResponseEntity<User> getUser(@PathVariable UUID id) {
+        User user = userService.getUserById(id);
+        return ResponseEntity.ok(user);
     }
 }

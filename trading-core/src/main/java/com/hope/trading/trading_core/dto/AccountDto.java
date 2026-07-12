@@ -20,7 +20,7 @@ public class AccountDto {
 
     private String baseCurrency;
 
-    private List<AccountBalanceDto> balances;
+    private AccountBalanceDto balances;
 
     private BigDecimal equity;
 

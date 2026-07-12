@@ -8,7 +8,7 @@ import com.hope.trading.broker_service.dto.Position;
 import java.util.List;
 
 public interface BrokerProvider {
-    AccountBalance getAccount();
+    AccountBalance getBalance();
 
     MarketPrice getMarketPrice(String symbol);
 

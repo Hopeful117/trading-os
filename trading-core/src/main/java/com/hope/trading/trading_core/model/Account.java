@@ -21,6 +21,9 @@ public class Account {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID accountId;
 
+    @Column(unique = true)
+    private String broker;
+
 
     @Column(nullable = false)
     private String name;

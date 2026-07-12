@@ -1,0 +1,15 @@
+package com.hope.trading.trading_core.apiClient;
+
+import com.hope.trading.trading_core.dto.BrokerAccountDto;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@FeignClient(
+        name = "broker-service"
+)
+public interface BrokerFeignclient extends BrokerApiClient{
+    @Override
+    @GetMapping("/broker/account")
+    BrokerAccountDto getAccount();
+
+}

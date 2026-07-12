@@ -24,7 +24,7 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     @Override
-    public UserDto createUser(UserRequest userRequest) {
+    public void createUser(UserRequest userRequest) {
         if(userRepository.existsByUsername(userRequest.getUsername())) {
             throw new IllegalArgumentException(
                     "Username already exists"
@@ -44,27 +44,24 @@ public class UserServiceImpl implements UserService {
                 .build();
 
 
-        return userMapper.toDto(
-                userRepository.save(user)
-        );
+        userRepository.save(user);
+
+
     }
 
 
 
     @Override
-    public UserDto getUserByUsername(String username) {
+    public User getUserByUsername(String username) {
         return userRepository.findByUsername(username)
-                .map(userMapper::toDto)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "User with username " + username + " not found"
                 ));
     }
 
     @Override
-    public List<UserDto> getAllUsers() {
-        return userRepository.findAll().stream()
-                .map(userMapper::toDto)
-                .collect(Collectors.toList());
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
     }
 
     @Override
@@ -78,9 +75,8 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public UserDto getUserById(UUID userId) {
+    public User getUserById(UUID userId) {
         return userRepository.findById(userId)
-                .map(userMapper::toDto)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "User with ID " + userId + " not found"
                 ));

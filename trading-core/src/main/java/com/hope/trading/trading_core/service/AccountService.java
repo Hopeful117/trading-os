@@ -1,19 +1,16 @@
 package com.hope.trading.trading_core.service;
 
-import com.hope.trading.trading_core.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.dto.AccountDto;
-import com.hope.trading.trading_core.dto.AccountRequest;
+import com.hope.trading.trading_core.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.model.Account;
-import com.hope.trading.trading_core.model.Rules;
-import com.hope.trading.trading_core.model.User;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
 public interface AccountService {
-    AccountDto getAccountById(UUID accountId);
-    List<AccountBalanceDto> getAllBalances(UUID accountId);
+    Account getAccountById(UUID accountId);
+
 
     BigDecimal getTotalBalance(UUID accountId);
 
@@ -23,9 +20,9 @@ public interface AccountService {
 
     BigDecimal getCurrentDrawdown(UUID accountId);
 
-    AccountDto createAccount(AccountRequest accountRequest);
+    void createAccount(BrokerAccountDto brokerAccountDto,String username);
 
-    List<AccountDto> getAllAccounts();
+    List<AccountDto> getAllUserAccounts(String username);
     BigDecimal getAvailableBalance(
             UUID accountId,
             String asset

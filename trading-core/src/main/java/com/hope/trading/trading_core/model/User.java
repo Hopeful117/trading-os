@@ -35,8 +35,9 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
+    @Builder.Default
     @OneToMany(mappedBy = "user")
-    private List<Account> accounts;
+    private List<Account> accounts = new ArrayList<>();
 
     public void addAccount(Account account) {
         accounts.add(account);
