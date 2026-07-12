@@ -36,7 +36,7 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public TradeDto openTrade(TradeRequest tradeRequest) {
+    public TradeDto openTrade(TradeRequest tradeRequest,String username) {
         Account account = accountRepository.findById(tradeRequest.getAccountId())
                 .orElseThrow(() ->
                         new EntityNotFoundException("Account not found with id: " + tradeRequest.getAccountId()));
@@ -44,7 +44,8 @@ public class TradingServiceImpl implements TradingService {
         BigDecimal availableFunds =
                 accountService.getAvailableBalance(
                         account.getAccountId(),
-                        tradeRequest.getQuoteAsset()
+                        tradeRequest.getQuoteAsset(),
+                        username
                 );
         BigDecimal entryPrice = null;
         //remplacer par brokerService.getCurrentPrice(tradeRequest.getSymbol());
@@ -72,7 +73,7 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public TradeDto closeTrade(UUID tradeId, BigDecimal exitPrice) {
+    public TradeDto closeTrade(UUID tradeId, BigDecimal exitPrice,String username) {
         // 1. load trade
         Trade trade = tradeRepository.findById(tradeId)
                 .orElseThrow(() ->
@@ -106,7 +107,7 @@ public class TradingServiceImpl implements TradingService {
                 account.getEquity().add(pnl)
         );
 
-        accountService.updateEquity(account.getAccountId(), pnl);
+        accountService.updateEquity(account.getAccountId(), pnl,username);
 
         // 6. persist trade
       return tradeMapper.toDto(tradeRepository.save(trade));
@@ -116,7 +117,7 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public TradeDto partialClose(UUID tradeId, BigDecimal quantity, BigDecimal exitPrice) {
+    public TradeDto partialClose(UUID tradeId, BigDecimal quantity, BigDecimal exitPrice,String username) {
         Trade trade = tradeRepository.findById(tradeId)
                 .orElseThrow(() ->
                         new EntityNotFoundException("Trade not found with id: " + tradeId));
@@ -152,7 +153,7 @@ public class TradingServiceImpl implements TradingService {
         // Update account equity
         Account account = trade.getAccount();
         account.setEquity(account.getEquity().add(pnl));
-        accountService.updateEquity(account.getAccountId(), pnl);
+        accountService.updateEquity(account.getAccountId(), pnl,username);
 
         return tradeMapper.toDto(tradeRepository.save(trade));
     }

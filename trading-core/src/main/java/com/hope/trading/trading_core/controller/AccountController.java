@@ -38,8 +38,8 @@ public class AccountController {
      * @return the account as a DTO
      */
     @GetMapping("/{accountId}")
-    public ResponseEntity<AccountDto> getAccount(@PathVariable UUID accountId,@AuthenticationPrincipal UserDetails userDetails) {
-        Account account = accountService.getAccountById(accountId);
+    public ResponseEntity<AccountDto> getAccount(@PathVariable UUID accountId,Authentication authentication) {
+        Account account = accountService.getAccountById(accountId, authentication.getName());
         return ResponseEntity.ok(accountMapper.toDto(account));
     }
 
@@ -48,8 +48,8 @@ public class AccountController {
      * @return a list of accounts as a DTO
      */
     @GetMapping
-    public ResponseEntity<List<AccountDto>> getAllAccounts(@AuthenticationPrincipal UserDetails userDetails) {
-        List<AccountDto> accounts = accountService.getAllUserAccounts(userDetails.getUsername());
+    public ResponseEntity<List<AccountDto>> getAllAccounts(Authentication authentication) {
+        List<AccountDto> accounts = accountService.getAllUserAccounts(authentication.getName());
         return ResponseEntity.ok(accounts);
     }
 

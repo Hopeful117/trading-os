@@ -8,6 +8,9 @@ import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.service.TradingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -31,8 +34,8 @@ public class TradeController {
      * @return the created trade as a DTO
      */
     @PostMapping
-    public ResponseEntity<TradeDto> createTrade(@RequestBody TradeRequest tradeRequest) {
-        TradeDto trade = tradingService.openTrade(tradeRequest);
+    public ResponseEntity<TradeDto> createTrade(@RequestBody TradeRequest tradeRequest, Authentication authentication ){
+        TradeDto trade = tradingService.openTrade(tradeRequest, authentication.getName());
         return ResponseEntity.ok(trade);
     }
 
@@ -72,8 +75,8 @@ public class TradeController {
      * @return the closed trade as a DTO
      */
     @PostMapping("/{tradeId}/close")
-    public ResponseEntity<TradeDto> closeTrade(@PathVariable UUID tradeId, @RequestParam BigDecimal exitPrice) {
-        TradeDto trade = tradingService.closeTrade(tradeId, exitPrice);
+    public ResponseEntity<TradeDto> closeTrade(@PathVariable UUID tradeId, @RequestParam BigDecimal exitPrice, Authentication authentication) {
+        TradeDto trade = tradingService.closeTrade(tradeId, exitPrice, authentication.getName());
         return ResponseEntity.ok(trade);
     }
 
@@ -88,9 +91,10 @@ public class TradeController {
     public ResponseEntity<TradeDto> partialCloseTrade(
             @PathVariable UUID tradeId,
             @RequestParam BigDecimal quantity,
-            @RequestParam BigDecimal exitPrice
+            @RequestParam BigDecimal exitPrice,
+            Authentication authentication
     ) {
-        TradeDto trade = tradingService.partialClose(tradeId, quantity, exitPrice);
+        TradeDto trade = tradingService.partialClose(tradeId, quantity, exitPrice, authentication.getName());
         return ResponseEntity.ok(trade);
     }
 

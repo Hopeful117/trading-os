@@ -4,6 +4,9 @@ import com.hope.trading.trading_core.dto.TradingStatistics;
 import com.hope.trading.trading_core.service.TradeAnalyticsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,8 +31,8 @@ public class TradeAnalyticsController {
      * @return TradingStatistics DTO that contains all the data
      */
     @GetMapping("/{accountId}/statistics")
-    public ResponseEntity<TradingStatistics> getTradingStatistics(@PathVariable UUID accountId) {
-        TradingStatistics statistics = tradeAnalyticsService.getTradingStatistics(accountId);
+    public ResponseEntity<TradingStatistics> getTradingStatistics(@PathVariable UUID accountId, Authentication authentication) {
+        TradingStatistics statistics = tradeAnalyticsService.getTradingStatistics(accountId, authentication.getName());
         return ResponseEntity.ok(statistics);
     }
 }

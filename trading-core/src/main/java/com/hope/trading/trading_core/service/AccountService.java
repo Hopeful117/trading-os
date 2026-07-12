@@ -9,22 +9,23 @@ import java.util.List;
 import java.util.UUID;
 
 public interface AccountService {
-    Account getAccountById(UUID accountId);
+    Account getAccountById(UUID accountId,String username);
 
 
-    BigDecimal getTotalBalance(UUID accountId);
+    BigDecimal getTotalBalance(UUID accountId,String username);
 
-    BigDecimal getEquity(UUID accountId);
+    BigDecimal getEquity(UUID accountId,String username);
 
-    void updateEquity(UUID accountId, BigDecimal pnl);
+    void updateEquity(UUID accountId, BigDecimal pnl,String username);
 
-    BigDecimal getCurrentDrawdown(UUID accountId);
+    BigDecimal getCurrentDrawdown(UUID accountId,String username);
 
 
     List<AccountDto> getAllUserAccounts(String username);
     BigDecimal getAvailableBalance(
             UUID accountId,
-            String asset
+            String asset,
+            String username
     );
 
 

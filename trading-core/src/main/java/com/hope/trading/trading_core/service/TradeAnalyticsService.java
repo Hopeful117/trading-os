@@ -20,15 +20,15 @@ public interface TradeAnalyticsService {
     int getClosedTradeCount(UUID accountId);
     List<Trade> getTodayTrades(UUID accountId);
 
-    long getWinningTradeCount(UUID accountId);
-    long getLosingTradeCount(UUID accountId);
-    double getWinRate(UUID accountId);
-    BigDecimal getAverageWin(UUID accountId);
-    BigDecimal getAverageLoss(UUID accountId);
+    long getWinningTradeCount(UUID accountId,String username);
+    long getLosingTradeCount(UUID accountId,String username);
+    double getWinRate(UUID accountId,String username);
+    BigDecimal getAverageWin(UUID accountId,String username);
+    BigDecimal getAverageLoss(UUID accountId,String username);
 
 
-    BigDecimal getCurrentDrawdown(UUID accountId);
-    BigDecimal getCurrentExposure(UUID accountId);
+    BigDecimal getCurrentDrawdown(UUID accountId,String username);
+    BigDecimal getCurrentExposure(UUID accountId,String username);
     BigDecimal getRiskUsedToday(UUID accountId);
     boolean hasReachedDailyLoss(UUID accountId);
 
@@ -40,7 +40,7 @@ public interface TradeAnalyticsService {
     List<Trade> getOpenTrades(UUID accountId);
     List<Trade> getClosedTrades(UUID accountId);
 
-    TradingStatistics getTradingStatistics(UUID accountId);
+    TradingStatistics getTradingStatistics(UUID accountId,String username);
 
 
 

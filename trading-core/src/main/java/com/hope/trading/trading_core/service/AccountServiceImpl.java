@@ -30,15 +30,15 @@ public class AccountServiceImpl implements AccountService {
 
 
     @Override
-    public Account getAccountById(UUID accountId) {
-       return accountRepository.findById(accountId).orElseThrow(()->new EntityNotFoundException("account not found"));
+    public Account getAccountById(UUID accountId,String username) {
+       return accountRepository.findByAccountIdAndUser_Username(accountId,username).orElseThrow(()->new EntityNotFoundException("account not found"));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public BigDecimal getTotalBalance(UUID accountId) {
+    public BigDecimal getTotalBalance(UUID accountId,String username) {
 
-        return getAccountById(accountId)
+        return getAccountById(accountId,username)
                 .getBalances()
                 .stream()
                 .map(AccountBalance::getAmount)
@@ -51,17 +51,17 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     @Transactional(readOnly = true)
-    public BigDecimal getEquity(UUID accountId) {
+    public BigDecimal getEquity(UUID accountId,String username) {
 
-        return getAccountById(accountId)
+        return getAccountById(accountId,username)
                 .getEquity();
     }
 
 
     @Override
-    public void updateEquity(UUID accountId, BigDecimal pnl) {
+    public void updateEquity(UUID accountId, BigDecimal pnl,String username) {
 
-        Account account = getAccountById(accountId);
+        Account account = getAccountById(accountId,username);
 
 
         BigDecimal newEquity =
@@ -85,9 +85,9 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     @Transactional(readOnly = true)
-    public BigDecimal getCurrentDrawdown(UUID accountId) {
+    public BigDecimal getCurrentDrawdown(UUID accountId,String username) {
 
-        Account account = getAccountById(accountId);
+        Account account = getAccountById(accountId,username);
 
 
         return account.getPeakEquity()
@@ -120,8 +120,8 @@ public class AccountServiceImpl implements AccountService {
     }
 
     @Override
-    public BigDecimal getAvailableBalance(UUID accountId, String asset) {
-        Account account = getAccountById(accountId);
+    public BigDecimal getAvailableBalance(UUID accountId, String asset,String username) {
+        Account account = getAccountById(accountId,username);
 
         return account.getBalances()
                 .stream()
