@@ -1,6 +1,7 @@
 package com.hope.trading.gateway.security;
 
 import com.hope.trading.gateway.dto.UserAuthenticationDto;
+import com.hope.trading.gateway.helper.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.security.Key;
 import java.util.Date;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -34,13 +36,36 @@ public class JwtServiceImpl implements JwtService{
 
     @Override
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(token,claims -> claims.get("username", String.class));
     }
 
     @Override
-    public boolean isTokenValid(String token, UserAuthenticationDto userAuthenticationDto) {
-        final String username = extractUsername(token);
-        return (username.equals(userAuthenticationDto.getUsername()) && !isTokenExpired(token));
+    public UUID extractUserId(String token){
+        String id=extractClaim(token, Claims::getSubject);
+        return UUID.fromString(id);}
+
+
+    @Override
+    public Role extractRole(String token) {
+        String role = extractClaim(token, claims -> claims.get("role", String.class));
+        return Role.valueOf(role);
+    }
+
+    @Override
+    public String extractEmail(String token) {
+        return extractClaim(token, claims -> claims.get("email", String.class));
+    }
+
+
+    @Override
+    public boolean isTokenValid(String token) {
+
+        try {
+            extractAllClaims(token);
+            return !isTokenExpired(token);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

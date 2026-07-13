@@ -2,7 +2,9 @@ package com.hope.trading.gateway.security;
 
 
 import com.hope.trading.gateway.dto.UserAuthenticationDto;
-import org.springframework.security.core.userdetails.UserDetails;
+import com.hope.trading.gateway.helper.Role;
+
+import java.util.UUID;
 
 public interface JwtService {
 
@@ -10,7 +12,13 @@ public interface JwtService {
 
         String extractUsername(String token);
 
-        boolean isTokenValid(String token, UserAuthenticationDto userAuthenticationDto);
+        UUID extractUserId(String token);
+
+        String extractEmail(String token);
+
+        Role extractRole(String token);
+
+        boolean isTokenValid(String token);
 
         boolean isTokenExpired(String token);
     }

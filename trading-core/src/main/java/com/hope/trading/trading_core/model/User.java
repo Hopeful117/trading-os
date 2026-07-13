@@ -36,7 +36,7 @@ public class User {
     private Role role;
 
     @Builder.Default
-    @OneToMany(mappedBy = "user")
+    @OneToMany(mappedBy = "user",fetch = FetchType.LAZY)
     private List<Account> accounts = new ArrayList<>();
 
     public void addAccount(Account account) {

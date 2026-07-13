@@ -22,7 +22,7 @@ public class AuthController {
     public ResponseEntity<AuthenticationResponse> login(
             @RequestBody LoginRequest request
     ){
-
+       
         return ResponseEntity.ok(
                 authService.login(request)
         );
