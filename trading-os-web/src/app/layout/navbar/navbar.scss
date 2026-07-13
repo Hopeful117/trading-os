@@ -1,0 +1,9 @@
+.container {
+  display: flex;
+  height: calc(100vh - 64px);
+}
+
+main {
+  flex: 1;
+  padding: 20px;
+}
