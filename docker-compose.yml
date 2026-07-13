@@ -19,9 +19,6 @@ services:
     container_name: trading-app
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/trading_os
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION}
-      JWT_ISSUER: ${JWT_ISSUER}
     depends_on:
       - postgres
     ports:
@@ -68,6 +65,9 @@ services:
     container_name: gateway
     environment:
       GATEWAY_PORT: 8080
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      JWT_ISSUER: ${JWT_ISSUER}
     depends_on:
       - eureka-server
     ports:

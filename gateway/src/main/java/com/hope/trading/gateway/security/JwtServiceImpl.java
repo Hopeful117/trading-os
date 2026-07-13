@@ -1,29 +1,31 @@
-package com.hope.trading.trading_core.config;
+package com.hope.trading.gateway.security;
 
+import com.hope.trading.gateway.dto.UserAuthenticationDto;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.security.Key;
-import java.util.Base64;
 import java.util.Date;
 import java.util.function.Function;
 
-@RequiredArgsConstructor
 @Service
-public class JwtServiceImpl implements JwtService {
+@RequiredArgsConstructor
+public class JwtServiceImpl implements JwtService{
     private final JwtProperties jwtProperties;
 
     @Override
-    public String generateToken(UserDetails userDetails) {
+    public String generateToken(UserAuthenticationDto userAuthenticationDto) {
         return Jwts.builder()
-                .subject(userDetails.getUsername())
-                .issuedAt(new java.util.Date(System.currentTimeMillis()))
+                .subject(userAuthenticationDto.getUserId().toString())
+                .claim("username", userAuthenticationDto.getUsername())
+                .claim("email", userAuthenticationDto.getEmail())
+                .claim("role", userAuthenticationDto.getRole().name())
+                .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + jwtProperties.getExpiration()))
                 .signWith(getSigningKey())
                 .issuer(jwtProperties.getIssuer())
@@ -36,9 +38,9 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
-    public boolean isTokenValid(String token, UserDetails userDetails) {
+    public boolean isTokenValid(String token, UserAuthenticationDto userAuthenticationDto) {
         final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        return (username.equals(userAuthenticationDto.getUsername()) && !isTokenExpired(token));
     }
 
     @Override

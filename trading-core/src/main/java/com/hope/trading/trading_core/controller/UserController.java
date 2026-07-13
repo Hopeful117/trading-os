@@ -1,9 +1,6 @@
 package com.hope.trading.trading_core.controller;
 
-import com.hope.trading.trading_core.config.CustomUserDetailsService;
-import com.hope.trading.trading_core.config.JwtService;
 import com.hope.trading.trading_core.dto.*;
-import com.hope.trading.trading_core.helper.UserMapper;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.service.UserService;
 import jakarta.validation.Valid;
@@ -28,7 +25,7 @@ import java.util.UUID;
 public class UserController {
     private final UserService userService;
     private final AuthenticationManager authenticationManager;
-    private final JwtService jwtService;
+
 
 
     /**
@@ -42,18 +39,7 @@ public class UserController {
         return ResponseEntity.ok("User successfully created");
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<AuthenticationResponse> login (@RequestBody @Valid LoginRequest loginRequest){
-        Authentication authentication =authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        loginRequest.getUsername(),
-                        loginRequest.getPassword()
-                )
-        );
-        UserDetails userDetails= (UserDetails) authentication.getPrincipal();
-        return ResponseEntity.ok(AuthenticationResponse.builder().token(jwtService.generateToken(userDetails)).build());
 
-    }
 
     /**
      * Fetch a user

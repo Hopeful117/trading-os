@@ -1,4 +1,4 @@
-package com.hope.trading.trading_core.config;
+package com.hope.trading.gateway.security;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -10,8 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 @RequiredArgsConstructor
 public class JwtProperties {
-    private final  String secret;
-    private final Long expiration;
-    private final String issuer;
-    // Getters and setters
+        private final  String secret;
+        private final Long expiration;
+        private final String issuer;
 }
