@@ -1,1 +1,15 @@
 <h1>Accounts</h1>
+
+<div class="accounts-container">
+
+  @for(account of accounts; track account.accountId) {
+
+    <app-account-card
+      [account]="account">
+    </app-account-card>
+
+  }
+
+</div>
+
+

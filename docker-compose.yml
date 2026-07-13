@@ -77,6 +77,18 @@ services:
         - trading-network
 
 
+  trading-web:
+    build: ./trading-os-web
+    container_name: trading-web
+    ports:
+      - "4200:80"
+    depends_on:
+      - gateway
+    restart: unless-stopped
+    networks:
+      - trading-network
+
+
 
 networks:
   trading-network:
