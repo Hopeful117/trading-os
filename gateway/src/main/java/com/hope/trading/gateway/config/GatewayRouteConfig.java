@@ -13,7 +13,12 @@ public class GatewayRouteConfig {
 
                 .route("authentication", r -> r
                         .path("/api/v1/users/**")
-                        .uri("lb://trading-core"))
+                        .uri("lb://trading-core")
+                )
+                .route("accounts",r -> r
+                        .path("/api/v1/accounts/**")
+                        .uri("lb://trading-core")
+    )
 
 
                 .build();

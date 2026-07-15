@@ -10,6 +10,6 @@ import { environment} from '../../../environments/environment';
 export class AccountService {
   constructor( private http: HttpClient) {}
   getAccounts(): Observable<Account[]> {
-    return this.http.get<Account[]>(`${environment.gatewayUrl}/accounts`);
+    return this.http.get<Account[]>(`${environment.gatewayUrl}v1/accounts`);
   }
 }
