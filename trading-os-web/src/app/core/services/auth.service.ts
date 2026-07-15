@@ -16,7 +16,7 @@ export class AuthService {
 
   login(request: LoginRequest): Observable<AuthenticationResponse> {
     return this.http
-      .post<AuthenticationResponse>(`${environment.gatewayUrl}/auth/login`, request)
+      .post<AuthenticationResponse>(`${environment.gatewayUrl}v1/users/login`, request)
       .pipe(tap((response) => this.tokenService.saveToken(response.token)));
   }
 

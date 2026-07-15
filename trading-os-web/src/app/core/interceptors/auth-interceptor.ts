@@ -6,7 +6,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const tokenService = inject(TokenService);
 
 
-  if (req.url.includes('/auth/login')) {
+  if (req.url.includes('/login')) {
     return next(req);
   }
 

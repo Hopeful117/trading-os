@@ -3,46 +3,42 @@ package com.hope.trading.gateway.security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.web.server.SecurityWebFilterChain;
 
 @Configuration
-@EnableWebSecurity
+@EnableWebFluxSecurity
 @RequiredArgsConstructor
 public class SpringSecurityConfig {
-    private final  JwtAuthenticationFilter authenticationFilter;
+    private final JwtAuthenticationFilter authenticationFilter;
 
     @Bean
-    SecurityFilterChain security(HttpSecurity http)
-            throws Exception {
+    SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
 
-        http
-                .csrf(AbstractHttpConfigurer::disable)
+        return http
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+                .authorizeExchange(exchange -> exchange
 
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS))
-
-                .authorizeHttpRequests(auth -> auth
-
-                        .requestMatchers(
-                                "/auth/**",
+                        .pathMatchers(
+                                "/api/v1/users/login",
+                                "/api/v1/users/register",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
 
-                        .anyRequest().authenticated()
+                        .anyExchange().authenticated()
                 )
 
                 .addFilterBefore(
                         authenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                );
+                        SecurityWebFiltersOrder.AUTHENTICATION
+                )
 
-        return http.build();
+                .build();
     }
 }

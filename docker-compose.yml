@@ -19,6 +19,9 @@ services:
     container_name: trading-app
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/trading_os
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      JWT_ISSUER: ${JWT_ISSUER}
     depends_on:
       - postgres
     ports:
@@ -84,7 +87,6 @@ services:
       - "4200:80"
     depends_on:
       - gateway
-    restart: unless-stopped
     networks:
       - trading-network
 

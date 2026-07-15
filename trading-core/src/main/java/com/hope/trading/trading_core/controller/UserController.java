@@ -1,7 +1,9 @@
 package com.hope.trading.trading_core.controller;
 
 import com.hope.trading.trading_core.dto.*;
+import com.hope.trading.trading_core.helper.UserMapper;
 import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.service.JwtService;
 import com.hope.trading.trading_core.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,8 @@ import java.util.UUID;
 public class UserController {
     private final UserService userService;
     private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
+    private final UserMapper userMapper;
 
 
 
@@ -50,5 +54,30 @@ public class UserController {
     public ResponseEntity<User> getUser(@PathVariable UUID id) {
         User user = userService.getUserById(id);
         return ResponseEntity.ok(user);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthenticationResponse> login(
+            @RequestBody LoginRequest request
+    ){
+
+
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        request.getUsername(),
+                        request.getPassword()
+                )
+        );
+
+        User user = userService.getUserByUsername(request.getUsername());
+        UserDto userDto=userMapper.toDto(user);
+        AuthenticationResponse authenticationResponse= AuthenticationResponse.builder()
+                .token(jwtService.generateToken(userDto))
+                .build();
+
+        return ResponseEntity.ok(authenticationResponse);
+
+
+
     }
 }
