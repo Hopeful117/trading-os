@@ -3,7 +3,7 @@ package com.hope.trading.trading_core.controller;
 import com.hope.trading.trading_core.dto.*;
 import com.hope.trading.trading_core.helper.UserMapper;
 import com.hope.trading.trading_core.model.User;
-import com.hope.trading.trading_core.service.JwtService;
+import com.hope.trading.trading_core.security.JwtService;
 import com.hope.trading.trading_core.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -11,8 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;

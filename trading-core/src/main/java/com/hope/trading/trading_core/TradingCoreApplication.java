@@ -1,6 +1,6 @@
 package com.hope.trading.trading_core;
 
-import com.hope.trading.trading_core.service.JwtProperties;
+import com.hope.trading.trading_core.security.JwtProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

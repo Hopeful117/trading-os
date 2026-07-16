@@ -1,4 +1,4 @@
-package com.hope.trading.trading_core.service;
+package com.hope.trading.trading_core.security;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

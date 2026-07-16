@@ -3,6 +3,7 @@ package com.hope.trading.gateway.security;
 import com.hope.trading.gateway.dto.UserAuthenticationDto;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.SpringCacheAnnotationParser;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter implements WebFilter {
@@ -37,6 +39,7 @@ public class JwtAuthenticationFilter implements WebFilter {
         boolean isPublic = PUBLIC_ENDPOINTS.stream()
                 .anyMatch(endpoint -> endpoint.equalsIgnoreCase(path));
         if (isPublic  ) {
+            log.info("accessing public path");
             return chain.filter(exchange);
         }
         String authHeader =
@@ -45,6 +48,7 @@ public class JwtAuthenticationFilter implements WebFilter {
                         .getFirst(HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.info("no token detected");
             return chain.filter(exchange);
         }
 
@@ -52,6 +56,7 @@ public class JwtAuthenticationFilter implements WebFilter {
 
         if (!jwtService.isTokenValid(token)) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+            log.error("invalid token");
             return exchange.getResponse().setComplete();
         }
 
@@ -59,6 +64,7 @@ public class JwtAuthenticationFilter implements WebFilter {
                 UserAuthenticationDto.builder()
                         .userId(jwtService.extractUserId(token))
                         .username(jwtService.extractUsername(token))
+                        .email(jwtService.extractEmail(token))
                         .role(jwtService.extractRole(token))
                         .build();
 

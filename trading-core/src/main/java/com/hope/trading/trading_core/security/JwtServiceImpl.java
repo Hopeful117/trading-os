@@ -1,4 +1,4 @@
-package com.hope.trading.trading_core.service;
+package com.hope.trading.trading_core.security;
 
 
 import com.hope.trading.trading_core.dto.UserDto;
@@ -8,7 +8,6 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -23,12 +22,12 @@ public class JwtServiceImpl implements JwtService{
     private final JwtProperties jwtProperties;
 
     @Override
-    public String generateToken(UserDto userDto) {
+    public String generateToken(UserDto userAuthenticationDto) {
         return Jwts.builder()
-                .subject(String.valueOf(userDto.getUserId()))
-                .claim("username", userDto.getUsername())
-                .claim("email", userDto.getEmail())
-                .claim("role", userDto.getRole().name())
+                .subject(userAuthenticationDto.getUserId().toString())
+                .claim("username", userAuthenticationDto.getUsername())
+                .claim("email", userAuthenticationDto.getEmail())
+                .claim("role", userAuthenticationDto.getRole().name())
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + jwtProperties.getExpiration()))
                 .signWith(getSigningKey())

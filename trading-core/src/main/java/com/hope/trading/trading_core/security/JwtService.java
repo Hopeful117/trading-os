@@ -1,16 +1,15 @@
-package com.hope.trading.trading_core.service;
+package com.hope.trading.trading_core.security;
 
 
 
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.helper.Role;
-import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.UUID;
 
 public interface JwtService {
 
-        String generateToken(UserDto userDto);
+        String generateToken(UserDto userAuthenticationDto);
 
         String extractUsername(String token);
 

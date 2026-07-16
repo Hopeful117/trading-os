@@ -11,6 +11,7 @@ import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -111,6 +113,7 @@ public class AccountServiceImpl implements AccountService {
     @Override
     @Transactional(readOnly = true)
     public List<AccountDto> getAllUserAccounts(String username) {
+        log.info("Retrieving account for user {}",username);
         User user = userRepository.findByUsername(username).orElseThrow(()->new EntityNotFoundException("User not found"));
 
         return accountRepository.findAllByUser_UserId(user.getUserId())
