@@ -3,9 +3,9 @@
   Synchroniser Kraken
 </button>
 <div class="accounts-container">
-  
 
-  @for(account of accounts; track account.accountId) {
+
+  @for(account of accounts | async; track account.accountId) {
 
     <app-account-card
       [account]="account">
