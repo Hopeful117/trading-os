@@ -1,6 +1,9 @@
 <h1>Accounts</h1>
-
+<button (click)="sync()">
+  Synchroniser Kraken
+</button>
 <div class="accounts-container">
+  
 
   @for(account of accounts; track account.accountId) {
 
@@ -11,5 +14,7 @@
   }
 
 </div>
-
+@if (errorMessage) {
+  <p class="error">{{ errorMessage }}</p>
+}
 

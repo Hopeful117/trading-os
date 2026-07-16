@@ -11,10 +11,12 @@
 </p>
 <div>
   <h3>Balances</h3>
-  @for (balance of getBalances(account); track balance.asset) {
-    <app-account-card
-      [account]="account">
-    </app-account-card>
+  @for (balance of balances; track balance.asset) {
+    <p>
+      {{ balance.asset }} :
+      {{ balance.amount }}
+    </p>
+
   }
 </div>
   </mat-card-content>
