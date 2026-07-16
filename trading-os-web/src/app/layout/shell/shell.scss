@@ -1,0 +1,31 @@
+.container {
+
+  display: flex;
+
+  height: calc(100vh - 64px);
+
+  background: #020617;
+
+  overflow: hidden;
+}
+
+
+app-sidebar {
+
+  flex-shrink: 0;
+
+  height: 100%;
+}
+
+
+main {
+
+  flex: 1;
+
+  padding: 24px;
+
+  overflow-y: auto;
+
+  color: #e2e8f0;
+
+}

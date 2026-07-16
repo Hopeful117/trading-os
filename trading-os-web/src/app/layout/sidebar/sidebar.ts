@@ -1,9 +1,11 @@
-import { Component } from '@angular/core';
-
+import { Component, inject } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
 @Component({
   selector: 'app-sidebar',
-  imports: [],
+  imports: [RouterLink],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.scss',
 })
-export class Sidebar {}
+export class Sidebar {
+  private router = inject(Router);
+}

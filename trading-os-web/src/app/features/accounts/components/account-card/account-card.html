@@ -1,25 +1,38 @@
 <mat-card>
-<mat-card-header>
-<h2>{{ account.name }}</h2>
-</mat-card-header>
+
+  <mat-card-header>
+    <h2>{{ account.name }}</h2>
+  </mat-card-header>
+
 
   <mat-card-content>
 
-<p>
-  Base currency :
-  {{ account.baseCurrency }}
-</p>
-<div>
-  <h3>Balances</h3>
-  @for (balance of balances; track balance.asset) {
     <p>
-      {{ balance.asset }} :
-      {{ balance.amount }}
+      Currency :
+      <strong>{{ account.baseCurrency }}</strong>
     </p>
 
-  }
-</div>
+
+    <h3>Balances</h3>
+
+
+    @for(balance of balances; track balance.asset) {
+
+      <div class="balance">
+
+        <span class="asset">
+          {{ balance.asset }}
+        </span>
+
+        <span class="amount">
+          {{ balance.amount }}
+        </span>
+
+      </div>
+
+    }
+
+
   </mat-card-content>
 
 </mat-card>
-
