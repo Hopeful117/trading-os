@@ -36,7 +36,7 @@ public class BrokerServiceImpl implements BrokerService {
         return BrokerAccountDto.builder()
                 .broker(brokerProvider.getBrokerName())
                 .baseCurrency(brokerProvider.getBaseCurrency())
-                .accountName("Main Account") // temporaire
+                .accountName(brokerProvider.getBrokerName().toLowerCase() + " account")
                 .balances(getBalance())
                 .openTrades(getOpenPositions())
                 .build();
