@@ -87,8 +87,27 @@ services:
       - "4200:80"
     depends_on:
       - gateway
+    restart: unless-stopped
     networks:
       - trading-network
+
+
+
+
+  market-data:
+    build: ./market-data
+    container_name: market-data
+
+    ports:
+      - "8083:8083"
+
+    depends_on:
+      - eureka-server
+
+    networks:
+      - trading-network
+
+    restart: unless-stopped
 
 
 

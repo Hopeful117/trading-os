@@ -8,6 +8,8 @@
         <option value="$PROJECT_DIR$/gateway/pom.xml" />
         <option value="$PROJECT_DIR$/trading-core/pom.xml" />
         <option value="$PROJECT_DIR$/eureka-server/pom.xml" />
+        <option value="$PROJECT_DIR$/market_data/pom.xml" />
+        <option value="$PROJECT_DIR$/market-data/pom.xml" />
       </list>
     </option>
   </component>
