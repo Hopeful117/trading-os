@@ -1,25 +1,58 @@
 package com.hope.trading.market_data.controller;
 
+import com.hope.trading.market_data.dto.MarketResponse;
+import com.hope.trading.market_data.helper.MarketMapper;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.service.MarketService;
 import com.hope.trading.market_data.service.MarketSynchronization;
+import feign.Response;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/markets")
 @RequiredArgsConstructor
 public class MarketController {
+
     private final MarketSynchronization marketSynchronization;
+    private final MarketService marketService;
+    private final MarketMapper marketMapper;
 
 
     @GetMapping
-    public List<Market> getMarkets() {
+    public ResponseEntity <List<MarketResponse>> findAll() {
 
-        return marketSynchronization.synchronizeMarkets();
+        return ResponseEntity.ok( marketService.findAll()
+                .stream()
+                .map(marketMapper::toDto)
+                .toList()
+        );
+    }
+
+
+    @GetMapping("/{marketId}")
+    public ResponseEntity <MarketResponse> findById(
+            @PathVariable UUID marketId
+    ) {
+
+        Market market = marketService.findById(marketId)
+                .orElseThrow(() ->
+                        new RuntimeException("Market not found")
+                );
+
+        return ResponseEntity.ok( marketMapper.toDto(market));
+    }
+
+    @PostMapping("/synchronize")
+    public ResponseEntity<Void> synchronize() {
+
+        marketSynchronization.synchronizeMarkets();
+
+        return ResponseEntity.ok().build();
     }
 
 }

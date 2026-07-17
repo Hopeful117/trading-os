@@ -26,7 +26,7 @@ public class KrakenMapper {
 
 
         return MarketPrice.builder()
-                .symbol(symbol)
+                .symbol(formatPair(symbol))
                 .price(new BigDecimal(ticker.getC().getFirst()))
                 .timestamp(Instant.now())
                 .build();

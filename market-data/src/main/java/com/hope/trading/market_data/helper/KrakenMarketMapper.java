@@ -10,6 +10,7 @@ public class KrakenMarketMapper {
     public Market toDomain(KrakenAssetPairDto dto) {
 
         return Market.builder()
+                .provider(MarketProvider.KRAKEN)
                 .symbol(dto.getWsname())
                 .baseAsset(dto.getBase())
                 .quoteAsset(dto.getQuote())
@@ -25,6 +26,7 @@ public class KrakenMarketMapper {
                 )
                 .build();
     }
+
 
 
     private MarketStatus mapStatus(String status) {

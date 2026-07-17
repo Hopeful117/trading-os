@@ -2,23 +2,54 @@ package com.hope.trading.market_data.model;
 
 
 import com.hope.trading.market_data.helper.MarketStatus;
-import lombok.Builder;
-import lombok.Getter;
+import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.MarketStatus;
+import jakarta.persistence.*;
+import lombok.*;
 
-@Builder
+import java.util.UUID;
+
+@Entity
+@Table(
+        name = "markets",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"provider", "symbol"})
+        }
+)
 @Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Market {
 
-    private final String symbol;
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID marketId;
 
-    private final String baseAsset;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MarketProvider provider;
 
-    private final String quoteAsset;
+    @Column(nullable = false)
+    private String symbol;
 
-    private final MarketStatus status;
+    @Column(nullable = false)
+    private String baseAsset;
 
-    private final MarketConstraints marketConstraints;
+    @Column(nullable = false)
+    private String quoteAsset;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MarketStatus status;
+
+    @Embedded
+    private MarketConstraints marketConstraints;
 
 }
+
+
+
 
 

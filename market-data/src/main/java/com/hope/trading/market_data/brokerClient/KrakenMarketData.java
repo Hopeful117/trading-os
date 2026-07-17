@@ -2,6 +2,7 @@ package com.hope.trading.market_data.brokerClient;
 
 import com.hope.trading.market_data.dto.KrakenAssetPairsResponse;
 import com.hope.trading.market_data.helper.KrakenMarketMapper;
+import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.httpClient.KrakenHttpClient;
 import com.hope.trading.market_data.model.Market;
 import lombok.RequiredArgsConstructor;
@@ -26,5 +27,10 @@ public class KrakenMarketData  implements MarketDataProvider{
                 .stream()
                 .map(mapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public MarketProvider getName(){
+        return MarketProvider.KRAKEN;
     }
 }

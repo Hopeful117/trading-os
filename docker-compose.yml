@@ -10,6 +10,27 @@ services:
 
     networks:
       - trading-network
+    volumes:
+      - trading_os:/var/lib/postgresql/data
+
+    restart: unless-stopped
+
+
+  market-data-db:
+    image: postgres:16
+    container_name: market_data-postgres
+
+    environment:
+      POSTGRES_DB: market_data
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    volumes:
+      - market_data:/var/lib/postgresql/data
+
+    networks:
+      - trading-network
+
 
     restart: unless-stopped
 
@@ -24,6 +45,7 @@ services:
       JWT_ISSUER: ${JWT_ISSUER}
     depends_on:
       - postgres
+      - eureka-server
     ports:
       - "8081:8081"
 
@@ -40,8 +62,13 @@ services:
       KRAKEN_API_KEY: ${KRAKEN_API_KEY}
       KRAKEN_API_SECRET: ${KRAKEN_API_SECRET}
 
+    depends_on:
+      - eureka-server
+
     networks:
-      trading-network:
+      - trading-network
+
+
 
     ports:
       - "8082:8082"
@@ -103,6 +130,7 @@ services:
 
     depends_on:
       - eureka-server
+      - market-data-db
 
     environment:
       KRAKEN_BASE_URL: ${KRAKEN_BASE_URL}
@@ -117,3 +145,10 @@ services:
 networks:
   trading-network:
     driver: bridge
+
+
+volumes:
+  market_data:
+  trading_os:
+
+
