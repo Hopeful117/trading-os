@@ -1,0 +1,257 @@
+.home-container {
+
+  min-height: calc(100vh - 64px);
+
+  padding: 40px;
+
+  background:
+    radial-gradient(
+      circle at top,
+      rgba(56,189,248,0.12),
+      transparent 45%
+    );
+
+  color:#e2e8f0;
+
+}
+
+
+
+.hero {
+
+  max-width:1200px;
+
+  margin:auto;
+
+  display:grid;
+
+  grid-template-columns:1fr 400px;
+
+  gap:60px;
+
+  align-items:center;
+
+}
+
+
+
+.hero-content h1 {
+
+  font-size:3.5rem;
+
+  font-weight:700;
+
+  background:
+    linear-gradient(
+      135deg,
+      #38bdf8,
+      #2563eb
+    );
+
+  -webkit-background-clip:text;
+
+  color:transparent;
+
+}
+
+
+
+.hero-content h2 {
+
+  font-size:1.8rem;
+
+  color:#e2e8f0;
+
+}
+
+
+
+.hero-content p {
+
+  margin-top:20px;
+
+  color:#94a3b8;
+
+  font-size:1.1rem;
+
+  line-height:1.6;
+
+  max-width:600px;
+
+}
+
+
+
+.hero-actions {
+
+  display:flex;
+
+  gap:15px;
+
+  margin-top:35px;
+
+}
+
+
+
+.hero-actions a {
+
+  padding:12px 24px;
+
+  border-radius:10px;
+
+  text-decoration:none;
+
+  font-weight:600;
+
+  transition:.2s;
+
+}
+
+
+
+.hero-actions a:first-child {
+
+  background:#2563eb;
+
+  color:white;
+
+}
+
+
+
+.hero-actions a:last-child {
+
+  border:
+
+    1px solid #334155;
+
+  color:#e2e8f0;
+
+}
+
+
+
+.hero-actions a:hover {
+
+  transform:translateY(-2px);
+
+}
+
+
+
+.hero-card {
+
+  padding:30px;
+
+  background:
+
+    linear-gradient(
+      145deg,
+      #0f172a,
+      #1e293b
+    );
+
+  border-radius:18px;
+
+  border:
+
+    1px solid rgba(148,163,184,.15);
+
+  box-shadow:
+
+    0 20px 40px rgba(0,0,0,.35);
+
+}
+
+
+
+.hero-card h3 {
+
+  margin-bottom:25px;
+
+}
+
+
+
+.feature {
+
+  display:flex;
+
+  gap:15px;
+
+  align-items:center;
+
+  margin-bottom:20px;
+
+}
+
+
+
+.feature span {
+
+  font-size:1.5rem;
+
+}
+
+
+
+.feature p {
+
+  color:#94a3b8;
+
+}
+
+
+
+.features {
+
+  max-width:1200px;
+
+  margin:80px auto 0;
+
+  display:grid;
+
+  grid-template-columns:repeat(3,1fr);
+
+  gap:25px;
+
+}
+
+
+
+.feature-card {
+
+  padding:25px;
+
+  background:#111827;
+
+  border-radius:16px;
+
+  border:
+
+    1px solid rgba(148,163,184,.12);
+
+  transition:.2s;
+
+}
+
+
+
+.feature-card:hover {
+
+  transform:translateY(-5px);
+
+  border-color:#38bdf8;
+
+}
+
+
+
+.feature-card p {
+
+  color:#94a3b8;
+
+  line-height:1.5;
+
+}
