@@ -6,6 +6,7 @@ import {authGuard} from './core/guards/auth.guard';
 import {guestGuard} from './core/guards/guest.guard';
 import { RegisterComponent } from './features/auth/components/register/register';
 import {HomeComponent} from './features/home/home';
+import {ErrorPage} from './features/errors/errors';
 
 
 export const routes: Routes = [
@@ -35,5 +36,10 @@ export const routes: Routes = [
     path: 'register',
     component: RegisterComponent,
     canActivate: [guestGuard],
+  }
+  ,
+  {
+    path:'error',
+    component: ErrorPage
   }
 ];

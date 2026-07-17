@@ -29,10 +29,12 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(request).pipe(
     catchError((error) => {
-      if (error.status === 401) {
-        authService.logout();
-
-        router.navigate(['/']);
+      if (error.status) {
+        router.navigate(['/error'], {
+          queryParams: {
+            status: error.status,
+          },
+        });
       }
 
       return throwError(() => error);
