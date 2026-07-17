@@ -104,6 +104,9 @@ services:
     depends_on:
       - eureka-server
 
+    environment:
+      KRAKEN_BASE_URL: ${KRAKEN_BASE_URL}
+
     networks:
       - trading-network
 
