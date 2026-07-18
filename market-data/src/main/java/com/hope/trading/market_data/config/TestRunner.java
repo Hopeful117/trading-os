@@ -1,6 +1,6 @@
 package com.hope.trading.market_data.config;
 
-import com.hope.trading.market_data.kraken.KrakenDataStreamProvider;
+import com.hope.trading.market_data.kraken.websocket.KrakenDataStreamProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -12,6 +12,8 @@ public class TestRunner implements CommandLineRunner {
 
     @Override
     public void run(String...args){
+
         provider.connect();
+
     }
 }

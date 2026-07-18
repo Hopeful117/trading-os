@@ -1,4 +1,4 @@
-package com.hope.trading.market_data.kraken;
+package com.hope.trading.market_data.kraken.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;

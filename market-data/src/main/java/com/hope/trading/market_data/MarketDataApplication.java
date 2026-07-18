@@ -1,6 +1,6 @@
 package com.hope.trading.market_data;
 
-import com.hope.trading.market_data.kraken.KrakenProperties;
+import com.hope.trading.market_data.kraken.config.KrakenProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;

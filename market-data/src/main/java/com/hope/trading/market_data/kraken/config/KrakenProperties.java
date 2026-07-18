@@ -1,4 +1,4 @@
-package com.hope.trading.market_data.kraken;
+package com.hope.trading.market_data.kraken.config;
 
 import lombok.Getter;
 import lombok.Setter;
