@@ -1,8 +1,8 @@
 package com.hope.trading.market_data.dto;
 
 import com.hope.trading.market_data.helper.MarketProvider;
-import com.hope.trading.market_data.helper.MarketStatus;
 import com.hope.trading.market_data.model.MarketConstraints;
+import com.hope.trading.market_data.model.MarketState;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -21,7 +21,7 @@ public class MarketResponse {
 
     private String quoteAsset;
 
-    private MarketStatus status;
+    private MarketState marketState;
 
     private MarketConstraints marketConstraints;
 

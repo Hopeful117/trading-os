@@ -1,4 +1,4 @@
-package com.hope.trading.broker_service.config;
+package com.hope.trading.broker_service.kraken.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;

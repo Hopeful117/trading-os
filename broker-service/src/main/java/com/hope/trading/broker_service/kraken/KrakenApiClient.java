@@ -1,8 +1,8 @@
-package com.hope.trading.broker_service.brokerClient;
+package com.hope.trading.broker_service.kraken;
 
+import com.hope.trading.broker_service.brokerClient.BrokerProvider;
 import com.hope.trading.broker_service.dto.*;
-import com.hope.trading.broker_service.helper.KrakenMapper;
-import com.hope.trading.broker_service.httpClient.KrakenHttpClient;
+import com.hope.trading.broker_service.kraken.httpClient.KrakenHttpClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

@@ -1,4 +1,4 @@
-package com.hope.trading.broker_service.httpClient;
+package com.hope.trading.broker_service.kraken.httpClient;
 
 import com.hope.trading.broker_service.dto.KrakenAccountBalanceResponse;
 import com.hope.trading.broker_service.dto.KrakenOpenPositionResponse;

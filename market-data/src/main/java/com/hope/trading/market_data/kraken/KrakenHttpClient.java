@@ -1,8 +1,6 @@
-package com.hope.trading.market_data.httpClient;
+package com.hope.trading.market_data.kraken;
 
-import com.hope.trading.market_data.dto.KrakenAssetPairsResponse;
 import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.GetMapping;
 
 @FeignClient(

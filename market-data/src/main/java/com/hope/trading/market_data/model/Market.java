@@ -1,9 +1,8 @@
 package com.hope.trading.market_data.model;
 
 
-import com.hope.trading.market_data.helper.MarketStatus;
+
 import com.hope.trading.market_data.helper.MarketProvider;
-import com.hope.trading.market_data.helper.MarketStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -40,14 +39,17 @@ public class Market {
     @Column(nullable = false)
     private String quoteAsset;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private MarketStatus status;
-
     @Embedded
+    @Column(nullable = false)
     private MarketConstraints marketConstraints;
 
+    @Embedded
+    @Column(nullable = false)
+    private MarketState marketState;
+
 }
+
+
 
 
 

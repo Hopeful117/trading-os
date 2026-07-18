@@ -1,11 +1,10 @@
-package com.hope.trading.broker_service.helper;
+package com.hope.trading.broker_service.kraken;
 
 import com.hope.trading.broker_service.dto.*;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 
 @Component
 public class KrakenMapper {

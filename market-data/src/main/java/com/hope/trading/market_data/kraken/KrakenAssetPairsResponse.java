@@ -1,4 +1,4 @@
-package com.hope.trading.market_data.dto;
+package com.hope.trading.market_data.kraken;
 
 import lombok.Data;
 
@@ -8,5 +8,5 @@ import java.util.Map;
 @Data
 public class KrakenAssetPairsResponse {
     private List<String> error;
-    private Map<String,KrakenAssetPairDto> result;
+    private Map<String, KrakenAssetPairDto> result;
 }
