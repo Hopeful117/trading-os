@@ -49,10 +49,24 @@ public class MarketSynchronizationImpl implements MarketSynchronization {
 
         existing.setBaseAsset(incoming.getBaseAsset());
         existing.setQuoteAsset(incoming.getQuoteAsset());
-        existing.setStatus(incoming.getStatus());
-        existing.setMarketConstraints(incoming.getMarketConstraints());
+
+        existing.setMarketConstraints(
+                incoming.getMarketConstraints()
+        );
+
+        updateMarketState(existing, incoming);
 
         return existing;
+    }
+    private void updateMarketState(
+            Market existing,
+            Market incoming
+    ) {
+
+        existing.setMarketState(
+                incoming.getMarketState()
+        );
+
     }
 }
 
