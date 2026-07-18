@@ -1,8 +1,7 @@
-package com.hope.trading.trading_core.service;
+package com.hope.trading.trading_core.broker.service;
 
-import com.hope.trading.trading_core.apiClient.BrokerApiClient;
-import com.hope.trading.trading_core.dto.BrokerAccountDto;
-import com.hope.trading.trading_core.dto.TradeCalculation;
+import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.helper.TradeStatus;
@@ -14,6 +13,7 @@ import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.TradeRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.service.TradingCalculatorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +22,7 @@ import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
-public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationService{
+public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationService {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final TradeRepository tradeRepository;

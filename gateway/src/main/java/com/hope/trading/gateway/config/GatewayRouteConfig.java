@@ -18,7 +18,11 @@ public class GatewayRouteConfig {
                 .route("accounts",r -> r
                         .path("/api/v1/accounts/**")
                         .uri("lb://trading-core")
-    )
+                 )
+                .route("markets", r -> r
+                        .path("/api/v1/markets/**")
+                                .uri("lb://market-data")
+                )
 
 
                 .build();

@@ -7,12 +7,13 @@ import {guestGuard} from './core/guards/guest.guard';
 import { RegisterComponent } from './features/auth/components/register/register';
 import {HomeComponent} from './features/home/home';
 import {ErrorPage} from './features/errors/errors';
+import {Markets} from './features/markets/markets'
 
 
 export const routes: Routes = [
   {
     path: '',
-    component: HomeComponent
+    component: HomeComponent,
   },
 
   {
@@ -36,10 +37,14 @@ export const routes: Routes = [
     path: 'register',
     component: RegisterComponent,
     canActivate: [guestGuard],
-  }
-  ,
+  },
   {
-    path:'error',
-    component: ErrorPage
-  }
+    path: 'error',
+    component: ErrorPage,
+  },
+  {
+    path: 'markets',
+    component: Markets,
+    canActivate: [authGuard],
+  },
 ];

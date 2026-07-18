@@ -1,4 +1,4 @@
-package com.hope.trading.trading_core.dto;
+package com.hope.trading.trading_core.broker.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

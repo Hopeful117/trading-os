@@ -1,0 +1,65 @@
+<div class="markets-page">
+
+  <div class="page-header">
+    <div>
+      <h1>Markets</h1>
+      <p>Available trading markets</p>
+    </div>
+  </div>
+
+
+  <div class="markets-card">
+
+    <table>
+
+      <thead>
+      <tr>
+        <th>Symbol</th>
+        <th>Provider</th>
+        <th>Base</th>
+        <th>Quote</th>
+        <th>Status</th>
+      </tr>
+      </thead>
+
+
+      <tbody>
+
+        @for (market of markets$ | async; track market.marketId) {
+
+          <tr>
+
+            <td class="symbol">
+              {{ market.symbol }}
+            </td>
+
+            <td>
+              {{ market.provider }}
+            </td>
+
+            <td>
+              {{ market.baseAsset }}
+            </td>
+
+            <td>
+              {{ market.quoteAsset }}
+            </td>
+
+            <td>
+            <span class="status"
+                  [class.open]="market.marketState.tradingStatus === 'OPEN'">
+              {{ market.marketState.tradingStatus }}
+            </span>
+            </td>
+
+          </tr>
+
+        }
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>

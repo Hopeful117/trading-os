@@ -1,11 +1,10 @@
-package com.hope.trading.trading_core.dto;
+package com.hope.trading.trading_core.broker.dto;
 
-import com.hope.trading.trading_core.model.AccountBalance;
+import com.hope.trading.trading_core.dto.Position;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.context.annotation.Bean;
 
 import java.util.List;
 

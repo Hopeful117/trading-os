@@ -1,24 +1,19 @@
 package com.hope.trading.trading_core.controller;
 
 import com.hope.trading.trading_core.dto.AccountDto;
-import com.hope.trading.trading_core.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.service.AccountService;
-import com.hope.trading.trading_core.service.BrokerSynchronizationService;
-import com.hope.trading.trading_core.service.UserService;
+import com.hope.trading.trading_core.broker.service.BrokerSynchronizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 /**

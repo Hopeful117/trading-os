@@ -1,8 +1,6 @@
 package com.hope.trading.trading_core.service;
 
 import com.hope.trading.trading_core.dto.AccountDto;
-import com.hope.trading.trading_core.dto.BrokerAccountDto;
-import com.hope.trading.trading_core.exception.DuplicateRessourceException;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;

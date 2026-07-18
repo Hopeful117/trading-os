@@ -1,8 +1,8 @@
 package com.hope.trading.trading_core.helper;
 
-import com.hope.trading.trading_core.dto.AccountBalanceDto;
+import com.hope.trading.trading_core.broker.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.dto.AccountDto;
-import com.hope.trading.trading_core.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.model.*;
 import org.springframework.stereotype.Component;
 
