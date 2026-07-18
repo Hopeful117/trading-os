@@ -13,7 +13,7 @@ public class MarketMapper {
                 .symbol(market.getSymbol())
                 .baseAsset(market.getBaseAsset())
                 .quoteAsset(market.getQuoteAsset())
-                .status(market.getStatus())
+                .marketState(market.getMarketState())
                 .marketConstraints(market.getMarketConstraints())
                 .build();
     }

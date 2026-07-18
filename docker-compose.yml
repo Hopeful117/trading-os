@@ -134,6 +134,7 @@ services:
 
     environment:
       KRAKEN_BASE_URL: ${KRAKEN_BASE_URL}
+      KRAKEN_WEBSOCKET: ${KRAKEN_WEBSOCKET}
 
     networks:
       - trading-network
