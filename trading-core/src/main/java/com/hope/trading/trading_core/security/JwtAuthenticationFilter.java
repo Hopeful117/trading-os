@@ -38,7 +38,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .anyMatch(path::equalsIgnoreCase);
 
             if (isPublic) {
-                log.info("Accessing public path");
+                log.debug("Public endpoint accessed path={}", path);
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -46,7 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                log.info("No token detected");
+                log.debug("No bearer token provided path={}", path);
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -54,7 +54,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = authHeader.substring(7);
 
             if (!jwtService.isTokenValid(token)) {
-                log.error("Invalid token");
+                log.warn("Invalid bearer token rejected path={}", path);
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
@@ -85,4 +85,3 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
     }
-

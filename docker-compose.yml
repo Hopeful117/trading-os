@@ -39,6 +39,7 @@ services:
     build: ./trading-core
     container_name: trading-app
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/trading_os
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION}
@@ -58,6 +59,7 @@ services:
     build: ./broker-service
     container_name: broker-service
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       KRAKEN_BASE_URL: ${KRAKEN_BASE_URL}
       KRAKEN_API_KEY: ${KRAKEN_API_KEY}
       KRAKEN_API_SECRET: ${KRAKEN_API_SECRET}
@@ -80,6 +82,8 @@ services:
   eureka-server:
     build: ./eureka-server
     container_name: eureka-server
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
     ports:
       - "8761:8761"
 
@@ -94,6 +98,7 @@ services:
     build: ./gateway
     container_name: gateway
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       GATEWAY_PORT: 8080
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION}
@@ -133,6 +138,7 @@ services:
       - market-data-db
 
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       KRAKEN_BASE_URL: ${KRAKEN_BASE_URL}
       KRAKEN_WEBSOCKET: ${KRAKEN_WEBSOCKET}
 
@@ -151,5 +157,4 @@ networks:
 volumes:
   market_data:
   trading_os:
-
 

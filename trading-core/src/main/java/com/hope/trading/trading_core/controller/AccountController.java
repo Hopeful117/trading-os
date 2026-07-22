@@ -38,7 +38,7 @@ public class AccountController {
      */
     @GetMapping("/{accountId}")
     public ResponseEntity<AccountDto> getAccount(@PathVariable UUID accountId,Authentication authentication) {
-        log.info("Accessing account {}",accountId);
+        log.debug("Account requested accountId={}", accountId);
         UserDto user =
                 (UserDto) authentication.getPrincipal();
         assert user != null;
@@ -52,7 +52,7 @@ public class AccountController {
      */
     @GetMapping
     public ResponseEntity<List<AccountDto>> getAllAccounts(Authentication authentication) {
-        log.info("requesting account list");
+        log.debug("Account list requested");
         UserDto user =
                 (UserDto) authentication.getPrincipal();
 

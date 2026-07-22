@@ -117,7 +117,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                                 tickerMapper.toEvent(data);
 
 
-                        log.info(
+                        log.debug(
                                 "MarketDataEvent received : {}",
                                 event
                         );
@@ -141,4 +141,3 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
 
     }
-

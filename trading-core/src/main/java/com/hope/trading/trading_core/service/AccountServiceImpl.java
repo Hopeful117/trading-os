@@ -111,7 +111,7 @@ public class AccountServiceImpl implements AccountService {
     @Override
     @Transactional(readOnly = true)
     public List<AccountDto> getAllUserAccounts(String username) {
-        log.info("Retrieving account for user {}",username);
+        log.debug("Retrieving account for authenticated user");
         User user = userRepository.findByUsername(username).orElseThrow(()->new EntityNotFoundException("User not found"));
 
         return accountRepository.findAllByUser_UserId(user.getUserId())

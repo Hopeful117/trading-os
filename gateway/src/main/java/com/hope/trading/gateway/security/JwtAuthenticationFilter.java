@@ -39,7 +39,7 @@ public class JwtAuthenticationFilter implements WebFilter {
         boolean isPublic = PUBLIC_ENDPOINTS.stream()
                 .anyMatch(endpoint -> endpoint.equalsIgnoreCase(path));
         if (isPublic  ) {
-            log.info("accessing public path");
+            log.debug("Public endpoint accessed path={}", path);
             return chain.filter(exchange);
         }
         String authHeader =
@@ -48,7 +48,7 @@ public class JwtAuthenticationFilter implements WebFilter {
                         .getFirst(HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.info("no token detected");
+            log.debug("No bearer token provided path={}", path);
             return chain.filter(exchange);
         }
 
@@ -56,7 +56,7 @@ public class JwtAuthenticationFilter implements WebFilter {
 
         if (!jwtService.isTokenValid(token)) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            log.error("invalid token");
+            log.warn("Invalid bearer token rejected path={}", path);
             return exchange.getResponse().setComplete();
         }
 
