@@ -8,6 +8,7 @@ import { RegisterComponent } from './features/auth/components/register/register'
 import {HomeComponent} from './features/home/home';
 import {ErrorPage} from './features/errors/errors';
 import {Markets} from './features/markets/markets'
+import {MarketDetail} from './features/markets/markets-details/markets-details';
 
 
 export const routes: Routes = [
@@ -45,6 +46,11 @@ export const routes: Routes = [
   {
     path: 'markets',
     component: Markets,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'markets/:marketId',
+    component: MarketDetail,
     canActivate: [authGuard],
   },
 ];

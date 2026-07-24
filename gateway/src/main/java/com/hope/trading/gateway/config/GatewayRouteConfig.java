@@ -23,6 +23,9 @@ public class GatewayRouteConfig {
                         .path("/api/v1/markets/**")
                                 .uri("lb://market-data")
                 )
+                .route("markets-data-websocket",r->r
+                        .path("/ws/market-data")
+                        .uri("lb:ws://market-data"))
 
 
                 .build();

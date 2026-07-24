@@ -1,0 +1,85 @@
+<section class="market-detail">
+  <a routerLink="/markets" class="back-link">
+    ← Back to markets
+  </a>
+
+  @if (market$ | async; as market) {
+    <header class="market-header">
+      <div>
+        <span class="provider">{{ market.provider }}</span>
+        <h1>{{ market.symbol }}</h1>
+        <p>
+          {{ market.baseAsset }} / {{ market.quoteAsset }}
+        </p>
+      </div>
+
+      <span
+        class="market-status"
+        [class.open]="market.marketState.tradable"
+      >
+        {{ market.marketState.tradingStatus }}
+      </span>
+    </header>
+
+    <div class="detail-grid">
+      <article class="detail-card">
+        <span class="card-label">Minimum order size</span>
+        <strong>
+          {{ market.marketConstraints.minimumOrderSize }}
+        </strong>
+      </article>
+
+      <article class="detail-card">
+        <span class="card-label">Minimum cost</span>
+        <strong>
+          {{ market.marketConstraints.minimumCost }}
+        </strong>
+      </article>
+
+      <article class="detail-card">
+        <span class="card-label">Tick size</span>
+        <strong>
+          {{ market.marketConstraints.tickSize }}
+        </strong>
+      </article>
+
+      <article class="detail-card">
+        <span class="card-label">Price precision</span>
+        <strong>
+          {{ market.marketConstraints.pricePrecision }}
+        </strong>
+      </article>
+    </div>
+
+    @if (ticker$ | async; as ticker) {
+      <section class="ticker-grid">
+        <article class="ticker-card ticker-card--primary">
+          <span>Last price</span>
+          <strong>{{ ticker.last }}</strong>
+        </article>
+
+        <article class="ticker-card">
+          <span>Bid</span>
+          <strong>{{ ticker.bid }}</strong>
+        </article>
+
+        <article class="ticker-card">
+          <span>Ask</span>
+          <strong>{{ ticker.ask }}</strong>
+        </article>
+
+        <article class="ticker-card">
+          <span>Spread</span>
+          <strong>{{ ticker.ask - ticker.bid }}</strong>
+        </article>
+      </section>
+
+      <p class="ticker-updated">
+        Last update: {{ ticker.timestamp | date:'mediumTime' }}
+      </p>
+    } @else {
+      <p>Waiting for live market data...</p>
+    }
+  
+  }
+</section>

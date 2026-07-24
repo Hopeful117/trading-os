@@ -1,16 +1,18 @@
 package com.hope.trading.market_data.brokerClient;
 
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketStreamRequest;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
 public interface MarketDataStreamProvider {
-    void connect();
+    Mono<Void> connect();
 
-    void disconnect();
+    Mono <Void> disconnect();
 
-    void subscribe(List<Market> markets);
+    Mono<Void> subscribe(List<Market> markets, MarketStreamRequest request);
 
-    void unsubscribe(List<Market> markets);
+    Mono<Void> unsubscribe(List<Market> markets,MarketStreamRequest request);
 
 }

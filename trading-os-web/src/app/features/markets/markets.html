@@ -27,7 +27,13 @@
 
         @for (market of markets$ | async; track market.marketId) {
 
-          <tr>
+          <tr
+            class="market-row"
+            tabindex="0"
+            (click)="openMarket(market.marketId)"
+            (keydown.enter)="openMarket(market.marketId)"
+
+          >
 
             <td class="symbol">
               {{ market.symbol }}

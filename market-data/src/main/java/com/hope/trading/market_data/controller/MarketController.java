@@ -3,7 +3,10 @@ package com.hope.trading.market_data.controller;
 import com.hope.trading.market_data.dto.MarketResponse;
 import com.hope.trading.market_data.helper.MarketMapper;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketStreamRequest;
+import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.service.MarketService;
+import com.hope.trading.market_data.service.MarketSubscriptionService;
 import com.hope.trading.market_data.service.MarketSynchronization;
 import feign.Response;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +24,7 @@ public class MarketController {
     private final MarketSynchronization marketSynchronization;
     private final MarketService marketService;
     private final MarketMapper marketMapper;
+    private final MarketSubscriptionService marketSubscriptionService;
 
 
     @GetMapping
@@ -53,6 +57,32 @@ public class MarketController {
         marketSynchronization.synchronizeMarkets();
 
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{marketId}/subscriptions")
+    public ResponseEntity<Void> subscribe(
+            @PathVariable UUID marketId,
+            @RequestBody MarketStreamRequest request
+    ) {
+        marketSubscriptionService.subscribe(
+                marketId,
+                request
+        );
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{marketId}/subscriptions")
+    public ResponseEntity<Void> unsubscribe(
+            @PathVariable UUID marketId,
+            @RequestBody MarketStreamRequest request
+    ) {
+        marketSubscriptionService.unsubscribe(
+                marketId,
+                request
+        );
+
+        return ResponseEntity.noContent().build();
     }
 
 }

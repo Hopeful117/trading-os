@@ -146,3 +146,15 @@ table {
   }
 
 }
+.market-row {
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: -2px;
+  }
+}
