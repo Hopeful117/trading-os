@@ -5,81 +5,216 @@
 
   @if (market$ | async; as market) {
     <header class="market-header">
-      <div>
+      <div class="market-identity">
         <span class="provider">{{ market.provider }}</span>
+
         <h1>{{ market.symbol }}</h1>
+
         <p>
           {{ market.baseAsset }} / {{ market.quoteAsset }}
         </p>
       </div>
 
-      <span
-        class="market-status"
-        [class.open]="market.marketState.tradable"
-      >
-        {{ market.marketState.tradingStatus }}
-      </span>
+      <div class="market-header-status">
+        <span
+          class="market-status"
+          [class.open]="market.marketState.tradable"
+        >
+          {{ market.marketState.tradingStatus }}
+        </span>
+
+        @if (ticker$ | async; as ticker) {
+          <span class="market-updated">
+            Updated {{ ticker.occurredAt | date: 'mediumTime' }}
+          </span>
+        }
+      </div>
     </header>
 
-    <div class="detail-grid">
-      <article class="detail-card">
-        <span class="card-label">Minimum order size</span>
-        <strong>
-          {{ market.marketConstraints.minimumOrderSize }}
-        </strong>
-      </article>
+    <main class="market-workspace">
+      <section
+        class="market-section market-section--ticker"
+        aria-labelledby="live-market-title"
+      >
+        <div class="section-header">
+          <div>
+            <span class="section-eyebrow">Live market</span>
+            <h2 id="live-market-title">Ticker</h2>
+          </div>
 
-      <article class="detail-card">
-        <span class="card-label">Minimum cost</span>
-        <strong>
-          {{ market.marketConstraints.minimumCost }}
-        </strong>
-      </article>
+          <span class="stream-badge">TICKER</span>
+        </div>
 
-      <article class="detail-card">
-        <span class="card-label">Tick size</span>
-        <strong>
-          {{ market.marketConstraints.tickSize }}
-        </strong>
-      </article>
+        @if (ticker$ | async; as ticker) {
+          <div class="ticker-grid">
+            <article class="ticker-card ticker-card--primary">
+              <span>Last price</span>
+              <strong>{{ ticker.last }}</strong>
+            </article>
 
-      <article class="detail-card">
-        <span class="card-label">Price precision</span>
-        <strong>
-          {{ market.marketConstraints.pricePrecision }}
-        </strong>
-      </article>
-    </div>
+            <article class="ticker-card">
+              <span>Bid</span>
+              <strong>{{ ticker.bid }}</strong>
+            </article>
 
-    @if (ticker$ | async; as ticker) {
-      <section class="ticker-grid">
-        <article class="ticker-card ticker-card--primary">
-          <span>Last price</span>
-          <strong>{{ ticker.last }}</strong>
-        </article>
+            <article class="ticker-card">
+              <span>Ask</span>
+              <strong>{{ ticker.ask }}</strong>
+            </article>
 
-        <article class="ticker-card">
-          <span>Bid</span>
-          <strong>{{ ticker.bid }}</strong>
-        </article>
+            <article class="ticker-card">
+              <span>Spread</span>
+              <strong>{{ ticker.ask - ticker.bid }}</strong>
+            </article>
 
-        <article class="ticker-card">
-          <span>Ask</span>
-          <strong>{{ ticker.ask }}</strong>
-        </article>
-
-        <article class="ticker-card">
-          <span>Spread</span>
-          <strong>{{ ticker.ask - ticker.bid }}</strong>
-        </article>
+            @if (ticker.volume !== null) {
+              <article class="ticker-card">
+                <span>Volume</span>
+                <strong>{{ ticker.volume }}</strong>
+              </article>
+            }
+          </div>
+        } @else {
+          <div class="section-placeholder">
+            <p>Waiting for live market data...</p>
+          </div>
+        }
       </section>
 
-      <p class="ticker-updated">
-        Last update: {{ ticker.timestamp | date:'mediumTime' }}
-      </p>
-    } @else {
-      <p>Waiting for live market data...</p>
-    }
-  
+      <section
+        class="market-section market-section--chart"
+        aria-labelledby="price-chart-title"
+      >
+        <div class="section-header">
+          <div>
+            <span class="section-eyebrow">Price history</span>
+            <h2 id="price-chart-title">Market chart</h2>
+          </div>
+
+          <div class="timeframe-selector">
+            <button type="button" disabled>1m</button>
+            <button type="button" disabled>5m</button>
+            <button type="button" disabled>15m</button>
+            <button type="button" disabled>1h</button>
+            <button type="button" disabled>4h</button>
+            <button type="button" disabled>1d</button>
+          </div>
+        </div>
+
+        <div class="chart-placeholder">
+          <div class="chart-placeholder-grid"></div>
+
+          <div class="chart-placeholder-content">
+            <strong>OHLC chart coming next</strong>
+            <p>
+              Historical candles and real-time updates will appear here.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div class="market-secondary-grid">
+        <section
+          class="market-section"
+          aria-labelledby="order-book-title"
+        >
+          <div class="section-header">
+            <div>
+              <span class="section-eyebrow">Liquidity</span>
+              <h2 id="order-book-title">Order book</h2>
+            </div>
+          </div>
+
+          <div class="section-placeholder section-placeholder--compact">
+            <p>Order-book data is not available yet.</p>
+          </div>
+        </section>
+
+        <section
+          class="market-section"
+          aria-labelledby="recent-trades-title"
+        >
+          <div class="section-header">
+            <div>
+              <span class="section-eyebrow">Execution flow</span>
+              <h2 id="recent-trades-title">Recent trades</h2>
+            </div>
+          </div>
+
+          <div class="section-placeholder section-placeholder--compact">
+            <p>Recent trade events will appear here.</p>
+          </div>
+        </section>
+      </div>
+
+      <section
+        class="market-section"
+        aria-labelledby="market-information-title"
+      >
+        <div class="section-header">
+          <div>
+            <span class="section-eyebrow">Trading conditions</span>
+            <h2 id="market-information-title">
+              Market information
+            </h2>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <article class="detail-card">
+            <span class="card-label">Minimum order size</span>
+            <strong>
+              {{ market.marketConstraints.minimumOrderSize }}
+            </strong>
+          </article>
+
+          <article class="detail-card">
+            <span class="card-label">Minimum cost</span>
+            <strong>
+              {{ market.marketConstraints.minimumCost }}
+            </strong>
+          </article>
+
+          <article class="detail-card">
+            <span class="card-label">Tick size</span>
+            <strong>
+              {{ market.marketConstraints.tickSize }}
+            </strong>
+          </article>
+
+          <article class="detail-card">
+            <span class="card-label">Quantity precision</span>
+            <strong>
+              {{ market.marketConstraints.quantityPrecision }}
+            </strong>
+          </article>
+
+          <article class="detail-card">
+            <span class="card-label">Price precision</span>
+            <strong>
+              {{ market.marketConstraints.pricePrecision }}
+            </strong>
+          </article>
+
+          <article class="detail-card">
+            <span class="card-label">Last market-state update</span>
+            <strong>
+              {{ market.marketState.lastUpdated | date: 'short' }}
+            </strong>
+          </article>
+        </div>
+
+        @if (market.marketState.closureReason) {
+          <div class="market-notice">
+            <strong>Market status information</strong>
+            <p>{{ market.marketState.closureReason }}</p>
+          </div>
+        }
+      </section>
+    </main>
+  } @else {
+    <div class="page-loading">
+      <p>Loading market...</p>
+    </div>
   }
 </section>

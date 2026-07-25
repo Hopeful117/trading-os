@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import {MarketDataEvent} from '../models/MarketDataEvent';
+import {TickerEvent} from '../models/ticker-event.model';
 import { environment } from '../../../environments/environment';
 import {AuthService} from './auth.service';
 
@@ -11,8 +11,8 @@ import {AuthService} from './auth.service';
 export class MarketDataStreamService {
   private readonly authService = inject(AuthService);
 
-  streamTicker(symbol: string): Observable<MarketDataEvent> {
-    return new Observable<MarketDataEvent>((subscriber) => {
+  streamTicker(symbol: string): Observable<TickerEvent> {
+    return new Observable<TickerEvent>((subscriber) => {
       const token = this.authService.getToken();
       if (!token) {
         subscriber.error(new Error('No authentication token available'));
@@ -25,7 +25,7 @@ export class MarketDataStreamService {
 
       socket.onmessage = (event) => {
         try {
-          subscriber.next(JSON.parse(event.data) as MarketDataEvent);
+          subscriber.next(JSON.parse(event.data) as TickerEvent);
         } catch (error) {
           subscriber.error(error);
         }

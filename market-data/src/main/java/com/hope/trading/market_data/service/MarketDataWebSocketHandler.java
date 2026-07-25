@@ -2,6 +2,7 @@ package com.hope.trading.market_data.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_data.model.MarketDataEvent;
+import com.hope.trading.market_data.model.TickerEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
@@ -24,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 @Slf4j
 public class MarketDataWebSocketHandler extends TextWebSocketHandler {
-    private final MarketDataEventPublisher eventPublisher;
+    private final TickerEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final Map<String, Disposable> subscriptions =
             new ConcurrentHashMap<>();
@@ -79,7 +80,7 @@ public class MarketDataWebSocketHandler extends TextWebSocketHandler {
 
     private void sendEvent(
             WebSocketSession session,
-            MarketDataEvent event
+            TickerEvent event
     ) {
         if (!session.isOpen()) {
             return;
@@ -94,18 +95,7 @@ public class MarketDataWebSocketHandler extends TextWebSocketHandler {
                         new TextMessage(payload)
                 );
             }
-            log.info(
-                    "[FRONTEND-WS] sending session={} symbol={} last={}",
-                    session.getId(),
-                    event.getSymbol(),
-                    event.getLast()
-            );
 
-            log.debug(
-                    "[WS] Frame sent session={} symbol={}",
-                    session.getId(),
-                    event.getSymbol()
-            );
 
         } catch (Exception exception) {
             log.error(

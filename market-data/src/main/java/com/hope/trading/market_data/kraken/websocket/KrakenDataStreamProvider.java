@@ -7,7 +7,9 @@ import com.hope.trading.market_data.kraken.helper.KrakenTickerMapper;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketDataEvent;
 import com.hope.trading.market_data.model.MarketStreamRequest;
+import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.service.MarketDataEventPublisher;
+import com.hope.trading.market_data.service.TickerEventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketMessage;
@@ -21,6 +23,10 @@ import tools.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Component
 @Slf4j
@@ -30,9 +36,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final ObjectMapper objectMapper;
     private final KrakenTickerMapper tickerMapper;
     private Mono<Void>connection;
-    private final MarketDataEventPublisher eventPublisher;
-    private static final Duration KRAKEN_PING_INTERVAL =
-            Duration.ofSeconds(30);
+    private final ConcurrentMap<String, Market> subscribedMarkets =
+            new ConcurrentHashMap<>();
     private volatile WebSocketSession session;
     private volatile reactor.core.Disposable connectionSubscription;
     private final java.util.concurrent.atomic.AtomicBoolean connecting =
@@ -43,12 +48,13 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     .unicast()
                     .onBackpressureBuffer();
 
+    private final TickerEventPublisher tickerEventPublisher;
 
-
-    public KrakenDataStreamProvider(KrakenProperties krakenProperties, ObjectMapper objectMapper, KrakenTickerMapper tickerMapper, MarketDataEventPublisher eventPublisher) {
+    public KrakenDataStreamProvider(KrakenProperties krakenProperties, ObjectMapper objectMapper, KrakenTickerMapper tickerMapper, MarketDataEventPublisher eventPublisher, TickerEventPublisher tickerEventPublisher) {
         this.objectMapper = objectMapper;
         this.tickerMapper = tickerMapper;
-        this.eventPublisher = eventPublisher;
+        this.tickerEventPublisher = tickerEventPublisher;
+
         this.client = new ReactorNettyWebSocketClient();
         this.krakenProperties = krakenProperties;
 
@@ -168,21 +174,38 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             List<Market> markets,
             MarketStreamRequest request
     ) {
-
-        List<String> symbols =
-                extractSymbols(markets);
+        List<String> symbols = extractSymbols(markets);
 
         if (symbols.isEmpty()) {
             return Mono.empty();
         }
 
+        markets.stream()
+                .filter(Objects::nonNull)
+                .forEach(market ->
+                        subscribedMarkets.put(
+                                normalize(market.getSymbol()),
+                                market
+                        )
+                );
+
         return connect()
                 .then(
-                        queueSubscriptionRequest(
+                        sendSubscriptionRequest(
                                 KrakenSubscriptionMethod.SUBSCRIBE,
                                 KrakenChannel.TICKER,
                                 symbols
                         )
+                )
+                .doOnError(error ->
+                        markets.stream()
+                                .filter(Objects::nonNull)
+                                .forEach(market ->
+                                        subscribedMarkets.remove(
+                                                normalize(market.getSymbol()),
+                                                market
+                                        )
+                                )
                 );
     }
     @Override
@@ -190,21 +213,26 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             List<Market> markets,
             MarketStreamRequest request
     ) {
-
         List<String> symbols = extractSymbols(markets);
 
         if (symbols.isEmpty()) {
             return Mono.empty();
         }
 
-        return connect()
-                .then(
-                        sendSubscriptionRequest(
-                                KrakenSubscriptionMethod.UNSUBSCRIBE,
-                                KrakenChannel.TICKER,
-                                symbols
+        return sendSubscriptionRequest(
+                KrakenSubscriptionMethod.UNSUBSCRIBE,
+                KrakenChannel.TICKER,
+                symbols
+        ).doOnSuccess(ignored ->
+                markets.stream()
+                        .filter(Objects::nonNull)
+                        .forEach(market ->
+                                subscribedMarkets.remove(
+                                        normalize(market.getSymbol()),
+                                        market
+                                )
                         )
-                );
+        );
     }
     private void handleMessage(String message) {
 
@@ -231,19 +259,36 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     );
 
             tickerMessage.getData()
-                    .stream()
-                    .map(tickerMapper::toEvent)
-                    .forEach(event -> {
-                        log.info(
-                                "[KRAKEN] event symbol={} bid={} ask={} last={}",
-                                event.getSymbol(),
-                                event.getBid(),
-                                event.getAsk(),
-                                event.getLast()
-                        );
+                    .forEach(data -> {
 
-                        eventPublisher.publish(event);
+                        String symbol =
+                                normalize(data.getSymbol());
+
+                        Market market =
+                                subscribedMarkets.get(symbol);
+
+                        if (market == null) {
+                            log.warn(
+                                    "Ignoring Kraken ticker without subscribed market symbol={}",
+                                    symbol
+                            );
+                            return;
+                        }
+
+                        TickerEvent event =
+                                tickerMapper.toEvent(
+                                        data,
+                                        market
+                                );
+
+                        tickerEventPublisher.publish(event);
+
+                        log.debug(
+                                "TickerEvent received: {}",
+                                event
+                        );
                     });
+
 
         } catch (Exception exception) {
             log.error(
@@ -431,6 +476,11 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         );
 
         return Mono.empty();
+    }
+    private String normalize(String symbol) {
+        return symbol
+                .trim()
+                .toUpperCase(Locale.ROOT);
     }
 
 
