@@ -1,0 +1,38 @@
+<section class="market-toolbar">
+  <div class="search-field">
+    <label for="market-search" class="sr-only">
+      Search markets
+    </label>
+
+    <span class="search-icon" aria-hidden="true">
+      ⌕
+    </span>
+
+    <input
+      id="market-search"
+      type="search"
+      [formControl]="searchControl"
+      placeholder="Search by symbol, asset or provider"
+      autocomplete="off"
+    />
+
+    @if (searchControl.value) {
+      <button
+        type="button"
+        class="clear-button"
+        aria-label="Clear market search"
+        (click)="clearSearch()"
+      >
+        ×
+      </button>
+    }
+  </div>
+
+  <button
+    type="button"
+    class="refresh-button"
+    (click)="refresh()"
+  >
+    Refresh
+  </button>
+</section>

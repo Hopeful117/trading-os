@@ -6,7 +6,10 @@
       <p>Available trading markets</p>
     </div>
   </div>
-
+  <app-market-toolbar-component
+    (filterChange)="applyFilter($event)"
+    (refreshRequested)="refreshMarkets()"
+  />
 
   <div class="markets-card">
 
@@ -24,8 +27,11 @@
 
 
       <tbody>
+        @if (filteredMarkets$ | async; as markets) {
+          @if (markets.length > 0) {
+            @for (market of markets; track market.marketId) {
 
-        @for (market of markets$ | async; track market.marketId) {
+
 
           <tr
             class="market-row"
@@ -60,7 +66,14 @@
 
           </tr>
 
+        }}@else {
+          <section class="empty-state">
+            <h2>No market found</h2>
+            <p>Try another symbol, asset or provider.</p>
+          </section>
         }
+        }
+
 
       </tbody>
 
