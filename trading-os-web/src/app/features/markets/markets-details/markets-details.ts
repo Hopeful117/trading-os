@@ -1,14 +1,13 @@
-import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { AsyncPipe, DatePipe } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { distinctUntilChanged, filter, map,shareReplay, switchMap, tap } from 'rxjs';
+import { Component, DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { distinctUntilChanged, filter, map, shareReplay, switchMap, tap } from 'rxjs';
 
-import {MarketService} from '../../../core/services/market.service';
-import {MarketStreamType} from '../../../core/models/market-stream-type';
+import { MarketDataStreamService } from '../../../core/services/market-data-stream.service';
+import { MarketService } from '../../../core/services/market.service';
 import { MarketStreamRequest } from '../../../core/models/market-stream-request';
-import {MarketDataStreamService} from '../../../core/services/market-data-stream.service';
-
+import { MarketStreamType } from '../../../core/models/market-stream-type';
 
 @Component({
   selector: 'app-market-details',
@@ -16,11 +15,13 @@ import {MarketDataStreamService} from '../../../core/services/market-data-stream
   templateUrl: './markets-details.html',
   styleUrl: './markets-details.scss',
 })
-export class MarketDetail implements OnInit {
+export class MarketDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly marketService = inject(MarketService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly marketDataStreamService = inject(MarketDataStreamService);
+
+  private subscribedMarketId: string | null = null;
 
   private readonly tickerRequest: MarketStreamRequest = {
     type: MarketStreamType.TICKER,
@@ -45,34 +46,44 @@ export class MarketDetail implements OnInit {
     }),
   );
 
-  ngOnInit(): void {
-    this.marketId$
-      .pipe(
-        switchMap((marketId) =>
-          this.marketService.subscribe(marketId, this.tickerRequest).pipe(map(() => marketId)),
-        ),
-        tap((marketId) => {
-          this.destroyRef.onDestroy(() => {
-            this.marketService.unsubscribe(marketId, this.tickerRequest).subscribe({
-              error: (error) => {
-                console.error('Unable to unsubscribe from market ticker', error);
-              },
-            });
-          });
-        }),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        error: (error) => {
-          console.error('Unable to subscribe to market ticker', error);
-        },
-      });
-  }
+  /**
+   * Un seul pipeline :
+   *
+   * marché chargé
+   * → abonnement REST terminé
+   * → ouverture du WebSocket frontend
+   */
   readonly ticker$ = this.market$.pipe(
-    switchMap((market) => this.marketDataStreamService.streamTicker(market.symbol)),
+    switchMap((market) =>
+      this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
+        tap(() => {
+          this.subscribedMarketId = market.marketId;
+        }),
+        switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
+      ),
+    ),
     shareReplay({
       bufferSize: 1,
       refCount: true,
     }),
   );
+
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      const marketId = this.subscribedMarketId;
+
+      if (marketId === null) {
+        return;
+      }
+
+      this.marketService
+        .unsubscribe(marketId, this.tickerRequest)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          error: (error) => {
+            console.error('Unable to unsubscribe from market ticker', error);
+          },
+        });
+    });
+  }
 }
