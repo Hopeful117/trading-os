@@ -34,12 +34,6 @@ public class TickerEventPublisher {
         latestEvents.put(symbol, event);
 
         Sinks.EmitResult result = sink.tryEmitNext(event);
-        log.info(
-                "[TICKER-PUBLISHER] symbol={} last={} result={}",
-                event.symbol(),
-                event.last(),
-                result
-        );
 
         if (result.isFailure()
                 && result != Sinks.EmitResult.FAIL_ZERO_SUBSCRIBER) {

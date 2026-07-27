@@ -2,16 +2,28 @@ import { AsyncPipe, DatePipe } from '@angular/common';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { distinctUntilChanged, filter, map, shareReplay, switchMap, tap } from 'rxjs';
+import {
+  BehaviorSubject,
+  catchError,
+  combineLatest,
+  distinctUntilChanged,
+  filter,
+  map,
+  of,
+  shareReplay,
+  switchMap,
+  tap,
+} from 'rxjs';
 
 import { MarketDataStreamService } from '../../../core/services/market-data-stream.service';
 import { MarketService } from '../../../core/services/market.service';
 import { MarketStreamRequest } from '../../../core/models/market-stream-request';
 import { MarketStreamType } from '../../../core/models/market-stream-type';
+import { MarketChartComponent } from '../market-chart-component/market-chart-component';
 
 @Component({
   selector: 'app-market-details',
-  imports: [AsyncPipe, RouterLink, DatePipe],
+  imports: [AsyncPipe, RouterLink, DatePipe, MarketChartComponent],
   templateUrl: './markets-details.html',
   styleUrl: './markets-details.scss',
 })
@@ -22,15 +34,26 @@ export class MarketDetail {
   private readonly marketDataStreamService = inject(MarketDataStreamService);
 
   private subscribedMarketId: string | null = null;
-  private readonly ohlcInterval = 5;
+  readonly ohlcIntervals = [
+    { label: '1m', minutes: 1 },
+    { label: '5m', minutes: 5 },
+    { label: '15m', minutes: 15 },
+    { label: '30m', minutes: 30 },
+    { label: '1h', minutes: 60 },
+    { label: '4h', minutes: 240 },
+    { label: '1d', minutes: 1440 },
+  ] as const;
 
-  private readonly ohlcRequest: MarketStreamRequest = {
-    type: MarketStreamType.OHLC,
-    parameters: {
-      interval: this.ohlcInterval,
-      depth: 0,
-    },
-  };
+  private readonly ohlcIntervalSubject = new BehaviorSubject<number>(5);
+
+  readonly selectedOhlcInterval$ = this.ohlcIntervalSubject.pipe(
+    distinctUntilChanged(),
+    shareReplay({
+      bufferSize: 1,
+      refCount: true,
+    }),
+  );
+  private activeOhlcSubscription: ActiveOhlcSubscription | null = null;
 
   private readonly tickerRequest: MarketStreamRequest = {
     type: MarketStreamType.TICKER,
@@ -54,14 +77,10 @@ export class MarketDetail {
       refCount: true,
     }),
   );
+  private readonly chartResetSubject = new BehaviorSubject<number>(0);
 
-  /**
-   * Un seul pipeline :
-   *
-   * marché chargé
-   * → abonnement REST terminé
-   * → ouverture du WebSocket frontend
-   */
+  readonly chartReset$ = this.chartResetSubject.asObservable();
+
   readonly ticker$ = this.market$.pipe(
     tap((market) => {
       console.log('[TICKER] Market received', market);
@@ -91,50 +110,92 @@ export class MarketDetail {
 
   constructor() {
     this.destroyRef.onDestroy(() => {
-      const marketId = this.subscribedMarketId;
+      const active = this.activeOhlcSubscription;
 
-      if (marketId === null) {
+      if (active === null) {
         return;
       }
 
-      this.marketService
-        .unsubscribe(marketId, this.tickerRequest)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          error: (error) => {
-            console.error('Unable to unsubscribe from market ticker', error);
-          },
-        });
+      this.marketService.unsubscribe(active.marketId, active.request).subscribe({
+        error: (error) => {
+          console.error('Unable to unsubscribe OHLC stream', error);
+        },
+      });
     });
   }
-  readonly ohlc$ = this.market$.pipe(
-    tap((market) => {
-      console.log('[OHLC] Market received', market);
-    }),
-    switchMap((market) => {
-      console.log('[OHLC] Sending REST subscription', market.marketId, this.ohlcRequest);
+  selectOhlcInterval(interval: number): void {
+    if (this.ohlcIntervalSubject.value === interval) {
+      return;
+    }
 
-      return this.marketService.subscribe(market.marketId, this.ohlcRequest).pipe(
+    this.ohlcIntervalSubject.next(interval);
+  }
+  readonly ohlc$ = combineLatest([this.market$, this.selectedOhlcInterval$]).pipe(
+    switchMap(([market, interval]) => {
+      const nextRequest: MarketStreamRequest = {
+        type: MarketStreamType.OHLC,
+        parameters: {
+          interval,
+          depth: 0,
+        },
+      };
+
+      /*
+       * switchMap vient déjà de fermer l’ancien
+       * WebSocket Angular à ce stade.
+       */
+      const previousSubscription = this.activeOhlcSubscription;
+
+      const unsubscribePrevious$ =
+        previousSubscription === null
+          ? of(undefined)
+          : this.marketService
+              .unsubscribe(previousSubscription.marketId, previousSubscription.request)
+              .pipe(
+                catchError((error) => {
+                  console.error('Unable to unsubscribe previous OHLC stream', error);
+
+                  /*
+                   * On poursuit afin de ne pas bloquer
+                   * définitivement le changement d’intervalle.
+                   */
+                  return of(undefined);
+                }),
+              );
+
+      return unsubscribePrevious$.pipe(
         tap(() => {
-          console.log('[OHLC] REST subscription completed');
-        }),
-        switchMap(() => {
-          console.log('[OHLC] Opening frontend WebSocket');
+          this.activeOhlcSubscription = null;
 
-          return this.marketDataStreamService.streamOhlc(
-            market.marketId,
-            market.symbol,
-            this.ohlcInterval,
-          );
+          /*
+           * Vide immédiatement l’ancien graphique.
+           */
+          this.chartResetSubject.next(this.chartResetSubject.value + 1);
         }),
+
+        switchMap(() => this.marketService.subscribe(market.marketId, nextRequest)),
+
+        tap(() => {
+          this.activeOhlcSubscription = {
+            marketId: market.marketId,
+            request: nextRequest,
+          };
+        }),
+
+        switchMap(() =>
+          this.marketDataStreamService.streamOhlc(market.marketId, market.symbol, interval),
+        ),
       );
     }),
-    tap((event) => {
-      console.log('[OHLC] Event received', event);
-    }),
+
     shareReplay({
       bufferSize: 1,
       refCount: true,
     }),
   );
+}
+interface ActiveOhlcSubscription {
+  marketId: string;
+  request: MarketStreamRequest;
+
 }

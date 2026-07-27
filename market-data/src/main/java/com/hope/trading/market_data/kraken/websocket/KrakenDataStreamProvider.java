@@ -49,11 +49,17 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final Sinks.Many<String> outboundMessages =
             Sinks.many()
                     .multicast()
-                    .onBackpressureBuffer();
+                    .onBackpressureBuffer(
+                            OUTBOUND_BUFFER_SIZE,
+                            false
+                    );
+    private static final int OUTBOUND_BUFFER_SIZE = 256;
 
     private final TickerEventPublisher tickerEventPublisher;
     private final OhlcEventPublisher ohlcEventPublisher;
    private final KrakenOhlcMapper ohlcMapper;
+    private final Object outboundEmissionLock =
+            new Object();
 
     public KrakenDataStreamProvider(KrakenProperties krakenProperties, ObjectMapper objectMapper, KrakenTickerMapper tickerMapper, TickerEventPublisher tickerEventPublisher, OhlcEventPublisher ohlcEventPublisher, KrakenOhlcMapper mapper) {
         this.objectMapper = objectMapper;
@@ -252,8 +258,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 return;
             }
 
-            String channel = root.get("channel")
-                    .asText()
+            String channel = root.get("channel").asString()
                     .trim()
                     .toLowerCase();
 
@@ -302,18 +307,25 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             List<String> symbols,
             MarketStreamRequest streamRequest
     ) {
-
-        KrakenSubscriptionRequest request =
-                new KrakenSubscriptionRequest(
-                        method.getValue(),
-                        buildSubscriptionParams(channel,symbols,streamRequest)
-
-                );
-
         final String payload;
 
         try {
-            payload = objectMapper.writeValueAsString(request);
+            KrakenSubscriptionParams parameters =
+                    buildSubscriptionParams(
+                            channel,
+                            symbols,
+                            streamRequest
+                    );
+
+            KrakenSubscriptionRequest request =
+                    new KrakenSubscriptionRequest(
+                            method.getValue(),
+                            parameters
+                    );
+
+            payload =
+                    objectMapper.writeValueAsString(request);
+
         } catch (Exception exception) {
             return Mono.error(
                     new IllegalStateException(
@@ -323,27 +335,9 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             );
         }
 
-        Sinks.EmitResult result =
-                outboundMessages.tryEmitNext(payload);
-
-        if (result.isFailure()) {
-            return Mono.error(
-                    new IllegalStateException(
-                            "Unable to queue Kraken subscription request: "
-                                    + result
-                    )
-            );
-        }
-
-        log.info(
-                "Kraken {} request queued for channel {} and symbols {}",
-                method,
-                channel,
-                symbols
-        );
-
-        return Mono.empty();
+        return emitOutboundMessage(payload);
     }
+
     private Mono<Void> waitUntilConnected() {
 
         return Mono.defer(() -> {
@@ -526,6 +520,32 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 "Ignoring Kraken control message: {}",
                 root
         );
+    }
+    private Mono<Void> emitOutboundMessage(
+            String payload
+    ) {
+        Sinks.EmitResult result;
+
+        synchronized (outboundEmissionLock) {
+            result = outboundMessages.tryEmitNext(payload);
+        }
+
+        if (result.isFailure()) {
+            return Mono.error(
+                    new IllegalStateException(
+                            "Unable to queue Kraken subscription request: "
+                                    + result
+                    )
+            );
+        }
+
+        log.info(
+                "[KRAKEN-QUEUE] payload={} result={}",
+                payload,
+                result
+        );
+
+        return Mono.empty();
     }
 
 

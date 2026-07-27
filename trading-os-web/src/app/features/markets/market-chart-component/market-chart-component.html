@@ -1,0 +1,21 @@
+<section class="market-chart">
+  <div
+    #chartContainer
+    class="chart-container"
+    aria-label="Market candlestick chart"
+  ></div>
+
+  @if (!candle()) {
+    <div class="chart-empty-state">
+      <div class="empty-state-content">
+        <span class="empty-icon">📈</span>
+
+        <h3>Waiting for market data</h3>
+
+        <p>
+          The chart will appear as soon as OHLC data is received.
+        </p>
+      </div>
+    </div>
+  }
+</section>

@@ -92,33 +92,36 @@
           </div>
 
           <div class="timeframe-selector">
-            <button type="button" disabled>1m</button>
-            <button type="button" disabled>5m</button>
-            <button type="button" disabled>15m</button>
-            <button type="button" disabled>1h</button>
-            <button type="button" disabled>4h</button>
-            <button type="button" disabled>1d</button>
+            @if (
+              selectedOhlcInterval$ | async;
+              as selectedInterval
+              ) {
+              @for (
+                interval of ohlcIntervals;
+                track interval.minutes
+                ) {
+                <button
+                  type="button"
+                  [class.active]="
+              selectedInterval === interval.minutes
+            "
+                  (click)="
+              selectOhlcInterval(interval.minutes)
+            "
+                >
+                  {{ interval.label }}
+                </button>
+              }
+            }
           </div>
         </div>
-        @if (ohlc$ | async; as candle) {
-          <section class="ohlc-debug">
-            <h3>OHLC {{ candle.interval }}</h3>
 
-            <p>Open: {{ candle.open }}</p>
-            <p>High: {{ candle.high }}</p>
-            <p>Low: {{ candle.low }}</p>
-            <p>Close: {{ candle.close }}</p>
-            <p>Volume: {{ candle.volume }}</p>
-            <p>
-              Period:
-              {{ candle.openTime | date: 'mediumTime' }}
-              →
-              {{ candle.closeTime | date: 'mediumTime' }}
-            </p>
-          </section>
-        }
-
+        <app-market-chart
+          [candle]="(ohlc$ | async) ?? null"
+          [resetKey]="(chartReset$ | async) ?? 0"
+        />
       </section>
+
 
       <div class="market-secondary-grid">
         <section
@@ -127,7 +130,6 @@
         >
           <div class="section-header">
             <div>
-              <span class="section-eyebrow">Liquidity</span>
               <h2 id="order-book-title">Order book</h2>
             </div>
           </div>
