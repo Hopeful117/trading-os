@@ -2,20 +2,18 @@ package com.hope.trading.market_data.kraken.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
-import lombok.Getter;
+
 
 import java.util.Arrays;
 
-@Getter
-public enum KrakenChannel {
-    TICKER("ticker"),
-    OHLC("ohlc"),
-    TRADES("trades"),
-    ORDER_BOOK("order-book");
+
+public enum KrakenMessageType {
+    SNAPSHOT("snapshot"),
+    UPDATE("update");
 
     private final String value;
 
-    KrakenChannel(String value) {
+    KrakenMessageType(String value) {
         this.value = value;
     }
 
@@ -25,17 +23,15 @@ public enum KrakenChannel {
     }
 
     @JsonCreator
-    public static KrakenChannel fromValue(String value) {
+    public static KrakenMessageType fromValue(String value) {
         return Arrays.stream(values())
-                .filter(channel ->
-                        channel.value.equalsIgnoreCase(value)
-                )
-                .findFirst()
+                .filter(type ->
+                        type.value.equalsIgnoreCase(value)
+                ).findFirst()
                 .orElseThrow(() ->
                         new IllegalArgumentException(
-                                "Unsupported Kraken channel: " + value
+                                "Unsupported Kraken message type: " + value
                         )
                 );
     }
-
 }

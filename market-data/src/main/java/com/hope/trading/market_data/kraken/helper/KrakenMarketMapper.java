@@ -3,7 +3,7 @@ package com.hope.trading.market_data.kraken.helper;
 import com.hope.trading.market_data.helper.MarketAvailability;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.helper.MarketStateBuilder;
-import com.hope.trading.market_data.kraken.dto.KrakenAssetPairDto;
+import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairDto;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketConstraints;
 import lombok.RequiredArgsConstructor;

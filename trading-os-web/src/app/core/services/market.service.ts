@@ -25,6 +25,8 @@ export class MarketService {
     marketId: string,
     request: MarketStreamRequest,
   ): Observable<void> {
+
+
     return this.http.post<void>(
       `${environment.gatewayUrl}v1/markets/${marketId}/subscriptions`,
       request,

@@ -3,21 +3,28 @@ package com.hope.trading.market_data.kraken.websocket;
 import com.hope.trading.market_data.brokerClient.MarketDataStreamProvider;
 import com.hope.trading.market_data.kraken.config.KrakenProperties;
 import com.hope.trading.market_data.kraken.dto.*;
+import com.hope.trading.market_data.kraken.dto.ohlc.KrakenOhlcMessage;
+import com.hope.trading.market_data.kraken.dto.subscription.KrakenSubscriptionMethod;
+import com.hope.trading.market_data.kraken.dto.subscription.KrakenSubscriptionParams;
+import com.hope.trading.market_data.kraken.dto.subscription.KrakenSubscriptionRequest;
+import com.hope.trading.market_data.kraken.dto.ticker.KrakenTickerMessage;
+import com.hope.trading.market_data.kraken.helper.KrakenOhlcMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenTickerMapper;
 import com.hope.trading.market_data.model.Market;
-import com.hope.trading.market_data.model.MarketDataEvent;
 import com.hope.trading.market_data.model.MarketStreamRequest;
+import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.TickerEvent;
-import com.hope.trading.market_data.service.MarketDataEventPublisher;
+import com.hope.trading.market_data.service.OhlcEventPublisher;
 import com.hope.trading.market_data.service.TickerEventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
-import reactor.core.publisher.Flux;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
@@ -35,25 +42,25 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final KrakenProperties krakenProperties;
     private final ObjectMapper objectMapper;
     private final KrakenTickerMapper tickerMapper;
-    private Mono<Void>connection;
     private final ConcurrentMap<String, Market> subscribedMarkets =
             new ConcurrentHashMap<>();
     private volatile WebSocketSession session;
-    private volatile reactor.core.Disposable connectionSubscription;
-    private final java.util.concurrent.atomic.AtomicBoolean connecting =
-            new java.util.concurrent.atomic.AtomicBoolean(false);
-
+    private volatile Disposable connectionSubscription;
     private final Sinks.Many<String> outboundMessages =
             Sinks.many()
-                    .unicast()
+                    .multicast()
                     .onBackpressureBuffer();
 
     private final TickerEventPublisher tickerEventPublisher;
+    private final OhlcEventPublisher ohlcEventPublisher;
+   private final KrakenOhlcMapper ohlcMapper;
 
-    public KrakenDataStreamProvider(KrakenProperties krakenProperties, ObjectMapper objectMapper, KrakenTickerMapper tickerMapper, MarketDataEventPublisher eventPublisher, TickerEventPublisher tickerEventPublisher) {
+    public KrakenDataStreamProvider(KrakenProperties krakenProperties, ObjectMapper objectMapper, KrakenTickerMapper tickerMapper, TickerEventPublisher tickerEventPublisher, OhlcEventPublisher ohlcEventPublisher, KrakenOhlcMapper mapper) {
         this.objectMapper = objectMapper;
         this.tickerMapper = tickerMapper;
         this.tickerEventPublisher = tickerEventPublisher;
+        this.ohlcEventPublisher = ohlcEventPublisher;
+        this.ohlcMapper = mapper;
 
         this.client = new ReactorNettyWebSocketClient();
         this.krakenProperties = krakenProperties;
@@ -192,10 +199,11 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         return connect()
                 .then(
                         sendSubscriptionRequest(
-                                KrakenSubscriptionMethod.SUBSCRIBE,
-                                KrakenChannel.TICKER,
-                                symbols
-                        )
+                                                        KrakenSubscriptionMethod.SUBSCRIBE,
+                                resolveChannel(request),
+                                symbols,
+                                request
+                                                )
                 )
                 .doOnError(error ->
                         markets.stream()
@@ -221,9 +229,10 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
         return sendSubscriptionRequest(
                 KrakenSubscriptionMethod.UNSUBSCRIBE,
-                KrakenChannel.TICKER,
-                symbols
-        ).doOnSuccess(ignored ->
+                resolveChannel(request),
+                symbols,
+                request
+                ).doOnSuccess(ignored ->
                 markets.stream()
                         .filter(Objects::nonNull)
                         .forEach(market ->
@@ -235,60 +244,32 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         );
     }
     private void handleMessage(String message) {
-
-        log.info("[KRAKEN-RAW] {}", message);
-
         try {
             var root = objectMapper.readTree(message);
 
-            if (!root.has("channel")
-                    || !"ticker".equals(root.get("channel").asString())) {
+            if (!root.has("channel")) {
+                handleControlMessage(root);
                 return;
             }
 
-            if (!root.has("data")
-                    || !root.get("data").isArray()
-                    || root.get("data").isEmpty()) {
-                return;
+            String channel = root.get("channel")
+                    .asText()
+                    .trim()
+                    .toLowerCase();
+
+            switch (channel) {
+                case "ticker" -> handleTickerMessage(root);
+                case "ohlc" -> handleOhlcMessage(root);
+
+                case "heartbeat" -> log.trace(
+                        "Kraken heartbeat received"
+                );
+
+                default -> log.debug(
+                        "Ignoring unsupported Kraken channel: {}",
+                        channel
+                );
             }
-
-            KrakenTickerMessage tickerMessage =
-                    objectMapper.treeToValue(
-                            root,
-                            KrakenTickerMessage.class
-                    );
-
-            tickerMessage.getData()
-                    .forEach(data -> {
-
-                        String symbol =
-                                normalize(data.getSymbol());
-
-                        Market market =
-                                subscribedMarkets.get(symbol);
-
-                        if (market == null) {
-                            log.warn(
-                                    "Ignoring Kraken ticker without subscribed market symbol={}",
-                                    symbol
-                            );
-                            return;
-                        }
-
-                        TickerEvent event =
-                                tickerMapper.toEvent(
-                                        data,
-                                        market
-                                );
-
-                        tickerEventPublisher.publish(event);
-
-                        log.debug(
-                                "TickerEvent received: {}",
-                                event
-                        );
-                    });
-
 
         } catch (Exception exception) {
             log.error(
@@ -307,7 +288,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         }
 
         return markets.stream()
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .map(Market::getSymbol)
                 .filter(symbol ->
                         symbol != null && !symbol.isBlank()
@@ -318,18 +299,15 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private Mono<Void> sendSubscriptionRequest(
             KrakenSubscriptionMethod method,
             KrakenChannel channel,
-            List<String> symbols
+            List<String> symbols,
+            MarketStreamRequest streamRequest
     ) {
 
         KrakenSubscriptionRequest request =
                 new KrakenSubscriptionRequest(
                         method.getValue(),
-                        new KrakenSubscriptionParams(
-                                channel.getValue(),
-                                symbols,
-                                "bbo",
-                                true
-                        )
+                        buildSubscriptionParams(channel,symbols,streamRequest)
+
                 );
 
         final String payload;
@@ -394,94 +372,162 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 )
                 .then();
     }
-    private Mono<Void> ensureConnected() {
-        WebSocketSession currentSession = this.session;
 
-        if (currentSession != null && currentSession.isOpen()) {
-            return Mono.empty();
-        }
 
-        return connect();
-    }
-    private Mono<Void> sendPing(
-            WebSocketSession currentSession
-    ) {
-        if (!currentSession.isOpen()) {
-            return Mono.empty();
-        }
 
-        String payload = """
-            {
-              "method": "ping"
-            }
-            """;
-
-        return currentSession.send(
-                Mono.just(
-                        currentSession.textMessage(payload)
-                )
-        ).doOnSuccess(ignored ->
-                log.debug("Kraken websocket ping sent")
-        );
-    }
-    private Mono<Void> queueSubscriptionRequest(
-            KrakenSubscriptionMethod method,
-            KrakenChannel channel,
-            List<String> symbols
-    ) {
-
-        final String payload;
-
-        try {
-            KrakenSubscriptionRequest request =
-                    new KrakenSubscriptionRequest(
-                            method.getValue(),
-                            new KrakenSubscriptionParams(
-                                    channel.getValue(),
-                                    symbols,
-                                    "bbo",
-                                    true
-                            )
-                    );
-
-            payload =
-                    objectMapper.writeValueAsString(request);
-
-        } catch (Exception exception) {
-            return Mono.error(
-                    new IllegalStateException(
-                            "Unable to serialize Kraken subscription request",
-                            exception
-                    )
-            );
-        }
-
-        Sinks.EmitResult result =
-                outboundMessages.tryEmitNext(payload);
-
-        if (result.isFailure()) {
-            return Mono.error(
-                    new IllegalStateException(
-                            "Unable to queue Kraken subscription request: "
-                                    + result
-                    )
-            );
-        }
-
-        log.info(
-                "Kraken {} request queued for channel {} and symbols {}",
-                method,
-                channel,
-                symbols
-        );
-
-        return Mono.empty();
-    }
     private String normalize(String symbol) {
         return symbol
                 .trim()
                 .toUpperCase(Locale.ROOT);
     }
+
+    private KrakenChannel resolveChannel(
+            MarketStreamRequest request
+    ) {
+        return switch (request.type()) {
+            case TICKER -> KrakenChannel.TICKER;
+            case OHLC -> KrakenChannel.OHLC;
+            case TRADES -> KrakenChannel.TRADES;
+            case ORDER_BOOK -> KrakenChannel.ORDER_BOOK;
+        };
+    }
+
+    private KrakenSubscriptionParams buildSubscriptionParams(
+            KrakenChannel channel,
+            List<String> symbols,
+            MarketStreamRequest request
+    ) {
+        return switch (request.type()) {
+            case TICKER -> new KrakenSubscriptionParams(
+                    channel.getValue(),
+                    symbols,
+                    null,
+                    "bbo",
+                    true
+            );
+
+            case OHLC -> new KrakenSubscriptionParams(
+                    channel.getValue(),
+                    symbols,
+                    request.parameters().interval(),
+                    null,
+                    true
+            );
+            case TRADES -> null;
+            case ORDER_BOOK -> null;
+        };
+    }
+    private void handleTickerMessage(JsonNode root) {
+        if (!root.has("data")
+                || !root.get("data").isArray()
+                || root.get("data").isEmpty()) {
+            return;
+        }
+
+        KrakenTickerMessage tickerMessage =
+                objectMapper.treeToValue(
+                        root,
+                        KrakenTickerMessage.class
+                );
+
+        tickerMessage.getData()
+                .forEach(data -> {
+                    Market market = findSubscribedMarket(
+                            data.getSymbol()
+                    );
+
+                    if (market == null) {
+                        return;
+                    }
+
+                    TickerEvent event =
+                            tickerMapper.toEvent(
+                                    data,
+                                    market
+                            );
+
+                    tickerEventPublisher.publish(event);
+                });
+    }
+
+    private Market findSubscribedMarket(String symbol) {
+        return subscribedMarkets.get(symbol);
+    }
+
+    private void handleOhlcMessage(JsonNode root) {
+
+        if (!root.has("data")
+                || !root.get("data").isArray()
+                || root.get("data").isEmpty()) {
+            return;
+        }
+
+        KrakenOhlcMessage ohlcMessage =
+                objectMapper.treeToValue(
+                        root,
+                        KrakenOhlcMessage.class
+                );
+
+        ohlcMessage.data()
+                .forEach(entry -> {
+                    Market market = findSubscribedMarket(
+                            entry.symbol()
+                    );
+
+                    if (market == null) {
+                        log.warn(
+                                "Ignoring Kraken OHLC data without subscribed market symbol={}",
+                                entry.symbol()
+                        );
+                        return;
+                    }
+
+                    boolean closed =
+                            entry.timestamp()
+                                    .isBefore(ohlcMessage.timestamp());
+
+                    OhlcEvent event =
+                            ohlcMapper.toEvent(
+                                    entry,
+                                    market,
+                                    ohlcMessage.timestamp(),
+                                    closed
+                            );
+
+                    ohlcEventPublisher.publish(event);
+
+                    log.debug(
+                            "OhlcEvent received: {}",
+                            event
+                    );
+                });
+    }
+    private void handleControlMessage(JsonNode root) {
+        if (root.has("success")) {
+            boolean success = root.get("success").asBoolean();
+
+            if (success) {
+                log.info(
+                        "Kraken control message succeeded method={}",
+                        root.path("method").asString()
+                );
+            } else {
+                log.warn(
+                        "Kraken control message failed method={} error={}",
+                        root.path("method").asString(),
+                        root.path("error").asString()
+                );
+            }
+
+            return;
+        }
+
+        log.debug(
+                "Ignoring Kraken control message: {}",
+                root
+        );
+    }
+
 
 
 

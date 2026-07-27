@@ -1,4 +1,4 @@
-package com.hope.trading.market_data.kraken.dto;
+package com.hope.trading.market_data.kraken.dto.subscription;
 
 import lombok.Getter;
 

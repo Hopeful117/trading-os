@@ -3,6 +3,9 @@ import { Observable } from 'rxjs';
 import {TickerEvent} from '../models/ticker-event.model';
 import { environment } from '../../../environments/environment';
 import {AuthService} from './auth.service';
+import { OhlcEvent } from '../models/ohlc-event.model';
+import { MarketStreamQuery } from '../models/MarketStreamQuery';
+import { MarketStreamType } from '../models/market-stream-type';
 
 
 @Injectable({
@@ -12,27 +15,56 @@ export class MarketDataStreamService {
   private readonly authService = inject(AuthService);
 
   streamTicker(symbol: string): Observable<TickerEvent> {
-    return new Observable<TickerEvent>((subscriber) => {
+    return this.createStream<TickerEvent>({
+      symbol,
+      type:MarketStreamType.TICKER,
+    });
+  }
+
+  streamOhlc(marketId: string, symbol: string, interval: number): Observable<OhlcEvent> {
+    return this.createStream<OhlcEvent>({
+      marketId,
+      symbol,
+      type:MarketStreamType.OHLC,
+      interval,
+    });
+  }
+
+  private createStream<T>(parameters: MarketStreamQuery): Observable<T> {
+    return new Observable<T>((subscriber) => {
       const token = this.authService.getToken();
+
       if (!token) {
         subscriber.error(new Error('No authentication token available'));
         return;
       }
 
-      const socket = new WebSocket(
-        `${environment.marketDataWebSocketUrl}?symbol=${encodeURIComponent(symbol)}&access_token=${encodeURIComponent(token)}`,
-      );
+      const query = new URLSearchParams();
 
-      socket.onmessage = (event) => {
+      query.set('symbol', parameters.symbol);
+      query.set('type', parameters.type);
+      query.set('access_token', token);
+
+      if (parameters.marketId !== undefined) {
+        query.set('marketId', parameters.marketId);
+      }
+
+      if (parameters.interval !== undefined) {
+        query.set('interval', parameters.interval.toString());
+      }
+
+      const socket = new WebSocket(`${environment.marketDataWebSocketUrl}?${query.toString()}`);
+
+      socket.onmessage = (message: MessageEvent<string>) => {
         try {
-          subscriber.next(JSON.parse(event.data) as TickerEvent);
+          subscriber.next(JSON.parse(message.data) as T);
         } catch (error) {
           subscriber.error(error);
         }
       };
 
       socket.onerror = () => {
-        subscriber.error(new Error('Market data WebSocket error'));
+        subscriber.error(new Error(`${parameters.type} market data WebSocket error`));
       };
 
       socket.onclose = () => {

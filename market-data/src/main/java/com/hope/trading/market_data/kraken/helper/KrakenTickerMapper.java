@@ -1,9 +1,7 @@
 package com.hope.trading.market_data.kraken.helper;
 
-import com.hope.trading.market_data.helper.MarketProvider;
-import com.hope.trading.market_data.kraken.dto.KrakenTickerData;
+import com.hope.trading.market_data.kraken.dto.ticker.KrakenTickerData;
 import com.hope.trading.market_data.model.Market;
-import com.hope.trading.market_data.model.MarketDataEvent;
 import com.hope.trading.market_data.model.TickerEvent;
 import org.springframework.stereotype.Component;
 

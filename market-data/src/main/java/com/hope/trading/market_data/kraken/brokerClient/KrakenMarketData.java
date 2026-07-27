@@ -2,7 +2,7 @@ package com.hope.trading.market_data.kraken.brokerClient;
 
 import com.hope.trading.market_data.brokerClient.MarketDataProvider;
 import com.hope.trading.market_data.helper.MarketProvider;
-import com.hope.trading.market_data.kraken.dto.KrakenAssetPairsResponse;
+import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairsResponse;
 import com.hope.trading.market_data.kraken.helper.KrakenMarketMapper;
 import com.hope.trading.market_data.model.Market;
 import lombok.RequiredArgsConstructor;

@@ -100,17 +100,24 @@
             <button type="button" disabled>1d</button>
           </div>
         </div>
+        @if (ohlc$ | async; as candle) {
+          <section class="ohlc-debug">
+            <h3>OHLC {{ candle.interval }}</h3>
 
-        <div class="chart-placeholder">
-          <div class="chart-placeholder-grid"></div>
-
-          <div class="chart-placeholder-content">
-            <strong>OHLC chart coming next</strong>
+            <p>Open: {{ candle.open }}</p>
+            <p>High: {{ candle.high }}</p>
+            <p>Low: {{ candle.low }}</p>
+            <p>Close: {{ candle.close }}</p>
+            <p>Volume: {{ candle.volume }}</p>
             <p>
-              Historical candles and real-time updates will appear here.
+              Period:
+              {{ candle.openTime | date: 'mediumTime' }}
+              →
+              {{ candle.closeTime | date: 'mediumTime' }}
             </p>
-          </div>
-        </div>
+          </section>
+        }
+
       </section>
 
       <div class="market-secondary-grid">

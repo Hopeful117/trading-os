@@ -22,7 +22,9 @@ public class TickerEventPublisher {
             new ConcurrentHashMap<>();
 
     public void publish(TickerEvent event) {
-        if (event == null || event.symbol() == null) {
+
+
+        if (event.symbol() == null) {
             log.warn("Ignoring ticker event without symbol");
             return;
         }
@@ -32,6 +34,12 @@ public class TickerEventPublisher {
         latestEvents.put(symbol, event);
 
         Sinks.EmitResult result = sink.tryEmitNext(event);
+        log.info(
+                "[TICKER-PUBLISHER] symbol={} last={} result={}",
+                event.symbol(),
+                event.last(),
+                result
+        );
 
         if (result.isFailure()
                 && result != Sinks.EmitResult.FAIL_ZERO_SUBSCRIBER) {

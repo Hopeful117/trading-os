@@ -22,6 +22,15 @@ export class MarketDetail {
   private readonly marketDataStreamService = inject(MarketDataStreamService);
 
   private subscribedMarketId: string | null = null;
+  private readonly ohlcInterval = 5;
+
+  private readonly ohlcRequest: MarketStreamRequest = {
+    type: MarketStreamType.OHLC,
+    parameters: {
+      interval: this.ohlcInterval,
+      depth: 0,
+    },
+  };
 
   private readonly tickerRequest: MarketStreamRequest = {
     type: MarketStreamType.TICKER,
@@ -54,14 +63,26 @@ export class MarketDetail {
    * → ouverture du WebSocket frontend
    */
   readonly ticker$ = this.market$.pipe(
-    switchMap((market) =>
-      this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
+    tap((market) => {
+      console.log('[TICKER] Market received', market);
+    }),
+    switchMap((market) => {
+      console.log('[TICKER] Sending REST subscription', market.marketId, this.tickerRequest);
+
+      return this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
         tap(() => {
-          this.subscribedMarketId = market.marketId;
+          console.log('[TICKER] REST subscription completed');
         }),
-        switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
-      ),
-    ),
+        switchMap(() => {
+          console.log('[TICKER] Opening frontend WebSocket');
+
+          return this.marketDataStreamService.streamTicker(market.symbol);
+        }),
+      );
+    }),
+    tap((event) => {
+      console.log('[TICKER] Event received', event);
+    }),
     shareReplay({
       bufferSize: 1,
       refCount: true,
@@ -86,4 +107,34 @@ export class MarketDetail {
         });
     });
   }
+  readonly ohlc$ = this.market$.pipe(
+    tap((market) => {
+      console.log('[OHLC] Market received', market);
+    }),
+    switchMap((market) => {
+      console.log('[OHLC] Sending REST subscription', market.marketId, this.ohlcRequest);
+
+      return this.marketService.subscribe(market.marketId, this.ohlcRequest).pipe(
+        tap(() => {
+          console.log('[OHLC] REST subscription completed');
+        }),
+        switchMap(() => {
+          console.log('[OHLC] Opening frontend WebSocket');
+
+          return this.marketDataStreamService.streamOhlc(
+            market.marketId,
+            market.symbol,
+            this.ohlcInterval,
+          );
+        }),
+      );
+    }),
+    tap((event) => {
+      console.log('[OHLC] Event received', event);
+    }),
+    shareReplay({
+      bufferSize: 1,
+      refCount: true,
+    }),
+  );
 }

@@ -6,6 +6,7 @@ import com.hope.trading.market_data.helper.MarketSubscriptionKey;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
+import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.repository.MarketRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,19 +20,21 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class MarketSubscriptionServiceImpl implements MarketSubscriptionService{
+public class MarketSubscriptionServiceImpl implements MarketSubscriptionService {
     private final MarketDataStreamProvider marketDataStreamProvider;
     private final MarketRepository marketRepository;
     private final ConcurrentHashMap<
-                MarketSubscriptionKey,
-                AtomicInteger
-                > activeSubscriptions = new ConcurrentHashMap<>();
+            MarketSubscriptionKey,
+            AtomicInteger
+            > activeSubscriptions = new ConcurrentHashMap<>();
+
     @Override
     public void subscribe(
             UUID marketId,
             MarketStreamRequest request
     ) {
         validateRequest(request);
+
 
         Market market = marketRepository.findById(marketId)
                 .orElseThrow(() ->
@@ -166,6 +169,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService{
         }
 
     }
+
     private void validateSubscription(
             Market market,
             MarketStreamType streamType
@@ -177,10 +181,9 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService{
             );
         }
 
-        if(!market.getMarketState().isTradable()){
-            throw new IllegalStateException("Market is not currently tradable"+ market.getSymbol());
+        if (!market.getMarketState().isTradable()) {
+            throw new IllegalStateException("Market is not currently tradable" + market.getSymbol());
         }
-
 
 
         if (streamType == null) {
@@ -189,6 +192,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService{
             );
         }
     }
+
     private void validateRequest(MarketStreamRequest request) {
         if (request == null) {
             throw new IllegalArgumentException(
@@ -200,6 +204,24 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService{
             throw new IllegalArgumentException(
                     "Market stream type is required"
             );
+        }
+        switch (request.type()) {
+            case TICKER -> {
+
+            }
+
+            case OHLC -> {
+                if (request.parameters() == null
+                        || request.parameters().interval() == null) {
+                    throw new IllegalArgumentException(
+                            "OHLC subscription requires an interval"
+                    );
+                }
+
+                OhlcInterval.fromMinutes(
+                        request.parameters().interval()
+                );
+            }
         }
     }
 }
