@@ -24,9 +24,21 @@ public class Position {
 
     private BigDecimal entryValue;
 
+    private BigDecimal entryPrice;
+
+    private BigDecimal stopLoss;
+
+    private BigDecimal takeProfit;
+
     private BigDecimal unrealizedPnl;
+
+    private BigDecimal margin;
+
+    private BigDecimal exposure;
 
     private BigDecimal fee;
 
     private Instant openedAt;
+
+    private Instant dataAt;
 }

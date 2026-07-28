@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -34,11 +35,13 @@ public class BrokerServiceImpl implements BrokerService {
     public BrokerAccountDto getAccount() {
 
         return BrokerAccountDto.builder()
+                .brokerAccountId(brokerProvider.getBrokerName().toLowerCase() + "-default")
                 .broker(brokerProvider.getBrokerName())
                 .baseCurrency(brokerProvider.getBaseCurrency())
                 .accountName(brokerProvider.getBrokerName().toLowerCase() + " account")
                 .balances(getBalance())
                 .openTrades(getOpenPositions())
+                .dataAt(Instant.now())
                 .build();
     }
 }

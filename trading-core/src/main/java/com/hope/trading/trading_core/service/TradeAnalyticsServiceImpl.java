@@ -34,6 +34,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
                 TimeUtils.endOfDay()
         ).stream()
                 .map(Trade::getPnl)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -41,6 +42,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
     public BigDecimal getTotalPnL(UUID accountId) {
         return tradeRepository.findAllByAccount_AccountId(accountId).stream()
                 .map(Trade::getPnl)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -49,6 +51,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
         return tradeRepository.findAllByAccount_AccountId(accountId).stream()
                 .filter(trade -> trade.getClosedAt() == null)
                 .map(Trade::getPnl)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -57,6 +60,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
         return tradeRepository.findAllByAccount_AccountId(accountId).stream()
                 .filter(trade -> trade.getClosedAt() != null)
                 .map(Trade::getPnl)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 

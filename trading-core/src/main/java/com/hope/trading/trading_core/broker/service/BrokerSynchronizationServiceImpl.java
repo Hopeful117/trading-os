@@ -108,7 +108,11 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                                             ? TradeType.BUY
                                             : TradeType.SELL
                             )
-                            .entryPrice(position.getEntryValue())
+                            .entryPrice(
+                                    position.getEntryPrice() != null
+                                            ? position.getEntryPrice()
+                                            : position.getEntryValue()
+                            )
                             .quantity(position.getQuantity())
                             .tradeStatus(TradeStatus.OPEN)
                             .build();
@@ -167,4 +171,3 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
 
     }
-

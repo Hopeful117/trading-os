@@ -1,13 +1,11 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { TokenService } from '../services/token';
-import {AuthService} from '../services/auth.service';
 import { inject } from '@angular/core';
-import { provideRouter, Router} from '@angular/router';
+import { Router} from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const tokenService = inject(TokenService);
-  const authService = inject(AuthService);
   const router = inject(Router);
 
 
@@ -29,7 +27,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(request).pipe(
     catchError((error) => {
-      if (error.status) {
+      if (error.status === 401 || error.status === 403) {
         router.navigate(['/error'], {
           queryParams: {
             status: error.status,

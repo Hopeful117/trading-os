@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.math.BigDecimal;
+import java.time.Instant;
 
 @Data
 @Builder
@@ -14,6 +16,7 @@ import java.util.List;
 @NoArgsConstructor
 public class BrokerAccountDto {
 
+    private String brokerAccountId;
 
     private String broker;
 
@@ -24,4 +27,8 @@ public class BrokerAccountDto {
     private AccountBalanceDto balances;
 
     private List<Position> openTrades;
+
+    private BigDecimal brokerEquity;
+
+    private Instant dataAt;
 }

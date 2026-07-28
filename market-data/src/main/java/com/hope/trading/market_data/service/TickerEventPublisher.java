@@ -7,6 +7,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -20,6 +22,8 @@ public class TickerEventPublisher {
 
     private final ConcurrentMap<String, TickerEvent> latestEvents =
             new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, TickerEvent> latestEventsByMarketId =
+            new ConcurrentHashMap<>();
 
     public void publish(TickerEvent event) {
 
@@ -32,6 +36,9 @@ public class TickerEventPublisher {
         String symbol = normalize(event.symbol());
 
         latestEvents.put(symbol, event);
+        if (event.marketId() != null) {
+            latestEventsByMarketId.put(event.marketId(), event);
+        }
 
         Sinks.EmitResult result = sink.tryEmitNext(event);
 
@@ -62,6 +69,10 @@ public class TickerEventPublisher {
                 );
 
         return Flux.concat(snapshot, liveStream);
+    }
+
+    public Optional<TickerEvent> latestByMarketId(UUID marketId) {
+        return Optional.ofNullable(latestEventsByMarketId.get(marketId));
     }
 
     private String normalize(String symbol) {

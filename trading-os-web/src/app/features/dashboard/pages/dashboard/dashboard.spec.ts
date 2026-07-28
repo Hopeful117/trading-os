@@ -1,22 +1,199 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-
+import { of, throwError } from 'rxjs';
+import { vi } from 'vitest';
+import { Account } from '../../../../core/models/account.model';
+import { DashboardSummary } from '../../../../core/models/dashboard-summary.model';
+import { AccountService } from '../../../../core/services/account.service';
+import { DashboardService } from '../../../../core/services/dashboard.service';
 import { Dashboard } from './dashboard';
 
 describe('Dashboard', () => {
-  let component: Dashboard;
   let fixture: ComponentFixture<Dashboard>;
+  let dashboardService: { findDashboard: ReturnType<typeof vi.fn> };
+
+  const accounts: Account[] = [
+    {
+      accountId: 'account-1',
+      name: 'Primary',
+      baseCurrency: 'USD',
+      balances: { balances: { USD: 1000 } },
+      equity: 1000,
+      peakEquity: 1100,
+      rulesId: 'rules-1',
+      userId: 'user-1',
+    },
+    {
+      accountId: 'account-2',
+      name: 'Secondary',
+      baseCurrency: 'USD',
+      balances: { balances: { USD: 500 } },
+      equity: 500,
+      peakEquity: 500,
+      rulesId: 'rules-2',
+      userId: 'user-1',
+    },
+  ];
 
   beforeEach(async () => {
+    dashboardService = { findDashboard: vi.fn(() => of(summary())) };
     await TestBed.configureTestingModule({
       imports: [Dashboard],
+      providers: [
+        { provide: AccountService, useValue: { getAccounts: () => of(accounts) } },
+        { provide: DashboardService, useValue: dashboardService },
+      ],
     }).compileComponents();
+  });
 
+  it('displays main metrics and an account without position', async () => {
+    await create();
+
+    expect(text()).toContain('1,020');
+    expect(text()).toContain('Aucune position ouverte');
+    expect(text()).toContain('LIVE');
+  });
+
+  it('displays multiple positions and positive or negative pnl classes', async () => {
+    const data = summary();
+    data.openPositions = [
+      position('p1', 'BTC/USD', 25),
+      position('p2', 'ETH/USD', -15),
+    ];
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+
+    expect(text()).toContain('BTC/USD');
+    expect(text()).toContain('ETH/USD');
+    expect(fixture.nativeElement.querySelectorAll('td.positive')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelectorAll('td.negative')).toHaveLength(1);
+  });
+
+  it('displays alerts and degraded status', async () => {
+    const data = summary();
+    data.freshness.status = 'DEGRADED';
+    data.freshness.warnings = ['Market Data Service indisponible'];
+    data.alerts = [
+      {
+        code: 'MISSING_STOP_LOSS',
+        severity: 'WARNING',
+        title: 'Position non protégée',
+        message: 'Aucun stop loss',
+        marketId: null,
+        positionId: 'p1',
+        occurredAt: new Date().toISOString(),
+      },
+    ];
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+
+    expect(text()).toContain('DEGRADED');
+    expect(text()).toContain('Position non protégée');
+    expect(text()).toContain('Market Data Service indisponible');
+  });
+
+  it('keeps an explicit error state', async () => {
+    dashboardService.findDashboard.mockReturnValue(
+      throwError(() => new Error('unavailable')),
+    );
+    await create();
+
+    expect(text()).toContain('Dashboard est temporairement indisponible');
+  });
+
+  it('polls the selected account', async () => {
+    await create();
+    fixture.componentInstance.selectAccount('account-2');
+    await nextTask();
+    fixture.detectChanges();
+
+    expect(dashboardService.findDashboard).toHaveBeenCalledWith('account-2');
+  });
+
+  async function create(): Promise<void> {
     fixture = TestBed.createComponent(Dashboard);
-    component = fixture.componentInstance;
-    await fixture.whenStable();
-  });
+    fixture.detectChanges();
+    await nextTask();
+    fixture.detectChanges();
+  }
 
-  it('should create', () => {
-    expect(component).toBeTruthy();
-  });
+  function nextTask(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  function text(): string {
+    return fixture.nativeElement.textContent;
+  }
+
+  function summary(): DashboardSummary {
+    const now = new Date().toISOString();
+    return {
+      account: {
+        accountId: 'account-1',
+        accountName: 'Primary',
+        broker: 'KRAKEN',
+        currency: 'USD',
+        balance: 1000,
+        equity: 1020,
+        dailyPnl: 20,
+        dailyPnlPercentage: 2,
+        currentDrawdown: 80,
+        currentDrawdownPercentage: 7.27,
+        equitySource: 'CALCULATED',
+      },
+      risk: {
+        status: 'SAFE',
+        usedRiskAmount: 10,
+        usedRiskPercentage: 1,
+        remainingRiskAmount: 10,
+        remainingRiskPercentage: 1,
+        dailyLossAmount: 0,
+        dailyLossPercentage: 0,
+        maximumDailyLossPercentage: 5,
+        totalDrawdownAmount: 80,
+        totalDrawdownPercentage: 7.27,
+        maximumDrawdownPercentage: 10,
+        rules: [],
+      },
+      openPositions: [],
+      alerts: [],
+      watchedMarkets: [],
+      freshness: {
+        status: 'LIVE',
+        brokerDataAt: now,
+        marketDataAt: now,
+        calculatedAt: now,
+        brokerDataStale: false,
+        marketDataStale: false,
+        warnings: [],
+      },
+      generatedAt: now,
+    };
+  }
+
+  function position(id: string, symbol: string, pnl: number) {
+    const now = new Date().toISOString();
+    return {
+      positionId: id,
+      accountId: 'account-1',
+      marketId: 'market-1',
+      symbol,
+      side: 'BUY' as const,
+      quantity: 1,
+      entryPrice: 100,
+      currentPrice: 100 + pnl,
+      stopLoss: null,
+      takeProfit: null,
+      unrealizedPnl: pnl,
+      unrealizedPnlPercentage: pnl,
+      brokerUnrealizedPnl: pnl,
+      riskAmount: 0,
+      riskPercentage: 0,
+      exposure: 100 + pnl,
+      protectionStatus: 'MISSING_STOP_LOSS' as const,
+      marketTradable: true,
+      openedAt: now,
+      priceOccurredAt: now,
+      calculatedAt: now,
+    };
+  }
 });

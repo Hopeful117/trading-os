@@ -7,7 +7,6 @@ import com.hope.trading.market_data.service.MarketHistoryService;
 import com.hope.trading.market_data.service.MarketService;
 import com.hope.trading.market_data.service.MarketSubscriptionService;
 import com.hope.trading.market_data.service.MarketSynchronization;
-import feign.Response;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
