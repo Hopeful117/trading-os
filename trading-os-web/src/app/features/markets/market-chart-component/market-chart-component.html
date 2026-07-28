@@ -5,15 +5,16 @@
     aria-label="Market candlestick chart"
   ></div>
 
-  @if (!candle()) {
+  @if (
+    history().length === 0 &&
+    liveCandle() === null
+    ) {
     <div class="chart-empty-state">
       <div class="empty-state-content">
-        <span class="empty-icon">📈</span>
-
-        <h3>Waiting for market data</h3>
+        <h3>Loading market history</h3>
 
         <p>
-          The chart will appear as soon as OHLC data is received.
+          Waiting for OHLC market data...
         </p>
       </div>
     </div>

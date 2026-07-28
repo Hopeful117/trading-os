@@ -20,6 +20,7 @@ import { MarketService } from '../../../core/services/market.service';
 import { MarketStreamRequest } from '../../../core/models/market-stream-request';
 import { MarketStreamType } from '../../../core/models/market-stream-type';
 import { MarketChartComponent } from '../market-chart-component/market-chart-component';
+import { OhlcInterval } from '../../../core/models/ohlc-interval';
 
 @Component({
   selector: 'app-market-details',
@@ -32,27 +33,18 @@ export class MarketDetail {
   private readonly marketService = inject(MarketService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly marketDataStreamService = inject(MarketDataStreamService);
+  private readonly selectedTimeframeSubject = new BehaviorSubject<OhlcTimeframe>(
+    OHLC_TIMEFRAMES[1],
+  );
 
-  private subscribedMarketId: string | null = null;
-  readonly ohlcIntervals = [
-    { label: '1m', minutes: 1 },
-    { label: '5m', minutes: 5 },
-    { label: '15m', minutes: 15 },
-    { label: '30m', minutes: 30 },
-    { label: '1h', minutes: 60 },
-    { label: '4h', minutes: 240 },
-    { label: '1d', minutes: 1440 },
-  ] as const;
-
-  private readonly ohlcIntervalSubject = new BehaviorSubject<number>(5);
-
-  readonly selectedOhlcInterval$ = this.ohlcIntervalSubject.pipe(
-    distinctUntilChanged(),
+  readonly selectedTimeframe$ = this.selectedTimeframeSubject.pipe(
+    distinctUntilChanged((previous, current) => previous.minutes === current.minutes),
     shareReplay({
       bufferSize: 1,
       refCount: true,
     }),
   );
+
   private activeOhlcSubscription: ActiveOhlcSubscription | null = null;
 
   private readonly tickerRequest: MarketStreamRequest = {
@@ -77,6 +69,7 @@ export class MarketDetail {
       refCount: true,
     }),
   );
+  readonly ohlcIntervals = OHLC_TIMEFRAMES;
   private readonly chartResetSubject = new BehaviorSubject<number>(0);
 
   readonly chartReset$ = this.chartResetSubject.asObservable();
@@ -123,27 +116,32 @@ export class MarketDetail {
       });
     });
   }
-  selectOhlcInterval(interval: number): void {
-    if (this.ohlcIntervalSubject.value === interval) {
+  selectOhlcInterval(timeframe: OhlcTimeframe): void {
+    if (this.selectedTimeframeSubject.value.minutes === timeframe.minutes) {
       return;
     }
 
-    this.ohlcIntervalSubject.next(interval);
+    this.selectedTimeframeSubject.next(timeframe);
   }
-  readonly ohlc$ = combineLatest([this.market$, this.selectedOhlcInterval$]).pipe(
-    switchMap(([market, interval]) => {
+  readonly ohlcHistory$ = combineLatest([this.market$, this.selectedTimeframe$]).pipe(
+    switchMap(([market, timeframe]) =>
+      this.marketService.findOhlcHistory(market.marketId, timeframe.interval, 200),
+    ),
+    shareReplay({
+      bufferSize: 1,
+      refCount: true,
+    }),
+  );
+  readonly ohlc$ = combineLatest([this.market$, this.selectedTimeframe$]).pipe(
+    switchMap(([market, timeframe]) => {
       const nextRequest: MarketStreamRequest = {
         type: MarketStreamType.OHLC,
         parameters: {
-          interval,
+          interval: timeframe.minutes,
           depth: 0,
         },
       };
 
-      /*
-       * switchMap vient déjà de fermer l’ancien
-       * WebSocket Angular à ce stade.
-       */
       const previousSubscription = this.activeOhlcSubscription;
 
       const unsubscribePrevious$ =
@@ -155,10 +153,6 @@ export class MarketDetail {
                 catchError((error) => {
                   console.error('Unable to unsubscribe previous OHLC stream', error);
 
-                  /*
-                   * On poursuit afin de ne pas bloquer
-                   * définitivement le changement d’intervalle.
-                   */
                   return of(undefined);
                 }),
               );
@@ -167,9 +161,6 @@ export class MarketDetail {
         tap(() => {
           this.activeOhlcSubscription = null;
 
-          /*
-           * Vide immédiatement l’ancien graphique.
-           */
           this.chartResetSubject.next(this.chartResetSubject.value + 1);
         }),
 
@@ -183,7 +174,11 @@ export class MarketDetail {
         }),
 
         switchMap(() =>
-          this.marketDataStreamService.streamOhlc(market.marketId, market.symbol, interval),
+          this.marketDataStreamService.streamOhlc(
+            market.marketId,
+            market.symbol,
+            timeframe.minutes,
+          ),
         ),
       );
     }),
@@ -194,8 +189,49 @@ export class MarketDetail {
     }),
   );
 }
+
+
+type OhlcTimeframe = (typeof OHLC_TIMEFRAMES)[number];
+
 interface ActiveOhlcSubscription {
   marketId: string;
   request: MarketStreamRequest;
-
 }
+
+const OHLC_TIMEFRAMES = [
+  {
+    label: '1m',
+    minutes: 1,
+    interval: OhlcInterval.ONE_MINUTE,
+  },
+  {
+    label: '5m',
+    minutes: 5,
+    interval: OhlcInterval.FIVE_MINUTES,
+  },
+  {
+    label: '15m',
+    minutes: 15,
+    interval: OhlcInterval.FIFTEEN_MINUTES,
+  },
+  {
+    label: '30m',
+    minutes: 30,
+    interval: OhlcInterval.THIRTY_MINUTES,
+  },
+  {
+    label: '1h',
+    minutes: 60,
+    interval: OhlcInterval.ONE_HOUR,
+  },
+  {
+    label: '4h',
+    minutes: 240,
+    interval: OhlcInterval.FOUR_HOURS,
+  },
+  {
+    label: '1d',
+    minutes: 1440,
+    interval: OhlcInterval.ONE_DAY,
+  },
+] as const;

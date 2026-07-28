@@ -2,9 +2,8 @@ package com.hope.trading.market_data.controller;
 
 import com.hope.trading.market_data.dto.MarketResponse;
 import com.hope.trading.market_data.helper.MarketMapper;
-import com.hope.trading.market_data.model.Market;
-import com.hope.trading.market_data.model.MarketStreamRequest;
-import com.hope.trading.market_data.model.MarketStreamType;
+import com.hope.trading.market_data.model.*;
+import com.hope.trading.market_data.service.MarketHistoryService;
 import com.hope.trading.market_data.service.MarketService;
 import com.hope.trading.market_data.service.MarketSubscriptionService;
 import com.hope.trading.market_data.service.MarketSynchronization;
@@ -25,6 +24,7 @@ public class MarketController {
     private final MarketService marketService;
     private final MarketMapper marketMapper;
     private final MarketSubscriptionService marketSubscriptionService;
+    private final MarketHistoryService marketHistoryService;
 
 
     @GetMapping
@@ -83,6 +83,21 @@ public class MarketController {
         );
 
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{marketId}/ohlc")
+    public ResponseEntity<List<OhlcEvent>> findOhlcHistory(
+            @PathVariable UUID marketId,
+            @RequestParam OhlcInterval interval,
+            @RequestParam(defaultValue = "200") int limit
+    ) {
+        return ResponseEntity.ok(
+                marketHistoryService.findOhlcHistory(
+                        marketId,
+                        interval,
+                        limit
+                )
+        );
     }
 
 }

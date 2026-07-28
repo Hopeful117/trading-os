@@ -13,4 +13,5 @@ public class KrakenProperties {
     private String baseUrl;
     private String websocket;
 
+
 }

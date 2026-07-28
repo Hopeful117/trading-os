@@ -93,23 +93,22 @@
 
           <div class="timeframe-selector">
             @if (
-              selectedOhlcInterval$ | async;
-              as selectedInterval
+              selectedTimeframe$ | async;
+              as selectedTimeframe
               ) {
               @for (
-                interval of ohlcIntervals;
-                track interval.minutes
+                timeframe of ohlcIntervals;
+                track timeframe.minutes
                 ) {
                 <button
                   type="button"
                   [class.active]="
-              selectedInterval === interval.minutes
-            "
-                  (click)="
-              selectOhlcInterval(interval.minutes)
-            "
+        selectedTimeframe.minutes ===
+        timeframe.minutes
+      "
+                  (click)="selectOhlcInterval(timeframe)"
                 >
-                  {{ interval.label }}
+                  {{ timeframe.label }}
                 </button>
               }
             }
@@ -117,7 +116,8 @@
         </div>
 
         <app-market-chart
-          [candle]="(ohlc$ | async) ?? null"
+          [history]="(ohlcHistory$ | async) ?? []"
+          [liveCandle]="(ohlc$ | async) ?? null"
           [resetKey]="(chartReset$ | async) ?? 0"
         />
       </section>
