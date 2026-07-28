@@ -59,4 +59,18 @@ describe('MarketDataStreamService', () => {
 
     subscription.unsubscribe();
   });
+
+  it('opens a recent-trades stream without provider parameters', () => {
+    const subscription = service
+      .streamRecentTrades('market-id', 'BTC/EUR')
+      .subscribe();
+
+    expect(openedUrl).toContain('marketId=market-id');
+    expect(openedUrl).toContain('symbol=BTC%2FEUR');
+    expect(openedUrl).toContain('type=TRADES');
+    expect(openedUrl).not.toContain('depth=');
+    expect(openedUrl).not.toContain('interval=');
+
+    subscription.unsubscribe();
+  });
 });

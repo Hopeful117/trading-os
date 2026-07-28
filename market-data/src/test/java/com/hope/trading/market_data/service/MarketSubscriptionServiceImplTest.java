@@ -39,6 +39,10 @@ class MarketSubscriptionServiceImplTest {
     private OrderBookStateService stateService;
     @Mock
     private OrderBookEventPublisher eventPublisher;
+    @Mock
+    private RecentTradesStateService recentTradesStateService;
+    @Mock
+    private RecentTradesEventPublisher recentTradesEventPublisher;
 
     private MarketSubscriptionServiceImpl service;
     private Market market;
@@ -50,7 +54,9 @@ class MarketSubscriptionServiceImplTest {
                 streamProvider,
                 marketRepository,
                 stateService,
-                eventPublisher
+                eventPublisher,
+                recentTradesStateService,
+                recentTradesEventPublisher
         );
         market = Market.builder()
                 .marketId(MARKET_ID)
@@ -116,5 +122,38 @@ class MarketSubscriptionServiceImplTest {
 
         verify(streamProvider, never())
                 .subscribe(List.of(market), request);
+    }
+
+    @Test
+    void cleansRecentTradesOnlyAfterLastUnsubscribe() {
+        MarketStreamRequest tradesRequest = new MarketStreamRequest(
+                MarketStreamType.TRADES,
+                null
+        );
+        when(marketRepository.findById(MARKET_ID))
+                .thenReturn(Optional.of(market));
+        when(streamProvider.subscribe(
+                List.of(market),
+                tradesRequest
+        )).thenReturn(Mono.empty());
+        when(streamProvider.unsubscribe(
+                List.of(market),
+                tradesRequest
+        )).thenReturn(Mono.empty());
+
+        service.subscribe(MARKET_ID, tradesRequest);
+        service.subscribe(MARKET_ID, tradesRequest);
+        service.unsubscribe(MARKET_ID, tradesRequest);
+
+        verify(recentTradesStateService, never()).clear(MARKET_ID);
+
+        service.unsubscribe(MARKET_ID, tradesRequest);
+
+        verify(streamProvider).unsubscribe(
+                List.of(market),
+                tradesRequest
+        );
+        verify(recentTradesStateService).clear(MARKET_ID);
+        verify(recentTradesEventPublisher).clear(MARKET_ID);
     }
 }

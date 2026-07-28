@@ -7,6 +7,7 @@ import { OhlcEvent } from '../models/ohlc-event.model';
 import { MarketStreamQuery } from '../models/MarketStreamQuery';
 import { MarketStreamType } from '../models/market-stream-type';
 import { OrderBookSnapshot } from '../models/order-book-snapshot.model';
+import { RecentTradesSnapshot } from '../models/recent-trades-snapshot.model';
 
 
 @Injectable({
@@ -41,6 +42,17 @@ export class MarketDataStreamService {
       symbol,
       type: MarketStreamType.ORDER_BOOK,
       depth,
+    });
+  }
+
+  streamRecentTrades(
+    marketId: string,
+    symbol: string,
+  ): Observable<RecentTradesSnapshot> {
+    return this.createStream<RecentTradesSnapshot>({
+      marketId,
+      symbol,
+      type: MarketStreamType.TRADES,
     });
   }
 

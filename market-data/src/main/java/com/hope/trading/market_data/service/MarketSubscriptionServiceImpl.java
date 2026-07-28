@@ -30,6 +30,8 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
     private final MarketRepository marketRepository;
     private final OrderBookStateService orderBookStateService;
     private final OrderBookEventPublisher orderBookEventPublisher;
+    private final RecentTradesStateService recentTradesStateService;
+    private final RecentTradesEventPublisher recentTradesEventPublisher;
     private final ConcurrentHashMap<
             MarketSubscriptionKey,
             AtomicInteger
@@ -90,12 +92,6 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             }
         }
 
-        log.debug(
-                "Subscription count for {} {} is now {}",
-                market.getSymbol(),
-                request.type(),
-                currentCount
-        );
     }
 
     @Override
@@ -114,12 +110,6 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                 activeSubscriptions.get(key);
 
         if (subscriberCount == null) {
-            log.debug(
-                    "No active {} subscription found for market {} with parameters {}",
-                    request.type(),
-                    marketId,
-                    request.parameters()
-            );
             return;
         }
 
@@ -127,12 +117,6 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                 subscriberCount.decrementAndGet();
 
         if (remainingSubscribers > 0) {
-            log.debug(
-                    "Subscription count for market {} and stream {} is now {}",
-                    marketId,
-                    request.type(),
-                    remainingSubscribers
-            );
             return;
         }
 
@@ -163,7 +147,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             ).block(java.time.Duration.ofSeconds(10));
 
             activeSubscriptions.remove(key, subscriberCount);
-            clearOrderBookState(marketId, request);
+            clearStreamState(marketId, request);
 
             log.info(
                     "Stopped {} subscription for market {}",
@@ -249,25 +233,34 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                     );
                 }
             }
-            case TRADES -> throw new IllegalArgumentException(
-                    "Trades stream is not implemented"
-            );
+            case TRADES -> {
+                if (request.parameters() != null
+                        && (request.parameters().interval() != null
+                        || request.parameters().depth() != null)) {
+                    throw new IllegalArgumentException(
+                            "Trades subscription does not accept parameters"
+                    );
+                }
+            }
         }
     }
 
-    private void clearOrderBookState(
+    private void clearStreamState(
             UUID marketId,
             MarketStreamRequest request
     ) {
-        if (request.type() != MarketStreamType.ORDER_BOOK) {
-            return;
+        if (request.type() == MarketStreamType.ORDER_BOOK) {
+            OrderBookKey key = new OrderBookKey(
+                    marketId,
+                    request.parameters().depth()
+            );
+            orderBookStateService.clear(key);
+            orderBookEventPublisher.clear(key);
         }
 
-        OrderBookKey key = new OrderBookKey(
-                marketId,
-                request.parameters().depth()
-        );
-        orderBookStateService.clear(key);
-        orderBookEventPublisher.clear(key);
+        if (request.type() == MarketStreamType.TRADES) {
+            recentTradesStateService.clear(marketId);
+            recentTradesEventPublisher.clear(marketId);
+        }
     }
 }

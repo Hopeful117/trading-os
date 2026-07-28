@@ -1,0 +1,29 @@
+<section class="recent-trades" aria-label="Recent executed trades">
+  <div class="trades-header" aria-hidden="true">
+    <span>Time</span>
+    <span>Side</span>
+    <span>Price</span>
+    <span>Quantity</span>
+    <span>Notional</span>
+  </div>
+
+  @for (trade of snapshot().trades; track trade.tradeId) {
+    <div class="trade-row">
+      <time [dateTime]="trade.occurredAt">
+        {{ trade.occurredAt | date: 'mediumTime' }}
+      </time>
+      <span
+        class="trade-side"
+        [class.trade-side--buy]="trade.side === 'BUY'"
+        [class.trade-side--sell]="trade.side === 'SELL'"
+      >
+        {{ trade.side }}
+      </span>
+      <span>{{ trade.price }}</span>
+      <span>{{ trade.quantity }}</span>
+      <span>{{ trade.notional | number: '1.2-8' }}</span>
+    </div>
+  } @empty {
+    <p class="trades-empty">Waiting for executed trades...</p>
+  }
+</section>

@@ -10,7 +10,7 @@ import java.util.Arrays;
 public enum KrakenChannel {
     TICKER("ticker"),
     OHLC("ohlc"),
-    TRADES("trades"),
+    TRADES("trade"),
     ORDER_BOOK("book");
 
     private final String value;

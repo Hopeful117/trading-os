@@ -21,6 +21,7 @@ import { MarketStreamType } from '../../../core/models/market-stream-type';
 import { MarketChartComponent } from '../market-chart-component/market-chart-component';
 import { OhlcInterval } from '../../../core/models/ohlc-interval';
 import { OrderBookComponent } from '../order-book-component/order-book-component';
+import { RecentTradesComponent } from '../recent-trades-component/recent-trades-component';
 
 @Component({
   selector: 'app-market-details',
@@ -30,6 +31,7 @@ import { OrderBookComponent } from '../order-book-component/order-book-component
     DatePipe,
     MarketChartComponent,
     OrderBookComponent,
+    RecentTradesComponent,
   ],
   templateUrl: './markets-details.html',
   styleUrl: './markets-details.scss',
@@ -56,9 +58,14 @@ export class MarketDetail {
   private activeOhlcSubscription: ActiveOhlcSubscription | null = null;
   private activeOrderBookSubscription: ActiveOrderBookSubscription | null = null;
   private activeTickerSubscription: ActiveTickerSubscription | null = null;
+  private activeRecentTradesSubscription: ActiveRecentTradesSubscription | null = null;
 
   private readonly tickerRequest: MarketStreamRequest = {
     type: MarketStreamType.TICKER,
+    parameters: null,
+  };
+  private readonly recentTradesRequest: MarketStreamRequest = {
+    type: MarketStreamType.TRADES,
     parameters: null,
   };
 
@@ -160,6 +167,18 @@ export class MarketDetail {
           .subscribe({
             error: (error) => {
               console.error('Unable to unsubscribe order-book stream', error);
+            },
+          });
+      }
+
+      const activeRecentTrades = this.activeRecentTradesSubscription;
+
+      if (activeRecentTrades !== null) {
+        this.marketService
+          .unsubscribe(activeRecentTrades.marketId, this.recentTradesRequest)
+          .subscribe({
+            error: (error) => {
+              console.error('Unable to unsubscribe recent-trades stream', error);
             },
           });
       }
@@ -296,6 +315,56 @@ export class MarketDetail {
       refCount: true,
     }),
   );
+
+  readonly recentTrades$ = this.market$.pipe(
+    switchMap((market) => {
+      const previousSubscription = this.activeRecentTradesSubscription;
+      const unsubscribePrevious$ =
+        previousSubscription === null
+          ? of(undefined)
+          : this.marketService
+              .unsubscribe(
+                previousSubscription.marketId,
+                this.recentTradesRequest,
+              )
+              .pipe(
+                catchError((error) => {
+                  console.error(
+                    'Unable to unsubscribe previous recent-trades stream',
+                    error,
+                  );
+                  return of(undefined);
+                }),
+              );
+
+      return unsubscribePrevious$.pipe(
+        tap(() => {
+          this.activeRecentTradesSubscription = null;
+        }),
+        switchMap(() =>
+          this.marketService.subscribe(
+            market.marketId,
+            this.recentTradesRequest,
+          ),
+        ),
+        tap(() => {
+          this.activeRecentTradesSubscription = {
+            marketId: market.marketId,
+          };
+        }),
+        switchMap(() =>
+          this.marketDataStreamService.streamRecentTrades(
+            market.marketId,
+            market.symbol,
+          ),
+        ),
+      );
+    }),
+    shareReplay({
+      bufferSize: 1,
+      refCount: true,
+    }),
+  );
 }
 
 
@@ -312,6 +381,10 @@ interface ActiveOrderBookSubscription {
 }
 
 interface ActiveTickerSubscription {
+  marketId: string;
+}
+
+interface ActiveRecentTradesSubscription {
   marketId: string;
 }
 

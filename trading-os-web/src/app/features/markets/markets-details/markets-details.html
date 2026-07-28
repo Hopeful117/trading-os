@@ -163,14 +163,20 @@
         >
           <div class="section-header">
             <div>
-              <span class="section-eyebrow">Execution flow</span>
+
               <h2 id="recent-trades-title">Recent trades</h2>
             </div>
+
+            <span class="stream-badge">TRADES</span>
           </div>
 
-          <div class="section-placeholder section-placeholder--compact">
-            <p>Recent trade events will appear here.</p>
-          </div>
+          @if (recentTrades$ | async; as recentTrades) {
+            <app-recent-trades [snapshot]="recentTrades" />
+          } @else {
+            <div class="section-placeholder section-placeholder--compact">
+              <p>Waiting for recent trades...</p>
+            </div>
+          }
         </section>
       </div>
 
@@ -180,7 +186,7 @@
       >
         <div class="section-header">
           <div>
-            <span class="section-eyebrow">Trading conditions</span>
+
             <h2 id="market-information-title">
               Market information
             </h2>

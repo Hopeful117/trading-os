@@ -35,6 +35,7 @@ describe('MarketsDetails', () => {
             streamTicker: () => NEVER,
             streamOhlc: () => NEVER,
             streamOrderBook: () => NEVER,
+            streamRecentTrades: () => NEVER,
           },
         },
       ],

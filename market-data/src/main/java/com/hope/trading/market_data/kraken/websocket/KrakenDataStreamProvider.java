@@ -9,9 +9,11 @@ import com.hope.trading.market_data.kraken.dto.subscription.KrakenSubscriptionMe
 import com.hope.trading.market_data.kraken.dto.subscription.KrakenSubscriptionParams;
 import com.hope.trading.market_data.kraken.dto.subscription.KrakenSubscriptionRequest;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenTickerMessage;
+import com.hope.trading.market_data.kraken.dto.trade.KrakenTradeMessage;
 import com.hope.trading.market_data.kraken.helper.KrakenOhlcMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenOrderBookMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenTickerMapper;
+import com.hope.trading.market_data.kraken.helper.KrakenTradeMapper;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
@@ -19,10 +21,14 @@ import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OrderBookDelta;
 import com.hope.trading.market_data.model.OrderBookKey;
 import com.hope.trading.market_data.model.OrderBookSnapshot;
+import com.hope.trading.market_data.model.RecentTradesSnapshot;
 import com.hope.trading.market_data.model.TickerEvent;
+import com.hope.trading.market_data.model.TradeEvent;
 import com.hope.trading.market_data.service.OhlcEventPublisher;
 import com.hope.trading.market_data.service.OrderBookEventPublisher;
 import com.hope.trading.market_data.service.OrderBookStateService;
+import com.hope.trading.market_data.service.RecentTradesEventPublisher;
+import com.hope.trading.market_data.service.RecentTradesStateService;
 import com.hope.trading.market_data.service.TickerEventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -37,10 +43,14 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -58,6 +68,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<Integer>> orderBookDepthsBySymbol =
             new ConcurrentHashMap<>();
+    private final Set<String> tradeSymbols =
+            ConcurrentHashMap.newKeySet();
     private volatile WebSocketSession session;
     private volatile Disposable connectionSubscription;
     private final Sinks.Many<String> outboundMessages =
@@ -75,6 +87,9 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final KrakenOrderBookMapper orderBookMapper;
     private final OrderBookStateService orderBookStateService;
     private final OrderBookEventPublisher orderBookEventPublisher;
+    private final KrakenTradeMapper tradeMapper;
+    private final RecentTradesStateService recentTradesStateService;
+    private final RecentTradesEventPublisher recentTradesEventPublisher;
     private final Object outboundEmissionLock =
             new Object();
 
@@ -87,7 +102,10 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             KrakenOhlcMapper ohlcMapper,
             KrakenOrderBookMapper orderBookMapper,
             OrderBookStateService orderBookStateService,
-            OrderBookEventPublisher orderBookEventPublisher
+            OrderBookEventPublisher orderBookEventPublisher,
+            KrakenTradeMapper tradeMapper,
+            RecentTradesStateService recentTradesStateService,
+            RecentTradesEventPublisher recentTradesEventPublisher
     ) {
         this.objectMapper = objectMapper;
         this.tickerMapper = tickerMapper;
@@ -97,6 +115,9 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         this.orderBookMapper = orderBookMapper;
         this.orderBookStateService = orderBookStateService;
         this.orderBookEventPublisher = orderBookEventPublisher;
+        this.tradeMapper = tradeMapper;
+        this.recentTradesStateService = recentTradesStateService;
+        this.recentTradesEventPublisher = recentTradesEventPublisher;
         this.client = new ReactorNettyWebSocketClient();
         this.krakenProperties = krakenProperties;
     }
@@ -157,7 +178,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                                     )
                             )
                             .doFinally(signal -> {
-                                clearOrderBookStates();
+                                clearRealtimeStates();
                                 log.info(
                                         "[KRAKEN] Connection terminated signal={}",
                                         signal
@@ -201,10 +222,6 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     )
                     .doFinally(signal -> {
                         this.session = null;
-                        log.debug(
-                                "Kraken websocket session cleared ({})",
-                                signal
-                        );
                     });
         }
 
@@ -274,15 +291,12 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 case "ticker" -> handleTickerMessage(root);
                 case "ohlc" -> handleOhlcMessage(root);
                 case "book" -> handleOrderBookMessage(root);
+                case "trade" -> handleTradeMessage(root);
 
-                case "heartbeat" -> log.trace(
-                        "Kraken heartbeat received"
-                );
-
-                default -> log.debug(
-                        "Ignoring unsupported Kraken channel: {}",
-                        channel
-                );
+                case "heartbeat" -> {
+                }
+                default -> {
+                }
             }
 
         } catch (Exception exception) {
@@ -323,7 +337,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     buildSubscriptionParams(
                             channel,
                             symbols,
-                            streamRequest
+                            streamRequest,
+                            method == KrakenSubscriptionMethod.SUBSCRIBE
                     );
 
             KrakenSubscriptionRequest request =
@@ -398,7 +413,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private KrakenSubscriptionParams buildSubscriptionParams(
             KrakenChannel channel,
             List<String> symbols,
-            MarketStreamRequest request
+            MarketStreamRequest request,
+            boolean subscribe
     ) {
         return switch (request.type()) {
             case TICKER -> new KrakenSubscriptionParams(
@@ -407,7 +423,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     null,
                     null,
                     "bbo",
-                    true
+                    subscribe ? true : null
             );
 
             case OHLC -> new KrakenSubscriptionParams(
@@ -416,7 +432,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     request.parameters().interval(),
                     null,
                     null,
-                    true
+                    subscribe ? true : null
             );
             case ORDER_BOOK -> new KrakenSubscriptionParams(
                     channel.getValue(),
@@ -424,10 +440,15 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     null,
                     request.parameters().depth(),
                     null,
-                    true
+                    subscribe ? true : null
             );
-            case TRADES -> throw new IllegalArgumentException(
-                    "Kraken trades stream is not implemented"
+            case TRADES -> new KrakenSubscriptionParams(
+                    channel.getValue(),
+                    symbols,
+                    null,
+                    null,
+                    null,
+                    subscribe ? true : null
             );
         };
     }
@@ -573,6 +594,55 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         });
     }
 
+    private void handleTradeMessage(JsonNode root) {
+        if (!root.has("data")
+                || !root.get("data").isArray()
+                || root.get("data").isEmpty()) {
+            return;
+        }
+
+        KrakenTradeMessage message =
+                objectMapper.treeToValue(
+                        root,
+                        KrakenTradeMessage.class
+                );
+        Map<UUID, List<TradeEvent>> tradesByMarket =
+                new LinkedHashMap<>();
+
+        message.data().forEach(data -> {
+            Market market = findSubscribedMarket(data.symbol());
+
+            if (market == null) {
+                log.warn(
+                        "Ignoring Kraken trade without subscribed market symbol={}",
+                        data.symbol()
+                );
+                return;
+            }
+
+            try {
+                TradeEvent event = tradeMapper.toEvent(data, market);
+                tradesByMarket.computeIfAbsent(
+                        market.getMarketId(),
+                        ignored -> new ArrayList<>()
+                ).add(event);
+            } catch (IllegalArgumentException exception) {
+                log.warn(
+                        "Ignoring invalid Kraken trade symbol={} tradeId={} reason={}",
+                        data.symbol(),
+                        data.tradeId(),
+                        exception.getMessage()
+                );
+            }
+        });
+
+        tradesByMarket.values().forEach(trades -> {
+            RecentTradesSnapshot snapshot =
+                    recentTradesStateService.addBatch(trades);
+            recentTradesEventPublisher.publish(snapshot);
+        });
+    }
+
     private void registerMarkets(
             List<Market> markets,
             MarketStreamRequest request
@@ -593,6 +663,9 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                                 symbol,
                                 ignored -> ConcurrentHashMap.newKeySet()
                         ).add(request.parameters().depth());
+                    }
+                    if (request.type() == MarketStreamType.TRADES) {
+                        tradeSymbols.add(symbol);
                     }
                 });
     }
@@ -617,6 +690,9 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                             }
                         }
                     }
+                    if (request.type() == MarketStreamType.TRADES) {
+                        tradeSymbols.remove(symbol);
+                    }
 
                     marketSubscriptionCounts.computeIfPresent(
                             symbol,
@@ -631,7 +707,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 });
     }
 
-    private void clearOrderBookStates() {
+    private void clearRealtimeStates() {
         orderBookDepthsBySymbol.forEach((symbol, depths) -> {
             Market market = subscribedMarkets.get(symbol);
 
@@ -645,6 +721,16 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 orderBookStateService.clear(key);
                 orderBookEventPublisher.clear(key);
             });
+        });
+        tradeSymbols.forEach(symbol -> {
+            Market market = subscribedMarkets.get(symbol);
+
+            if (market == null) {
+                return;
+            }
+
+            recentTradesStateService.clear(market.getMarketId());
+            recentTradesEventPublisher.clear(market.getMarketId());
         });
     }
     private void handleControlMessage(JsonNode root) {
@@ -667,10 +753,6 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             return;
         }
 
-        log.debug(
-                "Ignoring Kraken control message: {}",
-                root
-        );
     }
     private Mono<Void> emitOutboundMessage(
             String payload

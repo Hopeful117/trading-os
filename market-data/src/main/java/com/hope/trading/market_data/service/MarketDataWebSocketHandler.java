@@ -2,9 +2,7 @@ package com.hope.trading.market_data.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_data.model.MarketStreamType;
-import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
-import com.hope.trading.market_data.model.TickerEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
@@ -34,6 +32,7 @@ public class MarketDataWebSocketHandler
     private final TickerEventPublisher tickerEventPublisher;
     private final OhlcEventPublisher ohlcEventPublisher;
     private final OrderBookEventPublisher orderBookEventPublisher;
+    private final RecentTradesEventPublisher recentTradesEventPublisher;
     private final ObjectMapper objectMapper;
 
     private final Map<String, Disposable> subscriptions =
@@ -100,9 +99,13 @@ public class MarketDataWebSocketHandler
                 yield orderBookEventPublisher
                         .streamByMarketAndDepth(marketId, depth);
             }
-            case TRADES -> throw new IllegalArgumentException(
-                    "Trades stream is not implemented"
-            );
+            case TRADES -> {
+                UUID marketId = UUID.fromString(
+                        extractRequiredParameter(uri, "marketId")
+                );
+                yield recentTradesEventPublisher
+                        .streamByMarket(marketId);
+            }
         };
 
         log.info(
@@ -177,12 +180,6 @@ public class MarketDataWebSocketHandler
                         new TextMessage(payload)
                 );
             }
-
-            log.debug(
-                    "[WS] Event sent session={} eventType={}",
-                    session.getId(),
-                    event.getClass().getSimpleName()
-            );
 
         } catch (Exception exception) {
             log.error(
