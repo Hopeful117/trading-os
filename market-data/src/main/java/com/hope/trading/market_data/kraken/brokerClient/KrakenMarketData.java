@@ -12,6 +12,7 @@ import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.service.OhlcHistoryNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,7 @@ public class KrakenMarketData  implements MarketDataProvider {
     private final KrakenMarketMapper marketMapper;
     private static final int KRAKEN_MAX_OHLC_ENTRIES = 720;
     private final KrakenRestOhlcMapper restOhlcMapper;
+    private final OhlcHistoryNormalizer historyNormalizer;
 
 
     @Override
@@ -45,56 +47,47 @@ public class KrakenMarketData  implements MarketDataProvider {
     public MarketProvider getName(){
         return MarketProvider.KRAKEN;
     }
-
     @Override
     public List<OhlcEvent> findOhlcHistory(
             Market market,
             OhlcInterval interval,
             int limit
     ) {
-        validateArguments(market, interval, limit);
-
-        String providerSymbol =
-                resolveProviderSymbol(market);
-
-        log.info(
-                "Requesting Kraken OHLC history symbol={} interval={} limit={}",
-                providerSymbol,
+        validateArguments(
+                market,
                 interval,
                 limit
         );
 
         KrakenOhlcResponse response =
                 client.findOhlcHistory(
-                        providerSymbol,
+                        market.getSymbol(),
                         interval.getMinutes()
                 );
 
         KrakenOhlcResult result =
                 restOhlcMapper.extract(response);
 
-        List<KrakenRestOhlcEntry> selectedEntries =
-                takeLast(
-                        result.entries(),
-                        limit
-                );
-
-        List<OhlcEvent> events =
+        List<OhlcEvent> mappedEvents =
                 mapEntries(
-                        selectedEntries,
+                        result.entries(),
                         market,
                         interval
                 );
 
-        log.info(
-                "Received Kraken OHLC history symbol={} interval={} entries={}",
-                providerSymbol,
-                interval,
-                events.size()
-        );
+        List<OhlcEvent> normalizedEvents =
+                historyNormalizer.fillMissingIntervals(
+                        mappedEvents,
+                        interval
+                );
 
-        return events;
+        return takeLastEvents(
+                normalizedEvents,
+                limit
+        );
     }
+
+
 
     private List<OhlcEvent> mapEntries(
             List<KrakenRestOhlcEntry> entries,
@@ -183,5 +176,26 @@ public class KrakenMarketData  implements MarketDataProvider {
                             + KRAKEN_MAX_OHLC_ENTRIES
             );
         }
+    }
+    private List<OhlcEvent> takeLastEvents(
+            List<OhlcEvent> events,
+            int limit
+    ) {
+        if (events == null || events.isEmpty()) {
+            return List.of();
+        }
+
+        int fromIndex =
+                Math.max(
+                        0,
+                        events.size() - limit
+                );
+
+        return List.copyOf(
+                events.subList(
+                        fromIndex,
+                        events.size()
+                )
+        );
     }
 }
