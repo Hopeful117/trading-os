@@ -1,0 +1,62 @@
+<section class="order-book" aria-label="Live order book">
+  <div class="book-summary">
+    <div>
+      <span>Spread</span>
+      <strong>{{ snapshot().spread ?? '—' }}</strong>
+    </div>
+    <div>
+      <span>Bid volume</span>
+      <strong>{{ snapshot().bidVolume }}</strong>
+    </div>
+    <div>
+      <span>Ask volume</span>
+      <strong>{{ snapshot().askVolume }}</strong>
+    </div>
+    <div>
+      <span>Bid imbalance</span>
+      <strong>{{ snapshot().imbalance | percent: '1.1-1' }}</strong>
+    </div>
+  </div>
+
+  <div class="book-side book-side--asks">
+    <h3>Asks</h3>
+    <div class="book-header" aria-hidden="true">
+      <span>Price</span>
+      <span>Quantity</span>
+      <span>Total</span>
+    </div>
+    @for (level of snapshot().asks; track level.price) {
+      <div class="book-row">
+        <span class="ask-price">{{ level.price }}</span>
+        <span>{{ level.quantity }}</span>
+        <span>{{ level.price * level.quantity | number: '1.2-8' }}</span>
+      </div>
+    } @empty {
+      <p class="book-empty">No ask level available.</p>
+    }
+  </div>
+
+  <div class="book-spread">
+    <span>Best bid {{ snapshot().bestBid ?? '—' }}</span>
+    <strong>{{ snapshot().spread ?? '—' }}</strong>
+    <span>Best ask {{ snapshot().bestAsk ?? '—' }}</span>
+  </div>
+
+  <div class="book-side book-side--bids">
+    <h3>Bids</h3>
+    <div class="book-header" aria-hidden="true">
+      <span>Price</span>
+      <span>Quantity</span>
+      <span>Total</span>
+    </div>
+    @for (level of snapshot().bids; track level.price) {
+      <div class="book-row">
+        <span class="bid-price">{{ level.price }}</span>
+        <span>{{ level.quantity }}</span>
+        <span>{{ level.price * level.quantity | number: '1.2-8' }}</span>
+      </div>
+    } @empty {
+      <p class="book-empty">No bid level available.</p>
+    }
+  </div>
+</section>

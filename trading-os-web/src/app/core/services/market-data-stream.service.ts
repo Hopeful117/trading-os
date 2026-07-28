@@ -6,6 +6,7 @@ import {AuthService} from './auth.service';
 import { OhlcEvent } from '../models/ohlc-event.model';
 import { MarketStreamQuery } from '../models/MarketStreamQuery';
 import { MarketStreamType } from '../models/market-stream-type';
+import { OrderBookSnapshot } from '../models/order-book-snapshot.model';
 
 
 @Injectable({
@@ -30,6 +31,19 @@ export class MarketDataStreamService {
     });
   }
 
+  streamOrderBook(
+    marketId: string,
+    symbol: string,
+    depth: number,
+  ): Observable<OrderBookSnapshot> {
+    return this.createStream<OrderBookSnapshot>({
+      marketId,
+      symbol,
+      type: MarketStreamType.ORDER_BOOK,
+      depth,
+    });
+  }
+
   private createStream<T>(parameters: MarketStreamQuery): Observable<T> {
     return new Observable<T>((subscriber) => {
       const token = this.authService.getToken();
@@ -51,6 +65,10 @@ export class MarketDataStreamService {
 
       if (parameters.interval !== undefined) {
         query.set('interval', parameters.interval.toString());
+      }
+
+      if (parameters.depth !== undefined) {
+        query.set('depth', parameters.depth.toString());
       }
 
       const socket = new WebSocket(`${environment.marketDataWebSocketUrl}?${query.toString()}`);

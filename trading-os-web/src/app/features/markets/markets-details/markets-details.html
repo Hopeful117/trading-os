@@ -132,11 +132,29 @@
             <div>
               <h2 id="order-book-title">Order book</h2>
             </div>
+
+            <div class="timeframe-selector" aria-label="Order-book depth">
+              @if (selectedOrderBookDepth$ | async; as selectedDepth) {
+                @for (depth of orderBookDepths; track depth) {
+                  <button
+                    type="button"
+                    [class.active]="selectedDepth === depth"
+                    (click)="selectOrderBookDepth(depth)"
+                  >
+                    {{ depth }} levels
+                  </button>
+                }
+              }
+            </div>
           </div>
 
-          <div class="section-placeholder section-placeholder--compact">
-            <p>Order-book data is not available yet.</p>
-          </div>
+          @if (orderBook$ | async; as orderBook) {
+            <app-order-book [snapshot]="orderBook" />
+          } @else {
+            <div class="section-placeholder section-placeholder--compact">
+              <p>Waiting for the initial order-book snapshot...</p>
+            </div>
+          }
         </section>
 
         <section

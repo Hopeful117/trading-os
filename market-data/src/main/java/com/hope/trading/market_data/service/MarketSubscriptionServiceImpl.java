@@ -7,12 +7,14 @@ import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.model.OrderBookKey;
 import com.hope.trading.market_data.repository.MarketRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,8 +23,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequiredArgsConstructor
 @Slf4j
 public class MarketSubscriptionServiceImpl implements MarketSubscriptionService {
+    private static final Set<Integer> SUPPORTED_ORDER_BOOK_DEPTHS =
+            Set.of(10, 25);
+
     private final MarketDataStreamProvider marketDataStreamProvider;
     private final MarketRepository marketRepository;
+    private final OrderBookStateService orderBookStateService;
+    private final OrderBookEventPublisher orderBookEventPublisher;
     private final ConcurrentHashMap<
             MarketSubscriptionKey,
             AtomicInteger
@@ -156,6 +163,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             ).block(java.time.Duration.ofSeconds(10));
 
             activeSubscriptions.remove(key, subscriberCount);
+            clearOrderBookState(marketId, request);
 
             log.info(
                     "Stopped {} subscription for market {}",
@@ -222,6 +230,44 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                         request.parameters().interval()
                 );
             }
+            case ORDER_BOOK -> {
+                if (request.parameters() == null
+                        || request.parameters().depth() == null) {
+                    throw new IllegalArgumentException(
+                            "Order-book subscription requires a depth"
+                    );
+                }
+
+                if (!SUPPORTED_ORDER_BOOK_DEPTHS.contains(
+                        request.parameters().depth()
+                )) {
+                    throw new IllegalArgumentException(
+                            "Unsupported order-book depth: "
+                                    + request.parameters().depth()
+                                    + ". Supported depths are "
+                                    + SUPPORTED_ORDER_BOOK_DEPTHS
+                    );
+                }
+            }
+            case TRADES -> throw new IllegalArgumentException(
+                    "Trades stream is not implemented"
+            );
         }
+    }
+
+    private void clearOrderBookState(
+            UUID marketId,
+            MarketStreamRequest request
+    ) {
+        if (request.type() != MarketStreamType.ORDER_BOOK) {
+            return;
+        }
+
+        OrderBookKey key = new OrderBookKey(
+                marketId,
+                request.parameters().depth()
+        );
+        orderBookStateService.clear(key);
+        orderBookEventPublisher.clear(key);
     }
 }

@@ -10,6 +10,7 @@ public record KrakenSubscriptionParams(
         String channel,
         List<String> symbol,
         Integer interval,
+        Integer depth,
         @JsonProperty("event_trigger")
         String eventTrigger,
 

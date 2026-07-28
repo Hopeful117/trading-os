@@ -20,13 +20,6 @@ public class OhlcEventPublisher {
     public void publish(OhlcEvent event) {
         Sinks.EmitResult result =
                 sink.tryEmitNext(event);
-        log.info(
-                "[OHLC-PUBLISHER] marketId={} interval={} close={} result={}",
-                event.marketId(),
-                event.interval(),
-                event.close(),
-                result
-        );
 
         if (result.isFailure()
                 && result != Sinks.EmitResult.FAIL_ZERO_SUBSCRIBER) {

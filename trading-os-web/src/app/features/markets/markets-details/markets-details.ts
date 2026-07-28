@@ -1,6 +1,5 @@
 import { AsyncPipe, DatePipe } from '@angular/common';
 import { Component, DestroyRef, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   BehaviorSubject,
@@ -21,10 +20,17 @@ import { MarketStreamRequest } from '../../../core/models/market-stream-request'
 import { MarketStreamType } from '../../../core/models/market-stream-type';
 import { MarketChartComponent } from '../market-chart-component/market-chart-component';
 import { OhlcInterval } from '../../../core/models/ohlc-interval';
+import { OrderBookComponent } from '../order-book-component/order-book-component';
 
 @Component({
   selector: 'app-market-details',
-  imports: [AsyncPipe, RouterLink, DatePipe, MarketChartComponent],
+  imports: [
+    AsyncPipe,
+    RouterLink,
+    DatePipe,
+    MarketChartComponent,
+    OrderBookComponent,
+  ],
   templateUrl: './markets-details.html',
   styleUrl: './markets-details.scss',
 })
@@ -36,6 +42,8 @@ export class MarketDetail {
   private readonly selectedTimeframeSubject = new BehaviorSubject<OhlcTimeframe>(
     OHLC_TIMEFRAMES[1],
   );
+  private readonly selectedOrderBookDepthSubject =
+    new BehaviorSubject<OrderBookDepth>(ORDER_BOOK_DEPTHS[0]);
 
   readonly selectedTimeframe$ = this.selectedTimeframeSubject.pipe(
     distinctUntilChanged((previous, current) => previous.minutes === current.minutes),
@@ -46,6 +54,8 @@ export class MarketDetail {
   );
 
   private activeOhlcSubscription: ActiveOhlcSubscription | null = null;
+  private activeOrderBookSubscription: ActiveOrderBookSubscription | null = null;
+  private activeTickerSubscription: ActiveTickerSubscription | null = null;
 
   private readonly tickerRequest: MarketStreamRequest = {
     type: MarketStreamType.TICKER,
@@ -70,30 +80,47 @@ export class MarketDetail {
     }),
   );
   readonly ohlcIntervals = OHLC_TIMEFRAMES;
+  readonly orderBookDepths = ORDER_BOOK_DEPTHS;
+  readonly selectedOrderBookDepth$ = this.selectedOrderBookDepthSubject.pipe(
+    distinctUntilChanged(),
+    shareReplay({
+      bufferSize: 1,
+      refCount: true,
+    }),
+  );
   private readonly chartResetSubject = new BehaviorSubject<number>(0);
 
   readonly chartReset$ = this.chartResetSubject.asObservable();
 
   readonly ticker$ = this.market$.pipe(
-    tap((market) => {
-      console.log('[TICKER] Market received', market);
-    }),
     switchMap((market) => {
-      console.log('[TICKER] Sending REST subscription', market.marketId, this.tickerRequest);
+      const previousSubscription = this.activeTickerSubscription;
+      const unsubscribePrevious$ =
+        previousSubscription === null
+          ? of(undefined)
+          : this.marketService
+              .unsubscribe(previousSubscription.marketId, this.tickerRequest)
+              .pipe(
+                catchError((error) => {
+                  console.error('Unable to unsubscribe previous ticker stream', error);
+                  return of(undefined);
+                }),
+              );
 
-      return this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
+      return unsubscribePrevious$.pipe(
         tap(() => {
-          console.log('[TICKER] REST subscription completed');
+          this.activeTickerSubscription = null;
         }),
-        switchMap(() => {
-          console.log('[TICKER] Opening frontend WebSocket');
-
-          return this.marketDataStreamService.streamTicker(market.symbol);
+        switchMap(() =>
+          this.marketService.subscribe(market.marketId, this.tickerRequest),
+        ),
+        tap(() => {
+          this.activeTickerSubscription = {
+            marketId: market.marketId,
+          };
         }),
+        switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
       );
-    }),
-    tap((event) => {
-      console.log('[TICKER] Event received', event);
     }),
     shareReplay({
       bufferSize: 1,
@@ -103,17 +130,39 @@ export class MarketDetail {
 
   constructor() {
     this.destroyRef.onDestroy(() => {
-      const active = this.activeOhlcSubscription;
+      const activeTicker = this.activeTickerSubscription;
 
-      if (active === null) {
-        return;
+      if (activeTicker !== null) {
+        this.marketService
+          .unsubscribe(activeTicker.marketId, this.tickerRequest)
+          .subscribe({
+            error: (error) => {
+              console.error('Unable to unsubscribe ticker stream', error);
+            },
+          });
       }
 
-      this.marketService.unsubscribe(active.marketId, active.request).subscribe({
-        error: (error) => {
-          console.error('Unable to unsubscribe OHLC stream', error);
-        },
-      });
+      const active = this.activeOhlcSubscription;
+
+      if (active !== null) {
+        this.marketService.unsubscribe(active.marketId, active.request).subscribe({
+          error: (error) => {
+            console.error('Unable to unsubscribe OHLC stream', error);
+          },
+        });
+      }
+
+      const activeOrderBook = this.activeOrderBookSubscription;
+
+      if (activeOrderBook !== null) {
+        this.marketService
+          .unsubscribe(activeOrderBook.marketId, activeOrderBook.request)
+          .subscribe({
+            error: (error) => {
+              console.error('Unable to unsubscribe order-book stream', error);
+            },
+          });
+      }
     });
   }
   selectOhlcInterval(timeframe: OhlcTimeframe): void {
@@ -122,6 +171,14 @@ export class MarketDetail {
     }
 
     this.selectedTimeframeSubject.next(timeframe);
+  }
+
+  selectOrderBookDepth(depth: OrderBookDepth): void {
+    if (this.selectedOrderBookDepthSubject.value === depth) {
+      return;
+    }
+
+    this.selectedOrderBookDepthSubject.next(depth);
   }
   readonly ohlcHistory$ = combineLatest([this.market$, this.selectedTimeframe$]).pipe(
     switchMap(([market, timeframe]) =>
@@ -188,6 +245,57 @@ export class MarketDetail {
       refCount: true,
     }),
   );
+
+  readonly orderBook$ = combineLatest([
+    this.market$,
+    this.selectedOrderBookDepth$,
+  ]).pipe(
+    switchMap(([market, depth]) => {
+      const nextRequest: MarketStreamRequest = {
+        type: MarketStreamType.ORDER_BOOK,
+        parameters: {
+          interval: null,
+          depth,
+        },
+      };
+      const previousSubscription = this.activeOrderBookSubscription;
+      const unsubscribePrevious$ =
+        previousSubscription === null
+          ? of(undefined)
+          : this.marketService
+              .unsubscribe(previousSubscription.marketId, previousSubscription.request)
+              .pipe(
+                catchError((error) => {
+                  console.error('Unable to unsubscribe previous order-book stream', error);
+                  return of(undefined);
+                }),
+              );
+
+      return unsubscribePrevious$.pipe(
+        tap(() => {
+          this.activeOrderBookSubscription = null;
+        }),
+        switchMap(() => this.marketService.subscribe(market.marketId, nextRequest)),
+        tap(() => {
+          this.activeOrderBookSubscription = {
+            marketId: market.marketId,
+            request: nextRequest,
+          };
+        }),
+        switchMap(() =>
+          this.marketDataStreamService.streamOrderBook(
+            market.marketId,
+            market.symbol,
+            depth,
+          ),
+        ),
+      );
+    }),
+    shareReplay({
+      bufferSize: 1,
+      refCount: true,
+    }),
+  );
 }
 
 
@@ -196,6 +304,15 @@ type OhlcTimeframe = (typeof OHLC_TIMEFRAMES)[number];
 interface ActiveOhlcSubscription {
   marketId: string;
   request: MarketStreamRequest;
+}
+
+interface ActiveOrderBookSubscription {
+  marketId: string;
+  request: MarketStreamRequest;
+}
+
+interface ActiveTickerSubscription {
+  marketId: string;
 }
 
 const OHLC_TIMEFRAMES = [
@@ -235,3 +352,6 @@ const OHLC_TIMEFRAMES = [
     interval: OhlcInterval.ONE_DAY,
   },
 ] as const;
+
+const ORDER_BOOK_DEPTHS = [10, 25] as const;
+type OrderBookDepth = (typeof ORDER_BOOK_DEPTHS)[number];

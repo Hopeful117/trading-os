@@ -11,7 +11,7 @@ public enum KrakenChannel {
     TICKER("ticker"),
     OHLC("ohlc"),
     TRADES("trades"),
-    ORDER_BOOK("order-book");
+    ORDER_BOOK("book");
 
     private final String value;
 

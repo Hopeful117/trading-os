@@ -33,6 +33,7 @@ public class MarketDataWebSocketHandler
 
     private final TickerEventPublisher tickerEventPublisher;
     private final OhlcEventPublisher ohlcEventPublisher;
+    private final OrderBookEventPublisher orderBookEventPublisher;
     private final ObjectMapper objectMapper;
 
     private final Map<String, Disposable> subscriptions =
@@ -54,10 +55,6 @@ public class MarketDataWebSocketHandler
         MarketStreamType streamType =
                 extractStreamType(uri);
 
-        log.info(
-                "[FRONTEND-WS] subscribing to publisher type={}",
-                streamType
-        );
         Flux<?> stream = switch (streamType) {
 
             case TICKER ->
@@ -92,8 +89,20 @@ public class MarketDataWebSocketHandler
                                 interval
                         );
             }
-            case TRADES -> null;
-            case ORDER_BOOK -> null;
+            case ORDER_BOOK -> {
+                UUID marketId = UUID.fromString(
+                        extractRequiredParameter(uri, "marketId")
+                );
+                int depth = Integer.parseInt(
+                        extractRequiredParameter(uri, "depth")
+                );
+
+                yield orderBookEventPublisher
+                        .streamByMarketAndDepth(marketId, depth);
+            }
+            case TRADES -> throw new IllegalArgumentException(
+                    "Trades stream is not implemented"
+            );
         };
 
         log.info(
@@ -104,7 +113,6 @@ public class MarketDataWebSocketHandler
 
         );
 
-        assert stream != null;
         Disposable subscription =
                 stream.subscribe(
                         event ->

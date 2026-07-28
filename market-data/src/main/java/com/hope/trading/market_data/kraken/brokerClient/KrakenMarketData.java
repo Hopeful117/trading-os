@@ -7,33 +7,30 @@ import com.hope.trading.market_data.kraken.dto.ohlc.KrakenOhlcResponse;
 import com.hope.trading.market_data.kraken.dto.ohlc.KrakenOhlcResult;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairsResponse;
 import com.hope.trading.market_data.kraken.helper.KrakenMarketMapper;
-import com.hope.trading.market_data.kraken.helper.KrakenOhlcMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.service.OhlcHistoryNormalizer;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.IntStream;
 
 @Component
 @RequiredArgsConstructor
-@Slf4j
-public class KrakenMarketData  implements MarketDataProvider {
+public class KrakenMarketData implements MarketDataProvider {
+    private static final int KRAKEN_MAX_OHLC_ENTRIES = 720;
+
     private final KrakenHttpClient client;
     private final KrakenMarketMapper marketMapper;
-    private static final int KRAKEN_MAX_OHLC_ENTRIES = 720;
     private final KrakenRestOhlcMapper restOhlcMapper;
     private final OhlcHistoryNormalizer historyNormalizer;
 
-
     @Override
     public List<Market> getMarkets() {
-
         KrakenAssetPairsResponse response = client.getAssetPairs();
 
         return response.getResult()
@@ -44,9 +41,10 @@ public class KrakenMarketData  implements MarketDataProvider {
     }
 
     @Override
-    public MarketProvider getName(){
+    public MarketProvider getName() {
         return MarketProvider.KRAKEN;
     }
+
     @Override
     public List<OhlcEvent> findOhlcHistory(
             Market market,
@@ -59,88 +57,55 @@ public class KrakenMarketData  implements MarketDataProvider {
                 limit
         );
 
-        KrakenOhlcResponse response =
-                client.findOhlcHistory(
-                        market.getSymbol(),
-                        interval.getMinutes()
-                );
+        String providerSymbol = resolveProviderSymbol(market);
 
-        KrakenOhlcResult result =
-                restOhlcMapper.extract(response);
+        KrakenOhlcResponse response = client.findOhlcHistory(
+                providerSymbol,
+                interval.getMinutes()
+        );
 
-        List<OhlcEvent> mappedEvents =
-                mapEntries(
-                        result.entries(),
-                        market,
-                        interval
-                );
+        KrakenOhlcResult result = restOhlcMapper.extract(response);
+
+        List<OhlcEvent> mappedEvents = mapEntries(
+                result.entries(),
+                market,
+                interval,
+                result.last()
+        );
 
         List<OhlcEvent> normalizedEvents =
-                historyNormalizer.fillMissingIntervals(
-                        mappedEvents,
-                        interval
-                );
+                historyNormalizer.fillMissingIntervals(mappedEvents, interval);
 
-        return takeLastEvents(
-                normalizedEvents,
-                limit
-        );
+        return takeLastEvents(normalizedEvents, limit);
     }
-
-
 
     private List<OhlcEvent> mapEntries(
             List<KrakenRestOhlcEntry> entries,
             Market market,
-            OhlcInterval interval
+            OhlcInterval interval,
+            Instant occurredAt
     ) {
-
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
+        }
 
         return IntStream.range(0, entries.size())
                 .mapToObj(index -> {
-                    KrakenRestOhlcEntry entry =
-                            entries.get(index);
-
-                    boolean closed =
-                            index < entries.size() - 1;
+                    KrakenRestOhlcEntry entry = entries.get(index);
+                    boolean closed = index < entries.size() - 1;
 
                     return restOhlcMapper.toEvent(
                             entry,
                             market,
                             interval,
                             closed,
-                            entries.getLast().openTime()
-
+                            occurredAt
                     );
                 })
                 .toList();
     }
 
-    private List<KrakenRestOhlcEntry> takeLast(
-            List<KrakenRestOhlcEntry> entries,
-            int limit
-    ) {
-        if (entries == null || entries.isEmpty()) {
-            return List.of();
-        }
-
-        int fromIndex =
-                Math.max(
-                        0,
-                        entries.size() - limit
-                );
-
-        return List.copyOf(
-                entries.subList(
-                        fromIndex,
-                        entries.size()
-                )
-        );
-    }
-
-    private String resolveProviderSymbol(
-            Market market
-    ) {
+    private String resolveProviderSymbol(Market market) {
         String symbol = market.getSymbol();
 
         if (symbol == null || symbol.isBlank()) {
@@ -177,6 +142,7 @@ public class KrakenMarketData  implements MarketDataProvider {
             );
         }
     }
+
     private List<OhlcEvent> takeLastEvents(
             List<OhlcEvent> events,
             int limit
@@ -185,17 +151,10 @@ public class KrakenMarketData  implements MarketDataProvider {
             return List.of();
         }
 
-        int fromIndex =
-                Math.max(
-                        0,
-                        events.size() - limit
-                );
+        int fromIndex = Math.max(0, events.size() - limit);
 
         return List.copyOf(
-                events.subList(
-                        fromIndex,
-                        events.size()
-                )
+                events.subList(fromIndex, events.size())
         );
     }
 }

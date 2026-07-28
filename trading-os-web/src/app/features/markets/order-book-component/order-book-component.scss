@@ -1,0 +1,89 @@
+:host {
+  display: block;
+}
+
+.order-book {
+  display: grid;
+  gap: 1rem;
+}
+
+.book-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.book-summary div {
+  padding: 0.7rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 0.55rem;
+}
+
+.book-summary span,
+.book-header {
+  color: #94a3b8;
+  font-size: 0.72rem;
+}
+
+.book-summary strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: #e2e8f0;
+}
+
+.book-side h3 {
+  margin: 0 0 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.book-header,
+.book-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  text-align: right;
+}
+
+.book-row {
+  color: #cbd5e1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.ask-price {
+  color: #fca5a5;
+}
+
+.bid-price {
+  color: #86efac;
+}
+
+.book-spread {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.65rem 0.5rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  background: rgba(30, 41, 59, 0.55);
+  border-radius: 0.5rem;
+}
+
+.book-spread strong {
+  color: #e2e8f0;
+}
+
+.book-empty {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .book-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

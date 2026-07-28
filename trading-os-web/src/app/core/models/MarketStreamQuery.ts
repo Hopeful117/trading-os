@@ -5,4 +5,5 @@ export interface MarketStreamQuery {
   symbol: string;
   type: MarketStreamType;
   interval?: number;
+  depth?: number;
 }

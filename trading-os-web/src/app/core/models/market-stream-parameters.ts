@@ -1,4 +1,4 @@
 export interface MarketStreamParameters {
-  interval: number;
-  depth: number;
+  interval: number | null;
+  depth: number | null;
 }
