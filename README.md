@@ -53,6 +53,7 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Fondation Market Intelligence ADR-020 : contexte modulaire, modes passif/actif, analyses déterministes, provenance et consolidation partielle.
 - Gouvernance ADR-021 : `AnalysisExecution` asynchrone, idempotence, politique d'exécution, annulation, classification du contexte et contrat AI Engine désactivé.
 - Artefacts ADR-022 : identités et scopes fortement typés, fraîcheur métier, résolution de réutilisation, dépendances et stockage V1 en mémoire.
+- Capability Engine ADR-023 : contrat atomique, planner DAG immuable, moteur local parallèle, lifecycle, propagation ciblée, retries et annulation coopérative.
 - News Service, scheduling passif, interface Scanner et AI Engine réel : non commencés.
 
 ### Market Intelligence
@@ -194,6 +195,9 @@ Une branche n'est intégrable que si les six suites Maven, les tests Angular et 
 - [x] Gouvernance asynchrone et idempotente des `AnalysisExecution`
 - [x] Première fondation de gestion et de réutilisation des artefacts en mémoire
 - [ ] Intégration de l'`ArtifactResolver` dans l'orchestrateur et les capacités
+- [x] Fondation locale du Capability Engine et planification par DAG
+- [ ] Migration des capacités ADR-020 vers le contrat atomique ADR-023
+- [ ] Intégration Planner → Engine dans le cycle `AnalysisExecution`
 - [ ] Stockage durable et cohérence multi-instance des exécutions et artefacts
 - [ ] Persistance et réutilisation des observations Market Intelligence
 - [ ] Passive Scanner, Active Scanner et surveillance des positions
@@ -219,7 +223,8 @@ Les documents d'implémentation actuels sont :
 
 - [ADR-020 — fondation Market Intelligence](docs/ADR-020-implementation.md) ;
 - [ADR-021 — gouvernance des exécutions](docs/ADR-021-implementation.md) ;
-- [ADR-022 — gestion des artefacts](docs/ADR-022-implementation.md).
+- [ADR-022 — gestion des artefacts](docs/ADR-022-implementation.md) ;
+- [ADR-023 — Capability Engine local](docs/ADR-023-implementation.md).
 
 ## Avertissement
 

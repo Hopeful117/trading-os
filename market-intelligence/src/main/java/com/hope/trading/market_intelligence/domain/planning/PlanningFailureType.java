@@ -1,0 +1,7 @@
+package com.hope.trading.market_intelligence.domain.planning;
+
+public enum PlanningFailureType {
+    CYCLIC_DEPENDENCY, UNSATISFIED_REQUIREMENT,
+    NO_COMPATIBLE_ARTIFACT_PRODUCER, AMBIGUOUS_ARTIFACT_PRODUCER,
+    INVALID_ARTIFACT_CARDINALITY, INVALID_CAPABILITY_METADATA
+}
