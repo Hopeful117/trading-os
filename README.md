@@ -4,7 +4,7 @@ Trading OS est un assistant de trading intelligent destiné aux traders discrét
 
 Le produit n'est ni un bot autonome, ni une plateforme HFT, ni un outil limité aux challenges de prop firms. Les règles déterministes ont toujours priorité sur les recommandations de l'IA et toute exécution reste soumise à une validation humaine explicite.
 
-Le projet est en développement actif. L'architecture microservices, l'authentification, la synchronisation Kraken, un premier moteur de risque et une interface Angular sont présents. Le prochain objectif est de stabiliser un parcours déterministe complet et reproductible avant d'introduire les couches Market Intelligence et IA.
+Le projet est en développement actif. L'architecture microservices, l'authentification, la synchronisation Kraken, le moteur de risque, le Dashboard, l'interface Angular et les premières fondations de Market Intelligence sont présents. Aucun AI Engine réel ni mécanisme d'exécution automatique des ordres n'est actuellement intégré.
 
 ## Principes directeurs
 
@@ -23,7 +23,7 @@ Le projet est en développement actif. L'architecture microservices, l'authentif
 | `trading-core` | 8081 | Utilisateurs, comptes, règles, trades et statistiques |
 | `broker-service` | 8082 | Adaptateur Kraken privé : compte, positions et prix |
 | `market-data` | 8083 | Référentiel de marchés, synchronisation et flux Kraken |
-| `market-intelligence` | 8084 | Contexte, orchestration déterministe/IA et consolidation traçable |
+| `market-intelligence` | 8084 | Contexte, orchestration, gouvernance des exécutions et artefacts d'intelligence |
 | `eureka-server` | 8761 | Découverte des services |
 | `trading-web` | 4200 | Application Angular servie par Nginx |
 | PostgreSQL | interne | Bases séparées `trading_os` et `market_data` |
@@ -48,10 +48,36 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Règles et moteur de risque : première version implémentée ; les profils configurables complets restent à construire.
 - Cycle de vie local des trades et statistiques : API implémentée, intégration UI incomplète.
 - Exécution réelle d'ordres : non implémentée ; le code enregistre actuellement les trades sans soumettre d'ordre au broker.
-- Flux temps réel : prototype Kraken abonné en dur à `BTC/USD` ; gestion dynamique non implémentée.
-- Dashboard : squelette.
-- Fondation Market Intelligence : contexte modulaire, modes passif/actif, spread déterministe, provenance et gestion des résultats partiels disponibles.
+- Flux temps réel : ticker, OHLC, carnet d'ordres et transactions récentes avec abonnements dynamiques.
+- Dashboard : orchestration dans Trading Core, valorisation des positions, risque, fraîcheur et états dégradés.
+- Fondation Market Intelligence ADR-020 : contexte modulaire, modes passif/actif, analyses déterministes, provenance et consolidation partielle.
+- Gouvernance ADR-021 : `AnalysisExecution` asynchrone, idempotence, politique d'exécution, annulation, classification du contexte et contrat AI Engine désactivé.
+- Artefacts ADR-022 : identités et scopes fortement typés, fraîcheur métier, résolution de réutilisation, dépendances et stockage V1 en mémoire.
 - News Service, scheduling passif, interface Scanner et AI Engine réel : non commencés.
+
+### Market Intelligence
+
+Le service distingue explicitement :
+
+- l'exécution technique `AnalysisExecution` ;
+- le résultat consolidé `ConsolidatedIntelligence` ;
+- la connaissance métier durable `IntelligenceObservation` ;
+- les artefacts dérivés réutilisables.
+
+Les analyses déterministes et IA sont des capacités de premier rang travaillant en parallèle sur les sections de contexte qui leur sont autorisées. L'adaptateur AI Engine est volontairement indisponible : aucun résultat IA fictif n'est produit.
+
+Contrat REST asynchrone :
+
+```text
+POST /api/v1/intelligence/analyses
+GET  /api/v1/intelligence/analyses/{executionId}
+GET  /api/v1/intelligence/analyses/{executionId}/result
+POST /api/v1/intelligence/analyses/{executionId}/cancel
+```
+
+La création exige un en-tête `Idempotency-Key` et retourne `202 Accepted`.
+
+La gestion des artefacts reste indépendante de Redis, Caffeine ou SQL. L'implémentation actuelle utilise uniquement un store en mémoire pour valider les règles de clé, scope, provenance, fraîcheur, réutilisation et invalidation ciblée. Elle n'est ni durable ni distribuée.
 
 ## Pipeline de décision cible
 
@@ -144,10 +170,11 @@ Ou par application :
 
 ```bash
 cd trading-core && ./mvnw test
+cd market-intelligence && ../trading-core/mvnw test
 cd trading-os-web && npm run check
 ```
 
-Une branche n'est intégrable que si les cinq suites Maven, les tests Angular et le build Angular passent. Les tests `contextLoads` constituent seulement un smoke test : la couverture métier doit progresser avec chaque fonctionnalité.
+Une branche n'est intégrable que si les six suites Maven, les tests Angular et le build Angular passent. Les tests `contextLoads` constituent seulement un smoke test : la couverture métier doit progresser avec chaque fonctionnalité.
 
 ## Roadmap
 
@@ -164,6 +191,10 @@ Une branche n'est intégrable que si les cinq suites Maven, les tests Angular et
 - [ ] Journal, Market Detail et dashboard complets
 - [ ] News Service et calendrier économique
 - [x] Fondation d'orchestration Market Intelligence et première analyse déterministe
+- [x] Gouvernance asynchrone et idempotente des `AnalysisExecution`
+- [x] Première fondation de gestion et de réutilisation des artefacts en mémoire
+- [ ] Intégration de l'`ArtifactResolver` dans l'orchestrateur et les capacités
+- [ ] Stockage durable et cohérence multi-instance des exécutions et artefacts
 - [ ] Persistance et réutilisation des observations Market Intelligence
 - [ ] Passive Scanner, Active Scanner et surveillance des positions
 - [ ] AI Engine explicable consommant les données normalisées
@@ -182,6 +213,13 @@ Les principaux axes couverts sont :
 - architecture Angular réactive ;
 - pipeline de décision avec validation humaine ;
 - architecture pilotée par la valeur produit.
+- orchestration Market Intelligence, gouvernance des exécutions et gestion des artefacts dérivés.
+
+Les documents d'implémentation actuels sont :
+
+- [ADR-020 — fondation Market Intelligence](docs/ADR-020-implementation.md) ;
+- [ADR-021 — gouvernance des exécutions](docs/ADR-021-implementation.md) ;
+- [ADR-022 — gestion des artefacts](docs/ADR-022-implementation.md).
 
 ## Avertissement
 
