@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.config;
 
+import com.hope.trading.market_intelligence.domain.artifact.FreshnessEvaluator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -12,6 +13,11 @@ public class IntelligenceExecutionConfiguration {
     @Bean
     Clock intelligenceClock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    FreshnessEvaluator artifactFreshnessEvaluator() {
+        return new FreshnessEvaluator();
     }
 
     @Bean(name = "intelligenceCapabilityExecutor", destroyMethod = "shutdown")
