@@ -16,6 +16,11 @@ public class LoggingFilter implements GlobalFilter , Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         var request = exchange.getRequest();
+        boolean credentialCommand = request.getPath().value().matches(
+                "^/api/v1/broker-accounts/[^/]+/(credentials|validate).*$");
+        if (credentialCommand) {
+            exchange.getResponse().getHeaders().setCacheControl("no-store");
+        }
         long startedAt = System.nanoTime();
         log.debug("HTTP request started method={} path={}", request.getMethod(), request.getPath());
         return chain.filter(exchange)

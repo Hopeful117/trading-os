@@ -84,3 +84,50 @@ button {
   color: #fca5a5;
 
 }
+.broker-connect,
+.broker-list {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.broker-connect form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.broker-connect label {
+  display: grid;
+  gap: 0.4rem;
+  color: #cbd5e1;
+}
+
+.broker-connect input {
+  min-width: 0;
+  padding: 0.7rem;
+  color: #f8fafc;
+  border: 1px solid #334155;
+  border-radius: 0.45rem;
+  background: #0f172a;
+}
+
+.broker-list article {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) auto auto;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.status,
+.eyebrow {
+  color: #38bdf8;
+}
+
+.connection-message {
+  margin-top: 1rem;
+}

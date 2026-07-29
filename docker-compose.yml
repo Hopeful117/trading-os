@@ -34,6 +34,19 @@ services:
 
     restart: unless-stopped
 
+  broker-db:
+    image: postgres:16
+    container_name: broker-postgres
+    environment:
+      POSTGRES_DB: broker_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - broker_data:/var/lib/postgresql/data
+    networks:
+      - trading-network
+    restart: unless-stopped
+
 
   trading-app:
     build: ./trading-core
@@ -63,9 +76,18 @@ services:
       KRAKEN_BASE_URL: ${KRAKEN_BASE_URL}
       KRAKEN_API_KEY: ${KRAKEN_API_KEY}
       KRAKEN_API_SECRET: ${KRAKEN_API_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER}
+      BROKER_DATABASE_URL: jdbc:postgresql://broker-db:5432/broker_service
+      BROKER_DATABASE_USERNAME: postgres
+      BROKER_DATABASE_PASSWORD: postgres
+      BROKER_CREDENTIAL_SOURCE: stored
+      BROKER_MASTER_KEY: ${BROKER_MASTER_KEY}
+      BROKER_MASTER_KEY_VERSION: ${BROKER_MASTER_KEY_VERSION:-v1}
 
     depends_on:
       - eureka-server
+      - broker-db
 
     networks:
       - trading-network
@@ -171,3 +193,4 @@ networks:
 volumes:
   market_data:
   trading_os:
+  broker_data:

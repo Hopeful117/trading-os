@@ -21,7 +21,7 @@ Le projet est en développement actif. L'architecture microservices, l'authentif
 | --- | ---: | --- |
 | `gateway` | 8080 | Point d'entrée HTTP, sécurité JWT et routage |
 | `trading-core` | 8081 | Utilisateurs, comptes, règles, trades et statistiques |
-| `broker-service` | 8082 | Adaptateur Kraken privé : compte, positions et prix |
+| `broker-service` | 8082 | Connexions broker, validation Kraken et secrets chiffrés versionnés |
 | `market-data` | 8083 | Référentiel de marchés, synchronisation et flux Kraken |
 | `market-intelligence` | 8084 | Contexte, orchestration, gouvernance des exécutions et artefacts d'intelligence |
 | `eureka-server` | 8761 | Découverte des services |
@@ -107,8 +107,16 @@ KRAKEN_BASE_URL=https://api.kraken.com
 KRAKEN_WEBSOCKET=wss://ws.kraken.com/v2
 KRAKEN_API_KEY=
 KRAKEN_API_SECRET=
+BROKER_MASTER_KEY=
+BROKER_MASTER_KEY_VERSION=v1
 SPRING_PROFILES_ACTIVE=prod
 ```
+
+`BROKER_MASTER_KEY` doit contenir exactement 32 octets aléatoires encodés en
+Base64. Elle peut être générée hors du dépôt avec `openssl rand -base64 32`.
+Elle ne doit jamais être commitée. Le profil production utilise
+`BROKER_CREDENTIAL_SOURCE=stored`; le mode `environment` est réservé au
+développement et aux démonstrations explicitement configurées.
 
 Ne jamais journaliser ni committer les clés Kraken, le JWT, les mots de passe ou les en-têtes `Authorization`.
 

@@ -1,4 +1,53 @@
 <h1>Accounts</h1>
+<section class="broker-connect">
+  <div>
+    <p class="eyebrow">Broker connection</p>
+    <h2>Connecter Kraken</h2>
+    <p>Les credentials sont transmis une seule fois et ne pourront pas être relus.</p>
+  </div>
+
+  <form [formGroup]="brokerForm" (ngSubmit)="connectBroker()" autocomplete="off">
+    <label>
+      Nom d’affichage
+      <input formControlName="displayName" maxlength="80" autocomplete="off" />
+    </label>
+    <label>
+      API key
+      <input formControlName="apiKey" type="password" maxlength="256" autocomplete="off" />
+    </label>
+    <label>
+      API secret
+      <input formControlName="apiSecret" type="password" maxlength="512" autocomplete="new-password" />
+    </label>
+    <button type="submit" [disabled]="connecting">
+      {{ connecting ? 'Validation…' : 'Connecter le compte' }}
+    </button>
+  </form>
+  @if (connectionMessage) {
+    <p class="connection-message">{{ connectionMessage }}</p>
+  }
+</section>
+
+<section class="broker-list">
+  <h2>Connexions broker</h2>
+  @if (accountState | async; as state) {
+    @for (brokerAccount of state.brokerAccounts; track brokerAccount.id) {
+      <article>
+        <strong>{{ brokerAccount.displayName }}</strong>
+        <span>{{ brokerAccount.provider }}</span>
+        <span class="status">{{ brokerAccount.connectionStatus }}</span>
+      </article>
+    } @empty {
+      @if (state.accounts.length > 0) {
+        <p>Compte broker synchronisé via la configuration existante.</p>
+      } @else {
+        <p>Aucun compte broker connecté.</p>
+      }
+    }
+  }
+</section>
+
+<h2>Comptes de trading synchronisés</h2>
 <button (click)="sync()">
   Synchroniser Kraken
 </button>
@@ -17,4 +66,3 @@
 @if (errorMessage) {
   <p class="error">{{ errorMessage }}</p>
 }
-
