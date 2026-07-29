@@ -50,6 +50,8 @@ public class DisabledAiAnalysisCapability implements AiAnalysisCapability {
             IntelligenceAnalysisRequest request,
             IntelligenceContext context
     ) {
-        return aiEnginePort.analyze(request, context);
+        throw new IllegalStateException(
+                "Asynchronous AI Engine execution is not configured"
+        );
     }
 }

@@ -3,7 +3,7 @@
 ## Scope
 
 The first ADR-020 increment introduces a dedicated Java orchestration boundary
-in `market-intelligence`. It is a stateless read-only service. It does not own
+in `market-intelligence`. It is a read-only service. It does not own
 market, account, risk, news or broker data and it does not execute orders.
 
 The service is intentionally modular so its domain and application contracts
@@ -32,7 +32,8 @@ Market Intelligence
    `-- AI Engine (future probabilistic capability adapter)
 ```
 
-The current service uses synchronous REST/OpenFeign calls through Eureka. No
+Context collection uses synchronous REST/OpenFeign calls through Eureka.
+Analysis requests use the asynchronous lifecycle introduced by ADR-021. No
 message broker, distributed cache or additional database is introduced.
 
 ## Data flow
@@ -72,7 +73,7 @@ instances. Each section contains:
 
 - a section type;
 - `AVAILABLE`, `STALE`, `MISSING` or `UNAVAILABLE`;
-- `PUBLIC` or `USER_PRIVATE` sensitivity;
+- an ADR-021 classification declared by its contributor;
 - a typed payload;
 - source and timestamps;
 - an explicit diagnostic message when incomplete.
@@ -133,6 +134,9 @@ No global opaque score is produced.
 
 ```text
 POST /api/v1/intelligence/analyses
+GET  /api/v1/intelligence/analyses/{executionId}
+GET  /api/v1/intelligence/analyses/{executionId}/result
+POST /api/v1/intelligence/analyses/{executionId}/cancel
 ```
 
 Example request:
@@ -155,7 +159,7 @@ request contains only a public `marketId`; no account context is loaded.
 - no account/risk contributor;
 - no order-book REST snapshot contributor;
 - no passive scheduler or persisted intelligence repository;
-- no cache or reuse of previous analyses;
+- idempotence is currently scoped to the lifetime of one service instance;
 - one deterministic spread capability only;
 - no Angular Scanner or Market Intelligence view.
 

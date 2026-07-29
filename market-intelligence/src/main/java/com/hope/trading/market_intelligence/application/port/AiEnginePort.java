@@ -1,14 +1,19 @@
 package com.hope.trading.market_intelligence.application.port;
 
-import com.hope.trading.market_intelligence.application.capability.CapabilityAnalysisResult;
-import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
-import com.hope.trading.market_intelligence.domain.IntelligenceContext;
+import java.util.Optional;
 
+/**
+ * Asynchronous, provider-independent boundary toward the future AI Engine.
+ * Commands contain only context authorized by Market Intelligence.
+ */
 public interface AiEnginePort {
     boolean available();
 
-    CapabilityAnalysisResult analyze(
-            IntelligenceAnalysisRequest request,
-            IntelligenceContext context
-    );
+    AiExecutionReference submit(AiAnalysisCommand command);
+
+    AiExecutionProgress progress(AiExecutionReference reference);
+
+    Optional<AiStructuredResult> result(AiExecutionReference reference);
+
+    void cancel(AiExecutionReference reference);
 }

@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.application.context.IntelligenceCont
 import com.hope.trading.market_intelligence.application.strategy.*;
 import com.hope.trading.market_intelligence.domain.*;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -26,7 +27,7 @@ public class IntelligenceOrchestrator {
             AnalysisStrategyRegistry strategyRegistry,
             List<AnalysisCapability> capabilities,
             IntelligenceConsolidator consolidator,
-            ExecutorService executor
+            @Qualifier("intelligenceCapabilityExecutor") ExecutorService executor
     ) {
         this.contextAssembler = contextAssembler;
         this.strategyRegistry = strategyRegistry;

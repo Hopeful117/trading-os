@@ -1,10 +1,9 @@
 package com.hope.trading.market_intelligence.adapter.ai;
 
-import com.hope.trading.market_intelligence.application.capability.CapabilityAnalysisResult;
-import com.hope.trading.market_intelligence.application.port.AiEnginePort;
-import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
-import com.hope.trading.market_intelligence.domain.IntelligenceContext;
+import com.hope.trading.market_intelligence.application.port.*;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 @Component
 public class DisabledAiEngineAdapter implements AiEnginePort {
@@ -14,10 +13,22 @@ public class DisabledAiEngineAdapter implements AiEnginePort {
     }
 
     @Override
-    public CapabilityAnalysisResult analyze(
-            IntelligenceAnalysisRequest request,
-            IntelligenceContext context
-    ) {
+    public AiExecutionReference submit(AiAnalysisCommand command) {
         throw new IllegalStateException("AI Engine is not configured");
+    }
+
+    @Override
+    public AiExecutionProgress progress(AiExecutionReference reference) {
+        throw new IllegalStateException("AI Engine is not configured");
+    }
+
+    @Override
+    public Optional<AiStructuredResult> result(AiExecutionReference reference) {
+        return Optional.empty();
+    }
+
+    @Override
+    public void cancel(AiExecutionReference reference) {
+        // Nothing was submitted while this adapter is unavailable.
     }
 }
