@@ -147,6 +147,20 @@ services:
 
     restart: unless-stopped
 
+  market-intelligence:
+    build: ./market-intelligence
+    container_name: market-intelligence
+    ports:
+      - "8084:8084"
+    depends_on:
+      - eureka-server
+      - market-data
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+    networks:
+      - trading-network
+    restart: unless-stopped
+
 
 
 networks:
@@ -157,4 +171,3 @@ networks:
 volumes:
   market_data:
   trading_os:
-

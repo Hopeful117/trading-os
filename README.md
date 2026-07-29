@@ -23,6 +23,7 @@ Le projet est en développement actif. L'architecture microservices, l'authentif
 | `trading-core` | 8081 | Utilisateurs, comptes, règles, trades et statistiques |
 | `broker-service` | 8082 | Adaptateur Kraken privé : compte, positions et prix |
 | `market-data` | 8083 | Référentiel de marchés, synchronisation et flux Kraken |
+| `market-intelligence` | 8084 | Contexte, orchestration déterministe/IA et consolidation traçable |
 | `eureka-server` | 8761 | Découverte des services |
 | `trading-web` | 4200 | Application Angular servie par Nginx |
 | PostgreSQL | interne | Bases séparées `trading_os` et `market_data` |
@@ -33,8 +34,8 @@ Services prévus par l'architecture cible, mais pas encore implémentés :
 | --- | --- |
 | `news-service` | Calendrier économique, actualités et contexte macroéconomique normalisés |
 | `ai-engine` | Interprétation, scénarios, explications et classement d'opportunités |
-| Passive Scanner | Veille continue et détection d'événements sur un périmètre limité |
-| Active Scanner | Analyse approfondie déclenchée par l'utilisateur |
+| Passive Scanner | Planification continue de la stratégie passive Market Intelligence |
+| Active Scanner UI | Déclenchement et présentation de l'analyse approfondie |
 | Position Monitoring | Surveillance des positions et recommandations sans exécution automatique |
 
 La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21 et Docker Compose.
@@ -49,15 +50,17 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Exécution réelle d'ordres : non implémentée ; le code enregistre actuellement les trades sans soumettre d'ordre au broker.
 - Flux temps réel : prototype Kraken abonné en dur à `BTC/USD` ; gestion dynamique non implémentée.
 - Dashboard : squelette.
-- News Service, scanners, Market Intelligence et AI Engine : non commencés.
+- Fondation Market Intelligence : contexte modulaire, modes passif/actif, spread déterministe, provenance et gestion des résultats partiels disponibles.
+- News Service, scheduling passif, interface Scanner et AI Engine réel : non commencés.
 
 ## Pipeline de décision cible
 
 ```text
-Market Data
-    → Analyse déterministe
-    → Market Intelligence
-    → Interprétation IA
+Market Data et contexte
+    ├── Analyse déterministe ──┐
+    └── Interprétation IA ─────┤
+                              ↓
+                   Market Intelligence consolidée
     → Validation des règles et du risque
     → Validation humaine
     → Exécution par le Broker Service
@@ -160,7 +163,8 @@ Une branche n'est intégrable que si les cinq suites Maven, les tests Angular et
 - [ ] Parcours complet préparation → risque → validation humaine → ordre broker idempotent
 - [ ] Journal, Market Detail et dashboard complets
 - [ ] News Service et calendrier économique
-- [ ] Analyse déterministe et dépôt partagé de Market Intelligence
+- [x] Fondation d'orchestration Market Intelligence et première analyse déterministe
+- [ ] Persistance et réutilisation des observations Market Intelligence
 - [ ] Passive Scanner, Active Scanner et surveillance des positions
 - [ ] AI Engine explicable consommant les données normalisées
 
