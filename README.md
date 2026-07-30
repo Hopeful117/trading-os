@@ -213,7 +213,7 @@ Une branche n'est intégrable que si les six suites Maven, les tests Angular et 
 
 ## Décisions d'architecture
 
-Les décisions structurantes et la vision produit sont consignées dans les [ADR](docs/ADR-001.md). Les ADR décrivent l'architecture cible ; leur statut `Accepted` signifie que la décision est adoptée, pas que son implémentation est terminée.
+Les décisions structurantes et la vision produit sont consignées dans les [ADR](docs/adr/ADR-001.md). Les ADR décrivent l'architecture cible ; leur statut `Accepted` signifie que la décision est adoptée, pas que son implémentation est terminée.
 
 Les principaux axes couverts sont :
 
@@ -229,10 +229,10 @@ Les principaux axes couverts sont :
 
 Les documents d'implémentation actuels sont :
 
-- [ADR-020 — fondation Market Intelligence](docs/ADR-020-implementation.md) ;
-- [ADR-021 — gouvernance des exécutions](docs/ADR-021-implementation.md) ;
-- [ADR-022 — gestion des artefacts](docs/ADR-022-implementation.md) ;
-- [ADR-023 — Capability Engine local](docs/ADR-023-implementation.md).
+- [ADR-020 — fondation Market Intelligence](docs/implementation/ADR-020-implementation.md) ;
+- [ADR-021 — gouvernance des exécutions](docs/implementation/ADR-021-implementation.md) ;
+- [ADR-022 — gestion des artefacts](docs/implementation/ADR-022-implementation.md) ;
+- [ADR-023 — Capability Engine local](docs/implementation/ADR-023-implementation.md).
 
 ## Avertissement
 
