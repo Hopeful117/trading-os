@@ -318,7 +318,7 @@ aucune signification métier aux faits techniques.
 
 ## Tests
 
-Les tests ADR-030 ajoutés couvrent :
+Les tests ADR-030 couvrent notamment :
 
 - enregistrement et résolution d’un provider ;
 - rejet des providers dupliqués ou absents ;
@@ -329,19 +329,20 @@ Les tests ADR-030 ajoutés couvrent :
 - résultat inconnu lors d’une indisponibilité ;
 - réconciliation par clé d’idempotence.
 
-Commande ciblée :
+Commande de la suite complète :
 
 ```bash
 cd broker-service
-mvn -q -Dtest='com.hope.trading.broker_service.broker.*Test' test
+mvn test
 ```
 
-Résultat :
+Résultat de la suite complète vérifié le 1er août 2026 :
 
 ```text
-Tests ADR-030: 9
+Tests run: 41
 Failures: 0
 Errors: 0
+Skipped: 0
 ```
 
 Le packaging est validé avec :
@@ -350,10 +351,8 @@ Le packaging est validé avec :
 mvn -q -DskipTests package
 ```
 
-La suite complète exécute 28 tests. Vingt-cinq passent ; trois tests
-préexistants de `BrokerCredentialConnectionServiceTest` ne démarrent pas dans
-l’environnement isolé parce que le mock maker inline Mockito/Byte Buddy ne
-peut pas attacher son agent à la JVM. Aucun échec d’assertion n’est observé.
+La suite complète passe. La JVM affiche encore un avertissement concernant
+l'auto-attachement du mock maker inline Mockito/Byte Buddy, sans échec de test.
 
 ## Conformité à ADR-030
 
@@ -386,8 +385,8 @@ Ces éléments ne changent pas les frontières architecturales mises en place.
 
 ## Durcissement post-audit
 
-Le durcissement réalisé sur la branche `feature/adr-030-hardening` complète
-l'implémentation initiale sur les points suivants :
+Le durcissement intégré à `main` complète l'implémentation initiale sur les
+points suivants :
 
 - une réponse Kraken ambiguë après `AddOrder` produit désormais `Unknown` et
   jamais un faux rejet définitif ;

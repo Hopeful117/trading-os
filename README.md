@@ -4,7 +4,7 @@ Trading OS est un assistant de trading intelligent destiné aux traders discrét
 
 Le produit n'est ni un bot autonome, ni une plateforme HFT, ni un outil limité aux challenges de prop firms. Les règles déterministes ont toujours priorité sur les recommandations de l'IA et toute exécution reste soumise à une validation humaine explicite.
 
-Le projet est en développement actif. L'architecture microservices, l'authentification, la synchronisation Kraken, le moteur de risque, le Dashboard, l'interface Angular et les premières fondations de Market Intelligence sont présents. Aucun AI Engine réel ni mécanisme d'exécution automatique des ordres n'est actuellement intégré.
+Le projet est en développement actif. L'architecture microservices, l'authentification, la synchronisation Kraken, le moteur de risque, le Dashboard, l'interface Angular, les fondations de Market Intelligence et le pipeline d'exécution broker sont présents. Aucun AI Engine réel ni mécanisme de décision ou d'exécution autonome n'est actuellement intégré : une exécution doit provenir d'une intention explicitement autorisée.
 
 ## Principes directeurs
 
@@ -20,13 +20,13 @@ Le projet est en développement actif. L'architecture microservices, l'authentif
 | Service | Port | Responsabilité |
 | --- | ---: | --- |
 | `gateway` | 8080 | Point d'entrée HTTP, sécurité JWT et routage |
-| `trading-core` | 8081 | Utilisateurs, comptes, règles, trades et statistiques |
-| `broker-service` | 8082 | Connexions broker, validation Kraken et secrets chiffrés versionnés |
-| `market-data` | 8083 | Référentiel de marchés, synchronisation et flux Kraken |
-| `market-intelligence` | 8084 | Contexte, orchestration, gouvernance des exécutions et artefacts d'intelligence |
+| `trading-core` | 8081 | Utilisateurs, comptes, règles, trades, dashboard, statistiques et domaine d'exécution |
+| `broker-service` | 8082 | Connexions broker, credentials chiffrés, capacités broker-neutres et exécution Kraken |
+| `market-data` | 8083 | Référentiel de marchés, OHLC, snapshots de prix et flux Kraken |
+| `market-intelligence` | 8084 | Analyses, observations, opportunités, trade plans, orchestration et artefacts d'intelligence |
 | `eureka-server` | 8761 | Découverte des services |
 | `trading-web` | 4200 | Application Angular servie par Nginx |
-| PostgreSQL | interne | Bases séparées `trading_os` et `market_data` |
+| PostgreSQL | interne | Bases séparées `trading_os`, `market_data` et `broker_service` |
 
 Services prévus par l'architecture cible, mais pas encore implémentés :
 
@@ -43,17 +43,24 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 ## État fonctionnel
 
 - Authentification et autorisation JWT : disponible.
-- Comptes broker et synchronisation Kraken : disponible, à durcir.
+- Comptes broker et synchronisation Kraken : disponible.
 - Référentiel et affichage des marchés Kraken : disponible.
 - Règles et moteur de risque : première version implémentée ; les profils configurables complets restent à construire.
 - Cycle de vie local des trades et statistiques : API implémentée, intégration UI incomplète.
-- Exécution réelle d'ordres : non implémentée ; le code enregistre actuellement les trades sans soumettre d'ordre au broker.
+- Exécution broker : intentions, tentatives, idempotence, soumission Kraken, annulation, récupération et réconciliation implémentées. La validation contractuelle contre le sandbox Kraken et le parcours déployé de bout en bout restent à exécuter.
 - Flux temps réel : ticker, OHLC, carnet d'ordres et transactions récentes avec abonnements dynamiques.
 - Dashboard : orchestration dans Trading Core, valorisation des positions, risque, fraîcheur et états dégradés.
 - Fondation Market Intelligence ADR-020 : contexte modulaire, modes passif/actif, analyses déterministes, provenance et consolidation partielle.
 - Gouvernance ADR-021 : `AnalysisExecution` asynchrone, idempotence, politique d'exécution, annulation, classification du contexte et contrat AI Engine désactivé.
 - Artefacts ADR-022 : identités et scopes fortement typés, fraîcheur métier, résolution de réutilisation, dépendances et stockage V1 en mémoire.
 - Capability Engine ADR-023 : contrat atomique, planner DAG immuable, moteur local parallèle, lifecycle, propagation ciblée, retries et annulation coopérative.
+- Credentials ADR-024 : stockage chiffré et versionné, validation, rotation et statut technique par compte broker.
+- Observations ADR-025 : modèle normalisé, construction, requêtes et repository local en mémoire.
+- Opportunités ADR-026 : détection, ranking, projections utilisateur et API de consultation.
+- Trade Planning ADR-027 : génération déterministe, versionnement et replanification ; adaptateur IA désactivé.
+- Risk Domain ADR-028 : moteur déterministe autonome et testé ; intégration complète au pipeline produit encore partielle.
+- Execution Domain ADR-029 : cycle de vie, idempotence, audit, retry contrôlé, annulation et récupération dans Trading Core.
+- Broker Architecture ADR-030 : contrats broker-neutres, capacités, registre de providers, adaptateur Kraken, résilience et observabilité.
 - News Service, scheduling passif, interface Scanner et AI Engine réel : non commencés.
 
 ### Market Intelligence
@@ -80,7 +87,7 @@ La création exige un en-tête `Idempotency-Key` et retourne `202 Accepted`.
 
 La gestion des artefacts reste indépendante de Redis, Caffeine ou SQL. L'implémentation actuelle utilise uniquement un store en mémoire pour valider les règles de clé, scope, provenance, fraîcheur, réutilisation et invalidation ciblée. Elle n'est ni durable ni distribuée.
 
-## Pipeline de décision cible
+## Pipeline de décision
 
 ```text
 Market Data et contexte
@@ -94,6 +101,10 @@ Market Data et contexte
 ```
 
 Chaque couche enrichit les informations reçues sans remplacer les responsabilités des couches précédentes. Une recommandation doit rester explicable et un refus du moteur de risque doit être traçable.
+
+Les briques Market Intelligence, Risk, Execution et Broker existent. Leur
+enchaînement complet depuis une opportunité jusqu'à une exécution validée par
+l'utilisateur n'est pas encore intégré de bout en bout.
 
 ## Configuration
 
@@ -175,6 +186,13 @@ Exécuter toute la validation :
 ./scripts/test-all.sh
 ```
 
+Le script couvre les six applications Maven et le frontend. Le module
+autonome `risk-domain` se valide séparément :
+
+```bash
+cd risk-domain && mvn test
+```
+
 Ou par application :
 
 ```bash
@@ -183,7 +201,10 @@ cd market-intelligence && ../trading-core/mvnw test
 cd trading-os-web && npm run check
 ```
 
-Une branche n'est intégrable que si les six suites Maven, les tests Angular et le build Angular passent. Les tests `contextLoads` constituent seulement un smoke test : la couverture métier doit progresser avec chaque fonctionnalité.
+Une branche n'est intégrable que si les six suites applicatives Maven, la suite
+`risk-domain`, les tests Angular et le build Angular passent. Les tests
+`contextLoads` constituent seulement un smoke test : la couverture métier doit
+progresser avec chaque fonctionnalité.
 
 ## Roadmap
 
@@ -192,12 +213,16 @@ Une branche n'est intégrable que si les six suites Maven, les tests Angular et 
 - [x] Première intégration Kraken et synchronisation des comptes
 - [x] Référentiel de marchés et affichage Angular
 - [ ] Stabilisation Docker, healthchecks et migrations de base
-- [ ] Couverture métier du moteur de risque et des trades
+- [x] Domaine de risque déterministe et tests métier associés
+- [ ] Intégration complète du domaine Risk aux parcours de trades et d'exécution
 - [ ] Routage Gateway de toutes les API publiques
 - [ ] Profils de règles configurables, versionnables et indépendants des prop firms
-- [ ] Abonnements temps réel dynamiques et événements de marché distribuables
+- [x] Abonnements temps réel dynamiques
+- [ ] Événements de marché distribuables entre instances
 - [ ] Parcours complet préparation → risque → validation humaine → ordre broker idempotent
-- [ ] Journal, Market Detail et dashboard complets
+- [x] Market Detail avec OHLC, ticker, carnet d'ordres et transactions récentes
+- [x] Première version du dashboard de compte
+- [ ] Journal, historique d'equity et pages Positions/Analytics complets
 - [ ] News Service et calendrier économique
 - [x] Fondation d'orchestration Market Intelligence et première analyse déterministe
 - [x] Gouvernance asynchrone et idempotente des `AnalysisExecution`
@@ -207,7 +232,14 @@ Une branche n'est intégrable que si les six suites Maven, les tests Angular et 
 - [ ] Migration des capacités ADR-020 vers le contrat atomique ADR-023
 - [ ] Intégration Planner → Engine dans le cycle `AnalysisExecution`
 - [ ] Stockage durable et cohérence multi-instance des exécutions et artefacts
-- [ ] Persistance et réutilisation des observations Market Intelligence
+- [x] Modèle, repository local et requêtes d'observations Market Intelligence
+- [ ] Persistance durable et réutilisation distribuée des observations Market Intelligence
+- [x] Modèle d'opportunités, ranking et projections utilisateur
+- [x] Trade Planning déterministe, versionnement et replanification
+- [x] Risk Domain ADR-028
+- [x] Execution Domain ADR-029
+- [x] Architecture broker-neutre et provider Kraken ADR-030
+- [ ] Tests contractuels sandbox et E2E déployé Trading Core → Broker Service → Kraken
 - [ ] Passive Scanner, Active Scanner et surveillance des positions
 - [ ] AI Engine explicable consommant les données normalisées
 
@@ -232,7 +264,14 @@ Les documents d'implémentation actuels sont :
 - [ADR-020 — fondation Market Intelligence](docs/implementation/ADR-020-implementation.md) ;
 - [ADR-021 — gouvernance des exécutions](docs/implementation/ADR-021-implementation.md) ;
 - [ADR-022 — gestion des artefacts](docs/implementation/ADR-022-implementation.md) ;
-- [ADR-023 — Capability Engine local](docs/implementation/ADR-023-implementation.md).
+- [ADR-023 — Capability Engine local](docs/implementation/ADR-023-implementation.md) ;
+- [ADR-024 — gestion des credentials broker](docs/implementation/ADR-024-implementation.md) ;
+- [ADR-025 — modèle d'observation](docs/implementation/ADR-025-implementation.md) ;
+- [ADR-026 — opportunités de trading](docs/implementation/ADR-026-implementation.md) ;
+- [ADR-027 — Trade Planning](docs/implementation/ADR-027-implementation.md) ;
+- [ADR-028 — Risk Domain](docs/implementation/ADR-028-implementation.md) ;
+- [ADR-029 — Execution Domain](docs/implementation/ADR-029-implementation.md) ;
+- [ADR-030 — Broker Service Architecture](docs/implementation/ADR-030-implementation.md).
 
 ## Avertissement
 

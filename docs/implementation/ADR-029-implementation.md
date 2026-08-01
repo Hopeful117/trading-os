@@ -437,10 +437,10 @@ Le packaging est également validé :
 mvn -q -DskipTests package
 ```
 
-La suite globale contient des tests préexistants utilisant le mock maker
-inline de Mockito. Dans l’environnement isolé de validation, sept de ces tests
-ne peuvent pas démarrer car Byte Buddy ne peut pas attacher son agent à la
-JVM. Cette limitation ne produit aucun échec d’assertion ADR-029.
+La suite complète de Trading Core a été vérifiée le 1er août 2026 : 33 tests
+passent, sans échec ni test ignoré. La JVM affiche encore un avertissement
+concernant l'auto-attachement du mock maker inline Mockito/Byte Buddy, sans
+échec de test.
 
 ## Conformité à ADR-029
 
@@ -469,4 +469,3 @@ nécessitant plusieurs services restent dépendantes de leur environnement :
 Ces éléments ne modifient pas l’architecture du domaine. Ils devront être
 réalisés dans les adaptateurs ou dans les tests interservices lorsque les
 contrats correspondants seront disponibles.
-

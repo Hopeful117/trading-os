@@ -3,7 +3,9 @@
 
 **Related ADR:** ADR-029 – Execution Domain Architecture
 
-**Status:** Planned
+**Status:** Implemented
+
+**Implementation report:** `docs/implementation/ADR-029-implementation.md`
 
 ---
 
@@ -934,4 +936,3 @@ The Execution Domain implementation is considered complete when:
 ✓ End-to-end execution flow is validated
 
 ✓ Architecture remains compliant with ADR-029
-

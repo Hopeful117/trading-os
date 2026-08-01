@@ -2,7 +2,9 @@
 
 **Related ADR:** ADR-028 — Risk Engine Architecture
 
-**Status:** Ready for Implementation
+**Status:** Implemented
+
+**Implementation report:** `docs/implementation/ADR-028-implementation.md`
 
 **Target:** Trading OS V1
 

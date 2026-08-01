@@ -4,7 +4,9 @@
 
 **Related ADR:** ADR-030 – Broker Service Architecture
 
-**Status:** Planned
+**Status:** Implemented
+
+**Implementation report:** `docs/implementation/ADR-030-implementation.md`
 
 ---
 
