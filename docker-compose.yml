@@ -47,6 +47,19 @@ services:
       - trading-network
     restart: unless-stopped
 
+  market-intelligence-db:
+    image: postgres:16
+    container_name: market-intelligence-postgres
+    environment:
+      POSTGRES_DB: market_intelligence
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - market_intelligence_data:/var/lib/postgresql/data
+    networks:
+      - trading-network
+    restart: unless-stopped
+
 
   trading-app:
     build: ./trading-core
@@ -177,8 +190,12 @@ services:
     depends_on:
       - eureka-server
       - market-data
+      - market-intelligence-db
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      MARKET_INTELLIGENCE_DB_URL: jdbc:postgresql://market-intelligence-db:5432/market_intelligence
+      MARKET_INTELLIGENCE_DB_USERNAME: postgres
+      MARKET_INTELLIGENCE_DB_PASSWORD: postgres
     networks:
       - trading-network
     restart: unless-stopped
@@ -194,3 +211,4 @@ volumes:
   market_data:
   trading_os:
   broker_data:
+  market_intelligence_data:

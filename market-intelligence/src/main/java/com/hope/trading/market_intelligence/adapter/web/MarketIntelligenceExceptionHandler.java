@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionNotFoundException;
+import com.hope.trading.market_intelligence.application.tradeplan.TradePlanRiskHandoffException;
 import com.hope.trading.market_intelligence.domain.execution.IllegalExecutionTransitionException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -10,6 +11,13 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class MarketIntelligenceExceptionHandler {
+    @ExceptionHandler(TradePlanRiskHandoffException.class)
+    ResponseEntity<Map<String, String>> tradePlanRiskHandoff(
+            TradePlanRiskHandoffException exception) {
+        return ResponseEntity.status(exception.status()).body(Map.of(
+                "code", exception.code(), "error", exception.getMessage()));
+    }
+
     @ExceptionHandler(AnalysisExecutionNotFoundException.class)
     ResponseEntity<Map<String, String>> notFound(AnalysisExecutionNotFoundException exception) {
         return ResponseEntity.status(404).body(Map.of("error", exception.getMessage()));

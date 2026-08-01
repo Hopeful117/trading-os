@@ -3,6 +3,7 @@ package com.hope.trading.broker_service.broker.domain.model;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -12,6 +13,7 @@ public final class BrokerModels {
     public enum Side { BUY, SELL }
     public enum OrderType { MARKET, LIMIT }
     public enum OrderStatus { ACKNOWLEDGED, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED, UNKNOWN }
+    public enum SnapshotCompleteness { COMPLETE, INCOMPLETE }
 
     public record ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
             String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
@@ -55,5 +57,33 @@ public final class BrokerModels {
             BigDecimal quantity, BigDecimal filledQuantity, List<FillSnapshot> fills, Instant observedAt) {
         public OrderSnapshot { fills=List.copyOf(fills); }
     }
+    public record RiskSnapshot(UUID brokerAccountId, long snapshotVersion, Instant observedAt,
+            SnapshotCompleteness completeness, List<String> unavailabilityReasons,
+            Map<String, BigDecimal> assetBalances, AccountRiskFacts account,
+            List<RiskPosition> positions, List<ClosedTrade> closedTrades,
+            List<LedgerEntry> ledgerEntries) {
+        public RiskSnapshot {
+            Objects.requireNonNull(brokerAccountId); Objects.requireNonNull(observedAt);
+            Objects.requireNonNull(completeness); unavailabilityReasons=List.copyOf(new java.util.LinkedHashSet<>(unavailabilityReasons));
+            assetBalances=Map.copyOf(assetBalances); positions=List.copyOf(positions);
+            closedTrades=List.copyOf(closedTrades); ledgerEntries=List.copyOf(ledgerEntries);
+        }
+    }
+    public record AccountRiskFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
+            BigDecimal margin) {}
+    public record RiskPosition(UUID positionId, String providerPositionReference,
+            String providerReferenceProvenance, String instrument, BigDecimal signedQuantity,
+            BigDecimal entryPrice, BigDecimal cost, BigDecimal marketValue,
+            BigDecimal unrealizedPnl, BigDecimal margin, BigDecimal protectedQuantity,
+            List<ProtectiveStop> protectiveStops) {
+        public RiskPosition { protectiveStops=List.copyOf(protectiveStops); }
+    }
+    public record ProtectiveStop(String providerOrderReference,
+            String providerReferenceProvenance, BigDecimal quantity, BigDecimal stopPrice) {}
+    public record ClosedTrade(String providerTradeReference, String instrument, String settlementAsset, Side side,
+            BigDecimal quantity, BigDecimal price, BigDecimal fee, BigDecimal realizedPnl,
+            Instant closedAt) {}
+    public record LedgerEntry(String providerLedgerReference, String asset, String type,
+            BigDecimal amount, BigDecimal fee, BigDecimal balance, Instant occurredAt) {}
     private static String required(String value,String name){String v=Objects.requireNonNull(value,name).trim();if(v.isEmpty())throw new IllegalArgumentException(name+" is required");return v;}
 }

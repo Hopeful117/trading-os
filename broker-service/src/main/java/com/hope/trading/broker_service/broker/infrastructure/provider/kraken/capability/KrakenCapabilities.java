@@ -7,6 +7,7 @@ import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.authentication.ProviderCredentialSession;
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.client.KrakenProviderClient;
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.mapper.KrakenOrderMapper;
+import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.mapper.KrakenAssetNormalizer;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.*;
@@ -21,11 +22,12 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
     public void verify(UUID accountId){sessions.withCredentials(accountId,c->{client.privatePost("/0/private/Balance",Map.of(),c);return null;});}
     public AccountSnapshot account(UUID accountId){return sessions.withCredentials(accountId,c->{
         JsonNode result=client.privatePost("/0/private/Balance",Map.of(),c);Map<String,BigDecimal> balances=new TreeMap<>();
-        result.fields().forEachRemaining(entry->balances.put(entry.getKey(),new BigDecimal(entry.getValue().asText("0"))));
+        result.fields().forEachRemaining(entry->balances.merge(KrakenAssetNormalizer.asset(entry.getKey()),
+                new BigDecimal(entry.getValue().asText("0")),BigDecimal::add));
         return new AccountSnapshot(accountId,balances,clock.instant());});}
     public List<PositionSnapshot> positions(UUID accountId){return sessions.withCredentials(accountId,c->{
         JsonNode result=client.privatePost("/0/private/OpenPositions",Map.of(),c);List<PositionSnapshot> positions=new ArrayList<>();
-        result.fields().forEachRemaining(entry->{JsonNode p=entry.getValue();BigDecimal quantity=new BigDecimal(p.path("vol").asText("0"));if("sell".equals(p.path("type").asText()))quantity=quantity.negate();positions.add(new PositionSnapshot(p.path("pair").asText(entry.getKey()),quantity,new BigDecimal(p.path("cost").asText("0")).divide(new BigDecimal(p.path("vol").asText("1")),java.math.MathContext.DECIMAL64),clock.instant()));});
+        result.fields().forEachRemaining(entry->{JsonNode p=entry.getValue();BigDecimal quantity=new BigDecimal(p.path("vol").asText("0"));if("sell".equals(p.path("type").asText()))quantity=quantity.negate();positions.add(new PositionSnapshot(KrakenAssetNormalizer.pair(p.path("pair").asText()).instrument(),quantity,new BigDecimal(p.path("cost").asText("0")).divide(new BigDecimal(p.path("vol").asText("1")),java.math.MathContext.DECIMAL64),clock.instant()));});
         return List.copyOf(positions);});}
     public List<OrderSnapshot> orders(UUID accountId){return sessions.withCredentials(accountId,c->readOrders(c,null));}
     public void cancel(UUID accountId,String externalOrderId){sessions.withCredentials(accountId,c->{client.privatePost("/0/private/CancelOrder",Map.of("txid",required(externalOrderId)),c);return null;});}

@@ -1,6 +1,11 @@
 package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.model.TickerEvent;
+import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.PriceObservation;
+import com.hope.trading.market_data.repository.MarketRepository;
+import com.hope.trading.market_data.repository.PriceObservationRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -9,12 +14,18 @@ import reactor.core.publisher.Sinks;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class TickerEventPublisher {
+    private final MarketRepository marketRepository;
+    private final PriceObservationRepository priceObservationRepository;
+    private final Clock clock;
     private final Sinks.Many<TickerEvent> sink =
             Sinks.many()
                     .multicast()
@@ -35,6 +46,8 @@ public class TickerEventPublisher {
 
         String symbol = normalize(event.symbol());
 
+        persistObservation(event);
+
         latestEvents.put(symbol, event);
         if (event.marketId() != null) {
             latestEventsByMarketId.put(event.marketId(), event);
@@ -50,6 +63,23 @@ public class TickerEventPublisher {
                     result
             );
         }
+    }
+
+    private void persistObservation(TickerEvent event) {
+        if (event.marketId() == null || event.provider() == null || event.occurredAt() == null) {
+            log.warn("Ignoring persistence for incomplete ticker event symbol={}", event.symbol());
+            return;
+        }
+        Market market = marketRepository.findById(event.marketId()).orElse(null);
+        if (market == null) {
+            log.warn("Ignoring ticker observation for unknown marketId={}", event.marketId());
+            return;
+        }
+        priceObservationRepository.save(new PriceObservation(
+                UUID.randomUUID(), event.marketId(), event.provider(), event.symbol(),
+                market.getBaseAsset(), market.getQuoteAsset(), event.bid(), event.ask(), event.last(),
+                event.occurredAt(), Instant.now(clock)
+        ));
     }
 
     public Flux<TickerEvent> streamBySymbol(String symbol) {

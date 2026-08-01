@@ -3,6 +3,7 @@ package com.hope.trading.broker_service.broker.domain.capability;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import java.util.List;
 import java.util.UUID;
+import java.time.Instant;
 
 public final class BrokerCapabilities {
     private BrokerCapabilities() {}
@@ -12,4 +13,7 @@ public final class BrokerCapabilities {
     public interface OrderCapability { List<OrderSnapshot> orders(UUID brokerAccountId); void cancel(UUID brokerAccountId,String externalOrderId); }
     public interface ExecutionCapability { ExecutionResult execute(ExecutionRequest request); }
     public interface ReconciliationCapability { ReconciliationResult reconcile(ReconciliationRequest request); }
+    public interface RiskSnapshotCapability {
+        RiskSnapshot snapshot(UUID brokerAccountId, Instant closedFrom, Instant closedTo);
+    }
 }

@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TradeRepository extends JpaRepository<Trade, UUID> {
-    List<Trade> findByAccount_AccountIdAndOpenedAtBetween(
+    List<Trade> findByAccount_AccountIdAndClosedAtGreaterThanEqualAndClosedAtLessThan(
             UUID accountId,
             Instant start,
             Instant end

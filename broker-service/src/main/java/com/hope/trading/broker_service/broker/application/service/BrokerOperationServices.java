@@ -1,8 +1,10 @@
 package com.hope.trading.broker_service.broker.application.service;
 
 import com.hope.trading.broker_service.broker.domain.capability.BrokerCapabilities.*;
+import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerAuthorizationException;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import com.hope.trading.broker_service.broker.infrastructure.monitoring.BrokerOperationsMetrics;
+import com.hope.trading.broker_service.connection.application.BrokerConnectionRepository;
 import java.util.*;
 import org.slf4j.Logger;import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -15,4 +17,5 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
     @Service public static final class ExecuteOrderService {private static final Logger log=LoggerFactory.getLogger(ExecuteOrderService.class);private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public ExecuteOrderService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public ExecutionResult execute(ExecutionRequest r){log.info("broker_execution providerAccount={} attempt={}",r.brokerAccountId(),r.executionAttemptId());return metrics.record("execution",()->require(providers.resolve(r.brokerAccountId()),ExecutionCapability.class).execute(r));}}
     @Service public static final class CancelOrderService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public CancelOrderService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public void cancel(UUID id,String order){metrics.record("cancel",()->require(providers.resolve(id),OrderCapability.class).cancel(id,order));}}
     @Service public static final class ReconcileExecutionService {private static final Logger log=LoggerFactory.getLogger(ReconcileExecutionService.class);private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public ReconcileExecutionService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public ReconciliationResult reconcile(ReconciliationRequest r){log.info("broker_reconciliation providerAccount={} attempt={}",r.brokerAccountId(),r.executionAttemptId());return metrics.record("reconciliation",()->require(providers.resolve(r.brokerAccountId()),ReconciliationCapability.class).reconcile(r));}}
+    @Service public static class GetRiskSnapshotService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final BrokerConnectionRepository connections;public GetRiskSnapshotService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public RiskSnapshot get(UUID ownerId,UUID id,java.time.Instant from,java.time.Instant to){Objects.requireNonNull(ownerId,"ownerId");Objects.requireNonNull(from,"from");Objects.requireNonNull(to,"to");if(!from.isBefore(to))throw new IllegalArgumentException("from must be before to");if(connections.findByBrokerAccountIdAndOwnerId(id,ownerId).isEmpty())throw new BrokerAuthorizationException("Broker account is not accessible");return metrics.record("risk_snapshot",()->require(providers.resolve(id),RiskSnapshotCapability.class).snapshot(id,from,to));}}
 }

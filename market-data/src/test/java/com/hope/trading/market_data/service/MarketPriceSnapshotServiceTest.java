@@ -6,10 +6,12 @@ import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketState;
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.repository.MarketRepository;
+import com.hope.trading.market_data.repository.PriceObservationRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,7 +21,8 @@ import static org.mockito.Mockito.when;
 
 class MarketPriceSnapshotServiceTest {
     private final MarketRepository repository = mock(MarketRepository.class);
-    private final TickerEventPublisher publisher = new TickerEventPublisher();
+    private final TickerEventPublisher publisher = new TickerEventPublisher(
+            repository, mock(PriceObservationRepository.class), Clock.systemUTC());
     private final MarketPriceSnapshotService service =
             new MarketPriceSnapshotService(repository, publisher);
 

@@ -12,9 +12,6 @@ import java.util.*;
 
 @Configuration
 public class TradePlanningConfiguration {
-    @Bean TradePlanRepository tradePlanRepository() {
-        return new InMemoryTradePlanRepository();
-    }
     @Bean TradingContextRepository tradingContextRepository() {
         return new InMemoryTradingContextRepository();
     }
@@ -77,5 +74,12 @@ public class TradePlanningConfiguration {
     @Bean DefaultTradePlanIntegrationBoundary tradePlanIntegrationBoundary(
             TradePlanRepository repository, TradePlanApplicationService service) {
         return new DefaultTradePlanIntegrationBoundary(repository, service);
+    }
+    @Bean TradePlanRiskHandoffService tradePlanRiskHandoffService(
+            TradePlanRepository plans, TradingContextRepository contexts,
+            TradePlanRiskValidationBoundary lifecycle,
+            RiskValidationAcknowledgmentRepository acknowledgments, Clock clock) {
+        return new TradePlanRiskHandoffService(
+                plans, contexts, lifecycle, acknowledgments, clock, UUID::randomUUID);
     }
 }

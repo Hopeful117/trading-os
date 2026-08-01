@@ -28,7 +28,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public BigDecimal getTodayPnL(UUID accountId) {
-        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(
+        return tradeRepository.findByAccount_AccountIdAndClosedAtGreaterThanEqualAndClosedAtLessThan(
                 accountId,
                 TimeUtils.startOfDay(),
                 TimeUtils.endOfDay()
@@ -66,7 +66,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public int getTodayTradeCount(UUID accountId) {
-        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(
+        return tradeRepository.findByAccount_AccountIdAndClosedAtGreaterThanEqualAndClosedAtLessThan(
                 accountId,
                 TimeUtils.startOfDay(),
                 TimeUtils.endOfDay()
@@ -85,7 +85,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public List<Trade> getTodayTrades(UUID accountId) {
-        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(
+        return tradeRepository.findByAccount_AccountIdAndClosedAtGreaterThanEqualAndClosedAtLessThan(
                 accountId,
                 TimeUtils.startOfDay(),
                 TimeUtils.endOfDay()
@@ -183,7 +183,7 @@ public class TradeAnalyticsServiceImpl implements TradeAnalyticsService {
 
     @Override
     public List<Trade> getTradesBetween(UUID accountId, Instant start, Instant end) {
-        return tradeRepository.findByAccount_AccountIdAndOpenedAtBetween(accountId, start, end);
+        return tradeRepository.findByAccount_AccountIdAndClosedAtGreaterThanEqualAndClosedAtLessThan(accountId, start, end);
     }
 
     @Override
