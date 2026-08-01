@@ -20,6 +20,7 @@ public class BrokerSecurityConfiguration {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(errors -> errors.authenticationEntryPoint((request,response,exception) -> response.sendError(401)))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())

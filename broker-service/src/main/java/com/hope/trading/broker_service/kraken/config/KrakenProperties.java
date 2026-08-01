@@ -13,4 +13,6 @@ public class KrakenProperties {
     private String apiSecret;
     private Duration connectTimeout;
     private Duration readTimeout;
+    private int readMaxAttempts = 3;
+    private int requestsPerSecond = 15;
 }
