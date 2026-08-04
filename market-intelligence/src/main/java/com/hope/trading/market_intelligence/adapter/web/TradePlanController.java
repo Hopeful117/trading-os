@@ -24,8 +24,8 @@ public final class TradePlanController {
         return response(service.create(new TradePlanningRequest(
                 request.opportunityIds().stream().map(OpportunityId::new)
                         .collect(Collectors.toUnmodifiableSet()),
-                request.tradingContextId(), request.contextVersion(), request.actorId(),
-                request.marketPrice(), PlanningPreferences.conservative(),
+                request.planningContextId(), request.contextVersion(), request.actorId(),
+                request.marketPrice(),
                 null, null, "")), HttpStatus.CREATED);
     }
     @GetMapping("/{id}")
@@ -45,7 +45,7 @@ public final class TradePlanController {
             @PathVariable UUID id, @Valid @RequestBody ReplanTradePlanRequest request) {
         return response(replanning.replan(
                 new TradePlanId(id), request.actorId(), request.marketPrice(),
-                PlanningPreferences.conservative(), request.reason()), HttpStatus.CREATED);
+                request.reason()), HttpStatus.CREATED);
     }
     private ResponseEntity<?> response(TradePlanningResult result, HttpStatus successStatus) {
         if (result instanceof TradePlanningResult.Success success) {

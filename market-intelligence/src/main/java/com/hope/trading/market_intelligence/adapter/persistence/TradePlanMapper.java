@@ -8,8 +8,8 @@ final class TradePlanMapper {
         return new TradePlanEntity(
                 plan.id().value(), plan.version().value(),
                 plan.previousVersion().map(TradePlanVersion::value).orElse(null),
-                plan.status().name(), plan.tradingContext().id(),
-                plan.tradingContext().version(), plan.tradingContext().snapshotAt(),
+                plan.status().name(), plan.planningContext().id(),
+                plan.planningContext().version(), plan.planningContext().capturedAt(),
                 plan.execution(), plan.rationale(), plan.createdAt());
     }
     TradePlan toDomain(TradePlanEntity entity) {
@@ -18,7 +18,7 @@ final class TradePlanMapper {
                 entity.previousVersion() == null ? null
                         : new TradePlanVersion(entity.previousVersion()),
                 TradePlanStatus.valueOf(entity.status()),
-                new TradingContextReference(
+                new TradePlanningContextReference(
                         entity.contextId(), entity.contextVersion(), entity.contextSnapshotAt()),
                 entity.execution(), entity.rationale(), entity.createdAt());
     }

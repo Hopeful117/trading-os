@@ -36,16 +36,15 @@ class TradePlanDomainTest {
     }
 
     @Test
-    void contextSnapshotDefensivelyCopiesAndExposesExactReference() {
+    void planningContextContainsOnlyTypedVersionedPlanningInputs() {
         UUID id = UUID.randomUUID(); UUID owner = UUID.randomUUID();
-        Map<String, String> preferences = new HashMap<>(Map.of("type", "LIMIT"));
-        TradingContext context = new TradingContext(
+        TradePlanningContext context = new TradePlanningContext(
                 id, 2, TradePlanTestFixtures.NOW, owner, UUID.randomUUID(), "eur",
-                BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ONE, "LOW", "RULE",
-                Map.of(), preferences);
-        preferences.clear();
-        assertThat(context.executionPreferences()).containsEntry("type", "LIMIT");
-        assertThat(context.reference()).isEqualTo(new TradingContextReference(
+                new RiskBudget(BigDecimal.TEN, "EUR", UUID.randomUUID(), 4),
+                TradePlanTestFixtures.preferences());
+        assertThat(context.riskBudget().amount()).isEqualByComparingTo("10");
+        assertThat(context.preferences().entryType()).isEqualTo(EntryType.LIMIT);
+        assertThat(context.reference()).isEqualTo(new TradePlanningContextReference(
                 id, 2, TradePlanTestFixtures.NOW));
     }
 }

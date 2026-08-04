@@ -62,7 +62,7 @@ public class AccountController {
     }
 
     @PostMapping("/synchronize")
-    public ResponseEntity<?> synchronize(Authentication authentication){
+    public ResponseEntity<String> synchronize(Authentication authentication){
         log.info("synchronizing account for user {}",authentication.getPrincipal());
         UserDto user =
                 (UserDto) authentication.getPrincipal();

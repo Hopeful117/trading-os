@@ -21,7 +21,9 @@ class TradePlanningEngineTest {
         TradePlan plan = ((TradePlanningResult.Success) result).plan();
         assertThat(plan.status()).isEqualTo(TradePlanStatus.PROPOSED);
         assertThat(plan.version().value()).isEqualTo(1);
-        assertThat(plan.tradingContext()).isEqualTo(environment.context().reference());
+        assertThat(plan.planningContext()).isEqualTo(environment.context().reference());
+        assertThat(plan.execution().positionSizing().expectedMonetaryRisk())
+                .isEqualByComparingTo(environment.context().riskBudget().amount());
         assertThat(plan.execution().riskReward().ratio()).isEqualByComparingTo("2.00");
         assertThat(plan.rationale().opportunities()).hasSize(1);
         assertThat(environment.plans().history(plan.id())).hasSize(1);
@@ -35,8 +37,8 @@ class TradePlanningEngineTest {
         var environment = TradePlanTestFixtures.environment();
         TradePlanningRequest valid = TradePlanTestFixtures.request(environment);
         TradePlanningRequest unauthorized = new TradePlanningRequest(
-                valid.opportunityIds(), valid.tradingContextId(), valid.contextVersion(),
-                UUID.randomUUID(), valid.marketPrice(), valid.preferences(),
+                valid.opportunityIds(), valid.planningContextId(), valid.contextVersion(),
+                UUID.randomUUID(), valid.marketPrice(),
                 null, null, "");
         assertThat(environment.engine().plan(unauthorized))
                 .isEqualTo(new TradePlanningResult.Failure(
@@ -73,8 +75,7 @@ class TradePlanningEngineTest {
         List<PlanningPolicy> policies = new ArrayList<>(
                 TradePlanTestFixtures.policies().applicable(new PlanningInput(
                         List.of(environment.opportunity()), environment.context(),
-                        BigDecimal.valueOf(100), PlanningPreferences.conservative(),
-                        TradePlanTestFixtures.NOW)));
+                        BigDecimal.valueOf(100), TradePlanTestFixtures.NOW)));
         policies.add(conflicting);
         var engine = new TradePlanningEngine(
                 environment.opportunities(), environment.contexts(), (a, c) -> true,

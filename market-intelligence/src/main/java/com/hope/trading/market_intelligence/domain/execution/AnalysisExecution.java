@@ -122,6 +122,20 @@ public final class AnalysisExecution {
         );
     }
 
+    public static AnalysisExecution restore(
+            UUID executionId, IdempotencyKey idempotencyKey,
+            AnalysisExecutionStatus status, AnalysisResultQuality resultQuality,
+            AnalysisExecutionPolicy executionPolicy, Instant requestedAt,
+            Instant updatedAt, Instant expiresAt, Instant completedAt,
+            List<String> capabilities, RetryMetadata retryMetadata,
+            AnalysisExecutionProvenance provenance, AnalysisTraceMetadata traceMetadata,
+            ConsolidatedIntelligence result) {
+        return new AnalysisExecution(
+                executionId, idempotencyKey, status, resultQuality, executionPolicy,
+                requestedAt, updatedAt, expiresAt, completedAt, capabilities,
+                retryMetadata, provenance, traceMetadata, result);
+    }
+
     public AnalysisExecution transitionTo(AnalysisExecutionStatus target, Instant at) {
         Objects.requireNonNull(target);
         Objects.requireNonNull(at);

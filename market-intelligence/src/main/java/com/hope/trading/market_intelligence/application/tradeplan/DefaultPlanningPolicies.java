@@ -54,9 +54,7 @@ public final class DefaultPlanningPolicies {
     public static final class PositionSizingSelection extends Base {
         public PositionSizingSelection() { super("position-sizing-v1", 40); }
         @Override public PlanningContribution evaluate(PlanningInput input) {
-            BigDecimal risk = input.context().availableCapital()
-                    .multiply(input.preferences().capitalRiskPercent())
-                    .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+            BigDecimal risk = input.context().riskBudget().amount();
             BigDecimal quantity = risk.divide(distance(input), 8, RoundingMode.DOWN);
             BigDecimal notional = quantity.multiply(input.marketPrice());
             return PlanningContribution.deterministic(

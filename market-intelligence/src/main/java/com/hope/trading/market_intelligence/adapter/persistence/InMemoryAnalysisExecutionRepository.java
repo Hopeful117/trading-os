@@ -4,7 +4,6 @@ import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRe
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
-import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -16,7 +15,6 @@ import java.util.concurrent.ConcurrentMap;
  * V1 adapter used until execution retention is decided. It deliberately
  * implements the repository port without claiming durable persistence.
  */
-@Repository
 public class InMemoryAnalysisExecutionRepository implements AnalysisExecutionRepository {
     private final ConcurrentMap<UUID, AnalysisExecution> executions = new ConcurrentHashMap<>();
 

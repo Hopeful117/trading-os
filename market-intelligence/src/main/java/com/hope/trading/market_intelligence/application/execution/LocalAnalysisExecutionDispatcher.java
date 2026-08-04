@@ -1,8 +1,8 @@
 package com.hope.trading.market_intelligence.application.execution;
 
-import com.hope.trading.market_intelligence.application.orchestration.IntelligenceOrchestrator;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionDispatcher;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
+import com.hope.trading.market_intelligence.application.pipeline.ProductionIntelligencePipeline;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.IntelligenceExecutionStatus;
@@ -22,17 +22,20 @@ import java.util.concurrent.*;
 @Component
 public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispatcher {
     private final AnalysisExecutionRepository repository;
-    private final IntelligenceOrchestrator orchestrator;
+    private final CapabilityAnalysisCoordinator coordinator;
     private final ExecutorService executor;
+    private final ProductionIntelligencePipeline pipeline;
     private final ConcurrentMap<UUID, Future<?>> tasks = new ConcurrentHashMap<>();
 
     public LocalAnalysisExecutionDispatcher(
             AnalysisExecutionRepository repository,
-            IntelligenceOrchestrator orchestrator,
+            CapabilityAnalysisCoordinator coordinator,
+            ProductionIntelligencePipeline pipeline,
             @Qualifier("analysisExecutionDispatcherExecutor") ExecutorService executionDispatcher
     ) {
         this.repository = repository;
-        this.orchestrator = orchestrator;
+        this.coordinator = coordinator;
+        this.pipeline = pipeline;
         this.executor = executionDispatcher;
     }
 
@@ -45,6 +48,7 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
     public void cancel(UUID executionId) {
         Future<?> task = tasks.remove(executionId);
         if (task != null) {
+            coordinator.cancel(executionId);
             task.cancel(true);
         }
     }
@@ -54,13 +58,16 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
             transition(executionId, AnalysisExecutionStatus.ACCEPTED);
             transition(executionId, AnalysisExecutionStatus.CONTEXT_BUILDING);
             transition(executionId, AnalysisExecutionStatus.RUNNING);
-            ConsolidatedIntelligence result = orchestrator.analyze(request);
+            ConsolidatedIntelligence result = coordinator.analyze(executionId, request);
             repository.findById(executionId)
                     .filter(execution -> !execution.status().isTerminal())
                     .map(execution -> execution.complete(
                             result, quality(result.status()), Instant.now()
                     ))
                     .ifPresent(repository::save);
+            if (result.status() != IntelligenceExecutionStatus.FAILED) {
+                pipeline.process(executionId, request.marketId(), request.mode());
+            }
         } catch (CancellationException ignored) {
             // Cancellation state is owned by AnalysisExecutionService.
         } catch (RuntimeException exception) {

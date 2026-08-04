@@ -11,12 +11,15 @@ import java.util.*;
 
 public final class TradePlanTestFixtures {
     public static final Instant NOW = Instant.parse("2026-07-30T14:00:00Z");
-    public static TradingContext context(UUID id, long version, UUID owner) {
-        return new TradingContext(
-                id, version, NOW, owner, UUID.randomUUID(), "EUR",
-                BigDecimal.valueOf(10_000), BigDecimal.valueOf(20_000),
-                BigDecimal.valueOf(2), "CONSERVATIVE", "STANDARD",
-                Map.of("BTC/EUR", BigDecimal.ZERO), Map.of("orderType", "LIMIT"));
+    public static TradePlanningContext context(UUID id, long version, UUID owner) {
+        return new TradePlanningContext(id, version, NOW, owner, UUID.randomUUID(), "EUR",
+                new RiskBudget(BigDecimal.valueOf(100), "EUR", UUID.randomUUID(), 3), preferences());
+    }
+    public static PlanningPreferences preferences() {
+        return new PlanningPreferences(UUID.randomUUID(), 2, EntryType.LIMIT,
+                PlanningPreferences.StopStrategy.PERCENTAGE_DISTANCE, BigDecimal.ONE,
+                PlanningPreferences.TargetStrategy.RISK_MULTIPLE, BigDecimal.valueOf(2),
+                PlanningPreferences.PlanningHorizon.INTRADAY, Duration.ofHours(1));
     }
     public static TradingOpportunity activeOpportunity() {
         return OpportunityTestFixtures.opportunity(
@@ -40,8 +43,8 @@ public final class TradePlanTestFixtures {
         TradingOpportunity opportunity = activeOpportunity();
         var opportunityStore = new InMemoryTradingOpportunityRepository();
         opportunityStore.append(opportunity);
-        var contextStore = new InMemoryTradingContextRepository();
-        TradingContext context = context(UUID.randomUUID(), 1, owner);
+        var contextStore = new InMemoryTradePlanningContextRepository();
+        TradePlanningContext context = context(UUID.randomUUID(), 1, owner);
         contextStore.saveSnapshot(context);
         var plans = new InMemoryTradePlanRepository();
         var engine = new TradePlanningEngine(
@@ -63,12 +66,12 @@ public final class TradePlanTestFixtures {
         return new TradePlanningRequest(
                 Set.of(environment.opportunity().id()), environment.context().id(),
                 environment.context().version(), environment.owner(), BigDecimal.valueOf(100),
-                PlanningPreferences.conservative(), null, null, "");
+                null, null, "");
     }
     public record Environment(
-            UUID owner, TradingOpportunity opportunity, TradingContext context,
+            UUID owner, TradingOpportunity opportunity, TradePlanningContext context,
             InMemoryTradingOpportunityRepository opportunities,
-            InMemoryTradingContextRepository contexts,
+            InMemoryTradePlanningContextRepository contexts,
             InMemoryTradePlanRepository plans, TradePlanningEngine engine,
             TradePlanApplicationService service,
             List<com.hope.trading.market_intelligence.domain.tradeplan.TradePlanEvent> events,

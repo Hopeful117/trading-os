@@ -11,16 +11,25 @@
         <module name="gateway" />
         <module name="market-intelligence" />
       </profile>
-      <profile name="Annotation profile for broker-service" enabled="true">
+      <profile name="Annotation profile for trading-core" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <processorPath useClasspath="false">
           <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.46/lombok-1.18.46.jar" />
         </processorPath>
-        <module name="broker-service" />
-        <module name="market-data" />
         <module name="trading-core" />
+      </profile>
+      <profile name="Annotation profile for market-data" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.46/lombok-1.18.46.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.46/lombok-1.18.46.jar" />
+        </processorPath>
+        <module name="market-data" />
+        <module name="broker-service" />
         <module name="eureka-server" />
       </profile>
     </annotationProcessing>

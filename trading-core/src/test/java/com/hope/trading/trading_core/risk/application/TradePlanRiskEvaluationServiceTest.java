@@ -22,6 +22,7 @@ import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Comma
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Response;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
+import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import java.math.BigDecimal;
@@ -49,6 +50,7 @@ class TradePlanRiskEvaluationServiceTest {
     private TradePlanRiskPort plans;
     private BrokerRiskFactsPort broker;
     private MarketValuationPort market;
+    private RequiredMarginPort requiredMargins;
     private RiskPersistence persistence;
     private RiskAcknowledgmentDeliveryService acknowledgmentDelivery;
     private PlatformTransactionManager transactionManager;
@@ -58,7 +60,8 @@ class TradePlanRiskEvaluationServiceTest {
     void setUp() {
         accounts = mock(AccountRepository.class); brokerAccounts = mock(BrokerAccountRepository.class);
         plans = mock(TradePlanRiskPort.class); broker = mock(BrokerRiskFactsPort.class);
-        market = mock(MarketValuationPort.class); persistence = mock(RiskPersistence.class);
+        market = mock(MarketValuationPort.class); requiredMargins = mock(RequiredMarginPort.class);
+        persistence = mock(RiskPersistence.class);
         acknowledgmentDelivery = mock(RiskAcknowledgmentDeliveryService.class);
         transactionManager = mock(PlatformTransactionManager.class);
         when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
@@ -75,7 +78,8 @@ class TradePlanRiskEvaluationServiceTest {
                         Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
                         1, "persisted-baseline"));
         service = new TradePlanRiskEvaluationService(accounts, brokerAccounts, plans, broker, market,
-                persistence, Clock.fixed(now, ZoneOffset.UTC), acknowledgmentDelivery, transactionManager);
+                requiredMargins, persistence, Clock.fixed(now, ZoneOffset.UTC), acknowledgmentDelivery,
+                transactionManager);
     }
 
     @Test
@@ -123,6 +127,18 @@ class TradePlanRiskEvaluationServiceTest {
         var order = inOrder(transactionManager, acknowledgmentDelivery);
         order.verify(transactionManager).commit(any());
         order.verify(acknowledgmentDelivery).deliver(response.evaluationId());
+    }
+
+    @Test
+    void missingAuthoritativeRequiredMarginFailsClosedWithoutLeverageInference() {
+        availableContext(List.of());
+        when(requiredMargins.resolve(any())).thenReturn(Optional.empty());
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("REQUIRED_MARGIN_UNAVAILABLE");
     }
 
     @Test
@@ -354,6 +370,8 @@ class TradePlanRiskEvaluationServiceTest {
         when(plans.load(planId, 3)).thenReturn(plan("USD", "USD"));
         when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(positions, List.of()));
         when(market.value(any(), any(), any(), any())).thenAnswer(this::valuation);
+        when(requiredMargins.resolve(any())).thenReturn(Optional.of(new RequiredMarginPort.Fact(
+                new BigDecimal("100"), "USD", "broker-margin-quote", 7, now)));
     }
 
     private BrokerRiskFactsPort.Snapshot brokerSnapshot(List<BrokerRiskFactsPort.Position> positions,
@@ -385,7 +403,8 @@ class TradePlanRiskEvaluationServiceTest {
 
     private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency) {
         return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", now,
-                UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency, BigDecimal.TEN,
+                UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
+                UUID.randomUUID(), 2, UUID.randomUUID(), 4,
                 "ETHUSD", "LONG", new BigDecimal("100"), new BigDecimal("90"), BigDecimal.ONE,
                 new BigDecimal("1000"), new BigDecimal("100"), sizingCurrency, "{\"accepted\":true}");
     }

@@ -42,4 +42,17 @@ public final class ObservationFactory {
                 current.supersedes().orElse(null), current.supersededBy().orElse(null),
                 current.consolidationRuleVersion(), current.evidence(), current.confidence());
     }
+
+    public Observation restore(
+            UUID id, UUID lineageId, long version, String instrument, ObservationType type,
+            ObservationStatus status, String title, String explanation, Set<String> categories,
+            String horizon, Instant createdAt, Instant validFrom, Instant validUntil,
+            UUID supersedes, UUID supersededBy, String ruleVersion,
+            List<ObservationEvidence> evidence) {
+        List<ObservationEvidence> copy = List.copyOf(evidence);
+        return new Observation(
+                id, lineageId, version, instrument, type, status, title, explanation,
+                categories, horizon, createdAt, validFrom, validUntil, supersedes,
+                supersededBy, ruleVersion, copy, ObservationConfidence.from(copy));
+    }
 }

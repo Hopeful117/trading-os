@@ -12,10 +12,7 @@ import java.util.*;
 
 @Configuration
 public class TradePlanningConfiguration {
-    @Bean TradingContextRepository tradingContextRepository() {
-        return new InMemoryTradingContextRepository();
-    }
-    @Bean TradingContextAccessPolicy tradingContextAccessPolicy() {
+    @Bean TradePlanningContextAccessPolicy tradePlanningContextAccessPolicy() {
         return (actor, context) -> context.ownerId().equals(actor);
     }
     @Bean PlanningPolicyRegistry planningPolicyRegistry() {
@@ -41,8 +38,8 @@ public class TradePlanningConfiguration {
         return () -> new TradePlanId(UUID.randomUUID());
     }
     @Bean TradePlanningEngine tradePlanningEngine(
-            TradingOpportunityRepository opportunities, TradingContextRepository contexts,
-            TradingContextAccessPolicy access, TradePlanRepository plans,
+            TradingOpportunityRepository opportunities, TradePlanningContextRepository contexts,
+            TradePlanningContextAccessPolicy access, TradePlanRepository plans,
             PlanningPolicyRegistry policies, AiTradePlanningPort ai,
             AiContributionValidator aiValidator, TradePlanFactory factory,
             TradePlanIdentifierGenerator identifiers, Clock clock) {
@@ -67,7 +64,7 @@ public class TradePlanningConfiguration {
                 engine, repository, lifecycle, events, metrics, clock);
     }
     @Bean TradePlanReplanningService tradePlanReplanningService(
-            TradePlanRepository plans, TradingContextRepository contexts,
+            TradePlanRepository plans, TradePlanningContextRepository contexts,
             TradePlanApplicationService service) {
         return new TradePlanReplanningService(plans, contexts, service);
     }
@@ -76,7 +73,7 @@ public class TradePlanningConfiguration {
         return new DefaultTradePlanIntegrationBoundary(repository, service);
     }
     @Bean TradePlanRiskHandoffService tradePlanRiskHandoffService(
-            TradePlanRepository plans, TradingContextRepository contexts,
+            TradePlanRepository plans, TradePlanningContextRepository contexts,
             TradePlanRiskValidationBoundary lifecycle,
             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock) {
         return new TradePlanRiskHandoffService(

@@ -4,7 +4,8 @@ import com.hope.trading.market_intelligence.adapter.persistence.InMemoryRiskVali
 import com.hope.trading.market_intelligence.domain.tradeplan.PositionSizing;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlan;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus;
-import com.hope.trading.market_intelligence.domain.tradeplan.TradingContext;
+import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContext;
+import com.hope.trading.market_intelligence.domain.tradeplan.RiskBudget;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -38,7 +39,8 @@ class TradePlanRiskHandoffServiceTest {
         assertThat(snapshot.context().tradingAccountId())
                 .isEqualTo(fixture.environment().context().tradingAccountId());
         assertThat(snapshot.context().accountCurrency()).isEqualTo("EUR");
-        assertThat(snapshot.context().leverage()).isEqualByComparingTo("2");
+        assertThat(snapshot.context().riskBudgetSourceId())
+                .isEqualTo(fixture.environment().context().riskBudget().sourceId());
         assertThat(snapshot.execution().instrument()).isEqualTo(
                 fixture.accepted().execution().instrument());
         assertThat(snapshot.execution().entry().price()).isEqualByComparingTo("100");
@@ -77,7 +79,7 @@ class TradePlanRiskHandoffServiceTest {
         TradePlan source = ((TradePlanningResult.Success) missingContextEnvironment.service().create(
                 TradePlanTestFixtures.request(missingContextEnvironment))).plan();
         var missingReference = new com.hope.trading.market_intelligence.domain.tradeplan
-                .TradingContextReference(UUID.randomUUID(), 1, TradePlanTestFixtures.NOW);
+                .TradePlanningContextReference(UUID.randomUUID(), 1, TradePlanTestFixtures.NOW);
         TradePlan acceptedWithMissingContext = new com.hope.trading.market_intelligence.domain
                 .tradeplan.TradePlanFactory().create(
                         source.id(), source.version().next(), source.version(),
@@ -92,12 +94,11 @@ class TradePlanRiskHandoffServiceTest {
         var currencyEnvironment = TradePlanTestFixtures.environment();
         TradePlan currencySource = ((TradePlanningResult.Success) currencyEnvironment.service().create(
                 TradePlanTestFixtures.request(currencyEnvironment))).plan();
-        TradingContext eur = currencyEnvironment.context();
-        TradingContext usd = new TradingContext(
-                UUID.randomUUID(), 1, eur.snapshotAt(), eur.ownerId(), eur.tradingAccountId(),
-                "USD", eur.availableCapital(), eur.buyingPower(), eur.leverage(),
-                eur.riskProfile(), eur.ruleProfile(), eur.existingExposure(),
-                eur.executionPreferences());
+        TradePlanningContext eur = currencyEnvironment.context();
+        TradePlanningContext usd = new TradePlanningContext(
+                UUID.randomUUID(), 1, eur.capturedAt(), eur.ownerId(), eur.tradingAccountId(),
+                "USD", new RiskBudget(eur.riskBudget().amount(), "USD", UUID.randomUUID(), 1),
+                eur.preferences());
         currencyEnvironment.contexts().saveSnapshot(usd);
         PositionSizing sizing = currencySource.execution().positionSizing();
         TradePlan incoherent = new com.hope.trading.market_intelligence.domain.tradeplan
@@ -139,7 +140,7 @@ class TradePlanRiskHandoffServiceTest {
         assertThat(first.acceptedTradePlanVersion()).isEqualTo(fixture.accepted().version().value());
         assertThat(first.riskValidatedTradePlanVersion())
                 .isEqualTo(fixture.accepted().version().value() + 1);
-        assertThat(first.tradingContextId()).isEqualTo(fixture.accepted().tradingContext().id());
+        assertThat(first.tradingContextId()).isEqualTo(fixture.accepted().planningContext().id());
         assertThat(fixture.environment().plans().findLatest(fixture.accepted().id()).orElseThrow()
                 .status()).isEqualTo(TradePlanStatus.RISK_VALIDATED);
         assertThat(fixture.environment().plans().history(fixture.accepted().id()))
@@ -171,7 +172,7 @@ class TradePlanRiskHandoffServiceTest {
                 fixture.environment().plans(), fixture.environment().contexts(),
                 fixture.environment().service()).replan(
                         fixture.accepted().id(), fixture.environment().owner(),
-                        BigDecimal.valueOf(101), PlanningPreferences.conservative(), "changed"))
+                        BigDecimal.valueOf(101), "changed"))
                 .plan();
         TradePlan changedAccepted = fixture.environment().service().transition(
                 changed.id(), TradePlanStatus.ACCEPTED);

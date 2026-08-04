@@ -35,3 +35,7 @@ build/
 ### Secret ###
 *.env
 
+### Quality tooling ###
+**/.scannerwork/
+**/.sonar/
+**/coverage/

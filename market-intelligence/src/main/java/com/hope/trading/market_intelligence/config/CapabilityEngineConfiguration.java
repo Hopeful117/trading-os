@@ -41,15 +41,6 @@ public class CapabilityEngineConfiguration {
         return new LocalCapabilityExecutor(parallelism);
     }
 
-    @Bean
-    CapabilityExecutionRepository capabilityExecutionRepository() {
-        return new InMemoryCapabilityExecutionRepository();
-    }
-
-    @Bean
-    ArtifactPersistencePort capabilityArtifactPersistencePort() {
-        return new InMemoryCapabilityArtifactPersistenceAdapter();
-    }
 
     @Bean
     BackoffCalculator capabilityBackoffCalculator() {

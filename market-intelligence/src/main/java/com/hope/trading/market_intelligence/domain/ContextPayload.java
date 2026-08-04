@@ -1,4 +1,6 @@
 package com.hope.trading.market_intelligence.domain;
 
-public interface ContextPayload {
+import com.hope.trading.market_intelligence.domain.artifact.ArtifactContent;
+
+public interface ContextPayload extends ArtifactContent {
 }

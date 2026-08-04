@@ -3,7 +3,7 @@ package com.hope.trading.market_intelligence.application.tradeplan;
 import com.hope.trading.market_intelligence.application.port.RiskValidationAcknowledgmentRepository;
 import com.hope.trading.market_intelligence.application.port.TradePlanRepository;
 import com.hope.trading.market_intelligence.application.port.TradePlanRiskValidationBoundary;
-import com.hope.trading.market_intelligence.application.port.TradingContextRepository;
+import com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository;
 import com.hope.trading.market_intelligence.domain.opportunity.AiAnalysisReference;
 import com.hope.trading.market_intelligence.domain.opportunity.ObservationReference;
 import com.hope.trading.market_intelligence.domain.tradeplan.ExecutionParameters;
@@ -11,7 +11,7 @@ import com.hope.trading.market_intelligence.domain.tradeplan.TradePlan;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanId;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanVersion;
-import com.hope.trading.market_intelligence.domain.tradeplan.TradingContext;
+import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContext;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -22,14 +22,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class TradePlanRiskHandoffService {
     private final TradePlanRepository plans;
-    private final TradingContextRepository contexts;
+    private final TradePlanningContextRepository contexts;
     private final TradePlanRiskValidationBoundary lifecycle;
     private final RiskValidationAcknowledgmentRepository acknowledgments;
     private final Clock clock;
     private final Supplier<UUID> acknowledgmentIds;
 
     public TradePlanRiskHandoffService(
-            TradePlanRepository plans, TradingContextRepository contexts,
+            TradePlanRepository plans, TradePlanningContextRepository contexts,
             TradePlanRiskValidationBoundary lifecycle,
             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
             Supplier<UUID> acknowledgmentIds) {
@@ -54,11 +54,11 @@ public class TradePlanRiskHandoffService {
             throw TradePlanRiskHandoffException.conflict(
                     "TRADE_PLAN_NOT_ACCEPTED", "Risk evaluation requires an ACCEPTED Trade Plan");
         }
-        TradingContext context = contexts.find(
-                        requested.tradingContext().id(), requested.tradingContext().version())
+        TradePlanningContext context = contexts.find(
+                        requested.planningContext().id(), requested.planningContext().version())
                 .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
                         "Referenced Trading Context snapshot not found"));
-        if (!context.snapshotAt().equals(requested.tradingContext().snapshotAt())) {
+        if (!context.capturedAt().equals(requested.planningContext().capturedAt())) {
             throw TradePlanRiskHandoffException.conflict(
                     "TRADING_CONTEXT_MISMATCH", "Referenced Trading Context identity is inconsistent");
         }
@@ -112,21 +112,20 @@ public class TradePlanRiskHandoffService {
         }
         return acknowledgments.save(new RiskValidationAcknowledgment(
                 acknowledgmentIds.get(), id.value(), acceptedVersion.value(),
-                validated.version().value(), accepted.tradingContext().id(),
-                accepted.tradingContext().version(), evaluationId, decision, evaluatedAt,
+                validated.version().value(), accepted.planningContext().id(),
+                accepted.planningContext().version(), evaluationId, decision, evaluatedAt,
                 clock.instant().truncatedTo(ChronoUnit.MICROS)));
     }
 
-    private TradePlanRiskSnapshot snapshot(TradePlan plan, TradingContext context) {
+    private TradePlanRiskSnapshot snapshot(TradePlan plan, TradePlanningContext context) {
         ExecutionParameters execution = plan.execution();
         return new TradePlanRiskSnapshot(
                 plan.id().value(), plan.version().value(), plan.status().name(), plan.createdAt(),
                 new TradePlanRiskSnapshot.Context(
-                        context.id(), context.version(), context.snapshotAt(), context.ownerId(),
+                        context.id(), context.version(), context.capturedAt(), context.ownerId(),
                         context.tradingAccountId(), context.accountCurrency(),
-                        context.availableCapital(), context.buyingPower(), context.leverage(),
-                        context.riskProfile(), context.ruleProfile(), context.existingExposure(),
-                        context.executionPreferences()),
+                        context.riskBudget().sourceId(), context.riskBudget().sourceVersion(),
+                        context.preferences().id(), context.preferences().version()),
                 new TradePlanRiskSnapshot.Execution(
                         execution.instrument(), execution.direction().name(),
                         new TradePlanRiskSnapshot.Entry(

@@ -19,7 +19,7 @@ class TradePlanControllerTest {
         String body = """
                 {
                   "opportunityIds":["%s"],
-                  "tradingContextId":"%s",
+                  "planningContextId":"%s",
                   "contextVersion":1,
                   "actorId":"%s",
                   "marketPrice":100

@@ -12,6 +12,9 @@ public record MarketPriceSnapshotResponse(
         BigDecimal ask,
         boolean tradable,
         Instant occurredAt,
-        String status
+        String status,
+        String sourceSnapshotId,
+        Long sourceSnapshotVersion,
+        Instant capturedAt
 ) {
 }

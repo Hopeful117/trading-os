@@ -7,7 +7,6 @@ import feign.FeignException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -29,10 +28,9 @@ interface MarketIntelligenceRiskFeignClient {
 record Acknowledgment(UUID evaluationId, String decision, Instant evaluatedAt) { }
 record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status, Instant createdAt,
                           Context context, Execution execution, Object rationale) {
-    record Context(UUID id, long version, Instant snapshotAt, UUID ownerId, UUID tradingAccountId,
-                   String accountCurrency, BigDecimal availableCapital, BigDecimal buyingPower,
-                   BigDecimal leverage, String riskProfile, String ruleProfile,
-                   Map<String, BigDecimal> existingExposure, Map<String, String> executionPreferences) { }
+    record Context(UUID id, long version, Instant capturedAt, UUID ownerId, UUID tradingAccountId,
+                   String accountCurrency, UUID riskBudgetSourceId, long riskBudgetSourceVersion,
+                   UUID planningPreferencesId, long planningPreferencesVersion) { }
     record Execution(String instrument, String direction, Entry entry, StopLoss stopLoss,
                      List<Object> takeProfits, PositionSizing positionSizing,
                      BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules) { }
@@ -66,9 +64,10 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
         }
         try {
             return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.createdAt(),
-                    value.context().id(), value.context().version(), value.context().snapshotAt(),
-                    value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
-                    value.context().leverage(),
+                     value.context().id(), value.context().version(), value.context().capturedAt(),
+                     value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
+                     value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
+                     value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
                     value.execution().instrument(), value.execution().direction(), value.execution().entry().price(),
                     value.execution().stopLoss().price(), value.execution().positionSizing().quantity(),
                     value.execution().positionSizing().notional(),

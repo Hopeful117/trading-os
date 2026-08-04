@@ -6,7 +6,7 @@ import java.util.*;
 
 public record CreateTradePlanRequest(
         @NotEmpty Set<UUID> opportunityIds,
-        @NotNull UUID tradingContextId,
+        @NotNull UUID planningContextId,
         @Positive long contextVersion,
         @NotNull UUID actorId,
         @NotNull @Positive BigDecimal marketPrice

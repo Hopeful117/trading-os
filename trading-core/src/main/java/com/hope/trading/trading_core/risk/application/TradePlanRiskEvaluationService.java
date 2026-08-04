@@ -31,10 +31,10 @@ import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Respo
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Trace;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
+import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -64,6 +64,7 @@ public class TradePlanRiskEvaluationService {
     private final TradePlanRiskPort tradePlans;
     private final BrokerRiskFactsPort broker;
     private final MarketValuationPort market;
+    private final RequiredMarginPort requiredMargins;
     private final RiskPersistence persistence;
     private final Clock clock;
     private final RiskEngine engine;
@@ -72,7 +73,8 @@ public class TradePlanRiskEvaluationService {
 
     public TradePlanRiskEvaluationService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
                                           TradePlanRiskPort tradePlans, BrokerRiskFactsPort broker,
-                                          MarketValuationPort market, RiskPersistence persistence, Clock clock,
+                                           MarketValuationPort market, RequiredMarginPort requiredMargins,
+                                           RiskPersistence persistence, Clock clock,
                                           RiskAcknowledgmentDeliveryService acknowledgmentDelivery,
                                           PlatformTransactionManager transactionManager) {
         this.accounts = accounts;
@@ -80,6 +82,7 @@ public class TradePlanRiskEvaluationService {
         this.tradePlans = tradePlans;
         this.broker = broker;
         this.market = market;
+        this.requiredMargins = requiredMargins;
         this.persistence = persistence;
         this.clock = clock;
         this.acknowledgmentDelivery = acknowledgmentDelivery;
@@ -187,8 +190,11 @@ public class TradePlanRiskEvaluationService {
         BigDecimal sizingRate = assetRate(current, plan.sizingCurrency());
         BigDecimal notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
         BigDecimal expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
-        BigDecimal leverage = positive(plan.leverage(), "PLAN_LEVERAGE_INVALID");
-        BigDecimal requiredMargin = notional.divide(leverage, 12, RoundingMode.HALF_UP);
+        RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
+                        configuration.brokerAccountId(), plan.instrument(), plan.direction(), plan.quantity(),
+                        plan.entryPrice(), brokerSnapshot.observedAt()))
+                .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
+        BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
         ProposedTrade proposed = new ProposedTrade(plan.tradePlanId(), plan.tradePlanVersion(), plan.instrument(),
                 direction(plan.direction()), positive(plan.quantity(), "PLAN_QUANTITY_INVALID"),
                 new Money(notional, currency), new Money(expectedLoss, currency), new Money(requiredMargin, currency));
@@ -199,6 +205,7 @@ public class TradePlanRiskEvaluationService {
         provenance.put("riskDayBaselinePayload", baseline.payload());
         provenance.put("candidateStartMarket", startValuation.sourcePayload()); provenance.put("currentMarket", current.sourcePayload());
         provenance.put("closedTradeMarkets", dailyClosed.marketPayloads());
+        provenance.put("requiredMargin", marginFact);
         provenance.put("profile", profile);
 
         long accountVersion = persistence.component(evaluationId, "ACCOUNT",
@@ -528,6 +535,15 @@ public class TradePlanRiskEvaluationService {
     }
     private static BigDecimal positiveOrZero(BigDecimal value, String code) {
         if (value == null || value.signum() < 0) throw unavailable(code); return value;
+    }
+    private static BigDecimal authoritativeMargin(RequiredMarginPort.Fact fact, String currency, Instant asOf) {
+        if (fact.amount() == null || fact.amount().signum() <= 0 || blank(fact.currency())
+                || !normalizedCurrency(fact.currency()).equals(normalizedCurrency(currency))
+                || blank(fact.sourceId()) || fact.sourceVersion() < 1 || fact.observedAt() == null
+                || fact.observedAt().isAfter(asOf)) {
+            throw unavailable("REQUIRED_MARGIN_INVALID");
+        }
+        return fact.amount();
     }
     private static ContextUnavailable unavailable(String code) { return new ContextUnavailable(code); }
     private static final class ContextUnavailable extends RuntimeException {

@@ -12,9 +12,6 @@ import java.util.UUID;
 
 @Configuration
 public class OpportunityConfiguration {
-    @Bean TradingOpportunityRepository tradingOpportunityRepository() {
-        return new InMemoryTradingOpportunityRepository();
-    }
     @Bean UserOpportunityRepository userOpportunityRepository() {
         return new InMemoryUserOpportunityRepository();
     }

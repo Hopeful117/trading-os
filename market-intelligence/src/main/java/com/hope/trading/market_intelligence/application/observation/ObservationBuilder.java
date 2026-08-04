@@ -53,6 +53,13 @@ public final class ObservationBuilder {
                 .toList();
         if (evidence.isEmpty()) throw new IllegalArgumentException("Rule produced no evidence");
 
+        Optional<Observation> replay = observations.findByInstrument(instrument).stream()
+                .filter(item -> item.consolidationRuleVersion().equals(rule.version()))
+                .filter(item -> evidenceFingerprint(item.evidence())
+                        .equals(evidenceFingerprint(evidence)))
+                .findFirst();
+        if (replay.isPresent()) return replay.get();
+
         Observation current = observations.findByInstrument(instrument).stream()
                 .filter(item -> item.type().equals(result.type()))
                 .filter(item -> item.status() == ObservationStatus.ACTIVE)
@@ -71,6 +78,14 @@ public final class ObservationBuilder {
         Observation superseded = factory.superseded(current, next.id());
         observations.supersede(superseded, next);
         return next;
+    }
+
+    private List<String> evidenceFingerprint(List<ObservationEvidence> evidence) {
+        return evidence.stream().map(item -> {
+            List<String> artifacts = item.capabilityResult().artifacts().stream()
+                    .map(ArtifactTrace::inputFingerprint).sorted().toList();
+            return item.capabilityResult().capabilityExecutionId() + ":" + artifacts;
+        }).sorted().toList();
     }
 
     public Observation expire(UUID observationId) {

@@ -3,7 +3,6 @@ package com.hope.trading.market_intelligence.application.tradeplan;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -12,11 +11,9 @@ public record TradePlanRiskSnapshot(
         Context context, Execution execution, Rationale rationale
 ) {
     public record Context(
-            UUID id, long version, Instant snapshotAt, UUID ownerId, UUID tradingAccountId,
-            String accountCurrency, BigDecimal availableCapital, BigDecimal buyingPower,
-            BigDecimal leverage, String riskProfile, String ruleProfile,
-            Map<String, BigDecimal> existingExposure,
-            Map<String, String> executionPreferences
+            UUID id, long version, Instant capturedAt, UUID ownerId, UUID tradingAccountId,
+            String accountCurrency, UUID riskBudgetSourceId, long riskBudgetSourceVersion,
+            UUID planningPreferencesId, long planningPreferencesVersion
     ) { }
 
     public record Execution(

@@ -80,6 +80,18 @@ public final class CapabilityExecution {
                 previous.attemptNumber + 1, previous.id);
     }
 
+    public static CapabilityExecution restore(
+            UUID id, UUID analysisExecutionId, CapabilityId capabilityId,
+            CapabilityVersion capabilityVersion, CapabilityExecutionState state,
+            Instant createdAt, Instant startedAt, Instant completedAt,
+            CapabilityResult result, CapabilityFailure failure, SkipReason skipReason,
+            UUID executionGroupId, int attemptNumber, UUID previousAttemptId) {
+        return new CapabilityExecution(
+                id, analysisExecutionId, capabilityId, capabilityVersion, state,
+                createdAt, startedAt, completedAt, result, failure, skipReason,
+                executionGroupId, attemptNumber, previousAttemptId);
+    }
+
     public CapabilityExecution transitionTo(CapabilityExecutionState target, Instant at) {
         if (state.isTerminal() || !TRANSITIONS.getOrDefault(state, Set.of()).contains(target)) {
             throw new IllegalCapabilityExecutionTransitionException(state, target);

@@ -7,8 +7,8 @@ import java.time.Instant;
 import java.util.List;
 
 public record PlanningInput(
-        List<TradingOpportunity> opportunities, TradingContext context,
-        BigDecimal marketPrice, PlanningPreferences preferences, Instant plannedAt
+        List<TradingOpportunity> opportunities, TradePlanningContext context,
+        BigDecimal marketPrice, Instant plannedAt
 ) {
     public PlanningInput { opportunities = List.copyOf(opportunities); }
     public TradeDirection direction() {
@@ -17,4 +17,5 @@ public record PlanningInput(
                 ? TradeDirection.LONG : TradeDirection.SHORT;
     }
     public String instrument() { return opportunities.getFirst().instrument(); }
+    public PlanningPreferences preferences() { return context.preferences(); }
 }

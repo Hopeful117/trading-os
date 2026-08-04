@@ -61,7 +61,7 @@ final class TradePlanBuilder {
     TradePlan transition(TradePlan previous, TradePlanStatus target, Instant createdAt) {
         return factory.create(
                 previous.id(), previous.version().next(), previous.version(), target,
-                previous.tradingContext(), previous.execution(), previous.rationale(), createdAt);
+                previous.planningContext(), previous.execution(), previous.rationale(), createdAt);
     }
     private <T> T required(TradePlanDraft draft, ContributionType type, Class<T> expected) {
         Object value = requiredRaw(draft, type);

@@ -10,12 +10,18 @@ import java.time.Clock;
 
 @Configuration
 public class ObservationConfiguration {
-    @Bean ObservationRepository observationRepository() {
-        return new InMemoryObservationRepository();
-    }
 
     @Bean ObservationFactory observationFactory() {
         return new ObservationFactory();
+    }
+
+    @Bean ObservationRehydrator observationRehydrator(ObservationFactory factory) {
+        return snapshot -> factory.restore(
+                snapshot.id(), snapshot.lineageId(), snapshot.version(), snapshot.instrument(),
+                snapshot.type(), snapshot.status(), snapshot.title(), snapshot.explanation(),
+                snapshot.categories(), snapshot.horizon(), snapshot.createdAt(),
+                snapshot.validFrom(), snapshot.validUntil(), snapshot.supersedes(),
+                snapshot.supersededBy(), snapshot.ruleVersion(), snapshot.evidence());
     }
 
     @Bean ObservationBuilder observationBuilder(

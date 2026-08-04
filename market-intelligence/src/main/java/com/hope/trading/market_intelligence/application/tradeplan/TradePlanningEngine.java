@@ -9,8 +9,8 @@ import java.util.*;
 /** Exclusive public creation boundary for immutable TradePlan versions. */
 public final class TradePlanningEngine {
     private final TradingOpportunityRepository opportunities;
-    private final TradingContextRepository contexts;
-    private final TradingContextAccessPolicy access;
+    private final TradePlanningContextRepository contexts;
+    private final TradePlanningContextAccessPolicy access;
     private final TradePlanRepository plans;
     private final PlanningPolicyRegistry policies;
     private final AiTradePlanningPort ai;
@@ -20,8 +20,8 @@ public final class TradePlanningEngine {
     private final Clock clock;
 
     public TradePlanningEngine(
-            TradingOpportunityRepository opportunities, TradingContextRepository contexts,
-            TradingContextAccessPolicy access, TradePlanRepository plans,
+            TradingOpportunityRepository opportunities, TradePlanningContextRepository contexts,
+            TradePlanningContextAccessPolicy access, TradePlanRepository plans,
             PlanningPolicyRegistry policies, AiTradePlanningPort ai,
             AiContributionValidator aiValidator, TradePlanFactory factory,
             TradePlanIdentifierGenerator identifiers, Clock clock) {
@@ -41,15 +41,15 @@ public final class TradePlanningEngine {
                 return failure(PlanningFailureReason.INCOMPATIBLE_OPPORTUNITIES,
                         "Opportunities must be active and share instrument and direction");
             }
-            TradingContext context = contexts.find(
-                            request.tradingContextId(), request.contextVersion())
+            TradePlanningContext context = contexts.find(
+                            request.planningContextId(), request.contextVersion())
                     .orElse(null);
             if (context == null || !access.mayUse(request.actorId(), context)) {
                 return failure(PlanningFailureReason.INVALID_TRADING_CONTEXT,
                         "Trading Context is missing or unauthorized");
             }
             PlanningInput input = new PlanningInput(
-                    loaded, context, request.marketPrice(), request.preferences(), clock.instant());
+                    loaded, context, request.marketPrice(), clock.instant());
             TradePlanDraft draft = new TradePlanDraft();
             List<PlanningContribution> deterministic = new ArrayList<>();
             for (PlanningPolicy policy : policies.applicable(input)) {

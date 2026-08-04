@@ -10,7 +10,9 @@ public interface TradePlanRiskPort {
 
     record Snapshot(UUID tradePlanId, long tradePlanVersion, String status, Instant createdAt,
                     UUID contextId, long contextVersion, Instant contextSnapshotAt,
-                    UUID ownerId, UUID tradingAccountId, String accountCurrency, BigDecimal leverage,
+                    UUID ownerId, UUID tradingAccountId, String accountCurrency,
+                    UUID riskBudgetSourceId, long riskBudgetSourceVersion,
+                    UUID planningPreferencesId, long planningPreferencesVersion,
                     String instrument, String direction, BigDecimal entryPrice, BigDecimal stopPrice,
                     BigDecimal quantity, BigDecimal notional, BigDecimal expectedMonetaryRisk,
                     String sizingCurrency, String sourcePayload) { }

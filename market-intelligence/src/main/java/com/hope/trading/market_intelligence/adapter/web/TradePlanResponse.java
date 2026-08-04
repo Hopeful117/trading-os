@@ -7,7 +7,7 @@ import java.util.*;
 
 public record TradePlanResponse(
         UUID id, long version, Long previousVersion, String status,
-        UUID tradingContextId, long tradingContextVersion, Instant contextSnapshotAt,
+        UUID planningContextId, long planningContextVersion, Instant contextCapturedAt,
         String instrument, String direction, String entryType, BigDecimal entryPrice,
         BigDecimal stopLoss, List<BigDecimal> takeProfits, BigDecimal quantity,
         BigDecimal notional, BigDecimal monetaryRisk, BigDecimal riskReward,
@@ -22,8 +22,8 @@ public record TradePlanResponse(
         return new TradePlanResponse(
                 plan.id().value(), plan.version().value(),
                 plan.previousVersion().map(TradePlanVersion::value).orElse(null),
-                plan.status().name(), plan.tradingContext().id(),
-                plan.tradingContext().version(), plan.tradingContext().snapshotAt(),
+                 plan.status().name(), plan.planningContext().id(),
+                plan.planningContext().version(), plan.planningContext().capturedAt(),
                 execution.instrument(), execution.direction().name(),
                 execution.entry().type().name(), execution.entry().price(),
                 execution.stopLoss().price(),

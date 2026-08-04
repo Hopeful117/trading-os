@@ -9,7 +9,7 @@ import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanFactory;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanId;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanVersion;
-import com.hope.trading.market_intelligence.domain.tradeplan.TradingContextReference;
+import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContextReference;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradingRationale;
 import java.util.List;
 import java.util.Optional;
@@ -85,9 +85,9 @@ public class JpaTradePlanRepository implements TradePlanRepository {
         entity.version = plan.version().value();
         entity.previousVersion = plan.previousVersion().map(TradePlanVersion::value).orElse(null);
         entity.status = plan.status().name();
-        entity.tradingContextId = plan.tradingContext().id();
-        entity.tradingContextVersion = plan.tradingContext().version();
-        entity.tradingContextSnapshotAt = plan.tradingContext().snapshotAt();
+        entity.tradingContextId = plan.planningContext().id();
+        entity.tradingContextVersion = plan.planningContext().version();
+        entity.tradingContextSnapshotAt = plan.planningContext().capturedAt();
         entity.executionPayload = write(plan.execution());
         entity.rationalePayload = write(plan.rationale());
         entity.createdAt = plan.createdAt();
@@ -99,7 +99,7 @@ public class JpaTradePlanRepository implements TradePlanRepository {
                 new TradePlanId(entity.tradePlanId), new TradePlanVersion(entity.version),
                 entity.previousVersion == null ? null : new TradePlanVersion(entity.previousVersion),
                 TradePlanStatus.valueOf(entity.status),
-                new TradingContextReference(
+                new TradePlanningContextReference(
                         entity.tradingContextId, entity.tradingContextVersion,
                         entity.tradingContextSnapshotAt),
                 read(entity.executionPayload, ExecutionParameters.class),

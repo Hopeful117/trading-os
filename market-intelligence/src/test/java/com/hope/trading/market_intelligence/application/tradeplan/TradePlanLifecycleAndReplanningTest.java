@@ -59,7 +59,7 @@ class TradePlanLifecycleAndReplanningTest {
         var environment = TradePlanTestFixtures.environment();
         TradePlan first = ((TradePlanningResult.Success) environment.service().create(
                 TradePlanTestFixtures.request(environment))).plan();
-        TradingContext fresh = TradePlanTestFixtures.context(
+        TradePlanningContext fresh = TradePlanTestFixtures.context(
                 environment.context().id(), 2, environment.owner());
         environment.contexts().saveSnapshot(fresh);
         var replanning = new TradePlanReplanningService(
@@ -67,13 +67,13 @@ class TradePlanLifecycleAndReplanningTest {
 
         TradePlan second = ((TradePlanningResult.Success) replanning.replan(
                 first.id(), environment.owner(), BigDecimal.valueOf(102),
-                PlanningPreferences.conservative(), "market changed")).plan();
+                "market changed")).plan();
 
         assertThat(first.version().value()).isEqualTo(1);
-        assertThat(first.tradingContext().version()).isEqualTo(1);
+        assertThat(first.planningContext().version()).isEqualTo(1);
         assertThat(second.version().value()).isEqualTo(2);
         assertThat(second.previousVersion()).contains(first.version());
-        assertThat(second.tradingContext().version()).isEqualTo(2);
+        assertThat(second.planningContext().version()).isEqualTo(2);
         assertThat(environment.plans().findNext(
                 first.id(), first.version()).orElseThrow().version()).isEqualTo(second.version());
         assertThat(environment.plans().history(first.id())).hasSize(2);

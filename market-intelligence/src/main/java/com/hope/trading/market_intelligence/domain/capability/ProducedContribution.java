@@ -1,5 +1,8 @@
 package com.hope.trading.market_intelligence.domain.capability;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, property = "@class")
 public sealed interface ProducedContribution permits
         ProducedContribution.ArtifactContribution,
         ProducedContribution.ObservationContribution,
