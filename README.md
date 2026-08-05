@@ -58,7 +58,7 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Observations ADR-025 : modèle normalisé, construction, requêtes et repository local en mémoire.
 - Opportunités ADR-026 : détection, ranking, projections utilisateur et API de consultation.
 - Trade Planning ADR-027 : génération déterministe, versionnement et replanification ; adaptateur IA désactivé.
-- Risk Domain ADR-028 : moteur déterministe autonome et testé ; intégration complète au pipeline produit encore partielle.
+- Risk Domain ADR-028 : moteur déterministe autonome et testé ; autorisation des Trade Plans via le pipeline Trading Core, rendue accessible à travers le Gateway (Story 0003).
 - Execution Domain ADR-029 : cycle de vie, idempotence, audit, retry contrôlé, annulation et récupération dans Trading Core.
 - Broker Architecture ADR-030 : contrats broker-neutres, capacités, registre de providers, adaptateur Kraken, résilience et observabilité.
 - News Service, scheduling passif, interface Scanner et AI Engine réel : non commencés.
@@ -102,9 +102,11 @@ Market Data et contexte
 
 Chaque couche enrichit les informations reçues sans remplacer les responsabilités des couches précédentes. Une recommandation doit rester explicable et un refus du moteur de risque doit être traçable.
 
-Les briques Market Intelligence, Risk, Execution et Broker existent. Leur
-enchaînement complet depuis une opportunité jusqu'à une exécution validée par
-l'utilisateur n'est pas encore intégré de bout en bout.
+Les briques Market Intelligence, Risk, Execution et Broker existent. L'autorisation
+déterministe des Trade Plans par le Risk Domain est connectée et exposée via le
+Gateway. L'enchaînement complet depuis une opportunité jusqu'à une exécution
+validée par l'utilisateur n'est pas encore intégré de bout en bout : l'exécution
+post-approbation reste une Story future.
 
 ## Configuration
 
