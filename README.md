@@ -239,6 +239,7 @@ progresser avec chaque fonctionnalité.
 - [x] Modèle d'opportunités, ranking et projections utilisateur
 - [x] Trade Planning déterministe, versionnement et replanification
 - [x] Risk Domain ADR-028
+- [x] Autorisation déterministe des Trade Plans via le Risk Domain, exposée à travers le Gateway (Story 0003)
 - [x] Execution Domain ADR-029
 - [x] Architecture broker-neutre et provider Kraken ADR-030
 - [ ] Tests contractuels sandbox et E2E déployé Trading Core → Broker Service → Kraken
