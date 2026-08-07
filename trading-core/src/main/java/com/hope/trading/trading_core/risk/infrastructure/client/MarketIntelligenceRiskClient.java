@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.risk.infrastructure.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationException;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import feign.FeignException;
@@ -63,12 +64,13 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
             throw failure;
         }
         try {
+            EntryIntent entryIntent = toEntryIntent(value.execution().entry());
             return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.createdAt(),
                      value.context().id(), value.context().version(), value.context().capturedAt(),
                      value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
                      value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
                      value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
-                    value.execution().instrument(), value.execution().direction(), value.execution().entry().price(),
+                    value.execution().instrument(), value.execution().direction(), entryIntent,
                     value.execution().stopLoss().price(), value.execution().positionSizing().quantity(),
                     value.execution().positionSizing().notional(),
                     value.execution().positionSizing().expectedMonetaryRisk(),
@@ -82,5 +84,15 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
     public void acknowledge(UUID tradePlanId, long version, UUID evaluationId,
                             String decision, Instant evaluatedAt) {
         client.acknowledge(tradePlanId, version, new Acknowledgment(evaluationId, decision, evaluatedAt));
+    }
+
+    private static EntryIntent toEntryIntent(TradePlanTransport.Entry entry) {
+        EntryIntent.OrderType orderType = switch (entry.type()) {
+            case "MARKET" -> EntryIntent.OrderType.MARKET;
+            case "LIMIT" -> EntryIntent.OrderType.LIMIT;
+            case "STOP" -> EntryIntent.OrderType.STOP;
+            default -> throw new IllegalArgumentException("Unknown entry type: " + entry.type());
+        };
+        return new EntryIntent(orderType, entry.price());
     }
 }

@@ -192,7 +192,7 @@ public class TradePlanRiskEvaluationService {
         BigDecimal expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
                         configuration.brokerAccountId(), plan.instrument(), plan.direction(), plan.quantity(),
-                        plan.entryPrice(), brokerSnapshot.observedAt()))
+                        plan.entryIntent().price(), brokerSnapshot.observedAt()))
                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
         BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
         ProposedTrade proposed = new ProposedTrade(plan.tradePlanId(), plan.tradePlanVersion(), plan.instrument(),

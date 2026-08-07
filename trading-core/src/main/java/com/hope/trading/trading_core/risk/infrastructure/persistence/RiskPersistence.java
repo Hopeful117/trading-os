@@ -38,7 +38,8 @@ public class RiskPersistence {
         return entityManager.createQuery("select e from RiskEvaluationEntity e where e.actorId=:actor and e.idempotencyKey=:key",
                         RiskEvaluationEntity.class).setParameter("actor", actorId).setParameter("key", key)
                 .getResultStream().findFirst().map(e -> new StoredEvaluation(e.id, e.tradePlanId,
-                        e.tradePlanVersion, e.accountId, read(e.responsePayload, Response.class)));
+                        e.tradePlanVersion, e.accountId, e.status, e.decision,
+                        read(e.responsePayload, Response.class)));
     }
 
     public Optional<AccountConfiguration> configuration(UUID accountId) {
@@ -190,8 +191,16 @@ public class RiskPersistence {
         catch (Exception failure) { throw new IllegalStateException("Stored risk evaluation is unreadable", failure); }
     }
 
+    public Optional<StoredEvaluation> evaluationById(UUID evaluationId) {
+        RiskEvaluationEntity e = entityManager.find(RiskEvaluationEntity.class, evaluationId);
+        if (e == null) return Optional.empty();
+        return Optional.of(new StoredEvaluation(e.id, e.tradePlanId, e.tradePlanVersion,
+                e.accountId, e.status, e.decision, read(e.responsePayload, Response.class)));
+    }
+
     public record StoredEvaluation(UUID id, UUID tradePlanId, long tradePlanVersion,
-                                   UUID accountId, Response response) { }
+                                   UUID accountId, String status, String decision,
+                                   Response response) { }
     public record AcknowledgmentDelivery(UUID evaluationId, UUID tradePlanId, long tradePlanVersion,
                                          String decision, Instant evaluatedAt, UUID claimToken) { }
     public record AccountConfiguration(UUID accountId, UUID brokerAccountId, String riskTimeZone,

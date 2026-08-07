@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.risk.application.port;
 
+import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -13,7 +14,7 @@ public interface TradePlanRiskPort {
                     UUID ownerId, UUID tradingAccountId, String accountCurrency,
                     UUID riskBudgetSourceId, long riskBudgetSourceVersion,
                     UUID planningPreferencesId, long planningPreferencesVersion,
-                    String instrument, String direction, BigDecimal entryPrice, BigDecimal stopPrice,
+                    String instrument, String direction, EntryIntent entryIntent, BigDecimal stopPrice,
                     BigDecimal quantity, BigDecimal notional, BigDecimal expectedMonetaryRisk,
                     String sizingCurrency, String sourcePayload) { }
 }

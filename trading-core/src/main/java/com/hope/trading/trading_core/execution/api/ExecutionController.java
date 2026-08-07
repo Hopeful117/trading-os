@@ -2,7 +2,7 @@ package com.hope.trading.trading_core.execution.api;
 
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.execution.api.dto.*;
-import com.hope.trading.trading_core.execution.application.command.CreateExecutionIntentCommand;
+import com.hope.trading.trading_core.execution.application.command.ValidateAndCreateCommand;
 import com.hope.trading.trading_core.execution.application.service.*;
 import com.hope.trading.trading_core.execution.domain.model.*;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
@@ -16,27 +16,30 @@ import java.util.List;
 @RestController
 @RequestMapping("/executions")
 public class ExecutionController {
-    private final CreateExecutionIntentService creation;
+    private final ValidateAndCreateService validation;
     private final ExecuteTradeService execution;
     private final RetryExecutionService retry;
     private final CancelExecutionService cancellation;
     private final RecoverExecutionService recovery;
     private final QueryExecutionService query;
-    public ExecutionController(CreateExecutionIntentService creation,ExecuteTradeService execution,
-            RetryExecutionService retry,CancelExecutionService cancellation,
-            RecoverExecutionService recovery,QueryExecutionService query){
-        this.creation=creation;this.execution=execution;this.retry=retry;
+    public ExecutionController(ValidateAndCreateService validation, ExecuteTradeService execution,
+            RetryExecutionService retry, CancelExecutionService cancellation,
+            RecoverExecutionService recovery, QueryExecutionService query){
+        this.validation=validation;this.execution=execution;this.retry=retry;
         this.cancellation=cancellation;this.recovery=recovery;this.query=query;
     }
-    @PostMapping public ResponseEntity<ExecutionDto> create(
-            @Valid @RequestBody CreateExecutionRequest request,Authentication authentication){
-        var intent=creation.create(new CreateExecutionIntentCommand(
-                new TradePlanReference(request.tradePlanId(),request.tradePlanVersion()),
-                new RiskApprovalReference(request.riskEvaluationId(),request.riskDecision(),
-                        request.riskApprovedAt()),new IdempotencyKey(request.idempotencyKey()),
-                principal(authentication).getUserId(),request.brokerAccountId(),
-                new ExecutionParameters(request.instrument(),request.side(),request.orderType(),
-                        request.quantity(),request.limitPrice()),request.expiresAt()));
+    @PostMapping("/validate")
+    public ResponseEntity<ExecutionDto> validateAndCreate(
+            @Valid @RequestBody ValidateAndCreateRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            Authentication authentication){
+        var intent=validation.validateAndCreate(
+                new ValidateAndCreateCommand(
+                        principal(authentication).getUserId(),
+                        request.tradePlanId(), request.tradePlanVersion(),
+                        request.evaluationId(), request.brokerAccountId(),
+                        new IdempotencyKey(idempotencyKey),
+                        request.expiresAt()));
         return ResponseEntity.created(URI.create("/executions/"+intent.id().value()))
                 .body(ExecutionDto.from(intent));
     }

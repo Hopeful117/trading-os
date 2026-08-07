@@ -23,6 +23,7 @@ import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Respo
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
+import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import java.math.BigDecimal;
@@ -326,7 +327,7 @@ class TradePlanRiskEvaluationServiceTest {
                 "APPROVED", true, List.of(), List.of(), Map.of(), now,
                 new RiskEvaluationModels.Trace(UUID.randomUUID(), "v", Map.of(), Map.of(), Map.of()));
         when(persistence.evaluation(actorId, "key")).thenReturn(Optional.of(
-                new RiskPersistence.StoredEvaluation(storedResponse.evaluationId(), planId, 3, accountId, storedResponse)));
+                new RiskPersistence.StoredEvaluation(storedResponse.evaluationId(), planId, 3, accountId, "COMPLETED", "APPROVED", storedResponse)));
 
         assertThat(service.evaluate(command("key", 3))).isSameAs(storedResponse);
         verify(acknowledgmentDelivery).deliver(storedResponse.evaluationId());
@@ -402,10 +403,11 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency) {
+        EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.MARKET, new BigDecimal("100"));
         return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", now,
                 UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
                 UUID.randomUUID(), 2, UUID.randomUUID(), 4,
-                "ETHUSD", "LONG", new BigDecimal("100"), new BigDecimal("90"), BigDecimal.ONE,
+                "ETHUSD", "LONG", entryIntent, new BigDecimal("90"), BigDecimal.ONE,
                 new BigDecimal("1000"), new BigDecimal("100"), sizingCurrency, "{\"accepted\":true}");
     }
 

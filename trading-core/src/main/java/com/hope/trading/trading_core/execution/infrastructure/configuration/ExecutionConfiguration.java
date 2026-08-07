@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.execution.infrastructure.configuration;
 
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.execution.application.pipeline.*;
 import com.hope.trading.trading_core.execution.application.pipeline.recovery.*;
 import com.hope.trading.trading_core.execution.application.port.*;
@@ -7,6 +8,8 @@ import com.hope.trading.trading_core.execution.application.service.*;
 import com.hope.trading.trading_core.execution.domain.repository.*;
 import com.hope.trading.trading_core.execution.domain.service.*;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import org.springframework.context.annotation.*;
 import java.time.Clock;
 
@@ -25,6 +28,13 @@ public class ExecutionConfiguration {
             IdempotencyService idempotency,ExecutionIdGenerator ids,ExecutionEventPublisher events,
             ExecutionMetrics metrics,Clock clock){
         return new CreateExecutionIntentService(intents,idempotency,ids,events,metrics,clock);
+    }
+    @Bean ValidateAndCreateService validateAndCreateService(
+            RiskPersistence riskPersistence, TradePlanRiskPort tradePlans,
+            BrokerAccountRepository brokerAccounts, CreateExecutionIntentService intentCreation,
+            ExecutionLifecycleService lifecycle, Clock clock){
+        return new ValidateAndCreateService(riskPersistence, tradePlans, brokerAccounts,
+                intentCreation, lifecycle, clock);
     }
     @Bean ExecuteTradeService executeTradeService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
