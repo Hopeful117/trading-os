@@ -248,7 +248,7 @@ progresser avec chaque fonctionnalité.
 
 ## Décisions d'architecture
 
-Les décisions structurantes et la vision produit sont consignées dans les [ADR](docs/adr/ADR-001.md). Les ADR décrivent l'architecture cible ; leur statut `Accepted` signifie que la décision est adoptée, pas que son implémentation est terminée.
+Les décisions structurantes et la vision produit sont consignées dans les [ADR](docs/architecture/adr/ADR-001.md). Les ADR décrivent l'architecture cible ; leur statut `Accepted` signifie que la décision est adoptée, pas que son implémentation est terminée.
 
 Les principaux axes couverts sont :
 
