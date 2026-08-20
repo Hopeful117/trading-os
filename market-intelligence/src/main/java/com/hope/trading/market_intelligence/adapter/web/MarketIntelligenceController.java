@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService;
+import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
@@ -16,9 +17,14 @@ import java.util.UUID;
 @RequestMapping("/api/v1/intelligence")
 public class MarketIntelligenceController {
     private final AnalysisExecutionService executions;
+    private final ActiveScanScopeResolutionService activeScanScopeResolution;
 
-    public MarketIntelligenceController(AnalysisExecutionService executions) {
+    public MarketIntelligenceController(
+            AnalysisExecutionService executions,
+            ActiveScanScopeResolutionService activeScanScopeResolution
+    ) {
         this.executions = executions;
+        this.activeScanScopeResolution = activeScanScopeResolution;
     }
 
     @PostMapping("/analyses")
@@ -46,6 +52,21 @@ public class MarketIntelligenceController {
                         "/api/v1/intelligence/analyses/" + execution.executionId()
                 ))
                 .body(AnalysisExecutionResponse.from(execution));
+    }
+
+    @PostMapping("/scans/scope")
+    public ResponseEntity<ActiveScanScopeResolutionResponse> resolveScope(
+            @Valid @RequestBody ActiveScanScopeResolutionRequestDto request
+    ) {
+        return ResponseEntity.ok(
+                ActiveScanScopeResolutionResponse.from(
+                        activeScanScopeResolution.resolve(
+                                new com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest(
+                                        request.accountId(), request.objective(), request.requestedMarketIds()
+                                )
+                        )
+                )
+        );
     }
 
     @GetMapping("/analyses/{executionId}")

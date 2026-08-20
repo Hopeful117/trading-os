@@ -8,6 +8,9 @@ import java.util.UUID;
 
 @FeignClient(name = "market-data")
 public interface MarketDataClient {
+    @GetMapping("/api/v1/markets")
+    List<MarketResponse> findAllMarkets();
+
     @GetMapping("/api/v1/markets/{marketId}")
     MarketResponse findMarket(@PathVariable UUID marketId);
 

@@ -6,7 +6,7 @@
 
 **Title:** Authorize Trade Plans through the Risk Domain
 
-**Status:** Draft
+**Status:** Completed
 
 ---
 
