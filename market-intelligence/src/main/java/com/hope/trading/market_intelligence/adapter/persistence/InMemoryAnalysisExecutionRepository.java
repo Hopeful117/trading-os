@@ -39,4 +39,23 @@ public class InMemoryAnalysisExecutionRepository implements AnalysisExecutionRep
                 .filter(execution -> execution.status() != AnalysisExecutionStatus.EXPIRED)
                 .findFirst();
     }
+
+    @Override
+    public boolean transitionStatus(
+            UUID executionId,
+            AnalysisExecutionStatus expected,
+            AnalysisExecutionStatus target,
+            Instant updatedAt
+    ) {
+        java.util.concurrent.atomic.AtomicBoolean transitioned =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        executions.computeIfPresent(executionId, (ignored, current) -> {
+            if (current.status() != expected) {
+                return current;
+            }
+            transitioned.set(true);
+            return current.transitionTo(target, updatedAt);
+        });
+        return transitioned.get();
+    }
 }

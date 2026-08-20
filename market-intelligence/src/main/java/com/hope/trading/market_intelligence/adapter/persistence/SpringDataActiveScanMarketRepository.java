@@ -6,22 +6,22 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.UUID;
 
-interface SpringDataAnalysisExecutionRepository
-        extends JpaRepository<JpaAnalysisExecutionEntity, UUID> {
-    Optional<JpaAnalysisExecutionEntity> findByIdempotencyKey(String idempotencyKey);
+interface SpringDataActiveScanMarketRepository extends JpaRepository<JpaActiveScanMarketEntity, UUID> {
+    List<JpaActiveScanMarketEntity> findByScanIdOrderByOrdinalAsc(UUID scanId);
 
     @Modifying
     @Query("""
-            update JpaAnalysisExecutionEntity entity
+            update JpaActiveScanMarketEntity entity
                set entity.status = :target,
                    entity.updatedAt = :updatedAt
-             where entity.executionId = :executionId
+             where entity.scanMarketId = :scanMarketId
                and entity.status = :expected
             """)
     int transitionStatus(
-            @Param("executionId") UUID executionId,
+            @Param("scanMarketId") UUID scanMarketId,
             @Param("expected") String expected,
             @Param("target") String target,
             @Param("updatedAt") Instant updatedAt

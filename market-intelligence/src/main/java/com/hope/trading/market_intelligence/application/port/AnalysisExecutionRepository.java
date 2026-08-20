@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.port;
 
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
+import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 
 import java.time.Instant;
@@ -17,4 +18,11 @@ public interface AnalysisExecutionRepository {
     Optional<AnalysisExecution> findById(UUID executionId);
 
     Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now);
+
+    boolean transitionStatus(
+            UUID executionId,
+            AnalysisExecutionStatus expected,
+            AnalysisExecutionStatus target,
+            Instant updatedAt
+    );
 }
