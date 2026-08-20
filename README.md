@@ -85,6 +85,16 @@ POST /api/v1/intelligence/analyses/{executionId}/cancel
 
 La création exige un en-tête `Idempotency-Key` et retourne `202 Accepted`.
 
+Résolution déterministe du périmètre Active Scan :
+
+```text
+POST /api/v1/intelligence/scans/scope
+```
+
+Cet endpoint calcule le scope effectif à partir du compte sélectionné, du
+catalogue de marchés et des règles d'eligibilité déterministes. Il ne crée
+pas d'`AnalysisExecution` et ne déclenche pas le pipeline d'intelligence.
+
 La gestion des artefacts reste indépendante de Redis, Caffeine ou SQL. L'implémentation actuelle utilise uniquement un store en mémoire pour valider les règles de clé, scope, provenance, fraîcheur, réutilisation et invalidation ciblée. Elle n'est ni durable ni distribuée.
 
 ## Pipeline de décision
