@@ -51,6 +51,44 @@ class ActiveScanTest {
     }
 
     @Test
+    void dispatchRequestedCanAdvanceToRunning() {
+        ActiveScan scan = ActiveScan.readyToDispatch(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "scan",
+                "key-1",
+                "fingerprint-1",
+                snapshot(List.of(UUID.randomUUID())),
+                now
+        ).markDispatchRequested(now.plusSeconds(1));
+
+        ActiveScan updated = scan.reconcileTo(ActiveScanStatus.RUNNING, now.plusSeconds(2));
+
+        assertThat(updated.status()).isEqualTo(ActiveScanStatus.RUNNING);
+    }
+
+    @Test
+    void runningCanAdvanceToTerminalStatus() {
+        ActiveScan scan = ActiveScan.readyToDispatch(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "scan",
+                "key-1",
+                "fingerprint-1",
+                snapshot(List.of(UUID.randomUUID())),
+                now
+        ).markDispatchRequested(now.plusSeconds(1))
+                .reconcileTo(ActiveScanStatus.RUNNING, now.plusSeconds(2));
+
+        ActiveScan updated = scan.reconcileTo(ActiveScanStatus.PARTIALLY_COMPLETED, now.plusSeconds(3));
+
+        assertThat(updated.status()).isEqualTo(ActiveScanStatus.PARTIALLY_COMPLETED);
+        assertThat(updated.status().isTerminal()).isTrue();
+    }
+
+    @Test
     void registeredMarketCanTransitionToDispatchRequested() {
         ActiveScanMarket market = ActiveScanMarket.registered(
                 UUID.randomUUID(),

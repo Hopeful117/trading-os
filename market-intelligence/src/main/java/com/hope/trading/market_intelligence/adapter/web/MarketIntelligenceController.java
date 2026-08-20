@@ -83,7 +83,7 @@ public class MarketIntelligenceController {
             @Valid @RequestBody CreateActiveScanRequestDto request
     ) {
         UUID actorId = actorId(actorIdHeader);
-        ActiveScanApplicationService.ActiveScanView scan = scans.findOwned(
+        ActiveScanResponse scan = ActiveScanResponse.from(scans.findOwnedProjection(
                 actorId,
                 scans.create(new CreateActiveScanCommand(
                         actorId,
@@ -91,11 +91,10 @@ public class MarketIntelligenceController {
                         request.accountId(),
                         request.objective(),
                         request.requestedMarketIds()
-                )).scanId()
-        );
+                )).scanId()));
         return ResponseEntity.accepted()
-                .location(URI.create("/api/v1/intelligence/scans/" + scan.scan().scanId()))
-                .body(ActiveScanResponse.from(scan));
+                .location(URI.create("/api/v1/intelligence/scans/" + scan.scanId()))
+                .body(scan);
     }
 
     @GetMapping("/scans/{scanId}")
@@ -104,7 +103,7 @@ public class MarketIntelligenceController {
             @PathVariable UUID scanId
     ) {
         return ResponseEntity.ok(
-                ActiveScanResponse.from(scans.findOwned(actorId(actorIdHeader), scanId))
+                ActiveScanResponse.from(scans.findOwnedProjection(actorId(actorIdHeader), scanId))
         );
     }
 

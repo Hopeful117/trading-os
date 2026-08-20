@@ -76,7 +76,11 @@ public class JpaIntelligencePipelineRunEntity {
     }
 
     public UUID analysisExecutionId() { return analysisExecutionId; }
+    public String pipelineVersion() { return pipelineVersion; }
     public String state() { return state; }
     public UUID opportunityId() { return opportunityId; }
     public Long opportunityVersion() { return opportunityVersion; }
+    public String failureCode() { return failureCode; }
+    public String failureMessage() { return failureMessage; }
+    public Instant completedAt() { return completedAt; }
 }

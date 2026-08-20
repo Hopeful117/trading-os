@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.adapter.persistence;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
+import com.hope.trading.market_intelligence.application.port.TradingOpportunityVersionRef;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +63,21 @@ public class JpaTradingOpportunityRepository implements TradingOpportunityReposi
         return latest.values().stream().map(this::domain)
                 .sorted(Comparator.comparing(TradingOpportunity::createdAt)
                         .thenComparing(v -> v.id().value())).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TradingOpportunity> findAllExact(Collection<TradingOpportunityVersionRef> refs) {
+        if (refs.isEmpty()) {
+            return List.of();
+        }
+        List<JpaTradingOpportunityId> ids = refs.stream()
+                .map(ref -> new JpaTradingOpportunityId(
+                        ref.opportunityId().value(),
+                        ref.opportunityVersion().value()
+                ))
+                .toList();
+        return repository.findAllById(ids).stream().map(this::domain).toList();
     }
 
     private JpaTradingOpportunityEntity entity(TradingOpportunity value) {

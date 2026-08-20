@@ -50,6 +50,7 @@ class ActiveScanApplicationServiceTest {
     private final ActiveScanChildKeyFactory childKeys = new ActiveScanChildKeyFactory();
     private final ActiveScanScopeResolutionService scopeResolution = mock(ActiveScanScopeResolutionService.class);
     private final ActiveScanDispatchCoordinator coordinator = mock(ActiveScanDispatchCoordinator.class);
+    private final ActiveScanReconciliationService reconciliation = mock(ActiveScanReconciliationService.class);
     private final ActiveScanApplicationService service = new ActiveScanApplicationService(
             scans,
             scopeResolution,
@@ -57,6 +58,7 @@ class ActiveScanApplicationServiceTest {
             fingerprints,
             childKeys,
             coordinator,
+            reconciliation,
             clock
     );
 
@@ -335,7 +337,7 @@ class ActiveScanApplicationServiceTest {
             if (current == null || current.status() != expected) {
                 return false;
             }
-            scans.put(scanId, current.markDispatchRequested(updatedAt));
+            scans.put(scanId, current.reconcileTo(target, updatedAt));
             return true;
         }
 
