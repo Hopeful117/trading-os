@@ -6,6 +6,8 @@ import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionSt
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,6 +29,14 @@ public class InMemoryAnalysisExecutionRepository implements AnalysisExecutionRep
     @Override
     public Optional<AnalysisExecution> findById(UUID executionId) {
         return Optional.ofNullable(executions.get(executionId));
+    }
+
+    @Override
+    public List<AnalysisExecution> findAllById(Collection<UUID> executionIds) {
+        return executionIds.stream()
+                .map(executions::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     @Override

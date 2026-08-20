@@ -5,6 +5,8 @@ import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionSt
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,6 +18,8 @@ public interface AnalysisExecutionRepository {
     AnalysisExecution save(AnalysisExecution execution);
 
     Optional<AnalysisExecution> findById(UUID executionId);
+
+    List<AnalysisExecution> findAllById(Collection<UUID> executionIds);
 
     Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now);
 

@@ -33,6 +33,13 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
     @Override @Transactional(readOnly = true)
     public Optional<AnalysisExecution> findById(UUID id) { return repository.findById(id).map(this::domain); }
     @Override @Transactional(readOnly = true)
+    public List<AnalysisExecution> findAllById(Collection<UUID> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByExecutionIdIn(ids).stream().map(this::domain).toList();
+    }
+    @Override @Transactional(readOnly = true)
     public Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now) {
         return repository.findByIdempotencyKey(key.value()).map(this::domain)
                 .filter(value -> !value.isExpiredAt(now));

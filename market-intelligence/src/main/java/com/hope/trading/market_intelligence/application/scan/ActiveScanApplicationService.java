@@ -29,6 +29,7 @@ public class ActiveScanApplicationService {
     private final ActiveScanFingerprintFactory fingerprints;
     private final ActiveScanChildKeyFactory childKeys;
     private final ActiveScanDispatchCoordinator dispatchCoordinator;
+    private final ActiveScanReconciliationService reconciliation;
     private final Clock clock;
 
     public ActiveScanApplicationService(
@@ -38,6 +39,7 @@ public class ActiveScanApplicationService {
             ActiveScanFingerprintFactory fingerprints,
             ActiveScanChildKeyFactory childKeys,
             ActiveScanDispatchCoordinator dispatchCoordinator,
+            ActiveScanReconciliationService reconciliation,
             Clock clock
     ) {
         this.scans = scans;
@@ -46,6 +48,7 @@ public class ActiveScanApplicationService {
         this.fingerprints = fingerprints;
         this.childKeys = childKeys;
         this.dispatchCoordinator = dispatchCoordinator;
+        this.reconciliation = reconciliation;
         this.clock = clock;
     }
 
@@ -119,6 +122,10 @@ public class ActiveScanApplicationService {
                         404
                 ));
         return new ActiveScanView(scan, scans.findMarketsByScanId(scanId));
+    }
+
+    public ActiveScanResultProjection findOwnedProjection(UUID actorId, UUID scanId) {
+        return reconciliation.reconcileOwned(actorId, scanId);
     }
 
     private List<ActiveScanMarket> buildMarkets(

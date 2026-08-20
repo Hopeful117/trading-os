@@ -15,4 +15,5 @@ public interface TradingOpportunityRepository {
             String instrument, OpportunityDirection direction, String scenario,
             String timeframe, Instant evaluatedAfter);
     List<TradingOpportunity> findAllLatest();
+    List<TradingOpportunity> findAllExact(Collection<TradingOpportunityVersionRef> refs);
 }

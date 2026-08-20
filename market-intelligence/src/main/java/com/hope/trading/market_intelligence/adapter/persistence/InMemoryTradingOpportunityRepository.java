@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
+import com.hope.trading.market_intelligence.application.port.TradingOpportunityVersionRef;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
 
 import java.time.Instant;
@@ -59,6 +60,14 @@ public final class InMemoryTradingOpportunityRepository implements TradingOpport
                 .map(history -> mapper.toDomain(history.lastEntry().getValue()))
                 .sorted(Comparator.comparing(TradingOpportunity::createdAt)
                         .thenComparing(item -> item.id().value()))
+                .toList();
+    }
+
+    @Override
+    public List<TradingOpportunity> findAllExact(Collection<TradingOpportunityVersionRef> refs) {
+        return refs.stream()
+                .map(ref -> find(ref.opportunityId(), ref.opportunityVersion()))
+                .flatMap(Optional::stream)
                 .toList();
     }
 }

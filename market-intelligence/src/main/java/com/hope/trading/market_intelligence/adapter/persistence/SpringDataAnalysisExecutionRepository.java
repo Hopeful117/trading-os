@@ -12,6 +12,8 @@ interface SpringDataAnalysisExecutionRepository
         extends JpaRepository<JpaAnalysisExecutionEntity, UUID> {
     Optional<JpaAnalysisExecutionEntity> findByIdempotencyKey(String idempotencyKey);
 
+    List<JpaAnalysisExecutionEntity> findByExecutionIdIn(Collection<UUID> executionIds);
+
     @Modifying
     @Query("""
             update JpaAnalysisExecutionEntity entity

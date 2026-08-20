@@ -1,7 +1,11 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.scan.ActiveScanApplicationService;
-import com.hope.trading.market_intelligence.domain.scan.*;
+import com.hope.trading.market_intelligence.application.scan.ActiveScanMarketOutcome;
+import com.hope.trading.market_intelligence.application.scan.ActiveScanResultProjection;
+import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
+import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
+import com.hope.trading.market_intelligence.domain.scan.ActiveScanStatus;
 import com.hope.trading.market_intelligence.domain.scope.MarketEligibilityReason;
 
 import java.time.Instant;
@@ -10,37 +14,55 @@ import java.util.UUID;
 
 public record ActiveScanResponse(
         UUID scanId,
-        UUID actorId,
         UUID accountId,
         String objective,
         ActiveScanStatus status,
-        String idempotencyKey,
         List<UUID> requestedMarketIds,
         List<UUID> candidateMarketIds,
         List<UUID> effectiveMarketIds,
         Instant resolvedAt,
         Instant createdAt,
         Instant updatedAt,
+        ProgressResponse progress,
         List<MarketResponse> markets
 ) {
-    static ActiveScanResponse from(ActiveScanApplicationService.ActiveScanView view) {
-        ActiveScan scan = view.scan();
-        ActiveScanScopeSnapshot snapshot = scan.scopeSnapshot();
+    static ActiveScanResponse from(ActiveScanResultProjection projection) {
         return new ActiveScanResponse(
-                scan.scanId(),
-                scan.actorId(),
-                scan.accountId(),
-                scan.objective(),
-                scan.status(),
-                scan.idempotencyKey(),
-                snapshot.requestedMarketIds(),
-                snapshot.candidateMarketIds(),
-                snapshot.effectiveMarketIds(),
-                snapshot.resolvedAt(),
-                scan.createdAt(),
-                scan.updatedAt(),
-                view.markets().stream().map(MarketResponse::from).toList()
+                projection.scanId(),
+                projection.accountId(),
+                projection.objective(),
+                projection.status(),
+                projection.requestedMarketIds(),
+                projection.candidateMarketIds(),
+                projection.effectiveMarketIds(),
+                projection.resolvedAt(),
+                projection.createdAt(),
+                projection.updatedAt(),
+                ProgressResponse.from(projection.progress()),
+                projection.markets().stream().map(MarketResponse::from).toList()
         );
+    }
+
+    public record ProgressResponse(
+            int totalCandidates,
+            int eligible,
+            int excluded,
+            int running,
+            int completed,
+            int failed,
+            int opportunitiesFound
+    ) {
+        static ProgressResponse from(ActiveScanResultProjection.ActiveScanProgress progress) {
+            return new ProgressResponse(
+                    progress.totalCandidates(),
+                    progress.eligible(),
+                    progress.excluded(),
+                    progress.running(),
+                    progress.completed(),
+                    progress.failed(),
+                    progress.opportunitiesFound()
+            );
+        }
     }
 
     public record MarketResponse(
@@ -48,19 +70,39 @@ public record ActiveScanResponse(
             int ordinal,
             UUID marketId,
             boolean eligible,
-            ActiveScanMarketStatus status,
+            AnalysisExecutionStatus analysisStatus,
+            AnalysisResultQuality resultQuality,
+            ActiveScanMarketOutcome outcome,
             UUID analysisExecutionId,
-            List<MarketEligibilityReason> exclusionReasons
+            List<MarketEligibilityReason> exclusionReasons,
+            DiagnosticResponse diagnostic,
+            OpportunityResponse opportunity
     ) {
-        static MarketResponse from(ActiveScanMarket market) {
+        static MarketResponse from(ActiveScanResultProjection.MarketResult market) {
             return new MarketResponse(
                     market.scanMarketId(),
                     market.ordinal(),
                     market.marketId(),
                     market.eligible(),
-                    market.status(),
+                    market.analysisStatus(),
+                    market.resultQuality(),
+                    market.outcome(),
                     market.analysisExecutionId(),
-                    market.exclusionReasons()
+                    market.exclusionReasons(),
+                    DiagnosticResponse.from(market.diagnostic()),
+                    market.opportunity() == null ? null : OpportunityResponse.from(market.opportunity())
+            );
+        }
+    }
+
+    public record DiagnosticResponse(
+            String code,
+            String message
+    ) {
+        static DiagnosticResponse from(ActiveScanResultProjection.Diagnostic diagnostic) {
+            return diagnostic == null ? null : new DiagnosticResponse(
+                    diagnostic.code(),
+                    diagnostic.message()
             );
         }
     }

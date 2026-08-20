@@ -144,6 +144,32 @@ public final class ActiveScan {
         );
     }
 
+    public ActiveScan reconcileTo(ActiveScanStatus target, Instant at) {
+        Objects.requireNonNull(target);
+        Objects.requireNonNull(at);
+        if (status == target || status.isTerminal()) {
+            return this;
+        }
+        if (!status.canAdvanceTo(target)) {
+            throw new IllegalStateException(
+                    "ActiveScan status cannot advance from %s to %s".formatted(status, target)
+            );
+        }
+        return new ActiveScan(
+                scanId,
+                actorId,
+                accountId,
+                objective,
+                idempotencyKey,
+                requestFingerprint,
+                scopeSnapshot,
+                target,
+                resolvedAt,
+                createdAt,
+                at
+        );
+    }
+
     public UUID scanId() { return scanId; }
     public UUID actorId() { return actorId; }
     public UUID accountId() { return accountId; }
