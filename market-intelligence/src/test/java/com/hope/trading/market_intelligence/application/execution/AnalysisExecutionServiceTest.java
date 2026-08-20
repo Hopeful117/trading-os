@@ -41,6 +41,36 @@ class AnalysisExecutionServiceTest {
         assertThat(dispatcher.dispatches).hasValue(1);
     }
 
+    @Test
+    void registerPersistsWithoutDispatchAndDispatchClaimSucceedsOnlyOnce() {
+        Instant now = Instant.parse("2026-07-29T10:00:00Z");
+        InMemoryAnalysisExecutionRepository repository =
+                new InMemoryAnalysisExecutionRepository();
+        CountingDispatcher dispatcher = new CountingDispatcher();
+        AnalysisExecutionService service = new AnalysisExecutionService(
+                repository,
+                dispatcher,
+                new AnalysisStrategyRegistry(List.of(strategy())),
+                new AnalysisExecutionPolicyFactory(),
+                Clock.fixed(now, ZoneOffset.UTC)
+        );
+        UUID marketId = UUID.randomUUID();
+        UUID analysisId = UUID.randomUUID();
+
+        AnalysisExecution execution = service.register(
+                request(analysisId, marketId), new IdempotencyKey("register-key"),
+                "request-1", "trace-1"
+        );
+
+        assertThat(dispatcher.dispatches).hasValue(0);
+        assertThat(service.claimForDispatch(execution.executionId())).isTrue();
+        assertThat(service.claimForDispatch(execution.executionId())).isFalse();
+
+        service.dispatchRegistered(execution.executionId());
+
+        assertThat(dispatcher.dispatches).hasValue(1);
+    }
+
     private AnalysisExecutionStrategy strategy() {
         return new AnalysisExecutionStrategy() {
             @Override

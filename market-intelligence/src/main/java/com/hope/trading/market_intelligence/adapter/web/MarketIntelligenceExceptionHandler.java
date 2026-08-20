@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
+import com.hope.trading.market_intelligence.application.scan.ActiveScanException;
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionNotFoundException;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionException;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanRiskHandoffException;
@@ -27,6 +28,12 @@ public class MarketIntelligenceExceptionHandler {
     @ExceptionHandler(ActiveScanScopeResolutionException.class)
     ResponseEntity<Map<String, String>> activeScanScopeResolution(
             ActiveScanScopeResolutionException exception) {
+        return ResponseEntity.status(exception.status()).body(Map.of(
+                "code", exception.code(), "error", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ActiveScanException.class)
+    ResponseEntity<Map<String, String>> activeScan(ActiveScanException exception) {
         return ResponseEntity.status(exception.status()).body(Map.of(
                 "code", exception.code(), "error", exception.getMessage()));
     }

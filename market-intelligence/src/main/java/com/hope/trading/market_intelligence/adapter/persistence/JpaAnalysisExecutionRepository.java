@@ -38,6 +38,22 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
                 .filter(value -> !value.isExpiredAt(now));
     }
 
+    @Override
+    @Transactional
+    public boolean transitionStatus(
+            UUID executionId,
+            AnalysisExecutionStatus expected,
+            AnalysisExecutionStatus target,
+            Instant updatedAt
+    ) {
+        return repository.transitionStatus(
+                executionId,
+                expected.name(),
+                target.name(),
+                updatedAt
+        ) == 1;
+    }
+
     private Snapshot snapshot(AnalysisExecution value) {
         return new Snapshot(
                 value.resultQuality().orElse(null), value.executionPolicy(), value.capabilities(),

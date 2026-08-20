@@ -1,5 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
+import com.hope.trading.market_intelligence.application.scan.ActiveScanApplicationService;
+import com.hope.trading.market_intelligence.application.scan.CreateActiveScanCommand;
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
@@ -16,15 +18,20 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/intelligence")
 public class MarketIntelligenceController {
+    private static final String ACTOR_HEADER = "X-Actor-Id";
+
     private final AnalysisExecutionService executions;
     private final ActiveScanScopeResolutionService activeScanScopeResolution;
+    private final ActiveScanApplicationService scans;
 
     public MarketIntelligenceController(
             AnalysisExecutionService executions,
-            ActiveScanScopeResolutionService activeScanScopeResolution
+            ActiveScanScopeResolutionService activeScanScopeResolution,
+            ActiveScanApplicationService scans
     ) {
         this.executions = executions;
         this.activeScanScopeResolution = activeScanScopeResolution;
+        this.scans = scans;
     }
 
     @PostMapping("/analyses")
@@ -69,6 +76,38 @@ public class MarketIntelligenceController {
         );
     }
 
+    @PostMapping("/scans")
+    public ResponseEntity<ActiveScanResponse> createScan(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader(value = ACTOR_HEADER, required = false) String actorIdHeader,
+            @Valid @RequestBody CreateActiveScanRequestDto request
+    ) {
+        UUID actorId = actorId(actorIdHeader);
+        ActiveScanApplicationService.ActiveScanView scan = scans.findOwned(
+                actorId,
+                scans.create(new CreateActiveScanCommand(
+                        actorId,
+                        idempotencyKey,
+                        request.accountId(),
+                        request.objective(),
+                        request.requestedMarketIds()
+                )).scanId()
+        );
+        return ResponseEntity.accepted()
+                .location(URI.create("/api/v1/intelligence/scans/" + scan.scan().scanId()))
+                .body(ActiveScanResponse.from(scan));
+    }
+
+    @GetMapping("/scans/{scanId}")
+    public ResponseEntity<ActiveScanResponse> findScan(
+            @RequestHeader(value = ACTOR_HEADER, required = false) String actorIdHeader,
+            @PathVariable UUID scanId
+    ) {
+        return ResponseEntity.ok(
+                ActiveScanResponse.from(scans.findOwned(actorId(actorIdHeader), scanId))
+        );
+    }
+
     @GetMapping("/analyses/{executionId}")
     public ResponseEntity<AnalysisExecutionResponse> find(
             @PathVariable UUID executionId
@@ -95,5 +134,24 @@ public class MarketIntelligenceController {
         return ResponseEntity.ok(
                 AnalysisExecutionResponse.from(executions.cancel(executionId))
         );
+    }
+
+    private UUID actorId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "AUTHENTICATION_REQUIRED",
+                    "Authenticated actor context is required",
+                    401
+            );
+        }
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException exception) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "AUTHENTICATION_REQUIRED",
+                    "Authenticated actor context is invalid",
+                    401
+            );
+        }
     }
 }

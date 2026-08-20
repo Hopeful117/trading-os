@@ -55,8 +55,14 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
 
     private void execute(UUID executionId, IntelligenceAnalysisRequest request) {
         try {
-            transition(executionId, AnalysisExecutionStatus.ACCEPTED);
-            transition(executionId, AnalysisExecutionStatus.CONTEXT_BUILDING);
+            if (!repository.transitionStatus(
+                    executionId,
+                    AnalysisExecutionStatus.ACCEPTED,
+                    AnalysisExecutionStatus.CONTEXT_BUILDING,
+                    Instant.now()
+            )) {
+                return;
+            }
             transition(executionId, AnalysisExecutionStatus.RUNNING);
             ConsolidatedIntelligence result = coordinator.analyze(executionId, request);
             repository.findById(executionId)

@@ -47,6 +47,19 @@ public class AnalysisExecutionService {
             String requestId,
             String traceId
     ) {
+        AnalysisExecution execution = register(request, idempotencyKey, requestId, traceId);
+        if (claimForDispatch(execution.executionId())) {
+            dispatchRegistered(execution.executionId());
+        }
+        return execution;
+    }
+
+    public AnalysisExecution register(
+            IntelligenceAnalysisRequest request,
+            IdempotencyKey idempotencyKey,
+            String requestId,
+            String traceId
+    ) {
         Instant now = clock.instant();
         return repository.findReusable(idempotencyKey, now).orElseGet(() -> {
             AnalysisExecutionPlan plan = strategies.strategy(request.mode()).plan(request);
@@ -71,9 +84,36 @@ public class AnalysisExecutionService {
                     new AnalysisTraceMetadata(List.of(trace))
             );
             repository.save(execution);
-            dispatcher.dispatch(execution.executionId(), request);
             return execution;
         });
+    }
+
+    public boolean claimForDispatch(UUID executionId) {
+        return repository.transitionStatus(
+                executionId,
+                AnalysisExecutionStatus.REQUESTED,
+                AnalysisExecutionStatus.ACCEPTED,
+                clock.instant()
+        );
+    }
+
+    public boolean beginProcessing(UUID executionId) {
+        return repository.transitionStatus(
+                executionId,
+                AnalysisExecutionStatus.ACCEPTED,
+                AnalysisExecutionStatus.CONTEXT_BUILDING,
+                clock.instant()
+        );
+    }
+
+    public void dispatchRegistered(UUID executionId) {
+        AnalysisExecution execution = find(executionId);
+        dispatcher.dispatch(execution.executionId(), new IntelligenceAnalysisRequest(
+                execution.executionId(),
+                execution.provenance().marketId(),
+                execution.provenance().mode(),
+                execution.provenance().objective()
+        ));
     }
 
     public AnalysisExecution find(UUID executionId) {
