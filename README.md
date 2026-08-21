@@ -17,16 +17,21 @@ Le projet est en développement actif. L'architecture microservices, l'authentif
 
 ## Architecture
 
-| Service | Port | Responsabilité |
-| --- | ---: | --- |
-| `gateway` | 8080 | Point d'entrée HTTP, sécurité JWT et routage |
-| `trading-core` | 8081 | Utilisateurs, comptes, règles, trades, dashboard, statistiques et domaine d'exécution |
-| `broker-service` | 8082 | Connexions broker, credentials chiffrés, capacités broker-neutres et exécution Kraken |
-| `market-data` | 8083 | Référentiel de marchés, OHLC, snapshots de prix et flux Kraken |
-| `market-intelligence` | 8084 | Analyses, observations, opportunités, trade plans, orchestration et artefacts d'intelligence |
-| `eureka-server` | 8761 | Découverte des services |
-| `trading-web` | 4200 | Application Angular servie par Nginx |
-| PostgreSQL | interne | Bases séparées `trading_os`, `market_data` et `broker_service` |
+| Service | Port hôte | Port conteneur | Responsabilité |
+| --- | ---: | ---: | --- |
+| `gateway` | 17080 | 8080 | Point d'entrée HTTP, sécurité JWT et routage |
+| `trading-core` | 17081 | 8081 | Utilisateurs, comptes, règles, trades, dashboard, statistiques et domaine d'exécution |
+| `broker-service` | 17082 | 8082 | Connexions broker, credentials chiffrés, capacités broker-neutres et exécution Kraken |
+| `market-data` | 17083 | 8083 | Référentiel de marchés, OHLC, snapshots de prix et flux Kraken |
+| `market-intelligence` | interne | 8084 | Analyses, observations, opportunités, trade plans, orchestration et artefacts d'intelligence |
+| `eureka-server` | 17084 | 8761 | Découverte des services |
+| `trading-web` | 17085 | 80 | Application Angular servie par Nginx |
+| PostgreSQL | interne | 5432 | Bases séparées `trading_os`, `market_data`, `broker_service` et `market_intelligence` |
+
+Les ports hôtes utilisent la plage `1708x` afin de laisser les ports standards
+disponibles pour d'autres applications développées en parallèle sur la même
+machine. Seuls les mappings hôtes du Compose ont été déplacés ; les ports
+internes des conteneurs et la communication inter-services restent inchangés.
 
 Services prévus par l'architecture cible, mais pas encore implémentés :
 
@@ -151,9 +156,9 @@ docker compose up --build
 
 Points d'accès principaux :
 
-- application : <http://localhost:4200>
-- API Gateway : <http://localhost:8080>
-- Eureka : <http://localhost:8761>
+- application : <http://localhost:17085>
+- API Gateway : <http://localhost:17080>
+- Eureka : <http://localhost:17084>
 
 Le fichier Compose est adapté au développement et à la validation locale. Pour une production exposée, les secrets, TLS, sauvegardes PostgreSQL, healthchecks et limites de ressources doivent être fournis par la plateforme de déploiement.
 

@@ -74,7 +74,7 @@ services:
       - postgres
       - eureka-server
     ports:
-      - "8081:8081"
+      - "17081:8081"
 
     networks:
       - trading-network
@@ -108,7 +108,7 @@ services:
 
 
     ports:
-      - "8082:8082"
+      - "17082:8082"
 
     restart: unless-stopped
 
@@ -120,7 +120,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
     ports:
-      - "8761:8761"
+      - "17084:8761"
 
     networks:
         - trading-network
@@ -141,7 +141,7 @@ services:
     depends_on:
       - eureka-server
     ports:
-      - "8080:8080"
+      - "17080:8080"
     restart: unless-stopped
     networks:
         - trading-network
@@ -151,7 +151,7 @@ services:
     build: ./trading-os-web
     container_name: trading-web
     ports:
-      - "4200:80"
+      - "17085:80"
     depends_on:
       - gateway
     restart: unless-stopped
@@ -166,7 +166,7 @@ services:
     container_name: market-data
 
     ports:
-      - "8083:8083"
+      - "17083:8083"
 
     depends_on:
       - eureka-server
