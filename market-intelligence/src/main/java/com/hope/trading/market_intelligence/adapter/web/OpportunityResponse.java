@@ -10,7 +10,8 @@ public record OpportunityResponse(
         UUID id, long version, String status, String instrument, String direction,
         String scenario, String timeframe, String type, String origin, BigDecimal score,
         String explanation, Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
-        Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt
+        Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
+        UUID strategyMatchId
 ) {
     static OpportunityResponse from(TradingOpportunity value) {
         return new OpportunityResponse(
@@ -23,6 +24,6 @@ public record OpportunityResponse(
                 value.aiAnalyses().stream().map(AiAnalysisReference::analysisId)
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
                 value.evaluatedAt(), value.validFrom(), value.validUntil().orElse(null),
-                value.createdAt());
+                value.createdAt(), value.strategyMatchId().orElse(null));
     }
 }

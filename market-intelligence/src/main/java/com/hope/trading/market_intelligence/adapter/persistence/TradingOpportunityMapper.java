@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.domain.opportunity.*;
 
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 final class TradingOpportunityMapper {
@@ -18,7 +19,7 @@ final class TradingOpportunityMapper {
                 value.aiAnalyses().stream().map(AiAnalysisReference::analysisId)
                         .collect(Collectors.toUnmodifiableSet()),
                 value.evaluatedAt(), value.validFrom(), value.validUntil().orElse(null),
-                value.createdAt());
+                value.createdAt(), value.strategyMatchId().orElse(null));
     }
 
     TradingOpportunity toDomain(TradingOpportunityEntity value) {
@@ -33,6 +34,7 @@ final class TradingOpportunityMapper {
                         .collect(Collectors.toUnmodifiableSet()),
                 value.aiAnalysisIds().stream().map(AiAnalysisReference::new)
                         .collect(Collectors.toUnmodifiableSet()),
-                value.evaluatedAt(), value.validFrom(), value.validUntil(), value.createdAt());
+                value.evaluatedAt(), value.validFrom(), value.validUntil(), value.createdAt(),
+                value.strategyMatchId());
     }
 }

@@ -40,7 +40,8 @@ class ActiveScanScopeResolutionControllerTest {
                 new MarketIntelligenceController(
                         mock(com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService.class),
                         service,
-                        mock(com.hope.trading.market_intelligence.application.scan.ActiveScanApplicationService.class)))
+                        mock(com.hope.trading.market_intelligence.application.scan.ActiveScanApplicationService.class),
+                        mock(com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository.class)))
                 .setControllerAdvice(new MarketIntelligenceExceptionHandler())
                 .build();
 

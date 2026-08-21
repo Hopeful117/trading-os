@@ -5,6 +5,8 @@ import com.hope.trading.market_intelligence.domain.opportunity.*;
 import java.time.Instant;
 import java.util.*;
 
+import java.util.UUID;
+
 public record CreateOpportunityCommand(
         String instrument,
         OpportunityDirection direction,
@@ -14,7 +16,9 @@ public record CreateOpportunityCommand(
         Set<ObservationReference> observations,
         Set<AiAnalysisReference> aiAnalyses,
         Instant evaluatedAt,
-        Instant validUntil
+        Instant validUntil,
+        UUID strategyMatchId,
+        UUID opportunityId
 ) {
     public CreateOpportunityCommand {
         instrument = required(instrument, "instrument");
@@ -31,6 +35,8 @@ public record CreateOpportunityCommand(
         if (validUntil != null && !validUntil.isAfter(evaluatedAt)) {
             throw new IllegalArgumentException("validUntil must follow evaluation");
         }
+        Objects.requireNonNull(strategyMatchId,
+                "strategyMatchId is required (ADR-034: opportunities derive from a match)");
     }
 
     private static String required(String value, String name) {

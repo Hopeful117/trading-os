@@ -80,7 +80,8 @@ class ActiveScanControllerTest {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new MarketIntelligenceController(
                         mock(com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService.class),
                         mock(com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService.class),
-                        scans))
+                        scans,
+                        mock(com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository.class)))
                 .setControllerAdvice(new MarketIntelligenceExceptionHandler())
                 .build();
 
@@ -110,7 +111,8 @@ class ActiveScanControllerTest {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new MarketIntelligenceController(
                         mock(com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService.class),
                         mock(com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService.class),
-                        mock(ActiveScanApplicationService.class)))
+                        mock(ActiveScanApplicationService.class),
+                        mock(com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository.class)))
                 .setControllerAdvice(new MarketIntelligenceExceptionHandler())
                 .build();
 
@@ -133,7 +135,8 @@ class ActiveScanControllerTest {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new MarketIntelligenceController(
                         mock(com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService.class),
                         mock(com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService.class),
-                        scans))
+                        scans,
+                        mock(com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository.class)))
                 .setControllerAdvice(new MarketIntelligenceExceptionHandler())
                 .build();
 
@@ -180,7 +183,8 @@ class ActiveScanControllerTest {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new MarketIntelligenceController(
                         mock(com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService.class),
                         mock(com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService.class),
-                        scans))
+                        scans,
+                        mock(com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository.class)))
                 .setControllerAdvice(new MarketIntelligenceExceptionHandler())
                 .build();
 
@@ -207,7 +211,8 @@ class ActiveScanControllerTest {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new MarketIntelligenceController(
                         mock(com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService.class),
                         mock(com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService.class),
-                        scans))
+                        scans,
+                        mock(com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository.class)))
                 .setControllerAdvice(new MarketIntelligenceExceptionHandler())
                 .build();
 

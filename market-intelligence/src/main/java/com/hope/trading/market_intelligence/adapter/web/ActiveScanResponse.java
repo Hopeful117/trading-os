@@ -1,6 +1,8 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.scan.ActiveScanApplicationService;
+import com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
 import com.hope.trading.market_intelligence.application.scan.ActiveScanMarketOutcome;
 import com.hope.trading.market_intelligence.application.scan.ActiveScanResultProjection;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
@@ -26,7 +28,8 @@ public record ActiveScanResponse(
         ProgressResponse progress,
         List<MarketResponse> markets
 ) {
-    static ActiveScanResponse from(ActiveScanResultProjection projection) {
+    static ActiveScanResponse from(
+            ActiveScanResultProjection projection, StrategyMatchRepository matches) {
         return new ActiveScanResponse(
                 projection.scanId(),
                 projection.accountId(),
@@ -39,8 +42,17 @@ public record ActiveScanResponse(
                 projection.createdAt(),
                 projection.updatedAt(),
                 ProgressResponse.from(projection.progress()),
-                projection.markets().stream().map(MarketResponse::from).toList()
+                projection.markets().stream()
+                        .map(market -> MarketResponse.from(market, matches)).toList()
         );
+    }
+
+    /** Minimal truthful Strategy provenance for trader-facing projection. */
+    public record StrategyProvenance(UUID strategyMatchId, UUID strategyId, Integer strategyVersion) {
+        static StrategyProvenance from(StrategyMatch match) {
+            return new StrategyProvenance(match.matchId(), match.strategyId().value(),
+                    match.strategyVersion());
+        }
     }
 
     public record ProgressResponse(
@@ -76,9 +88,12 @@ public record ActiveScanResponse(
             UUID analysisExecutionId,
             List<MarketEligibilityReason> exclusionReasons,
             DiagnosticResponse diagnostic,
-            OpportunityResponse opportunity
+            OpportunityResponse opportunity,
+            StrategyProvenance strategy
     ) {
-        static MarketResponse from(ActiveScanResultProjection.MarketResult market) {
+        static MarketResponse from(
+                ActiveScanResultProjection.MarketResult market,
+                StrategyMatchRepository matches) {
             return new MarketResponse(
                     market.scanMarketId(),
                     market.ordinal(),
@@ -90,8 +105,19 @@ public record ActiveScanResponse(
                     market.analysisExecutionId(),
                     market.exclusionReasons(),
                     DiagnosticResponse.from(market.diagnostic()),
-                    market.opportunity() == null ? null : OpportunityResponse.from(market.opportunity())
+                    market.opportunity() == null ? null : OpportunityResponse.from(market.opportunity()),
+                    strategyProvenance(market.opportunity(), matches)
             );
+        }
+
+        private static StrategyProvenance strategyProvenance(
+                com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity opportunity,
+                StrategyMatchRepository matches) {
+            if (opportunity == null || opportunity.strategyMatchId().isEmpty()) {
+                return null; // historical pre-0012 rows carry no fabricated attribution
+            }
+            return matches.findById(opportunity.strategyMatchId().get())
+                    .map(StrategyProvenance::from).orElse(null);
         }
     }
 
