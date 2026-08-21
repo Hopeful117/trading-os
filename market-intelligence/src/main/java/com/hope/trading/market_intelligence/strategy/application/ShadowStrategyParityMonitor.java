@@ -30,6 +30,7 @@ public class ShadowStrategyParityMonitor {
     private final StrategyEvaluationContextFactory contextFactory;
     private final StrategyEvaluationService evaluationService;
     private final BuiltinStrategies builtins;
+    private final StrategyMatchRecorder matchRecorder;
 
     private final AtomicLong comparisons = new AtomicLong();
     private final AtomicLong matchesAgreed = new AtomicLong();
@@ -38,19 +39,25 @@ public class ShadowStrategyParityMonitor {
     public ShadowStrategyParityMonitor(
             StrategyEvaluationContextFactory contextFactory,
             StrategyEvaluationService evaluationService,
-            BuiltinStrategies builtins
+            BuiltinStrategies builtins,
+            StrategyMatchRecorder matchRecorder
     ) {
         this.contextFactory = contextFactory;
         this.evaluationService = evaluationService;
         this.builtins = builtins;
+        this.matchRecorder = matchRecorder;
     }
 
     /**
      * Runs a shadow evaluation against the legacy observation outcome. Never
      * throws into the production pipeline; never mutates trader-facing state.
+     *
+     * <p>Story 0011: a MATCH evaluation additionally registers an after-commit
+     * StrategyMatch recording intent (shadow persistence, see
+     * {@link StrategyMatchRecorder}).</p>
      */
     public void compareWithLegacyDecision(Observation observation, UUID marketId,
-            Instant evaluatedAt) {
+            UUID analysisExecutionId, Instant evaluatedAt) {
         try {
             String legacyDirection = legacyDirection(observation);
             BigDecimal priceChange = observation.evidence().stream()
@@ -83,6 +90,7 @@ public class ShadowStrategyParityMonitor {
                         evaluation.status(), evaluation.direction().orElse(null),
                         evaluation.contextDigest());
             }
+            matchRecorder.recordAfterCommit(evaluation, analysisExecutionId, observation.id());
         } catch (RuntimeException exception) {
             mismatches.incrementAndGet();
             log.warn("Shadow strategy parity diagnostic failed market={} message={}",

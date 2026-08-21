@@ -66,7 +66,8 @@ public class ProductionIntelligencePipeline {
                     analysisExecutionId, instrument, new OhlcTrendObservationRule());
             // Story 0010 shadow mode: deterministic evaluator parity check.
             // Trader-facing behavior remains owned by the legacy rule above.
-            shadowParity.compareWithLegacyDecision(observation, marketId, clock.instant());
+            shadowParity.compareWithLegacyDecision(
+                    observation, marketId, analysisExecutionId, clock.instant());
         } catch (java.util.NoSuchElementException exception) {
             run.noSignal(exception.getMessage(), clock.instant());
             return runs.save(run);
