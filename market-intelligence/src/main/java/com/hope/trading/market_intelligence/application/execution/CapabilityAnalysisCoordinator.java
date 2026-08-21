@@ -52,6 +52,7 @@ public class CapabilityAnalysisCoordinator {
         AnalysisExecutionPlan strategy = strategies.strategy(request.mode()).plan(request);
         List<ContextRequirement> requirements = requirements(strategy.capabilityIds());
         IntelligenceContext context = contexts.assemble(request, requirements);
+        validateRequiredContext(context, requirements);
         Set<ArtifactDescriptor> descriptors = materializeInitialArtifacts(
                 analysisExecutionId, request, context);
         Set<CapabilityId> selected = strategy.capabilityIds().stream()
@@ -68,6 +69,37 @@ public class CapabilityAnalysisCoordinator {
         } finally {
             controls.remove(analysisExecutionId);
         }
+    }
+
+    private void validateRequiredContext(
+            IntelligenceContext context,
+            List<ContextRequirement> requirements
+    ) {
+        requirements.stream()
+                .filter(ContextRequirement::required)
+                .forEach(requirement -> {
+                    ContextSection section = context.section(requirement.sectionType())
+                            .orElse(ContextSection.missing(requirement,
+                                    "Required context is missing"));
+                    if (section.status() == ContextSectionStatus.MISSING
+                            || section.status() == ContextSectionStatus.UNAVAILABLE) {
+                        throw new AnalysisContextUnavailableException(
+                                failureCode(requirement.sectionType(), false),
+                                section.message() == null
+                                        ? "Required context is unavailable"
+                                        : section.message()
+                        );
+                    }
+                    if (requirement.sectionType() == ContextSectionType.MARKET_SNAPSHOT
+                            && section.status() == ContextSectionStatus.STALE) {
+                        throw new AnalysisContextUnavailableException(
+                                failureCode(requirement.sectionType(), true),
+                                section.message() == null
+                                        ? "Current market snapshot is stale"
+                                        : section.message()
+                        );
+                    }
+                });
     }
 
     public void cancel(UUID analysisExecutionId) {
@@ -227,5 +259,12 @@ public class CapabilityAnalysisCoordinator {
             com.hope.trading.market_intelligence.domain.capability.CapabilityExecution execution) {
         return execution.startedAt().map(start -> Duration.between(
                 start, execution.completedAt().orElse(start))).orElse(Duration.ZERO);
+    }
+
+    private String failureCode(ContextSectionType type, boolean stale) {
+        if (type == ContextSectionType.MARKET_SNAPSHOT) {
+            return stale ? "MARKET_SNAPSHOT_STALE" : "MARKET_SNAPSHOT_UNAVAILABLE";
+        }
+        return stale ? "CONTEXT_STALE" : "CONTEXT_UNAVAILABLE";
     }
 }

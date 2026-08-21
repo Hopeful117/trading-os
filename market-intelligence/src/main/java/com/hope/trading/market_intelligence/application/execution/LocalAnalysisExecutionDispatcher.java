@@ -76,6 +76,13 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
             }
         } catch (CancellationException ignored) {
             // Cancellation state is owned by AnalysisExecutionService.
+        } catch (AnalysisContextUnavailableException exception) {
+            repository.findById(executionId)
+                    .filter(execution -> !execution.status().isTerminal())
+                    .map(execution -> execution.transitionTo(
+                            AnalysisExecutionStatus.FAILED, Instant.now()
+                    ))
+                    .ifPresent(repository::save);
         } catch (RuntimeException exception) {
             repository.findById(executionId)
                     .filter(execution -> !execution.status().isTerminal())

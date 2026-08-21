@@ -37,20 +37,9 @@ public class TickerEventPublisher {
             new ConcurrentHashMap<>();
 
     public void publish(TickerEvent event) {
-
-
-        if (event.symbol() == null) {
-            log.warn("Ignoring ticker event without symbol");
+        String symbol = store(event);
+        if (symbol == null) {
             return;
-        }
-
-        String symbol = normalize(event.symbol());
-
-        persistObservation(event);
-
-        latestEvents.put(symbol, event);
-        if (event.marketId() != null) {
-            latestEventsByMarketId.put(event.marketId(), event);
         }
 
         Sinks.EmitResult result = sink.tryEmitNext(event);
@@ -63,6 +52,10 @@ public class TickerEventPublisher {
                     result
             );
         }
+    }
+
+    public void recordCurrentState(TickerEvent event) {
+        store(event);
     }
 
     private void persistObservation(TickerEvent event) {
@@ -103,6 +96,23 @@ public class TickerEventPublisher {
 
     public Optional<TickerEvent> latestByMarketId(UUID marketId) {
         return Optional.ofNullable(latestEventsByMarketId.get(marketId));
+    }
+
+    private String store(TickerEvent event) {
+        if (event == null || event.symbol() == null) {
+            log.warn("Ignoring ticker event without symbol");
+            return null;
+        }
+
+        String symbol = normalize(event.symbol());
+
+        persistObservation(event);
+
+        latestEvents.put(symbol, event);
+        if (event.marketId() != null) {
+            latestEventsByMarketId.put(event.marketId(), event);
+        }
+        return symbol;
     }
 
     private String normalize(String symbol) {

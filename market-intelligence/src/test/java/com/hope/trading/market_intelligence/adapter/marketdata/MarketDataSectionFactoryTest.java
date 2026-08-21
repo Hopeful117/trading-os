@@ -30,4 +30,26 @@ class MarketDataSectionFactoryTest {
         assertThat(section.status()).isEqualTo(ContextSectionStatus.STALE);
         assertThat(section.provenance().source()).isEqualTo("market-data");
     }
+
+    @Test
+    void keepsMarketSnapshotFreshnessAsReportedByMarketData() {
+        MarketDataSectionFactory factory =
+                new MarketDataSectionFactory(Duration.ofSeconds(30));
+        MarketSnapshotContext payload = new MarketSnapshotContext(
+                UUID.randomUUID(), "BTC/USD", BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.ONE, true,
+                Instant.parse("2026-08-01T12:00:00Z")
+        );
+
+        ContextSection section = factory.snapshot(
+                payload,
+                "STALE",
+                payload.occurredAt(),
+                Instant.parse("2026-08-01T12:00:02Z")
+        );
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.STALE);
+        assertThat(section.message()).isEqualTo("Current market snapshot is stale");
+        assertThat(section.provenance().fetchedAt()).isEqualTo("2026-08-01T12:00:02Z");
+    }
 }
