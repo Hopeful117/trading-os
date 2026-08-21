@@ -7,6 +7,7 @@ import com.hope.trading.market_intelligence.application.opportunity.*;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
+import com.hope.trading.market_intelligence.strategy.application.ShadowStrategyParityMonitor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,16 +23,18 @@ public class ProductionIntelligencePipeline {
     private final MarketDataClient marketData;
     private final JpaIntelligencePipelineRunRepository runs;
     private final Clock clock;
+    private final ShadowStrategyParityMonitor shadowParity;
 
     public ProductionIntelligencePipeline(
             ObservationBuilder observations, OpportunityEngine opportunities,
             MarketDataClient marketData, JpaIntelligencePipelineRunRepository runs,
-            Clock clock) {
+            Clock clock, ShadowStrategyParityMonitor shadowParity) {
         this.observations = observations;
         this.opportunities = opportunities;
         this.marketData = marketData;
         this.runs = runs;
         this.clock = clock;
+        this.shadowParity = shadowParity;
     }
 
     @Transactional
@@ -61,6 +64,9 @@ public class ProductionIntelligencePipeline {
         try {
             observation = observations.build(
                     analysisExecutionId, instrument, new OhlcTrendObservationRule());
+            // Story 0010 shadow mode: deterministic evaluator parity check.
+            // Trader-facing behavior remains owned by the legacy rule above.
+            shadowParity.compareWithLegacyDecision(observation, marketId, clock.instant());
         } catch (java.util.NoSuchElementException exception) {
             run.noSignal(exception.getMessage(), clock.instant());
             return runs.save(run);

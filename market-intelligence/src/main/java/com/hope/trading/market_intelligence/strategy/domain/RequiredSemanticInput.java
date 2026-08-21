@@ -8,7 +8,15 @@ import java.util.Objects;
  * stable semantic key. Deliberately decoupled from pipeline implementation
  * types.
  */
-public record RequiredSemanticInput(SemanticInputType type, String key) {
+public record RequiredSemanticInput(SemanticInputType type, String key)
+        implements Comparable<RequiredSemanticInput> {
+
+    @Override
+    public int compareTo(RequiredSemanticInput other) {
+        int byType = type.compareTo(other.type);
+        return byType != 0 ? byType : key.compareTo(other.key);
+    }
+
 
     public RequiredSemanticInput {
         Objects.requireNonNull(type, "input type is required");
