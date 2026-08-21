@@ -86,6 +86,7 @@ public class JpaTradingOpportunityRepository implements TradingOpportunityReposi
         entity.status = value.status().name(); entity.instrument = value.instrument();
         entity.direction = value.direction().name(); entity.scenario = value.scenario();
         entity.timeframe = value.timeframe(); entity.evaluatedAt = value.evaluatedAt();
+        entity.strategyMatchId = value.strategyMatchId().orElse(null);
         try { entity.payload = mapper.writeValueAsString(domainMapper.toEntity(value)); }
         catch (JsonProcessingException e) { throw new IllegalStateException("Cannot serialize Opportunity", e); }
         return entity;

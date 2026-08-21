@@ -67,8 +67,11 @@ public final class OpportunityEngine {
                 .max(Comparator.comparing(item -> item.version().value()))
                 .orElse(null);
         if (equivalent == null) {
+            OpportunityId lineageId = command.opportunityId() != null
+                    ? new OpportunityId(command.opportunityId())
+                    : identifiers.next();
             TradingOpportunity created = builder.create(
-                    identifiers.next(), command, fused, clock.instant());
+                    lineageId, command, fused, clock.instant());
             return new OpportunityCreationResult.Created(opportunities.append(created));
         }
         TradingOpportunity latest = opportunities.findLatest(equivalent.id()).orElseThrow();

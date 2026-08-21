@@ -1,11 +1,11 @@
 package com.hope.trading.market_intelligence.strategy.adapter.persistence;
 
-import com.hope.trading.market_intelligence.strategy.application.StrategyMatchPersistResult;
+import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
+import com.hope.trading.market_intelligence.strategy.application.StrategyEvaluationContextFactory;
 import com.hope.trading.market_intelligence.strategy.application.StrategyMatchPersister;
-import com.hope.trading.market_intelligence.strategy.application.PendingStrategyMatchRecord;
 import com.hope.trading.market_intelligence.strategy.domain.ConditionResult;
 import com.hope.trading.market_intelligence.strategy.domain.MatchedDirection;
-import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluation;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,111 +22,108 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Story 0011 persistence semantics against real Flyway-managed schema
+ * Story 0012 persistence semantics against real Flyway-managed schema
  * (H2 PostgreSQL mode): round-trip fidelity, business-key idempotency,
- * authoritative uniqueness and independence from strategy_definitions rows.
+ * authoritative uniqueness, independence from strategy_definitions rows.
  */
 @SpringBootTest
 @ActiveProfiles("test")
 class StrategyMatchPersistenceTest {
 
     private static final Instant MATCHED = Instant.parse("2026-08-21T10:00:00Z");
-    private static final Instant STORED = Instant.parse("2026-08-21T10:00:01Z");
     private static final UUID STRATEGY = UUID.fromString("0a10c7e2-9d1e-4f5a-b6c8-123456789001");
     private static final UUID MARKET = UUID.fromString("cccccccc-1111-2222-3333-444444444444");
-    private static final UUID ANALYSIS = UUID.fromString("aaaaaaaa-1111-2222-3333-444444444444");
+    private static final UUID ANALYSIS = UUID.randomUUID();
     private static final UUID OBSERVATION = UUID.fromString("bbbbbbbb-1111-2222-3333-444444444444");
 
     @Autowired com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository repository;
     @Autowired StrategyMatchPersister persister;
 
-    private PendingStrategyMatchRecord pending(String digest) {
-        return new PendingStrategyMatchRecord(STRATEGY, 1, MARKET, ANALYSIS,
-                OBSERVATION, MatchedDirection.LONG, digest,
+    private StrategyEvaluation evaluation(long evaluatedAtOffsetSeconds) {
+        return StrategyEvaluation.match(
+                new BuiltinStrategies().legacyOhlcTrend(),
+                new StrategyEvaluationContextFactory().fromOhlcTrendValues(
+                        MARKET, "ETH/USD",
+                        com.hope.trading.market_intelligence.strategy.domain
+                                .StrategyApplicability.Timeframe.M15,
+                        MATCHED.plusSeconds(evaluatedAtOffsetSeconds),
+                        new BigDecimal("469.88"), MATCHED.minusSeconds(60)),
+                MatchedDirection.LONG,
                 List.of(new ConditionResult("directional_price_change", true,
                         new BigDecimal("469.88").toPlainString())),
-                MATCHED);
+                BigDecimal.ONE, null, java.util.Set.of());
     }
 
     @Test
     void persistsAndReloadsFaithfully() {
-        var result = persister.persist(pending("digest-round-trip")).orElseThrow();
+        var result = persister.persist(evaluation(0), ANALYSIS, OBSERVATION).orElseThrow();
         assertThat(result.created()).isTrue();
 
-        Optional<StrategyMatch> reloaded = repository.findById(
-                result.match().matchId());
+        Optional<com.hope.trading.market_intelligence.strategy.domain.StrategyMatch> reloaded =
+                repository.findById(result.match().matchId());
         assertThat(reloaded).isPresent();
-        StrategyMatch match = reloaded.get();
+        var match = reloaded.get();
         assertThat(match.strategyId().value()).isEqualTo(STRATEGY);
         assertThat(match.strategyVersion()).isEqualTo(1);
         assertThat(match.marketId()).isEqualTo(MARKET);
         assertThat(match.analysisExecutionId()).isEqualTo(ANALYSIS);
         assertThat(match.observationId()).isEqualTo(OBSERVATION);
         assertThat(match.direction()).isEqualTo(MatchedDirection.LONG);
-        assertThat(match.contextDigest()).isEqualTo("digest-round-trip");
         assertThat(match.matchedAt()).isEqualTo(MATCHED);
-        // storage time is distinct from semantic match time and never earlier
         assertThat(match.createdAt()).isAfterOrEqualTo(match.matchedAt());
-        // exact condition results round trip, deterministic order
-        assertThat(match.conditionResults())
-                .containsExactly(new ConditionResult("directional_price_change", true,
+        assertThat(match.conditionResults()).containsExactly(
+                new ConditionResult("directional_price_change", true,
                         new BigDecimal("469.88").toPlainString()));
+        // context digest round-trips exactly as produced by the evaluator
+        assertThat(match.contextDigest()).isEqualTo(result.match().contextDigest());
     }
 
     @Test
     void strategyDefinitionRowIsNotRequired() {
-        // no strategy_definitions row exists for STRATEGY: insert must succeed
-        var result = persister.persist(pending("digest-no-fk")).orElseThrow();
+        var result = persister.persist(evaluation(1000), ANALYSIS, OBSERVATION).orElseThrow();
         assertThat(repository.findById(result.match().matchId())).isPresent();
     }
 
     @Test
     void databaseUniquenessIsAuthoritative() {
-        persister.persist(pending("digest-dup"));
-        // raw second insert of same logical identity through the adapter must hit the constraint
-        assertThatThrownBy(() -> repository.save(StrategyMatch.rehydrate(
-                UUID.randomUUID(), new com.hope.trading.market_intelligence.strategy.domain.StrategyId(STRATEGY),
-                1, MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG,
-                "digest-dup",
-                List.of(new ConditionResult("c", true, "1")),
-                MATCHED, STORED)))
+        persister.persist(evaluation(2000), ANALYSIS, OBSERVATION);
+        String digest = repository.findByAnalysisExecutionId(ANALYSIS).stream()
+                .filter(m -> m.matchedAt().equals(MATCHED.plusSeconds(2000)))
+                .findFirst().orElseThrow().contextDigest();
+
+        // raw second insert of the same logical identity must hit the constraint
+        assertThatThrownBy(() -> repository.save(
+                com.hope.trading.market_intelligence.strategy.domain.StrategyMatch.rehydrate(
+                        UUID.randomUUID(), new com.hope.trading.market_intelligence.strategy.domain.StrategyId(STRATEGY),
+                        1, MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG,
+                        digest,
+                        List.of(new ConditionResult("c", true, "1")),
+                        MATCHED.plusSeconds(2000), MATCHED)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void sameLogicalEvaluationPersistsOnce() {
-        UUID analysis = UUID.randomUUID();
-        PendingStrategyMatchRecord record = new PendingStrategyMatchRecord(
-                STRATEGY, 1, MARKET, analysis, OBSERVATION, MatchedDirection.LONG,
-                "digest-idem",
-                List.of(new ConditionResult("c", true,
-                        BigDecimal.ONE.toPlainString())),
-                MATCHED);
-        var first = persister.persist(record).orElseThrow();
-        var second = persister.persist(record).orElseThrow();
+        var evaluation = evaluation(3000);
+        var first = persister.persist(evaluation, ANALYSIS, OBSERVATION).orElseThrow();
+        var second = persister.persist(evaluation, ANALYSIS, OBSERVATION).orElseThrow();
         assertThat(first.created()).isTrue();
         assertThat(second.created()).isFalse();
         assertThat(second.match().matchId()).isEqualTo(first.match().matchId());
-        assertThat(repository.findByAnalysisExecutionId(analysis)).hasSize(1);
+
+        UUID otherAnalysis = UUID.randomUUID();
+        persister.persist(evaluation, otherAnalysis, OBSERVATION);
+        assertThat(repository.findByAnalysisExecutionId(otherAnalysis)).hasSize(1);
+        assertThat(repository.findByAnalysisExecutionId(otherAnalysis).get(0))
+                .usingRecursiveComparison()
+                .usingOverriddenEquals()
+                .isNotEqualTo(first.match());
     }
 
     @Test
-    void distinctDigestOrAnalysisOrVersionYieldDistinctMatches() {
-        persister.persist(pending("d1"));
-
-        PendingStrategyMatchRecord otherDigest = new PendingStrategyMatchRecord(
-                STRATEGY, 1, MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG,
-                "d2", List.of(), MATCHED);
-        assertThat(persister.persist(otherDigest).orElseThrow().created()).isTrue();
-
-        PendingStrategyMatchRecord otherAnalysis = new PendingStrategyMatchRecord(
-                STRATEGY, 1, MARKET, UUID.randomUUID(), OBSERVATION,
-                MatchedDirection.LONG, "d1", List.of(), MATCHED);
-        assertThat(persister.persist(otherAnalysis).orElseThrow().created()).isTrue();
-
-        PendingStrategyMatchRecord otherVersion = new PendingStrategyMatchRecord(
-                STRATEGY, 2, MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG,
-                "d1", List.of(), MATCHED);
-        assertThat(persister.persist(otherVersion).orElseThrow().created()).isTrue();
+    void distinctContextYieldsDistinctMatches() {
+        persister.persist(evaluation(4000), ANALYSIS, OBSERVATION);
+        var second = persister.persist(evaluation(4001), ANALYSIS, OBSERVATION).orElseThrow();
+        assertThat(second.created()).isTrue(); // different digest -> distinct row
     }
 }

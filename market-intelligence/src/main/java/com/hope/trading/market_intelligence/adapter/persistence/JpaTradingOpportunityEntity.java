@@ -19,6 +19,7 @@ class JpaTradingOpportunityEntity {
     @Column(name = "timeframe", nullable = false, length = 40) String timeframe;
     @Column(name = "evaluated_at", nullable = false) Instant evaluatedAt;
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT") String payload;
+    @Column(name = "strategy_match_id") UUID strategyMatchId;
 }
 
 record JpaTradingOpportunityId(UUID opportunityId, long version) implements Serializable { }

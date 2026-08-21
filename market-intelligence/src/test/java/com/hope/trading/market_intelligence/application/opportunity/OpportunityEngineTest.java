@@ -58,7 +58,7 @@ class OpportunityEngineTest {
         CreateOpportunityCommand command = new CreateOpportunityCommand(
                 base.instrument(), base.direction(), base.scenario(), base.timeframe(),
                 base.origin(), base.observations(), Set.of(ai), base.evaluatedAt(),
-                base.validUntil());
+                base.validUntil(), base.strategyMatchId(), base.opportunityId());
         OpportunityEngine engine = new OpportunityEngine(
                 observationStore, references -> references.equals(Set.of(ai)),
                 new InMemoryTradingOpportunityRepository(),

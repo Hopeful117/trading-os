@@ -23,15 +23,18 @@ public class MarketIntelligenceController {
     private final AnalysisExecutionService executions;
     private final ActiveScanScopeResolutionService activeScanScopeResolution;
     private final ActiveScanApplicationService scans;
+    private final com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches;
 
     public MarketIntelligenceController(
             AnalysisExecutionService executions,
             ActiveScanScopeResolutionService activeScanScopeResolution,
-            ActiveScanApplicationService scans
+            ActiveScanApplicationService scans,
+            com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches
     ) {
         this.executions = executions;
         this.activeScanScopeResolution = activeScanScopeResolution;
         this.scans = scans;
+        this.matches = matches;
     }
 
     @PostMapping("/analyses")
@@ -83,15 +86,17 @@ public class MarketIntelligenceController {
             @Valid @RequestBody CreateActiveScanRequestDto request
     ) {
         UUID actorId = actorId(actorIdHeader);
-        ActiveScanResponse scan = ActiveScanResponse.from(scans.findOwnedProjection(
-                actorId,
-                scans.create(new CreateActiveScanCommand(
+        ActiveScanResponse scan = ActiveScanResponse.from(
+                scans.findOwnedProjection(
                         actorId,
-                        idempotencyKey,
-                        request.accountId(),
-                        request.objective(),
-                        request.requestedMarketIds()
-                )).scanId()));
+                        scans.create(new CreateActiveScanCommand(
+                                actorId,
+                                idempotencyKey,
+                                request.accountId(),
+                                request.objective(),
+                                request.requestedMarketIds()
+                        )).scanId()),
+                matches);
         return ResponseEntity.accepted()
                 .location(URI.create("/api/v1/intelligence/scans/" + scan.scanId()))
                 .body(scan);
@@ -103,7 +108,8 @@ public class MarketIntelligenceController {
             @PathVariable UUID scanId
     ) {
         return ResponseEntity.ok(
-                ActiveScanResponse.from(scans.findOwnedProjection(actorId(actorIdHeader), scanId))
+                ActiveScanResponse.from(
+                        scans.findOwnedProjection(actorId(actorIdHeader), scanId), matches)
         );
     }
 
