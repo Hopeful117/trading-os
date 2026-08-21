@@ -31,8 +31,14 @@ public class MarketSnapshotContextContributor implements ContextContributor {
         ).stream().findFirst().orElse(null);
         ContextRequirement requirement =
                 ContextRequirement.requiredPublic(sectionType());
-        if (snapshot == null || !"AVAILABLE".equals(snapshot.status())) {
-            return ContextSection.missing(requirement, "Current market price is unavailable");
+        if (snapshot == null) {
+            return ContextSection.unavailable(requirement, "Current market snapshot is unavailable");
+        }
+        if ("UNAVAILABLE".equals(snapshot.status())) {
+            return ContextSection.unavailable(requirement, "Current market snapshot is unavailable");
+        }
+        if ("UNKNOWN_MARKET".equals(snapshot.status())) {
+            return ContextSection.unavailable(requirement, "Requested market is unknown to Market Data");
         }
         MarketSnapshotContext payload = new MarketSnapshotContext(
                 snapshot.marketId(),
@@ -43,6 +49,11 @@ public class MarketSnapshotContextContributor implements ContextContributor {
                 snapshot.tradable(),
                 snapshot.occurredAt()
         );
-        return sectionFactory.available(sectionType(), payload, snapshot.occurredAt());
+        return sectionFactory.snapshot(
+                payload,
+                snapshot.status(),
+                snapshot.occurredAt(),
+                snapshot.capturedAt()
+        );
     }
 }

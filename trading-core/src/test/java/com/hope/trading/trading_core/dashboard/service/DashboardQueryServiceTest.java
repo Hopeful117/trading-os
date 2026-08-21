@@ -202,7 +202,7 @@ class DashboardQueryServiceTest {
         return new MarketPriceSnapshotDto(
                 id, symbol, new BigDecimal(price), new BigDecimal(price),
                 new BigDecimal(price), true, Instant.now(),
-                MarketPriceSnapshotStatus.AVAILABLE
+                MarketPriceSnapshotStatus.FRESH
         );
     }
 }

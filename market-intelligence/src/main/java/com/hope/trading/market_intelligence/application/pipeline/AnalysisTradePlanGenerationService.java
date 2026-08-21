@@ -158,7 +158,10 @@ public class AnalysisTradePlanGenerationService {
     }
 
     private void validatePrice(MarketPriceSnapshotResponse price, String instrument) {
-        if (!"AVAILABLE".equals(price.status()) || !price.tradable()
+        if ("STALE".equals(price.status())) {
+            throw failure(HttpStatus.SERVICE_UNAVAILABLE, "MARKET_PRICE_STALE");
+        }
+        if (!"FRESH".equals(price.status()) || !price.tradable()
                 || price.sourceSnapshotId() == null || price.sourceSnapshotVersion() == null
                 || price.capturedAt() == null || price.occurredAt() == null
                 || !instrument.equalsIgnoreCase(price.symbol())) {

@@ -6,11 +6,16 @@ import com.hope.trading.market_data.kraken.dto.ohlc.KrakenOhlcResult;
 import com.hope.trading.market_data.kraken.dto.ohlc.KrakenRestOhlcEntry;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairDto;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairsResponse;
+import com.hope.trading.market_data.kraken.dto.ticker.KrakenRestTickerData;
+import com.hope.trading.market_data.kraken.dto.ticker.KrakenTickerResponse;
 import com.hope.trading.market_data.kraken.helper.KrakenMarketMapper;
+import com.hope.trading.market_data.kraken.helper.KrakenProviderSymbolResolver;
+import com.hope.trading.market_data.kraken.helper.KrakenRestTickerMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.service.OhlcHistoryNormalizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +44,8 @@ class KrakenMarketDataTest {
     @Mock
     private KrakenMarketMapper marketMapper;
     @Mock
+    private KrakenRestTickerMapper restTickerMapper;
+    @Mock
     private KrakenRestOhlcMapper restOhlcMapper;
     @Mock
     private OhlcHistoryNormalizer historyNormalizer;
@@ -50,7 +57,9 @@ class KrakenMarketDataTest {
         provider = new KrakenMarketData(
                 client,
                 marketMapper,
+                new KrakenProviderSymbolResolver(),
                 restOhlcMapper,
+                restTickerMapper,
                 historyNormalizer
         );
     }
@@ -92,7 +101,7 @@ class KrakenMarketDataTest {
         OhlcEvent second = event(market, entries.get(1).openTime(), true);
         OhlcEvent current = event(market, entries.get(2).openTime(), false);
 
-        when(client.findOhlcHistory("XBT/EUR", 1)).thenReturn(response);
+        when(client.findOhlcHistory("XBTEUR", 1)).thenReturn(response);
         when(restOhlcMapper.extract(response)).thenReturn(result);
         when(restOhlcMapper.toEvent(
                 entries.get(0), market, interval, true, responseTimestamp
@@ -121,7 +130,7 @@ class KrakenMarketDataTest {
                 Instant.parse("2026-07-28T10:00:00Z")
         );
 
-        when(client.findOhlcHistory("XBT/EUR", 5)).thenReturn(response);
+        when(client.findOhlcHistory("XBTEUR", 5)).thenReturn(response);
         when(restOhlcMapper.extract(response)).thenReturn(result);
         when(historyNormalizer.fillMissingIntervals(
                 List.of(), OhlcInterval.FIVE_MINUTES
@@ -172,6 +181,34 @@ class KrakenMarketDataTest {
                 .withMessage("Market provider symbol is required");
 
         verify(client, never()).findOhlcHistory(any(), any(Integer.class));
+    }
+
+    @Test
+    void acquiresCurrentSnapshotFromKrakenTicker() {
+        Market market = market("XBT/EUR");
+        KrakenTickerResponse response = new KrakenTickerResponse();
+        KrakenRestTickerData dto = new KrakenRestTickerData();
+        dto.setBid(List.of("99.1"));
+        dto.setAsk(List.of("99.2"));
+        dto.setLastTrade(List.of("99.15"));
+        dto.setVolume(List.of("123"));
+        response.setResult(Map.of("XXBTZEUR", dto));
+        TickerEvent event = new TickerEvent(
+                market.getMarketId(),
+                MarketProvider.KRAKEN,
+                market.getSymbol(),
+                new BigDecimal("99.1"),
+                new BigDecimal("99.2"),
+                new BigDecimal("99.15"),
+                new BigDecimal("123"),
+                Instant.parse("2026-08-01T12:00:00Z")
+        );
+
+        when(client.findTicker("XBTEUR")).thenReturn(response);
+        when(restTickerMapper.toEvent(any(), any(), any())).thenReturn(event);
+
+        assertThat(provider.acquireCurrentSnapshot(market))
+                .contains(event);
     }
 
     private Market market(String symbol) {

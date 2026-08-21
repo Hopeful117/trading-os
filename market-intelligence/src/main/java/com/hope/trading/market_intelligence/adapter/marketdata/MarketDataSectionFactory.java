@@ -22,9 +22,18 @@ public class MarketDataSectionFactory {
             ContextPayload payload,
             Instant occurredAt
     ) {
-        Instant fetchedAt = Instant.now();
+        return available(type, payload, occurredAt, Instant.now());
+    }
+
+    public ContextSection available(
+            ContextSectionType type,
+            ContextPayload payload,
+            Instant occurredAt,
+            Instant fetchedAt
+    ) {
+        Instant effectiveFetchedAt = fetchedAt == null ? Instant.now() : fetchedAt;
         ContextSectionStatus status = occurredAt != null
-                && occurredAt.isBefore(fetchedAt.minus(staleAfter))
+                && occurredAt.isBefore(effectiveFetchedAt.minus(staleAfter))
                 ? ContextSectionStatus.STALE
                 : ContextSectionStatus.AVAILABLE;
         return new ContextSection(
@@ -32,8 +41,33 @@ public class MarketDataSectionFactory {
                 status,
                 ContextSensitivity.PUBLIC,
                 payload,
-                new ContextProvenance("market-data", occurredAt, fetchedAt),
+                new ContextProvenance("market-data", occurredAt, effectiveFetchedAt),
                 status == ContextSectionStatus.STALE ? "Market data is stale" : null
+        );
+    }
+
+    public ContextSection snapshot(
+            ContextPayload payload,
+            String snapshotStatus,
+            Instant occurredAt,
+            Instant fetchedAt
+    ) {
+        ContextSectionStatus status = "STALE".equals(snapshotStatus)
+                ? ContextSectionStatus.STALE
+                : ContextSectionStatus.AVAILABLE;
+        return new ContextSection(
+                ContextSectionType.MARKET_SNAPSHOT,
+                status,
+                ContextSensitivity.PUBLIC,
+                payload,
+                new ContextProvenance(
+                        "market-data",
+                        occurredAt,
+                        fetchedAt == null ? Instant.now() : fetchedAt
+                ),
+                status == ContextSectionStatus.STALE
+                        ? "Current market snapshot is stale"
+                        : null
         );
     }
 }

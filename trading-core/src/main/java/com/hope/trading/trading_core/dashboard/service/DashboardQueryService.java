@@ -189,7 +189,7 @@ public class DashboardQueryService {
                     .stream()
                     .map(marketMapper::toFact)
                     .peek(price -> {
-                        if (price.status() != MarketPriceSnapshotStatus.AVAILABLE) {
+                        if (price.status() != MarketPriceSnapshotStatus.FRESH) {
                             warnings.add("Prix indisponible pour le marché " + price.marketId());
                         }
                     })
@@ -212,7 +212,7 @@ public class DashboardQueryService {
             MarketResponse market = markets.get(position.symbol());
             MarketPriceFact price = market == null ? null : prices.get(market.getMarketId());
             BigDecimal currentPrice = price != null
-                    && price.status() == MarketPriceSnapshotStatus.AVAILABLE
+                    && price.status() == MarketPriceSnapshotStatus.FRESH
                     ? price.price() : null;
             PositionValuation value = valuationService.value(position, currentPrice, equity);
             return new OpenPositionDashboardView(
