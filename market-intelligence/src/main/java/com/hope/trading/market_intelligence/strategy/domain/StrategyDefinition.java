@@ -180,8 +180,20 @@ public final class StrategyDefinition {
     }
 
     /**
-     * Records accepted validation evidence and marks the definition validated.
-     * Operational activation remains a separate explicit step (ADR-036).
+     * Records accepted strategy-validation evidence and marks the definition
+     * validated (ADR-038).
+     *
+     * <p>Contract: {@code evidenceRef} MUST reference accepted deterministic
+     * or empirical strategy-validation evidence bound to this exact
+     * StrategyId and version — for example a backtest/replay report once that
+     * capability exists. Technical correctness (tests, reviews, pipeline
+     * proofs) is necessary but NEVER sufficient: passing it here would make
+     * the status lie. No production producer of such evidence exists yet; a
+     * normal strategy therefore legitimately stays UNVALIDATED until the
+     * future validation capability delivers accepted evidence.</p>
+     *
+     * <p>Operational activation remains a separate explicit human decision
+     * (ADR-036): VALIDATED never implies ENABLED.</p>
      */
     public StrategyDefinition recordValidation(String evidenceRef, Instant now) {
         if (operationalStatus.isTerminal()) {
@@ -258,6 +270,13 @@ public final class StrategyDefinition {
 
     public ValidationStatus validationStatus() { return validationStatus; }
 
+    /**
+     * Reference to the accepted strategy-validation evidence supporting
+     * {@code VALIDATED} (ADR-038). Opaque by design: it points to an
+     * immutable evidence artifact owned outside this aggregate. The artifact
+     * MUST be bound to this exact StrategyId and version; validation never
+     * transfers across versions. Null unless VALIDATED.
+     */
     public String validationEvidenceRef() { return validationEvidenceRef; }
 
     public StrategyDirection direction() { return direction; }
