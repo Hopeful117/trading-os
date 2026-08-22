@@ -10,6 +10,7 @@ import com.hope.trading.market_intelligence.domain.opportunity.*;
 import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
 import com.hope.trading.market_intelligence.strategy.application.LiveStrategyEvaluationRunner;
 import com.hope.trading.market_intelligence.strategy.application.ShadowStrategyParityMonitor;
+import com.hope.trading.market_intelligence.strategy.application.StrategyDefinitionRepository;
 import com.hope.trading.market_intelligence.strategy.application.StrategyMatchPersister;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyApplicability;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
@@ -43,6 +44,11 @@ import java.util.UUID;
  * <p>The pipeline is strategy-agnostic: it does not inspect concrete Strategy
  * IDs. Strategy-specific behavior lives in StrategyEvaluator implementations
  * and declarative StrategyDefinition metadata.</p>
+ *
+ * <p>Strategy definitions are loaded from the persistent runtime source of
+ * truth (ADR-037); BuiltinStrategies only seeds that store at startup. There
+ * is deliberately no fallback to in-memory builtins: a persistence failure
+ * must be visible, never silently bypassed.</p>
  */
 @Service
 public class ProductionIntelligencePipeline {
@@ -57,7 +63,7 @@ public class ProductionIntelligencePipeline {
     private final ShadowStrategyParityMonitor parity;
     private final StrategyMatchPersister matches;
     private final StrategyMatchOpportunityFactory matchOpportunities;
-    private final BuiltinStrategies builtins;
+    private final StrategyDefinitionRepository definitions;
 
     public ProductionIntelligencePipeline(
             ObservationBuilder observations, OpportunityEngine opportunities,
@@ -65,7 +71,7 @@ public class ProductionIntelligencePipeline {
             Clock clock, LiveStrategyEvaluationRunner strategyEvaluation,
             ShadowStrategyParityMonitor parity, StrategyMatchPersister matches,
             StrategyMatchOpportunityFactory matchOpportunities,
-            BuiltinStrategies builtins) {
+            StrategyDefinitionRepository definitions) {
         this.observations = observations;
         this.opportunities = opportunities;
         this.marketData = marketData;
@@ -75,7 +81,7 @@ public class ProductionIntelligencePipeline {
         this.parity = parity;
         this.matches = matches;
         this.matchOpportunities = matchOpportunities;
-        this.builtins = builtins;
+        this.definitions = definitions;
     }
 
     @Transactional
@@ -113,7 +119,9 @@ public class ProductionIntelligencePipeline {
             return runs.save(run);
         }
 
-        List<StrategyDefinition> allStrategies = builtins.all();
+        // Runtime source of truth: persisted definitions (ADR-037), seeded at
+        // startup by BuiltinStrategyBootstrap. Never the in-memory catalogue.
+        List<StrategyDefinition> allStrategies = definitions.findAll();
         // Governance gate first (ADR-036): only domain-eligible strategies
         // participate in live evaluation. An ineligible strategy is simply not
         // selected — it never reaches an evaluator and never produces
