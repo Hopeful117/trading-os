@@ -1,0 +1,300 @@
+name: Trading OS Quality
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-quality:
+    name: Backend Quality — ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - eureka-server
+          - gateway
+          - broker-service
+          - market-data
+          - trading-core
+          - market-intelligence
+          - risk-domain
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21 (Maven cache)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # market-intelligence and risk-domain have no wrapper; reuse the
+      # trading-core wrapper as scripts/test-all.sh does.
+      - name: Build and verify (${{ matrix.module }})
+        working-directory: ${{ matrix.module }}
+        run: |
+          MVN="./mvnw"
+          if [ ! -x "$MVN" ]; then
+            chmod +x ../trading-core/mvnw
+            MVN="../trading-core/mvnw"
+          fi
+          $MVN -B clean verify
+
+      - name: Upload test results (${{ matrix.module }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.module }}
+          path: |
+            ${{ matrix.module }}/target/surefire-reports/*.xml
+            ${{ matrix.module }}/target/failsafe-reports/*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload JaCoCo report (${{ matrix.module }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/site/jacoco/**
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # Compiled bytecode reused by the sonarqube-analysis job so Sonar does
+      # not have to rebuild or rerun tests.
+      - name: Upload compiled classes (${{ matrix.module }})
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: classes-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/classes/**
+          if-no-files-found: ignore
+          retention-days: 1
+
+  frontend-quality:
+    name: Frontend Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22 (npm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: trading-os-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: trading-os-web
+        run: npm ci
+
+      # NON-BLOCKING visibility only. Formatting enforcement is deferred:
+      # the repository contains 58 pre-existing Prettier violations.
+      # Follow-up: mechanical formatting commit -> verify no functional
+      # change -> promote this step to a blocking gate (continue-on-error removed).
+      - name: Format check (Prettier, non-blocking)
+        working-directory: trading-os-web
+        continue-on-error: true
+        run: npx prettier --check .
+
+      - name: Unit tests with coverage (Vitest)
+        working-directory: trading-os-web
+        run: npm run test:coverage
+
+      - name: Production build
+        working-directory: trading-os-web
+        run: npm run build
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-trading-os-web
+          path: trading-os-web/coverage/**
+          if-no-files-found: ignore
+          retention-days: 30
+
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: [backend-quality, frontend-quality]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download JaCoCo reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jacoco-*
+          path: coverage-backend
+
+      - name: Backend JaCoCo summary
+        env:
+          PY_SUMMARY: |
+            import glob
+            import xml.etree.ElementTree as ET
+
+            modules = ['eureka-server', 'gateway', 'broker-service',
+                       'market-data', 'trading-core', 'market-intelligence',
+                       'risk-domain']
+            for module in modules:
+                print(f'== {module} ==')
+                matches = glob.glob(f'coverage-backend/jacoco-{module}/**/jacoco.xml', recursive=True)
+                if not matches:
+                    print('NO_REPORT')
+                    continue
+                root = ET.parse(matches[0]).getroot()
+                counters = {c.get('type'): c for c in root.iter('counter')}
+                for t in ('INSTRUCTION', 'LINE', 'BRANCH', 'COMPLEXITY', 'METHOD', 'CLASS'):
+                    c = counters.get(t)
+                    if c is None:
+                        print(f'{t}: n/a')
+                        continue
+                    m, cv = int(c.get('missed')), int(c.get('covered'))
+                    pct = 100.0 * cv / (m + cv) if m + cv else 0.0
+                    print(f'{t}: {pct:.2f}% ({cv}/{m + cv})')
+        run: python3 -c "$PY_SUMMARY"
+
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-trading-os-web
+          path: coverage-frontend
+
+      - name: Frontend coverage summary
+        run: |
+          if [ -d coverage-frontend ]; then
+            grep -A6 -r "Coverage summary" coverage-frontend || true
+          else
+            echo "Frontend coverage artifact not available (frontend job failed or produced no output)."
+          fi
+
+  # Self-hosted runner so the scanner can reach the local, never-public
+  # SonarQube instance. GitHub-hosted runners cannot reach localhost services.
+  # Reuses the JaCoCo XML, compiled classes, and frontend LCOV produced by the
+  # quality jobs above. No test is rerun for Sonar. Analysis follows the
+  # repository's existing per-module Sonar projects (trading-os:<module>) and
+  # waits for each real Quality Gate result on the server.
+  #
+  # Security: this repository accepts trusted same-repository development PRs.
+  # The head-repo guard below prevents fork pull requests from executing on
+  # the self-hosted runner. Community Build limitation: analyses run as branch
+  # analyses of the PR HEAD; native PR decoration is not available.
+  sonarqube-analysis:
+    name: SonarQube Analysis
+    runs-on: [self-hosted, linux, x64, trading-os-sonar]
+    if: github.event_name == 'workflow_dispatch' ||
+        github.event.pull_request.head.repo.full_name == github.repository
+    needs: [backend-quality, frontend-quality]
+    env:
+      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Require Sonar configuration
+        if: ${{ env.SONAR_HOST_URL == '' || env.SONAR_TOKEN == '' }}
+        run: |
+          echo "::error::SONAR_HOST_URL (repository variable) and SONAR_TOKEN (repository secret) are required."
+          echo "::error::SonarQube analysis is a mandatory part of the Trading OS Quality Gate."
+          exit 1
+
+      - name: Clean persistent-runner workspace
+        run: |
+          rm -rf */target trading-os-web/node_modules trading-os-web/coverage \
+                 trading-os-web/dist sonar-backend-artifacts sonar-frontend-coverage
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download backend coverage and classes
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '{jacoco-*,classes-*}'
+          path: sonar-backend-artifacts
+
+      - name: Restore backend build outputs
+        run: |
+          for module in eureka-server gateway broker-service market-data trading-core market-intelligence risk-domain; do
+            mkdir -p "${module}/target/classes" "${module}/target/site/jacoco"
+            cp -a "sonar-backend-artifacts/classes-${module}/." "${module}/target/classes/"
+            cp -a "sonar-backend-artifacts/jacoco-${module}/." "${module}/target/site/jacoco/"
+            test -f "${module}/target/site/jacoco/jacoco.xml"
+          done
+
+      - name: Analyze Java modules and wait for Quality Gates
+        run: |
+          for module in eureka-server gateway broker-service market-data trading-core market-intelligence risk-domain; do
+            printf 'Analyzing %s\n' "${module}"
+            wrapper="./mvnw"
+            if [ ! -x "$wrapper" ]; then
+              chmod +x ../trading-core/mvnw
+              wrapper="../trading-core/mvnw"
+            fi
+            (cd "$module" && "$wrapper" -B \
+              org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+              -Dsonar.qualitygate.wait=true \
+              -Dsonar.qualitygate.timeout=300)
+          done
+
+      - name: Setup Node 22 (npm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: trading-os-web/package-lock.json
+
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-trading-os-web
+          path: sonar-frontend-coverage
+
+      - name: Analyze frontend and wait for Quality Gate
+        working-directory: trading-os-web
+        run: |
+          mkdir -p coverage/trading-os-web
+          cp -a ../sonar-frontend-coverage/. coverage/trading-os-web/
+          npm ci
+          npm exec -- sonar-scanner-npm \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+  quality-gate:
+    name: Trading OS Quality Gate
+    runs-on: ubuntu-latest
+    needs: [backend-quality, frontend-quality, sonarqube-analysis]
+    if: always()
+    steps:
+      - name: Evaluate mandatory jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          failed=0
+          for job in $RESULTS; do
+            if [ "$job" != "success" ]; then
+              echo "Mandatory job result: $job"
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::Trading OS Quality Gate failed — one or more mandatory jobs did not succeed."
+            exit 1
+          fi
+          echo "All mandatory quality jobs succeeded."
