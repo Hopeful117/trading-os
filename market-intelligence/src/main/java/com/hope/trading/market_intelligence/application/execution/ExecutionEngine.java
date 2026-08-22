@@ -126,6 +126,7 @@ public class ExecutionEngine {
             } catch (TimeoutException exception) {
                 handle.cancel();
                 if (control.isCancellationRequested()) {
+                    lateResults[0]++;
                     return persist(attempt.transitionTo(
                             CapabilityExecutionState.CANCELLED, clock.instant()), history);
                 }
@@ -141,10 +142,14 @@ public class ExecutionEngine {
                                 acceptedResults, control));
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                return persist(attempt.transitionTo(
-                        CapabilityExecutionState.CANCELLED, clock.instant()), history);
+                if (control.isCancellationRequested()) {
+                    lateResults[0]++;
+                    return persist(attempt.transitionTo(
+                            CapabilityExecutionState.CANCELLED, clock.instant()), history);
+                }
             } catch (ExecutionException | RuntimeException exception) {
                 if (control.isCancellationRequested()) {
+                    lateResults[0]++;
                     return persist(attempt.transitionTo(
                             CapabilityExecutionState.CANCELLED, clock.instant()), history);
                 }

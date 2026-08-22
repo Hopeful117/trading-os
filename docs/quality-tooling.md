@@ -111,3 +111,9 @@ Reproduce the full pipeline locally with:
 ```bash
 ./scripts/quality-scan.sh   # verify + coverage + all Sonar scans + gates
 ```
+
+## Pull Request Quality Policy
+
+- persistent changes must be proposed through pull requests;
+- `Trading OS Quality Gate` is intended to become a required merge check;
+- direct pushes to `main` are not part of the normal engineering workflow.
