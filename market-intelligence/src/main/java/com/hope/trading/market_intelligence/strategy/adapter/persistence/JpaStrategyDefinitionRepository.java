@@ -68,6 +68,13 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
                 .toList();
     }
 
+    @Override
+    public List<StrategyDefinition> findAll() {
+        return jpa.findAll().stream()
+                .map(JpaStrategyDefinitionRepository::toDomain)
+                .toList();
+    }
+
     private static StrategyDefinition toDomain(JpaStrategyDefinitionEntity entity) {
         return StrategyDefinition.rehydrate(
                 new StrategyId(entity.getStrategyId()),

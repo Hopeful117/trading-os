@@ -16,4 +16,7 @@ public interface StrategyDefinitionRepository {
     Optional<StrategyDefinition> find(StrategyId strategyId, int version);
 
     List<StrategyDefinition> findAllVersions(StrategyId strategyId);
+
+    /** All persisted strategy versions (runtime governance source of truth). */
+    List<StrategyDefinition> findAll();
 }
