@@ -114,9 +114,18 @@ public class ProductionIntelligencePipeline {
         }
 
         List<StrategyDefinition> allStrategies = builtins.all();
+        // Governance gate first (ADR-036): only domain-eligible strategies
+        // participate in live evaluation. An ineligible strategy is simply not
+        // selected — it never reaches an evaluator and never produces
+        // NO_MATCH or NOT_EVALUABLE.
+        List<StrategyDefinition> governedStrategies = allStrategies.stream()
+                .filter(StrategyDefinition::isEligibleForLiveEvaluation)
+                .toList();
         String provider = marketData.findMarket(marketId).provider();
         String timeframe = observation.horizon();
-        List<StrategyDefinition> applicableStrategies = allStrategies.stream()
+        // Market applicability second (ADR-035 I-8): timeframe/provider fit.
+        // Governance and applicability are independent selection filters.
+        List<StrategyDefinition> applicableStrategies = governedStrategies.stream()
                 .filter(definition -> isApplicable(definition, timeframe, provider))
                 .toList();
         Instant evaluatedAt = clock.instant();

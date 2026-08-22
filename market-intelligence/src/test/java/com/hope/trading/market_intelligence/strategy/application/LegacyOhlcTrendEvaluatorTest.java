@@ -110,12 +110,13 @@ class LegacyOhlcTrendEvaluatorTest {
     }
 
     @Test
-    void bootstrapDefinitionRemainsUnvalidated() {
+    void bootstrapDefinitionRemainsUnvalidatedUnderControlledRun() {
         var definition = builtins.legacyOhlcTrend();
         assertThat(definition.validationStatus()
                 .name()).isEqualTo("UNVALIDATED");
-        assertThat(definition.lifecycle())
+        assertThat(definition.operationalStatus())
                 .isEqualTo(com.hope.trading.market_intelligence.strategy.domain
-                        .StrategyLifecycle.DRAFT);
+                        .StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN);
+        assertThat(definition.isEligibleForLiveEvaluation()).isTrue();
     }
 }

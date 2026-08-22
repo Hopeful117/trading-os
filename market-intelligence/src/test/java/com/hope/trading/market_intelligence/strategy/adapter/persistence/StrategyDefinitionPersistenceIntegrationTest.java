@@ -77,18 +77,19 @@ class StrategyDefinitionPersistenceIntegrationTest {
             StrategyDefinitionRepository repository =
                     context.getBean(StrategyDefinitionRepository.class);
             Instant later = NOW.plusSeconds(30);
-            StrategyDefinition candidate = definition(strategyId, 1)
+            StrategyDefinition bootstrap = definition(strategyId, 1)
                     .transitionTo(com.hope.trading.market_intelligence.strategy.domain
-                            .StrategyLifecycle.CANDIDATE, later);
-            repository.save(candidate);
+                            .StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN, later);
+            repository.save(bootstrap);
 
             StrategyDefinition reloaded = repository.find(strategyId, 1).orElseThrow();
-            assertThat(reloaded.lifecycle())
+            assertThat(reloaded.operationalStatus())
                     .isEqualTo(com.hope.trading.market_intelligence.strategy.domain
-                            .StrategyLifecycle.CANDIDATE);
+                            .StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN);
             assertThat(reloaded.validationStatus())
                     .isEqualTo(com.hope.trading.market_intelligence.strategy.domain
                             .ValidationStatus.UNVALIDATED);
+            assertThat(reloaded.isEligibleForLiveEvaluation()).isTrue();
         }
     }
 

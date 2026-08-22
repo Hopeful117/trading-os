@@ -30,8 +30,8 @@ public class JpaStrategyDefinitionEntity {
     @Column(name = "description")
     private String description;
 
-    @Column(name = "lifecycle_status", nullable = false, length = 20)
-    private String lifecycleStatus;
+    @Column(name = "operational_status", nullable = false, length = 30)
+    private String operationalStatus;
 
     @Column(name = "validation_status", nullable = false, length = 20)
     private String validationStatus;
@@ -107,9 +107,11 @@ public class JpaStrategyDefinitionEntity {
 
     public void setDescription(String description) { this.description = description; }
 
-    public String getLifecycleStatus() { return lifecycleStatus; }
+    public String getOperationalStatus() { return operationalStatus; }
 
-    public void setLifecycleStatus(String lifecycleStatus) { this.lifecycleStatus = lifecycleStatus; }
+    public void setOperationalStatus(String operationalStatus) {
+        this.operationalStatus = operationalStatus;
+    }
 
     public String getValidationStatus() { return validationStatus; }
 

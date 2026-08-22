@@ -7,7 +7,7 @@ import com.hope.trading.market_intelligence.strategy.domain.StrategyApplicabilit
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDirection;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyId;
-import com.hope.trading.market_intelligence.strategy.domain.StrategyLifecycle;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyOperationalStatus;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyParameter;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyParameters;
 import com.hope.trading.market_intelligence.strategy.domain.ValidationStatus;
@@ -38,7 +38,7 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
         entity.setVersion(definition.version());
         entity.setName(definition.name());
         entity.setDescription(definition.description());
-        entity.setLifecycleStatus(definition.lifecycle().name());
+        entity.setOperationalStatus(definition.operationalStatus().name());
         entity.setValidationStatus(definition.validationStatus().name());
         entity.setDirection(definition.direction().name());
         entity.setAssetClasses(join(definition.applicability().assetClasses()));
@@ -74,7 +74,7 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
                 entity.getVersion(),
                 entity.getName(),
                 entity.getDescription(),
-                StrategyLifecycle.valueOf(entity.getLifecycleStatus()),
+                StrategyOperationalStatus.valueOf(entity.getOperationalStatus()),
                 ValidationStatus.valueOf(entity.getValidationStatus()),
                 entity.getValidationEvidenceRef(),
                 StrategyDirection.valueOf(entity.getDirection()),

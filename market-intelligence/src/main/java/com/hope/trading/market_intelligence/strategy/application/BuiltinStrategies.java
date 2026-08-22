@@ -10,6 +10,7 @@ import com.hope.trading.market_intelligence.strategy.domain.StrategyDirection;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluation;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluationContext;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyId;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyOperationalStatus;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyParameter;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyParameters;
 import org.springframework.stereotype.Component;
@@ -26,9 +27,8 @@ import java.util.UUID;
  * hidden mutable configuration; the bootstrap legacy strategy exists purely as
  * a behavior-preserving migration vehicle and is UNVALIDATED by construction.
  *
- * <p>Story 0013: Production BuiltinStrategies remains limited to the existing
- * compatibility fixture. Additional strategies for architectural proof exist
- * only in test source.</p>
+ * <p>Story 0014: carries two production strategy definitions: the bootstrap
+ * legacy compatibility fixture and the OHLC range-expansion setup.</p>
  */
 @Component
 public final class BuiltinStrategies {
@@ -44,22 +44,76 @@ public final class BuiltinStrategies {
     public static final int LEGACY_OHLC_TREND_VERSION = 1;
     public static final String LEGACY_OHLC_TREND_SCENARIO = "OHLC_TREND";
 
-    /** Semantic input key carrying the OHLC first-to-last price change. */
+    /**
+     * Semantic input keys use the canonical UPPER_SNAKE_CASE form. Generic
+     * resolution maps them mechanically to camelCase observation evidence
+     * measurement keys (PRICE_CHANGE -> priceChange, ADR-035 I-3/I-16).
+     * OBSERVED_AT is reserved for the evidence timestamp metadata.
+     */
     public static final RequiredSemanticInput PRICE_CHANGE = new RequiredSemanticInput(
-            SemanticInputType.OBSERVATION, "OHLC_PRICE_CHANGE");
+            SemanticInputType.OBSERVATION, "PRICE_CHANGE");
     /** Semantic input key carrying the observation timestamp. */
-    public static final RequiredSemanticInput OBSERVED_AT = new RequiredSemanticInput(
-            SemanticInputType.OBSERVATION, "OHLC_OBSERVED_AT");
+    public static final RequiredSemanticInput OBSERVED_AT =
+            StrategyEvaluationContextFactory.EVIDENCE_TIME_KEY;
     public static final String CONDITION_DIRECTIONAL_CHANGE = "directional_price_change";
 
+    // ---- Second production strategy: OHLC Range Expansion (Story 0014) ----
+
+    public static final UUID OHLC_RANGE_EXPANSION_ID =
+            UUID.fromString("0a10c7e2-9d1e-4f5a-b6c8-123456789002");
+    public static final String OHLC_RANGE_EXPANSION_TYPE = "OHLC_RANGE_EXPANSION_V1";
+    public static final int OHLC_RANGE_EXPANSION_VERSION = 1;
+    public static final String OHLC_RANGE_EXPANSION_SCENARIO = "RANGE_EXPANSION";
+
+    /** Semantic input carrying the high-to-low range as percentage of lowest price. */
+    public static final RequiredSemanticInput RANGE_PERCENTAGE = new RequiredSemanticInput(
+            SemanticInputType.OBSERVATION, "RANGE_PERCENTAGE");
+    public static final String CONDITION_SIGNIFICANT_MOVE = "significant_directional_move";
+    public static final String CONDITION_RANGE_EXPANSION = "range_expansion";
+
+    public StrategyDefinition ohlcRangeExpansion() {
+        return StrategyDefinition.create(
+                new StrategyId(OHLC_RANGE_EXPANSION_ID),
+                OHLC_RANGE_EXPANSION_VERSION,
+                "OHLC Range Expansion",
+                "Volatility-expansion setup: a directional price change that is "
+                        + "significant in absolute terms AND occurs within a "
+                        + "substantial high-to-low range. Direction follows the sign "
+                        + "of the price change. NOT quantitatively validated.",
+                OHLC_RANGE_EXPANSION_SCENARIO,
+                StrategyDirection.DYNAMIC,
+                new StrategyApplicability(
+                        Set.of("CRYPTO"),
+                        Set.of(StrategyApplicability.Timeframe.M15),
+                        Set.of("KRAKEN")),
+                Set.of(PRICE_CHANGE, RANGE_PERCENTAGE, OBSERVED_AT),
+                new StrategyParameters(List.of(
+                        new StrategyParameter("minimumAbsoluteChange",
+                                StrategyParameter.ParameterType.DECIMAL, new BigDecimal("1")),
+                        new StrategyParameter("minimumRangePercentage",
+                                StrategyParameter.ParameterType.DECIMAL, new BigDecimal("1")),
+                        new StrategyParameter("validityDuration",
+                                StrategyParameter.ParameterType.DURATION, Duration.ofMinutes(30)),
+                        new StrategyParameter("horizon",
+                                StrategyParameter.ParameterType.STRING, "15m"))),
+                null,
+                Instant.EPOCH);
+    }
+
     public StrategyDefinition legacyOhlcTrend() {
+        // Governance (ADR-036): the bootstrap fixture is UNVALIDATED by truth
+        // (ADR-034 forbids labeling it quantitatively validated) and runs under
+        // the explicit temporary BOOTSTRAP_CONTROLLED_RUN operational state,
+        // expressed purely as definition data — no orchestration exception.
         return StrategyDefinition.create(
                 new StrategyId(LEGACY_OHLC_TREND_ID),
                 LEGACY_OHLC_TREND_VERSION,
                 "Legacy OHLC Trend",
                 "Bootstrap migration vehicle porting the legacy OHLC trend "
                         + "observation rule. Condition is intentionally permissive "
-                        + "(any nonzero price change). NOT quantitatively validated.",
+                        + "(any nonzero price change). NOT quantitatively validated; "
+                        + "runs under controlled bootstrap evaluation with shadow "
+                        + "parity monitoring.",
                 LEGACY_OHLC_TREND_SCENARIO,
                 StrategyDirection.DYNAMIC,
                 new StrategyApplicability(
@@ -73,11 +127,12 @@ public final class BuiltinStrategies {
                         new StrategyParameter("horizon",
                                 StrategyParameter.ParameterType.STRING, "15m"))),
                 null,
-                Instant.EPOCH);
+                Instant.EPOCH)
+                .transitionTo(StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN, Instant.EPOCH);
     }
 
     public List<StrategyDefinition> all() {
-        return List.of(legacyOhlcTrend());
+        return List.of(legacyOhlcTrend(), ohlcRangeExpansion());
     }
 }
 
