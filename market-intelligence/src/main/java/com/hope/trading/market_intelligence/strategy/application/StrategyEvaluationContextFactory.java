@@ -74,41 +74,59 @@ public class StrategyEvaluationContextFactory {
             Observation observation,
             StrategyEvaluationContext.Builder builder
     ) {
+        if (EVIDENCE_TIME_KEY.equals(required)) {
+            Instant observedAt = observation.evidence().stream()
+                    .map(ObservationEvidence::observedAt)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+            if (observedAt != null) {
+                builder.input(required, StrategyEvaluationContext.SemanticValue.instant(observedAt));
+            }
+            return;
+        }
+        // Generic rule: UPPER_SNAKE_CASE semantic key -> camelCase measurement
+        // key. No strategy-specific or key-specific mapping table exists.
         BigDecimal value = observation.evidence().stream()
                 .map(ObservationEvidence::measurements)
                 .map(m -> m.get(measurementKeyFor(required)))
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
-        Instant observedAt = observation.evidence().stream()
-                .map(ObservationEvidence::observedAt)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
-
-        if (isPriceChangeKey(required) && value != null) {
+        if (value != null) {
             builder.input(required, StrategyEvaluationContext.SemanticValue.decimal(value));
-        } else if (isObservedAtKey(required) && observedAt != null) {
-            builder.input(required, StrategyEvaluationContext.SemanticValue.instant(observedAt));
         }
         // Unknown OBSERVATION keys are silently skipped; the evaluator will
         // decide NOT_EVALUABLE if the input is required but absent.
     }
 
-    private static String measurementKeyFor(RequiredSemanticInput input) {
-        if (isPriceChangeKey(input)) {
-            return "priceChange";
+    /**
+     * Generic semantic-key normalization: converts the canonical
+     * {@code UPPER_SNAKE_CASE} form of a RequiredSemanticInput key into the
+     * camelCase measurement key used by ObservationEvidence measurements
+     * ({@code PRICE_CHANGE -> priceChange}, {@code RANGE_PERCENTAGE ->
+     * rangePercentage}). Purely mechanical; contains no knowledge of any
+     * concrete strategy or semantic key.
+     */
+    static String measurementKeyFor(RequiredSemanticInput required) {
+        String[] words = required.key().toLowerCase(java.util.Locale.ROOT).split("_");
+        StringBuilder camel = new StringBuilder(words[0]);
+        for (int i = 1; i < words.length; i++) {
+            if (!words[i].isEmpty()) {
+                camel.append(Character.toUpperCase(words[i].charAt(0)))
+                        .append(words[i].substring(1));
+            }
         }
-        return input.key();
+        return camel.toString();
     }
 
-    private static boolean isPriceChangeKey(RequiredSemanticInput input) {
-        return "OHLC_PRICE_CHANGE".equals(input.key());
-    }
-
-    private static boolean isObservedAtKey(RequiredSemanticInput input) {
-        return "OHLC_OBSERVED_AT".equals(input.key());
-    }
+    /**
+     * Reserved semantic input resolved from evidence observation metadata
+     * (the evidence timestamp) instead of a decimal measurement. This is an
+     * evidence-metadata convention, not a per-strategy mapping.
+     */
+    public static final RequiredSemanticInput EVIDENCE_TIME_KEY =
+            new RequiredSemanticInput(SemanticInputType.OBSERVATION, "OBSERVED_AT");
 
     private static StrategyApplicability.Timeframe firstTimeframe(StrategyDefinition definition) {
         return definition.applicability().timeframes().stream()

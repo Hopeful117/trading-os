@@ -67,6 +67,23 @@ class StrategyEvaluationTest {
     }
 
     @Test
+    void equalityAndHashCodeTolerateNullNonMatchFields() {
+        // Non-MATCH evaluations carry null direction/confidence by design;
+        // equals/hashCode must not throw (latent List.of bug fixed in 0014).
+        StrategyEvaluation first = StrategyEvaluation.notEvaluable(
+                definition(), context(), "missing input");
+        StrategyEvaluation second = StrategyEvaluation.notEvaluable(
+                definition(), context(), "missing input");
+        StrategyEvaluation different = StrategyEvaluation.noMatch(
+                definition(), context(), List.of(), "no signal", Set.of());
+
+        assertThat(first).isEqualTo(second);
+        assertThat(first).hasSameHashCodeAs(second);
+        assertThat(first).isNotEqualTo(different);
+        assertThat(first.hashCode()).isNotZero();
+    }
+
+    @Test
     void digestIsStableAcrossEquivalentContextsAndOrderIndependent() {
         RequiredSemanticInput a = new RequiredSemanticInput(SemanticInputType.OBSERVATION, "A");
         RequiredSemanticInput b = new RequiredSemanticInput(SemanticInputType.OBSERVATION, "B");

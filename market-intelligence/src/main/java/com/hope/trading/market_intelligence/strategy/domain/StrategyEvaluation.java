@@ -166,7 +166,10 @@ public final class StrategyEvaluation {
     }
 
     private List<Object> hashCodeFields() {
-        return List.of(strategyId, strategyVersion, marketId, evaluatedAt, status, direction,
-                conditionResults, confidence, explanation, consumedInputs, contextDigest);
+        // Arrays.asList tolerates null members; non-MATCH evaluations carry
+        // null direction/confidence by design.
+        return java.util.Arrays.asList(strategyId, strategyVersion, marketId, evaluatedAt,
+                status, direction, conditionResults, confidence, explanation,
+                consumedInputs, contextDigest);
     }
 }

@@ -2,20 +2,21 @@ package com.hope.trading.market_intelligence.strategy.domain;
 
 public class IllegalStrategyTransitionException extends RuntimeException {
 
-    private final StrategyLifecycle from;
-    private final StrategyLifecycle to;
+    private final StrategyOperationalStatus from;
+    private final StrategyOperationalStatus to;
 
-    public IllegalStrategyTransitionException(StrategyLifecycle from, StrategyLifecycle to) {
-        super("Illegal strategy lifecycle transition " + from + " -> " + to);
+    public IllegalStrategyTransitionException(
+            StrategyOperationalStatus from, StrategyOperationalStatus to) {
+        super("Illegal strategy operational status transition " + from + " -> " + to);
         this.from = from;
         this.to = to;
     }
 
-    public StrategyLifecycle from() {
+    public StrategyOperationalStatus from() {
         return from;
     }
 
-    public StrategyLifecycle to() {
+    public StrategyOperationalStatus to() {
         return to;
     }
 }

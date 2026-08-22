@@ -42,11 +42,13 @@ class StrategyDefinitionTest {
     }
 
     @Test
-    void createdDefinitionStartsAsUnvalidatedDraft() {
+    void createdDefinitionStartsAsUnvalidatedAndDisabled() {
         StrategyDefinition definition = draft();
-        assertThat(definition.lifecycle()).isEqualTo(StrategyLifecycle.DRAFT);
+        assertThat(definition.operationalStatus())
+                .isEqualTo(StrategyOperationalStatus.DISABLED);
         assertThat(definition.validationStatus()).isEqualTo(ValidationStatus.UNVALIDATED);
         assertThat(definition.validationEvidenceRef()).isNull();
+        assertThat(definition.isEligibleForLiveEvaluation()).isFalse();
         assertThat(definition.createdAt()).isEqualTo(NOW);
         assertThat(definition.updatedAt()).isEqualTo(NOW);
     }
@@ -75,7 +77,8 @@ class StrategyDefinitionTest {
         StrategyDefinition v1 = draft().recordValidation("backtest://bt-1", LATER);
         StrategyDefinition v2 = v1.deriveVersion(2, LATER);
         assertThat(v2.version()).isEqualTo(2);
-        assertThat(v2.lifecycle()).isEqualTo(StrategyLifecycle.DRAFT);
+        assertThat(v2.operationalStatus())
+                .isEqualTo(StrategyOperationalStatus.DISABLED);
         assertThat(v2.validationStatus()).isEqualTo(ValidationStatus.UNVALIDATED);
         assertThat(v2.requiredInputs()).isEqualTo(v1.requiredInputs());
         assertThat(v2.parameters()).isEqualTo(v1.parameters());
@@ -90,66 +93,74 @@ class StrategyDefinitionTest {
     }
 
     @Test
-    void legalTransitionsFollowAdr034Chain() {
-        StrategyDefinition definition = draft();
-        definition = definition.transitionTo(StrategyLifecycle.CANDIDATE, LATER);
-        definition = definition.recordValidation("backtest://evidence-1", LATER)
-                .transitionTo(StrategyLifecycle.VALIDATED, LATER);
-        definition = definition.transitionTo(StrategyLifecycle.ENABLED, LATER);
-        definition = definition.retire(LATER);
-        assertThat(definition.lifecycle()).isEqualTo(StrategyLifecycle.RETIRED);
+    void governanceDimensionsStayIndependent() {
+        // A strategy can be validated without being active.
+        StrategyDefinition validatedButDisabled =
+                draft().recordValidation("backtest://evidence", LATER);
+        assertThat(validatedButDisabled.validationStatus())
+                .isEqualTo(ValidationStatus.VALIDATED);
+        assertThat(validatedButDisabled.operationalStatus())
+                .isEqualTo(StrategyOperationalStatus.DISABLED);
+        assertThat(validatedButDisabled.isEligibleForLiveEvaluation()).isFalse();
+
+        // ...and becomes active only through an explicit operational decision.
+        StrategyDefinition validatedAndEnabled =
+                validatedButDisabled.transitionTo(StrategyOperationalStatus.ENABLED, LATER);
+        assertThat(validatedAndEnabled.isEligibleForLiveEvaluation()).isTrue();
+
+        // Disabling keeps the validation truth intact (ADR-036).
+        StrategyDefinition disabledAgain =
+                validatedAndEnabled.transitionTo(StrategyOperationalStatus.DISABLED, LATER);
+        assertThat(disabledAgain.validationStatus()).isEqualTo(ValidationStatus.VALIDATED);
+        assertThat(disabledAgain.isEligibleForLiveEvaluation()).isFalse();
     }
 
     @Test
-    void illegalTransitionsAreRejected() {
-        StrategyDefinition fresh = draft();
-        assertThatThrownBy(() -> fresh.transitionTo(StrategyLifecycle.ENABLED, LATER))
-                .isInstanceOf(IllegalStrategyTransitionException.class);
-        StrategyDefinition candidate = fresh.transitionTo(StrategyLifecycle.CANDIDATE, LATER);
-        assertThatThrownBy(() -> candidate.transitionTo(StrategyLifecycle.ENABLED, LATER))
-                .isInstanceOf(IllegalStrategyTransitionException.class);
-        StrategyDefinition enabled = candidate
+    void enabledRequiresAcceptedValidationEvidence() {
+        StrategyDefinition unvalidated = draft();
+        assertThatThrownBy(() ->
+                unvalidated.transitionTo(StrategyOperationalStatus.ENABLED, LATER))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        // A validated definition can be enabled; a new derived version always
+        // restarts governance from scratch and is therefore not eligible.
+        StrategyDefinition enabled = unvalidated
                 .recordValidation("backtest://evidence", LATER)
-                .transitionTo(StrategyLifecycle.VALIDATED, LATER)
-                .transitionTo(StrategyLifecycle.ENABLED, LATER);
-        assertThatThrownBy(() -> enabled.retire(LATER).retire(LATER.plusSeconds(1)))
-                .isInstanceOf(IllegalStrategyTransitionException.class);
+                .transitionTo(StrategyOperationalStatus.ENABLED, LATER);
+        assertThat(enabled.isEligibleForLiveEvaluation()).isTrue();
+        assertThat(enabled.deriveVersion(2, LATER).isEligibleForLiveEvaluation()).isFalse();
     }
 
     @Test
     void retiredIsTerminal() {
         StrategyDefinition retired = draft().retire(LATER);
-        assertThat(retired.lifecycle().isTerminal()).isTrue();
-        assertThatThrownBy(() -> retired.transitionTo(StrategyLifecycle.DRAFT, LATER.plusSeconds(1)))
+        assertThat(retired.operationalStatus().isTerminal()).isTrue();
+        assertThat(retired.isEligibleForLiveEvaluation()).isFalse();
+        assertThatThrownBy(() -> retired.transitionTo(
+                StrategyOperationalStatus.DISABLED, LATER.plusSeconds(1)))
                 .isInstanceOf(IllegalStrategyTransitionException.class);
         assertThatThrownBy(() -> retired.recordValidation("backtest://x", LATER.plusSeconds(1)))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
-    void validatedLifecycleRequiresAcceptedEvidence() {
-        StrategyDefinition candidate = draft().transitionTo(StrategyLifecycle.CANDIDATE, LATER);
-        StrategyDefinition withEvidence =
-                candidate.recordValidation("backtest://evidence", LATER);
-        StrategyDefinition validated =
-                withEvidence.transitionTo(StrategyLifecycle.VALIDATED, LATER.plusSeconds(1));
-        assertThat(validated.lifecycle()).isEqualTo(StrategyLifecycle.VALIDATED);
-        assertThat(validated.validationStatus()).isEqualTo(ValidationStatus.VALIDATED);
-        assertThat(validated.validationEvidenceRef()).isEqualTo("backtest://evidence");
+    void bootstrapControlledRunIsExplicitUnvalidatedLiveState() {
+        StrategyDefinition fixture = draft()
+                .transitionTo(StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN, LATER);
+        assertThat(fixture.validationStatus()).isEqualTo(ValidationStatus.UNVALIDATED);
+        assertThat(fixture.operationalStatus())
+                .isEqualTo(StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN);
+        assertThat(fixture.isEligibleForLiveEvaluation()).isTrue();
 
-        // a governance VALIDATED lifecycle is impossible while evidence is absent
-        StrategyDefinition unvalidatedCandidate =
-                StrategyDefinition.create(
-                        StrategyId.random(), 1, "n", null, "N", StrategyDirection.LONG,
-                        applicability(), Set.of(), StrategyParameters.empty(), null, NOW)
-                        .transitionTo(StrategyLifecycle.CANDIDATE, NOW);
-
-        // recordValidation then removing evidence is impossible (immutable),
-        // so simulate the missing-evidence case through an unrecorded candidate:
-        // transition must fail because validationStatus is still UNVALIDATED.
-        assertThatThrownBy(() -> unvalidatedCandidate.transitionTo(
-                StrategyLifecycle.VALIDATED, NOW))
+        // It cannot be labeled validated while in the bootstrap state...
+        assertThatThrownBy(() -> fixture.recordValidation("backtest://x", LATER.plusSeconds(1)))
                 .isInstanceOf(IllegalArgumentException.class);
+        // ...and its only exit is retirement.
+        assertThatThrownBy(() -> fixture.transitionTo(
+                StrategyOperationalStatus.ENABLED, LATER.plusSeconds(1)))
+                .isInstanceOf(IllegalStrategyTransitionException.class);
+        assertThat(fixture.retire(LATER.plusSeconds(1)).operationalStatus())
+                .isEqualTo(StrategyOperationalStatus.RETIRED);
     }
 
     @Test

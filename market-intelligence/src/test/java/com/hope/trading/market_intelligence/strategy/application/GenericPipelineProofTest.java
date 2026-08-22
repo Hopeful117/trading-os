@@ -39,9 +39,9 @@ class GenericPipelineProofTest {
     private static final UUID MARKET = UUID.fromString("dddddddd-1111-2222-3333-444444444444");
 
     private static final RequiredSemanticInput PRICE_CHANGE =
-            new RequiredSemanticInput(SemanticInputType.OBSERVATION, "OHLC_PRICE_CHANGE");
+            new RequiredSemanticInput(SemanticInputType.OBSERVATION, "PRICE_CHANGE");
     private static final RequiredSemanticInput OBSERVED_AT =
-            new RequiredSemanticInput(SemanticInputType.OBSERVATION, "OHLC_OBSERVED_AT");
+            new RequiredSemanticInput(SemanticInputType.OBSERVATION, "OBSERVED_AT");
 
     /**
      * Test-only fake strategy definition. Exists ONLY in test source.
@@ -188,9 +188,13 @@ class GenericPipelineProofTest {
     void productionBuiltinStrategiesDoesNotContainFakeStrategy() {
         BuiltinStrategies builtins = new BuiltinStrategies();
         List<StrategyDefinition> all = builtins.all();
-        assertThat(all).hasSize(1);
-        assertThat(all.getFirst().strategyId().value())
-                .isEqualTo(BuiltinStrategies.LEGACY_OHLC_TREND_ID);
+        assertThat(all).hasSize(2);
+        assertThat(all).extracting(definition -> definition.strategyId().value())
+                .containsExactlyInAnyOrder(
+                        BuiltinStrategies.LEGACY_OHLC_TREND_ID,
+                        BuiltinStrategies.OHLC_RANGE_EXPANSION_ID);
+        assertThat(all.stream().map(StrategyDefinition::name))
+                .doesNotContain("Fake Momentum");
     }
 
     @Test

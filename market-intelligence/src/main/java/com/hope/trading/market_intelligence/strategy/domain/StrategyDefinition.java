@@ -6,13 +6,25 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * One exact version of a trading strategy (ADR-034).
+ * One exact version of a trading strategy (ADR-034, governance split per
+ * ADR-036).
  *
  * <p>The pair ({@code strategyId}, {@code version}) uniquely identifies the
  * deterministic semantics of this strategy forever. Semantic content is
  * immutable per version; semantic evolution is expressed by creating a new
  * version, never by mutating an existing one. Only governance metadata
- * (lifecycle status, validation status/evidence) may evolve in place.</p>
+ * (operational status, validation status/evidence) may evolve in place.</p>
+ *
+ * <p>Governance is two-dimensional and deliberately explicit:</p>
+ * <ul>
+ *   <li>{@code validationStatus} (+ evidence reference) answers: what level of
+ *       accepted deterministic evidence supports this strategy?</li>
+ *   <li>{@code operationalStatus} answers: is it currently authorized to run
+ *       in live evaluation?</li>
+ * </ul>
+ *
+ * <p>A strategy can be validated without being active, and it can be activated
+ * only when the domain governance rules allow it.</p>
  */
 public final class StrategyDefinition {
 
@@ -21,7 +33,7 @@ public final class StrategyDefinition {
     private final String name;
     private final String description;
     private final String scenario;
-    private final StrategyLifecycle lifecycle;
+    private final StrategyOperationalStatus operationalStatus;
     private final ValidationStatus validationStatus;
     private final String validationEvidenceRef;
     private final StrategyDirection direction;
@@ -38,7 +50,7 @@ public final class StrategyDefinition {
             String name,
             String description,
             String scenario,
-            StrategyLifecycle lifecycle,
+            StrategyOperationalStatus operationalStatus,
             ValidationStatus validationStatus,
             String validationEvidenceRef,
             StrategyDirection direction,
@@ -59,7 +71,8 @@ public final class StrategyDefinition {
         this.name = name.trim();
         this.description = description == null || description.isBlank() ? null : description.trim();
         this.scenario = scenario == null || scenario.isBlank() ? name.trim() : scenario.trim();
-        this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle is required");
+        this.operationalStatus = Objects.requireNonNull(
+                operationalStatus, "operationalStatus is required");
         this.validationStatus = Objects.requireNonNull(validationStatus, "validationStatus is required");
         this.validationEvidenceRef = normalizeRef(validationEvidenceRef);
         this.direction = Objects.requireNonNull(direction, "direction is required");
@@ -78,11 +91,20 @@ public final class StrategyDefinition {
             throw new IllegalArgumentException(
                     "VALIDATED strategies require a validation evidence reference");
         }
-        if (lifecycle == StrategyLifecycle.VALIDATED || lifecycle == StrategyLifecycle.ENABLED) {
+        // Governance invariant (ADR-036): full operational authorization
+        // requires accepted validation evidence. The bootstrap controlled run
+        // is the only unvalidated live state and must stay UNVALIDATED.
+        if (operationalStatus == StrategyOperationalStatus.ENABLED) {
             if (validationStatus != ValidationStatus.VALIDATED || validationEvidenceRef == null) {
                 throw new IllegalArgumentException(
-                        "lifecycle " + lifecycle + " requires accepted validation evidence");
+                        "ENABLED strategies require accepted validation evidence");
             }
+        }
+        if (operationalStatus == StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN
+                && validationStatus != ValidationStatus.UNVALIDATED) {
+            throw new IllegalArgumentException(
+                    "BOOTSTRAP_CONTROLLED_RUN is reserved for the UNVALIDATED "
+                            + "bootstrap migration vehicle");
         }
     }
 
@@ -100,7 +122,8 @@ public final class StrategyDefinition {
             Instant createdAt
     ) {
         return new StrategyDefinition(
-                strategyId, version, name, description, scenario, StrategyLifecycle.DRAFT,
+                strategyId, version, name, description, scenario,
+                StrategyOperationalStatus.DISABLED,
                 ValidationStatus.UNVALIDATED, null, direction, applicability,
                 requiredInputs, parameters, researchRef, createdAt, createdAt);
     }
@@ -115,7 +138,7 @@ public final class StrategyDefinition {
             int version,
             String name,
             String description,
-            StrategyLifecycle lifecycle,
+            StrategyOperationalStatus operationalStatus,
             ValidationStatus validationStatus,
             String validationEvidenceRef,
             StrategyDirection direction,
@@ -126,7 +149,8 @@ public final class StrategyDefinition {
             Instant createdAt,
             Instant updatedAt
     ) {
-        return new StrategyDefinition(strategyId, version, name, description, null, lifecycle,
+        return new StrategyDefinition(strategyId, version, name, description, null,
+                operationalStatus,
                 validationStatus, validationEvidenceRef, direction, applicability,
                 requiredInputs, parameters, researchRef, createdAt, updatedAt);
     }
@@ -141,25 +165,26 @@ public final class StrategyDefinition {
                     "next version must be greater than current version " + version);
         }
         return new StrategyDefinition(
-                strategyId, nextVersion, name, description, scenario, StrategyLifecycle.DRAFT,
+                strategyId, nextVersion, name, description, scenario,
+                StrategyOperationalStatus.DISABLED,
                 ValidationStatus.UNVALIDATED, null, direction, applicability,
                 requiredInputs, parameters, researchRef, now, now);
     }
 
-    public StrategyDefinition transitionTo(StrategyLifecycle target, Instant now) {
-        Objects.requireNonNull(target, "target lifecycle is required");
-        if (!lifecycle.canTransitionTo(target)) {
-            throw new IllegalStrategyTransitionException(lifecycle, target);
+    public StrategyDefinition transitionTo(StrategyOperationalStatus target, Instant now) {
+        Objects.requireNonNull(target, "target operational status is required");
+        if (!operationalStatus.canTransitionTo(target)) {
+            throw new IllegalStrategyTransitionException(operationalStatus, target);
         }
-        return copyLifecycleTo(target, now);
+        return copyOperationalStatusTo(target, now);
     }
 
     /**
      * Records accepted validation evidence and marks the definition validated.
-     * The governance transition to VALIDATED remains a separate explicit step.
+     * Operational activation remains a separate explicit step (ADR-036).
      */
     public StrategyDefinition recordValidation(String evidenceRef, Instant now) {
-        if (lifecycle.isTerminal()) {
+        if (operationalStatus.isTerminal()) {
             throw new IllegalStateException("retired strategies cannot be validated");
         }
         String normalized = normalizeRef(evidenceRef);
@@ -170,17 +195,19 @@ public final class StrategyDefinition {
     }
 
     public StrategyDefinition retire(Instant now) {
-        return transitionTo(StrategyLifecycle.RETIRED, now);
+        return transitionTo(StrategyOperationalStatus.RETIRED, now);
     }
 
-    private StrategyDefinition copyLifecycleTo(StrategyLifecycle target, Instant now) {
+    private StrategyDefinition copyOperationalStatusTo(
+            StrategyOperationalStatus target, Instant now) {
         return new StrategyDefinition(strategyId, version, name, description, scenario, target,
                 validationStatus, validationEvidenceRef, direction, applicability,
                 requiredInputs, parameters, researchRef, createdAt, now);
     }
 
     private StrategyDefinition copyValidationTo(ValidationStatus status, String evidenceRef, Instant now) {
-        return new StrategyDefinition(strategyId, version, name, description, scenario, lifecycle,
+        return new StrategyDefinition(strategyId, version, name, description, scenario,
+                operationalStatus,
                 status, evidenceRef, direction, applicability, requiredInputs,
                 parameters, researchRef, createdAt, now);
     }
@@ -210,7 +237,24 @@ public final class StrategyDefinition {
 
     public String scenario() { return scenario; }
 
-    public StrategyLifecycle lifecycle() { return lifecycle; }
+    public StrategyOperationalStatus operationalStatus() { return operationalStatus; }
+
+    /**
+     * Single source of truth for live-evaluation governance (ADR-036). A
+     * strategy participates in live evaluation only when the domain considers
+     * it eligible: either fully governed activation backed by accepted
+     * validation evidence, or the explicit temporary bootstrap controlled run.
+     *
+     * <p>This is a selection concern, not an evaluation outcome: an ineligible
+     * strategy never reaches an evaluator and therefore never produces
+     * NO_MATCH or NOT_EVALUABLE.</p>
+     */
+    public boolean isEligibleForLiveEvaluation() {
+        return operationalStatus == StrategyOperationalStatus.ENABLED
+                && validationStatus == ValidationStatus.VALIDATED
+                && validationEvidenceRef != null
+                || operationalStatus == StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN;
+    }
 
     public ValidationStatus validationStatus() { return validationStatus; }
 
