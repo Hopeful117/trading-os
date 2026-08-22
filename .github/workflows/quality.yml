@@ -36,6 +36,17 @@ jobs:
           java-version: '21'
           cache: maven
 
+      # trading-core depends on the local risk-domain module, which is not
+      # published to any repository. Provision it into the local Maven
+      # repository so dependency resolution succeeds; risk-domain tests are
+      # executed by its dedicated matrix job.
+      - name: Provision local risk-domain artifact
+        if: matrix.module == 'trading-core'
+        working-directory: risk-domain
+        run: |
+          chmod +x ../trading-core/mvnw
+          ../trading-core/mvnw -B -DskipTests install
+
       # market-intelligence and risk-domain have no wrapper; reuse the
       # trading-core wrapper as scripts/test-all.sh does.
       - name: Build and verify (${{ matrix.module }})
