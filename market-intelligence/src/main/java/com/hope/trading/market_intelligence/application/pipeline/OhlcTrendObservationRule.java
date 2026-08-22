@@ -30,13 +30,25 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                         "No complete OHLC range result is available"));
         CapabilityResult result = execution.result().orElseThrow();
         BigDecimal change = result.metrics().get("priceChange");
-        if (change == null || change.signum() == 0) {
-            throw new NoSuchElementException("OHLC series contains no directional signal");
+        if (change == null) {
+            throw new NoSuchElementException("OHLC series contains no price change data");
         }
         DeterministicMeasurements details = result.artifacts().stream()
                 .map(ProducedArtifact::artifact).map(item -> item.content())
                 .filter(DeterministicMeasurements.class::isInstance)
                 .map(DeterministicMeasurements.class::cast).findFirst().orElseThrow();
+        if (change.signum() == 0) {
+            return new ObservationRuleResult(
+                    new ObservationType("PRICE_TREND_NEUTRAL"),
+                    "Neutral OHLC trend",
+                    "First-to-last OHLC price change is zero.",
+                    Set.of("price-action", "deterministic"), "15m",
+                    details.observedAt(), details.observedAt().plus(Duration.ofMinutes(30)),
+                    List.of(new ObservationEvidenceCandidate(
+                            execution.id(), details.title(), details.explanation(),
+                            result.metrics(), Map.of("priceChange", BigDecimal.ZERO),
+                            details.observedAt(), BigDecimal.ONE)));
+        }
         String direction = change.signum() > 0 ? "LONG" : "SHORT";
         return new ObservationRuleResult(
                 new ObservationType("PRICE_TREND_" + direction),
@@ -46,7 +58,7 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                 details.observedAt(), details.observedAt().plus(Duration.ofMinutes(30)),
                 List.of(new ObservationEvidenceCandidate(
                         execution.id(), details.title(), details.explanation(),
-                        result.metrics(), Map.of("priceChange", BigDecimal.ZERO),
+                        result.metrics(), Map.of("priceChange", change),
                         details.observedAt(), BigDecimal.ONE)));
     }
 }

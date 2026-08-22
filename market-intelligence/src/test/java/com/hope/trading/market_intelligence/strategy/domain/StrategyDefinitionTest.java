@@ -25,6 +25,7 @@ class StrategyDefinitionTest {
                 1,
                 "OHLC Trend",
                 "Legacy bootstrap trend strategy",
+                "OHLC_TREND",
                 StrategyDirection.DYNAMIC,
                 applicability(),
                 Set.of(new RequiredSemanticInput(SemanticInputType.OBSERVATION, "PRICE_TREND")),
@@ -64,7 +65,7 @@ class StrategyDefinitionTest {
     @Test
     void versionMustBePositive() {
         assertThatThrownBy(() -> StrategyDefinition.create(
-                StrategyId.random(), 0, "x", null, StrategyDirection.LONG,
+                StrategyId.random(), 0, "x", null, "X", StrategyDirection.LONG,
                 applicability(), Set.of(), StrategyParameters.empty(), null, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -139,7 +140,7 @@ class StrategyDefinitionTest {
         // a governance VALIDATED lifecycle is impossible while evidence is absent
         StrategyDefinition unvalidatedCandidate =
                 StrategyDefinition.create(
-                        StrategyId.random(), 1, "n", null, StrategyDirection.LONG,
+                        StrategyId.random(), 1, "n", null, "N", StrategyDirection.LONG,
                         applicability(), Set.of(), StrategyParameters.empty(), null, NOW)
                         .transitionTo(StrategyLifecycle.CANDIDATE, NOW);
 

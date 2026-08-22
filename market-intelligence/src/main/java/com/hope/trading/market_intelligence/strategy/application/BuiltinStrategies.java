@@ -25,6 +25,10 @@ import java.util.UUID;
  * Built-in code-defined strategy definitions. Deterministic identity, no
  * hidden mutable configuration; the bootstrap legacy strategy exists purely as
  * a behavior-preserving migration vehicle and is UNVALIDATED by construction.
+ *
+ * <p>Story 0013: Production BuiltinStrategies remains limited to the existing
+ * compatibility fixture. Additional strategies for architectural proof exist
+ * only in test source.</p>
  */
 @Component
 public final class BuiltinStrategies {
@@ -38,6 +42,7 @@ public final class BuiltinStrategies {
 
     public static final String LEGACY_OHLC_TREND_TYPE = "LEGACY_OHLC_TREND_V1";
     public static final int LEGACY_OHLC_TREND_VERSION = 1;
+    public static final String LEGACY_OHLC_TREND_SCENARIO = "OHLC_TREND";
 
     /** Semantic input key carrying the OHLC first-to-last price change. */
     public static final RequiredSemanticInput PRICE_CHANGE = new RequiredSemanticInput(
@@ -55,6 +60,7 @@ public final class BuiltinStrategies {
                 "Bootstrap migration vehicle porting the legacy OHLC trend "
                         + "observation rule. Condition is intentionally permissive "
                         + "(any nonzero price change). NOT quantitatively validated.",
+                LEGACY_OHLC_TREND_SCENARIO,
                 StrategyDirection.DYNAMIC,
                 new StrategyApplicability(
                         Set.of("CRYPTO", "FOREX", "STOCK", "INDEX", "COMMODITY"),

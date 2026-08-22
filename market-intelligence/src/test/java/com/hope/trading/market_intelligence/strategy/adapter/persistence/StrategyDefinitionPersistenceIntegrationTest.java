@@ -98,6 +98,7 @@ class StrategyDefinitionPersistenceIntegrationTest {
                 version,
                 "OHLC Trend",
                 "Legacy bootstrap trend strategy",
+                "OHLC_TREND",
                 StrategyDirection.DYNAMIC,
                 new StrategyApplicability(
                         Set.of("CRYPTO"),

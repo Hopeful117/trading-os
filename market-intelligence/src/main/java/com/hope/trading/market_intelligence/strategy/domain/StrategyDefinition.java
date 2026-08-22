@@ -20,6 +20,7 @@ public final class StrategyDefinition {
     private final int version;
     private final String name;
     private final String description;
+    private final String scenario;
     private final StrategyLifecycle lifecycle;
     private final ValidationStatus validationStatus;
     private final String validationEvidenceRef;
@@ -36,6 +37,7 @@ public final class StrategyDefinition {
             int version,
             String name,
             String description,
+            String scenario,
             StrategyLifecycle lifecycle,
             ValidationStatus validationStatus,
             String validationEvidenceRef,
@@ -56,6 +58,7 @@ public final class StrategyDefinition {
         this.version = version;
         this.name = name.trim();
         this.description = description == null || description.isBlank() ? null : description.trim();
+        this.scenario = scenario == null || scenario.isBlank() ? name.trim() : scenario.trim();
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle is required");
         this.validationStatus = Objects.requireNonNull(validationStatus, "validationStatus is required");
         this.validationEvidenceRef = normalizeRef(validationEvidenceRef);
@@ -88,6 +91,7 @@ public final class StrategyDefinition {
             int version,
             String name,
             String description,
+            String scenario,
             StrategyDirection direction,
             StrategyApplicability applicability,
             Set<RequiredSemanticInput> requiredInputs,
@@ -96,14 +100,15 @@ public final class StrategyDefinition {
             Instant createdAt
     ) {
         return new StrategyDefinition(
-                strategyId, version, name, description, StrategyLifecycle.DRAFT,
+                strategyId, version, name, description, scenario, StrategyLifecycle.DRAFT,
                 ValidationStatus.UNVALIDATED, null, direction, applicability,
                 requiredInputs, parameters, researchRef, createdAt, createdAt);
     }
 
     /**
      * Rehydrates a persisted strategy version. Used by persistence adapters
-     * only; applies identical invariants as creation.
+     * only; applies identical invariants as creation. The scenario field
+     * defaults to the strategy name when not persisted.
      */
     public static StrategyDefinition rehydrate(
             StrategyId strategyId,
@@ -121,7 +126,7 @@ public final class StrategyDefinition {
             Instant createdAt,
             Instant updatedAt
     ) {
-        return new StrategyDefinition(strategyId, version, name, description, lifecycle,
+        return new StrategyDefinition(strategyId, version, name, description, null, lifecycle,
                 validationStatus, validationEvidenceRef, direction, applicability,
                 requiredInputs, parameters, researchRef, createdAt, updatedAt);
     }
@@ -136,7 +141,7 @@ public final class StrategyDefinition {
                     "next version must be greater than current version " + version);
         }
         return new StrategyDefinition(
-                strategyId, nextVersion, name, description, StrategyLifecycle.DRAFT,
+                strategyId, nextVersion, name, description, scenario, StrategyLifecycle.DRAFT,
                 ValidationStatus.UNVALIDATED, null, direction, applicability,
                 requiredInputs, parameters, researchRef, now, now);
     }
@@ -169,13 +174,13 @@ public final class StrategyDefinition {
     }
 
     private StrategyDefinition copyLifecycleTo(StrategyLifecycle target, Instant now) {
-        return new StrategyDefinition(strategyId, version, name, description, target,
+        return new StrategyDefinition(strategyId, version, name, description, scenario, target,
                 validationStatus, validationEvidenceRef, direction, applicability,
                 requiredInputs, parameters, researchRef, createdAt, now);
     }
 
     private StrategyDefinition copyValidationTo(ValidationStatus status, String evidenceRef, Instant now) {
-        return new StrategyDefinition(strategyId, version, name, description, lifecycle,
+        return new StrategyDefinition(strategyId, version, name, description, scenario, lifecycle,
                 status, evidenceRef, direction, applicability, requiredInputs,
                 parameters, researchRef, createdAt, now);
     }
@@ -202,6 +207,8 @@ public final class StrategyDefinition {
     public String name() { return name; }
 
     public String description() { return description; }
+
+    public String scenario() { return scenario; }
 
     public StrategyLifecycle lifecycle() { return lifecycle; }
 
