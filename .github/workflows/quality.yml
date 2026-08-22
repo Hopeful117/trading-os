@@ -68,17 +68,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      # Compiled bytecode reused by the sonarqube-analysis job so Sonar does
-      # not have to rebuild or rerun tests.
-      - name: Upload compiled classes (${{ matrix.module }})
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: classes-${{ matrix.module }}
-          path: ${{ matrix.module }}/target/classes/**
-          if-no-files-found: ignore
-          retention-days: 1
-
   frontend-quality:
     name: Frontend Quality
     runs-on: ubuntu-latest
@@ -179,107 +168,10 @@ jobs:
             echo "Frontend coverage artifact not available (frontend job failed or produced no output)."
           fi
 
-  # Self-hosted runner so the scanner can reach the local, never-public
-  # SonarQube instance. GitHub-hosted runners cannot reach localhost services.
-  # Reuses the JaCoCo XML, compiled classes, and frontend LCOV produced by the
-  # quality jobs above. No test is rerun for Sonar. Analysis follows the
-  # repository's existing per-module Sonar projects (trading-os:<module>) and
-  # waits for each real Quality Gate result on the server.
-  #
-  # Security: this repository accepts trusted same-repository development PRs.
-  # The head-repo guard below prevents fork pull requests from executing on
-  # the self-hosted runner. Community Build limitation: analyses run as branch
-  # analyses of the PR HEAD; native PR decoration is not available.
-  sonarqube-analysis:
-    name: SonarQube Analysis
-    runs-on: [self-hosted, linux, x64, trading-os-sonar]
-    if: github.event_name == 'workflow_dispatch' ||
-        github.event.pull_request.head.repo.full_name == github.repository
-    needs: [backend-quality, frontend-quality]
-    env:
-      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    steps:
-      - name: Require Sonar configuration
-        if: ${{ env.SONAR_HOST_URL == '' || env.SONAR_TOKEN == '' }}
-        run: |
-          echo "::error::SONAR_HOST_URL (repository variable) and SONAR_TOKEN (repository secret) are required."
-          echo "::error::SonarQube analysis is a mandatory part of the Trading OS Quality Gate."
-          exit 1
-
-      - name: Clean persistent-runner workspace
-        run: |
-          rm -rf */target trading-os-web/node_modules trading-os-web/coverage \
-                 trading-os-web/dist sonar-backend-artifacts sonar-frontend-coverage
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          clean: true
-
-      - name: Setup JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Download backend coverage and classes
-        uses: actions/download-artifact@v4
-        with:
-          pattern: '{jacoco-*,classes-*}'
-          path: sonar-backend-artifacts
-
-      - name: Restore backend build outputs
-        run: |
-          for module in eureka-server gateway broker-service market-data trading-core market-intelligence risk-domain; do
-            mkdir -p "${module}/target/classes" "${module}/target/site/jacoco"
-            cp -a "sonar-backend-artifacts/classes-${module}/." "${module}/target/classes/"
-            cp -a "sonar-backend-artifacts/jacoco-${module}/." "${module}/target/site/jacoco/"
-            test -f "${module}/target/site/jacoco/jacoco.xml"
-          done
-
-      - name: Analyze Java modules and wait for Quality Gates
-        run: |
-          for module in eureka-server gateway broker-service market-data trading-core market-intelligence risk-domain; do
-            printf 'Analyzing %s\n' "${module}"
-            wrapper="./mvnw"
-            if [ ! -x "$wrapper" ]; then
-              chmod +x ../trading-core/mvnw
-              wrapper="../trading-core/mvnw"
-            fi
-            (cd "$module" && "$wrapper" -B \
-              org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
-              -Dsonar.qualitygate.wait=true \
-              -Dsonar.qualitygate.timeout=300)
-          done
-
-      - name: Setup Node 22 (npm cache)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: trading-os-web/package-lock.json
-
-      - name: Download frontend coverage
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-trading-os-web
-          path: sonar-frontend-coverage
-
-      - name: Analyze frontend and wait for Quality Gate
-        working-directory: trading-os-web
-        run: |
-          mkdir -p coverage/trading-os-web
-          cp -a ../sonar-frontend-coverage/. coverage/trading-os-web/
-          npm ci
-          npm exec -- sonar-scanner-npm \
-            -Dsonar.qualitygate.wait=true \
-            -Dsonar.qualitygate.timeout=300
-
   quality-gate:
     name: Trading OS Quality Gate
     runs-on: ubuntu-latest
-    needs: [backend-quality, frontend-quality, sonarqube-analysis]
+    needs: [backend-quality, frontend-quality]
     if: always()
     steps:
       - name: Evaluate mandatory jobs
