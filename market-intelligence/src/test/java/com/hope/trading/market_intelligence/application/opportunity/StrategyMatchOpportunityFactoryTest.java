@@ -4,28 +4,33 @@ import com.hope.trading.market_intelligence.domain.opportunity.ObservationRefere
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityOrigin;
 import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
-import com.hope.trading.market_intelligence.strategy.domain.ConditionResult;
-import com.hope.trading.market_intelligence.strategy.domain.MatchedDirection;
-import com.hope.trading.market_intelligence.strategy.domain.StrategyId;
-import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
+import com.hope.trading.market_intelligence.strategy.domain.*;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Story 0012: the StrategyMatch is the causal authority for opportunity
- * creation. The factory only projects persisted match facts.
+ * Story 0012/0013: the StrategyMatch is the causal authority for opportunity
+ * creation. The factory projects persisted match facts using declarative
+ * StrategyDefinition metadata (Story 0013 generalized model).
+ *
+ * <p>The test-only fake strategy proves that the factory accepts any
+ * StrategyDefinition without strategy-specific branching.</p>
  */
 class StrategyMatchOpportunityFactoryTest {
 
     private static final Instant MATCHED = Instant.parse("2026-08-21T10:00:00Z");
     private static final UUID MATCH = UUID.fromString("bbbbbbbb-2222-3333-4444-555555555555");
+
+    /** Test-only fake strategy ID — never appears in production code. */
+    private static final UUID FAKE_STRATEGY_ID =
+            UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
 
     private final StrategyMatchOpportunityFactory factory =
             new StrategyMatchOpportunityFactory();
@@ -42,13 +47,14 @@ class StrategyMatchOpportunityFactoryTest {
 
     @Test
     void longMatchProjectsLongOhlcTrendOpportunity() {
-        var command = factory.command(match(MatchedDirection.LONG), "ETH/USD",
+        StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
+        var command = factory.command(match(MatchedDirection.LONG), definition, "ETH/USD",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, MATCHED.plusSeconds(1800));
 
         assertThat(command.direction()).isEqualTo(OpportunityDirection.LONG);
         assertThat(command.scenario()).isEqualTo("OHLC_TREND");
-        assertThat(command.timeframe()).isEqualTo("15m");
+        assertThat(command.timeframe()).isEqualTo("m15");
         assertThat(command.instrument()).isEqualTo("ETH/USD");
         assertThat(command.strategyMatchId()).isEqualTo(MATCH);
         assertThat(command.evaluatedAt()).isEqualTo(MATCHED);
@@ -58,7 +64,8 @@ class StrategyMatchOpportunityFactoryTest {
 
     @Test
     void shortMatchProjectsShortOpportunity() {
-        var command = factory.command(match(MatchedDirection.SHORT), "ETH/USD",
+        StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
+        var command = factory.command(match(MatchedDirection.SHORT), definition, "ETH/USD",
                 OpportunityOrigin.USER_REQUEST, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, null);
         assertThat(command.direction()).isEqualTo(OpportunityDirection.SHORT);
@@ -77,7 +84,8 @@ class StrategyMatchOpportunityFactoryTest {
 
     @Test
     void commandCarriesDeterministicLineageIdFromMatch() {
-        var command = factory.command(match(MatchedDirection.LONG), "ETH/USD",
+        StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
+        var command = factory.command(match(MatchedDirection.LONG), definition, "ETH/USD",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, null);
         assertThat(command.opportunityId())
@@ -85,15 +93,31 @@ class StrategyMatchOpportunityFactoryTest {
     }
 
     @Test
-    void nonBootstrapStrategyRequiresExplicitMapping() {
-        StrategyMatch unknown = StrategyMatch.rehydrate(
-                UUID.randomUUID(), new StrategyId(UUID.randomUUID()), 1,
+    void anyStrategyDefinitionIsAcceptedWithoutBranching() {
+        // Test-only fake strategy: proves the factory is generic
+        StrategyDefinition fakeDefinition = StrategyDefinition.create(
+                new StrategyId(FAKE_STRATEGY_ID),
+                1,
+                "Fake Momentum",
+                "Test-only proof strategy",
+                "FAKE_MOMENTUM",
+                StrategyDirection.DYNAMIC,
+                new StrategyApplicability(Set.of("CRYPTO"),
+                        Set.of(StrategyApplicability.Timeframe.M15), Set.of()),
+                Set.of(new RequiredSemanticInput(SemanticInputType.OBSERVATION, "X")),
+                StrategyParameters.empty(), null, MATCHED);
+
+        StrategyMatch fakeMatch = StrategyMatch.rehydrate(
+                UUID.randomUUID(), new StrategyId(FAKE_STRATEGY_ID), 1,
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 MatchedDirection.LONG, "d", List.of(), MATCHED, MATCHED);
-        assertThatThrownBy(() -> factory.command(unknown, "X/Y",
+
+        var command = factory.command(fakeMatch, fakeDefinition, "X/Y",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
-                MATCHED, MATCHED, null))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("No opportunity mapping");
+                MATCHED, MATCHED, null);
+
+        assertThat(command.scenario()).isEqualTo("FAKE_MOMENTUM");
+        assertThat(command.direction()).isEqualTo(OpportunityDirection.LONG);
+        assertThat(command.instrument()).isEqualTo("X/Y");
     }
 }

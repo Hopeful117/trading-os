@@ -20,7 +20,7 @@ class StrategyEvaluationTest {
     private static StrategyDefinition definition() {
         return StrategyDefinition.create(
                 new StrategyId(UUID.fromString("0a10c7e2-9d1e-4f5a-b6c8-123456789001")),
-                1, "Legacy OHLC Trend", null, StrategyDirection.DYNAMIC,
+                1, "Legacy OHLC Trend", null, "OHLC_TREND", StrategyDirection.DYNAMIC,
                 new StrategyApplicability(Set.of("CRYPTO"),
                         Set.of(StrategyApplicability.Timeframe.M15), Set.of()),
                 Set.of(new RequiredSemanticInput(SemanticInputType.OBSERVATION, "X")),

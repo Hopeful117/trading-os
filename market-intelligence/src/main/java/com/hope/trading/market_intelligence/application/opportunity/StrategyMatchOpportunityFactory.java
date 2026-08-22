@@ -3,7 +3,7 @@ package com.hope.trading.market_intelligence.application.opportunity;
 import com.hope.trading.market_intelligence.domain.opportunity.ObservationReference;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityOrigin;
-import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
 import org.springframework.stereotype.Component;
 
@@ -20,10 +20,9 @@ import java.util.UUID;
  * never re-evaluates, never reads OHLC rules, never infers strategy identity
  * or direction, and never consults risk/broker/ranking/AI.
  *
- * <p>Story 0012 mapping is parity-first for the bootstrap legacy strategy:
- * scenario/timeframe keep their trader-visible values, validity comes from the
- * observation context exactly as before, and the instrument is the pipeline-
- * resolved market symbol (the match stores the market identifier only).</p>
+ * <p>Story 0013 generalized model: scenario and timeframe are derived from
+ * declarative {@link StrategyDefinition} metadata, not from strategy-specific
+ * branching. The same code path serves all strategies.</p>
  */
 @Component
 public class StrategyMatchOpportunityFactory {
@@ -34,6 +33,7 @@ public class StrategyMatchOpportunityFactory {
 
     public CreateOpportunityCommand command(
             StrategyMatch match,
+            StrategyDefinition definition,
             String instrument,
             OpportunityOrigin origin,
             ObservationReference evidence,
@@ -42,14 +42,15 @@ public class StrategyMatchOpportunityFactory {
             Instant validUntil
     ) {
         Objects.requireNonNull(match, "match is required");
+        Objects.requireNonNull(definition, "definition is required");
         Objects.requireNonNull(instrument, "instrument is required");
         Objects.requireNonNull(origin, "origin is required");
         Objects.requireNonNull(evidence, "evidence reference is required");
         return new CreateOpportunityCommand(
                 instrument,
                 directionOf(match),
-                scenarioOf(match),
-                timeframeOf(match),
+                definition.scenario(),
+                timeframeOf(definition),
                 origin,
                 Set.of(evidence),
                 Set.of(),
@@ -108,30 +109,15 @@ public class StrategyMatchOpportunityFactory {
     }
 
     /**
-     * Deterministic mapping from exact strategy semantics. The bootstrap
-     * legacy strategy maps to its historical trader-facing scenario value.
+     * Derives the trader-facing timeframe label from the strategy definition's
+     * primary applicability timeframe. Defaults to the first declared timeframe.
      */
-    private String scenarioOf(StrategyMatch match) {
-        requireBootstrap(match);
-        return "OHLC_TREND";
+    private String timeframeOf(StrategyDefinition definition) {
+        return definition.applicability().timeframes().stream()
+                .findFirst()
+                .map(tf -> tf.name().toLowerCase(Locale.ROOT))
+                .orElse("unknown");
     }
 
-    /** Bootstrap parity: 15m semantics preserved (definition applicability M15). */
-    private String timeframeOf(StrategyMatch match) {
-        requireBootstrap(match);
-        return "15m";
-    }
-
-    /**
-     * Story 0012 maps exactly the bootstrap legacy strategy identity/version.
-     * Any other strategy requires an explicit mapping extension first.
-     */
-    private void requireBootstrap(StrategyMatch match) {
-        if (!BuiltinStrategies.LEGACY_OHLC_TREND_ID.equals(match.strategyId().value())
-                || match.strategyVersion() != BuiltinStrategies.LEGACY_OHLC_TREND_VERSION) {
-            throw new IllegalStateException(
-                    "No opportunity mapping defined for strategy "
-                            + match.strategyId() + "v" + match.strategyVersion());
-        }
-    }
+    private static final java.util.Locale Locale = java.util.Locale.ROOT;
 }
