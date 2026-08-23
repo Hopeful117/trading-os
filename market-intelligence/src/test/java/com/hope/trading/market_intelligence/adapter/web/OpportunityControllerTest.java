@@ -29,7 +29,7 @@ class OpportunityControllerTest {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new OpportunityController(repository)).build();
 
-        mvc.perform(get("/opportunities")
+        mvc.perform(get("/api/v1/opportunities")
                         .param("instrument", "BTC/EUR")
                         .param("activeOnly", "true")
                         .param("sort", "score")
@@ -37,13 +37,13 @@ class OpportunityControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
                 .andExpect(jsonPath("$.items[0].version").value(2));
-        mvc.perform(get("/opportunities/{id}", id.value()))
+        mvc.perform(get("/api/v1/opportunities/{id}", id.value()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
-        mvc.perform(get("/opportunities/active"))
+        mvc.perform(get("/api/v1/opportunities/active"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].status").value("ACTIVE"));
-        mvc.perform(get("/opportunities/history/{id}", id.value()))
+        mvc.perform(get("/api/v1/opportunities/history/{id}", id.value()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
-        mvc.perform(get("/opportunities/{id}", UUID.randomUUID()))
+        mvc.perform(get("/api/v1/opportunities/{id}", UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
 }

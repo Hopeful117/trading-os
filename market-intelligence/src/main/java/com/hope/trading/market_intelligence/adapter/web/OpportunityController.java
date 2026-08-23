@@ -7,8 +7,13 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 
+/**
+ * Public trader-facing opportunity API (STORY-0019). Lives under the
+ * service-owned public prefix so the Gateway routes it by the existing
+ * no-rewrite convention.
+ */
 @RestController
-@RequestMapping("/opportunities")
+@RequestMapping("/api/v1/opportunities")
 public final class OpportunityController {
     private final TradingOpportunityRepository repository;
 
