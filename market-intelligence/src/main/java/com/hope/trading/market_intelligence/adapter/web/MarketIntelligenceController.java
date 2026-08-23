@@ -58,8 +58,11 @@ public class MarketIntelligenceController {
                 traceId == null ? executionId.toString() : traceId
         );
         return ResponseEntity.accepted()
+                // Location of the Trading Core public trade-plan creation
+                // entry point for this analysis execution (STORY-0019).
                 .location(URI.create(
-                        "/api/v1/intelligence/analyses/" + execution.executionId()
+                        "/api/v1/trade-plans/analyses/" + execution.executionId()
+                                + "/trade-plans"
                 ))
                 .body(AnalysisExecutionResponse.from(execution));
     }

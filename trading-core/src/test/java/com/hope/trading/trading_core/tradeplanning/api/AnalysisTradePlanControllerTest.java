@@ -24,7 +24,7 @@ class AnalysisTradePlanControllerTest {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new AnalysisTradePlanController(service)).build();
         UserDto principal = UserDto.builder().userId(actorId).build();
 
-        mvc.perform(post("/api/v1/intelligence/analyses/{id}/trade-plans", analysisId)
+        mvc.perform(post("/api/v1/trade-plans/analyses/{id}/trade-plans", analysisId)
                         .header("Idempotency-Key", "key-1")
                         .principal(new UsernamePasswordAuthenticationToken(principal, null))
                         .contentType("application/json")
@@ -40,7 +40,7 @@ class AnalysisTradePlanControllerTest {
                 new AnalysisTradePlanController(mock(AnalysisTradePlanGenerationService.class))).build();
         UUID actorId = UUID.randomUUID();
         UserDto principal = UserDto.builder().userId(actorId).build();
-        mvc.perform(post("/api/v1/intelligence/analyses/{id}/trade-plans", UUID.randomUUID())
+        mvc.perform(post("/api/v1/trade-plans/analyses/{id}/trade-plans", UUID.randomUUID())
                         .principal(new UsernamePasswordAuthenticationToken(principal, null))
                         .contentType("application/json")
                         .content("{\"accountId\":\"" + UUID.randomUUID() + "\"}"))

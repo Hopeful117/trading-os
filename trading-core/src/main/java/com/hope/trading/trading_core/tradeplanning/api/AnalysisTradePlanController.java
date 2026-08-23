@@ -12,7 +12,17 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/intelligence/analyses")
+/**
+ * Public trade-plan creation entry point (STORY-0019).
+ *
+ * <p>Trading Core owns the user-facing orchestration: authenticated identity,
+ * generation delegated to Market Intelligence over its internal API, then
+ * risk evaluation. The path deliberately lives under this service's public
+ * {@code /api/v1/trade-plans} namespace — it previously sat under
+ * {@code /api/v1/intelligence/**}, which the Gateway routes to
+ * market-intelligence, making it unreachable (WRONG_SERVICE).</p>
+ */
+@RequestMapping("/api/v1/trade-plans/analyses")
 public class AnalysisTradePlanController {
     private final AnalysisTradePlanGenerationService service;
     public AnalysisTradePlanController(AnalysisTradePlanGenerationService service) {
