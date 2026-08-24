@@ -1,15 +1,7 @@
 import { AsyncPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import {
-  catchError,
-  map,
-  of,
-  shareReplay,
-  startWith,
-  Subject,
-  switchMap,
-} from 'rxjs';
+import { catchError, map, of, shareReplay, startWith, Subject, switchMap } from 'rxjs';
 
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { OpportunityService } from '../../core/services/opportunity.service';

@@ -41,9 +41,7 @@ describe('OpportunityDetail', () => {
           provide: ActivatedRoute,
           useValue: {
             paramMap: of(
-              opportunityId === null
-                ? convertToParamMap({})
-                : convertToParamMap({ opportunityId }),
+              opportunityId === null ? convertToParamMap({}) : convertToParamMap({ opportunityId }),
             ),
           },
         },

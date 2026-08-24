@@ -4,7 +4,8 @@ export type OpportunityDirection = 'LONG' | 'SHORT' | 'NEUTRAL';
 
 export type OpportunityType = 'SCALPING' | 'INTRADAY' | 'SWING' | 'POSITIONAL';
 
-export type OpportunityOrigin = 'PASSIVE_SCAN' | 'ACTIVE_SCAN' | 'USER_REQUEST' | 'SYSTEM_REEVALUATION';
+export type OpportunityOrigin =
+  'PASSIVE_SCAN' | 'ACTIVE_SCAN' | 'USER_REQUEST' | 'SYSTEM_REEVALUATION';
 
 export interface OpportunityResponse {
   id: string;

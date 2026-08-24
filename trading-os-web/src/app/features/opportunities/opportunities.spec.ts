@@ -126,9 +126,7 @@ describe('Opportunities', () => {
     });
 
     it('renders the error state when the backend fails', async () => {
-      opportunityServiceMock.findActive.mockReturnValue(
-        throwError(() => new Error('boom')),
-      );
+      opportunityServiceMock.findActive.mockReturnValue(throwError(() => new Error('boom')));
 
       const second = TestBed.createComponent(Opportunities);
       await second.whenStable();
