@@ -1,6 +1,9 @@
 name: Trading OS Quality
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -49,6 +52,9 @@ jobs:
 
       # market-intelligence and risk-domain have no wrapper; reuse the
       # trading-core wrapper as scripts/test-all.sh does.
+      #
+      # JaCoCo check goal enforces LINE >=80% for business modules.
+      # A coverage regression will cause `mvn verify` to fail.
       - name: Build and verify (${{ matrix.module }})
         working-directory: ${{ matrix.module }}
         run: |
@@ -79,6 +85,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Upload compiled classes (${{ matrix.module }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: classes-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/classes/**
+          if-no-files-found: ignore
+          retention-days: 30
+
   frontend-quality:
     name: Frontend Quality
     runs-on: ubuntu-latest
@@ -97,15 +112,16 @@ jobs:
         working-directory: trading-os-web
         run: npm ci
 
-      # NON-BLOCKING visibility only. Formatting enforcement is deferred:
-      # the repository contains 58 pre-existing Prettier violations.
-      # Follow-up: mechanical formatting commit -> verify no functional
-      # change -> promote this step to a blocking gate (continue-on-error removed).
-      - name: Format check (Prettier, non-blocking)
+      # Lint enforcement: Prettier formatting check.
+      # BASELINE_DEBT: 58 pre-existing violations.
+      # This gate prevents NEW formatting violations from being introduced.
+      # To clear the baseline, run: npx prettier --write .
+      - name: Lint check (Prettier)
         working-directory: trading-os-web
-        continue-on-error: true
         run: npx prettier --check .
 
+      # Vitest enforces LINE >=80% via coverageThresholds in angular.json.
+      # A coverage regression will cause this step to fail.
       - name: Unit tests with coverage (Vitest)
         working-directory: trading-os-web
         run: npm run test:coverage
@@ -179,25 +195,228 @@ jobs:
             echo "Frontend coverage artifact not available (frontend job failed or produced no output)."
           fi
 
+  sonar-quality:
+    name: SonarQube Analysis
+    runs-on: [self-hosted, linux, x64, engineering, sonarqube, trading-os]
+    needs: [backend-quality, frontend-quality]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify SonarQube is reachable
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        run: |
+          if [ -z "$SONAR_HOST_URL" ]; then
+            echo "::error::SONAR_HOST_URL variable is not set."
+            exit 1
+          fi
+          status=$(curl -s -o /dev/null -w '%{http_code}' "${SONAR_HOST_URL}/api/system/status" || true)
+          if [ "$status" != "200" ]; then
+            echo "::error::SonarQube is not reachable at ${SONAR_HOST_URL} (HTTP ${status})."
+            exit 1
+          fi
+          echo "SonarQube is reachable at ${SONAR_HOST_URL}"
+
+      # Download backend JaCoCo reports and compiled classes for all modules.
+      - name: Download backend artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jacoco-*
+          path: coverage-backend
+
+      - name: Download backend compiled classes
+        uses: actions/download-artifact@v4
+        with:
+          pattern: classes-*
+          path: classes-backend
+
+      # Restore compiled classes into each module's target/classes/ directory
+      # so the SonarQube Java analyzer can resolve types and dependencies.
+      - name: Restore compiled classes
+        run: |
+          for module in risk-domain gateway eureka-server trading-core broker-service market-data market-intelligence; do
+            artifact_dir="classes-backend/classes-${module}"
+            target_dir="${module}/target/classes"
+            if [ -d "$artifact_dir" ]; then
+              mkdir -p "$target_dir"
+              cp -r "$artifact_dir"/* "$target_dir"/ 2>/dev/null || true
+              echo "Restored classes for ${module}"
+            else
+              echo "::warning::No compiled classes artifact for ${module}"
+            fi
+          done
+
+      # Restore JaCoCo XML reports into each module's target/site/jacoco/ directory.
+      - name: Restore JaCoCo reports
+        run: |
+          for module in risk-domain gateway eureka-server trading-core broker-service market-data market-intelligence; do
+            artifact_dir="coverage-backend/jacoco-${module}"
+            target_dir="${module}/target/site/jacoco"
+            if [ -d "$artifact_dir" ]; then
+              mkdir -p "$target_dir"
+              find "$artifact_dir" -name "jacoco.xml" -exec cp {} "$target_dir/" \;
+              echo "Restored JaCoCo report for ${module}"
+            else
+              echo "::warning::No JaCoCo report artifact for ${module}"
+            fi
+          done
+
+      # Download frontend coverage.
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-trading-os-web
+          path: coverage-frontend
+
+      - name: Restore frontend LCOV
+        run: |
+          mkdir -p trading-os-web/coverage/trading-os-web
+          find coverage-frontend -name "lcov.info" -exec cp {} trading-os-web/coverage/trading-os-web/ \;
+          if [ ! -f trading-os-web/coverage/trading-os-web/lcov.info ]; then
+            echo "::error::Frontend LCOV report not found in artifacts."
+            exit 1
+          fi
+          echo "Frontend LCOV restored"
+
+      # Install frontend dependencies for the npm sonar-scanner.
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: trading-os-web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: trading-os-web
+        run: npm ci
+
+      # Run SonarQube analysis for each backend module.
+      # Each scan waits for its Quality Gate; failure blocks the job.
+      - name: Scan risk-domain
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_RISK_DOMAIN }}
+        run: |
+          chmod +x trading-core/mvnw
+          trading-core/mvnw -f risk-domain/pom.xml \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Scan gateway
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_GATEWAY }}
+        run: |
+          trading-core/mvnw -f gateway/pom.xml \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Scan eureka-server
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_EUREKA_SERVER }}
+        run: |
+          trading-core/mvnw -f eureka-server/pom.xml \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Scan trading-core
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_TRADING_CORE }}
+        run: |
+          trading-core/mvnw -f trading-core/pom.xml \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Scan broker-service
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_BROKER_SERVICE }}
+        run: |
+          trading-core/mvnw -f broker-service/pom.xml \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Scan market-data
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_MARKET_DATA }}
+        run: |
+          trading-core/mvnw -f market-data/pom.xml \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Scan market-intelligence
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_MARKET_INTELLIGENCE }}
+        run: |
+          trading-core/mvnw -f market-intelligence/pom.xml \
+            org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+      # Run SonarQube analysis for the Angular frontend.
+      - name: Scan trading-os-web
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_WEB }}
+        working-directory: trading-os-web
+        run: |
+          npm exec -- sonar-scanner-npm \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
   quality-gate:
     name: Trading OS Quality Gate
     runs-on: ubuntu-latest
-    needs: [backend-quality, frontend-quality]
+    needs: [backend-quality, frontend-quality, sonar-quality]
     if: always()
     steps:
       - name: Evaluate mandatory jobs
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          BACKEND: ${{ needs.backend-quality.result }}
+          FRONTEND: ${{ needs.frontend-quality.result }}
+          SONAR: ${{ needs.sonar-quality.result }}
         run: |
           failed=0
-          for job in $RESULTS; do
+          # Backend and frontend always run — must succeed.
+          for job in "$BACKEND" "$FRONTEND"; do
             if [ "$job" != "success" ]; then
-              echo "Mandatory job result: $job"
+              echo "::error::Mandatory job did not succeed: $job"
               failed=1
             fi
           done
+          # Sonar only runs on push to main / workflow_dispatch.
+          # On PR it is "skipped" which is acceptable.
+          if [ "$SONAR" = "failure" ] || [ "$SONAR" = "cancelled" ]; then
+            echo "::error::SonarQube analysis failed or was cancelled: $SONAR"
+            failed=1
+          elif [ "$SONAR" = "skipped" ]; then
+            echo "SonarQube analysis was skipped (PR run)."
+          elif [ "$SONAR" = "success" ]; then
+            echo "SonarQube analysis succeeded."
+          else
+            echo "::warning::Unexpected sonar-quality result: $SONAR"
+          fi
           if [ "$failed" -ne 0 ]; then
-            echo "::error::Trading OS Quality Gate failed — one or more mandatory jobs did not succeed."
+            echo "::error::Trading OS Quality Gate failed."
             exit 1
           fi
           echo "All mandatory quality jobs succeeded."

@@ -4,49 +4,74 @@ Trading OS keeps every Maven service independent. There is no root Maven
 aggregator, so verification and SonarQube analysis run once per Java module.
 The Angular application is also verified and analyzed as its own project.
 
-## Local verification and coverage
+## Fast local loop
 
-Run all seven Maven `verify` lifecycles, generate JaCoCo XML reports, run the
-Angular tests with LCOV, and build the production frontend:
+Run tests, coverage, lint, and build without Sonar:
 
 ```bash
 ./scripts/quality-verify.sh
 ```
 
-The script fails on the first failed test, missing coverage report, dependency
-installation failure, or frontend build failure. Reports are generated at:
+This is the recommended loop for everyday development. It runs all seven Maven
+`verify` lifecycles, generates JaCoCo XML reports, runs the Angular tests with
+LCOV, checks Prettier formatting, and builds the production frontend.
 
-- `<module>/target/site/jacoco/jacoco.xml` for each Java module;
-- `trading-os-web/coverage/trading-os-web/lcov.info` for Angular.
+## Full local Sonar loop
 
-Generated reports and scanner work directories are ignored by Git.
+Run tests, coverage, lint, build, and all Sonar analyses with Quality Gate
+checks:
+
+```bash
+export SONAR_HOST_URL=http://localhost:9000
+export SONAR_TOKEN='<analysis-token>'
+./scripts/quality-scan.sh
+```
+
+This is the heavier loop to run before submitting PRs or periodically. It
+performs the complete local verification, then scans each Maven module and the
+frontend independently against the local SonarQube instance. Every scanner
+waits for its Quality Gate.
+
+## Continuous Integration
+
+`.github/workflows/quality.yml` runs on every push to `main`, pull request
+targeting `main`, and manual dispatch:
+
+### Pull requests (GitHub-hosted runners only)
+
+1. **Backend Quality** (matrix): JDK 21 `clean verify` per Maven module with
+   JaCoCo XML reports, compiled classes, and test results uploaded.
+2. **Frontend Quality**: Node 22, `npm ci`, Prettier check, Vitest coverage,
+   production build, coverage artifact.
+3. **Coverage Summary**: per-module JaCoCo metrics plus frontend summary.
+4. **Trading OS Quality Gate**: aggregate check; fails unless backend and
+   frontend jobs succeeded. Sonar is skipped on PRs.
+
+### Push to main / workflow dispatch (GitHub-hosted + self-hosted)
+
+All PR jobs above, plus:
+
+5. **SonarQube Analysis** (self-hosted runner `trading-os-sonarqube`):
+   downloads artifacts from GitHub-hosted jobs, restores compiled classes and
+   coverage reports, runs SonarQube analysis for all 8 projects (7 backend +
+   1 frontend), waits for every Quality Gate.
+6. **Trading OS Quality Gate**: aggregate check including Sonar result.
+
+### Security boundary
+
+Self-hosted Sonar jobs ONLY execute on `push` to `main` or `workflow_dispatch`.
+Pull requests (including fork PRs) NEVER trigger self-hosted jobs. This
+prevents untrusted code from executing on the local machine, even if a PR
+modifies the workflow file.
 
 ## Local SonarQube infrastructure
 
-The intended analysis target is the developer's existing local SonarQube
-(Community Build 26.7) already running persistently at
-<http://localhost:9000> under `dev-tools/sonarqube-26.7.0.124771`. The pinned
-Docker Compose stack below exists as an isolated alternative and must never be
-run as a second parallel instance:
+The analysis target is the shared standalone SonarQube (Community Build 26.7)
+running at <http://localhost:9000> under
+`dev-tools/sonarqube-26.7.0.124771`. This instance is shared with DevLog AI.
 
-SonarQube Community Build and its dedicated PostgreSQL database are isolated
-from the application Compose stack, network, databases, and startup lifecycle:
-
-```bash
-docker compose -f docker-compose.sonar.yml up -d
-docker compose -f docker-compose.sonar.yml down
-```
-
-The pinned local stack exposes SonarQube at <http://localhost:9000>. The default
-database password is for local development only. Override it before first
-startup when needed:
-
-```bash
-SONAR_DB_PASSWORD='<local-password>' docker compose -f docker-compose.sonar.yml up -d
-```
-
-Create analysis projects and a token in SonarQube. Do not store the token or
-database password in repository files.
+The pinned Docker Compose stack (`docker-compose.sonar.yml`) exists as an
+isolated fallback and must never be run as a second parallel instance.
 
 ## Authenticated scans
 
@@ -58,19 +83,31 @@ export SONAR_TOKEN='<analysis-token>'
 ./scripts/quality-scan.sh
 ```
 
-The script refuses to start without both environment variables. It first runs
-the complete local verification, then scans each Maven module and the frontend
-independently. Every scanner waits for its Quality Gate and returns a failure
-when analysis, upload, or the gate fails. The Maven scanner is pinned in the
-script; the frontend scanner is pinned in `package-lock.json`.
+The script refuses to start without both environment variables.
+
+## Sonar project topology
+
+One Sonar project per backend module plus the frontend:
+
+- `trading-os:risk-domain`
+- `trading-os:gateway`
+- `trading-os:eureka-server`
+- `trading-os:trading-core`
+- `trading-os:broker-service`
+- `trading-os:market-data`
+- `trading-os:market-intelligence`
+- `trading-os:trading-os-web`
+
+Each project has its own analysis token stored as a GitHub Secret
+(`SONAR_TOKEN_*`).
 
 ## New-code Quality Gate
 
-Configure the initial Clean-as-You-Code gate on the SonarQube server for every
+The SonarQube server enforces a Clean-as-You-Code gate for every
 `trading-os:*` project:
 
-- no new high-severity bugs;
-- no new high-severity vulnerabilities;
+- no new bugs;
+- no new vulnerabilities;
 - all new Security Hotspots reviewed;
 - new-code coverage at least 80%;
 - new-code duplication at most 3%.
@@ -78,42 +115,48 @@ Configure the initial Clean-as-You-Code gate on the SonarQube server for every
 The server owns gate configuration and the new-code definition. Repository
 scripts enforce its result but do not attempt to mutate server policy.
 
-SonarQube supplements tests, ADR validation, architecture review, migration
-review, and human Code Review. It does not replace any of them.
+SonarQube supplements tests, ADR validation, architecture review, and human
+Code Review. It does not replace any of them.
 
-## Continuous Integration
+## Troubleshooting
 
-`.github/workflows/quality.yml` runs on every pull request targeting `main`:
+### Runner offline
 
-1. **Backend Quality** (matrix): JDK 21 `clean verify` per Maven module with
-   Surefire and JaCoCo artifacts uploaded per module.
-2. **Frontend Quality**: Node 22, `npm ci`, Prettier check (non-blocking until
-   the deferred formatting cleanup lands), Vitest coverage, production build,
-   coverage artifact.
-3. **Coverage Summary**: per-module INSTRUCTION/LINE/BRANCH/COMPLEXITY/METHOD/
-   CLASS metrics from JaCoCo XML plus the frontend Vitest summary.
-4. **Trading OS Quality Gate**: aggregate required check; fails unless the
-   backend and frontend quality jobs succeeded.
-
-All jobs run on GitHub-hosted runners. CI owns reproducible validation only:
-code, tests, contracts, builds and coverage reporting.
-
-**GitHub Actions does NOT submit analyses to the developer's local SonarQube,
-and the quality gate does not depend on it.** SonarQube remains local
-engineering-quality tooling (static analysis, technical debt, security
-findings, duplication, Quality Gate, coverage import) run manually through the
-scripts above with local token handling via environment/.env mechanisms.
-Connecting SonarQube to CI is a future infrastructure decision that must not be
-introduced until a stable CI-accessible Sonar infrastructure exists.
-
-Reproduce the full pipeline locally with:
+If the self-hosted runner is offline, push-to-main quality checks will fail.
+Ensure the `gha-trading-os` user's runner service is running:
 
 ```bash
-./scripts/quality-scan.sh   # verify + coverage + all Sonar scans + gates
+sudo -u gha-trading-os /opt/gha-trading-os/actions-runner/svc.sh status
 ```
+
+### Sonar unavailable
+
+If SonarQube is not running at `http://localhost:9000`, the Sonar job will
+fail. Start it:
+
+```bash
+cd dev-tools/sonarqube-26.7.0.124771/bin/linux-x86-64
+./sonar.sh start
+```
+
+### Missing artifacts
+
+If backend or frontend jobs fail, their artifacts won't be available for the
+Sonar job. Fix the failing job first.
+
+### Quality Gate failure
+
+A Quality Gate failure means the code has real quality issues. Check the
+SonarQube UI at `http://localhost:9000` for details.
+
+### Token/auth failure
+
+A 401 error means the `SONAR_TOKEN_*` secret is missing, invalid, or
+unauthorized. Regenerate the token in SonarQube UI and update the GitHub
+Secret.
 
 ## Pull Request Quality Policy
 
 - persistent changes must be proposed through pull requests;
-- `Trading OS Quality Gate` is intended to become a required merge check;
+- `Trading OS Quality Gate` is a required merge check;
 - direct pushes to `main` are not part of the normal engineering workflow.
