@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { AccountService } from '../../../../core/services/account.service';
 import { Account } from '../../../../core/models/account.model';
 import { AccountCard } from '../../components/account-card/account-card';
@@ -8,6 +8,9 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 import { BrokerAccount } from '../../../../core/models/broker-account.model';
 
+export type ConnectionFeedback =
+  { kind: 'success'; message: string } | { kind: 'error'; message: string } | null;
+
 @Component({
   selector: 'app-accounts',
   imports: [AccountCard, AsyncPipe, ReactiveFormsModule],
@@ -16,12 +19,14 @@ import { BrokerAccount } from '../../../../core/models/broker-account.model';
 })
 export class Accounts {
   accounts!: Observable<Account[]>;
-  loadingSync = false;
-  errorMessage = '';
   brokerAccounts!: Observable<BrokerAccount[]>;
   accountState!: Observable<{ accounts: Account[]; brokerAccounts: BrokerAccount[] }>;
-  connectionMessage = '';
-  connecting = false;
+
+  readonly connecting = signal(false);
+  readonly connectionFeedback = signal<ConnectionFeedback>(null);
+  readonly syncing = signal(false);
+  readonly syncFeedback = signal<ConnectionFeedback>(null);
+
   readonly brokerForm = new FormGroup({
     provider: new FormControl<'KRAKEN'>('KRAKEN', { nonNullable: true }),
     displayName: new FormControl('', {
@@ -50,35 +55,70 @@ export class Accounts {
   }
 
   connectBroker(): void {
-    if (this.brokerForm.invalid || this.connecting) {
+    if (this.brokerForm.invalid || this.connecting()) {
       this.brokerForm.markAllAsTouched();
       return;
     }
-    this.connecting = true;
-    this.connectionMessage = '';
+    this.connecting.set(true);
+    this.connectionFeedback.set(null);
     this.brokerAccountService.createAndConnect(this.brokerForm.getRawValue()).subscribe({
       next: (result) => {
-        this.connecting = false;
-        // Show clear success message
-        this.connectionMessage =
-          'Connexion broker réussie · ' + (result.safeMessage || 'Compte créé');
-        this.brokerForm.reset({
-          provider: 'KRAKEN',
-          displayName: '',
-          apiKey: '',
-          apiSecret: '',
-          passphrase: '',
-        });
-        this.loadBrokerAccounts();
-        // Set a timeout to clear the message after 5 seconds
-        setTimeout(() => {
-          this.connectionMessage = '';
-        }, 5000);
+        this.connecting.set(false);
+        if (result.outcome === 'VALID') {
+          const detail = result.safeMessage || 'Credentials validés';
+          this.connectionFeedback.set({
+            kind: 'success',
+            message: `Connexion Kraken réussie — ${detail}. Vous pouvez maintenant synchroniser vos comptes.`,
+          });
+          this.brokerForm.reset({
+            provider: 'KRAKEN',
+            displayName: '',
+            apiKey: '',
+            apiSecret: '',
+            passphrase: '',
+          });
+          this.loadBrokerAccounts();
+        } else {
+          this.connectionFeedback.set({
+            kind: 'error',
+            message:
+              result.safeMessage ||
+              "La connexion broker n'a pas pu être validée. Vérifiez vos clés API puis réessayez.",
+          });
+          this.clearSensitiveFields();
+        }
       },
       error: () => {
-        this.connecting = false;
-        this.connectionMessage = 'La connexion broker n’a pas pu être validée.';
+        this.connecting.set(false);
+        this.connectionFeedback.set({
+          kind: 'error',
+          message:
+            "La connexion broker n'a pas pu être validée. Vérifiez vos clés API puis réessayez.",
+        });
         this.clearSensitiveFields();
+      },
+    });
+  }
+
+  sync(): void {
+    if (this.syncing()) {
+      return;
+    }
+    this.syncing.set(true);
+    this.syncFeedback.set(null);
+
+    this.accountService.synchronize().subscribe({
+      next: () => {
+        this.syncing.set(false);
+        this.syncFeedback.set({ kind: 'success', message: 'Synchronisation réussie.' });
+        this.loadAccounts();
+      },
+      error: () => {
+        this.syncing.set(false);
+        this.syncFeedback.set({
+          kind: 'error',
+          message: 'Erreur lors de la synchronisation.',
+        });
       },
     });
   }
@@ -111,20 +151,5 @@ export class Accounts {
       accounts: this.accounts,
       brokerAccounts: this.brokerAccounts,
     }).pipe(shareReplay({ bufferSize: 1, refCount: true }));
-  }
-
-  sync(): void {
-    this.loadingSync = true;
-
-    this.accountService.synchronize().subscribe({
-      next: () => {
-        this.loadingSync = false;
-        this.loadAccounts();
-      },
-      error: () => {
-        this.loadingSync = false;
-        this.errorMessage = 'Erreur lors de la synchronisation.';
-      },
-    });
   }
 }

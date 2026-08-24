@@ -24,12 +24,20 @@
         autocomplete="new-password"
       />
     </label>
-    <button type="submit" [disabled]="connecting">
-      {{ connecting ? 'Validation…' : 'Connecter le compte' }}
+    <button type="submit" [disabled]="connecting()">
+      {{ connecting() ? 'Validation…' : 'Connecter le compte' }}
     </button>
   </form>
-  @if (connectionMessage) {
-    <p class="connection-message">{{ connectionMessage }}</p>
+  @if (connectionFeedback(); as feedback) {
+    <p
+      class="connection-message"
+      [class.success]="feedback.kind === 'success'"
+      [class.error]="feedback.kind === 'error'"
+      data-testid="connection-feedback"
+      role="status"
+    >
+      {{ feedback.message }}
+    </p>
   }
 </section>
 
@@ -53,12 +61,22 @@
 </section>
 
 <h2>Comptes de trading synchronisés</h2>
-<button (click)="sync()">Synchroniser Kraken</button>
+<button (click)="sync()" [disabled]="syncing()" data-testid="synchronize-button">
+  {{ syncing() ? 'Synchronisation…' : 'Synchroniser Kraken' }}
+</button>
+@if (syncFeedback(); as feedback) {
+  <p
+    class="connection-message"
+    [class.success]="feedback.kind === 'success'"
+    [class.error]="feedback.kind === 'error'"
+    data-testid="sync-feedback"
+    role="status"
+  >
+    {{ feedback.message }}
+  </p>
+}
 <div class="accounts-container">
   @for (account of accounts | async; track account.accountId) {
     <app-account-card [account]="account"> </app-account-card>
   }
 </div>
-@if (errorMessage) {
-  <p class="error">{{ errorMessage }}</p>
-}
