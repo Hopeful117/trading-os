@@ -1,14 +1,12 @@
 import { Component } from '@angular/core';
 import { AccountService } from '../../../../core/services/account.service';
 import { Account } from '../../../../core/models/account.model';
-import { AccountCard} from '../../components/account-card/account-card';
+import { AccountCard } from '../../components/account-card/account-card';
 import { combineLatest, Observable, shareReplay } from 'rxjs';
 import { AsyncPipe } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 import { BrokerAccount } from '../../../../core/models/broker-account.model';
-
-
 
 @Component({
   selector: 'app-accounts',
@@ -80,9 +78,9 @@ export class Accounts {
   }
 
   private loadBrokerAccounts(): void {
-    this.brokerAccounts = this.brokerAccountService.list().pipe(
-      shareReplay({ bufferSize: 1, refCount: true }),
-    );
+    this.brokerAccounts = this.brokerAccountService
+      .list()
+      .pipe(shareReplay({ bufferSize: 1, refCount: true }));
     this.refreshAccountState();
   }
 
@@ -93,9 +91,9 @@ export class Accounts {
   }
 
   private loadAccounts(): void {
-    this.accounts = this.accountService.getAccounts().pipe(
-      shareReplay({ bufferSize: 1, refCount: true }),
-    );
+    this.accounts = this.accountService
+      .getAccounts()
+      .pipe(shareReplay({ bufferSize: 1, refCount: true }));
     this.refreshAccountState();
   }
 

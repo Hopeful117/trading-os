@@ -1,8 +1,8 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import {RegisterService} from '../../../../core/services/register';
-import {RegisterRequest} from '../../../../core/models/register-request.model';
-import {Router} from '@angular/router';
+import { RegisterService } from '../../../../core/services/register';
+import { RegisterRequest } from '../../../../core/models/register-request.model';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-register',
@@ -11,7 +11,7 @@ import {Router} from '@angular/router';
   styleUrl: './register.scss',
 })
 export class RegisterComponent {
-  private registerService=inject(RegisterService);
+  private registerService = inject(RegisterService);
   private router = inject(Router);
   registerRequest: RegisterRequest = {
     username: '',
@@ -29,7 +29,7 @@ export class RegisterComponent {
     this.registerService.register(this.registerRequest).subscribe({
       next: () => {
         this.loading = false;
-        this.router.navigate(['/login'])
+        this.router.navigate(['/login']);
       },
 
       error: (error) => {

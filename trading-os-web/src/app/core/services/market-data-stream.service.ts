@@ -1,14 +1,13 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import {TickerEvent} from '../models/ticker-event.model';
+import { TickerEvent } from '../models/ticker-event.model';
 import { environment } from '../../../environments/environment';
-import {AuthService} from './auth.service';
+import { AuthService } from './auth.service';
 import { OhlcEvent } from '../models/ohlc-event.model';
 import { MarketStreamQuery } from '../models/MarketStreamQuery';
 import { MarketStreamType } from '../models/market-stream-type';
 import { OrderBookSnapshot } from '../models/order-book-snapshot.model';
 import { RecentTradesSnapshot } from '../models/recent-trades-snapshot.model';
-
 
 @Injectable({
   providedIn: 'root',
@@ -19,7 +18,7 @@ export class MarketDataStreamService {
   streamTicker(symbol: string): Observable<TickerEvent> {
     return this.createStream<TickerEvent>({
       symbol,
-      type:MarketStreamType.TICKER,
+      type: MarketStreamType.TICKER,
     });
   }
 
@@ -27,16 +26,12 @@ export class MarketDataStreamService {
     return this.createStream<OhlcEvent>({
       marketId,
       symbol,
-      type:MarketStreamType.OHLC,
+      type: MarketStreamType.OHLC,
       interval,
     });
   }
 
-  streamOrderBook(
-    marketId: string,
-    symbol: string,
-    depth: number,
-  ): Observable<OrderBookSnapshot> {
+  streamOrderBook(marketId: string, symbol: string, depth: number): Observable<OrderBookSnapshot> {
     return this.createStream<OrderBookSnapshot>({
       marketId,
       symbol,
@@ -45,10 +40,7 @@ export class MarketDataStreamService {
     });
   }
 
-  streamRecentTrades(
-    marketId: string,
-    symbol: string,
-  ): Observable<RecentTradesSnapshot> {
+  streamRecentTrades(marketId: string, symbol: string): Observable<RecentTradesSnapshot> {
     return this.createStream<RecentTradesSnapshot>({
       marketId,
       symbol,

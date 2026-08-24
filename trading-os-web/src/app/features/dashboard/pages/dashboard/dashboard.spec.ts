@@ -55,10 +55,7 @@ describe('Dashboard', () => {
 
   it('displays multiple positions and positive or negative pnl classes', async () => {
     const data = summary();
-    data.openPositions = [
-      position('p1', 'BTC/USD', 25),
-      position('p2', 'ETH/USD', -15),
-    ];
+    data.openPositions = [position('p1', 'BTC/USD', 25), position('p2', 'ETH/USD', -15)];
     dashboardService.findDashboard.mockReturnValue(of(data));
     await create();
 
@@ -92,12 +89,18 @@ describe('Dashboard', () => {
   });
 
   it('keeps an explicit error state', async () => {
-    dashboardService.findDashboard.mockReturnValue(
-      throwError(() => new Error('unavailable')),
-    );
+    dashboardService.findDashboard.mockReturnValue(throwError(() => new Error('unavailable')));
     await create();
 
     expect(text()).toContain('Dashboard est temporairement indisponible');
+  });
+
+  it('returns empty string for null or zero pnl', () => {
+    const comp = TestBed.createComponent(Dashboard).componentInstance;
+    expect(comp.pnlClass(null)).toBe('');
+    expect(comp.pnlClass(0)).toBe('');
+    expect(comp.pnlClass(10)).toBe('positive');
+    expect(comp.pnlClass(-10)).toBe('negative');
   });
 
   it('polls the selected account', async () => {
@@ -107,6 +110,67 @@ describe('Dashboard', () => {
     fixture.detectChanges();
 
     expect(dashboardService.findDashboard).toHaveBeenCalledWith('account-2');
+  });
+
+  it('handles account service failure gracefully', async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Dashboard],
+      providers: [
+        {
+          provide: AccountService,
+          useValue: { getAccounts: () => throwError(() => new Error('service down')) },
+        },
+        { provide: DashboardService, useValue: dashboardService },
+      ],
+    }).compileComponents();
+    fixture = TestBed.createComponent(Dashboard);
+    fixture.detectChanges();
+    await nextTask();
+    fixture.detectChanges();
+
+    expect(text()).toContain('Aucun compte');
+  });
+
+  it('shows empty state when no accounts exist', async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Dashboard],
+      providers: [
+        { provide: AccountService, useValue: { getAccounts: () => of([]) } },
+        { provide: DashboardService, useValue: dashboardService },
+      ],
+    }).compileComponents();
+    fixture = TestBed.createComponent(Dashboard);
+    fixture.detectChanges();
+    await nextTask();
+    fixture.detectChanges();
+
+    expect(text()).toContain('Aucun compte');
+    expect(dashboardService.findDashboard).not.toHaveBeenCalled();
+  });
+
+  it('displays null fields as unavailable and renders risk rules', async () => {
+    const data = summary();
+    data.account.equity = null;
+    data.account.dailyPnl = null;
+    data.account.currentDrawdown = null;
+    data.risk.rules = [
+      {
+        code: 'MAX_DAILY_LOSS',
+        label: 'Perte max/jour',
+        limit: 5,
+        currentValue: 3.2,
+        status: 'WARNING',
+      },
+    ];
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+
+    const text_ = text();
+    expect(text_).toContain('Indisponible');
+    expect(text_).toContain('Perte max/jour');
+    expect(text_).toContain('3.20');
   });
 
   async function create(): Promise<void> {

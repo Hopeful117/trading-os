@@ -44,8 +44,9 @@ export class MarketDetail {
   private readonly selectedTimeframeSubject = new BehaviorSubject<OhlcTimeframe>(
     OHLC_TIMEFRAMES[1],
   );
-  private readonly selectedOrderBookDepthSubject =
-    new BehaviorSubject<OrderBookDepth>(ORDER_BOOK_DEPTHS[0]);
+  private readonly selectedOrderBookDepthSubject = new BehaviorSubject<OrderBookDepth>(
+    ORDER_BOOK_DEPTHS[0],
+  );
 
   readonly selectedTimeframe$ = this.selectedTimeframeSubject.pipe(
     distinctUntilChanged((previous, current) => previous.minutes === current.minutes),
@@ -105,22 +106,18 @@ export class MarketDetail {
       const unsubscribePrevious$ =
         previousSubscription === null
           ? of(undefined)
-          : this.marketService
-              .unsubscribe(previousSubscription.marketId, this.tickerRequest)
-              .pipe(
-                catchError((error) => {
-                  console.error('Unable to unsubscribe previous ticker stream', error);
-                  return of(undefined);
-                }),
-              );
+          : this.marketService.unsubscribe(previousSubscription.marketId, this.tickerRequest).pipe(
+              catchError((error) => {
+                console.error('Unable to unsubscribe previous ticker stream', error);
+                return of(undefined);
+              }),
+            );
 
       return unsubscribePrevious$.pipe(
         tap(() => {
           this.activeTickerSubscription = null;
         }),
-        switchMap(() =>
-          this.marketService.subscribe(market.marketId, this.tickerRequest),
-        ),
+        switchMap(() => this.marketService.subscribe(market.marketId, this.tickerRequest)),
         tap(() => {
           this.activeTickerSubscription = {
             marketId: market.marketId,
@@ -140,13 +137,11 @@ export class MarketDetail {
       const activeTicker = this.activeTickerSubscription;
 
       if (activeTicker !== null) {
-        this.marketService
-          .unsubscribe(activeTicker.marketId, this.tickerRequest)
-          .subscribe({
-            error: (error) => {
-              console.error('Unable to unsubscribe ticker stream', error);
-            },
-          });
+        this.marketService.unsubscribe(activeTicker.marketId, this.tickerRequest).subscribe({
+          error: (error) => {
+            console.error('Unable to unsubscribe ticker stream', error);
+          },
+        });
       }
 
       const active = this.activeOhlcSubscription;
@@ -265,10 +260,7 @@ export class MarketDetail {
     }),
   );
 
-  readonly orderBook$ = combineLatest([
-    this.market$,
-    this.selectedOrderBookDepth$,
-  ]).pipe(
+  readonly orderBook$ = combineLatest([this.market$, this.selectedOrderBookDepth$]).pipe(
     switchMap(([market, depth]) => {
       const nextRequest: MarketStreamRequest = {
         type: MarketStreamType.ORDER_BOOK,
@@ -302,11 +294,7 @@ export class MarketDetail {
           };
         }),
         switchMap(() =>
-          this.marketDataStreamService.streamOrderBook(
-            market.marketId,
-            market.symbol,
-            depth,
-          ),
+          this.marketDataStreamService.streamOrderBook(market.marketId, market.symbol, depth),
         ),
       );
     }),
@@ -323,16 +311,10 @@ export class MarketDetail {
         previousSubscription === null
           ? of(undefined)
           : this.marketService
-              .unsubscribe(
-                previousSubscription.marketId,
-                this.recentTradesRequest,
-              )
+              .unsubscribe(previousSubscription.marketId, this.recentTradesRequest)
               .pipe(
                 catchError((error) => {
-                  console.error(
-                    'Unable to unsubscribe previous recent-trades stream',
-                    error,
-                  );
+                  console.error('Unable to unsubscribe previous recent-trades stream', error);
                   return of(undefined);
                 }),
               );
@@ -341,22 +323,14 @@ export class MarketDetail {
         tap(() => {
           this.activeRecentTradesSubscription = null;
         }),
-        switchMap(() =>
-          this.marketService.subscribe(
-            market.marketId,
-            this.recentTradesRequest,
-          ),
-        ),
+        switchMap(() => this.marketService.subscribe(market.marketId, this.recentTradesRequest)),
         tap(() => {
           this.activeRecentTradesSubscription = {
             marketId: market.marketId,
           };
         }),
         switchMap(() =>
-          this.marketDataStreamService.streamRecentTrades(
-            market.marketId,
-            market.symbol,
-          ),
+          this.marketDataStreamService.streamRecentTrades(market.marketId, market.symbol),
         ),
       );
     }),
@@ -366,7 +340,6 @@ export class MarketDetail {
     }),
   );
 }
-
 
 type OhlcTimeframe = (typeof OHLC_TIMEFRAMES)[number];
 

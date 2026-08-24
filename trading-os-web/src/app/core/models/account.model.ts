@@ -1,4 +1,4 @@
-import {AccountBalance } from './account-balance.model';
+import { AccountBalance } from './account-balance.model';
 
 export interface Account {
   accountId: string;

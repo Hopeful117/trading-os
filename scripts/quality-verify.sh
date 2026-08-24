@@ -36,8 +36,17 @@ for module in "${java_modules[@]}"; do
   fi
 done
 
+printf '\nBackend coverage gate: checking LINE >= 80%% for business modules\n'
+python3 "${project_root}/scripts/check-backend-coverage.py"
+
 printf '\nInstalling frontend dependencies from package-lock.json\n'
 npm --prefix "${project_root}/trading-os-web" ci
+
+printf '\nChecking frontend lint (Prettier)\n'
+npm --prefix "${project_root}/trading-os-web" exec -- prettier --check . || {
+  printf '\nLint check failed. Run: npx prettier --write .\n' >&2
+  exit 1
+}
 
 printf '\nTesting trading-os-web with LCOV coverage\n'
 npm --prefix "${project_root}/trading-os-web" run test:coverage
@@ -50,3 +59,5 @@ fi
 
 printf '\nBuilding trading-os-web\n'
 npm --prefix "${project_root}/trading-os-web" run build
+
+printf '\nAll quality gates passed.\n'

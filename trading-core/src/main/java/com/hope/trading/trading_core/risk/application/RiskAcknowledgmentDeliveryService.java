@@ -23,7 +23,12 @@ public class RiskAcknowledgmentDeliveryService {
         persistence.claimAcknowledgment(evaluationId, clock.instant(), true).ifPresent(this::deliverClaim);
     }
 
-    @Scheduled(fixedDelayString = "${risk.acknowledgment.retry-delay:5000}")
+    // Separate initial delay so a fresh instance does not immediately deliver
+    // stale outbox entries at startup (STORY-0020A flaky-root-cause fix); the
+    // first delivery pass now waits one full retry period by default.
+    @Scheduled(fixedDelayString = "${risk.acknowledgment.retry-delay:5000}",
+            initialDelayString = "${risk.acknowledgment.retry-initial-delay:"
+                    + "${risk.acknowledgment.retry-delay:5000}}")
     public void retryDue() {
         for (UUID evaluationId : persistence.dueAcknowledgments(clock.instant(), 50)) {
             persistence.claimAcknowledgment(evaluationId, clock.instant(), false).ifPresent(this::deliverClaim);

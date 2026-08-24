@@ -1,5 +1,4 @@
 .login-container {
-
   min-height: calc(100vh - 64px);
 
   display: flex;
@@ -7,18 +6,10 @@
   justify-content: center;
   align-items: center;
 
-  background:
-    radial-gradient(
-      circle at top,
-      rgba(56, 189, 248, 0.12),
-      transparent 45%
-    );
-
+  background: radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 45%);
 }
 
-
 .login-container h2 {
-
   color: #e2e8f0;
 
   font-size: 1.8rem;
@@ -26,12 +17,9 @@
   margin-bottom: 25px;
 
   font-weight: 600;
-
 }
 
-
 .login-container form {
-
   width: 380px;
 
   padding: 32px;
@@ -41,47 +29,32 @@
 
   gap: 20px;
 
-  background:
-    linear-gradient(
-      145deg,
-      #0f172a,
-      #1e293b
-    );
+  background: linear-gradient(145deg, #0f172a, #1e293b);
 
   border-radius: 16px;
 
-  border: 1px solid rgba(148,163,184,0.15);
+  border: 1px solid rgba(148, 163, 184, 0.15);
 
-  box-shadow:
-    0 20px 40px rgba(0,0,0,0.35);
-
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
 }
 
-
 .login-container form > div {
-
   display: flex;
 
   flex-direction: column;
 
   gap: 8px;
-
 }
 
-
 .login-container label {
-
   color: #94a3b8;
 
   font-size: 0.9rem;
 
   font-weight: 500;
-
 }
 
-
 .login-container input {
-
   padding: 12px 14px;
 
   border-radius: 10px;
@@ -94,32 +67,22 @@
 
   font-size: 1rem;
 
-  transition: all .2s ease;
-
+  transition: all 0.2s ease;
 }
-
 
 .login-container input::placeholder {
-
   color: #64748b;
-
 }
 
-
 .login-container input:focus {
-
   outline: none;
 
   border-color: #38bdf8;
 
-  box-shadow:
-    0 0 0 3px rgba(56,189,248,0.15);
-
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
 }
 
-
 .login-container button {
-
   margin-top: 10px;
 
   padding: 12px;
@@ -136,47 +99,31 @@
 
   color: white;
 
-  background:
-    linear-gradient(
-      135deg,
-      #2563eb,
-      #38bdf8
-    );
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
 
   transition:
-    transform .2s ease,
-    box-shadow .2s ease;
-
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
-
 
 .login-container button:hover {
-
   transform: translateY(-2px);
 
-  box-shadow:
-    0 10px 25px rgba(56,189,248,0.25);
-
+  box-shadow: 0 10px 25px rgba(56, 189, 248, 0.25);
 }
 
-
 .error {
-
   margin: 0;
 
   padding: 12px;
 
   border-radius: 10px;
 
-  background:
-    rgba(239,68,68,0.15);
+  background: rgba(239, 68, 68, 0.15);
 
-  border:
-    1px solid rgba(239,68,68,0.3);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 
-  color:
-    #fca5a5;
+  color: #fca5a5;
 
-  font-size: .9rem;
-
+  font-size: 0.9rem;
 }

@@ -5,7 +5,7 @@ import { Shell } from './layout/shell/shell';
   selector: 'app-root',
   imports: [Shell],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
 export class App {
   protected readonly title = signal('trading-os-web');

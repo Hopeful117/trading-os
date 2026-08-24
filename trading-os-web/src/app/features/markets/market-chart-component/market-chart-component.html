@@ -1,21 +1,12 @@
 <section class="market-chart">
-  <div
-    #chartContainer
-    class="chart-container"
-    aria-label="Market candlestick chart"
-  ></div>
+  <div #chartContainer class="chart-container" aria-label="Market candlestick chart"></div>
 
-  @if (
-    history().length === 0 &&
-    liveCandle() === null
-    ) {
+  @if (history().length === 0 && liveCandle() === null) {
     <div class="chart-empty-state">
       <div class="empty-state-content">
         <h3>Loading market history</h3>
 
-        <p>
-          Waiting for OHLC market data...
-        </p>
+        <p>Waiting for OHLC market data...</p>
       </div>
     </div>
   }

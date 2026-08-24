@@ -34,7 +34,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
-import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -58,7 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 @Slf4j
 public class KrakenDataStreamProvider implements MarketDataStreamProvider {
-    private final ReactorNettyWebSocketClient client;
+    private final KrakenStreamConnector connector;
     private final KrakenProperties krakenProperties;
     private final ObjectMapper objectMapper;
     private final KrakenTickerMapper tickerMapper;
@@ -94,6 +93,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             new Object();
 
     public KrakenDataStreamProvider(
+            KrakenStreamConnector connector,
             KrakenProperties krakenProperties,
             ObjectMapper objectMapper,
             KrakenTickerMapper tickerMapper,
@@ -118,7 +118,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         this.tradeMapper = tradeMapper;
         this.recentTradesStateService = recentTradesStateService;
         this.recentTradesEventPublisher = recentTradesEventPublisher;
-        this.client = new ReactorNettyWebSocketClient();
+        this.connector = connector;
         this.krakenProperties = krakenProperties;
     }
 
@@ -134,7 +134,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 || connectionSubscription.isDisposed()) {
 
             connectionSubscription =
-                    client.execute(
+                    connector.connect(
                                     URI.create(krakenProperties.getWebsocket()),
                                     webSocketSession -> {
 

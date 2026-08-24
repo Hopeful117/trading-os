@@ -32,14 +32,11 @@ export class BrokerAccountService {
       })
       .pipe(
         switchMap((account) =>
-          this.http.post<CredentialValidation>(
-            `${this.baseUrl}/${account.id}/credentials`,
-            {
-              apiKey: command.apiKey,
-              apiSecret: command.apiSecret,
-              passphrase: command.passphrase || undefined,
-            },
-          ),
+          this.http.post<CredentialValidation>(`${this.baseUrl}/${account.id}/credentials`, {
+            apiKey: command.apiKey,
+            apiSecret: command.apiSecret,
+            passphrase: command.passphrase || undefined,
+          }),
         ),
       );
   }
@@ -55,10 +52,7 @@ export class BrokerAccountService {
   }
 
   disconnect(accountId: string): Observable<BrokerAccount> {
-    return this.http.post<BrokerAccount>(
-      `${this.baseUrl}/${accountId}/disconnect`,
-      {},
-    );
+    return this.http.post<BrokerAccount>(`${this.baseUrl}/${accountId}/disconnect`, {});
   }
 
   revoke(accountId: string): Observable<void> {

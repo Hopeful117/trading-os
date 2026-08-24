@@ -32,9 +32,7 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles.scss"
-            ]
+            "styles": ["src/styles.scss"]
           },
           "configurations": {
             "production": {
@@ -75,11 +73,10 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "coverageReporters": [
-              "html",
-              "lcov",
-              "text-summary"
-            ]
+            "coverageReporters": ["html", "lcov", "text-summary"],
+            "coverageThresholds": {
+              "lines": 80
+            }
           }
         }
       }

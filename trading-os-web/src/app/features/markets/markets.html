@@ -1,5 +1,4 @@
 <div class="markets-page">
-
   <div class="page-header">
     <div>
       <h1>Markets</h1>
@@ -12,73 +11,58 @@
   />
 
   <div class="markets-card">
-
     <table>
-
       <thead>
-      <tr>
-        <th>Symbol</th>
-        <th>Provider</th>
-        <th>Base</th>
-        <th>Quote</th>
-        <th>Status</th>
-      </tr>
+        <tr>
+          <th>Symbol</th>
+          <th>Provider</th>
+          <th>Base</th>
+          <th>Quote</th>
+          <th>Status</th>
+        </tr>
       </thead>
-
 
       <tbody>
         @if (filteredMarkets$ | async; as markets) {
           @if (markets.length > 0) {
             @for (market of markets; track market.marketId) {
+              <tr
+                class="market-row"
+                tabindex="0"
+                (click)="openMarket(market.marketId)"
+                (keydown.enter)="openMarket(market.marketId)"
+              >
+                <td class="symbol">
+                  {{ market.symbol }}
+                </td>
 
+                <td>
+                  {{ market.provider }}
+                </td>
 
+                <td>
+                  {{ market.baseAsset }}
+                </td>
 
-          <tr
-            class="market-row"
-            tabindex="0"
-            (click)="openMarket(market.marketId)"
-            (keydown.enter)="openMarket(market.marketId)"
+                <td>
+                  {{ market.quoteAsset }}
+                </td>
 
-          >
-
-            <td class="symbol">
-              {{ market.symbol }}
-            </td>
-
-            <td>
-              {{ market.provider }}
-            </td>
-
-            <td>
-              {{ market.baseAsset }}
-            </td>
-
-            <td>
-              {{ market.quoteAsset }}
-            </td>
-
-            <td>
-            <span class="status"
-                  [class.open]="market.marketState.tradingStatus === 'OPEN'">
-              {{ market.marketState.tradingStatus }}
-            </span>
-            </td>
-
-          </tr>
-
-        }}@else {
-          <section class="empty-state">
-            <h2>No market found</h2>
-            <p>Try another symbol, asset or provider.</p>
-          </section>
+                <td>
+                  <span class="status" [class.open]="market.marketState.tradingStatus === 'OPEN'">
+                    {{ market.marketState.tradingStatus }}
+                  </span>
+                </td>
+              </tr>
+            }
+          } @else {
+            <section class="empty-state">
+              <h2>No market found</h2>
+              <p>Try another symbol, asset or provider.</p>
+            </section>
+          }
         }
-        }
-
-
       </tbody>
-
     </table>
-
   </div>
-
 </div>

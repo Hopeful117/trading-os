@@ -1,13 +1,12 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { TokenService } from '../services/token';
 import { inject } from '@angular/core';
-import { Router} from '@angular/router';
+import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const tokenService = inject(TokenService);
   const router = inject(Router);
-
 
   if (req.url.includes('/login') || req.url.includes('/register')) {
     return next(req);

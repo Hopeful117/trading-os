@@ -1,6 +1,4 @@
-
 export interface MarketResponse {
-
   marketId: string;
 
   provider: string;
@@ -25,5 +23,4 @@ export interface MarketResponse {
     quantityPrecision: number;
     pricePrecision: number;
   };
-
 }

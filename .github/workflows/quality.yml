@@ -1,6 +1,9 @@
 name: Trading OS Quality
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -79,6 +82,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Upload compiled classes (${{ matrix.module }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: classes-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/classes/
+          if-no-files-found: warn
+          retention-days: 30
+
   frontend-quality:
     name: Frontend Quality
     runs-on: ubuntu-latest
@@ -97,13 +109,8 @@ jobs:
         working-directory: trading-os-web
         run: npm ci
 
-      # NON-BLOCKING visibility only. Formatting enforcement is deferred:
-      # the repository contains 58 pre-existing Prettier violations.
-      # Follow-up: mechanical formatting commit -> verify no functional
-      # change -> promote this step to a blocking gate (continue-on-error removed).
-      - name: Format check (Prettier, non-blocking)
+      - name: Format check (Prettier)
         working-directory: trading-os-web
-        continue-on-error: true
         run: npx prettier --check .
 
       - name: Unit tests with coverage (Vitest)
@@ -177,6 +184,119 @@ jobs:
             grep -A6 -r "Coverage summary" coverage-frontend || true
           else
             echo "Frontend coverage artifact not available (frontend job failed or produced no output)."
+          fi
+
+  sonar-quality:
+    name: SonarQube Quality — ${{ matrix.project }}
+    runs-on: [self-hosted, linux, x64, engineering, sonarqube, trading-os]
+    if: >
+      github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch'
+    needs: [backend-quality, frontend-quality]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: risk-domain
+            module: risk-domain
+            secret: SONAR_TOKEN_RISK_DOMAIN
+            type: backend
+          - project: gateway
+            module: gateway
+            secret: SONAR_TOKEN_GATEWAY
+            type: backend
+          - project: eureka-server
+            module: eureka-server
+            secret: SONAR_TOKEN_EUREKA_SERVER
+            type: backend
+          - project: trading-core
+            module: trading-core
+            secret: SONAR_TOKEN_TRADING_CORE
+            type: backend
+          - project: broker-service
+            module: broker-service
+            secret: SONAR_TOKEN_BROKER_SERVICE
+            type: backend
+          - project: market-data
+            module: market-data
+            secret: SONAR_TOKEN_MARKET_DATA
+            type: backend
+          - project: market-intelligence
+            module: market-intelligence
+            secret: SONAR_TOKEN_MARKET_INTELLIGENCE
+            type: backend
+          - project: trading-os-web
+            module: trading-os-web
+            secret: SONAR_TOKEN_WEB
+            type: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK 21 (Maven cache)
+        if: matrix.type == 'backend'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Setup Node 22 (npm cache)
+        if: matrix.type == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: trading-os-web/package-lock.json
+
+      - name: Download JaCoCo reports (${{ matrix.module }})
+        if: matrix.type == 'backend'
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/site/jacoco/
+
+      - name: Download compiled classes (${{ matrix.module }})
+        if: matrix.type == 'backend'
+        uses: actions/download-artifact@v4
+        with:
+          name: classes-${{ matrix.module }}
+          path: ${{ matrix.module }}/target/classes/
+
+      - name: Download frontend coverage
+        if: matrix.type == 'frontend'
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-trading-os-web
+          path: trading-os-web/coverage/
+
+      - name: SonarQube Scan — ${{ matrix.project }}
+        env:
+          SONAR_TOKEN: ${{ secrets[matrix.secret] }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        run: |
+          if [ "${{ matrix.type }}" = "backend" ]; then
+            cd "${{ matrix.module }}"
+            mvn -B sonar:sonar \
+              -Dsonar.projectKey=${{ matrix.project }} \
+              -Dsonar.host.url="$SONAR_HOST_URL" \
+              -Dsonar.token="$SONAR_TOKEN" \
+              -Dsonar.qualitygate.wait=true \
+              -Dsonar.scm.revision="${{ github.sha }}"
+          else
+            cd trading-os-web
+            npm ci
+            npx sonar-scanner \
+              -Dsonar.projectKey=${{ matrix.project }} \
+              -Dsonar.host.url="$SONAR_HOST_URL" \
+              -Dsonar.token="$SONAR_TOKEN" \
+              -Dsonar.sources=src \
+              -Dsonar.tests=src \
+              -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info \
+              -Dsonar.qualitygate.wait=true \
+              -Dsonar.scm.revision="${{ github.sha }}"
           fi
 
   quality-gate:
