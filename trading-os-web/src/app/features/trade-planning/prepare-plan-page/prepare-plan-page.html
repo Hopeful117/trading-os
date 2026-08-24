@@ -1,0 +1,99 @@
+<div class="prepare-plan-page">
+  <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
+
+  @if (view$ | async; as view) {
+    @switch (view.status) {
+      @case ('loading') {
+        <div class="state-card" data-testid="loading-state">
+          <span class="spinner"></span>
+          <p>Loading opportunity…</p>
+        </div>
+      }
+      @case ('error') {
+        <div class="state-card error" data-testid="error-state">
+          <h2>Unable to prepare trade plan</h2>
+          <p>The opportunity must be ACTIVE to create a trade plan.</p>
+        </div>
+      }
+      @case ('ready') {
+        <article class="prepare-card" data-testid="prepare-form">
+          <header class="card-header">
+            <div>
+              <h1>Create Trade Plan</h1>
+              <p>
+                {{ view.opportunity.instrument }} · {{ view.opportunity.direction }} ·
+                {{ view.opportunity.type }}
+              </p>
+            </div>
+            <span class="direction-badge" [class.long]="view.opportunity.direction === 'LONG'">
+              {{ view.opportunity.direction }}
+            </span>
+          </header>
+
+          <section class="facts-grid">
+            <div class="fact">
+              <span class="label">Timeframe</span>
+              <span class="value">{{ view.opportunity.timeframe }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Score</span>
+              <span class="value">{{ view.opportunity.score }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Valid from</span>
+              <span class="value">{{ view.opportunity.validFrom | date: 'MMM d, HH:mm' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Valid until</span>
+              <span class="value">
+                @if (view.opportunity.validUntil; as validUntil) {
+                  {{ validUntil | date: 'MMM d, HH:mm' }}
+                } @else {
+                  —
+                }
+              </span>
+            </div>
+          </section>
+
+          <section class="thesis">
+            <h2>Opportunity thesis</h2>
+            <p>{{ view.opportunity.explanation }}</p>
+          </section>
+
+          <section class="account-selection">
+            <h2>Select account</h2>
+            @if (view.accounts.length === 0) {
+              <p class="empty-accounts">No accounts available. Create an account first.</p>
+            } @else {
+              <select [(ngModel)]="accountId" class="account-select" data-testid="account-select">
+                <option value="" disabled>Choose an account…</option>
+                @for (account of view.accounts; track account.accountId) {
+                  <option [value]="account.accountId">
+                    {{ account.name }} ({{ account.baseCurrency }})
+                  </option>
+                }
+              </select>
+            }
+          </section>
+
+          <footer class="card-actions">
+            <button
+              class="btn-primary"
+              [disabled]="!accountId"
+              (click)="createPlan(view.opportunity.id)"
+              data-testid="create-plan-button"
+            >
+              Create Trade Plan
+            </button>
+          </footer>
+        </article>
+      }
+      @case ('creating') {
+        <div class="state-card" data-testid="creating-state">
+          <span class="spinner"></span>
+          <p>Creating trade plan…</p>
+        </div>
+      }
+    }
+  }
+</div>

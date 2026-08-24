@@ -1,0 +1,263 @@
+<div class="plan-page">
+  @if (view$ | async; as view) {
+    @switch (view.status) {
+      @case ('loading') {
+        <div class="state-card" data-testid="loading-state">
+          <span class="spinner"></span>
+          <p>Loading trade plan…</p>
+        </div>
+      }
+      @case ('error') {
+        <div class="state-card error" data-testid="error-state">
+          <h2>Unable to load trade plan</h2>
+          <p>Market Intelligence is temporarily unavailable. Try again later.</p>
+        </div>
+      }
+      @case ('deciding') {
+        <div class="state-card" data-testid="deciding-state">
+          <span class="spinner"></span>
+          <p>Processing decision…</p>
+        </div>
+      }
+      @case ('evaluatingRisk') {
+        <div class="state-card" data-testid="evaluating-risk-state">
+          <span class="spinner"></span>
+          <p>Evaluating risk…</p>
+        </div>
+      }
+      @case ('proposal') {
+        <article class="plan-card" data-testid="proposal-state">
+          <header class="card-header">
+            <div>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
+              <p>
+                Status: <span class="status-badge proposed">{{ view.plan.status }}</span>
+              </p>
+            </div>
+            <div class="badges">
+              <span class="direction" [class.long]="view.plan.direction === 'LONG'">
+                {{ view.plan.direction }}
+              </span>
+              <span class="entry-type">{{ view.plan.entryType }}</span>
+            </div>
+          </header>
+
+          <section class="facts-grid">
+            <div class="fact">
+              <span class="label">Entry price</span>
+              <span class="value">{{ view.plan.entryPrice | number: '1.2-2' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Stop loss</span>
+              <span class="value loss">{{ view.plan.stopLoss | number: '1.2-2' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Take profits</span>
+              <span class="value">
+                @for (tp of view.plan.takeProfits; track $index) {
+                  {{ tp | number: '1.2-2'
+                  }}{{ $index < view.plan.takeProfits.length - 1 ? ', ' : '' }}
+                }
+              </span>
+            </div>
+            <div class="fact">
+              <span class="label">Quantity</span>
+              <span class="value">{{ view.plan.quantity | number: '1.4-4' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Notional</span>
+              <span class="value">{{ view.plan.notional | number: '1.2-2' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Risk</span>
+              <span class="value">{{ view.plan.monetaryRisk | number: '1.2-2' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Risk/Reward</span>
+              <span class="value">{{ view.plan.riskReward | number: '1.1-1' }}R</span>
+            </div>
+            <div class="fact">
+              <span class="label">Expires</span>
+              <span class="value">{{ view.plan.expiresAt | date: 'MMM d, HH:mm' }}</span>
+            </div>
+          </section>
+
+          <section class="thesis">
+            <h2>Thesis</h2>
+            <p>{{ view.plan.thesis }}</p>
+          </section>
+
+          <section class="conditions">
+            <h2>Confirmation conditions</h2>
+            @if (view.plan.confirmationConditions.length === 0) {
+              <p class="empty">None</p>
+            } @else {
+              <ul>
+                @for (condition of view.plan.confirmationConditions; track $index) {
+                  <li>{{ condition }}</li>
+                }
+              </ul>
+            }
+
+            <h2>Invalidation conditions</h2>
+            @if (view.plan.invalidationConditions.length === 0) {
+              <p class="empty">None</p>
+            } @else {
+              <ul>
+                @for (condition of view.plan.invalidationConditions; track $index) {
+                  <li>{{ condition }}</li>
+                }
+              </ul>
+            }
+          </section>
+
+          <footer class="card-actions">
+            <button class="btn-reject" (click)="reject(view.plan)" data-testid="reject-button">
+              Reject
+            </button>
+            <button class="btn-accept" (click)="accept(view.plan)" data-testid="accept-button">
+              Accept Plan
+            </button>
+          </footer>
+        </article>
+      }
+      @case ('accepted') {
+        <article class="plan-card" data-testid="accepted-state">
+          <header class="card-header">
+            <div>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
+              <p>
+                Status: <span class="status-badge accepted">{{ view.plan.status }}</span>
+              </p>
+            </div>
+          </header>
+
+          <section class="facts-grid">
+            <div class="fact">
+              <span class="label">Entry price</span>
+              <span class="value">{{ view.plan.entryPrice | number: '1.2-2' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Stop loss</span>
+              <span class="value loss">{{ view.plan.stopLoss | number: '1.2-2' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Take profits</span>
+              <span class="value">
+                @for (tp of view.plan.takeProfits; track $index) {
+                  {{ tp | number: '1.2-2'
+                  }}{{ $index < view.plan.takeProfits.length - 1 ? ', ' : '' }}
+                }
+              </span>
+            </div>
+            <div class="fact">
+              <span class="label">Risk/Reward</span>
+              <span class="value">{{ view.plan.riskReward | number: '1.1-1' }}R</span>
+            </div>
+          </section>
+
+          <section class="thesis">
+            <h2>Thesis</h2>
+            <p>{{ view.plan.thesis }}</p>
+          </section>
+
+          <footer class="card-actions">
+            <button
+              class="btn-accept"
+              (click)="evaluateRisk(view.plan)"
+              data-testid="evaluate-risk-button"
+            >
+              Evaluate Risk
+            </button>
+          </footer>
+        </article>
+      }
+      @case ('rejected') {
+        <article class="plan-card" data-testid="rejected-state">
+          <header class="card-header">
+            <div>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
+              <p>
+                Status: <span class="status-badge rejected">{{ view.plan.status }}</span>
+              </p>
+            </div>
+          </header>
+
+          <section class="thesis">
+            <h2>Thesis</h2>
+            <p>{{ view.plan.thesis }}</p>
+          </section>
+        </article>
+      }
+      @case ('riskDecision') {
+        <article class="plan-card" data-testid="risk-decision-state">
+          <header class="card-header">
+            <div>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
+              <p>
+                Status:
+                <span
+                  class="status-badge"
+                  [class.approved]="view.decision.approved"
+                  [class.rejected]="!view.decision.approved"
+                >
+                  {{ view.decision.decision }}
+                </span>
+              </p>
+            </div>
+          </header>
+
+          <section class="risk-summary">
+            <h2>Risk evaluation</h2>
+            <div class="risk-grid">
+              <div class="fact">
+                <span class="label">Evaluation</span>
+                <span class="value">{{ view.decision.evaluationId }}</span>
+              </div>
+              <div class="fact">
+                <span class="label">Approved</span>
+                <span class="value" [class.approved]="view.decision.approved">
+                  {{ view.decision.approved ? 'Yes' : 'No' }}
+                </span>
+              </div>
+              <div class="fact">
+                <span class="label">Evaluated at</span>
+                <span class="value">{{ view.decision.evaluatedAt | date: 'MMM d, HH:mm:ss' }}</span>
+              </div>
+            </div>
+          </section>
+
+          @if (view.decision.reasons.length > 0) {
+            <section class="risk-details">
+              <h2>Reasons</h2>
+              <ul>
+                @for (reason of view.decision.reasons; track reason.code) {
+                  <li [class]="reason.severity">
+                    <strong>{{ reason.code }}</strong> — {{ reason.message }}
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          @if (view.decision.warnings.length > 0) {
+            <section class="risk-details">
+              <h2>Warnings</h2>
+              <ul>
+                @for (warning of view.decision.warnings; track warning.code) {
+                  <li class="warning">
+                    <strong>{{ warning.code }}</strong> — {{ warning.message }}
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          <footer class="card-actions">
+            <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
+          </footer>
+        </article>
+      }
+    }
+  }
+</div>

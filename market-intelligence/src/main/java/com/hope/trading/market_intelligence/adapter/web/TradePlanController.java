@@ -14,9 +14,18 @@ import java.util.stream.Collectors;
 public final class TradePlanController {
     private final TradePlanApplicationService service;
     private final TradePlanReplanningService replanning;
+    private final com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository contexts;
+
     public TradePlanController(
-            TradePlanApplicationService service, TradePlanReplanningService replanning) {
-        this.service = service; this.replanning = replanning;
+            TradePlanApplicationService service, TradePlanReplanningService replanning,
+            com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository contexts) {
+        this.service = service; this.replanning = replanning; this.contexts = contexts;
+    }
+
+    private TradePlanResponse view(TradePlan plan) {
+        var context = contexts.find(plan.planningContext().id(), plan.planningContext().version())
+                .orElseThrow();
+        return TradePlanResponse.from(plan, context);
     }
 
     @PostMapping
@@ -30,13 +39,13 @@ public final class TradePlanController {
     }
     @GetMapping("/{id}")
     public ResponseEntity<TradePlanResponse> latest(@PathVariable UUID id) {
-        return service.latest(new TradePlanId(id)).map(TradePlanResponse::from)
+        return service.latest(new TradePlanId(id)).map(this::view)
                 .map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
     @GetMapping("/{id}/versions")
     public ResponseEntity<List<TradePlanResponse>> versions(@PathVariable UUID id) {
         List<TradePlanResponse> history = service.history(new TradePlanId(id)).stream()
-                .map(TradePlanResponse::from).toList();
+                .map(this::view).toList();
         return history.isEmpty() ? ResponseEntity.notFound().build()
                 : ResponseEntity.ok(history);
     }
@@ -49,7 +58,7 @@ public final class TradePlanController {
     }
     private ResponseEntity<?> response(TradePlanningResult result, HttpStatus successStatus) {
         if (result instanceof TradePlanningResult.Success success) {
-            return ResponseEntity.status(successStatus).body(TradePlanResponse.from(success.plan()));
+            return ResponseEntity.status(successStatus).body(view(success.plan()));
         }
         TradePlanningResult.Failure failure = (TradePlanningResult.Failure) result;
         return ResponseEntity.unprocessableEntity().body(new TradePlanningFailureResponse(

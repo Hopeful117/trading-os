@@ -15,7 +15,7 @@ class TradePlanControllerTest {
         var replanning = new TradePlanReplanningService(
                 environment.plans(), environment.contexts(), environment.service());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new TradePlanController(environment.service(), replanning)).build();
+                new TradePlanController(environment.service(), replanning, environment.contexts())).build();
         String body = """
                 {
                   "opportunityIds":["%s"],
@@ -57,7 +57,7 @@ class TradePlanControllerTest {
                 new TradePlanController(environment.service(),
                         new TradePlanReplanningService(
                                 environment.plans(), environment.contexts(),
-                                environment.service()))).build();
+                                environment.service()), environment.contexts())).build();
         mvc.perform(post("/trade-plans")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
