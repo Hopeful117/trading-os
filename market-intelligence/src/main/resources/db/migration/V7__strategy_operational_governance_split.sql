@@ -8,7 +8,7 @@
 --   RETIRED                     -> RETIRED
 
 ALTER TABLE strategy_definitions RENAME COLUMN lifecycle_status TO operational_status;
-ALTER TABLE strategy_definitions ALTER COLUMN operational_status VARCHAR(30);
+ALTER TABLE strategy_definitions ALTER COLUMN operational_status TYPE VARCHAR(30);
 
 UPDATE strategy_definitions SET operational_status = 'DISABLED'
 WHERE operational_status IN ('DRAFT', 'CANDIDATE', 'VALIDATED');
