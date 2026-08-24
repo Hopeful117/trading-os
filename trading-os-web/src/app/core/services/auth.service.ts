@@ -1,11 +1,11 @@
-import { Injectable,inject } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable,tap } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { LoginRequest } from '../models/login-request.model';
 import { AuthenticationResponse } from '../models/authentication-response.model';
-import {TokenService} from './token';
+import { TokenService } from './token';
 
 @Injectable({
   providedIn: 'root',

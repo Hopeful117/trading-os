@@ -1,5 +1,4 @@
 .container {
-
   display: flex;
 
   height: calc(100vh - 64px);
@@ -9,17 +8,13 @@
   overflow: hidden;
 }
 
-
 app-sidebar {
-
   flex-shrink: 0;
 
   height: 100%;
 }
 
-
 main {
-
   flex: 1;
 
   padding: 24px;
@@ -27,5 +22,4 @@ main {
   overflow-y: auto;
 
   color: #e2e8f0;
-
 }

@@ -1,41 +1,26 @@
 <div class="login-container">
-
   <h2>Inscription</h2>
 
   <form (ngSubmit)="onSubmit()">
-
     <div>
       <label>Nom d'utilisateur</label>
-      <input
-        type="text"
-        name="username"
-        [(ngModel)]="registerRequest.username">
+      <input type="text" name="username" [(ngModel)]="registerRequest.username" />
     </div>
 
     <div>
       <label>Email</label>
-      <input
-        type="email"
-        name="email"
-        [(ngModel)]="registerRequest.email">
+      <input type="email" name="email" [(ngModel)]="registerRequest.email" />
     </div>
 
     <div>
       <label>Mot de passe</label>
-      <input
-        type="password"
-        name="password"
-        [(ngModel)]="registerRequest.password">
+      <input type="password" name="password" [(ngModel)]="registerRequest.password" />
     </div>
 
     @if (errorMessage) {
       <p class="error">{{ errorMessage }}</p>
     }
 
-    <button type="submit">
-      Créer un compte
-    </button>
-
+    <button type="submit">Créer un compte</button>
   </form>
-
 </div>

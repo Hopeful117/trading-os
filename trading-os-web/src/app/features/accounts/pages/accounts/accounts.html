@@ -17,7 +17,12 @@
     </label>
     <label>
       API secret
-      <input formControlName="apiSecret" type="password" maxlength="512" autocomplete="new-password" />
+      <input
+        formControlName="apiSecret"
+        type="password"
+        maxlength="512"
+        autocomplete="new-password"
+      />
     </label>
     <button type="submit" [disabled]="connecting">
       {{ connecting ? 'Validation…' : 'Connecter le compte' }}
@@ -48,20 +53,11 @@
 </section>
 
 <h2>Comptes de trading synchronisés</h2>
-<button (click)="sync()">
-  Synchroniser Kraken
-</button>
+<button (click)="sync()">Synchroniser Kraken</button>
 <div class="accounts-container">
-
-
-  @for(account of accounts | async; track account.accountId) {
-
-    <app-account-card
-      [account]="account">
-    </app-account-card>
-
+  @for (account of accounts | async; track account.accountId) {
+    <app-account-card [account]="account"> </app-account-card>
   }
-
 </div>
 @if (errorMessage) {
   <p class="error">{{ errorMessage }}</p>

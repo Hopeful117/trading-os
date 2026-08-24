@@ -30,9 +30,7 @@
     } @else if (vm.dashboard; as dashboard) {
       <section class="freshness" [class]="dashboard.freshness.status.toLowerCase()">
         <strong>{{ dashboard.freshness.status }}</strong>
-        <span>
-          Calculé le {{ dashboard.freshness.calculatedAt | date: 'mediumTime' }}
-        </span>
+        <span> Calculé le {{ dashboard.freshness.calculatedAt | date: 'mediumTime' }} </span>
         @for (warning of dashboard.freshness.warnings; track warning) {
           <span>{{ warning }}</span>
         }
@@ -150,9 +148,7 @@
                         —
                       }
                     </td>
-                    <td>
-                      {{ position.stopLoss ?? '—' }} / {{ position.takeProfit ?? '—' }}
-                    </td>
+                    <td>{{ position.stopLoss ?? '—' }} / {{ position.takeProfit ?? '—' }}</td>
                     <td>
                       {{ position.riskAmount | currency: dashboard.account.currency }}
                       · {{ position.riskPercentage | number: '1.2-2' }} %
@@ -164,7 +160,11 @@
                       {{ position.openedAt ? (position.openedAt | date: 'short') : '—' }}
                     </td>
                     <td>
-                      {{ position.priceOccurredAt ? (position.priceOccurredAt | date: 'mediumTime') : '—' }}
+                      {{
+                        position.priceOccurredAt
+                          ? (position.priceOccurredAt | date: 'mediumTime')
+                          : '—'
+                      }}
                     </td>
                   </tr>
                 }
@@ -183,7 +183,9 @@
             </strong>
           </div>
           <div class="risk-summary">
-            <span>Perte du jour : {{ dashboard.risk.dailyLossPercentage | number: '1.2-2' }} %</span>
+            <span
+              >Perte du jour : {{ dashboard.risk.dailyLossPercentage | number: '1.2-2' }} %</span
+            >
             <span>Drawdown : {{ dashboard.risk.totalDrawdownPercentage | number: '1.2-2' }} %</span>
           </div>
           @for (rule of dashboard.risk.rules; track rule.code) {
@@ -198,9 +200,7 @@
 
         <article class="panel">
           <h2>Performance</h2>
-          <div class="placeholder">
-            L’historique d’equity fiable n’est pas encore disponible.
-          </div>
+          <div class="placeholder">L’historique d’equity fiable n’est pas encore disponible.</div>
         </article>
       </section>
 

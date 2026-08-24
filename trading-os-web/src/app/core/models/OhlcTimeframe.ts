@@ -1,4 +1,4 @@
-import { OhlcInterval } from './ohlc-interval'
+import { OhlcInterval } from './ohlc-interval';
 
 interface OhlcTimeframe {
   label: string;

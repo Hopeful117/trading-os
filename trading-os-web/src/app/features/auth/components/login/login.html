@@ -1,33 +1,21 @@
 <div class="login-container">
-
   <h2>Connexion</h2>
 
   <form (ngSubmit)="onSubmit()">
-
     <div>
       <label>Nom d'utilisateur</label>
-      <input
-        type="text"
-        name="username"
-        [(ngModel)]="loginRequest.username">
+      <input type="text" name="username" [(ngModel)]="loginRequest.username" />
     </div>
 
     <div>
       <label>Mot de passe</label>
-      <input
-        type="password"
-        name="password"
-        [(ngModel)]="loginRequest.password">
+      <input type="password" name="password" [(ngModel)]="loginRequest.password" />
     </div>
 
     @if (errorMessage) {
       <p class="error">{{ errorMessage }}</p>
     }
 
-    <button type="submit">
-      Se connecter
-    </button>
-
+    <button type="submit">Se connecter</button>
   </form>
-
 </div>

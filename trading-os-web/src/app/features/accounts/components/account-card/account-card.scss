@@ -1,87 +1,58 @@
 mat-card {
-
   height: 100%;
 
-  background: linear-gradient(
-    145deg,
-    #0f172a,
-    #1e293b
-  ) !important;
-
+  background: linear-gradient(145deg, #0f172a, #1e293b) !important;
 
   color: #e2e8f0 !important;
 
   border-radius: 16px !important;
 
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 
-  box-shadow:
-    0 8px 25px rgba(0,0,0,.35);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
 
-  transition: all .25s ease;
-
+  transition: all 0.25s ease;
 
   &:hover {
-
     transform: translateY(-5px);
 
-    border-color: rgba(56,189,248,.4);
+    border-color: rgba(56, 189, 248, 0.4);
 
-    box-shadow:
-      0 12px 35px rgba(56,189,248,.15);
-
+    box-shadow: 0 12px 35px rgba(56, 189, 248, 0.15);
   }
-
 }
 
-
 mat-card-header {
-
-  border-bottom: 1px solid rgba(255,255,255,.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 
   padding-bottom: 12px;
 
   margin-bottom: 16px;
 
-
   h2 {
-
     margin: 0;
 
     color: #38bdf8;
 
     font-size: 1.3rem;
-
   }
-
 }
 
-
 mat-card-content {
-
-
   p {
-
     color: #cbd5e1;
-
   }
 
-
   h3 {
-
     margin-top: 20px;
 
     color: #f8fafc;
 
     font-size: 1rem;
-
   }
-
 }
 
-
 .balance {
-
   display: flex;
 
   justify-content: space-between;
@@ -90,24 +61,17 @@ mat-card-content {
 
   margin-bottom: 8px;
 
-  background: rgba(255,255,255,.04);
+  background: rgba(255, 255, 255, 0.04);
 
   border-radius: 8px;
 
-
   .asset {
-
     font-weight: 600;
 
     color: #38bdf8;
-
   }
-
 
   .amount {
-
     color: #f8fafc;
-
   }
-
 }

@@ -1,31 +1,21 @@
 <nav class="navbar">
-
   <div class="navbar-brand">
     <a routerLink="/">Trading OS</a>
   </div>
 
   <div class="navbar-links">
-
     @if (isLoggedIn()) {
-
       <a routerLink="/dashboard">Dashboard</a>
 
       <a routerLink="/accounts">Accounts</a>
 
       <a routerLink="/markets">Markets</a>
 
-      <button type="button" (click)="logout()">
-        Logout
-      </button>
-
+      <button type="button" (click)="logout()">Logout</button>
     } @else {
-
       <a routerLink="/login">Login</a>
 
       <a routerLink="/register">Register</a>
-
     }
-
   </div>
-
 </nav>

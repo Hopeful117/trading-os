@@ -4,9 +4,8 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { MarketResponse } from '../models/market-response';
 import { MarketStreamRequest } from '../models/market-stream-request';
-import {OhlcEvent} from '../models/ohlc-event.model';
-import {OhlcInterval} from '../models/ohlc-interval';
-
+import { OhlcEvent } from '../models/ohlc-event.model';
+import { OhlcInterval } from '../models/ohlc-interval';
 
 @Injectable({
   providedIn: 'root',
@@ -44,4 +43,3 @@ export class MarketService {
     });
   }
 }
-

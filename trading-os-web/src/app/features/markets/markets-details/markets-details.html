@@ -1,7 +1,5 @@
 <section class="market-detail">
-  <a routerLink="/markets" class="back-link">
-    ← Back to markets
-  </a>
+  <a routerLink="/markets" class="back-link"> ← Back to markets </a>
 
   @if (market$ | async; as market) {
     <header class="market-header">
@@ -10,32 +8,22 @@
 
         <h1>{{ market.symbol }}</h1>
 
-        <p>
-          {{ market.baseAsset }} / {{ market.quoteAsset }}
-        </p>
+        <p>{{ market.baseAsset }} / {{ market.quoteAsset }}</p>
       </div>
 
       <div class="market-header-status">
-        <span
-          class="market-status"
-          [class.open]="market.marketState.tradable"
-        >
+        <span class="market-status" [class.open]="market.marketState.tradable">
           {{ market.marketState.tradingStatus }}
         </span>
 
         @if (ticker$ | async; as ticker) {
-          <span class="market-updated">
-            Updated {{ ticker.occurredAt | date: 'mediumTime' }}
-          </span>
+          <span class="market-updated"> Updated {{ ticker.occurredAt | date: 'mediumTime' }} </span>
         }
       </div>
     </header>
 
     <main class="market-workspace">
-      <section
-        class="market-section market-section--ticker"
-        aria-labelledby="live-market-title"
-      >
+      <section class="market-section market-section--ticker" aria-labelledby="live-market-title">
         <div class="section-header">
           <div>
             <span class="section-eyebrow">Live market</span>
@@ -81,10 +69,7 @@
         }
       </section>
 
-      <section
-        class="market-section market-section--chart"
-        aria-labelledby="price-chart-title"
-      >
+      <section class="market-section market-section--chart" aria-labelledby="price-chart-title">
         <div class="section-header">
           <div>
             <span class="section-eyebrow">Price history</span>
@@ -92,20 +77,11 @@
           </div>
 
           <div class="timeframe-selector">
-            @if (
-              selectedTimeframe$ | async;
-              as selectedTimeframe
-              ) {
-              @for (
-                timeframe of ohlcIntervals;
-                track timeframe.minutes
-                ) {
+            @if (selectedTimeframe$ | async; as selectedTimeframe) {
+              @for (timeframe of ohlcIntervals; track timeframe.minutes) {
                 <button
                   type="button"
-                  [class.active]="
-        selectedTimeframe.minutes ===
-        timeframe.minutes
-      "
+                  [class.active]="selectedTimeframe.minutes === timeframe.minutes"
                   (click)="selectOhlcInterval(timeframe)"
                 >
                   {{ timeframe.label }}
@@ -122,12 +98,8 @@
         />
       </section>
 
-
       <div class="market-secondary-grid">
-        <section
-          class="market-section"
-          aria-labelledby="order-book-title"
-        >
+        <section class="market-section" aria-labelledby="order-book-title">
           <div class="section-header">
             <div>
               <h2 id="order-book-title">Order book</h2>
@@ -157,13 +129,9 @@
           }
         </section>
 
-        <section
-          class="market-section"
-          aria-labelledby="recent-trades-title"
-        >
+        <section class="market-section" aria-labelledby="recent-trades-title">
           <div class="section-header">
             <div>
-
               <h2 id="recent-trades-title">Recent trades</h2>
             </div>
 
@@ -180,16 +148,10 @@
         </section>
       </div>
 
-      <section
-        class="market-section"
-        aria-labelledby="market-information-title"
-      >
+      <section class="market-section" aria-labelledby="market-information-title">
         <div class="section-header">
           <div>
-
-            <h2 id="market-information-title">
-              Market information
-            </h2>
+            <h2 id="market-information-title">Market information</h2>
           </div>
         </div>
 
