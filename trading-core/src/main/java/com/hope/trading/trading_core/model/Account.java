@@ -11,7 +11,10 @@ import java.util.UUID;
 @Entity
 @Getter
 @Setter
-@Table(name = "accounts")
+@Table(name = "accounts",
+        uniqueConstraints = @UniqueConstraint(
+                name = "accounts_user_broker_key",
+                columnNames = {"user_id", "broker"}))
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -21,7 +24,7 @@ public class Account {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID accountId;
 
-    @Column(unique = true)
+    @Column
     private String broker;
 
 
