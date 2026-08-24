@@ -1,0 +1,186 @@
+<section class="scan-panel">
+  <header class="panel-header">
+    <h2>Market scan</h2>
+    <p>Ask Market Intelligence to analyze eligible markets now.</p>
+  </header>
+
+  <div class="controls" data-testid="scan-form">
+    <label class="field">
+      <span>Account</span>
+
+      @if (accounts$ | async; as state) {
+        @if (!state.loaded) {
+          <p class="inline-error" data-testid="accounts-error">Unable to load your accounts.</p>
+          <button type="button" class="retry-button" (click)="reloadAccounts()">Retry</button>
+        } @else if (state.accounts.length === 0) {
+          <p class="inline-error" data-testid="accounts-empty">
+            No account available for scanning.
+          </p>
+        } @else {
+          <select name="scanAccountId" [(ngModel)]="accountId" data-testid="account-select">
+            <option value="" disabled>Select an account</option>
+            @for (account of state.accounts; track account.accountId) {
+              <option [value]="account.accountId">{{ account.name }}</option>
+            }
+          </select>
+        }
+      }
+    </label>
+
+    <label class="field">
+      <span>Objective</span>
+      <input
+        type="text"
+        name="scanObjective"
+        [(ngModel)]="objective"
+        maxlength="500"
+        placeholder="Optional — what are you looking for?"
+      />
+    </label>
+
+    <button
+      type="button"
+      class="run-button"
+      data-testid="run-scan-button"
+      [disabled]="!accountId || (busy$ | async)"
+      (click)="runScan()"
+    >
+      Run market scan
+    </button>
+  </div>
+
+  @if (view$ | async; as view) {
+    @switch (view.status) {
+      @case ('submitting') {
+        <div class="state-card" data-testid="scan-submitting">
+          <span class="spinner"></span>
+          <p>Starting scan…</p>
+        </div>
+      }
+      @case ('running') {
+        <div class="state-card running" data-testid="scan-running">
+          <span class="spinner"></span>
+
+          <h3>Scan running — status: {{ view.scan.status }}</h3>
+
+          <dl class="progress-grid">
+            <div>
+              <dt>Candidates</dt>
+              <dd>{{ view.scan.progress.totalCandidates }}</dd>
+            </div>
+
+            <div>
+              <dt>Eligible</dt>
+              <dd>{{ view.scan.progress.eligible }}</dd>
+            </div>
+
+            <div>
+              <dt>Excluded</dt>
+              <dd>{{ view.scan.progress.excluded }}</dd>
+            </div>
+
+            <div>
+              <dt>Running</dt>
+              <dd>{{ view.scan.progress.running }}</dd>
+            </div>
+
+            <div>
+              <dt>Completed</dt>
+              <dd>{{ view.scan.progress.completed }}</dd>
+            </div>
+
+            <div>
+              <dt>Failed</dt>
+              <dd>{{ view.scan.progress.failed }}</dd>
+            </div>
+          </dl>
+
+          <p class="hint">
+            Updated {{ view.scan.updatedAt | date: 'HH:mm:ss' }} — this list refreshes automatically
+            until the scan completes.
+          </p>
+        </div>
+      }
+      @case ('terminal') {
+        <div
+          class="state-card terminal"
+          data-testid="scan-terminal"
+          [attr.data-status]="view.scan.status"
+        >
+          <h3>
+            @switch (view.scan.status) {
+              @case ('COMPLETED') {
+                Scan completed.
+              }
+              @case ('PARTIALLY_COMPLETED') {
+                Scan completed with partial results.
+              }
+              @case ('FAILED') {
+                Scan failed.
+              }
+              @case ('COMPLETED_NO_WORK') {
+                No eligible market to scan right now.
+              }
+            }
+          </h3>
+
+          @if (view.scan.status !== 'COMPLETED_NO_WORK') {
+            <dl class="progress-grid">
+              <div>
+                <dt>Eligible</dt>
+                <dd>{{ view.scan.progress.eligible }}</dd>
+              </div>
+
+              <div>
+                <dt>Completed</dt>
+                <dd>{{ view.scan.progress.completed }}</dd>
+              </div>
+
+              <div>
+                <dt>Failed</dt>
+                <dd>{{ view.scan.progress.failed }}</dd>
+              </div>
+
+              <div>
+                <dt>Opportunities found</dt>
+                <dd data-testid="opportunities-found">
+                  {{ view.scan.progress.opportunitiesFound }}
+                </dd>
+              </div>
+            </dl>
+
+            @if (view.scan.status === 'COMPLETED' && view.scan.progress.opportunitiesFound === 0) {
+              <p class="hint" data-testid="zero-opportunity-note">
+                No setup matched current strategies. This is not an error — the active opportunities
+                list below stays empty until a scan matches one.
+              </p>
+            }
+
+            @if (view.scan.status === 'FAILED') {
+              <p class="hint">The scan could not complete. You can run it again later.</p>
+            }
+          }
+
+          <p class="hint">The active opportunities list has been refreshed.</p>
+        </div>
+      }
+      @case ('error') {
+        <div class="state-card error" data-testid="scan-error" [attr.data-error]="view.error">
+          <h3>
+            @switch (view.error) {
+              @case ('CONFLICT') {
+                This scan request conflicts with a previous one. Try again.
+              }
+              @case ('UNAUTHORIZED') {
+                Your session is not authorized to run market scans.
+              }
+              @case ('UNAVAILABLE') {
+                Market Intelligence is unavailable. Try again later.
+              }
+            }
+          </h3>
+        </div>
+      }
+    }
+  }
+</section>

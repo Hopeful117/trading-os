@@ -1,16 +1,25 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { Opportunities, OpportunitiesView } from './opportunities';
 import { OpportunityService } from '../../core/services/opportunity.service';
 import { OpportunityResponse } from '../../core/models/opportunity.model';
+import { AccountService } from '../../core/services/account.service';
+import { ActiveScanService } from '../../core/services/active-scan.service';
+import { SCAN_POLL_INTERVAL_MS } from './scan-panel/scan-poll-interval';
 
 describe('Opportunities', () => {
   let component: Opportunities;
   let fixture: ComponentFixture<Opportunities>;
   let routerMock: { navigate: ReturnType<typeof vi.fn> };
   let opportunityServiceMock: { findActive: ReturnType<typeof vi.fn> };
+  let accountServiceMock: { getAccounts: ReturnType<typeof vi.fn> };
+  let activeScanServiceMock: {
+    createScan: ReturnType<typeof vi.fn>;
+    findScan: ReturnType<typeof vi.fn>;
+  };
 
   const mockOpportunities: OpportunityResponse[] = [
     {
@@ -58,12 +67,20 @@ describe('Opportunities', () => {
   beforeEach(async () => {
     routerMock = { navigate: vi.fn().mockResolvedValue(true) };
     opportunityServiceMock = { findActive: vi.fn().mockReturnValue(of(mockOpportunities)) };
+    accountServiceMock = { getAccounts: vi.fn().mockReturnValue(of([])) };
+    activeScanServiceMock = {
+      createScan: vi.fn(),
+      findScan: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [Opportunities],
       providers: [
         { provide: OpportunityService, useValue: opportunityServiceMock },
         { provide: Router, useValue: routerMock },
+        { provide: AccountService, useValue: accountServiceMock },
+        { provide: ActiveScanService, useValue: activeScanServiceMock },
+        { provide: SCAN_POLL_INTERVAL_MS, useValue: 25 },
       ],
     }).compileComponents();
 
@@ -148,6 +165,26 @@ describe('Opportunities', () => {
       opportunityServiceMock.findActive.mockClear();
 
       component.refreshOpportunities();
+
+      expect(opportunityServiceMock.findActive).toHaveBeenCalled();
+    });
+  });
+
+  describe('scan panel integration', () => {
+    it('embeds the scan trigger panel', () => {
+      expect(fixture.debugElement.query(By.css('app-scan-panel'))).not.toBeNull();
+    });
+
+    it('refreshes the opportunities list when a scan completes', async () => {
+      const panel = fixture.debugElement.query(By.css('app-scan-panel')).componentInstance;
+      opportunityServiceMock.findActive.mockClear();
+
+      panel.scanCompleted.emit({
+        ...mockOpportunities[0],
+        id: 'scan-1',
+        status: 'COMPLETED',
+      } as never);
+      await fixture.whenStable();
 
       expect(opportunityServiceMock.findActive).toHaveBeenCalled();
     });
