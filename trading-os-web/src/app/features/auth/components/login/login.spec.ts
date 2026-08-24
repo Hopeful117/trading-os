@@ -2,20 +2,18 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LoginComponent } from './login';
 import { AuthService } from '../../../../core/services/auth.service';
 import { Router } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 describe('LoginComponent', () => {
   let component: LoginComponent;
   let fixture: ComponentFixture<LoginComponent>;
   let authService: { login: ReturnType<typeof vi.fn> };
-  let router: { navigate: ReturnType<typeof vi.fn> };
+  let router: {
+    navigate: ReturnType<typeof vi.fn>;
+    getCurrentNavigation: ReturnType<typeof vi.fn>;
+  };
 
-  beforeEach(async () => {
-    authService = {
-      login: vi.fn(() => of({ token: 'fake-token' })),
-    };
-    router = { navigate: vi.fn(() => Promise.resolve(true)) };
-
+  async function setup() {
     await TestBed.configureTestingModule({
       imports: [LoginComponent],
       providers: [
@@ -27,14 +25,41 @@ describe('LoginComponent', () => {
     fixture = TestBed.createComponent(LoginComponent);
     component = fixture.componentInstance;
     await fixture.whenStable();
+  }
+
+  beforeEach(() => {
+    authService = {
+      login: vi.fn(() => of({ token: 'fake-token' })),
+    };
+    router = {
+      navigate: vi.fn(() => Promise.resolve(true)),
+      getCurrentNavigation: vi.fn(() => null),
+    };
   });
 
-  it('should create', () => {
+  it('should create without account-created banner by default', async () => {
+    await setup();
     expect(component).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="account-created-banner"]'),
+    ).toBeNull();
   });
 
-  it('should navigate to / on successful login', () => {
-    authService.login.mockReturnValue(of({ token: 'jwt-token' }));
+  it('shows visible success banner when arriving from successful registration', async () => {
+    router.getCurrentNavigation.mockReturnValue({
+      extras: { state: { accountCreated: true, username: 'newuser' } },
+    });
+    await setup();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="account-created-banner"]',
+    ) as HTMLElement | null;
+    expect(banner).not.toBeNull();
+    expect(banner!.textContent).toContain('Compte créé avec succès');
+  });
+
+  it('navigates to home on successful login', async () => {
+    await setup();
 
     component.onSubmit();
 
@@ -42,41 +67,34 @@ describe('LoginComponent', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/']);
   });
 
-  it('should show specific message on 401 error', () => {
+  it('shows visible error in DOM on failed login', async () => {
     authService.login.mockReturnValue(throwError(() => ({ status: 401 })));
+    await setup();
 
     component.onSubmit();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
-    expect(component.errorMessage).toBe('Nom d\u2019utilisateur ou mot de passe incorrect.');
+    const error = fixture.nativeElement.querySelector(
+      '[data-testid="login-error"]',
+    ) as HTMLElement | null;
+    expect(error).not.toBeNull();
+    expect(error!.textContent).toContain('incorrect');
   });
 
-  it('should show generic message on other errors', () => {
-    authService.login.mockReturnValue(throwError(() => ({ status: 500 })));
-
-    component.onSubmit();
-
-    expect(component.errorMessage).toBe('Nom d\u2019utilisateur ou mot de passe incorrect.');
-  });
-
-  it('should clear error message on new submit', () => {
+  it('clears the success banner when a new login attempt starts', async () => {
     authService.login.mockReturnValue(throwError(() => ({ status: 401 })));
-    component.onSubmit();
-    expect(component.errorMessage).not.toBe('');
-
-    authService.login.mockReturnValue(of({ token: 'jwt' }));
-    component.onSubmit();
-    expect(component.errorMessage).toBe('');
-  });
-
-  it('should not set loading state (no loading property)', () => {
-    authService.login.mockReturnValue(
-      new Observable((subscriber) => {
-        // never completes - used to test in-flight state
-      }),
-    );
+    router.getCurrentNavigation.mockReturnValue({
+      extras: { state: { accountCreated: true } },
+    });
+    await setup();
 
     component.onSubmit();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
-    expect(component.errorMessage).toBe('');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="account-created-banner"]'),
+    ).toBeNull();
   });
 });

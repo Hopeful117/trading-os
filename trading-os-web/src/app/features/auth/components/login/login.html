@@ -1,6 +1,12 @@
 <div class="login-container">
   <h2>Connexion</h2>
 
+  @if (accountCreated()) {
+    <p class="success-banner" data-testid="account-created-banner" role="status">
+      Compte créé avec succès — connectez-vous.
+    </p>
+  }
+
   <form (ngSubmit)="onSubmit()">
     <div>
       <label>Nom d'utilisateur</label>
@@ -12,8 +18,8 @@
       <input type="password" name="password" [(ngModel)]="loginRequest.password" />
     </div>
 
-    @if (errorMessage) {
-      <p class="error">{{ errorMessage }}</p>
+    @if (errorMessage(); as error) {
+      <p class="error" data-testid="login-error" role="alert">{{ error }}</p>
     }
 
     <button type="submit">Se connecter</button>

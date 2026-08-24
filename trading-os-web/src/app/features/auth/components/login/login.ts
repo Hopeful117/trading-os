@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LoginRequest } from '../../../../core/models/login-request.model';
@@ -11,27 +11,32 @@ import { Router } from '@angular/router';
   styleUrl: './login.scss',
 })
 export class LoginComponent {
+  private authService = inject(AuthService);
+  private router = inject(Router);
+
   loginRequest: LoginRequest = {
     username: '',
     password: '',
   };
 
-  errorMessage = '';
-
-  constructor(
-    private authService: AuthService,
-    private router: Router,
-  ) {}
+  readonly accountCreated = signal(
+    Boolean(
+      (this.router.getCurrentNavigation()?.extras.state as { accountCreated?: boolean } | undefined)
+        ?.accountCreated,
+    ),
+  );
+  readonly errorMessage = signal('');
 
   onSubmit(): void {
-    this.errorMessage = '';
+    this.errorMessage.set('');
+    this.accountCreated.set(false);
 
     this.authService.login(this.loginRequest).subscribe({
       next: () => {
         this.router.navigate(['/']);
       },
       error: () => {
-        this.errorMessage = 'Nom d’utilisateur ou mot de passe incorrect.';
+        this.errorMessage.set('Nom d’utilisateur ou mot de passe incorrect.');
       },
     });
   }

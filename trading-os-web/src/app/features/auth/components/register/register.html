@@ -17,10 +17,12 @@
       <input type="password" name="password" [(ngModel)]="registerRequest.password" />
     </div>
 
-    @if (errorMessage) {
-      <p class="error">{{ errorMessage }}</p>
+    @if (errorMessage(); as error) {
+      <p class="error" data-testid="register-error" role="alert">{{ error }}</p>
     }
 
-    <button type="submit">Créer un compte</button>
+    <button type="submit" [disabled]="loading()" data-testid="register-submit">
+      {{ loading() ? 'Création…' : 'Créer un compte' }}
+    </button>
   </form>
 </div>
