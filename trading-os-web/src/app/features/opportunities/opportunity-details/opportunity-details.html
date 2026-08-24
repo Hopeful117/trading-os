@@ -137,6 +137,18 @@
               </div>
             </dl>
           </section>
+
+          @if (view.opportunity.status === 'ACTIVE') {
+            <footer class="cta-section">
+              <a
+                class="btn-create-plan"
+                [routerLink]="['/trade-planning', 'prepare', view.opportunity.id]"
+                data-testid="create-trade-plan-button"
+              >
+                Create Trade Plan
+              </a>
+            </footer>
+          }
         </article>
       }
     }

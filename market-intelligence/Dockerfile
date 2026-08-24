@@ -1,5 +1,5 @@
 FROM maven:3.9.11-eclipse-temurin-21 AS build
-WORKDIR /workspace
+WORKDIR /app
 COPY pom.xml .
 RUN mvn -q -DskipTests dependency:go-offline
 COPY src src

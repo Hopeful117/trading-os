@@ -14,9 +14,9 @@ public record TradePlanResponse(
         Instant expiresAt, String thesis, Set<UUID> opportunityIds,
         Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Set<String> confirmationConditions, Set<String> invalidationConditions,
-        Set<String> managementRules, Instant createdAt
+        Set<String> managementRules, Instant createdAt, java.util.UUID tradingAccountId
 ) {
-    static TradePlanResponse from(TradePlan plan) {
+    static TradePlanResponse from(TradePlan plan, TradePlanningContext context) {
         ExecutionParameters execution = plan.execution();
         TradingRationale rationale = plan.rationale();
         return new TradePlanResponse(
@@ -39,6 +39,7 @@ public record TradePlanResponse(
                 rationale.aiAnalyses().stream().map(item -> item.analysisId())
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
                 rationale.confirmationConditions(), rationale.invalidationConditions(),
-                execution.managementRules(), plan.createdAt());
+                execution.managementRules(), plan.createdAt(),
+                context.tradingAccountId());
     }
 }
