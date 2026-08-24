@@ -65,7 +65,7 @@ describe('Accounts', () => {
     component.connectBroker();
 
     expect(component.connecting).toBeFalsy();
-    expect(component.connectionMessage).toBe('Connexion réussie.');
+    expect(component.connectionMessage).toBe('Connexion broker réussie · Connexion réussie.');
     expect(component.brokerForm.getRawValue()).toEqual({
       provider: 'KRAKEN',
       displayName: '',

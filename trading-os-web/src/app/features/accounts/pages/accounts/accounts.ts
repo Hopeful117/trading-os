@@ -59,7 +59,9 @@ export class Accounts {
     this.brokerAccountService.createAndConnect(this.brokerForm.getRawValue()).subscribe({
       next: (result) => {
         this.connecting = false;
-        this.connectionMessage = result.safeMessage;
+        // Show clear success message
+        this.connectionMessage =
+          'Connexion broker réussie · ' + (result.safeMessage || 'Compte créé');
         this.brokerForm.reset({
           provider: 'KRAKEN',
           displayName: '',
@@ -68,6 +70,10 @@ export class Accounts {
           passphrase: '',
         });
         this.loadBrokerAccounts();
+        // Set a timeout to clear the message after 5 seconds
+        setTimeout(() => {
+          this.connectionMessage = '';
+        }, 5000);
       },
       error: () => {
         this.connecting = false;
