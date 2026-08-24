@@ -5,6 +5,7 @@ import { catchError, map, of, shareReplay, startWith, Subject, switchMap } from 
 
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { OpportunityService } from '../../core/services/opportunity.service';
+import { ScanPanel } from './scan-panel/scan-panel';
 
 export type OpportunitiesView =
   | { status: 'loading' }
@@ -13,7 +14,7 @@ export type OpportunitiesView =
 
 @Component({
   selector: 'app-opportunities',
-  imports: [AsyncPipe, DatePipe],
+  imports: [AsyncPipe, DatePipe, ScanPanel],
   templateUrl: './opportunities.html',
   styleUrl: './opportunities.scss',
 })

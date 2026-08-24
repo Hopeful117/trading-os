@@ -8,6 +8,8 @@
     <button type="button" class="refresh-button" (click)="refreshOpportunities()">Refresh</button>
   </div>
 
+  <app-scan-panel (scanCompleted)="refreshOpportunities()" />
+
   @if (view$ | async; as view) {
     @switch (view.status) {
       @case ('loading') {
