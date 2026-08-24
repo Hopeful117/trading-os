@@ -83,30 +83,46 @@ review, and human Code Review. It does not replace any of them.
 
 ## Continuous Integration
 
-`.github/workflows/quality.yml` runs on every pull request targeting `main`:
+`.github/workflows/quality.yml` enforces quality on every pull request and
+on push to `main`:
+
+### PR runs (GitHub-hosted)
 
 1. **Backend Quality** (matrix): JDK 21 `clean verify` per Maven module with
-   Surefire and JaCoCo artifacts uploaded per module.
-2. **Frontend Quality**: Node 22, `npm ci`, Prettier check (non-blocking until
-   the deferred formatting cleanup lands), Vitest coverage, production build,
-   coverage artifact.
+   Surefire, JaCoCo, and compiled-classes artifacts uploaded per module.
+2. **Frontend Quality**: Node 22, `npm ci`, Prettier check (blocking),
+   Vitest coverage (LINE >=80%), production build, coverage artifact.
 3. **Coverage Summary**: per-module INSTRUCTION/LINE/BRANCH/COMPLEXITY/METHOD/
    CLASS metrics from JaCoCo XML plus the frontend Vitest summary.
 4. **Trading OS Quality Gate**: aggregate required check; fails unless the
    backend and frontend quality jobs succeeded.
 
-All jobs run on GitHub-hosted runners. CI owns reproducible validation only:
-code, tests, contracts, builds and coverage reporting.
+### Push/dispatch runs (self-hosted, Sonar analysis)
 
-**GitHub Actions does NOT submit analyses to the developer's local SonarQube,
-and the quality gate does not depend on it.** SonarQube remains local
-engineering-quality tooling (static analysis, technical debt, security
-findings, duplication, Quality Gate, coverage import) run manually through the
-scripts above with local token handling via environment/.env mechanisms.
-Connecting SonarQube to CI is a future infrastructure decision that must not be
-introduced until a stable CI-accessible Sonar infrastructure exists.
+5. **SonarQube Quality** (matrix): Self-hosted runner scans 8 projects in
+   parallel. Downloads artifacts from GitHub-hosted jobs. Each scanner waits
+   for its Quality Gate (`-Dsonar.qualitygate.wait=true`). All failure modes
+   are fail-closed.
 
-Reproduce the full pipeline locally with:
+### Security boundary
+
+PRs run only on GitHub-hosted runners (deterministic quality checks).
+Self-hosted Sonar analysis only runs on push to `main` or manual dispatch.
+This prevents untrusted fork/workflow-modification code from executing on the
+local machine.
+
+### Blocking semantics
+
+All failure modes block CI:
+- Quality Gate failure
+- Scanner failure
+- Auth failure
+- Sonar unavailable
+- Missing artifact
+
+No `continue-on-error` is used. See ADR-039 for architecture details.
+
+## Reproduce locally
 
 ```bash
 ./scripts/quality-scan.sh   # verify + coverage + all Sonar scans + gates
@@ -115,5 +131,6 @@ Reproduce the full pipeline locally with:
 ## Pull Request Quality Policy
 
 - persistent changes must be proposed through pull requests;
-- `Trading OS Quality Gate` is intended to become a required merge check;
+- `Trading OS Quality Gate` is a required merge check;
+- `SonarQube Quality` is a required merge check (main only);
 - direct pushes to `main` are not part of the normal engineering workflow.
