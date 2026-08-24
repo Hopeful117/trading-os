@@ -9,6 +9,8 @@ import { HomeComponent } from './features/home/home';
 import { ErrorPage } from './features/errors/errors';
 import { Markets } from './features/markets/markets';
 import { MarketDetail } from './features/markets/markets-details/markets-details';
+import { Opportunities } from './features/opportunities/opportunities';
+import { OpportunityDetail } from './features/opportunities/opportunity-details/opportunity-details';
 
 export const routes: Routes = [
   {
@@ -50,6 +52,16 @@ export const routes: Routes = [
   {
     path: 'markets/:marketId',
     component: MarketDetail,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'opportunities',
+    component: Opportunities,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'opportunities/:opportunityId',
+    component: OpportunityDetail,
     canActivate: [authGuard],
   },
 ];

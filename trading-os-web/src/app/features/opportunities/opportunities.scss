@@ -1,0 +1,210 @@
+.opportunities-page {
+  padding: 2rem;
+  color: #e2e8f0;
+}
+
+.page-header {
+  display: flex;
+
+  align-items: flex-start;
+
+  justify-content: space-between;
+
+  margin-bottom: 2rem;
+
+  h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin-top: 0.5rem;
+    color: #94a3b8;
+  }
+}
+
+.refresh-button {
+  padding: 0.6rem 1.2rem;
+
+  border: 1px solid rgba(59, 130, 246, 0.35);
+
+  border-radius: 10px;
+
+  background: rgba(59, 130, 246, 0.12);
+
+  color: #93c5fd;
+
+  font-size: 0.9rem;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+
+  &:hover {
+    background: rgba(59, 130, 246, 0.22);
+
+    border-color: rgba(59, 130, 246, 0.55);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #60a5fa;
+
+    outline-offset: 2px;
+  }
+}
+
+.opportunities-card,
+.state-card {
+  background: #111827;
+
+  border-radius: 14px;
+
+  padding: 1.5rem;
+
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+
+  overflow-x: auto;
+}
+
+.state-card {
+  text-align: center;
+
+  padding: 3rem 1.5rem;
+
+  h2 {
+    margin: 0 0 0.5rem;
+
+    font-size: 1.25rem;
+
+    font-weight: 600;
+
+    color: #e2e8f0;
+  }
+
+  p {
+    margin: 0;
+
+    color: #94a3b8;
+  }
+
+  &.error h2 {
+    color: #fca5a5;
+  }
+}
+
+.spinner {
+  display: inline-block;
+
+  width: 2rem;
+
+  height: 2rem;
+
+  margin-bottom: 1rem;
+
+  border: 3px solid rgba(59, 130, 246, 0.2);
+
+  border-top-color: #60a5fa;
+
+  border-radius: 50%;
+
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+table {
+  width: 100%;
+
+  border-collapse: collapse;
+
+  thead {
+    background: #1e293b;
+  }
+
+  th {
+    text-align: left;
+
+    padding: 1rem;
+
+    font-size: 0.85rem;
+
+    font-weight: 500;
+
+    color: #94a3b8;
+
+    text-transform: uppercase;
+  }
+
+  td {
+    padding: 1rem;
+
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+
+    color: #cbd5e1;
+  }
+
+  tbody tr {
+    transition: background 0.2s ease;
+  }
+}
+
+.opportunity-row {
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #60a5fa;
+
+    outline-offset: -2px;
+  }
+}
+
+.instrument {
+  color: #60a5fa;
+
+  font-weight: 600;
+}
+
+.direction {
+  display: inline-flex;
+
+  align-items: center;
+
+  padding: 0.35rem 0.75rem;
+
+  border-radius: 999px;
+
+  font-size: 0.8rem;
+
+  background: rgba(148, 163, 184, 0.15);
+
+  color: #cbd5e1;
+
+  &.long {
+    background: rgba(34, 197, 94, 0.15);
+
+    color: #86efac;
+  }
+}
+
+.rationale {
+  max-width: 22rem;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  color: #94a3b8;
+}

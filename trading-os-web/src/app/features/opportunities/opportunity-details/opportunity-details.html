@@ -1,0 +1,144 @@
+<div class="opportunity-details-page">
+  <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
+
+  @if (view$ | async; as view) {
+    @switch (view.status) {
+      @case ('loading') {
+        <div class="state-card" data-testid="loading-state">
+          <span class="spinner"></span>
+          <p>Loading opportunity…</p>
+        </div>
+      }
+      @case ('notFound') {
+        <div class="state-card" data-testid="not-found-state">
+          <h2>Opportunity not found</h2>
+          <p>This opportunity does not exist or is no longer available.</p>
+        </div>
+      }
+      @case ('error') {
+        <div class="state-card error" data-testid="error-state">
+          <h2>Unable to load opportunity</h2>
+          <p>Market Intelligence is temporarily unavailable. Try again later.</p>
+        </div>
+      }
+      @case ('loaded') {
+        <article class="detail-card" data-testid="opportunity-detail">
+          <header class="detail-header">
+            <div>
+              <h1>{{ view.opportunity.instrument }}</h1>
+              <p>{{ view.opportunity.scenario }}</p>
+            </div>
+
+            <div class="badges">
+              <span class="direction" [class.long]="view.opportunity.direction === 'LONG'">
+                {{ view.opportunity.direction }}
+              </span>
+              <span class="status-badge">{{ view.opportunity.status }}</span>
+            </div>
+          </header>
+
+          <section class="facts-grid">
+            <div class="fact">
+              <span class="label">Type</span>
+              <span class="value">{{ view.opportunity.type }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Timeframe</span>
+              <span class="value">{{ view.opportunity.timeframe }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Score</span>
+              <span class="value">{{ view.opportunity.score }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Origin</span>
+              <span class="value">{{ view.opportunity.origin }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Version</span>
+              <span class="value">v{{ view.opportunity.version }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Evaluated at</span>
+              <span class="value">{{
+                view.opportunity.evaluatedAt | date: 'MMM d, HH:mm:ss'
+              }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Valid from</span>
+              <span class="value">{{ view.opportunity.validFrom | date: 'MMM d, HH:mm' }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Valid until</span>
+              <span class="value">
+                @if (view.opportunity.validUntil; as validUntil) {
+                  {{ validUntil | date: 'MMM d, HH:mm' }}
+                } @else {
+                  —
+                }
+              </span>
+            </div>
+          </section>
+
+          <section class="explanation">
+            <h2>Why this opportunity exists</h2>
+            <p>{{ view.opportunity.explanation }}</p>
+          </section>
+
+          <section class="provenance">
+            <h2>Provenance</h2>
+
+            <dl>
+              <div class="provenance-row">
+                <dt>Strategy match</dt>
+                <dd>
+                  @if (view.opportunity.strategyMatchId; as strategyMatchId) {
+                    <code>{{ strategyMatchId }}</code>
+                  } @else {
+                    Not recorded
+                  }
+                </dd>
+              </div>
+
+              <div class="provenance-row">
+                <dt>Supporting observations</dt>
+                <dd>
+                  @if (view.opportunity.observationIds.length > 0) {
+                    <ul>
+                      @for (observationId of view.opportunity.observationIds; track observationId) {
+                        <li>
+                          <code>{{ observationId }}</code>
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    None recorded
+                  }
+                </dd>
+              </div>
+
+              <div class="provenance-row">
+                <dt>Opportunity id</dt>
+                <dd>
+                  <code>{{ view.opportunity.id }}</code>
+                </dd>
+              </div>
+
+              <div class="provenance-row">
+                <dt>Created at</dt>
+                <dd>{{ view.opportunity.createdAt | date: 'MMM d, HH:mm:ss' }}</dd>
+              </div>
+            </dl>
+          </section>
+        </article>
+      }
+    }
+  }
+</div>

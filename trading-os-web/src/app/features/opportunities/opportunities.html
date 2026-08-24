@@ -1,0 +1,88 @@
+<div class="opportunities-page">
+  <div class="page-header">
+    <div>
+      <h1>Opportunities</h1>
+      <p>Active Market Intelligence opportunities</p>
+    </div>
+
+    <button type="button" class="refresh-button" (click)="refreshOpportunities()">Refresh</button>
+  </div>
+
+  @if (view$ | async; as view) {
+    @switch (view.status) {
+      @case ('loading') {
+        <div class="state-card" data-testid="loading-state">
+          <span class="spinner"></span>
+          <p>Loading active opportunities…</p>
+        </div>
+      }
+      @case ('error') {
+        <div class="state-card error" data-testid="error-state">
+          <h2>Unable to load opportunities</h2>
+          <p>Market Intelligence is temporarily unavailable. Try again later.</p>
+        </div>
+      }
+      @case ('loaded') {
+        @if (view.opportunities.length > 0) {
+          <div class="opportunities-card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Instrument</th>
+                  <th>Direction</th>
+                  <th>Type</th>
+                  <th>Timeframe</th>
+                  <th>Score</th>
+                  <th>Valid until</th>
+                  <th>Rationale</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                @for (opportunity of view.opportunities; track opportunity.id) {
+                  <tr
+                    class="opportunity-row"
+                    tabindex="0"
+                    (click)="openOpportunity(opportunity.id)"
+                    (keydown.enter)="openOpportunity(opportunity.id)"
+                  >
+                    <td class="instrument">{{ opportunity.instrument }}</td>
+
+                    <td>
+                      <span class="direction" [class.long]="opportunity.direction === 'LONG'">
+                        {{ opportunity.direction }}
+                      </span>
+                    </td>
+
+                    <td>{{ opportunity.type }}</td>
+
+                    <td>{{ opportunity.timeframe }}</td>
+
+                    <td>{{ opportunity.score }}</td>
+
+                    <td>
+                      @if (opportunity.validUntil; as validUntil) {
+                        {{ validUntil | date: 'MMM d, HH:mm' }}
+                      } @else {
+                        —
+                      }
+                    </td>
+
+                    <td class="rationale" [title]="opportunity.explanation">
+                      {{ opportunity.explanation }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <section class="state-card" data-testid="empty-state">
+            <h2>No active trading opportunities right now</h2>
+            <p>Market Intelligence has not produced any active opportunity yet.</p>
+          </section>
+        }
+      }
+    }
+  }
+</div>
