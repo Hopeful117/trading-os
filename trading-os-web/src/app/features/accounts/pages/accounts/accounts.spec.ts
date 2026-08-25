@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Accounts } from './accounts';
 import { AccountService } from '../../../../core/services/account.service';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 import { Account } from '../../../../core/models/account.model';
 
@@ -22,7 +22,7 @@ describe('Accounts', () => {
     accounts = new BehaviorSubject<Account[]>([]);
     accountService = {
       getAccounts: vi.fn(() => accounts),
-      synchronize: vi.fn(() => of('ok')),
+      synchronize: vi.fn(() => of('Accounts synchronized successfully')),
     };
     brokerAccountService = {
       list: vi.fn(() => of([])),
@@ -53,7 +53,7 @@ describe('Accounts', () => {
     expect(brokerAccountService.list).toHaveBeenCalled();
   });
 
-  it('should reset form and reload broker accounts on connectBroker success', () => {
+  it('shows visible success feedback in the DOM after connecting a broker', async () => {
     component.brokerForm.setValue({
       provider: 'KRAKEN',
       displayName: 'My Kraken',
@@ -63,9 +63,16 @@ describe('Accounts', () => {
     });
 
     component.connectBroker();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
-    expect(component.connecting).toBeFalsy();
-    expect(component.connectionMessage).toBe('Connexion réussie.');
+    const feedback = fixture.nativeElement.querySelector(
+      '[data-testid="connection-feedback"]',
+    ) as HTMLElement | null;
+    expect(feedback).not.toBeNull();
+    expect(feedback!.classList.contains('success')).toBe(true);
+    expect(feedback!.textContent).toContain('Connexion Kraken réussie');
+    expect(component.connecting()).toBe(false);
     expect(component.brokerForm.getRawValue()).toEqual({
       provider: 'KRAKEN',
       displayName: '',
@@ -73,10 +80,10 @@ describe('Accounts', () => {
       apiSecret: '',
       passphrase: '',
     });
-    expect(brokerAccountService.list).toHaveBeenCalled();
+    expect(brokerAccountService.list).toHaveBeenCalledTimes(2);
   });
 
-  it('should show message and clear sensitive fields on connectBroker error', () => {
+  it('shows visible error feedback and clears sensitive fields when connection fails', async () => {
     brokerAccountService.createAndConnect.mockReturnValue(throwError(() => new Error('fail')));
 
     component.brokerForm.setValue({
@@ -88,34 +95,120 @@ describe('Accounts', () => {
     });
 
     component.connectBroker();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
-    expect(component.connectionMessage).toBe('La connexion broker n\u2019a pas pu être validée.');
+    const feedback = fixture.nativeElement.querySelector(
+      '[data-testid="connection-feedback"]',
+    ) as HTMLElement | null;
+    expect(feedback).not.toBeNull();
+    expect(feedback!.classList.contains('error')).toBe(true);
     expect(component.brokerForm.controls.apiKey.value).toBe('');
     expect(component.brokerForm.controls.apiSecret.value).toBe('');
     expect(component.brokerForm.controls.passphrase.value).toBe('');
   });
 
-  it('should reload accounts on sync success', () => {
-    component.sync();
+  it('treats non-VALID outcome as visible error even when HTTP returns 200', async () => {
+    brokerAccountService.createAndConnect.mockReturnValue(
+      of({
+        outcome: 'INVALID_CREDENTIALS',
+        connectionStatus: 'INVALID_CREDENTIALS',
+        missingPermissions: [],
+        validatedAt: new Date().toISOString(),
+        safeMessage: 'Broker rejected the credentials.',
+      }),
+    );
 
-    expect(accountService.synchronize).toHaveBeenCalled();
-    expect(accountService.getAccounts).toHaveBeenCalled();
+    component.brokerForm.setValue({
+      provider: 'KRAKEN',
+      displayName: 'Test',
+      apiKey: 'a'.repeat(8),
+      apiSecret: 'b'.repeat(16),
+      passphrase: '',
+    });
+
+    component.connectBroker();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const feedback = fixture.nativeElement.querySelector(
+      '[data-testid="connection-feedback"]',
+    ) as HTMLElement | null;
+    expect(feedback).not.toBeNull();
+    expect(feedback!.classList.contains('error')).toBe(true);
+    expect(feedback!.textContent).toContain('Broker rejected the credentials.');
+    expect(feedback!.textContent).not.toContain('réussie');
+    expect(component.brokerForm.controls.apiKey.value).toBe('');
   });
 
-  it('should show error message on sync failure', () => {
-    accountService.synchronize.mockReturnValue(throwError(() => new Error('fail')));
-
-    component.sync();
-
-    expect(component.errorMessage).toBe('Erreur lors de la synchronisation.');
-  });
-
-  it('should not submit when form is invalid', () => {
+  it('does not submit when form is invalid', () => {
     component.brokerForm.reset();
     component.connectBroker();
 
     expect(brokerAccountService.createAndConnect).not.toHaveBeenCalled();
-    expect(component.connecting).toBeFalsy();
+    expect(component.connecting()).toBe(false);
+  });
+
+  it('prevents double submit while a connection request is in flight', () => {
+    brokerAccountService.createAndConnect.mockReturnValue(
+      new BehaviorSubject({ outcome: 'VALID', safeMessage: '' }),
+    );
+
+    component.brokerForm.setValue({
+      provider: 'KRAKEN',
+      displayName: 'Test',
+      apiKey: 'a'.repeat(8),
+      apiSecret: 'b'.repeat(16),
+      passphrase: '',
+    });
+
+    component.connectBroker();
+    component.connectBroker();
+
+    expect(brokerAccountService.createAndConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows visible success feedback and reloads accounts on sync success', async () => {
+    component.sync();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const feedback = fixture.nativeElement.querySelector(
+      '[data-testid="sync-feedback"]',
+    ) as HTMLElement | null;
+    expect(feedback).not.toBeNull();
+    expect(feedback!.classList.contains('success')).toBe(true);
+    expect(accountService.synchronize).toHaveBeenCalled();
+    expect(accountService.getAccounts).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows visible error feedback on sync failure', async () => {
+    accountService.synchronize.mockReturnValue(throwError(() => new Error('fail')));
+
+    component.sync();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const feedback = fixture.nativeElement.querySelector(
+      '[data-testid="sync-feedback"]',
+    ) as HTMLElement | null;
+    expect(feedback).not.toBeNull();
+    expect(feedback!.classList.contains('error')).toBe(true);
+    expect(feedback!.textContent).toContain('Erreur lors de la synchronisation.');
+  });
+
+  it('disables the sync button and shows progress label while syncing', async () => {
+    accountService.synchronize.mockReturnValue(new Subject<string>());
+
+    component.sync();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(
+      '[data-testid="synchronize-button"]',
+    ) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain('Synchronisation…');
   });
 
   it('does not claim that no broker account exists when a synchronized account is present', async () => {

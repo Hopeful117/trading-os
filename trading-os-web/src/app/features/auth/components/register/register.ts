@@ -1,5 +1,5 @@
-import { Component, inject } from '@angular/core';
-import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RegisterService } from '../../../../core/services/register';
 import { RegisterRequest } from '../../../../core/models/register-request.model';
 import { Router } from '@angular/router';
@@ -18,29 +18,33 @@ export class RegisterComponent {
     email: '',
     password: '',
   };
-  errorMessage = '';
 
-  loading = false;
+  readonly loading = signal(false);
+  readonly errorMessage = signal('');
 
   onSubmit(): void {
-    this.errorMessage = '';
-    this.loading = true;
+    if (this.loading()) {
+      return;
+    }
+    this.errorMessage.set('');
+    this.loading.set(true);
 
     this.registerService.register(this.registerRequest).subscribe({
       next: () => {
-        this.loading = false;
-        this.router.navigate(['/login']);
+        this.loading.set(false);
+        this.router.navigate(['/login'], {
+          state: { accountCreated: true, username: this.registerRequest.username },
+        });
       },
-
       error: (error) => {
-        this.loading = false;
+        this.loading.set(false);
 
         if (error.status === 409) {
-          this.errorMessage = 'Ce nom d’utilisateur ou cet email est déjà utilisé.';
+          this.errorMessage.set('Ce nom d’utilisateur ou cet email est déjà utilisé.');
         } else if (error.status === 400) {
-          this.errorMessage = 'Les informations saisies sont invalides.';
+          this.errorMessage.set('Les informations saisies sont invalides.');
         } else {
-          this.errorMessage = 'Une erreur est survenue lors de la création du compte.';
+          this.errorMessage.set('Une erreur est survenue lors de la création du compte.');
         }
       },
     });

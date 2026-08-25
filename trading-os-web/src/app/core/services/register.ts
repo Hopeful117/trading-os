@@ -9,7 +9,9 @@ import { environment } from '../../../environments/environment';
 })
 export class RegisterService {
   private http = inject(HttpClient);
-  register(request: RegisterRequest): Observable<void> {
-    return this.http.post<void>(`${environment.gatewayUrl}v1/users/register`, request);
+  register(request: RegisterRequest): Observable<string> {
+    return this.http.post(`${environment.gatewayUrl}v1/users/register`, request, {
+      responseType: 'text',
+    });
   }
 }

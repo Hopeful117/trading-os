@@ -5,7 +5,8 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 
 @FeignClient(
-        name = "broker-service"
+        name = "broker-service",
+        contextId = "broker-account-client"
 )
 public interface BrokerFeignClient extends BrokerApiClient {
     @Override
