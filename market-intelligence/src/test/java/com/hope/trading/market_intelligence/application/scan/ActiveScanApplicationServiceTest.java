@@ -118,7 +118,7 @@ class ActiveScanApplicationServiceTest {
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
 
-        verify(coordinator).resume(created.scan().scanId());
+        verify(coordinator, timeout(2000)).resumeAsync(created.scan().scanId());
         assertThat(executionBefore.executionId()).isNotNull();
     }
 

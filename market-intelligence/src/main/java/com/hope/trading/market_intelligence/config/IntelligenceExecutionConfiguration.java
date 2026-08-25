@@ -29,4 +29,14 @@ public class IntelligenceExecutionConfiguration {
     ExecutorService analysisExecutionDispatcherExecutor() {
         return Executors.newVirtualThreadPerTaskExecutor();
     }
+
+    /**
+     * Owns scan-level dispatch work (claim + enqueue of every eligible market)
+     * so that it never runs on the HTTP request thread. Analyses themselves are
+     * still handed over to {@code analysisExecutionDispatcherExecutor}.
+     */
+    @Bean(name = "scanDispatchExecutor", destroyMethod = "shutdown")
+    ExecutorService scanDispatchExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
+    }
 }
