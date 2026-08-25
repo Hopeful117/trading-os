@@ -14,6 +14,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -203,6 +204,17 @@ class ActiveScanDispatchClaimServiceTest {
 
         private Instant now() {
             return Instant.parse("2026-08-20T12:00:01Z");
+        }
+
+        @Override
+        public List<ActiveScan> findRecentByActorId(UUID actorId, int limit) {
+            return java.util.List.of(scan).stream()
+                    .filter(s -> s.actorId().equals(actorId))
+                    .sorted(Comparator
+                            .comparing(ActiveScan::createdAt).reversed()
+                            .thenComparing(ActiveScan::scanId).reversed())
+                    .limit(limit)
+                    .toList();
         }
     }
 }

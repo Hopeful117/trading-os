@@ -20,6 +20,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -230,6 +231,16 @@ class ActiveScanDispatchAsyncBoundaryTest {
                 UUID scanMarketId, ActiveScanMarketStatus expected,
                 ActiveScanMarketStatus target, Instant updatedAt) {
             return false;
+        }
+
+        @Override public List<com.hope.trading.market_intelligence.domain.scan.ActiveScan> findRecentByActorId(UUID actorId, int limit) {
+            return scansById.values().stream()
+                    .filter(scan -> scan.actorId().equals(actorId))
+                    .sorted(Comparator
+                            .comparing(com.hope.trading.market_intelligence.domain.scan.ActiveScan::createdAt).reversed()
+                            .thenComparing(com.hope.trading.market_intelligence.domain.scan.ActiveScan::scanId).reversed())
+                    .limit(limit)
+                    .toList();
         }
     }
 }

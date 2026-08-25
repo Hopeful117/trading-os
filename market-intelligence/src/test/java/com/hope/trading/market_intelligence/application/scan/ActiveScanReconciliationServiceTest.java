@@ -466,5 +466,16 @@ class ActiveScanReconciliationServiceTest {
             markets.put(scanMarketId, current.markDispatchRequested(updatedAt));
             return true;
         }
+
+        @Override
+        public List<ActiveScan> findRecentByActorId(UUID actorId, int limit) {
+            return scans.values().stream()
+                    .filter(scan -> scan.actorId().equals(actorId))
+                    .sorted(Comparator
+                            .comparing(ActiveScan::createdAt).reversed()
+                            .thenComparing(ActiveScan::scanId).reversed())
+                    .limit(limit)
+                    .toList();
+        }
     }
 }

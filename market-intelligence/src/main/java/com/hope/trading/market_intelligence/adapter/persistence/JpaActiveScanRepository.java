@@ -8,6 +8,8 @@ import com.hope.trading.market_intelligence.domain.scope.MarketEligibilityReason
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -72,6 +74,15 @@ public class JpaActiveScanRepository implements ActiveScanRepository {
     @Transactional(readOnly = true)
     public Optional<ActiveScan> findById(UUID scanId) {
         return scans.findById(scanId).map(this::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ActiveScan> findRecentByActorId(UUID actorId, int limit) {
+        return scans.findByActorIdOrderByCreatedAtDescScanIdDesc(actorId, PageRequest.of(0, limit))
+                .stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

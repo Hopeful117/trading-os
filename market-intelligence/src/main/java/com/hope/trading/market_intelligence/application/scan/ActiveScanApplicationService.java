@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.application.scan;
 
+import com.hope.trading.market_intelligence.adapter.web.ActiveScanSummary;
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService;
 import com.hope.trading.market_intelligence.application.port.ActiveScanRepository;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService;
@@ -126,6 +127,13 @@ public class ActiveScanApplicationService {
 
     public ActiveScanResultProjection findOwnedProjection(UUID actorId, UUID scanId) {
         return reconciliation.reconcileOwned(actorId, scanId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ActiveScanSummary> findRecentSummary(UUID actorId, int limit) {
+        return scans.findRecentByActorId(actorId, limit).stream()
+                .map(ActiveScanSummary::from)
+                .toList();
     }
 
     private List<ActiveScanMarket> buildMarkets(

@@ -18,6 +18,8 @@ public interface ActiveScanRepository {
 
     Optional<ActiveScan> findById(UUID scanId);
 
+    List<ActiveScan> findRecentByActorId(UUID actorId, int limit);
+
     List<ActiveScanMarket> findMarketsByScanId(UUID scanId);
 
     Optional<ActiveScanMarket> findMarketById(UUID scanMarketId);

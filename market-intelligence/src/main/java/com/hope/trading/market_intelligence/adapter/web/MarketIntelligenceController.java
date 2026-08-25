@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -103,6 +104,22 @@ public class MarketIntelligenceController {
         return ResponseEntity.accepted()
                 .location(URI.create("/api/v1/intelligence/scans/" + scan.scanId()))
                 .body(scan);
+    }
+
+    @GetMapping("/scans")
+    public ResponseEntity<List<ActiveScanSummary>> findRecentScans(
+            @RequestHeader(value = ACTOR_HEADER, required = false) String actorIdHeader,
+            @RequestParam(defaultValue = "10") int limit
+    ) {
+        UUID actorId = actorId(actorIdHeader);
+        if (limit < 1 || limit > 100) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "INVALID_LIMIT",
+                    "Limit must be between 1 and 100",
+                    400
+            );
+        }
+        return ResponseEntity.ok(scans.findRecentSummary(actorId, limit));
     }
 
     @GetMapping("/scans/{scanId}")
