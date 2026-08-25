@@ -6,14 +6,14 @@
         <p>Vue consolidée par Trading Core</p>
       </div>
 
-      @if (vm.accounts.length > 0) {
+      @if (vm.accountsState.accounts.length > 0) {
         <label class="account-selector">
           <span>Compte</span>
           <select
             [value]="vm.selectedAccountId"
             (change)="selectAccount($any($event.target).value)"
           >
-            @for (account of vm.accounts; track account.accountId) {
+            @for (account of vm.accountsState.accounts; track account.accountId) {
               <option [value]="account.accountId">{{ account.name }}</option>
             }
           </select>
@@ -21,12 +21,20 @@
       }
     </header>
 
-    @if (vm.loading) {
+    @if (vm.accountsState.loading) {
+      <section class="state-panel">Chargement des comptes…</section>
+    } @else if (vm.accountsState.error) {
+      <section class="state-panel error">
+        Impossible de charger les comptes. Veuillez réessayer.
+      </section>
+    } @else if (vm.accountsState.accounts.length === 0) {
+      <section class="state-panel">Aucun compte n'est disponible.</section>
+    } @else if (vm.dashboardLoading) {
       <section class="state-panel">Chargement des données du compte…</section>
-    } @else if (vm.error) {
-      <section class="state-panel error">{{ vm.error }}</section>
+    } @else if (vm.dashboardError) {
+      <section class="state-panel error">{{ vm.dashboardError }}</section>
     } @else if (!vm.selectedAccountId) {
-      <section class="state-panel">Aucun compte n’est disponible.</section>
+      <section class="state-panel">Aucun compte sélectionné.</section>
     } @else if (vm.dashboard; as dashboard) {
       <section class="freshness" [class]="dashboard.freshness.status.toLowerCase()">
         <strong>{{ dashboard.freshness.status }}</strong>
@@ -46,7 +54,7 @@
               Indisponible
             }
           </strong>
-          <small>Source : {{ dashboard.account.equitySource }}</small>
+          <small>{{ equitySourceLabel(dashboard.account.equitySource) }}</small>
         </article>
 
         <article class="stat-card">
@@ -182,34 +190,52 @@
               {{ dashboard.risk.status }}
             </strong>
           </div>
-          <div class="risk-summary">
-            <span
-              >Perte du jour : {{ dashboard.risk.dailyLossPercentage | number: '1.2-2' }} %</span
-            >
-            <span>Drawdown : {{ dashboard.risk.totalDrawdownPercentage | number: '1.2-2' }} %</span>
-          </div>
-          @for (rule of dashboard.risk.rules; track rule.code) {
-            <div class="risk-rule">
-              <span>{{ rule.label }}</span>
-              <strong [class]="rule.status.toLowerCase()">
-                {{ rule.currentValue | number: '1.2-2' }} / {{ rule.limit | number: '1.2-2' }} %
-              </strong>
+          @if (dashboard.risk.status === 'UNAVAILABLE') {
+            <div class="empty-state">Aucune règle de risque configurée pour ce compte.</div>
+          } @else {
+            <div class="risk-summary">
+              <span
+                >Perte du jour : {{ dashboard.risk.dailyLossPercentage | number: '1.2-2' }} %</span
+              >
+              <span>Drawdown : {{ dashboard.risk.totalDrawdownPercentage | number: '1.2-2' }} %</span>
             </div>
+            @for (rule of dashboard.risk.rules; track rule.code) {
+              <div class="risk-rule">
+                <span>{{ rule.label }}</span>
+                <strong [class]="rule.status.toLowerCase()">
+                  {{ rule.currentValue | number: '1.2-2' }} / {{ rule.limit | number: '1.2-2' }} %
+                </strong>
+              </div>
+            }
           }
         </article>
 
         <article class="panel">
           <h2>Performance</h2>
-          <div class="placeholder">L’historique d’equity fiable n’est pas encore disponible.</div>
+          <div class="empty-state">
+            L'historique d'equity n'est pas encore disponible.
+          </div>
         </article>
       </section>
-
-      <section class="panel market-panel">
-        <h2>Market Intelligence</h2>
-        <div class="placeholder">
-          Aucun signal synthétique réel n’est disponible pour ce compte.
-        </div>
-      </section>
     }
+
+    <section class="panel mi-panel">
+      <div class="panel-title">
+        <h2>Market Intelligence</h2>
+        <a routerLink="/opportunities" class="panel-link">Voir les opportunités →</a>
+      </div>
+      @if (vm.mi.loading) {
+        <p class="empty-state">Chargement…</p>
+      } @else if (vm.mi.error) {
+        <p class="empty-state error">Market Intelligence temporairement indisponible.</p>
+      } @else {
+        <div class="mi-summary">
+          <div class="mi-stat">
+            <span>Opportunités actives</span>
+            <strong>{{ vm.mi.activeOpportunities.length }}</strong>
+          </div>
+        </div>
+      }
+    </section>
   }
 </div>
