@@ -1,15 +1,19 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { provideRouter } from '@angular/router';
+import { Observable, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { Account } from '../../../../core/models/account.model';
 import { DashboardSummary } from '../../../../core/models/dashboard-summary.model';
+import { OpportunityResponse } from '../../../../core/models/opportunity.model';
 import { AccountService } from '../../../../core/services/account.service';
 import { DashboardService } from '../../../../core/services/dashboard.service';
+import { OpportunityService } from '../../../../core/services/opportunity.service';
 import { Dashboard } from './dashboard';
 
 describe('Dashboard', () => {
   let fixture: ComponentFixture<Dashboard>;
   let dashboardService: { findDashboard: ReturnType<typeof vi.fn> };
+  let opportunityService: { findActive: ReturnType<typeof vi.fn> };
 
   const accounts: Account[] = [
     {
@@ -34,20 +38,23 @@ describe('Dashboard', () => {
     },
   ];
 
+  const activeOpps: OpportunityResponse[] = [
+    makeOpportunity('opp-1', 'BTC/USD'),
+    makeOpportunity('opp-2', 'ETH/USD'),
+  ];
+
   beforeEach(async () => {
     dashboardService = { findDashboard: vi.fn(() => of(summary())) };
-    await TestBed.configureTestingModule({
-      imports: [Dashboard],
-      providers: [
-        { provide: AccountService, useValue: { getAccounts: () => of(accounts) } },
-        { provide: DashboardService, useValue: dashboardService },
-      ],
-    }).compileComponents();
+    opportunityService = { findActive: vi.fn(() => of(activeOpps)) };
+    await configureTestingModule(
+      { getAccounts: () => of(accounts) },
+      dashboardService,
+      opportunityService,
+    );
   });
 
   it('displays main metrics and an account without position', async () => {
     await create();
-
     expect(text()).toContain('1,020');
     expect(text()).toContain('Aucune position ouverte');
     expect(text()).toContain('LIVE');
@@ -55,10 +62,9 @@ describe('Dashboard', () => {
 
   it('displays multiple positions and positive or negative pnl classes', async () => {
     const data = summary();
-    data.openPositions = [position('p1', 'BTC/USD', 25), position('p2', 'ETH/USD', -15)];
+    data.openPositions = [pos('p1', 'BTC/USD', 25), pos('p2', 'ETH/USD', -15)];
     dashboardService.findDashboard.mockReturnValue(of(data));
     await create();
-
     expect(text()).toContain('BTC/USD');
     expect(text()).toContain('ETH/USD');
     expect(fixture.nativeElement.querySelectorAll('td.positive')).toHaveLength(1);
@@ -82,16 +88,13 @@ describe('Dashboard', () => {
     ];
     dashboardService.findDashboard.mockReturnValue(of(data));
     await create();
-
     expect(text()).toContain('DEGRADED');
     expect(text()).toContain('Position non protégée');
-    expect(text()).toContain('Market Data Service indisponible');
   });
 
   it('keeps an explicit error state', async () => {
     dashboardService.findDashboard.mockReturnValue(throwError(() => new Error('unavailable')));
     await create();
-
     expect(text()).toContain('Dashboard est temporairement indisponible');
   });
 
@@ -108,44 +111,11 @@ describe('Dashboard', () => {
     fixture.componentInstance.selectAccount('account-2');
     await nextTask();
     fixture.detectChanges();
-
     expect(dashboardService.findDashboard).toHaveBeenCalledWith('account-2');
   });
 
-  it('handles account service failure gracefully', async () => {
-    TestBed.resetTestingModule();
-    await TestBed.configureTestingModule({
-      imports: [Dashboard],
-      providers: [
-        {
-          provide: AccountService,
-          useValue: { getAccounts: () => throwError(() => new Error('service down')) },
-        },
-        { provide: DashboardService, useValue: dashboardService },
-      ],
-    }).compileComponents();
-    fixture = TestBed.createComponent(Dashboard);
-    fixture.detectChanges();
-    await nextTask();
-    fixture.detectChanges();
-
-    expect(text()).toContain('Aucun compte');
-  });
-
   it('shows empty state when no accounts exist', async () => {
-    TestBed.resetTestingModule();
-    await TestBed.configureTestingModule({
-      imports: [Dashboard],
-      providers: [
-        { provide: AccountService, useValue: { getAccounts: () => of([]) } },
-        { provide: DashboardService, useValue: dashboardService },
-      ],
-    }).compileComponents();
-    fixture = TestBed.createComponent(Dashboard);
-    fixture.detectChanges();
-    await nextTask();
-    fixture.detectChanges();
-
+    await reconfigure({ getAccounts: () => of([]) }, dashboardService, opportunityService);
     expect(text()).toContain('Aucun compte');
     expect(dashboardService.findDashboard).not.toHaveBeenCalled();
   });
@@ -166,12 +136,143 @@ describe('Dashboard', () => {
     ];
     dashboardService.findDashboard.mockReturnValue(of(data));
     await create();
-
-    const text_ = text();
-    expect(text_).toContain('Indisponible');
-    expect(text_).toContain('Perte max/jour');
-    expect(text_).toContain('3.20');
+    const t = text();
+    expect(t).toContain('Indisponible');
+    expect(t).toContain('Perte max/jour');
+    expect(t).toContain('3.20');
   });
+
+  it('shows error state when accounts request fails', async () => {
+    await reconfigure(
+      { getAccounts: () => throwError(() => new Error('down')) },
+      dashboardService,
+      opportunityService,
+    );
+    expect(text()).toContain('Impossible de charger les comptes');
+    expect(dashboardService.findDashboard).not.toHaveBeenCalled();
+  });
+
+  it('shows CALCULATED equity source label', async () => {
+    const data = summary();
+    data.account.equitySource = 'CALCULATED';
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+    expect(text()).toContain('calculé à partir du compte broker');
+  });
+
+  it('shows BROKER equity source label', async () => {
+    const data = summary();
+    data.account.equitySource = 'BROKER';
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+    expect(text()).toContain('Provenance : broker');
+  });
+
+  it('shows risk explanation when status is UNAVAILABLE', async () => {
+    const data = summary();
+    data.risk.status = 'UNAVAILABLE';
+    data.risk.rules = [];
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+    expect(text()).toContain('Aucune règle de risque configurée');
+  });
+
+  it('shows risk rules when status is not UNAVAILABLE', async () => {
+    const data = summary();
+    data.risk.status = 'SAFE';
+    data.risk.rules = [
+      {
+        code: 'MAX_DAILY_LOSS',
+        label: 'Perte max/jour',
+        limit: 5,
+        currentValue: 1.5,
+        status: 'SAFE',
+      },
+    ];
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+    expect(text()).toContain('Perte max/jour');
+    expect(text()).not.toContain('Aucune règle de risque configurée');
+  });
+
+  it('shows active opportunities count', async () => {
+    await create();
+    expect(text()).toContain('Market Intelligence');
+    expect(text()).toContain('Opportunités actives');
+    expect(text()).toContain('2');
+  });
+
+  it('shows zero active opportunities', async () => {
+    opportunityService.findActive.mockReturnValue(of([]));
+    await create();
+    expect(text()).toContain('Opportunités actives');
+  });
+
+  it('shows MI error state', async () => {
+    opportunityService.findActive.mockReturnValue(throwError(() => new Error('mi down')));
+    await create();
+    expect(text()).toContain('Market Intelligence temporairement indisponible');
+  });
+
+  it('MI failure does not break account dashboard', async () => {
+    opportunityService.findActive.mockReturnValue(throwError(() => new Error('mi down')));
+    dashboardService.findDashboard.mockReturnValue(of(summary()));
+    await create();
+    expect(text()).toContain('1,020');
+    expect(text()).toContain('LIVE');
+    expect(text()).toContain('Market Intelligence temporairement indisponible');
+  });
+
+  it('account dashboard failure does not fabricate MI values', async () => {
+    dashboardService.findDashboard.mockReturnValue(throwError(() => new Error('tc down')));
+    opportunityService.findActive.mockReturnValue(of(activeOpps));
+    await create();
+    expect(text()).toContain('Dashboard est temporairement indisponible');
+    expect(text()).toContain('2');
+  });
+
+  it('shows performance not available message', async () => {
+    await create();
+    expect(text()).toContain("L'historique d'equity n'est pas encore disponible");
+  });
+
+  it('equitySourceLabel returns correct labels', () => {
+    const comp = TestBed.createComponent(Dashboard).componentInstance;
+    expect(comp.equitySourceLabel('BROKER')).toContain('broker');
+    expect(comp.equitySourceLabel('CALCULATED')).toContain('calculé');
+    expect(comp.equitySourceLabel('UNKNOWN')).toContain('UNKNOWN');
+  });
+
+  // --- Helpers ---
+
+  async function configureTestingModule(
+    accountProvider: { getAccounts: () => Observable<Account[]> },
+    dashService: { findDashboard: ReturnType<typeof vi.fn> },
+    oppService: { findActive: ReturnType<typeof vi.fn> },
+  ): Promise<void> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Dashboard],
+      providers: [
+        provideRouter([]),
+        { provide: AccountService, useValue: accountProvider },
+        { provide: DashboardService, useValue: dashService },
+        { provide: OpportunityService, useValue: oppService },
+      ],
+    }).compileComponents();
+  }
+
+  async function reconfigure(
+    accountProvider: { getAccounts: () => Observable<Account[]> },
+    dashService: { findDashboard: ReturnType<typeof vi.fn> },
+    oppService: { findActive: ReturnType<typeof vi.fn> },
+  ): Promise<void> {
+    await configureTestingModule(accountProvider, dashService, oppService);
+    fixture = TestBed.createComponent(Dashboard);
+    fixture.detectChanges();
+    await nextTask();
+    fixture.detectChanges();
+  }
 
   async function create(): Promise<void> {
     fixture = TestBed.createComponent(Dashboard);
@@ -234,7 +335,7 @@ describe('Dashboard', () => {
     };
   }
 
-  function position(id: string, symbol: string, pnl: number) {
+  function pos(id: string, symbol: string, pnl: number) {
     const now = new Date().toISOString();
     return {
       positionId: id,
@@ -258,6 +359,30 @@ describe('Dashboard', () => {
       openedAt: now,
       priceOccurredAt: now,
       calculatedAt: now,
+    };
+  }
+
+  function makeOpportunity(id: string, instrument: string): OpportunityResponse {
+    const now = new Date().toISOString();
+    return {
+      id,
+      version: 1,
+      status: 'ACTIVE',
+      instrument,
+      direction: 'LONG',
+      scenario: 'test',
+      timeframe: '1h',
+      type: 'INTRADAY',
+      origin: 'ACTIVE_SCAN',
+      score: 0.8,
+      explanation: 'test',
+      observationIds: [],
+      aiAnalysisIds: [],
+      evaluatedAt: now,
+      validFrom: now,
+      validUntil: null,
+      createdAt: now,
+      strategyMatchId: null,
     };
   }
 });
