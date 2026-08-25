@@ -82,6 +82,15 @@ export interface ActiveScanMarketResult {
   strategy: StrategyProvenance | null;
 }
 
+export interface ActiveScanSummary {
+  scanId: string;
+  accountId: string;
+  status: ActiveScanStatus;
+  objective: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ActiveScanResponse {
   scanId: string;
   accountId: string;

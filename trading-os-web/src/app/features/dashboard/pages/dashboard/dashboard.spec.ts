@@ -3,9 +3,11 @@ import { provideRouter } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { Account } from '../../../../core/models/account.model';
+import { ActiveScanSummary } from '../../../../core/models/active-scan.model';
 import { DashboardSummary } from '../../../../core/models/dashboard-summary.model';
 import { OpportunityResponse } from '../../../../core/models/opportunity.model';
 import { AccountService } from '../../../../core/services/account.service';
+import { ActiveScanService } from '../../../../core/services/active-scan.service';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { OpportunityService } from '../../../../core/services/opportunity.service';
 import { Dashboard } from './dashboard';
@@ -14,6 +16,7 @@ describe('Dashboard', () => {
   let fixture: ComponentFixture<Dashboard>;
   let dashboardService: { findDashboard: ReturnType<typeof vi.fn> };
   let opportunityService: { findActive: ReturnType<typeof vi.fn> };
+  let activeScanService: { findRecent: ReturnType<typeof vi.fn> };
 
   const accounts: Account[] = [
     {
@@ -46,10 +49,12 @@ describe('Dashboard', () => {
   beforeEach(async () => {
     dashboardService = { findDashboard: vi.fn(() => of(summary())) };
     opportunityService = { findActive: vi.fn(() => of(activeOpps)) };
+    activeScanService = { findRecent: vi.fn(() => of([])) };
     await configureTestingModule(
       { getAccounts: () => of(accounts) },
       dashboardService,
       opportunityService,
+      activeScanService,
     );
   });
 
@@ -115,7 +120,12 @@ describe('Dashboard', () => {
   });
 
   it('shows empty state when no accounts exist', async () => {
-    await reconfigure({ getAccounts: () => of([]) }, dashboardService, opportunityService);
+    await reconfigure(
+      { getAccounts: () => of([]) },
+      dashboardService,
+      opportunityService,
+      activeScanService,
+    );
     expect(text()).toContain('Aucun compte');
     expect(dashboardService.findDashboard).not.toHaveBeenCalled();
   });
@@ -147,6 +157,7 @@ describe('Dashboard', () => {
       { getAccounts: () => throwError(() => new Error('down')) },
       dashboardService,
       opportunityService,
+      activeScanService,
     );
     expect(text()).toContain('Impossible de charger les comptes');
     expect(dashboardService.findDashboard).not.toHaveBeenCalled();
@@ -208,10 +219,23 @@ describe('Dashboard', () => {
     expect(text()).toContain('Opportunités actives');
   });
 
-  it('shows MI error state', async () => {
+  it('shows opportunities error without breaking scan', async () => {
     opportunityService.findActive.mockReturnValue(throwError(() => new Error('mi down')));
+    activeScanService.findRecent.mockReturnValue(
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'RUNNING',
+          objective: null,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
+    );
     await create();
-    expect(text()).toContain('Market Intelligence temporairement indisponible');
+    expect(text()).toContain('Opportunités temporairement indisponibles');
+    expect(text()).toContain('En cours');
   });
 
   it('MI failure does not break account dashboard', async () => {
@@ -220,7 +244,7 @@ describe('Dashboard', () => {
     await create();
     expect(text()).toContain('1,020');
     expect(text()).toContain('LIVE');
-    expect(text()).toContain('Market Intelligence temporairement indisponible');
+    expect(text()).toContain('Opportunités temporairement indisponibles');
   });
 
   it('account dashboard failure does not fabricate MI values', async () => {
@@ -243,12 +267,115 @@ describe('Dashboard', () => {
     expect(comp.equitySourceLabel('UNKNOWN')).toContain('UNKNOWN');
   });
 
+  // --- Active Scan tests ---
+
+  it('shows latest scan status', async () => {
+    activeScanService.findRecent.mockReturnValue(
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'RUNNING',
+          objective: 'test',
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
+    );
+    await create();
+    expect(text()).toContain('Dernier scan');
+    expect(text()).toContain('En cours');
+  });
+
+  it('shows "Aucun scan exécuté" when no scans', async () => {
+    activeScanService.findRecent.mockReturnValue(of([]));
+    await create();
+    expect(text()).toContain('Aucun scan exécuté');
+  });
+
+  it('shows scan error state', async () => {
+    activeScanService.findRecent.mockReturnValue(throwError(() => new Error('scan down')));
+    await create();
+    expect(text()).toContain('Dernier scan');
+    expect(text()).toContain('Indisponible');
+  });
+
+  it('scan error does not break opportunities', async () => {
+    activeScanService.findRecent.mockReturnValue(throwError(() => new Error('scan down')));
+    opportunityService.findActive.mockReturnValue(of(activeOpps));
+    await create();
+    expect(text()).toContain('Opportunités actives');
+    expect(text()).toContain('2');
+    expect(text()).toContain('Dernier scan');
+    expect(text()).toContain('Indisponible');
+  });
+
+  it('scan loading shows loading indicator', async () => {
+    activeScanService.findRecent.mockReturnValue(new Observable(() => {}));
+    await create();
+    expect(text()).toContain('Dernier scan');
+    expect(text()).toContain('…');
+  });
+
+  it('shows terminal scan statuses', async () => {
+    activeScanService.findRecent.mockReturnValue(
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'COMPLETED',
+          objective: null,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
+    );
+    await create();
+    expect(text()).toContain('Terminé');
+  });
+
+  it('shows FAILED scan status', async () => {
+    activeScanService.findRecent.mockReturnValue(
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'FAILED',
+          objective: null,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
+    );
+    await create();
+    expect(text()).toContain('Échoué');
+  });
+
+  it('scanStatusLabel returns correct labels', () => {
+    const comp = TestBed.createComponent(Dashboard).componentInstance;
+    expect(comp.scanStatusLabel('READY_TO_DISPATCH')).toBe('Prêt');
+    expect(comp.scanStatusLabel('DISPATCH_REQUESTED')).toBe('En attente');
+    expect(comp.scanStatusLabel('RUNNING')).toBe('En cours');
+    expect(comp.scanStatusLabel('PARTIALLY_COMPLETED')).toBe('Partiellement terminé');
+    expect(comp.scanStatusLabel('COMPLETED')).toBe('Terminé');
+    expect(comp.scanStatusLabel('FAILED')).toBe('Échoué');
+    expect(comp.scanStatusLabel('COMPLETED_NO_WORK')).toBe('Terminé (aucun résultat)');
+  });
+
+  it('scanStatusClass returns correct classes', () => {
+    const comp = TestBed.createComponent(Dashboard).componentInstance;
+    expect(comp.scanStatusClass('RUNNING')).toBe('active');
+    expect(comp.scanStatusClass('COMPLETED')).toBe('terminal');
+    expect(comp.scanStatusClass('FAILED')).toBe('terminal');
+  });
+
   // --- Helpers ---
 
   async function configureTestingModule(
     accountProvider: { getAccounts: () => Observable<Account[]> },
     dashService: { findDashboard: ReturnType<typeof vi.fn> },
     oppService: { findActive: ReturnType<typeof vi.fn> },
+    scanService: { findRecent: ReturnType<typeof vi.fn> } = { findRecent: vi.fn(() => of([])) },
   ): Promise<void> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
@@ -258,6 +385,7 @@ describe('Dashboard', () => {
         { provide: AccountService, useValue: accountProvider },
         { provide: DashboardService, useValue: dashService },
         { provide: OpportunityService, useValue: oppService },
+        { provide: ActiveScanService, useValue: scanService },
       ],
     }).compileComponents();
   }
@@ -266,8 +394,9 @@ describe('Dashboard', () => {
     accountProvider: { getAccounts: () => Observable<Account[]> },
     dashService: { findDashboard: ReturnType<typeof vi.fn> },
     oppService: { findActive: ReturnType<typeof vi.fn> },
+    scanService: { findRecent: ReturnType<typeof vi.fn> } = { findRecent: vi.fn(() => of([])) },
   ): Promise<void> {
-    await configureTestingModule(accountProvider, dashService, oppService);
+    await configureTestingModule(accountProvider, dashService, oppService, scanService);
     fixture = TestBed.createComponent(Dashboard);
     fixture.detectChanges();
     await nextTask();
