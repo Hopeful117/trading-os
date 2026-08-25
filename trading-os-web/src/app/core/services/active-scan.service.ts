@@ -2,7 +2,11 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ActiveScanResponse, CreateActiveScanRequest } from '../models/active-scan.model';
+import {
+  ActiveScanResponse,
+  ActiveScanSummary,
+  CreateActiveScanRequest,
+} from '../models/active-scan.model';
 
 @Injectable({
   providedIn: 'root',
@@ -27,5 +31,11 @@ export class ActiveScanService {
     return this.http.get<ActiveScanResponse>(
       `${environment.gatewayUrl}v1/intelligence/scans/${scanId}`,
     );
+  }
+
+  findRecent(limit: number = 10): Observable<ActiveScanSummary[]> {
+    return this.http.get<ActiveScanSummary[]>(`${environment.gatewayUrl}v1/intelligence/scans`, {
+      params: { limit: limit.toString() },
+    });
   }
 }

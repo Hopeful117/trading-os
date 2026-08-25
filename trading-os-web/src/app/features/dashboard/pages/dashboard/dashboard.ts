@@ -14,9 +14,15 @@ import {
   timer,
 } from 'rxjs';
 import { Account } from '../../../../core/models/account.model';
+import {
+  ActiveScanStatus,
+  ActiveScanSummary,
+  isActiveScanTerminal,
+} from '../../../../core/models/active-scan.model';
 import { DashboardSummary } from '../../../../core/models/dashboard-summary.model';
 import { OpportunityResponse } from '../../../../core/models/opportunity.model';
 import { AccountService } from '../../../../core/services/account.service';
+import { ActiveScanService } from '../../../../core/services/active-scan.service';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { OpportunityService } from '../../../../core/services/opportunity.service';
 
@@ -28,8 +34,11 @@ interface AccountsState {
 
 interface MiState {
   activeOpportunities: OpportunityResponse[];
-  loading: boolean;
-  error: boolean;
+  opportunitiesLoading: boolean;
+  opportunitiesError: boolean;
+  recentScans: ActiveScanSummary[];
+  scanLoading: boolean;
+  scanError: boolean;
 }
 
 interface DashboardViewModel {
@@ -51,6 +60,7 @@ export class Dashboard {
   private readonly accountService = inject(AccountService);
   private readonly dashboardService = inject(DashboardService);
   private readonly opportunityService = inject(OpportunityService);
+  private readonly activeScanService = inject(ActiveScanService);
   private readonly selectedAccountId = new BehaviorSubject<string | null>(null);
 
   private readonly accountsState$: Observable<AccountsState> = this.accountService
@@ -62,10 +72,30 @@ export class Dashboard {
       shareReplay({ bufferSize: 1, refCount: true }),
     );
 
-  private readonly miState$: Observable<MiState> = this.opportunityService.findActive().pipe(
+  private readonly opportunitiesState$ = this.opportunityService.findActive().pipe(
     map((activeOpportunities) => ({ activeOpportunities, loading: false, error: false })),
     catchError(() => of({ activeOpportunities: [], loading: false, error: true })),
     startWith({ activeOpportunities: [], loading: true, error: false }),
+  );
+
+  private readonly scanState$ = this.activeScanService.findRecent(1).pipe(
+    map((recentScans) => ({ recentScans, loading: false, error: false })),
+    catchError(() => of({ recentScans: [], loading: false, error: true })),
+    startWith({ recentScans: [], loading: true, error: false }),
+  );
+
+  private readonly miState$: Observable<MiState> = combineLatest([
+    this.opportunitiesState$,
+    this.scanState$,
+  ]).pipe(
+    map(([opp, scan]) => ({
+      activeOpportunities: opp.activeOpportunities,
+      opportunitiesLoading: opp.loading,
+      opportunitiesError: opp.error,
+      recentScans: scan.recentScans,
+      scanLoading: scan.loading,
+      scanError: scan.error,
+    })),
   );
 
   readonly viewModel$: Observable<DashboardViewModel> = combineLatest([
@@ -149,5 +179,31 @@ export class Dashboard {
       default:
         return `Provenance : ${source}`;
     }
+  }
+
+  scanStatusLabel(status: ActiveScanStatus): string {
+    switch (status) {
+      case 'READY_TO_DISPATCH':
+        return 'Prêt';
+      case 'DISPATCH_REQUESTED':
+        return 'En attente';
+      case 'RUNNING':
+        return 'En cours';
+      case 'PARTIALLY_COMPLETED':
+        return 'Partiellement terminé';
+      case 'COMPLETED':
+        return 'Terminé';
+      case 'FAILED':
+        return 'Échoué';
+      case 'COMPLETED_NO_WORK':
+        return 'Terminé (aucun résultat)';
+    }
+  }
+
+  scanStatusClass(status: ActiveScanStatus): string {
+    if (isActiveScanTerminal(status)) {
+      return 'terminal';
+    }
+    return 'active';
   }
 }

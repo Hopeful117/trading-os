@@ -224,18 +224,44 @@
         <h2>Market Intelligence</h2>
         <a routerLink="/opportunities" class="panel-link">Voir les opportunités →</a>
       </div>
-      @if (vm.mi.loading) {
-        <p class="empty-state">Chargement…</p>
-      } @else if (vm.mi.error) {
-        <p class="empty-state error">Market Intelligence temporairement indisponible.</p>
-      } @else {
-        <div class="mi-summary">
-          <div class="mi-stat">
-            <span>Opportunités actives</span>
-            <strong>{{ vm.mi.activeOpportunities.length }}</strong>
-          </div>
+      <div class="mi-content">
+        <div class="mi-row">
+          @if (vm.mi.opportunitiesLoading) {
+            <p class="empty-state">Chargement des opportunités…</p>
+          } @else if (vm.mi.opportunitiesError) {
+            <p class="empty-state error">Opportunités temporairement indisponibles.</p>
+          } @else {
+            <div class="mi-stat">
+              <span>Opportunités actives</span>
+              <strong>{{ vm.mi.activeOpportunities.length }}</strong>
+            </div>
+          }
+
+          @if (vm.mi.scanLoading) {
+            <div class="mi-stat">
+              <span>Dernier scan</span>
+              <strong class="scan-loading">…</strong>
+            </div>
+          } @else if (vm.mi.scanError) {
+            <div class="mi-stat">
+              <span>Dernier scan</span>
+              <strong class="scan-error">Indisponible</strong>
+            </div>
+          } @else if (vm.mi.recentScans.length > 0) {
+            <div class="mi-stat">
+              <span>Dernier scan</span>
+              <strong [class]="scanStatusClass(vm.mi.recentScans[0].status)">
+                {{ scanStatusLabel(vm.mi.recentScans[0].status) }}
+              </strong>
+            </div>
+          } @else {
+            <div class="mi-stat">
+              <span>Dernier scan</span>
+              <strong class="empty">Aucun scan exécuté</strong>
+            </div>
+          }
         </div>
-      }
+      </div>
     </section>
   }
 </div>

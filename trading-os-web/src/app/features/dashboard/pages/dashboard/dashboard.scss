@@ -182,9 +182,13 @@ th {
   margin-top: 1.5rem;
 }
 
-.mi-summary {
+.mi-content {
+  padding-top: 0.5rem;
+}
+
+.mi-row {
   display: flex;
-  gap: 1.5rem;
+  gap: 2rem;
   padding: 0.5rem 0;
 }
 
@@ -201,6 +205,27 @@ th {
   strong {
     font-size: 1.5rem;
     color: #e2e8f0;
+  }
+
+  .scan-loading {
+    color: #64748b;
+  }
+
+  .scan-error {
+    color: #f87171;
+  }
+
+  .empty {
+    color: #64748b;
+    font-size: 1.1rem;
+  }
+
+  .terminal {
+    color: #94a3b8;
+  }
+
+  .active {
+    color: #38bdf8;
   }
 }
 
