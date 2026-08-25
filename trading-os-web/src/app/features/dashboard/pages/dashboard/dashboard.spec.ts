@@ -222,7 +222,16 @@ describe('Dashboard', () => {
   it('shows opportunities error without breaking scan', async () => {
     opportunityService.findActive.mockReturnValue(throwError(() => new Error('mi down')));
     activeScanService.findRecent.mockReturnValue(
-      of([{ scanId: 's1', accountId: 'a1', status: 'RUNNING', objective: null, createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }]),
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'RUNNING',
+          objective: null,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
     );
     await create();
     expect(text()).toContain('Opportunités temporairement indisponibles');
@@ -262,7 +271,16 @@ describe('Dashboard', () => {
 
   it('shows latest scan status', async () => {
     activeScanService.findRecent.mockReturnValue(
-      of([{ scanId: 's1', accountId: 'a1', status: 'RUNNING', objective: 'test', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }]),
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'RUNNING',
+          objective: 'test',
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
     );
     await create();
     expect(text()).toContain('Dernier scan');
@@ -301,7 +319,16 @@ describe('Dashboard', () => {
 
   it('shows terminal scan statuses', async () => {
     activeScanService.findRecent.mockReturnValue(
-      of([{ scanId: 's1', accountId: 'a1', status: 'COMPLETED', objective: null, createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }]),
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'COMPLETED',
+          objective: null,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
     );
     await create();
     expect(text()).toContain('Terminé');
@@ -309,7 +336,16 @@ describe('Dashboard', () => {
 
   it('shows FAILED scan status', async () => {
     activeScanService.findRecent.mockReturnValue(
-      of([{ scanId: 's1', accountId: 'a1', status: 'FAILED', objective: null, createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }]),
+      of([
+        {
+          scanId: 's1',
+          accountId: 'a1',
+          status: 'FAILED',
+          objective: null,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ]),
     );
     await create();
     expect(text()).toContain('Échoué');
