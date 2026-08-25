@@ -15,6 +15,7 @@ import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScan;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScanMarket;
+import com.hope.trading.market_intelligence.domain.scan.ActiveScanScopeSnapshot;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScanStatus;
 import com.hope.trading.market_intelligence.domain.scope.*;
 import org.junit.jupiter.api.AfterEach;
@@ -238,6 +239,76 @@ class ActiveScanApplicationServiceTest {
         verify(coordinator, never()).resume(any());
     }
 
+    @Test
+    void findRecentSummaryReturnsScansOrderedByCreatedAtDesc() {
+        UUID actorId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        Instant t1 = Instant.parse("2026-08-20T10:00:00Z");
+        Instant t2 = Instant.parse("2026-08-20T11:00:00Z");
+        Instant t3 = Instant.parse("2026-08-20T12:00:00Z");
+
+        scans.save(ActiveScan.readyToDispatch(
+                UUID.randomUUID(), actorId, accountId, "oldest", "k1", "f1",
+                snapshot(accountId, List.of()), t1));
+        scans.save(ActiveScan.readyToDispatch(
+                UUID.randomUUID(), actorId, accountId, "middle", "k2", "f2",
+                snapshot(accountId, List.of()), t2));
+        scans.save(ActiveScan.readyToDispatch(
+                UUID.randomUUID(), actorId, accountId, "newest", "k3", "f3",
+                snapshot(accountId, List.of()), t3));
+
+        var summaries = service.findRecentSummary(actorId, 10);
+
+        assertThat(summaries).hasSize(3);
+        assertThat(summaries.get(0).objective()).isEqualTo("newest");
+        assertThat(summaries.get(1).objective()).isEqualTo("middle");
+        assertThat(summaries.get(2).objective()).isEqualTo("oldest");
+    }
+
+    @Test
+    void findRecentSummaryRespectsLimit() {
+        UUID actorId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        Instant base = Instant.parse("2026-08-20T10:00:00Z");
+
+        for (int i = 0; i < 5; i++) {
+            scans.save(ActiveScan.readyToDispatch(
+                    UUID.randomUUID(), actorId, accountId, "scan-" + i, "k" + i, "f" + i,
+                    snapshot(accountId, List.of()), base.plusSeconds(i)));
+        }
+
+        var summaries = service.findRecentSummary(actorId, 2);
+
+        assertThat(summaries).hasSize(2);
+        assertThat(summaries.get(0).objective()).isEqualTo("scan-4");
+        assertThat(summaries.get(1).objective()).isEqualTo("scan-3");
+    }
+
+    @Test
+    void findRecentSummaryReturnsEmptyForUnknownActor() {
+        UUID unknownActor = UUID.randomUUID();
+        var summaries = service.findRecentSummary(unknownActor, 10);
+        assertThat(summaries).isEmpty();
+    }
+
+    @Test
+    void findRecentSummaryDoesNotCallReconciliation() {
+        UUID actorId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        scans.save(ActiveScan.readyToDispatch(
+                UUID.randomUUID(), actorId, accountId, "test", "k", "f",
+                snapshot(accountId, List.of()), now));
+
+        service.findRecentSummary(actorId, 10);
+
+        verify(reconciliation, never()).reconcileOwned(any(), any());
+    }
+
+    private ActiveScanScopeSnapshot snapshot(UUID accountId, List<java.util.UUID> effectiveMarketIds) {
+        return new ActiveScanScopeSnapshot(
+                List.of(), List.of(), List.of(), effectiveMarketIds, now);
+    }
+
     private AnalysisExecutionStrategy activeStrategy() {
         return new AnalysisExecutionStrategy() {
             @Override
@@ -287,6 +358,24 @@ class ActiveScanApplicationServiceTest {
         public List<ActiveScanMarket> saveMarkets(List<ActiveScanMarket> values) {
             values.forEach(market -> markets.put(market.scanMarketId(), market));
             return values;
+        }
+
+        @Override
+        public List<com.hope.trading.market_intelligence.domain.scan.ActiveScan> findRecentByActorId(
+                UUID actorId,
+                int limit
+        ) {
+            return scans.values().stream()
+                    .filter(scan -> scan.actorId().equals(actorId))
+                    .sorted(Comparator
+                            .<com.hope.trading.market_intelligence.domain.scan.ActiveScan, Instant>comparing(
+                                    com.hope.trading.market_intelligence.domain.scan.ActiveScan::createdAt,
+                                    Comparator.reverseOrder())
+                            .thenComparing(
+                                    com.hope.trading.market_intelligence.domain.scan.ActiveScan::scanId,
+                                    Comparator.reverseOrder()))
+                    .limit(limit)
+                    .toList();
         }
 
         @Override
