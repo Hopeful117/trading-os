@@ -178,7 +178,7 @@ public class ActiveScanApplicationService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                dispatchCoordinator.resume(scan.scanId());
+                dispatchCoordinator.resumeAsync(scan.scanId());
             }
         });
     }
