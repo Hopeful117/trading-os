@@ -22,7 +22,7 @@ final class OpportunityBuilder {
                 command.timeframe(), result.type(), command.origin(), result.score(),
                 result.explanation(), result.observations(), result.aiAnalyses(),
                 command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
-                command.strategyMatchId());
+                command.strategyMatchId(), command.setupSnapshot());
     }
 
     TradingOpportunity nextVersion(
@@ -35,7 +35,8 @@ final class OpportunityBuilder {
                 command.timeframe(), result.type(), command.origin(), result.score(),
                 result.explanation(), result.observations(), result.aiAnalyses(),
                 command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
-                previous.strategyMatchId().orElse(command.strategyMatchId()));
+                previous.strategyMatchId().orElse(command.strategyMatchId()),
+                command.setupSnapshot());
     }
 
     TradingOpportunity transition(
@@ -47,6 +48,8 @@ final class OpportunityBuilder {
                 previous.origin(), previous.score(), previous.explanation(),
                 previous.observations(), previous.aiAnalyses(), previous.evaluatedAt(),
                 previous.validFrom(), previous.validUntil().orElse(null), createdAt,
-                previous.strategyMatchId().orElse(null));
+                previous.strategyMatchId().orElse(null),
+                // Historical setup truth is immutable across status transitions.
+                previous.setup().orElse(null));
     }
 }

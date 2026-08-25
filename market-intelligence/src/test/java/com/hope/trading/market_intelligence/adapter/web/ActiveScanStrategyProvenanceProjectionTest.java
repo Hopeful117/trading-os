@@ -43,7 +43,7 @@ class ActiveScanStrategyProvenanceProjectionTest {
                 OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
                 "OHLC_TREND",
                 Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
-                NOW, NOW, NOW.plusSeconds(1800), NOW, matchId);
+                NOW, NOW, NOW.plusSeconds(1800), NOW, matchId, null);
     }
 
     private StrategyMatch match() {

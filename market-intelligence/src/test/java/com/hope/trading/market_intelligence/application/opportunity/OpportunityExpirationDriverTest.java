@@ -225,6 +225,7 @@ class OpportunityExpirationDriverTest {
                     NOW,
                     validUntil,
                     OpportunityTestFixtures.MATCH_ID,
+                    null,
                     null);
         }
     }

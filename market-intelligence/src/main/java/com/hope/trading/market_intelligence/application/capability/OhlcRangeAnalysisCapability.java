@@ -31,6 +31,7 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
                                 ProductionArtifactTypes.V1, Set.of()),
                         new ProducedContribution.MetricContribution("highestPrice"),
                         new ProducedContribution.MetricContribution("lowestPrice"),
+                        new ProducedContribution.MetricContribution("closePrice"),
                         new ProducedContribution.MetricContribution("range"),
                         new ProducedContribution.MetricContribution("rangePercentage"),
                         new ProducedContribution.MetricContribution("priceChange")),
@@ -145,6 +146,7 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
                 .subtract(history.candles().getFirst().open());
         return Map.of(
                 "highestPrice", highest, "lowestPrice", lowest,
+                "closePrice", history.candles().getLast().close(),
                 "range", range, "rangePercentage", rangePercentage,
                 "priceChange", priceChange);
     }

@@ -1,4 +1,4 @@
-import { AsyncPipe, DatePipe } from '@angular/common';
+import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -15,7 +15,7 @@ export type OpportunityDetailView =
 
 @Component({
   selector: 'app-opportunity-details',
-  imports: [AsyncPipe, DatePipe, RouterLink],
+  imports: [AsyncPipe, DatePipe, DecimalPipe, RouterLink],
   templateUrl: './opportunity-details.html',
   styleUrl: './opportunity-details.scss',
 })

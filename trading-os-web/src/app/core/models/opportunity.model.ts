@@ -7,6 +7,19 @@ export type OpportunityType = 'SCALPING' | 'INTRADAY' | 'SWING' | 'POSITIONAL';
 export type OpportunityOrigin =
   'PASSIVE_SCAN' | 'ACTIVE_SCAN' | 'USER_REQUEST' | 'SYSTEM_REEVALUATION';
 
+export interface OpportunityTrigger {
+  condition: string;
+  observedValue: string | null;
+}
+
+export interface OpportunitySetup {
+  referencePrice: number | null;
+  referencePriceAt: string | null;
+  description: string;
+  triggers: OpportunityTrigger[];
+  detectedAt: string;
+}
+
 export interface OpportunityResponse {
   id: string;
   version: number;
@@ -26,6 +39,7 @@ export interface OpportunityResponse {
   validUntil: string | null;
   createdAt: string;
   strategyMatchId: string | null;
+  setup?: OpportunitySetup | null;
 }
 
 export interface OpportunityPageResponse {

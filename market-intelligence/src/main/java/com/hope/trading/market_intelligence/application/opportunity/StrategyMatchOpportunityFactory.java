@@ -3,13 +3,19 @@ package com.hope.trading.market_intelligence.application.opportunity;
 import com.hope.trading.market_intelligence.domain.opportunity.ObservationReference;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityOrigin;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunitySetupSnapshot;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityTrigger;
+import com.hope.trading.market_intelligence.strategy.domain.ConditionResult;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluation;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +29,12 @@ import java.util.UUID;
  * <p>Story 0013 generalized model: scenario and timeframe are derived from
  * declarative {@link StrategyDefinition} metadata, not from strategy-specific
  * branching. The same code path serves all strategies.</p>
+ *
+ * <p>Story 0029: preserves the deterministic setup context that was
+ * previously dropped — matched condition facts, the evaluator's setup
+ * description, the match instant, and the reference price observed by the
+ * evidence that fed the match. All values are forwarded verbatim; no
+ * strategy-specific logic lives here.</p>
  */
 @Component
 public class StrategyMatchOpportunityFactory {
@@ -39,13 +51,17 @@ public class StrategyMatchOpportunityFactory {
             ObservationReference evidence,
             Instant evaluatedAt,
             Instant validFrom,
-            Instant validUntil
+            Instant validUntil,
+            StrategyEvaluation evaluation,
+            BigDecimal referencePrice,
+            Instant referencePriceAt
     ) {
         Objects.requireNonNull(match, "match is required");
         Objects.requireNonNull(definition, "definition is required");
         Objects.requireNonNull(instrument, "instrument is required");
         Objects.requireNonNull(origin, "origin is required");
         Objects.requireNonNull(evidence, "evidence reference is required");
+        Objects.requireNonNull(evaluation, "evaluation is required");
         return new CreateOpportunityCommand(
                 instrument,
                 directionOf(match),
@@ -57,7 +73,29 @@ public class StrategyMatchOpportunityFactory {
                 evaluatedAt,
                 validUntil,
                 match.matchId(),
-                deriveOpportunityLineageId(match.matchId()));
+                deriveOpportunityLineageId(match.matchId()),
+                setupSnapshot(match, evaluation, referencePrice, referencePriceAt));
+    }
+
+    /**
+     * Deterministic setup snapshot: identical match + evaluation inputs yield
+     * an identical snapshot. Condition results are projected verbatim (only
+     * passed conditions exist on a persisted MATCH); the description is the
+     * evaluator-owned explanation; detectedAt is the semantic match instant.
+     */
+    private static OpportunitySetupSnapshot setupSnapshot(
+            StrategyMatch match, StrategyEvaluation evaluation,
+            BigDecimal referencePrice, Instant referencePriceAt) {
+        List<OpportunityTrigger> triggers = match.conditionResults().stream()
+                .map(StrategyMatchOpportunityFactory::triggerOf)
+                .toList();
+        return new OpportunitySetupSnapshot(
+                referencePrice, referencePriceAt, evaluation.explanation(),
+                triggers, match.matchedAt());
+    }
+
+    private static OpportunityTrigger triggerOf(ConditionResult result) {
+        return new OpportunityTrigger(result.conditionId(), result.observedValue());
     }
 
     /**

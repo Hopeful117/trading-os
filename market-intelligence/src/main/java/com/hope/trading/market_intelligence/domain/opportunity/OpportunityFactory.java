@@ -13,11 +13,11 @@ public final class OpportunityFactory {
             OpportunityScore score, String explanation,
             Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
             Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-            UUID strategyMatchId
+            UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot
     ) {
         return new TradingOpportunity(
                 id, version, status, instrument, direction, scenario, timeframe, type,
                 origin, score, explanation, observations, aiAnalyses, evaluatedAt,
-                validFrom, validUntil, createdAt, strategyMatchId);
+                validFrom, validUntil, createdAt, strategyMatchId, setupSnapshot);
     }
 }

@@ -31,7 +31,7 @@ class TradingOpportunityTest {
                 "Scenario", "5m", OpportunityType.SCALPING,
                 OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
                 "Explanation", references, Set.of(), OpportunityTestFixtures.NOW,
-                OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null);
+                OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null, null);
         references.clear();
 
         assertThat(value.observations()).containsExactly(observation);
@@ -41,7 +41,7 @@ class TradingOpportunityTest {
                 "Scenario", "5m", OpportunityType.SCALPING,
                 OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
                 "Explanation", Set.of(), Set.of(), OpportunityTestFixtures.NOW,
-                OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null))
+                OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

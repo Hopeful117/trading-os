@@ -19,7 +19,8 @@ final class TradingOpportunityMapper {
                 value.aiAnalyses().stream().map(AiAnalysisReference::analysisId)
                         .collect(Collectors.toUnmodifiableSet()),
                 value.evaluatedAt(), value.validFrom(), value.validUntil().orElse(null),
-                value.createdAt(), value.strategyMatchId().orElse(null));
+                value.createdAt(), value.strategyMatchId().orElse(null),
+                value.setup().orElse(null));
     }
 
     TradingOpportunity toDomain(TradingOpportunityEntity value) {
@@ -35,6 +36,6 @@ final class TradingOpportunityMapper {
                 value.aiAnalysisIds().stream().map(AiAnalysisReference::new)
                         .collect(Collectors.toUnmodifiableSet()),
                 value.evaluatedAt(), value.validFrom(), value.validUntil(), value.createdAt(),
-                value.strategyMatchId());
+                value.strategyMatchId(), value.setupSnapshot());
     }
 }
