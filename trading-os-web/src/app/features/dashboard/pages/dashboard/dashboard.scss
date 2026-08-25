@@ -178,8 +178,44 @@ th {
   border-radius: 0.75rem;
 }
 
-.market-panel {
+.mi-panel {
   margin-top: 1.5rem;
+}
+
+.mi-summary {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.5rem 0;
+}
+
+.mi-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  span {
+    color: #94a3b8;
+    font-size: 0.85rem;
+  }
+
+  strong {
+    font-size: 1.5rem;
+    color: #e2e8f0;
+  }
+}
+
+.panel-link {
+  font-size: 0.85rem;
+  color: #60a5fa;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.empty-state.error {
+  color: #f87171;
 }
 
 .positive,
