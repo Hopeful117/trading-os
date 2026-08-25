@@ -41,6 +41,13 @@ describe('Opportunities', () => {
       validUntil: '2026-08-24T10:30:00Z',
       createdAt: '2026-08-24T09:55:00Z',
       strategyMatchId: 'match-1',
+      setup: {
+        referencePrice: 64120.5,
+        referencePriceAt: '2026-08-24T09:59:00Z',
+        description: 'Upward breakout detected',
+        triggers: [{ condition: 'directional_price_change', observedValue: '12.5' }],
+        detectedAt: '2026-08-24T10:00:00Z',
+      },
     },
     {
       id: 'o2',
@@ -131,6 +138,11 @@ describe('Opportunities', () => {
       expect(rows.length).toBe(2);
       expect(fixture.nativeElement.textContent).toContain('BTC/EUR');
       expect(fixture.nativeElement.textContent).toContain('ETH/EUR');
+    });
+
+    it('renders the setup reference price with an honest fallback for legacy rows', () => {
+      const priceCell = fixture.nativeElement.querySelector('.reference-price');
+      expect(priceCell.textContent).toContain('64,120.5');
     });
 
     it('renders the empty state when no active opportunity exists', async () => {

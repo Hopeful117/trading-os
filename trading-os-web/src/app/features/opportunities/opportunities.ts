@@ -1,4 +1,4 @@
-import { AsyncPipe, DatePipe } from '@angular/common';
+import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, map, of, shareReplay, startWith, Subject, switchMap } from 'rxjs';
@@ -14,7 +14,7 @@ export type OpportunitiesView =
 
 @Component({
   selector: 'app-opportunities',
-  imports: [AsyncPipe, DatePipe, ScanPanel],
+  imports: [AsyncPipe, DatePipe, DecimalPipe, ScanPanel],
   templateUrl: './opportunities.html',
   styleUrl: './opportunities.scss',
 })

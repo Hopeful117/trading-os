@@ -23,6 +23,11 @@ public final class TradingOpportunity {
     private final Instant createdAt;
     /** Authoritative setup provenance (ADR-034). Null only for pre-0012 rows. */
     private final UUID strategyMatchId;
+    /**
+     * Deterministic setup snapshot captured at detection time (Story 0029).
+     * Null only for pre-0029 rows; immutable across version transitions.
+     */
+    private final OpportunitySetupSnapshot setupSnapshot;
 
     TradingOpportunity(
             OpportunityId id, OpportunityVersion version, OpportunityStatus status,
@@ -31,7 +36,7 @@ public final class TradingOpportunity {
             OpportunityScore score, String explanation,
             Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
             Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-            UUID strategyMatchId
+            UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot
     ) {
         this.id = Objects.requireNonNull(id);
         this.version = Objects.requireNonNull(version);
@@ -57,6 +62,7 @@ public final class TradingOpportunity {
         this.validUntil = validUntil;
         this.createdAt = Objects.requireNonNull(createdAt);
         this.strategyMatchId = strategyMatchId;
+        this.setupSnapshot = setupSnapshot;
     }
 
     private static String required(String value, String name) {
@@ -84,4 +90,8 @@ public final class TradingOpportunity {
     public Instant createdAt() { return createdAt; }
 
     public Optional<UUID> strategyMatchId() { return Optional.ofNullable(strategyMatchId); }
+
+    public Optional<OpportunitySetupSnapshot> setup() {
+        return Optional.ofNullable(setupSnapshot);
+    }
 }

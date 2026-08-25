@@ -30,7 +30,7 @@ public final class OpportunityTestFixtures {
                 "BTC/EUR", OpportunityDirection.LONG, "Bullish breakout", "5m",
                 OpportunityOrigin.PASSIVE_SCAN,
                 Set.of(new ObservationReference(observation.id())), Set.of(),
-                NOW, NOW.plusSeconds(300), matchId, null);
+                NOW, NOW.plusSeconds(300), matchId, null, null);
     }
 
     public static TradingOpportunity opportunity(
@@ -42,7 +42,7 @@ public final class OpportunityTestFixtures {
                 OpportunityType.SCALPING, OpportunityOrigin.PASSIVE_SCAN, score,
                 "Confirmed", Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
                 evaluatedAt, evaluatedAt, evaluatedAt.plusSeconds(300), evaluatedAt,
-                null);
+                null, null);
     }
 
     private OpportunityTestFixtures() {}

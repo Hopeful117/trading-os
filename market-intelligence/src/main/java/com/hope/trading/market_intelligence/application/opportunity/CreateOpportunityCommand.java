@@ -18,7 +18,8 @@ public record CreateOpportunityCommand(
         Instant evaluatedAt,
         Instant validUntil,
         UUID strategyMatchId,
-        UUID opportunityId
+        UUID opportunityId,
+        OpportunitySetupSnapshot setupSnapshot
 ) {
     public CreateOpportunityCommand {
         instrument = required(instrument, "instrument");

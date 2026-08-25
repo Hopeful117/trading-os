@@ -92,6 +92,44 @@
             <p>{{ view.opportunity.explanation }}</p>
           </section>
 
+          @if (view.opportunity.setup; as setup) {
+            <section class="setup" data-testid="setup-section">
+              <h2>Setup at detection</h2>
+
+              @if (setup.referencePrice !== null) {
+                <div class="setup-price" data-testid="setup-reference-price">
+                  <span class="label">Reference price</span>
+                  <strong>{{ setup.referencePrice | number: '1.2-8' }}</strong>
+                  @if (setup.referencePriceAt; as referencePriceAt) {
+                    <span class="when"
+                      >observed {{ referencePriceAt | date: 'MMM d, HH:mm:ss' }}</span
+                    >
+                  }
+                </div>
+              }
+
+              <p class="setup-description">{{ setup.description }}</p>
+
+              @if (setup.triggers.length > 0) {
+                <h3>Matched conditions</h3>
+                <ul class="trigger-list" data-testid="setup-triggers">
+                  @for (trigger of setup.triggers; track trigger.condition) {
+                    <li>
+                      <span class="trigger-condition">{{ trigger.condition }}</span>
+                      @if (trigger.observedValue !== null) {
+                        <code>{{ trigger.observedValue }}</code>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+
+              <p class="setup-detected">
+                Detected {{ setup.detectedAt | date: 'MMM d, HH:mm:ss' }}
+              </p>
+            </section>
+          }
+
           <section class="provenance">
             <h2>Provenance</h2>
 

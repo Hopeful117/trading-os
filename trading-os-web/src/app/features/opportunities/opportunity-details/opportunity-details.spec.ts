@@ -5,11 +5,22 @@ import { of, throwError } from 'rxjs';
 
 import { OpportunityDetail, OpportunityDetailView } from './opportunity-details';
 import { OpportunityService } from '../../../core/services/opportunity.service';
-import { OpportunityResponse } from '../../../core/models/opportunity.model';
+import { OpportunityResponse, OpportunitySetup } from '../../../core/models/opportunity.model';
 
 describe('OpportunityDetail', () => {
   let fixture: ComponentFixture<OpportunityDetail>;
   let opportunityServiceMock: { findById: ReturnType<typeof vi.fn> };
+
+  const setup: OpportunitySetup = {
+    referencePrice: 64120.5,
+    referencePriceAt: '2026-08-24T09:59:00Z',
+    description: 'Price broke resistance with momentum',
+    triggers: [
+      { condition: 'directional_price_change', observedValue: '12.5' },
+      { condition: 'range_expansion', observedValue: null },
+    ],
+    detectedAt: '2026-08-24T10:00:00Z',
+  };
 
   const mockOpportunity: OpportunityResponse = {
     id: 'o1',
@@ -30,6 +41,7 @@ describe('OpportunityDetail', () => {
     validUntil: '2026-08-24T10:30:00Z',
     createdAt: '2026-08-24T09:55:00Z',
     strategyMatchId: 'match-1',
+    setup,
   };
 
   function configureComponent(opportunityId: string | null): void {
@@ -110,6 +122,40 @@ describe('OpportunityDetail', () => {
       const element = fixture.nativeElement;
       expect(element.textContent).toContain('Not recorded');
       expect(element.textContent).toContain('None recorded');
+    });
+  });
+
+  describe('setup snapshot', () => {
+    it('renders the setup section with reference price, description and triggers', async () => {
+      await createComponent('o1');
+
+      const element = fixture.nativeElement;
+      expect(element.querySelector('[data-testid="setup-section"]')).not.toBeNull();
+      expect(element.querySelector('[data-testid="setup-reference-price"]').textContent).toContain(
+        '64,120.5',
+      );
+      expect(element.querySelector('[data-testid="setup-triggers"]').textContent).toContain(
+        'directional_price_change',
+      );
+      expect(element.textContent).toContain(setup.description);
+      expect(element.textContent).toContain('Detected');
+    });
+
+    it('renders triggers without observed values honestly', async () => {
+      await createComponent('o1');
+
+      const triggers = fixture.nativeElement.querySelector(
+        '[data-testid="setup-triggers"]',
+      ).textContent;
+      expect(triggers).toContain('range_expansion');
+      expect(triggers).toContain('12.5');
+    });
+
+    it('hides the setup section for legacy opportunities without a snapshot', async () => {
+      opportunityServiceMock.findById.mockReturnValue(of({ ...mockOpportunity, setup: null }));
+      await createComponent('o1');
+
+      expect(fixture.nativeElement.querySelector('[data-testid="setup-section"]')).toBeNull();
     });
   });
 

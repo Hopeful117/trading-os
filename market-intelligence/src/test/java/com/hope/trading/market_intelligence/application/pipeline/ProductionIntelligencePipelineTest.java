@@ -158,7 +158,8 @@ class ProductionIntelligencePipelineTest {
         when(opportunities.transition(any(OpportunityId.class), any(OpportunityStatus.class)))
                 .thenReturn(opportunity);
         when(matchOpportunities.command(any(), any(StrategyDefinition.class),
-                anyString(), any(), any(), any(Instant.class), any(Instant.class), any()))
+                anyString(), any(), any(), any(Instant.class), any(Instant.class), any(),
+                any(), any(), any()))
                 .thenReturn(mock(CreateOpportunityCommand.class));
     }
 

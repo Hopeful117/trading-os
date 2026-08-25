@@ -190,16 +190,38 @@ public class ProductionIntelligencePipeline {
     ) {
         var persisted = matches.persist(
                 evaluation, analysisExecutionId, observation.id()).orElseThrow();
+        ReferencePrice reference = referencePriceOf(observation);
         CreateOpportunityCommand command = matchOpportunities.command(
                 persisted.match(), definition, instrument, originOf(mode),
                 new ObservationReference(observation.id()),
                 observation.validFrom(),
                 observation.validFrom(),
-                observation.validUntil().orElse(null));
+                observation.validUntil().orElse(null),
+                evaluation,
+                reference.price(),
+                reference.observedAt());
         OpportunityCreationResult created = opportunities.create(command);
         TradingOpportunity analyzed = opportunities.transition(
                 created.opportunity().id(), OpportunityStatus.ANALYZED);
         return opportunities.transition(analyzed.id(), OpportunityStatus.ACTIVE);
+    }
+
+    /**
+     * Detection-time price context for the setup snapshot (Story 0029):
+     * read from the observation evidence that fed the strategy evaluation —
+     * the same transaction, never a retroactive Market Data lookup. Absent
+     * when the evidence carries no close price.
+     */
+    private record ReferencePrice(java.math.BigDecimal price, java.time.Instant observedAt) {}
+
+    private static ReferencePrice referencePriceOf(Observation observation) {
+        return observation.evidence().stream()
+                .filter(evidence -> evidence.measurements() != null
+                        && evidence.measurements().containsKey("closePrice"))
+                .reduce((first, second) -> second)
+                .map(evidence -> new ReferencePrice(
+                        evidence.measurements().get("closePrice"), evidence.observedAt()))
+                .orElse(new ReferencePrice(null, null));
     }
 
     private static OpportunityOrigin originOf(AnalysisExecutionMode mode) {
