@@ -189,6 +189,125 @@
           </section>
         </article>
       }
+      @case ('executionSubmitting') {
+        <div class="state-card" data-testid="execution-submitting-state">
+          <span class="spinner"></span>
+          <p>Submitting to broker…</p>
+        </div>
+      }
+      @case ('executionReady') {
+        <article class="plan-card" data-testid="execution-ready-state">
+          <header class="card-header">
+            <div>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
+              <p>
+                Status:
+                <span
+                  class="status-badge"
+                  [class.approved]="view.decision.approved"
+                  [class.rejected]="!view.decision.approved"
+                >
+                  {{ view.decision.decision }}
+                </span>
+              </p>
+            </div>
+          </header>
+
+          <section class="risk-summary">
+            <h2>Risk evaluation</h2>
+            <div class="risk-grid">
+              <div class="fact">
+                <span class="label">Evaluation</span>
+                <span class="value">{{ view.decision.evaluationId }}</span>
+              </div>
+              <div class="fact">
+                <span class="label">Approved</span>
+                <span class="value" [class.approved]="view.decision.approved">
+                  {{ view.decision.approved ? 'Yes' : 'No' }}
+                </span>
+              </div>
+              <div class="fact">
+                <span class="label">Evaluated at</span>
+                <span class="value">{{ view.decision.evaluatedAt | date: 'MMM d, HH:mm:ss' }}</span>
+              </div>
+            </div>
+          </section>
+
+          @if (view.decision.reasons.length > 0) {
+            <section class="risk-details">
+              <h2>Reasons</h2>
+              <ul>
+                @for (reason of view.decision.reasons; track reason.code) {
+                  <li [class]="reason.severity">
+                    <strong>{{ reason.code }}</strong> — {{ reason.message }}
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          @if (view.decision.warnings.length > 0) {
+            <section class="risk-details">
+              <h2>Warnings</h2>
+              <ul>
+                @for (warning of view.decision.warnings; track warning.code) {
+                  <li class="warning">
+                    <strong>{{ warning.code }}</strong> — {{ warning.message }}
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          <footer class="card-actions">
+            <button
+              class="btn-accept"
+              (click)="execute(view.plan, view.decision)"
+              data-testid="execute-button"
+            >
+              Execute Trade
+            </button>
+          </footer>
+        </article>
+      }
+      @case ('executionResult') {
+        <article class="plan-card" data-testid="execution-result-state">
+          <header class="card-header">
+            <div>
+              <h1>Execution Result</h1>
+              <p>
+                Status:
+                <span
+                  class="status-badge"
+                  [class.approved]="view.execution.status === 'COMPLETED'"
+                  [class.rejected]="view.execution.status === 'FAILED'"
+                >
+                  {{ view.execution.status }}
+                </span>
+              </p>
+            </div>
+          </header>
+
+          <section class="facts-grid">
+            <div class="fact">
+              <span class="label">Execution ID</span>
+              <span class="value">{{ view.execution.id }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Created</span>
+              <span class="value">{{ view.execution.createdAt | date: 'MMM d, HH:mm:ss' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Updated</span>
+              <span class="value">{{ view.execution.updatedAt | date: 'MMM d, HH:mm:ss' }}</span>
+            </div>
+          </section>
+
+          <footer class="card-actions">
+            <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
+          </footer>
+        </article>
+      }
       @case ('riskDecision') {
         <article class="plan-card" data-testid="risk-decision-state">
           <header class="card-header">

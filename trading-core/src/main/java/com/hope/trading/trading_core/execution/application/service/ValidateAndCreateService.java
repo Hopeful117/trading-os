@@ -15,6 +15,7 @@ import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersist
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Validates an authorized Trade Plan against authoritative persisted data
@@ -71,10 +72,11 @@ public final class ValidateAndCreateService {
         }
 
         // 4. Verify evaluation belongs to the correct account
-        if (!evaluation.accountId().equals(command.brokerAccountId())) {
-            throw new ExecutionValidationException("EVALUATION_ACCOUNT_MISMATCH",
-                    "Risk Evaluation does not match the specified account", 409);
-        }
+        //    (Removed: the previous comparison of evaluation.accountId() with
+        //     command.brokerAccountId() was incorrect — these are different domain
+        //     identities. TradingAccount vs BrokerAccount must not be compared directly.
+        //     Step 10 below correctly validates evaluation.accountId() against
+        //     plan.tradingAccountId(). Step 11 correctly validates BrokerAccount ownership.)
 
         // 5. Load authoritative TradePlan
         TradePlanRiskPort.Snapshot plan;
@@ -121,15 +123,24 @@ public final class ValidateAndCreateService {
                     "Risk Evaluation account does not match Trade Plan trading account", 409);
         }
 
-        // 11. Verify BrokerAccount ownership
-        brokerAccounts.findByIdAndOwnerId(command.brokerAccountId(), command.initiatorId())
+        // 11. Resolve BrokerAccount from TradingAccount configuration
+        //     The frontend sends plan.tradingAccountId as brokerAccountId (TradePlan
+        //     has no brokerAccountId). The authoritative broker account is resolved
+        //     from the AccountRiskConfiguration linked to this trading account.
+        RiskPersistence.AccountConfiguration accountConfig = riskPersistence.configuration(plan.tradingAccountId())
+                .orElseThrow(() -> new ExecutionValidationException("ACCOUNT_RISK_CONFIGURATION_MISSING",
+                        "Account risk configuration not found", 422));
+        UUID resolvedBrokerAccountId = accountConfig.brokerAccountId();
+
+        // 12. Verify BrokerAccount ownership
+        brokerAccounts.findByIdAndOwnerId(resolvedBrokerAccountId, command.initiatorId())
                 .orElseThrow(() -> new ExecutionValidationException("BROKER_ACCOUNT_FORBIDDEN",
                         "Broker Account does not belong to the authenticated user", 403));
 
-        // 12. Derive ExecutionParameters from authoritative TradePlan
+        // 13. Derive ExecutionParameters from authoritative TradePlan
         ExecutionParameters parameters = deriveParameters(plan);
 
-        // 13. Create ExecutionIntent from authoritative data
+        // 14. Create ExecutionIntent from authoritative data
         RiskApprovalReference approval = new RiskApprovalReference(
                 evaluation.id(),
                 RiskApprovalReference.Decision.valueOf(decision),
@@ -141,11 +152,11 @@ public final class ValidateAndCreateService {
                         approval,
                         command.idempotencyKey(),
                         command.initiatorId(),
-                        command.brokerAccountId(),
+                        resolvedBrokerAccountId,
                         parameters,
                         command.expiresAt()));
 
-        // 14. Transition to VALIDATED
+        // 15. Transition to VALIDATED
         lifecycle.validate(intent, clock.instant());
 
         return intent;

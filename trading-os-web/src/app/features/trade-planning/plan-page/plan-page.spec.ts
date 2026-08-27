@@ -4,6 +4,7 @@ import { Observable, of } from 'rxjs';
 
 import { RiskDecisionResponse, TradePlanResponse } from '../../../core/models/trade-plan.model';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
+import { ExecutionService } from '../../../core/services/execution.service';
 import { PlanPage } from './plan-page';
 
 function fakePlan(status: string): TradePlanResponse {
@@ -77,11 +78,16 @@ describe('PlanPage', () => {
       decide: () => decide$,
       evaluateRisk: () => risk$,
     };
+    const executionService = {
+      validate: () => of({ id: 'exec-1', status: 'VALIDATED' } as any),
+      execute: () => of({ id: 'exec-1', status: 'COMPLETED' } as any),
+    };
     return TestBed.configureTestingModule({
       imports: [PlanPage],
       providers: [
         { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
         { provide: TradePlanService, useValue: tradePlanService },
+        { provide: ExecutionService, useValue: executionService },
       ],
     });
   }
@@ -117,7 +123,7 @@ describe('PlanPage', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="rejected-state"]')).toBeTruthy();
   });
 
-  it('shows risk decision state for APPROVED', () => {
+  it('shows execution-ready state for APPROVED risk decision', () => {
     configureMocks(
       of(fakePlan('ACCEPTED')),
       of(fakePlan('ACCEPTED')),
@@ -128,6 +134,44 @@ describe('PlanPage', () => {
     fixture.detectChanges();
     fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="risk-decision-state"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]'),
+    ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="execute-button"]')).toBeTruthy();
+  });
+
+  it('clicking execute triggers execution flow and shows result', () => {
+    configureMocks(
+      of(fakePlan('ACCEPTED')),
+      of(fakePlan('ACCEPTED')),
+      of(fakeRiskDecision('APPROVED')),
+    );
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="execute-button"]')?.click();
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-result-state"]'),
+    ).toBeTruthy();
+  });
+
+  it('does not show execute button for REJECTED risk decision', () => {
+    configureMocks(
+      of(fakePlan('ACCEPTED')),
+      of(fakePlan('ACCEPTED')),
+      of(fakeRiskDecision('REJECTED')),
+    );
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]'),
+    ).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('[data-testid="execute-button"]')).toBeFalsy();
   });
 });
