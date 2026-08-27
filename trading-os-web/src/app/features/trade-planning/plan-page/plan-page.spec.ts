@@ -134,7 +134,9 @@ describe('PlanPage', () => {
     fixture.detectChanges();
     fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]'),
+    ).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="execute-button"]')).toBeTruthy();
   });
 
@@ -151,7 +153,9 @@ describe('PlanPage', () => {
     fixture.detectChanges();
     fixture.nativeElement.querySelector('[data-testid="execute-button"]')?.click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="execution-result-state"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-result-state"]'),
+    ).toBeTruthy();
   });
 
   it('does not show execute button for REJECTED risk decision', () => {
@@ -165,7 +169,9 @@ describe('PlanPage', () => {
     fixture.detectChanges();
     fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]')).toBeFalsy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]'),
+    ).toBeFalsy();
     expect(fixture.nativeElement.querySelector('[data-testid="execute-button"]')).toBeFalsy();
   });
 });

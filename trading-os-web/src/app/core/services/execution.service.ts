@@ -10,10 +10,7 @@ import { ExecutionDto, ValidateExecutionRequest } from '../models/execution.mode
 export class ExecutionService {
   private http = inject(HttpClient);
 
-  validate(
-    request: ValidateExecutionRequest,
-    idempotencyKey: string,
-  ): Observable<ExecutionDto> {
+  validate(request: ValidateExecutionRequest, idempotencyKey: string): Observable<ExecutionDto> {
     return this.http.post<ExecutionDto>(
       `${environment.gatewayUrl}v1/executions/validate`,
       request,
@@ -29,8 +26,6 @@ export class ExecutionService {
   }
 
   getExecution(executionId: string): Observable<ExecutionDto> {
-    return this.http.get<ExecutionDto>(
-      `${environment.gatewayUrl}v1/executions/${executionId}`,
-    );
+    return this.http.get<ExecutionDto>(`${environment.gatewayUrl}v1/executions/${executionId}`);
   }
 }

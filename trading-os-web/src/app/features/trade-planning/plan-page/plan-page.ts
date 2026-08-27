@@ -96,9 +96,11 @@ export class PlanPage {
         return this.tradePlanService
           .evaluateRisk(plan.id, plan.version, accountId, crypto.randomUUID())
           .pipe(
-            map((decision): PlanView => decision.approved
-              ? { status: 'executionReady', plan, decision }
-              : { status: 'riskDecision', plan, decision }),
+            map((decision): PlanView =>
+              decision.approved
+                ? { status: 'executionReady', plan, decision }
+                : { status: 'riskDecision', plan, decision },
+            ),
             catchError(() => of<PlanView>({ status: 'error' })),
           );
       }),
@@ -128,9 +130,7 @@ export class PlanPage {
                       status: 'executionResult' as const,
                       execution,
                     })),
-                    catchError(() =>
-                      of<PlanView>({ status: 'error' }),
-                    ),
+                    catchError(() => of<PlanView>({ status: 'error' })),
                   ),
                 ),
                 catchError(() => of<PlanView>({ status: 'error' })),
