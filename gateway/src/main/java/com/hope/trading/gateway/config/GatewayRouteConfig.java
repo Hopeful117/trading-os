@@ -88,6 +88,10 @@ public class GatewayRouteConfig {
                         .path("/api/v1/intelligence/**")
                         .uri(uriFor.apply("market-intelligence", "lb://market-intelligence"))
                 )
+                .route("executions", r -> r
+                        .path("/api/v1/executions/**")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                )
 
                 .build();
     }

@@ -14,7 +14,9 @@ import {
 } from 'rxjs';
 
 import { RiskDecisionResponse, TradePlanResponse } from '../../../core/models/trade-plan.model';
+import { ExecutionDto } from '../../../core/models/execution.model';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
+import { ExecutionService } from '../../../core/services/execution.service';
 
 export type PlanView =
   | { status: 'loading' }
@@ -24,7 +26,10 @@ export type PlanView =
   | { status: 'accepted'; plan: TradePlanResponse }
   | { status: 'evaluatingRisk' }
   | { status: 'rejected'; plan: TradePlanResponse }
-  | { status: 'riskDecision'; plan: TradePlanResponse; decision: RiskDecisionResponse };
+  | { status: 'riskDecision'; plan: TradePlanResponse; decision: RiskDecisionResponse }
+  | { status: 'executionReady'; plan: TradePlanResponse; decision: RiskDecisionResponse }
+  | { status: 'executionSubmitting' }
+  | { status: 'executionResult'; execution: ExecutionDto };
 
 @Component({
   selector: 'app-plan-page',
@@ -35,10 +40,15 @@ export type PlanView =
 export class PlanPage {
   private readonly route = inject(ActivatedRoute);
   private readonly tradePlanService = inject(TradePlanService);
+  private readonly executionService = inject(ExecutionService);
 
   private readonly acceptSubject = new Subject<TradePlanResponse>();
   private readonly rejectSubject = new Subject<TradePlanResponse>();
   private readonly evaluateRiskSubject = new Subject<TradePlanResponse>();
+  private readonly executeSubject = new Subject<{
+    plan: TradePlanResponse;
+    decision: RiskDecisionResponse;
+  }>();
 
   readonly view$: Observable<PlanView>;
   readonly busy$: Observable<boolean>;
@@ -86,17 +96,51 @@ export class PlanPage {
         return this.tradePlanService
           .evaluateRisk(plan.id, plan.version, accountId, crypto.randomUUID())
           .pipe(
-            map((decision) => ({
-              status: 'riskDecision' as const,
-              plan,
-              decision,
-            })),
+            map((decision): PlanView => decision.approved
+              ? { status: 'executionReady', plan, decision }
+              : { status: 'riskDecision', plan, decision }),
             catchError(() => of<PlanView>({ status: 'error' })),
           );
       }),
     );
 
-    this.view$ = merge(plan$, accept$, reject$, evaluateRisk$).pipe(
+    const execute$ = this.executeSubject.pipe(
+      switchMap(({ plan, decision }) => {
+        const idempotencyKey = crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 3600_000).toISOString();
+        return of<PlanView>({ status: 'executionSubmitting' }).pipe(
+          switchMap(() =>
+            this.executionService
+              .validate(
+                {
+                  tradePlanId: plan.id,
+                  tradePlanVersion: plan.version,
+                  evaluationId: decision.evaluationId,
+                  brokerAccountId: plan.tradingAccountId,
+                  expiresAt,
+                },
+                idempotencyKey,
+              )
+              .pipe(
+                switchMap((validated) =>
+                  this.executionService.execute(validated.id).pipe(
+                    map((execution) => ({
+                      status: 'executionResult' as const,
+                      execution,
+                    })),
+                    catchError(() =>
+                      of<PlanView>({ status: 'error' }),
+                    ),
+                  ),
+                ),
+                catchError(() => of<PlanView>({ status: 'error' })),
+              ),
+          ),
+        );
+      }),
+    );
+
+    this.view$ = merge(plan$, accept$, reject$, evaluateRisk$, execute$).pipe(
       shareReplay({ bufferSize: 1, refCount: true }),
     );
 
@@ -105,7 +149,8 @@ export class PlanPage {
         (view) =>
           view.status === 'loading' ||
           view.status === 'deciding' ||
-          view.status === 'evaluatingRisk',
+          view.status === 'evaluatingRisk' ||
+          view.status === 'executionSubmitting',
       ),
     );
   }
@@ -120,6 +165,10 @@ export class PlanPage {
 
   evaluateRisk(plan: TradePlanResponse): void {
     this.evaluateRiskSubject.next(plan);
+  }
+
+  execute(plan: TradePlanResponse, decision: RiskDecisionResponse): void {
+    this.executeSubject.next({ plan, decision });
   }
 
   private toViewForPlan(plan: TradePlanResponse): PlanView {

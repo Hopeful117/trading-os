@@ -42,6 +42,7 @@ class ValidateAndCreateServiceTest {
     private final UUID tradePlanId = UUID.randomUUID();
     private final UUID evaluationId = UUID.randomUUID();
     private final UUID brokerAccountId = UUID.randomUUID();
+    private final UUID tradingAccountId = UUID.randomUUID(); // distinct from brokerAccountId
     private final Instant now = Instant.parse("2026-08-07T12:00:00Z");
     private final Instant expiresAt = now.plusSeconds(3600);
 
@@ -68,6 +69,9 @@ class ValidateAndCreateServiceTest {
 
         when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(plan);
+        when(riskPersistence.configuration(tradingAccountId))
+                .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                        tradingAccountId, brokerAccountId, "UTC", "USD", null)));
         when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, initiatorId))
                 .thenReturn(Optional.of(brokerAccount));
         when(intentCreation.create(any(CreateExecutionIntentCommand.class))).thenReturn(intent);
@@ -118,18 +122,59 @@ class ValidateAndCreateServiceTest {
     }
 
     @Test
-    void evaluationAccountMismatch_throws409() {
-        RiskPersistence.StoredEvaluation evaluation = new RiskPersistence.StoredEvaluation(
-                evaluationId, tradePlanId, 3, UUID.randomUUID(), "COMPLETED", "APPROVED",
-                riskResponse());
+    void distinctTradingAccountAndBrokerAccount_succeeds() {
+        // Regression test: TradingAccount UUID and BrokerAccount UUID are distinct
+        // domain identities. Execution must succeed when all ownership/consistency
+        // rules are satisfied, even though tradingAccountId != brokerAccountId.
+        RiskPersistence.StoredEvaluation evaluation = storedEvaluation("COMPLETED", "APPROVED");
+        TradePlanRiskPort.Snapshot plan = marketPlan();
+
+        BrokerAccount brokerAccount = mock(BrokerAccount.class);
+        when(brokerAccount.ownerId()).thenReturn(initiatorId);
+
+        ExecutionIntent intent = mock(ExecutionIntent.class);
 
         when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
+        when(tradePlans.load(tradePlanId, 3)).thenReturn(plan);
+        when(riskPersistence.configuration(tradingAccountId))
+                .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                        tradingAccountId, brokerAccountId, "UTC", "USD", null)));
+        when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, initiatorId))
+                .thenReturn(Optional.of(brokerAccount));
+        when(intentCreation.create(any(CreateExecutionIntentCommand.class))).thenReturn(intent);
+
+        ExecutionIntent result = service.validateAndCreate(command());
+
+        assertThat(result).isNotNull();
+        verify(lifecycle).validate(intent, now);
+        // Verify that tradingAccountId (from evaluation/plan) != brokerAccountId (resolved)
+        assertThat(tradingAccountId).isNotEqualTo(brokerAccountId);
+    }
+
+    @Test
+    void tradingAccountMismatch_throws409() {
+        // Step 10: evaluation.accountId() must match plan.tradingAccountId()
+        UUID mismatchedAccountId = UUID.randomUUID();
+        RiskPersistence.StoredEvaluation evaluation = new RiskPersistence.StoredEvaluation(
+                evaluationId, tradePlanId, 3, mismatchedAccountId, "COMPLETED", "APPROVED",
+                riskResponse());
+
+        BrokerAccount brokerAccount = mock(BrokerAccount.class);
+        when(brokerAccount.ownerId()).thenReturn(initiatorId);
+
+        when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
+        when(tradePlans.load(tradePlanId, 3)).thenReturn(marketPlan());
+        when(riskPersistence.configuration(tradingAccountId))
+                .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                        tradingAccountId, brokerAccountId, "UTC", "USD", null)));
+        when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, initiatorId))
+                .thenReturn(Optional.of(brokerAccount));
 
         assertThatThrownBy(() -> service.validateAndCreate(command()))
                 .isInstanceOf(ExecutionValidationException.class)
                 .satisfies(e -> {
                     var ve = (ExecutionValidationException) e;
-                    assertThat(ve.code()).isEqualTo("EVALUATION_ACCOUNT_MISMATCH");
+                    assertThat(ve.code()).isEqualTo("TRADING_ACCOUNT_MISMATCH");
                 });
     }
 
@@ -138,6 +183,9 @@ class ValidateAndCreateServiceTest {
         when(riskPersistence.evaluationById(evaluationId))
                 .thenReturn(Optional.of(storedEvaluation("COMPLETED", "APPROVED")));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(marketPlan());
+        when(riskPersistence.configuration(tradingAccountId))
+                .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                        tradingAccountId, brokerAccountId, "UTC", "USD", null)));
         when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, initiatorId))
                 .thenReturn(Optional.empty());
 
@@ -172,6 +220,9 @@ class ValidateAndCreateServiceTest {
 
         when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(plan);
+        when(riskPersistence.configuration(tradingAccountId))
+                .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                        tradingAccountId, brokerAccountId, "UTC", "USD", null)));
         when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, initiatorId))
                 .thenReturn(Optional.of(brokerAccount));
 
@@ -193,12 +244,12 @@ class ValidateAndCreateServiceTest {
 
     private RiskPersistence.StoredEvaluation storedEvaluation(String status, String decision) {
         return new RiskPersistence.StoredEvaluation(
-                evaluationId, tradePlanId, 3, brokerAccountId, status, decision, riskResponse());
+                evaluationId, tradePlanId, 3, tradingAccountId, status, decision, riskResponse());
     }
 
     private RiskEvaluationModels.Response riskResponse() {
         return new RiskEvaluationModels.Response(
-                evaluationId, tradePlanId, 3, brokerAccountId, "COMPLETED", "APPROVED",
+                evaluationId, tradePlanId, 3, tradingAccountId, "COMPLETED", "APPROVED",
                 true, List.of(), List.of(), Map.of(), now, null);
     }
 
@@ -206,7 +257,7 @@ class ValidateAndCreateServiceTest {
         EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.MARKET, null);
         return new TradePlanRiskPort.Snapshot(
                 tradePlanId, 3, "ACCEPTED", now,
-                UUID.randomUUID(), 1, now, initiatorId, brokerAccountId, "USD",
+                UUID.randomUUID(), 1, now, initiatorId, tradingAccountId, "USD",
                 UUID.randomUUID(), 1, UUID.randomUUID(), 1,
                 "ETHUSD", "LONG", entryIntent, new BigDecimal("90"),
                 BigDecimal.ONE, new BigDecimal("1000"), new BigDecimal("100"),
@@ -217,7 +268,7 @@ class ValidateAndCreateServiceTest {
         EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.STOP, new BigDecimal("49000"));
         return new TradePlanRiskPort.Snapshot(
                 tradePlanId, 3, "ACCEPTED", now,
-                UUID.randomUUID(), 1, now, initiatorId, brokerAccountId, "USD",
+                UUID.randomUUID(), 1, now, initiatorId, tradingAccountId, "USD",
                 UUID.randomUUID(), 1, UUID.randomUUID(), 1,
                 "BTCUSD", "LONG", entryIntent, new BigDecimal("48000"),
                 BigDecimal.ONE, new BigDecimal("50000"), new BigDecimal("1000"),
