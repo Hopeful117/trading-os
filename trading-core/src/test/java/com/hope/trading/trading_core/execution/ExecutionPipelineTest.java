@@ -42,11 +42,39 @@ class ExecutionPipelineTest {
                 new RecoveryStrategyStep(new RecoveryStrategyService()),
                 new BrokerReconciliationStep(f.broker),
                 new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
-                f.events,f.metrics,CLOCK);
+                f.events,f.metrics,CLOCK,f.intents);
         recovery.recoverAll();
         assertThat(intent.status()).isEqualTo(ExecutionStatus.VALIDATED);
         assertThat(intent.activeAttemptId()).isEmpty();
         assertThat(f.broker.reconciliations).isOne();
+    }
+    @Test void recoverOneReconcilesSingleExecution(){
+        var f=fixture();f.broker.submission=new BrokerExecutionPort.Unknown("TIMEOUT");
+        var intent=intent(ExecutionStatus.CREATED);f.intents.save(intent);
+        f.execution.execute(intent.id());
+        assertThat(intent.status()).isEqualTo(ExecutionStatus.SUBMISSION_OUTCOME_UNKNOWN);
+        var recovery=new RecoverExecutionService(
+                new RecoverableExecutionDiscoveryStep(f.intents),
+                new ExecutionInspectionStep(f.attempts),
+                new RecoveryStrategyStep(new RecoveryStrategyService()),
+                new BrokerReconciliationStep(f.broker),
+                new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
+                f.events,f.metrics,CLOCK,f.intents);
+        var recovered=recovery.recoverOne(intent.id());
+        assertThat(recovered.status()).isEqualTo(ExecutionStatus.VALIDATED);
+        assertThat(f.broker.reconciliations).isOne();
+    }
+    @Test void recoverOneRejectsNonRecoverableState(){
+        var f=fixture();var intent=intent(ExecutionStatus.VALIDATED);f.intents.save(intent);
+        var recovery=new RecoverExecutionService(
+                new RecoverableExecutionDiscoveryStep(f.intents),
+                new ExecutionInspectionStep(f.attempts),
+                new RecoveryStrategyStep(new RecoveryStrategyService()),
+                new BrokerReconciliationStep(f.broker),
+                new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
+                f.events,f.metrics,CLOCK,f.intents);
+        assertThatThrownBy(()->recovery.recoverOne(intent.id()))
+                .isInstanceOf(IllegalStateException.class);
     }
     private Fixture fixture(){
         var intents=new Intents();var attempts=new Attempts();var orders=new Orders();
