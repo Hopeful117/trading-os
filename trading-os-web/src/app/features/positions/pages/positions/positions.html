@@ -1,0 +1,161 @@
+<div class="positions-container">
+  @if (viewModel$ | async; as vm) {
+    <header class="positions-header">
+      <div>
+        <h1>Positions ouvertes</h1>
+        <p>Suivi en temps réel de vos positions broker</p>
+      </div>
+
+      @if (vm.accountsState.accounts.length > 0) {
+        <label class="account-selector">
+          <span>Compte</span>
+          <select
+            [value]="vm.selectedAccountId"
+            (change)="selectAccount($any($event.target).value)"
+          >
+            @for (account of vm.accountsState.accounts; track account.accountId) {
+              <option [value]="account.accountId">{{ account.name }}</option>
+            }
+          </select>
+        </label>
+      }
+    </header>
+
+    @if (vm.accountsState.loading) {
+      <section class="state-panel">Chargement des comptes…</section>
+    } @else if (vm.accountsState.error) {
+      <section class="state-panel error">
+        Impossible de charger les comptes. Veuillez réessayer.
+      </section>
+    } @else if (vm.accountsState.accounts.length === 0) {
+      <section class="state-panel">Aucun compte n'est disponible.</section>
+    } @else if (vm.positionsLoading && vm.positions.length === 0) {
+      <section class="state-panel">Chargement des positions…</section>
+    } @else if (!vm.selectedAccountId) {
+      <section class="state-panel">Aucun compte sélectionné.</section>
+    } @else if (vm.positions.length === 0 && vm.positionsError) {
+      <section class="state-panel error">{{ vm.positionsError }}</section>
+    } @else if (vm.positions.length === 0) {
+      <section class="state-panel empty">Aucune position ouverte.</section>
+    } @else {
+      @if (vm.positionsError) {
+        <section class="state-panel warning">{{ vm.positionsError }}</section>
+      }
+
+      <div class="positions-summary">
+        <span>{{ vm.positions.length }} position(s) ouverte(s)</span>
+      </div>
+
+      <div class="positions-grid">
+        @for (position of vm.positions; track position.positionId) {
+          <article class="position-card">
+            <div class="position-header">
+              <span class="position-symbol">{{ position.symbol }}</span>
+              <span class="position-side" [class]="position.side.toLowerCase()">
+                {{ position.side === 'BUY' ? 'Long' : 'Short' }}
+              </span>
+            </div>
+
+            <div class="position-metrics">
+              <div class="metric">
+                <span class="metric-label">Quantité</span>
+                <span class="metric-value">{{ position.quantity | number: '1.0-8' }}</span>
+              </div>
+
+              <div class="metric">
+                <span class="metric-label">Prix d'entrée</span>
+                <span class="metric-value">{{ position.entryPrice | number: '1.2-8' }}</span>
+              </div>
+
+              <div class="metric">
+                <span class="metric-label">Prix courant</span>
+                <span class="metric-value">
+                  @if (position.currentPrice !== null) {
+                    {{ position.currentPrice | number: '1.2-8' }}
+                  } @else {
+                    <span class="unavailable">Indisponible</span>
+                  }
+                </span>
+              </div>
+            </div>
+
+            <div class="position-pnl">
+              <div class="pnl-main" [class]="pnlClass(position.unrealizedPnl)">
+                @if (position.unrealizedPnl !== null) {
+                  <span class="pnl-amount">{{ position.unrealizedPnl | currency: 'USD' }}</span>
+                  <span class="pnl-percentage"
+                    >{{ position.unrealizedPnlPercentage | number: '1.2-2' }} %</span
+                  >
+                } @else {
+                  <span class="pnl-unavailable">—</span>
+                }
+              </div>
+            </div>
+
+            <div class="position-protection">
+              <div class="protection-item">
+                <span class="protection-label">Stop Loss</span>
+                <span class="protection-value">
+                  @if (position.stopLoss !== null) {
+                    {{ position.stopLoss | number: '1.2-8' }}
+                  } @else {
+                    —
+                  }
+                </span>
+              </div>
+
+              <div class="protection-item">
+                <span class="protection-label">Take Profit</span>
+                <span class="protection-value">
+                  @if (position.takeProfit !== null) {
+                    {{ position.takeProfit | number: '1.2-8' }}
+                  } @else {
+                    —
+                  }
+                </span>
+              </div>
+
+              <div
+                class="protection-status"
+                [class]="protectionStatusClass(position.protectionStatus)"
+              >
+                {{ protectionStatusLabel(position.protectionStatus) }}
+              </div>
+            </div>
+
+            <div class="position-details">
+              <div class="detail">
+                <span class="detail-label">Exposition</span>
+                <span class="detail-value">{{ position.exposure | currency: 'USD' }}</span>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Risque</span>
+                <span class="detail-value">
+                  {{ position.riskAmount | currency: 'USD' }}
+                  · {{ position.riskPercentage | number: '1.2-2' }} %
+                </span>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Ouverte depuis</span>
+                <span class="detail-value">
+                  {{ position.openedAt ? (position.openedAt | date: 'short') : '—' }}
+                </span>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Prix à</span>
+                <span class="detail-value">
+                  {{
+                    position.priceOccurredAt ? (position.priceOccurredAt | date: 'mediumTime') : '—'
+                  }}
+                </span>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  }
+</div>
