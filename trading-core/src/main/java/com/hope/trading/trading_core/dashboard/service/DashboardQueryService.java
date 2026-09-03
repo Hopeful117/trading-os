@@ -3,8 +3,6 @@ package com.hope.trading.trading_core.dashboard.service;
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
 import com.hope.trading.trading_core.dashboard.integration.*;
 import com.hope.trading.trading_core.dashboard.model.*;
-import com.hope.trading.trading_core.helper.TradeType;
-import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
 import com.hope.trading.trading_core.market_data.dto.*;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
@@ -20,7 +18,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,10 +26,8 @@ import java.util.stream.Collectors;
 public class DashboardQueryService {
     private final AccountService accountService;
     private final BrokerApiClient brokerApiClient;
-    private final MarketDataClient marketDataClient;
     private final BrokerDashboardMapper brokerMapper;
-    private final MarketDataDashboardMapper marketMapper;
-    private final PositionValuationService valuationService;
+    private final PositionQueryService positionQueryService;
     private final AccountEquityService equityService;
     private final DashboardFreshnessService freshnessService;
     private final DashboardAlertService alertService;
@@ -55,28 +50,22 @@ public class DashboardQueryService {
         BigDecimal balance = broker.balances()
                 .getOrDefault(account.getBaseCurrency(), persistedBalance(account));
         List<String> warnings = new ArrayList<>();
-        MarketLookup marketLookup = loadMarkets(broker.positions(), warnings);
-        Map<UUID, MarketPriceFact> prices = loadPrices(marketLookup.marketIds(), warnings);
-        boolean marketAvailable = marketLookup.available() && prices != null;
-        Map<UUID, MarketPriceFact> safePrices = prices == null ? Map.of() : prices;
+        boolean brokerStale = broker.dataAt() != null
+                && broker.dataAt().isBefore(generatedAt.minus(DashboardFreshnessService.STALE_AFTER));
 
-        List<OpenPositionDashboardView> initialPositions = buildPositions(
-                account, broker.positions(), marketLookup.bySymbol(), safePrices,
-                balance, generatedAt
+        List<OpenPositionDashboardView> initialPositions = positionQueryService.findPositions(
+                accountId, broker.positions(), balance, generatedAt
         );
         BigDecimal unrealizedPnl = initialPositions.stream()
                 .map(OpenPositionDashboardView::unrealizedPnl)
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        boolean brokerStale = broker.dataAt() != null
-                && broker.dataAt().isBefore(generatedAt.minus(DashboardFreshnessService.STALE_AFTER));
         AccountEquityResult equity = equityService.select(
                 balance, unrealizedPnl, broker.brokerEquity(), brokerStale
         );
 
-        List<OpenPositionDashboardView> positions = buildPositions(
-                account, broker.positions(), marketLookup.bySymbol(), safePrices,
-                equity.equity(), generatedAt
+        List<OpenPositionDashboardView> positions = positionQueryService.findPositions(
+                accountId, broker.positions(), equity.equity(), generatedAt
         );
         BigDecimal dailyPnl = tradeAnalyticsService.getTodayPnL(accountId);
         BigDecimal drawdown = positive(account.getPeakEquity().subtract(equity.equity()));
@@ -98,9 +87,9 @@ public class DashboardQueryService {
 
         DashboardFreshness freshness = freshnessService.evaluate(
                 broker.dataAt(),
-                safePrices.values().stream().map(MarketPriceFact::occurredAt).toList(),
+                List.of(),
                 true,
-                marketAvailable,
+                false,
                 !broker.positions().isEmpty(),
                 warnings
         );
@@ -113,15 +102,9 @@ public class DashboardQueryService {
                 balance, equity.equity(), dailyPnl, dailyPnlPercentage,
                 drawdown, drawdownPercentage, equity.source()
         );
-        List<MarketDashboardView> markets = safePrices.values().stream()
-                .map(price -> new MarketDashboardView(
-                        price.marketId(), price.symbol(), price.price(),
-                        price.tradable(), price.occurredAt()
-                ))
-                .toList();
 
         return new DashboardSummary(
-                accountSummary, risk, positions, alerts, markets, freshness, generatedAt
+                accountSummary, risk, positions, alerts, List.of(), freshness, generatedAt
         );
     }
 
@@ -145,90 +128,6 @@ public class DashboardQueryService {
                 alertService.build(List.of(), freshness, risk, false),
                 List.of(), freshness, generatedAt
         );
-    }
-
-    private MarketLookup loadMarkets(List<BrokerPositionFact> positions, List<String> warnings) {
-        if (positions.isEmpty()) {
-            return new MarketLookup(Map.of(), List.of(), true);
-        }
-        try {
-            Map<String, MarketResponse> bySymbol = marketDataClient.findAll().stream()
-                    .collect(Collectors.toMap(
-                            market -> normalize(market.getSymbol()),
-                            Function.identity(),
-                            (first, ignored) -> first
-                    ));
-            Map<String, MarketResponse> resolved = positions.stream()
-                    .map(BrokerPositionFact::symbol)
-                    .distinct()
-                    .filter(symbol -> bySymbol.containsKey(normalize(symbol)))
-                    .collect(Collectors.toMap(
-                            Function.identity(), symbol -> bySymbol.get(normalize(symbol))
-                    ));
-            positions.stream()
-                    .map(BrokerPositionFact::symbol)
-                    .filter(symbol -> !resolved.containsKey(symbol))
-                    .forEach(symbol -> warnings.add("Marché interne introuvable pour " + symbol));
-            return new MarketLookup(
-                    resolved,
-                    resolved.values().stream().map(MarketResponse::getMarketId).distinct().toList(),
-                    true
-            );
-        } catch (RuntimeException exception) {
-            log.warn("Dashboard market catalog unavailable");
-            return new MarketLookup(Map.of(), List.of(), false);
-        }
-    }
-
-    private Map<UUID, MarketPriceFact> loadPrices(List<UUID> marketIds, List<String> warnings) {
-        if (marketIds.isEmpty()) {
-            return Map.of();
-        }
-        try {
-            return marketDataClient.findPriceSnapshots(new MarketPriceSnapshotRequest(marketIds))
-                    .stream()
-                    .map(marketMapper::toFact)
-                    .peek(price -> {
-                        if (price.status() != MarketPriceSnapshotStatus.FRESH) {
-                            warnings.add("Prix indisponible pour le marché " + price.marketId());
-                        }
-                    })
-                    .collect(Collectors.toMap(MarketPriceFact::marketId, Function.identity()));
-        } catch (RuntimeException exception) {
-            log.warn("Dashboard market prices unavailable");
-            return null;
-        }
-    }
-
-    private List<OpenPositionDashboardView> buildPositions(
-            Account account,
-            List<BrokerPositionFact> brokerPositions,
-            Map<String, MarketResponse> markets,
-            Map<UUID, MarketPriceFact> prices,
-            BigDecimal equity,
-            Instant calculatedAt
-    ) {
-        return brokerPositions.stream().map(position -> {
-            MarketResponse market = markets.get(position.symbol());
-            MarketPriceFact price = market == null ? null : prices.get(market.getMarketId());
-            BigDecimal currentPrice = price != null
-                    && price.status() == MarketPriceSnapshotStatus.FRESH
-                    ? price.price() : null;
-            PositionValuation value = valuationService.value(position, currentPrice, equity);
-            return new OpenPositionDashboardView(
-                    position.positionId(), account.getAccountId(),
-                    market == null ? null : market.getMarketId(),
-                    position.symbol(), position.side(), position.quantity(),
-                    position.entryPrice(), currentPrice, position.stopLoss(), position.takeProfit(),
-                    value.pnl(), value.pnlPercentage(), position.brokerUnrealizedPnl(),
-                    value.riskAmount(), value.riskPercentage(), value.exposure(),
-                    position.stopLoss() == null
-                            ? PositionProtectionStatus.MISSING_STOP_LOSS
-                            : PositionProtectionStatus.PROTECTED,
-                    price != null && price.tradable(),
-                    position.openedAt(), price == null ? null : price.occurredAt(), calculatedAt
-            );
-        }).toList();
     }
 
     private RiskDashboardSummary riskSummary(
@@ -281,19 +180,6 @@ public class DashboardQueryService {
 
     private BigDecimal positive(BigDecimal value) {
         return value.max(BigDecimal.ZERO);
-    }
-
-    private String normalize(String symbol) {
-        return symbol == null ? "" : symbol.toUpperCase(Locale.ROOT)
-                .replace("XBT", "BTC")
-                .replaceAll("[^A-Z0-9]", "");
-    }
-
-    private record MarketLookup(
-            Map<String, MarketResponse> bySymbol,
-            List<UUID> marketIds,
-            boolean available
-    ) {
     }
 
     private enum RuleType {

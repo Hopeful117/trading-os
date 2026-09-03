@@ -13,6 +13,7 @@ import { Opportunities } from './features/opportunities/opportunities';
 import { OpportunityDetail } from './features/opportunities/opportunity-details/opportunity-details';
 import { PreparePlanPage } from './features/trade-planning/prepare-plan-page/prepare-plan-page';
 import { PlanPage } from './features/trade-planning/plan-page/plan-page';
+import { Positions } from './features/positions/pages/positions/positions';
 
 export const routes: Routes = [
   {
@@ -74,6 +75,11 @@ export const routes: Routes = [
   {
     path: 'trade-planning/plans/:planId/versions/:version',
     component: PlanPage,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'positions',
+    component: Positions,
     canActivate: [authGuard],
   },
 ];
