@@ -368,7 +368,9 @@
                 @if (view.execution.averageFillPrice !== null) {
                   <div class="fact">
                     <span class="label">Average price</span>
-                    <span class="value">{{ view.execution.averageFillPrice | number: '1.2-2' }}</span>
+                    <span class="value">{{
+                      view.execution.averageFillPrice | number: '1.2-2'
+                    }}</span>
                   </div>
                 }
                 @if (view.execution.totalFees !== null) {
@@ -390,8 +392,8 @@
           @if (view.execution.status === 'SUBMISSION_OUTCOME_UNKNOWN') {
             <section class="unknown-explanation">
               <p>
-                Trading OS cannot yet confirm whether the broker accepted the order.
-                Do not submit the trade again until the status has been checked.
+                Trading OS cannot yet confirm whether the broker accepted the order. Do not submit
+                the trade again until the status has been checked.
               </p>
             </section>
           }
@@ -399,8 +401,8 @@
           @if (view.execution.status === 'RECOVERY_BLOCKED') {
             <section class="unknown-explanation">
               <p>
-                Trading OS could not confirm the broker outcome automatically.
-                Check the broker account before attempting another execution.
+                Trading OS could not confirm the broker outcome automatically. Check the broker
+                account before attempting another execution.
               </p>
             </section>
           }
@@ -415,7 +417,10 @@
                 Retry
               </button>
             }
-            @if (view.execution.status === 'SUBMISSION_OUTCOME_UNKNOWN' || view.execution.status === 'RECOVERY_BLOCKED') {
+            @if (
+              view.execution.status === 'SUBMISSION_OUTCOME_UNKNOWN' ||
+              view.execution.status === 'RECOVERY_BLOCKED'
+            ) {
               <button
                 class="btn-reconcile"
                 (click)="reconcile(view.execution.id)"
