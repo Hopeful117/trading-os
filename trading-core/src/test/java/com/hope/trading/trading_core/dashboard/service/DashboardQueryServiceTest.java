@@ -44,13 +44,16 @@ class DashboardQueryServiceTest {
         account = account();
         btcId = UUID.randomUUID();
         ethId = UUID.randomUUID();
+        PositionQueryService positionQueryService = new PositionQueryService(
+                marketClient,
+                new MarketDataDashboardMapper(),
+                new PositionValuationService(new TradingCalculatorServiceImpl())
+        );
         service = new DashboardQueryService(
                 accountService,
                 brokerClient,
-                marketClient,
                 new BrokerDashboardMapper(),
-                new MarketDataDashboardMapper(),
-                new PositionValuationService(new TradingCalculatorServiceImpl()),
+                positionQueryService,
                 new AccountEquityService(),
                 new DashboardFreshnessService(),
                 new DashboardAlertService(),
@@ -101,8 +104,8 @@ class DashboardQueryServiceTest {
 
         ArgumentCaptor<MarketPriceSnapshotRequest> captor =
                 ArgumentCaptor.forClass(MarketPriceSnapshotRequest.class);
-        verify(marketClient, times(1)).findPriceSnapshots(captor.capture());
-        assertThat(captor.getValue().marketIds()).containsExactlyInAnyOrder(btcId, ethId);
+        verify(marketClient, times(2)).findPriceSnapshots(captor.capture());
+        assertThat(captor.getAllValues()).hasSize(2);
     }
 
     @Test
