@@ -68,6 +68,6 @@ public class ExecutionConfiguration {
         return new RecoverExecutionService(new RecoverableExecutionDiscoveryStep(intents),
                 new ExecutionInspectionStep(attempts),new RecoveryStrategyStep(strategies),
                 new BrokerReconciliationStep(broker),
-                new RecoveryFinalizationStep(intents,attempts,orders,ids),events,metrics,clock);
+                new RecoveryFinalizationStep(intents,attempts,orders,ids),events,metrics,clock,intents);
     }
 }

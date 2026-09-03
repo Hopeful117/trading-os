@@ -270,19 +270,15 @@
           </footer>
         </article>
       }
-      @case ('executionResult') {
-        <article class="plan-card" data-testid="execution-result-state">
+      @case ('executionPolling') {
+        <article class="plan-card" data-testid="execution-polling-state">
           <header class="card-header">
             <div>
               <h1>Execution Result</h1>
               <p>
                 Status:
-                <span
-                  class="status-badge"
-                  [class.approved]="view.execution.status === 'COMPLETED'"
-                  [class.rejected]="view.execution.status === 'FAILED'"
-                >
-                  {{ view.execution.status }}
+                <span class="status-badge polling">
+                  {{ statusLabel(view.execution.status) }}
                 </span>
               </p>
             </div>
@@ -293,6 +289,12 @@
               <span class="label">Execution ID</span>
               <span class="value">{{ view.execution.id }}</span>
             </div>
+            @if (view.execution.brokerExternalOrderId) {
+              <div class="fact">
+                <span class="label">Broker order</span>
+                <span class="value">{{ view.execution.brokerExternalOrderId }}</span>
+              </div>
+            }
             <div class="fact">
               <span class="label">Created</span>
               <span class="value">{{ view.execution.createdAt | date: 'MMM d, HH:mm:ss' }}</span>
@@ -304,6 +306,129 @@
           </section>
 
           <footer class="card-actions">
+            <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
+          </footer>
+        </article>
+      }
+      @case ('executionResult') {
+        <article class="plan-card" data-testid="execution-result-state">
+          <header class="card-header">
+            <div>
+              <h1>Execution Result</h1>
+              <p>
+                Status:
+                <span
+                  class="status-badge"
+                  [class.approved]="view.execution.status === 'COMPLETED'"
+                  [class.rejected]="view.execution.status === 'FAILED'"
+                  [class.unknown]="view.execution.status === 'SUBMISSION_OUTCOME_UNKNOWN'"
+                  [class.blocked]="view.execution.status === 'RECOVERY_BLOCKED'"
+                >
+                  {{ statusLabel(view.execution.status) }}
+                </span>
+              </p>
+            </div>
+          </header>
+
+          <section class="facts-grid">
+            <div class="fact">
+              <span class="label">Execution ID</span>
+              <span class="value">{{ view.execution.id }}</span>
+            </div>
+            @if (view.execution.brokerExternalOrderId) {
+              <div class="fact">
+                <span class="label">Broker order</span>
+                <span class="value">{{ view.execution.brokerExternalOrderId }}</span>
+              </div>
+            }
+            @if (view.execution.brokerOrderStatus) {
+              <div class="fact">
+                <span class="label">Broker status</span>
+                <span class="value">{{ brokerOrderLabel(view.execution.brokerOrderStatus) }}</span>
+              </div>
+            }
+            <div class="fact">
+              <span class="label">Created</span>
+              <span class="value">{{ view.execution.createdAt | date: 'MMM d, HH:mm:ss' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Updated</span>
+              <span class="value">{{ view.execution.updatedAt | date: 'MMM d, HH:mm:ss' }}</span>
+            </div>
+          </section>
+
+          @if (view.execution.filledQuantity !== null) {
+            <section class="fill-summary">
+              <h2>Fill summary</h2>
+              <div class="facts-grid">
+                <div class="fact">
+                  <span class="label">Filled quantity</span>
+                  <span class="value">{{ view.execution.filledQuantity | number: '1.4-4' }}</span>
+                </div>
+                @if (view.execution.averageFillPrice !== null) {
+                  <div class="fact">
+                    <span class="label">Average price</span>
+                    <span class="value">{{
+                      view.execution.averageFillPrice | number: '1.2-2'
+                    }}</span>
+                  </div>
+                }
+                @if (view.execution.totalFees !== null) {
+                  <div class="fact">
+                    <span class="label">Fees</span>
+                    <span class="value">{{ view.execution.totalFees | number: '1.4-4' }}</span>
+                  </div>
+                }
+              </div>
+            </section>
+          }
+
+          @if (view.execution.failureReason) {
+            <section class="failure-reason">
+              <p>{{ view.execution.failureReason }}</p>
+            </section>
+          }
+
+          @if (view.execution.status === 'SUBMISSION_OUTCOME_UNKNOWN') {
+            <section class="unknown-explanation">
+              <p>
+                Trading OS cannot yet confirm whether the broker accepted the order. Do not submit
+                the trade again until the status has been checked.
+              </p>
+            </section>
+          }
+
+          @if (view.execution.status === 'RECOVERY_BLOCKED') {
+            <section class="unknown-explanation">
+              <p>
+                Trading OS could not confirm the broker outcome automatically. Check the broker
+                account before attempting another execution.
+              </p>
+            </section>
+          }
+
+          <footer class="card-actions">
+            @if (view.execution.status === 'FAILED') {
+              <button
+                class="btn-retry"
+                (click)="retry(view.execution.id)"
+                data-testid="retry-button"
+              >
+                Retry
+              </button>
+            }
+            @if (
+              view.execution.status === 'SUBMISSION_OUTCOME_UNKNOWN' ||
+              view.execution.status === 'RECOVERY_BLOCKED'
+            ) {
+              <button
+                class="btn-reconcile"
+                (click)="reconcile(view.execution.id)"
+                data-testid="reconcile-button"
+              >
+                Check broker status
+              </button>
+            }
             <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
           </footer>
         </article>

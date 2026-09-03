@@ -28,4 +28,18 @@ export class ExecutionService {
   getExecution(executionId: string): Observable<ExecutionDto> {
     return this.http.get<ExecutionDto>(`${environment.gatewayUrl}v1/executions/${executionId}`);
   }
+
+  retry(executionId: string): Observable<ExecutionDto> {
+    return this.http.post<ExecutionDto>(
+      `${environment.gatewayUrl}v1/executions/${executionId}/retry`,
+      {},
+    );
+  }
+
+  reconcile(executionId: string): Observable<ExecutionDto> {
+    return this.http.post<ExecutionDto>(
+      `${environment.gatewayUrl}v1/executions/${executionId}/reconcile`,
+      {},
+    );
+  }
 }

@@ -10,6 +10,21 @@ export type ExecutionStatus =
   | 'CANCELLED'
   | 'EXPIRED';
 
+export const TERMINAL_STATUSES: ReadonlySet<ExecutionStatus> = new Set([
+  'COMPLETED',
+  'CANCELLED',
+  'EXPIRED',
+]);
+
+export const POLLABLE_STATUSES: ReadonlySet<ExecutionStatus> = new Set([
+  'CREATED',
+  'VALIDATED',
+  'SUBMISSION_IN_PROGRESS',
+  'SUBMISSION_OUTCOME_UNKNOWN',
+  'RECONCILIATION_IN_PROGRESS',
+  'RECOVERY_BLOCKED',
+]);
+
 export interface ValidateExecutionRequest {
   tradePlanId: string;
   tradePlanVersion: number;
@@ -30,4 +45,18 @@ export interface ExecutionDto {
   updatedAt: string;
   expiresAt: string;
   version: number;
+  brokerExternalOrderId: string | null;
+  brokerOrderStatus: string | null;
+  filledQuantity: number | null;
+  averageFillPrice: number | null;
+  totalFees: number | null;
+  failureReason: string | null;
+}
+
+export function isTerminal(status: ExecutionStatus): boolean {
+  return TERMINAL_STATUSES.has(status);
+}
+
+export function shouldPoll(status: ExecutionStatus): boolean {
+  return POLLABLE_STATUSES.has(status);
 }

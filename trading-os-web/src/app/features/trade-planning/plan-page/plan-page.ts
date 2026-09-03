@@ -1,5 +1,5 @@
 import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnDestroy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   catchError,
@@ -11,10 +11,17 @@ import {
   startWith,
   Subject,
   switchMap,
+  timer,
+  takeWhile,
 } from 'rxjs';
 
 import { RiskDecisionResponse, TradePlanResponse } from '../../../core/models/trade-plan.model';
-import { ExecutionDto } from '../../../core/models/execution.model';
+import {
+  ExecutionDto,
+  ExecutionStatus,
+  isTerminal,
+  shouldPoll,
+} from '../../../core/models/execution.model';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
 import { ExecutionService } from '../../../core/services/execution.service';
 
@@ -29,7 +36,30 @@ export type PlanView =
   | { status: 'riskDecision'; plan: TradePlanResponse; decision: RiskDecisionResponse }
   | { status: 'executionReady'; plan: TradePlanResponse; decision: RiskDecisionResponse }
   | { status: 'executionSubmitting' }
+  | { status: 'executionPolling'; execution: ExecutionDto }
   | { status: 'executionResult'; execution: ExecutionDto };
+
+const STATUS_LABELS: Record<ExecutionStatus, string> = {
+  CREATED: 'Created',
+  VALIDATED: 'Validated',
+  SUBMISSION_IN_PROGRESS: 'Submitting to broker',
+  SUBMISSION_OUTCOME_UNKNOWN: 'Submission outcome uncertain',
+  RECONCILIATION_IN_PROGRESS: 'Checking broker status',
+  COMPLETED: 'Accepted by broker',
+  FAILED: 'Execution failed',
+  RECOVERY_BLOCKED: 'Unable to confirm broker outcome',
+  CANCELLED: 'Cancelled',
+  EXPIRED: 'Expired',
+};
+
+const BROKER_ORDER_LABELS: Record<string, string> = {
+  ACKNOWLEDGED: 'Acknowledged',
+  PARTIALLY_FILLED: 'Partially filled',
+  FILLED: 'Filled',
+  REJECTED: 'Rejected',
+  CANCELLED: 'Cancelled',
+  UNKNOWN: 'Unknown',
+};
 
 @Component({
   selector: 'app-plan-page',
@@ -37,7 +67,7 @@ export type PlanView =
   templateUrl: './plan-page.html',
   styleUrl: './plan-page.scss',
 })
-export class PlanPage {
+export class PlanPage implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly tradePlanService = inject(TradePlanService);
   private readonly executionService = inject(ExecutionService);
@@ -49,9 +79,13 @@ export class PlanPage {
     plan: TradePlanResponse;
     decision: RiskDecisionResponse;
   }>();
+  private readonly retrySubject = new Subject<string>();
+  private readonly reconcileSubject = new Subject<string>();
 
   readonly view$: Observable<PlanView>;
   readonly busy$: Observable<boolean>;
+
+  private destroyed = false;
 
   constructor() {
     const plan$ = this.route.paramMap.pipe(
@@ -126,10 +160,7 @@ export class PlanPage {
               .pipe(
                 switchMap((validated) =>
                   this.executionService.execute(validated.id).pipe(
-                    map((execution) => ({
-                      status: 'executionResult' as const,
-                      execution,
-                    })),
+                    switchMap((execution) => this.pollOrResult(execution)),
                     catchError(() => of<PlanView>({ status: 'error' })),
                   ),
                 ),
@@ -140,7 +171,25 @@ export class PlanPage {
       }),
     );
 
-    this.view$ = merge(plan$, accept$, reject$, evaluateRisk$, execute$).pipe(
+    const retry$ = this.retrySubject.pipe(
+      switchMap((executionId) =>
+        this.executionService.retry(executionId).pipe(
+          switchMap((execution) => this.pollOrResult(execution)),
+          catchError(() => of<PlanView>({ status: 'error' })),
+        ),
+      ),
+    );
+
+    const reconcile$ = this.reconcileSubject.pipe(
+      switchMap((executionId) =>
+        this.executionService.reconcile(executionId).pipe(
+          switchMap((execution) => this.pollOrResult(execution)),
+          catchError(() => of<PlanView>({ status: 'error' })),
+        ),
+      ),
+    );
+
+    this.view$ = merge(plan$, accept$, reject$, evaluateRisk$, execute$, retry$, reconcile$).pipe(
       shareReplay({ bufferSize: 1, refCount: true }),
     );
 
@@ -153,6 +202,10 @@ export class PlanPage {
           view.status === 'executionSubmitting',
       ),
     );
+  }
+
+  ngOnDestroy(): void {
+    this.destroyed = true;
   }
 
   accept(plan: TradePlanResponse): void {
@@ -169,6 +222,53 @@ export class PlanPage {
 
   execute(plan: TradePlanResponse, decision: RiskDecisionResponse): void {
     this.executeSubject.next({ plan, decision });
+  }
+
+  retry(executionId: string): void {
+    this.retrySubject.next(executionId);
+  }
+
+  reconcile(executionId: string): void {
+    this.reconcileSubject.next(executionId);
+  }
+
+  statusLabel(status: ExecutionStatus): string {
+    return STATUS_LABELS[status] ?? status;
+  }
+
+  brokerOrderLabel(status: string | null): string {
+    return status ? (BROKER_ORDER_LABELS[status] ?? status) : '';
+  }
+
+  private pollOrResult(execution: ExecutionDto): Observable<PlanView> {
+    if (!shouldPoll(execution.status)) {
+      return of<PlanView>({ status: 'executionResult', execution });
+    }
+    const startTime = Date.now();
+    const maxDuration = 5 * 60 * 1000;
+    return timer(0, 2000).pipe(
+      switchMap(() => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed > 30_000) {
+          return timer(0, 5000);
+        }
+        return of(null);
+      }),
+      switchMap(() => this.executionService.getExecution(execution.id)),
+      takeWhile(
+        (exec) =>
+          !this.destroyed &&
+          !isTerminal(exec.status) &&
+          exec.status !== 'FAILED' &&
+          Date.now() - startTime < maxDuration,
+        true,
+      ),
+      map((exec) =>
+        shouldPoll(exec.status) && !isTerminal(exec.status) && exec.status !== 'FAILED'
+          ? { status: 'executionPolling' as const, execution: exec }
+          : { status: 'executionResult' as const, execution: exec },
+      ),
+    );
   }
 
   private toViewForPlan(plan: TradePlanResponse): PlanView {
