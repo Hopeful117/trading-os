@@ -273,7 +273,12 @@ export class Positions {
   }
 
   isActiveStatus(status: PositionCloseStatus | null): boolean {
-    return status === 'CREATED' || status === 'SUBMITTED' || status === 'ACKNOWLEDGED' || status === 'UNKNOWN';
+    return (
+      status === 'CREATED' ||
+      status === 'SUBMITTED' ||
+      status === 'ACKNOWLEDGED' ||
+      status === 'UNKNOWN'
+    );
   }
 
   isReconcilable(status: PositionCloseStatus | null): boolean {

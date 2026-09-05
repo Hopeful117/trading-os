@@ -17,7 +17,11 @@ export class PositionService {
     );
   }
 
-  closePosition(accountId: string, brokerPositionReference: string, idempotencyKey: string): Observable<PositionCloseResponse> {
+  closePosition(
+    accountId: string,
+    brokerPositionReference: string,
+    idempotencyKey: string,
+  ): Observable<PositionCloseResponse> {
     const headers = { 'Idempotency-Key': idempotencyKey };
     const body: PositionCloseRequest = { brokerPositionReference };
     return this.http.post<PositionCloseResponse>(

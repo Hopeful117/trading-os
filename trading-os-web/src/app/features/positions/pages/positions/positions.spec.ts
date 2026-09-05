@@ -151,7 +151,7 @@ describe('Positions', () => {
     await create();
     const button = fixture.nativeElement.querySelector('button.btn-close-exposure');
     expect(button).not.toBeNull();
-    expect(button.textContent).toContain('Fermer l\'exposition');
+    expect(button.textContent).toContain("Fermer l'exposition");
   });
 
   it('no legacy close button exists', async () => {

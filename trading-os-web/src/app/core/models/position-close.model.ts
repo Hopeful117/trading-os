@@ -1,6 +1,5 @@
 export type PositionCloseStatus =
-  | 'CREATED' | 'SUBMITTED' | 'ACKNOWLEDGED' | 'REJECTED'
-  | 'UNKNOWN' | 'CLOSED' | 'NOT_SUBMITTED';
+  'CREATED' | 'SUBMITTED' | 'ACKNOWLEDGED' | 'REJECTED' | 'UNKNOWN' | 'CLOSED' | 'NOT_SUBMITTED';
 
 export type ReconciliationResult =
   | 'EXPOSURE_CONFIRMED_ABSENT'

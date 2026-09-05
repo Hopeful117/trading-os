@@ -266,7 +266,9 @@ select {
   border: none;
   border-radius: 0.5rem;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
 }
 
 .btn-close-exposure:hover:not(:disabled) {
