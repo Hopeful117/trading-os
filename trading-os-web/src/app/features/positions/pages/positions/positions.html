@@ -153,6 +153,78 @@
                 </span>
               </div>
             </div>
+
+            <div class="position-actions">
+              @if (!getCloseState(position.positionId).showConfirmation) {
+                <button
+                  class="btn-close-exposure"
+                  (click)="showCloseConfirmation(position)"
+                  [disabled]="
+                    getCloseState(position.positionId).status !== null &&
+                    isActiveStatus(getCloseState(position.positionId).status)
+                  "
+                >
+                  Fermer l'exposition
+                </button>
+              } @else {
+                <div class="close-confirmation">
+                  <div class="confirmation-content">
+                    <p class="confirmation-question">
+                      Fermer complètement l'exposition {{ position.symbol }}
+                      {{ position.side === 'BUY' ? 'Long' : 'Short' }} ?
+                    </p>
+                    <p class="confirmation-fifo">
+                      Kraken réglera toutes les positions ouvertes pour cette paire selon le
+                      principe FIFO.
+                    </p>
+                    <p class="confirmation-warning">Cette action ne peut pas être annulée.</p>
+                    <div class="confirmation-buttons">
+                      <button
+                        class="btn-cancel"
+                        (click)="cancelCloseConfirmation(position.positionId)"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        class="btn-confirm"
+                        (click)="confirmFullExposureClose(vm.selectedAccountId!, position)"
+                      >
+                        Confirmer la fermeture complète
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              @if (getCloseState(position.positionId).status) {
+                <div
+                  class="close-status"
+                  [class]="closeStatusClass(getCloseState(position.positionId).status!)"
+                >
+                  <span class="status-badge">{{
+                    closeStatusLabel(getCloseState(position.positionId).status!)
+                  }}</span>
+                  @if (getCloseState(position.positionId).failureReason) {
+                    <span class="failure-reason">{{
+                      getCloseState(position.positionId).failureReason
+                    }}</span>
+                  }
+                  @if (isReconcilable(getCloseState(position.positionId).status!)) {
+                    <button
+                      class="btn-reconcile"
+                      (click)="reconcile(vm.selectedAccountId!, position.positionId)"
+                    >
+                      Réconcilier
+                    </button>
+                  }
+                  @if (getCloseState(position.positionId).reconciliationResult) {
+                    <span class="reconciliation-result">{{
+                      reconciliationLabel(getCloseState(position.positionId).reconciliationResult!)
+                    }}</span>
+                  }
+                </div>
+              }
+            </div>
           </article>
         }
       </div>
