@@ -10,7 +10,11 @@ import { Positions } from './positions';
 
 describe('Positions', () => {
   let fixture: ComponentFixture<Positions>;
-  let positionService: { getPositions: ReturnType<typeof vi.fn> };
+  let positionService: {
+    getPositions: ReturnType<typeof vi.fn>;
+    closePosition: ReturnType<typeof vi.fn>;
+    reconcileClose: ReturnType<typeof vi.fn>;
+  };
 
   const accounts: Account[] = [
     {
@@ -41,7 +45,11 @@ describe('Positions', () => {
   ];
 
   beforeEach(async () => {
-    positionService = { getPositions: vi.fn(() => of(positions)) };
+    positionService = {
+      getPositions: vi.fn(() => of(positions)),
+      closePosition: vi.fn(() => of({})),
+      reconcileClose: vi.fn(() => of({})),
+    };
     await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
   });
 
@@ -159,11 +167,182 @@ describe('Positions', () => {
     expect(fixture.nativeElement.querySelector('[close]')).toBeNull();
   });
 
+  // --- Close workflow tests ---
+
+  it('getCloseState creates default state', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    const state = comp.getCloseState('pos-1');
+    expect(state.status).toBeNull();
+    expect(state.showConfirmation).toBe(false);
+    expect(state.commandId).toBeNull();
+  });
+
+  it('getCloseState returns same instance for same positionId', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    const s1 = comp.getCloseState('pos-1');
+    s1.showConfirmation = true;
+    const s2 = comp.getCloseState('pos-1');
+    expect(s2.showConfirmation).toBe(true);
+  });
+
+  it('showCloseConfirmation toggles confirmation', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    comp.showCloseConfirmation({ positionId: 'p1' } as any);
+    expect(comp.getCloseState('p1').showConfirmation).toBe(true);
+  });
+
+  it('cancelCloseConfirmation hides confirmation', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    comp.showCloseConfirmation({ positionId: 'p1' } as any);
+    comp.cancelCloseConfirmation('p1');
+    expect(comp.getCloseState('p1').showConfirmation).toBe(false);
+  });
+
+  it('confirmFullExposureClose calls service and updates state', async () => {
+    const mockResponse = {
+      commandId: 'cmd-1',
+      status: 'CREATED',
+      externalOrderId: null,
+      failureReason: null,
+      resolvedMutationScope: 'scope',
+      reconciliationResult: null,
+    };
+    positionService.closePosition = vi.fn(() => of(mockResponse));
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    comp.confirmFullExposureClose('account-1', { positionId: 'p1' } as any);
+
+    const state = comp.getCloseState('p1');
+    expect(state.status).toBe('CREATED');
+    expect(state.commandId).toBe('cmd-1');
+    expect(state.showConfirmation).toBe(false);
+    expect(positionService.closePosition).toHaveBeenCalled();
+  });
+
+  it('confirmFullExposureClose handles error', async () => {
+    positionService.closePosition = vi.fn(() =>
+      throwError(() => ({ error: { message: 'Broker error' } })),
+    );
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    comp.confirmFullExposureClose('account-1', { positionId: 'p1' } as any);
+
+    const state = comp.getCloseState('p1');
+    expect(state.status).toBe('REJECTED');
+    expect(state.failureReason).toBe('Broker error');
+  });
+
+  it('reconcile calls service when commandId exists', async () => {
+    const mockResponse = { status: 'CLOSED', reconciliationResult: 'EXPOSURE_CONFIRMED_ABSENT' };
+    positionService.reconcileClose = vi.fn(() => of(mockResponse));
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    const state = comp.getCloseState('p1');
+    state.commandId = 'cmd-1';
+    comp.reconcile('account-1', 'p1');
+
+    expect(state.status).toBe('CLOSED');
+    expect(state.reconciliationResult).toBe('EXPOSURE_CONFIRMED_ABSENT');
+    expect(positionService.reconcileClose).toHaveBeenCalledWith('account-1', 'cmd-1');
+  });
+
+  it('reconcile does nothing when no commandId', async () => {
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    comp.reconcile('account-1', 'p1');
+    expect(positionService.reconcileClose).not.toHaveBeenCalled();
+  });
+
+  it('reconcile handles error', async () => {
+    positionService.reconcileClose = vi.fn(() => throwError(() => new Error('fail')));
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    const state = comp.getCloseState('p1');
+    state.commandId = 'cmd-1';
+    state.status = 'ACKNOWLEDGED';
+    comp.reconcile('account-1', 'p1');
+    expect(state.status).toBe('ACKNOWLEDGED');
+  });
+
+  it('closeStatusLabel returns correct labels', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    expect(comp.closeStatusLabel(null)).toBe('');
+    expect(comp.closeStatusLabel('CREATED')).toBe('Créée');
+    expect(comp.closeStatusLabel('SUBMITTED')).toBe('Soumise');
+    expect(comp.closeStatusLabel('ACKNOWLEDGED')).toBe('Reconnue');
+    expect(comp.closeStatusLabel('REJECTED')).toBe('Rejetée');
+    expect(comp.closeStatusLabel('UNKNOWN')).toBe('Incertain');
+    expect(comp.closeStatusLabel('CLOSED')).toBe('Fermée');
+    expect(comp.closeStatusLabel('NOT_SUBMITTED')).toBe('Non soumise');
+  });
+
+  it('closeStatusClass returns correct classes', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    expect(comp.closeStatusClass(null)).toBe('');
+    expect(comp.closeStatusClass('CREATED')).toBe('pending');
+    expect(comp.closeStatusClass('SUBMITTED')).toBe('pending');
+    expect(comp.closeStatusClass('ACKNOWLEDGED')).toBe('acknowledged');
+    expect(comp.closeStatusClass('REJECTED')).toBe('rejected');
+    expect(comp.closeStatusClass('UNKNOWN')).toBe('unknown');
+    expect(comp.closeStatusClass('CLOSED')).toBe('closed');
+    expect(comp.closeStatusClass('NOT_SUBMITTED')).toBe('not-submitted');
+  });
+
+  it('isActiveStatus returns correct booleans', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    expect(comp.isActiveStatus(null)).toBe(false);
+    expect(comp.isActiveStatus('CREATED')).toBe(true);
+    expect(comp.isActiveStatus('SUBMITTED')).toBe(true);
+    expect(comp.isActiveStatus('ACKNOWLEDGED')).toBe(true);
+    expect(comp.isActiveStatus('UNKNOWN')).toBe(true);
+    expect(comp.isActiveStatus('CLOSED')).toBe(false);
+    expect(comp.isActiveStatus('REJECTED')).toBe(false);
+  });
+
+  it('isReconcilable returns correct booleans', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    expect(comp.isReconcilable(null)).toBe(false);
+    expect(comp.isReconcilable('CREATED')).toBe(false);
+    expect(comp.isReconcilable('ACKNOWLEDGED')).toBe(true);
+    expect(comp.isReconcilable('UNKNOWN')).toBe(true);
+    expect(comp.isReconcilable('CLOSED')).toBe(false);
+  });
+
+  it('reconciliationLabel returns correct labels', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    expect(comp.reconciliationLabel(null)).toBe('');
+    expect(comp.reconciliationLabel('EXPOSURE_CONFIRMED_ABSENT')).toBe(
+      'Exposition confirmée absente',
+    );
+    expect(comp.reconciliationLabel('COMMAND_CONFIRMED_NOT_EXECUTED')).toBe(
+      'Commande non exécutée',
+    );
+    expect(comp.reconciliationLabel('RECONCILIATION_INCONCLUSIVE')).toBe(
+      'Réconciliation inconclusive',
+    );
+  });
+
+  it('closeStatusLabel returns correct labels for all statuses', () => {
+    const comp = TestBed.createComponent(Positions).componentInstance;
+    expect(comp.closeStatusLabel(null)).toBe('');
+    expect(comp.closeStatusLabel('CREATED')).toBe('Créée');
+    expect(comp.closeStatusLabel('SUBMITTED')).toBe('Soumise');
+    expect(comp.closeStatusLabel('ACKNOWLEDGED')).toBe('Reconnue');
+    expect(comp.closeStatusLabel('REJECTED')).toBe('Rejetée');
+    expect(comp.closeStatusLabel('UNKNOWN')).toBe('Incertain');
+    expect(comp.closeStatusLabel('CLOSED')).toBe('Fermée');
+    expect(comp.closeStatusLabel('NOT_SUBMITTED')).toBe('Non soumise');
+  });
+
   // --- Helpers ---
 
   async function configureTestingModule(
     accountProvider: { getAccounts: () => Observable<Account[]> },
-    posService: { getPositions: ReturnType<typeof vi.fn> },
+    posService: {
+      getPositions: ReturnType<typeof vi.fn>;
+      closePosition: ReturnType<typeof vi.fn>;
+      reconcileClose: ReturnType<typeof vi.fn>;
+    },
   ): Promise<void> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
@@ -178,7 +357,11 @@ describe('Positions', () => {
 
   async function reconfigure(
     accountProvider: { getAccounts: () => Observable<Account[]> },
-    posService: { getPositions: ReturnType<typeof vi.fn> },
+    posService: {
+      getPositions: ReturnType<typeof vi.fn>;
+      closePosition: ReturnType<typeof vi.fn>;
+      reconcileClose: ReturnType<typeof vi.fn>;
+    },
   ): Promise<void> {
     await configureTestingModule(accountProvider, posService);
     fixture = TestBed.createComponent(Positions);
