@@ -27,7 +27,7 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
         return new AccountSnapshot(accountId,balances,clock.instant());});}
     public List<PositionSnapshot> positions(UUID accountId){return sessions.withCredentials(accountId,c->{
         JsonNode result=client.privatePost("/0/private/OpenPositions",Map.of(),c);List<PositionSnapshot> positions=new ArrayList<>();
-        result.fields().forEachRemaining(entry->{JsonNode p=entry.getValue();BigDecimal quantity=new BigDecimal(p.path("vol").asText("0"));if("sell".equals(p.path("type").asText()))quantity=quantity.negate();positions.add(new PositionSnapshot(KrakenAssetNormalizer.pair(p.path("pair").asText()).instrument(),quantity,new BigDecimal(p.path("cost").asText("0")).divide(new BigDecimal(p.path("vol").asText("1")),java.math.MathContext.DECIMAL64),clock.instant()));});
+        result.fields().forEachRemaining(entry->{String txid=entry.getKey();JsonNode p=entry.getValue();BigDecimal quantity=new BigDecimal(p.path("vol").asText("0"));if("sell".equals(p.path("type").asText()))quantity=quantity.negate();positions.add(new PositionSnapshot(KrakenAssetNormalizer.pair(p.path("pair").asText()).instrument(),quantity,new BigDecimal(p.path("cost").asText("0")).divide(new BigDecimal(p.path("vol").asText("1")),java.math.MathContext.DECIMAL64),clock.instant(),txid));});
         return List.copyOf(positions);});}
     public List<OrderSnapshot> orders(UUID accountId){return sessions.withCredentials(accountId,c->readOrders(c,null));}
     public void cancel(UUID accountId,String externalOrderId){sessions.withCredentials(accountId,c->{client.privatePost("/0/private/CancelOrder",Map.of("txid",required(externalOrderId)),c);return null;});}

@@ -51,7 +51,49 @@ public final class BrokerModels {
     public record AccountSnapshot(UUID brokerAccountId, java.util.Map<String,BigDecimal> balances, Instant observedAt) {
         public AccountSnapshot { Objects.requireNonNull(brokerAccountId); balances=java.util.Map.copyOf(balances); Objects.requireNonNull(observedAt); }
     }
-    public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, Instant observedAt) {}
+    public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, Instant observedAt, String brokerPositionReference) {}
+
+    public record ResolveTargetRequest(UUID brokerAccountId, String brokerPositionReference) {
+        public ResolveTargetRequest {
+            Objects.requireNonNull(brokerAccountId);
+            brokerPositionReference = required(brokerPositionReference, "brokerPositionReference");
+        }
+    }
+    public record ResolvedPositionCloseTarget(UUID brokerAccountId, String resolvedMutationScope) {
+        public ResolvedPositionCloseTarget {
+            Objects.requireNonNull(brokerAccountId);
+            resolvedMutationScope = required(resolvedMutationScope, "resolvedMutationScope");
+        }
+    }
+    public record ExecuteCloseRequest(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {
+        public ExecuteCloseRequest {
+            Objects.requireNonNull(brokerAccountId);
+            resolvedMutationScope = required(resolvedMutationScope, "resolvedMutationScope");
+            idempotencyKey = required(idempotencyKey, "idempotencyKey");
+        }
+    }
+    public sealed interface CloseResult permits CloseAcknowledged, CloseRejected, CloseUnknown {}
+    public record CloseAcknowledged(String externalOrderId, String correlationId) implements CloseResult {
+        public CloseAcknowledged { externalOrderId = required(externalOrderId, "externalOrderId"); correlationId = required(correlationId, "correlationId"); }
+    }
+    public record CloseRejected(String externalOrderId, String reasonCode) implements CloseResult {
+        public CloseRejected { externalOrderId = required(externalOrderId, "externalOrderId"); reasonCode = required(reasonCode, "reasonCode"); }
+    }
+    public record CloseUnknown(String reasonCode) implements CloseResult {
+        public CloseUnknown { reasonCode = required(reasonCode, "reasonCode"); }
+    }
+    public record ReconcileCloseRequest(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {
+        public ReconcileCloseRequest {
+            Objects.requireNonNull(brokerAccountId);
+            resolvedMutationScope = required(resolvedMutationScope, "resolvedMutationScope");
+            idempotencyKey = required(idempotencyKey, "idempotencyKey");
+        }
+    }
+    public sealed interface ReconciliationCloseResult permits ExposureConfirmedAbsent, CommandConfirmedNotExecuted, Inconclusive {}
+    public record ExposureConfirmedAbsent() implements ReconciliationCloseResult {}
+    public record CommandConfirmedNotExecuted() implements ReconciliationCloseResult {}
+    public record Inconclusive(String reasonCode) implements ReconciliationCloseResult { public Inconclusive { reasonCode = required(reasonCode, "reasonCode"); } }
+
     public record FillSnapshot(String fillId, BigDecimal quantity, BigDecimal price, BigDecimal fee, Instant executedAt) {}
     public record OrderSnapshot(String externalOrderId, String clientOrderId, OrderStatus status,
             BigDecimal quantity, BigDecimal filledQuantity, List<FillSnapshot> fills, Instant observedAt) {
