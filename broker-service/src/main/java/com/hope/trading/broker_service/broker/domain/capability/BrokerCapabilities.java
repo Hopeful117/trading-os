@@ -16,4 +16,9 @@ public final class BrokerCapabilities {
     public interface RiskSnapshotCapability {
         RiskSnapshot snapshot(UUID brokerAccountId, Instant closedFrom, Instant closedTo);
     }
+    public interface PositionManagementCapability {
+        ResolvedPositionCloseTarget resolveTarget(ResolveTargetRequest request);
+        CloseResult executeClose(ExecuteCloseRequest request);
+        ReconciliationCloseResult reconcile(ReconcileCloseRequest request);
+    }
 }

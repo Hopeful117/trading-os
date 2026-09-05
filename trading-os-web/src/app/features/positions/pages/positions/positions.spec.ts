@@ -147,9 +147,15 @@ describe('Positions', () => {
     expect(comp.protectionStatusClass('UNKNOWN')).toBe('unknown');
   });
 
-  it('no broker-mutating controls exist', async () => {
+  it('shows Close Exposure button for open position', async () => {
     await create();
-    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    const button = fixture.nativeElement.querySelector('button.btn-close-exposure');
+    expect(button).not.toBeNull();
+    expect(button.textContent).toContain('Fermer l\'exposition');
+  });
+
+  it('no legacy close button exists', async () => {
+    await create();
     expect(fixture.nativeElement.querySelector('[close]')).toBeNull();
   });
 
