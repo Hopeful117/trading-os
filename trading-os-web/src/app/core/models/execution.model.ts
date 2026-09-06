@@ -8,12 +8,15 @@ export type ExecutionStatus =
   | 'FAILED'
   | 'RECOVERY_BLOCKED'
   | 'CANCELLED'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  | 'RISK_REVALIDATION_REJECTED'
+  | 'RISK_REVALIDATION_UNAVAILABLE';
 
 export const TERMINAL_STATUSES: ReadonlySet<ExecutionStatus> = new Set([
   'COMPLETED',
   'CANCELLED',
   'EXPIRED',
+  'RISK_REVALIDATION_REJECTED',
 ]);
 
 export const POLLABLE_STATUSES: ReadonlySet<ExecutionStatus> = new Set([

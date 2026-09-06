@@ -16,7 +16,7 @@ public final class ExecutionAttemptCreationStep {
     public void execute(ExecutionPipelineContext context) {
         int number = attempts.findByIntentId(context.intent().id()).size() + 1;
         ExecutionAttempt attempt = ExecutionAttempt.create(
-                ids.nextAttemptId(), context.intent().id(), number, context.now());
+                ids.nextAttemptId(), context.intent().id(), number, context.now(), context.t1EvaluationId());
         attempts.save(attempt);
         context.attempt(attempt);
         context.intent().addEvent(new ExecutionEvent.ExecutionAttemptCreated(

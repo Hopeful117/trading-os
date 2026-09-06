@@ -18,5 +18,6 @@ public class ExecutionAttemptEntity {
     @Column(name="created_at", nullable=false, updatable=false) public Instant createdAt;
     @Column(name="started_at") public Instant startedAt;
     @Column(name="completed_at") public Instant completedAt;
+    @Column(name="t1_evaluation_id") public UUID t1EvaluationId;
     @Version public long version;
 }

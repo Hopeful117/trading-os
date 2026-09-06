@@ -63,7 +63,7 @@ class ExecutionDtoTest {
         ExecutionAttempt attempt = ExecutionAttempt.rehydrate(
                 ExecutionAttemptId.newId(), intent.id(), 1,
                 AttemptStatus.SUCCEEDED, "corr-1", "ACKNOWLEDGED",
-                now, now, now, 0);
+                now, now, now, 0, null);
         BrokerOrder order = BrokerOrder.rehydrate(
                 BrokerOrderId.newId(), intent.id(), attempt.id(),
                 "ext-order-1", BrokerOrderStatus.ACKNOWLEDGED,
@@ -85,7 +85,7 @@ class ExecutionDtoTest {
         ExecutionAttempt attempt = ExecutionAttempt.rehydrate(
                 ExecutionAttemptId.newId(), intent.id(), 1,
                 AttemptStatus.SUCCEEDED, "corr-1", "ACKNOWLEDGED",
-                now, now, now, 0);
+                now, now, now, 0, null);
         List<BrokerOrder.Fill> fills = List.of(
                 new BrokerOrder.Fill("f1", new BigDecimal("0.5"), new BigDecimal("50000"), new BigDecimal("5"), now),
                 new BrokerOrder.Fill("f2", new BigDecimal("0.3"), new BigDecimal("50100"), new BigDecimal("3"), now)
@@ -123,7 +123,7 @@ class ExecutionDtoTest {
         ExecutionAttempt attempt = ExecutionAttempt.rehydrate(
                 ExecutionAttemptId.newId(), intent.id(), 1,
                 AttemptStatus.FAILED, null, "REJECTED",
-                now, now, now, 0);
+                now, now, now, 0, null);
 
         ExecutionDto dto = ExecutionDto.from(intent, Optional.empty(), Optional.of(attempt));
 
@@ -137,7 +137,7 @@ class ExecutionDtoTest {
         ExecutionAttempt attempt = ExecutionAttempt.rehydrate(
                 ExecutionAttemptId.newId(), intent.id(), 1,
                 AttemptStatus.TIMED_OUT, null, "TIMEOUT",
-                now, now, now, 0);
+                now, now, now, 0, null);
 
         ExecutionDto dto = ExecutionDto.from(intent, Optional.empty(), Optional.of(attempt));
 
@@ -151,7 +151,7 @@ class ExecutionDtoTest {
         ExecutionAttempt attempt = ExecutionAttempt.rehydrate(
                 ExecutionAttemptId.newId(), intent.id(), 1,
                 AttemptStatus.OUTCOME_UNKNOWN, null, "OUTCOME_UNKNOWN",
-                now, now, now, 0);
+                now, now, now, 0, null);
 
         ExecutionDto dto = ExecutionDto.from(intent, Optional.empty(), Optional.of(attempt));
 
@@ -165,7 +165,7 @@ class ExecutionDtoTest {
         ExecutionAttempt attempt = ExecutionAttempt.rehydrate(
                 ExecutionAttemptId.newId(), intent.id(), 1,
                 AttemptStatus.SUCCEEDED, "corr-1", "ACKNOWLEDGED",
-                now, now, now, 0);
+                now, now, now, 0, null);
 
         ExecutionDto dto = ExecutionDto.from(intent, Optional.empty(), Optional.of(attempt));
 

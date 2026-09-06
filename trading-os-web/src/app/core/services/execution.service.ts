@@ -36,6 +36,13 @@ export class ExecutionService {
     );
   }
 
+  retryT1(executionId: string): Observable<ExecutionDto> {
+    return this.http.post<ExecutionDto>(
+      `${environment.gatewayUrl}v1/executions/${executionId}/retry-t1`,
+      {},
+    );
+  }
+
   reconcile(executionId: string): Observable<ExecutionDto> {
     return this.http.post<ExecutionDto>(
       `${environment.gatewayUrl}v1/executions/${executionId}/reconcile`,

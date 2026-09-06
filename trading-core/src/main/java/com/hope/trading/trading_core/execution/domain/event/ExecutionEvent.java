@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.execution.domain.event;
 
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import java.time.Instant;
+import java.util.UUID;
 
 public sealed interface ExecutionEvent permits
         ExecutionEvent.ExecutionIntentCreated, ExecutionEvent.ExecutionIntentValidated,
@@ -14,7 +15,8 @@ public sealed interface ExecutionEvent permits
         ExecutionEvent.BrokerOrderFilled, ExecutionEvent.BrokerOrderPartiallyFilled,
         ExecutionEvent.ExecutionRetryScheduled, ExecutionEvent.ExecutionRetryAborted,
         ExecutionEvent.ExecutionRecoveryStarted, ExecutionEvent.ExecutionRecoveryCompleted,
-        ExecutionEvent.ExecutionRecoveryBlocked, ExecutionEvent.ExecutionIntentCancelled {
+        ExecutionEvent.ExecutionRecoveryBlocked, ExecutionEvent.ExecutionIntentCancelled,
+        ExecutionEvent.ExecutionIntentRiskRejected, ExecutionEvent.ExecutionIntentRiskUnavailable {
     ExecutionIntentId intentId();
     Instant occurredAt();
 
@@ -60,5 +62,9 @@ public sealed interface ExecutionEvent permits
     record ExecutionRecoveryBlocked(ExecutionIntentId intentId, String reasonCode,
                                     Instant occurredAt) implements ExecutionEvent {}
     record ExecutionIntentCancelled(ExecutionIntentId intentId, Instant occurredAt)
+            implements ExecutionEvent {}
+    record ExecutionIntentRiskRejected(ExecutionIntentId intentId, UUID t1EvaluationId, Instant occurredAt)
+            implements ExecutionEvent {}
+    record ExecutionIntentRiskUnavailable(ExecutionIntentId intentId, UUID t1EvaluationId, String reasonCode, Instant occurredAt)
             implements ExecutionEvent {}
 }

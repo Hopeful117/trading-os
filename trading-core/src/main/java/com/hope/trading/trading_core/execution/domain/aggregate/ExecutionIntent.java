@@ -107,7 +107,9 @@ public final class ExecutionIntent {
             case CREATED -> to == ExecutionStatus.VALIDATED || to == ExecutionStatus.EXPIRED
                     || to == ExecutionStatus.CANCELLED;
             case VALIDATED -> to == ExecutionStatus.SUBMISSION_IN_PROGRESS
-                    || to == ExecutionStatus.CANCELLED || to == ExecutionStatus.EXPIRED;
+                    || to == ExecutionStatus.CANCELLED || to == ExecutionStatus.EXPIRED
+                    || to == ExecutionStatus.RISK_REVALIDATION_REJECTED
+                    || to == ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE;
             case SUBMISSION_IN_PROGRESS -> to == ExecutionStatus.COMPLETED
                     || to == ExecutionStatus.FAILED
                     || to == ExecutionStatus.SUBMISSION_OUTCOME_UNKNOWN
@@ -120,6 +122,10 @@ public final class ExecutionIntent {
             case FAILED -> to == ExecutionStatus.VALIDATED || to == ExecutionStatus.CANCELLED;
             case RECOVERY_BLOCKED -> to == ExecutionStatus.RECONCILIATION_IN_PROGRESS
                     || to == ExecutionStatus.CANCELLED;
+            case RISK_REVALIDATION_REJECTED -> false;
+            case RISK_REVALIDATION_UNAVAILABLE -> to == ExecutionStatus.VALIDATED
+                    || to == ExecutionStatus.CANCELLED
+                    || to == ExecutionStatus.EXPIRED;
             case COMPLETED, CANCELLED, EXPIRED -> false;
         };
     }

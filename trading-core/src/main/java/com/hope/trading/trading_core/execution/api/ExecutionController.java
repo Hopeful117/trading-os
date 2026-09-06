@@ -20,16 +20,18 @@ public class ExecutionController {
     private final ValidateAndCreateService validation;
     private final ExecuteTradeService execution;
     private final RetryExecutionService retry;
+    private final RetryT1ExecutionService retryT1;
     private final CancelExecutionService cancellation;
     private final RecoverExecutionService recovery;
     private final QueryExecutionService query;
     private final BrokerOrderRepositoryPort orders;
     private final ExecutionAttemptRepositoryPort attempts;
     public ExecutionController(ValidateAndCreateService validation, ExecuteTradeService execution,
-            RetryExecutionService retry, CancelExecutionService cancellation,
+            RetryExecutionService retry, RetryT1ExecutionService retryT1,
+            CancelExecutionService cancellation,
             RecoverExecutionService recovery, QueryExecutionService query,
             BrokerOrderRepositoryPort orders, ExecutionAttemptRepositoryPort attempts){
-        this.validation=validation;this.execution=execution;this.retry=retry;
+        this.validation=validation;this.execution=execution;this.retry=retry;this.retryT1=retryT1;
         this.cancellation=cancellation;this.recovery=recovery;this.query=query;
         this.orders=orders;this.attempts=attempts;
     }
@@ -66,6 +68,12 @@ public class ExecutionController {
             @PathVariable java.util.UUID id,Authentication authentication){
         requireOwned(id,authentication);
         var retried=retry.retry(new ExecutionIntentId(id));
+        return ResponseEntity.ok(toEnrichedDto(retried));
+    }
+    @PostMapping("/{id}/retry-t1") public ResponseEntity<ExecutionDto> retryT1(
+            @PathVariable java.util.UUID id,Authentication authentication){
+        requireOwned(id,authentication);
+        var retried=retryT1.retry(new ExecutionIntentId(id));
         return ResponseEntity.ok(toEnrichedDto(retried));
     }
     @PostMapping("/{id}/cancel") public ResponseEntity<ExecutionDto> cancel(

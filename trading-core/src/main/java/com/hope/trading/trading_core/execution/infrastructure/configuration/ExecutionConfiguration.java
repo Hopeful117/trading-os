@@ -40,18 +40,24 @@ public class ExecutionConfiguration {
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
             BrokerExecutionPort broker,ExecutionIdGenerator ids,ExecutionEventPublisher events,
             ExecutionMetrics metrics,ExecutionValidationService validation,
-            IdempotencyService idempotency,ExecutionLifecycleService lifecycle,Clock clock){
+            IdempotencyService idempotency,ExecutionLifecycleService lifecycle,Clock clock,
+            ExecutionTimeRiskRevalidationService t1Revalidation){
         return new ExecuteTradeService(intents,new ExecutionValidationStep(validation,lifecycle),
                 new IdempotencyVerificationStep(idempotency),
                 new ExecutionAttemptCreationStep(attempts,ids),
                 new BrokerSubmissionStep(broker,intents,attempts,lifecycle),
                 new BrokerResponseProcessingStep(ids),
-                new ExecutionFinalizationStep(intents,attempts,orders,lifecycle,metrics),events,clock);
+                new ExecutionFinalizationStep(intents,attempts,orders,lifecycle,metrics),events,clock,
+                t1Revalidation);
     }
     @Bean RetryExecutionService retryExecutionService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,
             ExecuteTradeService execution,ExecutionEventPublisher events,ExecutionMetrics metrics,Clock clock){
         return new RetryExecutionService(intents,attempts,execution,events,metrics,clock);
+    }
+    @Bean RetryT1ExecutionService retryT1ExecutionService(ExecutionIntentRepositoryPort intents,
+            ExecuteTradeService execution, Clock clock){
+        return new RetryT1ExecutionService(intents, execution, clock);
     }
     @Bean CancelExecutionService cancelExecutionService(ExecutionIntentRepositoryPort intents,
             BrokerOrderRepositoryPort orders,BrokerExecutionPort broker,
