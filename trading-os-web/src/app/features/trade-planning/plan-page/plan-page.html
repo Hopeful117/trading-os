@@ -409,17 +409,17 @@
           @if (view.execution.status === 'RISK_REVALIDATION_REJECTED') {
             <section class="unknown-explanation">
               <p>
-                Execution rejected by execution-time risk revalidation. The trade was evaluated
-                and rejected by the deterministic risk engine. This decision is final for this
-                execution authorization.
+                Execution rejected by execution-time risk revalidation. The trade was evaluated and
+                rejected by the deterministic risk engine. This decision is final for this execution
+                authorization.
               </p>
             </section>
           }
           @if (view.execution.status === 'RISK_REVALIDATION_UNAVAILABLE') {
             <section class="unknown-explanation">
               <p>
-                Execution-time risk revalidation could not be completed. The risk engine was
-                unable to evaluate the trade with current market and account data.
+                Execution-time risk revalidation could not be completed. The risk engine was unable
+                to evaluate the trade with current market and account data.
               </p>
             </section>
           }

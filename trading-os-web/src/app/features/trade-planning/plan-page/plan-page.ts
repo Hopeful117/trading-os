@@ -201,9 +201,16 @@ export class PlanPage implements OnDestroy {
       ),
     );
 
-    this.view$ = merge(plan$, accept$, reject$, evaluateRisk$, execute$, retry$, reconcile$, retryT1$).pipe(
-      shareReplay({ bufferSize: 1, refCount: true }),
-    );
+    this.view$ = merge(
+      plan$,
+      accept$,
+      reject$,
+      evaluateRisk$,
+      execute$,
+      retry$,
+      reconcile$,
+      retryT1$,
+    ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 
     this.busy$ = this.view$.pipe(
       map(
