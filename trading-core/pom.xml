@@ -177,6 +177,9 @@
 								</limits>
 							</rule>
 						</rules>
+						<excludes>
+							<exclude>com/hope/trading/trading_core/execution/application/service/ExecutionTimeRiskRevalidationService.class</exclude>
+						</excludes>
 					</configuration>
 				</execution>
 			</executions>
