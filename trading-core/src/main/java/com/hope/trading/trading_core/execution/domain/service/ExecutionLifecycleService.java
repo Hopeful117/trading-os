@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.execution.domain.aggregate.*;
 import com.hope.trading.trading_core.execution.domain.event.ExecutionEvent;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import java.time.Instant;
+import java.util.UUID;
 
 public final class ExecutionLifecycleService {
     public void validate(ExecutionIntent intent, Instant now) {
@@ -44,5 +45,15 @@ public final class ExecutionLifecycleService {
         intent.transition(ExecutionStatus.SUBMISSION_OUTCOME_UNKNOWN, now);
         intent.addEvent(new ExecutionEvent.ExecutionAttemptUnknown(
                 intent.id(), attempt.id(), now));
+    }
+    public void riskRejected(ExecutionIntent intent, UUID t1EvaluationId, Instant now) {
+        intent.transition(ExecutionStatus.RISK_REVALIDATION_REJECTED, now);
+        intent.addEvent(new ExecutionEvent.ExecutionIntentRiskRejected(
+                intent.id(), t1EvaluationId, now));
+    }
+    public void riskUnavailable(ExecutionIntent intent, UUID t1EvaluationId, String reasonCode, Instant now) {
+        intent.transition(ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE, now);
+        intent.addEvent(new ExecutionEvent.ExecutionIntentRiskUnavailable(
+                intent.id(), t1EvaluationId, reasonCode, now));
     }
 }

@@ -164,7 +164,7 @@ class RetryExecutionServiceTest {
         when(intents.findById(id)).thenReturn(Optional.of(intent));
 
         var existingAttempt = com.hope.trading.trading_core.execution.domain.aggregate.ExecutionAttempt.create(
-                ExecutionAttemptId.newId(), id, 2, now);
+                ExecutionAttemptId.newId(), id, 2, now, null);
         when(attempts.findLatestByIntentId(id)).thenReturn(Optional.of(existingAttempt));
         when(execution.execute(id)).thenReturn(intent);
 

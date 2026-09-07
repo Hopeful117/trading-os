@@ -4,12 +4,14 @@ import com.hope.trading.trading_core.execution.domain.exception.InvalidExecution
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 public final class ExecutionAttempt {
     private final ExecutionAttemptId id;
     private final ExecutionIntentId intentId;
     private final int attemptNumber;
     private final Instant createdAt;
+    private final UUID t1EvaluationId;
     private AttemptStatus status;
     private String brokerCorrelationId;
     private String resultCode;
@@ -20,24 +22,25 @@ public final class ExecutionAttempt {
     private ExecutionAttempt(ExecutionAttemptId id, ExecutionIntentId intentId,
             int attemptNumber, AttemptStatus status, String brokerCorrelationId,
             String resultCode, Instant createdAt, Instant startedAt,
-            Instant completedAt, long version) {
+            Instant completedAt, long version, UUID t1EvaluationId) {
         this.id = Objects.requireNonNull(id); this.intentId = Objects.requireNonNull(intentId);
         if (attemptNumber < 1) throw new IllegalArgumentException("attempt number starts at 1");
         this.attemptNumber = attemptNumber; this.status = Objects.requireNonNull(status);
         this.brokerCorrelationId = brokerCorrelationId; this.resultCode = resultCode;
         this.createdAt = Objects.requireNonNull(createdAt); this.startedAt = startedAt;
         this.completedAt = completedAt; this.version = version;
+        this.t1EvaluationId = t1EvaluationId;
     }
     public static ExecutionAttempt create(ExecutionAttemptId id, ExecutionIntentId intentId,
-                                          int number, Instant now) {
+                                          int number, Instant now, UUID t1EvaluationId) {
         return new ExecutionAttempt(id, intentId, number, AttemptStatus.CREATED,
-                null, null, now, null, null, 0);
+                null, null, now, null, null, 0, t1EvaluationId);
     }
     public static ExecutionAttempt rehydrate(ExecutionAttemptId id, ExecutionIntentId intentId,
             int number, AttemptStatus status, String correlation, String result,
-            Instant created, Instant started, Instant completed, long version) {
+            Instant created, Instant started, Instant completed, long version, UUID t1EvaluationId) {
         return new ExecutionAttempt(id, intentId, number, status, correlation,
-                result, created, started, completed, version);
+                result, created, started, completed, version, t1EvaluationId);
     }
     public void start(Instant now) {
         require(AttemptStatus.CREATED); status = AttemptStatus.STARTED;
@@ -87,4 +90,5 @@ public final class ExecutionAttempt {
     public Instant startedAt() { return startedAt; }
     public Instant completedAt() { return completedAt; }
     public long version() { return version; }
+    public UUID t1EvaluationId() { return t1EvaluationId; }
 }

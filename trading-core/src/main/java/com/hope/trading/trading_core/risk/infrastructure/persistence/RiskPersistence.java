@@ -198,6 +198,39 @@ public class RiskPersistence {
                 e.accountId, e.status, e.decision, read(e.responsePayload, Response.class)));
     }
 
+    public void t1Evaluation(UUID id, UUID executionIntentId, UUID t0EvaluationId, UUID accountId,
+                             Instant evaluatedAt, String status, String decision, String unavailableReasonCode,
+                             Integer resultSchemaVersion, Object officialResult, String responsePayload,
+                             Instant createdAt) {
+        RiskEvaluationT1Entity entity = new RiskEvaluationT1Entity();
+        entity.id = id; entity.executionIntentId = executionIntentId; entity.t0EvaluationId = t0EvaluationId;
+        entity.accountId = accountId; entity.evaluatedAt = evaluatedAt; entity.status = status;
+        entity.decision = decision; entity.unavailableReasonCode = unavailableReasonCode;
+        entity.resultSchemaVersion = resultSchemaVersion;
+        entity.resultPayload = officialResult == null ? null : write(officialResult);
+        entity.responseSchemaVersion = 1;
+        entity.responsePayload = responsePayload;
+        entity.createdAt = createdAt;
+        entityManager.persist(entity); entityManager.flush();
+    }
+
+    public Optional<T1StoredEvaluation> t1EvaluationById(UUID evaluationId) {
+        RiskEvaluationT1Entity e = entityManager.find(RiskEvaluationT1Entity.class, evaluationId);
+        if (e == null) return Optional.empty();
+        return Optional.of(new T1StoredEvaluation(e.id, e.executionIntentId, e.t0EvaluationId, e.accountId,
+                e.status, e.decision, e.unavailableReasonCode, e.resultSchemaVersion, e.resultPayload,
+                e.responseSchemaVersion, e.responsePayload, e.evaluatedAt, e.createdAt));
+    }
+
+    public List<T1StoredEvaluation> t1EvaluationsByIntentId(UUID executionIntentId) {
+        return entityManager.createQuery("select e from RiskEvaluationT1Entity e where e.executionIntentId=:intent",
+                        RiskEvaluationT1Entity.class).setParameter("intent", executionIntentId)
+                .getResultList().stream().map(e -> new T1StoredEvaluation(e.id, e.executionIntentId, e.t0EvaluationId,
+                        e.accountId, e.status, e.decision, e.unavailableReasonCode, e.resultSchemaVersion,
+                        e.resultPayload, e.responseSchemaVersion, e.responsePayload, e.evaluatedAt, e.createdAt))
+                .toList();
+    }
+
     public record StoredEvaluation(UUID id, UUID tradePlanId, long tradePlanVersion,
                                    UUID accountId, String status, String decision,
                                    Response response) { }
@@ -215,6 +248,12 @@ public class RiskPersistence {
 
     public record ProfileKey(UUID id, String semanticVersion) implements Serializable { }
     public record ProfileRuleKey(UUID profileId, String profileSemanticVersion, String ruleId) implements Serializable { }
+    public record T1EvaluationKey(UUID id) implements Serializable { }
+    public record T1StoredEvaluation(UUID id, UUID executionIntentId, UUID t0EvaluationId, UUID accountId,
+                                     String status, String decision, String unavailableReasonCode,
+                                     int resultSchemaVersion, String resultPayload,
+                                     int responseSchemaVersion, String responsePayload,
+                                     Instant evaluatedAt, Instant createdAt) { }
 }
 
 @Entity(name = "RiskProfileEntity") @Table(name = "risk_profile")

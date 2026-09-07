@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.execution.application.port.BrokerExecutionP
 import com.hope.trading.trading_core.execution.domain.aggregate.*;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 public final class ExecutionPipelineContext {
     private final ExecutionIntent intent;
@@ -11,6 +12,7 @@ public final class ExecutionPipelineContext {
     private ExecutionAttempt attempt;
     private BrokerExecutionPort.SubmissionResult submissionResult;
     private BrokerOrder brokerOrder;
+    private UUID t1EvaluationId;
     public ExecutionPipelineContext(ExecutionIntent intent, Instant now) {
         this.intent = Objects.requireNonNull(intent); this.now = Objects.requireNonNull(now);
     }
@@ -24,4 +26,6 @@ public final class ExecutionPipelineContext {
     }
     public BrokerOrder brokerOrder() { return brokerOrder; }
     public void brokerOrder(BrokerOrder value) { brokerOrder = Objects.requireNonNull(value); }
+    public UUID t1EvaluationId() { return t1EvaluationId; }
+    public void t1EvaluationId(UUID value) { t1EvaluationId = Objects.requireNonNull(value); }
 }

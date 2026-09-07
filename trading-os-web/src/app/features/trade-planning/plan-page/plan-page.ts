@@ -50,6 +50,8 @@ const STATUS_LABELS: Record<ExecutionStatus, string> = {
   RECOVERY_BLOCKED: 'Unable to confirm broker outcome',
   CANCELLED: 'Cancelled',
   EXPIRED: 'Expired',
+  RISK_REVALIDATION_REJECTED: 'Execution rejected by risk revalidation',
+  RISK_REVALIDATION_UNAVAILABLE: 'Risk revalidation unavailable',
 };
 
 const BROKER_ORDER_LABELS: Record<string, string> = {
@@ -80,6 +82,7 @@ export class PlanPage implements OnDestroy {
     decision: RiskDecisionResponse;
   }>();
   private readonly retrySubject = new Subject<string>();
+  private readonly retryT1Subject = new Subject<string>();
   private readonly reconcileSubject = new Subject<string>();
 
   readonly view$: Observable<PlanView>;
@@ -189,9 +192,25 @@ export class PlanPage implements OnDestroy {
       ),
     );
 
-    this.view$ = merge(plan$, accept$, reject$, evaluateRisk$, execute$, retry$, reconcile$).pipe(
-      shareReplay({ bufferSize: 1, refCount: true }),
+    const retryT1$ = this.retryT1Subject.pipe(
+      switchMap((executionId) =>
+        this.executionService.retryT1(executionId).pipe(
+          switchMap((execution) => this.pollOrResult(execution)),
+          catchError(() => of<PlanView>({ status: 'error' })),
+        ),
+      ),
     );
+
+    this.view$ = merge(
+      plan$,
+      accept$,
+      reject$,
+      evaluateRisk$,
+      execute$,
+      retry$,
+      reconcile$,
+      retryT1$,
+    ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 
     this.busy$ = this.view$.pipe(
       map(
@@ -226,6 +245,10 @@ export class PlanPage implements OnDestroy {
 
   retry(executionId: string): void {
     this.retrySubject.next(executionId);
+  }
+
+  retryT1(executionId: string): void {
+    this.retryT1Subject.next(executionId);
   }
 
   reconcile(executionId: string): void {
