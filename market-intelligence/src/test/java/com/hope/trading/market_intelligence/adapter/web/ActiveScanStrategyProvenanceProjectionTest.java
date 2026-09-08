@@ -59,7 +59,7 @@ class ActiveScanStrategyProvenanceProjectionTest {
                 List.of(), UUID.randomUUID(), AnalysisExecutionStatus.COMPLETED,
                 AnalysisResultQuality.COMPLETE,
                 com.hope.trading.market_intelligence.application.scan.ActiveScanMarketOutcome.OPPORTUNITY_FOUND,
-                null, opportunity);
+                null, List.of(opportunity));
     }
 
     @Test
@@ -114,7 +114,9 @@ class ActiveScanStrategyProvenanceProjectionTest {
                 });
 
         var market = response.markets().get(0);
-        assertThat(market.opportunity().strategyMatchId()).isNull();
+        assertThat(market.opportunities()).singleElement()
+                .extracting(OpportunityResponse::strategyMatchId)
+                .isNull();
         assertThat(market.strategy()).isNull();
     }
 
@@ -128,13 +130,13 @@ class ActiveScanStrategyProvenanceProjectionTest {
                         List.of(new ActiveScanResultProjection.MarketResult(
                                 UUID.randomUUID(), 0, UUID.randomUUID(), true, List.of(),
                                 UUID.randomUUID(), AnalysisExecutionStatus.COMPLETED,
-                                AnalysisResultQuality.COMPLETE,
-                                com.hope.trading.market_intelligence.application.scan.ActiveScanMarketOutcome.COMPLETED_NO_OPPORTUNITY,
-                                null, null))),
-                null);
+                                 AnalysisResultQuality.COMPLETE,
+                                 com.hope.trading.market_intelligence.application.scan.ActiveScanMarketOutcome.COMPLETED_NO_OPPORTUNITY,
+                                 null, List.of()))),
+                 null);
 
         var market = response.markets().get(0);
-        assertThat(market.opportunity()).isNull();
+        assertThat(market.opportunities()).isEmpty();
         assertThat(market.strategy()).isNull();
     }
 }

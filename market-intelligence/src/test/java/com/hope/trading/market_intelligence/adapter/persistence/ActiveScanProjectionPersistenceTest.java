@@ -7,10 +7,12 @@ import com.hope.trading.market_intelligence.application.port.AnalysisPipelineRun
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityVersionRef;
 import com.hope.trading.market_intelligence.domain.execution.*;
-import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
-import com.hope.trading.market_intelligence.domain.opportunity.OpportunityScore;
-import com.hope.trading.market_intelligence.domain.opportunity.OpportunityStatus;
-import com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity;
+import com.hope.trading.market_intelligence.domain.opportunity.*;
+import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
+import com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository;
+import com.hope.trading.market_intelligence.strategy.domain.MatchedDirection;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyId;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,6 +34,7 @@ class ActiveScanProjectionPersistenceTest {
     @Autowired AnalysisExecutionRepository executions;
     @Autowired AnalysisPipelineRunViewRepository pipelineRuns;
     @Autowired TradingOpportunityRepository opportunities;
+    @Autowired StrategyMatchRepository strategyMatches;
     @Autowired JpaIntelligencePipelineRunRepository jpaPipelineRuns;
 
     @Test
@@ -106,6 +109,81 @@ class ActiveScanProjectionPersistenceTest {
                         new BigDecimal("71.25").setScale(2),
                         new BigDecimal("84.50").setScale(2)
                 );
+    }
+
+    @Test
+    void loadsLatestOpportunityVersionsByStrategyMatchIds() {
+        UUID strategyMatchId = UUID.randomUUID();
+        UUID unrelatedStrategyMatchId = UUID.randomUUID();
+        strategyMatches.save(strategyMatch(strategyMatchId));
+        strategyMatches.save(strategyMatch(unrelatedStrategyMatchId));
+        OpportunityId opportunityId = new OpportunityId(UUID.randomUUID());
+        TradingOpportunity firstVersion = opportunity(
+                opportunityId, 1, strategyMatchId, OpportunityStatus.ACTIVE, "71.25");
+        TradingOpportunity latestVersion = opportunity(
+                opportunityId, 2, strategyMatchId, OpportunityStatus.ANALYZED, "84.50");
+        TradingOpportunity unrelated = opportunity(
+                new OpportunityId(UUID.randomUUID()), 1, unrelatedStrategyMatchId,
+                OpportunityStatus.ACTIVE, "92.00");
+        opportunities.append(firstVersion);
+        opportunities.append(latestVersion);
+        opportunities.append(unrelated);
+
+        assertThat(opportunities.findByStrategyMatchIds(List.of(strategyMatchId)))
+                .singleElement()
+                .satisfies(value -> {
+                    assertThat(value.id()).isEqualTo(opportunityId);
+                    assertThat(value.version()).isEqualTo(new OpportunityVersion(2));
+                    assertThat(value.score().value()).isEqualByComparingTo("84.50");
+                });
+    }
+
+    private StrategyMatch strategyMatch(UUID matchId) {
+        Instant now = OpportunityTestFixtures.NOW;
+        return StrategyMatch.rehydrate(
+                matchId,
+                new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID),
+                1,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                MatchedDirection.LONG,
+                "digest-" + matchId,
+                List.of(),
+                now,
+                now
+        );
+    }
+
+    private TradingOpportunity opportunity(
+            OpportunityId id,
+            long version,
+            UUID strategyMatchId,
+            OpportunityStatus status,
+            String score
+    ) {
+        Instant now = OpportunityTestFixtures.NOW;
+        return new OpportunityFactory().create(
+                id,
+                new OpportunityVersion(version),
+                status,
+                "BTC/EUR",
+                OpportunityDirection.LONG,
+                "Bullish breakout",
+                "5m",
+                OpportunityType.SCALPING,
+                OpportunityOrigin.PASSIVE_SCAN,
+                new OpportunityScore(new BigDecimal(score)),
+                "Confirmed",
+                Set.of(new ObservationReference(UUID.randomUUID())),
+                Set.of(),
+                now,
+                now,
+                now.plusSeconds(300),
+                now,
+                strategyMatchId,
+                null
+        );
     }
 
     private AnalysisExecution requestedExecution(

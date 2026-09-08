@@ -16,4 +16,5 @@ public interface TradingOpportunityRepository {
             String timeframe, Instant evaluatedAfter);
     List<TradingOpportunity> findAllLatest();
     List<TradingOpportunity> findAllExact(Collection<TradingOpportunityVersionRef> refs);
+    List<TradingOpportunity> findByStrategyMatchIds(Collection<UUID> strategyMatchIds);
 }

@@ -55,7 +55,7 @@ class ActiveScanControllerTest {
                         null,
                         ActiveScanMarketOutcome.RUNNING,
                         null,
-                        null
+                        List.of()
                 ))
         );
         when(scans.create(any())).thenReturn(ActiveScan.readyToDispatch(
@@ -177,7 +177,7 @@ class ActiveScanControllerTest {
                         com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE,
                         ActiveScanMarketOutcome.COMPLETED_NO_OPPORTUNITY,
                         new ActiveScanResultProjection.Diagnostic("NO_SIGNAL", "No opportunity"),
-                        null
+                        List.of()
                 ))
         ));
 
@@ -195,6 +195,8 @@ class ActiveScanControllerTest {
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.progress.completed").value(1))
                 .andExpect(jsonPath("$.markets[0].outcome").value("COMPLETED_NO_OPPORTUNITY"))
+                .andExpect(jsonPath("$.markets[0].opportunities").isEmpty())
+                .andExpect(jsonPath("$.markets[0].opportunity").doesNotExist())
                 .andExpect(jsonPath("$.markets[0].diagnostic.code").value("NO_SIGNAL"));
     }
 

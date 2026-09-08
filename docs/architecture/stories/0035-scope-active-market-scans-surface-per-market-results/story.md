@@ -389,7 +389,7 @@ No new scope-mode domain concept needed. Frontend makes the choice explicit.
 
 | Status | Value |
 |--------|-------|
-| IMPLEMENTATION_COMPLETE | NO |
-| FINAL_SAFETY_REVIEW_COMPLETE | NO |
-| HUMAN_ACCEPTANCE | NO |
-| STORY_0035_ACCEPTED | NO |
+| IMPLEMENTATION_COMPLETE | YES |
+| FINAL_SAFETY_REVIEW_COMPLETE | YES |
+| HUMAN_ACCEPTANCE | YES |
+| STORY_0035_ACCEPTED | YES |
