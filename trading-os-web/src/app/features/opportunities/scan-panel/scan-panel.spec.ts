@@ -1,12 +1,19 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
+import { provideRouter, Router } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 
 import { ScanPanel, ScanPanelView } from './scan-panel';
 import { SCAN_POLL_INTERVAL_MS } from './scan-poll-interval';
 import { AccountService } from '../../../core/services/account.service';
 import { ActiveScanService } from '../../../core/services/active-scan.service';
-import { ActiveScanResponse, ActiveScanProgress } from '../../../core/models/active-scan.model';
+import {
+  ActiveScanMarketResult,
+  ActiveScanProgress,
+  ActiveScanResponse,
+} from '../../../core/models/active-scan.model';
+import { MarketService } from '../../../core/services/market.service';
+import { OpportunityResponse } from '../../../core/models/opportunity.model';
 
 describe('ScanPanel', () => {
   let fixture: ComponentFixture<ScanPanel>;
@@ -15,10 +22,53 @@ describe('ScanPanel', () => {
     findScan: ReturnType<typeof vi.fn>;
   };
   let accountServiceMock: { getAccounts: ReturnType<typeof vi.fn> };
+  let marketServiceMock: { findAll: ReturnType<typeof vi.fn> };
 
   const accounts = [
     { accountId: 'a1', name: 'Main account' },
     { accountId: 'a2', name: 'Challenge account' },
+  ];
+  const markets = [
+    {
+      marketId: 'm1',
+      provider: 'KRAKEN',
+      symbol: 'BTC/EUR',
+      baseAsset: 'BTC',
+      quoteAsset: 'EUR',
+      marketState: {
+        tradingStatus: 'ONLINE',
+        tradable: true,
+        closureReason: '',
+        lastUpdated: '2026-08-25T10:00:00Z',
+      },
+      marketConstraints: {
+        minimumOrderSize: 0.0001,
+        minimumCost: 10,
+        tickSize: 0.1,
+        quantityPrecision: 8,
+        pricePrecision: 1,
+      },
+    },
+    {
+      marketId: 'm2',
+      provider: 'KRAKEN',
+      symbol: 'ETH/EUR',
+      baseAsset: 'ETH',
+      quoteAsset: 'EUR',
+      marketState: {
+        tradingStatus: 'ONLINE',
+        tradable: true,
+        closureReason: '',
+        lastUpdated: '2026-08-25T10:00:00Z',
+      },
+      marketConstraints: {
+        minimumOrderSize: 0.001,
+        minimumCost: 10,
+        tickSize: 0.01,
+        quantityPrecision: 8,
+        pricePrecision: 2,
+      },
+    },
   ];
 
   function progress(overrides: Partial<ActiveScanProgress> = {}): ActiveScanProgress {
@@ -52,6 +102,51 @@ describe('ScanPanel', () => {
     };
   }
 
+  function opportunity(id: string, instrument: string): OpportunityResponse {
+    return {
+      id,
+      version: 1,
+      status: 'ACTIVE',
+      instrument,
+      direction: 'LONG',
+      scenario: 'Breakout continuation',
+      timeframe: '15m',
+      type: 'INTRADAY',
+      origin: 'PASSIVE_SCAN',
+      score: 82.5,
+      explanation: 'Confirmed setup',
+      observationIds: [],
+      aiAnalysisIds: [],
+      evaluatedAt: '2026-08-25T10:00:00Z',
+      validFrom: '2026-08-25T10:00:00Z',
+      validUntil: null,
+      createdAt: '2026-08-25T10:00:00Z',
+      strategyMatchId: `match-${id}`,
+    };
+  }
+
+  function marketResult(
+    marketId: string,
+    outcome: ActiveScanMarketResult['outcome'],
+    opportunities: OpportunityResponse[] = [],
+  ): ActiveScanMarketResult {
+    return {
+      scanMarketId: `scan-${marketId}`,
+      ordinal: 0,
+      marketId,
+      eligible: outcome !== 'EXCLUDED',
+      analysisStatus: outcome === 'EXCLUDED' ? null : 'COMPLETED',
+      resultQuality: outcome === 'EXCLUDED' ? null : 'COMPLETE',
+      outcome,
+      analysisExecutionId: outcome === 'EXCLUDED' ? null : `execution-${marketId}`,
+      exclusionReasons: outcome === 'EXCLUDED' ? ['MARKET_NOT_TRADABLE'] : [],
+      diagnostic:
+        outcome === 'FAILED' ? { code: 'ANALYSIS_FAILED', message: 'Analysis failed' } : null,
+      opportunities,
+      strategy: null,
+    };
+  }
+
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   async function createComponent(): Promise<void> {
@@ -60,7 +155,9 @@ describe('ScanPanel', () => {
       providers: [
         { provide: ActiveScanService, useValue: activeScanServiceMock },
         { provide: AccountService, useValue: accountServiceMock },
+        { provide: MarketService, useValue: marketServiceMock },
         { provide: SCAN_POLL_INTERVAL_MS, useValue: 25 },
+        provideRouter([]),
       ],
     }).compileComponents();
 
@@ -71,6 +168,7 @@ describe('ScanPanel', () => {
   async function selectAccountAndRun(): Promise<void> {
     const component = fixture.componentInstance;
     component.accountId = 'a1';
+    component.scopeMode = 'ALL_ELIGIBLE';
     component.runScan();
     await fixture.whenStable();
   }
@@ -81,6 +179,7 @@ describe('ScanPanel', () => {
       findScan: vi.fn().mockReturnValue(of(scan())),
     };
     accountServiceMock = { getAccounts: vi.fn().mockReturnValue(of(accounts)) };
+    marketServiceMock = { findAll: vi.fn().mockReturnValue(of(markets)) };
   });
 
   it('should create', async () => {
@@ -120,14 +219,20 @@ describe('ScanPanel', () => {
   });
 
   describe('trigger protection', () => {
-    it('disables the run button while no account is selected', async () => {
+    it('disables the run button until account and explicit scope are selected', async () => {
       await createComponent();
 
       const button = fixture.nativeElement.querySelector('[data-testid="run-scan-button"]');
       expect(button.disabled).toBe(true);
+
+      const accountSelect = fixture.nativeElement.querySelector('[data-testid="account-select"]');
+      accountSelect.value = 'a1';
+      accountSelect.dispatchEvent(new Event('change'));
+      await fixture.whenStable();
+      expect(button.disabled).toBe(true);
     });
 
-    it('sends the selected account and objective with an Idempotency-Key', async () => {
+    it('sends explicit all-eligible scope by omitting requestedMarketIds', async () => {
       await createComponent();
       fixture.componentInstance.objective = '  trend setups  ';
       await selectAccountAndRun();
@@ -139,6 +244,19 @@ describe('ScanPanel', () => {
       expect(request).toEqual({ accountId: 'a1', objective: 'trend setups' });
     });
 
+    it('sends every specifically selected market id', async () => {
+      await createComponent();
+      fixture.componentInstance.accountId = 'a1';
+      fixture.componentInstance.scopeMode = 'SPECIFIC';
+      fixture.componentInstance.selectedMarketIds = ['m1', 'm2'];
+
+      fixture.componentInstance.runScan();
+      await fixture.whenStable();
+
+      const [request] = activeScanServiceMock.createScan.mock.calls[0];
+      expect(request).toEqual({ accountId: 'a1', requestedMarketIds: ['m1', 'm2'] });
+    });
+
     it('ignores repeated triggers while a scan session is active', async () => {
       const never = new Subject<ActiveScanResponse>();
       activeScanServiceMock.createScan.mockReturnValue(never.asObservable());
@@ -148,6 +266,7 @@ describe('ScanPanel', () => {
       fixture.componentInstance.view$.subscribe((view) => views.push(view));
 
       fixture.componentInstance.accountId = 'a1';
+      fixture.componentInstance.scopeMode = 'ALL_ELIGIBLE';
       fixture.componentInstance.runScan();
       fixture.componentInstance.runScan();
       await fixture.whenStable();
@@ -156,6 +275,43 @@ describe('ScanPanel', () => {
       expect(views.some((view) => view.status === 'submitting' || view.status === 'running')).toBe(
         true,
       );
+    });
+  });
+
+  describe('market scope', () => {
+    it('renders catalogue markets only after specific scope is chosen', async () => {
+      await createComponent();
+      fixture.nativeElement.querySelector('[data-testid="specific-scope"]').click();
+      await fixture.whenStable();
+
+      const options = fixture.nativeElement.querySelectorAll(
+        '[data-testid="market-select"] option',
+      );
+      expect(options.length).toBe(2);
+      expect(fixture.nativeElement.textContent).toContain('BTC/EUR');
+    });
+
+    it('keeps all-eligible available when catalogue loading fails and supports retry', async () => {
+      marketServiceMock.findAll.mockReturnValueOnce(throwError(() => new Error('offline')));
+      activeScanServiceMock.createScan.mockReturnValue(of(scan({ status: 'COMPLETED' })));
+      await createComponent();
+
+      const specific = fixture.nativeElement.querySelector('[data-testid="specific-scope"]');
+      const allEligible = fixture.nativeElement.querySelector('[data-testid="all-eligible-scope"]');
+      expect(specific.disabled).toBe(true);
+      expect(allEligible.disabled).toBe(false);
+      expect(fixture.nativeElement.querySelector('[data-testid="markets-error"]')).not.toBeNull();
+
+      fixture.componentInstance.accountId = 'a1';
+      fixture.componentInstance.scopeMode = 'ALL_ELIGIBLE';
+      fixture.componentInstance.runScan();
+      await fixture.whenStable();
+      expect(activeScanServiceMock.createScan.mock.calls[0][0]).toEqual({ accountId: 'a1' });
+
+      marketServiceMock.findAll.mockReturnValue(of(markets));
+      fixture.nativeElement.querySelector('[data-testid="markets-error"] button').click();
+      await fixture.whenStable();
+      expect(marketServiceMock.findAll).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -206,6 +362,17 @@ describe('ScanPanel', () => {
       await fixture.whenStable();
 
       expect(completions.map((scan) => scan.status)).toEqual(['COMPLETED']);
+    });
+
+    it('does not poll when creation already returns a terminal scan', async () => {
+      activeScanServiceMock.createScan.mockReturnValue(of(scan({ status: 'COMPLETED' })));
+      await createComponent();
+
+      await selectAccountAndRun();
+      await wait(80);
+
+      expect(activeScanServiceMock.findScan).not.toHaveBeenCalled();
+      expect(fixture.nativeElement.querySelector('[data-testid="scan-terminal"]')).not.toBeNull();
     });
 
     it('distinguishes a successful zero-opportunity scan from an error', async () => {
@@ -274,6 +441,90 @@ describe('ScanPanel', () => {
 
     it('maps other backend failures to an unavailable message', async () => {
       await runExpectingError(new HttpErrorResponse({ status: 503 }), 'UNAVAILABLE');
+    });
+  });
+
+  describe('per-market results', () => {
+    it('renders every opportunity as a distinct detail link', async () => {
+      const first = opportunity('o1', 'BTC/EUR');
+      const second = opportunity('o2', 'BTC/EUR');
+      activeScanServiceMock.createScan.mockReturnValue(
+        of(
+          scan({
+            status: 'COMPLETED',
+            progress: progress({ opportunitiesFound: 2 }),
+            markets: [marketResult('m1', 'OPPORTUNITY_FOUND', [first, second])],
+          }),
+        ),
+      );
+      await createComponent();
+      const navigateByUrl = vi
+        .spyOn(TestBed.inject(Router), 'navigateByUrl')
+        .mockResolvedValue(true);
+
+      await selectAccountAndRun();
+      fixture.detectChanges();
+
+      const links = fixture.nativeElement.querySelectorAll('.opportunity-chip');
+      expect(links.length).toBe(2);
+      expect(links[0].getAttribute('href')).toBe('/opportunities/o1');
+      links[1].click();
+      expect(navigateByUrl).toHaveBeenCalled();
+    });
+
+    it('filters outcomes without hiding successful siblings from the full result', async () => {
+      activeScanServiceMock.createScan.mockReturnValue(
+        of(
+          scan({
+            status: 'PARTIALLY_COMPLETED',
+            markets: [
+              marketResult('m1', 'OPPORTUNITY_FOUND', [opportunity('o1', 'BTC/EUR')]),
+              marketResult('m2', 'FAILED'),
+            ],
+          }),
+        ),
+      );
+      await createComponent();
+      await selectAccountAndRun();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelectorAll('[data-testid="market-result"]').length).toBe(
+        2,
+      );
+      const filter = fixture.nativeElement.querySelector('[data-testid="result-filter"]');
+      filter.value = 'FAILED';
+      filter.dispatchEvent(new Event('change'));
+      await fixture.whenStable();
+
+      const rows = fixture.nativeElement.querySelectorAll('[data-testid="market-result"]');
+      expect(rows.length).toBe(1);
+      expect(rows[0].getAttribute('data-outcome')).toBe('FAILED');
+      expect(rows[0].textContent).toContain('Analysis failed');
+    });
+
+    it('classifies every supported result filter from backend outcomes', async () => {
+      await createComponent();
+      const component = fixture.componentInstance;
+      const result = scan({
+        markets: [
+          marketResult('m1', 'OPPORTUNITY_FOUND', [opportunity('o1', 'BTC/EUR')]),
+          marketResult('m2', 'COMPLETED_NO_OPPORTUNITY'),
+          marketResult('m3', 'EXCLUDED'),
+          marketResult('m4', 'FAILED'),
+          marketResult('m5', 'RUNNING'),
+        ],
+      });
+
+      component.resultFilter = 'OPPORTUNITY';
+      expect(component.filteredMarkets(result).map((market) => market.marketId)).toEqual(['m1']);
+      component.resultFilter = 'NO_OPPORTUNITY';
+      expect(component.filteredMarkets(result).map((market) => market.marketId)).toEqual(['m2']);
+      component.resultFilter = 'EXCLUDED';
+      expect(component.filteredMarkets(result).map((market) => market.marketId)).toEqual(['m3']);
+      component.resultFilter = 'FAILED';
+      expect(component.filteredMarkets(result).map((market) => market.marketId)).toEqual(['m4']);
+      component.resultFilter = 'PROCESSING';
+      expect(component.filteredMarkets(result).map((market) => market.marketId)).toEqual(['m5']);
     });
   });
 });

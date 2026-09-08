@@ -28,7 +28,8 @@ export type AnalysisExecutionStatus =
   | 'PARTIALLY_COMPLETED'
   | 'COMPLETED'
   | 'FAILED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'EXPIRED';
 
 export type MarketEligibilityReason = 'MARKET_NOT_FOUND' | 'MARKET_NOT_TRADABLE';
 
@@ -64,7 +65,7 @@ export interface ActiveScanMarketResult {
   ordinal: number;
   marketId: string;
   eligible: boolean;
-  analysisStatus: AnalysisExecutionStatus;
+  analysisStatus: AnalysisExecutionStatus | null;
   resultQuality: 'COMPLETE' | 'PARTIAL' | 'DEGRADED' | null;
   outcome:
     | 'EXCLUDED'
@@ -78,7 +79,7 @@ export interface ActiveScanMarketResult {
   analysisExecutionId: string | null;
   exclusionReasons: MarketEligibilityReason[];
   diagnostic: ScanDiagnostic | null;
-  opportunity: OpportunityResponse | null;
+  opportunities: OpportunityResponse[];
   strategy: StrategyProvenance | null;
 }
 

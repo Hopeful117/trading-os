@@ -80,6 +80,17 @@ public class JpaTradingOpportunityRepository implements TradingOpportunityReposi
         return repository.findAllById(ids).stream().map(this::domain).toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<TradingOpportunity> findByStrategyMatchIds(Collection<UUID> strategyMatchIds) {
+        if (strategyMatchIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findLatestByStrategyMatchIds(strategyMatchIds).stream()
+                .map(this::domain)
+                .toList();
+    }
+
     private JpaTradingOpportunityEntity entity(TradingOpportunity value) {
         JpaTradingOpportunityEntity entity = new JpaTradingOpportunityEntity();
         entity.opportunityId = value.id().value(); entity.version = value.version().value();

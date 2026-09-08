@@ -1,13 +1,12 @@
 <section class="scan-panel">
   <header class="panel-header">
     <h2>Market scan</h2>
-    <p>Ask Market Intelligence to analyze eligible markets now.</p>
+    <p>Choose the markets Market Intelligence should analyze now.</p>
   </header>
 
   <div class="controls" data-testid="scan-form">
     <label class="field">
       <span>Account</span>
-
       @if (accounts$ | async; as state) {
         @if (!state.loaded) {
           <p class="inline-error" data-testid="accounts-error">Unable to load your accounts.</p>
@@ -27,77 +26,128 @@
       }
     </label>
 
-    <label class="field">
-      <span>Objective</span>
+    <label class="field objective-field">
+      <span>Provenance / context</span>
       <input
         type="text"
         name="scanObjective"
         [(ngModel)]="objective"
         maxlength="500"
-        placeholder="Optional — what are you looking for?"
+        placeholder="Optional context for this scan"
       />
+      <small>Does not influence scope, eligibility, or ranking.</small>
     </label>
-
-    <button
-      type="button"
-      class="run-button"
-      data-testid="run-scan-button"
-      [disabled]="!accountId || (busy$ | async)"
-      (click)="runScan()"
-    >
-      Run market scan
-    </button>
   </div>
+
+  @if (markets$ | async; as catalogue) {
+    <fieldset class="scope-picker" data-testid="scope-picker">
+      <legend>Scan scope</legend>
+      <label [class.disabled]="catalogue.status !== 'loaded'">
+        <input
+          type="radio"
+          name="scanScope"
+          value="SPECIFIC"
+          [(ngModel)]="scopeMode"
+          [disabled]="catalogue.status !== 'loaded'"
+          data-testid="specific-scope"
+        />
+        <span><strong>Specific markets</strong>Choose one or more catalogue markets.</span>
+      </label>
+      <label>
+        <input
+          type="radio"
+          name="scanScope"
+          value="ALL_ELIGIBLE"
+          [(ngModel)]="scopeMode"
+          data-testid="all-eligible-scope"
+        />
+        <span
+          ><strong>All eligible markets</strong>Ask the backend to resolve the full catalogue.</span
+        >
+      </label>
+    </fieldset>
+
+    @if (catalogue.status === 'loading') {
+      <p class="catalogue-note">Loading market catalogue...</p>
+    } @else if (catalogue.status === 'error') {
+      <div class="catalogue-error" data-testid="markets-error">
+        <span>Unable to load markets.</span>
+        <button type="button" class="retry-button" (click)="reloadMarkets()">Retry</button>
+      </div>
+    } @else if (scopeMode === 'SPECIFIC') {
+      <label class="field market-picker">
+        <span>Markets</span>
+        <select
+          multiple
+          name="scanMarketIds"
+          [(ngModel)]="selectedMarketIds"
+          data-testid="market-select"
+        >
+          @for (market of catalogue.markets; track market.marketId) {
+            <option [value]="market.marketId">{{ market.symbol }} · {{ market.provider }}</option>
+          }
+        </select>
+        <small
+          >{{ selectedMarketIds.length }} selected. Eligibility is resolved by the backend.</small
+        >
+      </label>
+    }
+  }
+
+  <button
+    type="button"
+    class="run-button"
+    data-testid="run-scan-button"
+    [disabled]="!canRun() || (busy$ | async)"
+    (click)="runScan()"
+  >
+    Run market scan
+  </button>
 
   @if (view$ | async; as view) {
     @switch (view.status) {
       @case ('submitting') {
         <div class="state-card" data-testid="scan-submitting">
           <span class="spinner"></span>
-          <p>Starting scan…</p>
+          <p>Starting scan...</p>
         </div>
       }
       @case ('running') {
         <div class="state-card running" data-testid="scan-running">
           <span class="spinner"></span>
-
-          <h3>Scan running — status: {{ view.scan.status }}</h3>
-
+          <h3>Scan running · {{ view.scan.status }}</h3>
           <dl class="progress-grid">
             <div>
               <dt>Candidates</dt>
               <dd>{{ view.scan.progress.totalCandidates }}</dd>
             </div>
-
             <div>
               <dt>Eligible</dt>
               <dd>{{ view.scan.progress.eligible }}</dd>
             </div>
-
             <div>
               <dt>Excluded</dt>
               <dd>{{ view.scan.progress.excluded }}</dd>
             </div>
-
             <div>
               <dt>Running</dt>
               <dd>{{ view.scan.progress.running }}</dd>
             </div>
-
             <div>
               <dt>Completed</dt>
               <dd>{{ view.scan.progress.completed }}</dd>
             </div>
-
             <div>
               <dt>Failed</dt>
               <dd>{{ view.scan.progress.failed }}</dd>
             </div>
+            <div>
+              <dt>Opportunities</dt>
+              <dd>{{ view.scan.progress.opportunitiesFound }}</dd>
+            </div>
           </dl>
-
           <p class="hint">
-            Updated {{ view.scan.updatedAt | date: 'HH:mm:ss' }} — this list refreshes automatically
-            until the scan completes.
+            Updated {{ view.scan.updatedAt | date: 'HH:mm:ss' }}. Results refresh automatically.
           </p>
         </div>
       }
@@ -123,24 +173,20 @@
               }
             }
           </h3>
-
           @if (view.scan.status !== 'COMPLETED_NO_WORK') {
             <dl class="progress-grid">
               <div>
                 <dt>Eligible</dt>
                 <dd>{{ view.scan.progress.eligible }}</dd>
               </div>
-
               <div>
                 <dt>Completed</dt>
                 <dd>{{ view.scan.progress.completed }}</dd>
               </div>
-
               <div>
                 <dt>Failed</dt>
                 <dd>{{ view.scan.progress.failed }}</dd>
               </div>
-
               <div>
                 <dt>Opportunities found</dt>
                 <dd data-testid="opportunities-found">
@@ -148,19 +194,15 @@
                 </dd>
               </div>
             </dl>
-
             @if (view.scan.status === 'COMPLETED' && view.scan.progress.opportunitiesFound === 0) {
               <p class="hint" data-testid="zero-opportunity-note">
-                No setup matched current strategies. This is not an error — the active opportunities
-                list below stays empty until a scan matches one.
+                No setup matched current strategies. This is not an error.
               </p>
             }
-
             @if (view.scan.status === 'FAILED') {
               <p class="hint">The scan could not complete. You can run it again later.</p>
             }
           }
-
           <p class="hint">The active opportunities list has been refreshed.</p>
         </div>
       }
@@ -181,6 +223,103 @@
           </h3>
         </div>
       }
+    }
+
+    @if (scanFromView(view); as scan) {
+      <section class="results" data-testid="scan-results">
+        <div class="results-header">
+          <div>
+            <h3>Per-market results</h3>
+            <p>{{ scan.markets.length }} candidate markets · no ranking applied</p>
+          </div>
+          <label class="result-filter">
+            <span>Show</span>
+            <select name="scanResultFilter" [(ngModel)]="resultFilter" data-testid="result-filter">
+              <option value="ALL">All</option>
+              <option value="OPPORTUNITY">Opportunity produced</option>
+              <option value="NO_OPPORTUNITY">Completed no opportunity</option>
+              <option value="EXCLUDED">Excluded</option>
+              <option value="FAILED">Failed</option>
+              <option value="PROCESSING">Still processing</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Market</th>
+                <th>Eligibility</th>
+                <th>Analysis</th>
+                <th>Outcome</th>
+                <th>Opportunities</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (market of filteredMarkets(scan); track market.scanMarketId) {
+                <tr data-testid="market-result" [attr.data-outcome]="market.outcome">
+                  <td data-label="Market">
+                    <strong>{{ marketLabel(market.marketId) }}</strong>
+                    @if (marketProvider(market.marketId); as provider) {
+                      <small>{{ provider }}</small>
+                    }
+                    <code>{{ market.marketId }}</code>
+                  </td>
+                  <td data-label="Eligibility">
+                    <span class="status-pill" [class.positive]="market.eligible">
+                      {{ market.eligible ? 'Eligible' : 'Excluded' }}
+                    </span>
+                    @for (reason of market.exclusionReasons; track reason) {
+                      <small class="reason">{{ readable(reason) }}</small>
+                    }
+                  </td>
+                  <td data-label="Analysis">
+                    <span>{{ readable(market.analysisStatus ?? 'not_started') }}</span>
+                    @if (market.resultQuality; as quality) {
+                      <small>{{ readable(quality) }} result</small>
+                    }
+                  </td>
+                  <td data-label="Outcome">
+                    <strong>{{ readable(market.outcome ?? 'processing') }}</strong>
+                    @if (market.diagnostic; as diagnostic) {
+                      <small class="diagnostic">{{ diagnostic.message }}</small>
+                    }
+                    @if (market.outcome === 'COMPLETED_NO_OPPORTUNITY') {
+                      <small>No setup matched.</small>
+                    }
+                  </td>
+                  <td data-label="Opportunities">
+                    @if (market.opportunities.length === 0) {
+                      <span class="empty-result">None</span>
+                    } @else {
+                      <div class="opportunity-list">
+                        @for (opportunity of market.opportunities; track opportunity.id) {
+                          <a
+                            class="opportunity-chip"
+                            [routerLink]="['/opportunities', opportunity.id]"
+                            [attr.data-opportunity-id]="opportunity.id"
+                          >
+                            <strong
+                              >{{ opportunity.instrument }} · {{ opportunity.direction }}</strong
+                            >
+                            <span>{{ opportunity.scenario }} · {{ opportunity.timeframe }}</span>
+                            <span>Score {{ opportunity.score }} · {{ opportunity.status }}</span>
+                          </a>
+                        }
+                      </div>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="5" class="empty-table">No market matches this filter.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
     }
   }
 </section>

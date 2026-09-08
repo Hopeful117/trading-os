@@ -88,7 +88,7 @@ public record ActiveScanResponse(
             UUID analysisExecutionId,
             List<MarketEligibilityReason> exclusionReasons,
             DiagnosticResponse diagnostic,
-            OpportunityResponse opportunity,
+            List<OpportunityResponse> opportunities,
             StrategyProvenance strategy
     ) {
         static MarketResponse from(
@@ -105,18 +105,18 @@ public record ActiveScanResponse(
                     market.analysisExecutionId(),
                     market.exclusionReasons(),
                     DiagnosticResponse.from(market.diagnostic()),
-                    market.opportunity() == null ? null : OpportunityResponse.from(market.opportunity()),
-                    strategyProvenance(market.opportunity(), matches)
+                    market.opportunities().stream().map(OpportunityResponse::from).toList(),
+                    strategyProvenance(market.opportunities(), matches)
             );
         }
 
         private static StrategyProvenance strategyProvenance(
-                com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity opportunity,
+                List<com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity> opportunities,
                 StrategyMatchRepository matches) {
-            if (opportunity == null || opportunity.strategyMatchId().isEmpty()) {
+            if (opportunities.size() != 1 || opportunities.getFirst().strategyMatchId().isEmpty()) {
                 return null; // historical pre-0012 rows carry no fabricated attribution
             }
-            return matches.findById(opportunity.strategyMatchId().get())
+            return matches.findById(opportunities.getFirst().strategyMatchId().get())
                     .map(StrategyProvenance::from).orElse(null);
         }
     }

@@ -70,4 +70,17 @@ public final class InMemoryTradingOpportunityRepository implements TradingOpport
                 .flatMap(Optional::stream)
                 .toList();
     }
+
+    @Override
+    public List<TradingOpportunity> findByStrategyMatchIds(Collection<UUID> strategyMatchIds) {
+        if (strategyMatchIds.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> ids = Set.copyOf(strategyMatchIds);
+        return store.values().stream()
+                .filter(history -> !history.isEmpty())
+                .map(history -> mapper.toDomain(history.lastEntry().getValue()))
+                .filter(opportunity -> opportunity.strategyMatchId().filter(ids::contains).isPresent())
+                .toList();
+    }
 }

@@ -35,6 +35,32 @@ class OpportunityEngineTest {
     }
 
     @Test
+    void explicitMatchLineagesRemainDistinctWhenOpportunitiesAreEquivalent() {
+        Observation observation = OpportunityTestFixtures.observation();
+        InMemoryObservationRepository observationStore = new InMemoryObservationRepository();
+        observationStore.save(observation);
+        InMemoryTradingOpportunityRepository opportunities =
+                new InMemoryTradingOpportunityRepository();
+        OpportunityEngine engine = engine(observationStore, opportunities);
+        CreateOpportunityCommand base = OpportunityTestFixtures.command(observation);
+        UUID firstMatchId = UUID.randomUUID();
+        UUID secondMatchId = UUID.randomUUID();
+        UUID firstOpportunityId = UUID.randomUUID();
+        UUID secondOpportunityId = UUID.randomUUID();
+
+        OpportunityCreationResult first = engine.create(command(
+                base, firstMatchId, firstOpportunityId));
+        OpportunityCreationResult second = engine.create(command(
+                base, secondMatchId, secondOpportunityId));
+
+        assertThat(first).isInstanceOf(OpportunityCreationResult.Created.class);
+        assertThat(second).isInstanceOf(OpportunityCreationResult.Created.class);
+        assertThat(first.opportunity().id().value()).isEqualTo(firstOpportunityId);
+        assertThat(second.opportunity().id().value()).isEqualTo(secondOpportunityId);
+        assertThat(opportunities.findAllLatest()).hasSize(2);
+    }
+
+    @Test
     void rejectsUnknownObservationAndSupportsAbsentAi() {
         InMemoryObservationRepository observations = new InMemoryObservationRepository();
         OpportunityEngine engine = engine(
@@ -103,5 +129,26 @@ class OpportunityEngineTest {
                 () -> new OpportunityId(UUID.fromString(
                         "11111111-1111-1111-1111-111111111111")),
                 Clock.fixed(OpportunityTestFixtures.NOW, ZoneOffset.UTC));
+    }
+
+    private CreateOpportunityCommand command(
+            CreateOpportunityCommand base,
+            UUID strategyMatchId,
+            UUID opportunityId
+    ) {
+        return new CreateOpportunityCommand(
+                base.instrument(),
+                base.direction(),
+                base.scenario(),
+                base.timeframe(),
+                base.origin(),
+                base.observations(),
+                base.aiAnalyses(),
+                base.evaluatedAt(),
+                base.validUntil(),
+                strategyMatchId,
+                opportunityId,
+                base.setupSnapshot()
+        );
     }
 }

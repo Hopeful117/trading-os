@@ -59,17 +59,22 @@ public final class OpportunityEngine {
         OpportunityIdentity identity = new OpportunityIdentity(
                 command.instrument(), command.direction(), command.scenario(),
                 command.timeframe(), fused.observations());
-        TradingOpportunity equivalent = opportunities.findEquivalentCandidates(
-                        command.instrument(), command.direction(), command.scenario(),
-                        command.timeframe(),
-                        command.evaluatedAt().minus(deduplication.equivalenceWindow())).stream()
-                .filter(item -> deduplication.equivalent(identity, item, command.evaluatedAt()))
-                .max(Comparator.comparing(item -> item.version().value()))
-                .orElse(null);
+        OpportunityId requestedLineageId = command.opportunityId() == null
+                ? null
+                : new OpportunityId(command.opportunityId());
+        TradingOpportunity equivalent = requestedLineageId == null
+                ? opportunities.findEquivalentCandidates(
+                                command.instrument(), command.direction(), command.scenario(),
+                                command.timeframe(),
+                                command.evaluatedAt().minus(deduplication.equivalenceWindow())).stream()
+                        .filter(item -> deduplication.equivalent(identity, item, command.evaluatedAt()))
+                        .max(Comparator.comparing(item -> item.version().value()))
+                        .orElse(null)
+                : opportunities.findLatest(requestedLineageId).orElse(null);
         if (equivalent == null) {
-            OpportunityId lineageId = command.opportunityId() != null
-                    ? new OpportunityId(command.opportunityId())
-                    : identifiers.next();
+            OpportunityId lineageId = requestedLineageId == null
+                    ? identifiers.next()
+                    : requestedLineageId;
             TradingOpportunity created = builder.create(
                     lineageId, command, fused, clock.instant());
             return new OpportunityCreationResult.Created(opportunities.append(created));

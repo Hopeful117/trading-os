@@ -53,10 +53,11 @@ public record ActiveScanResultProjection(
             AnalysisResultQuality resultQuality,
             ActiveScanMarketOutcome outcome,
             Diagnostic diagnostic,
-            TradingOpportunity opportunity
+            List<TradingOpportunity> opportunities
     ) {
         public MarketResult {
             exclusionReasons = List.copyOf(exclusionReasons);
+            opportunities = List.copyOf(opportunities);
         }
     }
 

@@ -12,11 +12,18 @@ import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.IntelligenceExecutionStatus;
 import com.hope.trading.market_intelligence.domain.execution.*;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityFactory;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityScore;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityStatus;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityVersion;
 import com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity;
 import com.hope.trading.market_intelligence.domain.scan.*;
 import com.hope.trading.market_intelligence.domain.scope.MarketEligibilityReason;
+import com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository;
+import com.hope.trading.market_intelligence.strategy.domain.MatchedDirection;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyId;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -26,6 +33,9 @@ import java.time.ZoneOffset;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ActiveScanReconciliationServiceTest {
     private final Instant now = Instant.parse("2026-08-21T10:00:00Z");
@@ -34,13 +44,20 @@ class ActiveScanReconciliationServiceTest {
     private final InMemoryAnalysisExecutionRepository executions = new InMemoryAnalysisExecutionRepository();
     private final InMemoryPipelineRunRepository pipelineRuns = new InMemoryPipelineRunRepository();
     private final InMemoryTradingOpportunityRepository opportunities = new InMemoryTradingOpportunityRepository();
+    private final StrategyMatchRepository strategyMatches = mock(StrategyMatchRepository.class);
     private final ActiveScanReconciliationService service = new ActiveScanReconciliationService(
             scans,
             executions,
             pipelineRuns,
             opportunities,
+            strategyMatches,
             clock
     );
+
+    @BeforeEach
+    void defaultToNoStrategyMatches() {
+        when(strategyMatches.findByAnalysisExecutionId(any())).thenReturn(List.of());
+    }
 
     @Test
     void completedNoWorkRemainsTerminalAndExcludedMarketVisible() {
@@ -140,7 +157,7 @@ class ActiveScanReconciliationServiceTest {
         assertThat(projection.markets()).singleElement()
                 .satisfies(result -> {
                     assertThat(result.outcome()).isEqualTo(ActiveScanMarketOutcome.COMPLETED_NO_OPPORTUNITY);
-                    assertThat(result.opportunity()).isNull();
+                    assertThat(result.opportunities()).isEmpty();
                 });
     }
 
@@ -178,9 +195,47 @@ class ActiveScanReconciliationServiceTest {
         assertThat(projection.markets()).singleElement()
                 .satisfies(result -> {
                     assertThat(result.outcome()).isEqualTo(ActiveScanMarketOutcome.OPPORTUNITY_FOUND);
-                    assertThat(result.opportunity()).isNotNull();
-                    assertThat(result.opportunity().score().value()).isEqualByComparingTo("82.50");
+                    assertThat(result.opportunities()).singleElement()
+                            .extracting(value -> value.score().value())
+                            .isEqualTo(new BigDecimal("82.50"));
                 });
+    }
+
+    @Test
+    void completedExecutionProjectsEveryOpportunityFromStrategyMatchLineage() {
+        AnalysisExecution execution = completedExecution(
+                IntelligenceExecutionStatus.COMPLETE,
+                AnalysisResultQuality.COMPLETE
+        );
+        ScanFixture fixture = persistSingleEligibleScan(ActiveScanStatus.RUNNING, execution);
+        StrategyMatch firstMatch = strategyMatch(UUID.randomUUID(), execution);
+        StrategyMatch secondMatch = strategyMatch(UUID.randomUUID(), execution);
+        when(strategyMatches.findByAnalysisExecutionId(execution.executionId()))
+                .thenReturn(List.of(firstMatch, secondMatch));
+        TradingOpportunity first = opportunity(firstMatch.matchId(), "73.25");
+        TradingOpportunity second = opportunity(secondMatch.matchId(), "86.75");
+        opportunities.append(first);
+        opportunities.append(second);
+        pipelineRuns.put(new AnalysisPipelineRunView(
+                execution.executionId(),
+                ProductionIntelligencePipeline.VERSION,
+                "COMPLETED",
+                null,
+                null,
+                null,
+                null,
+                now
+        ));
+
+        ActiveScanResultProjection projection = service.reconcileOwned(fixture.actorId, fixture.scanId);
+
+        assertThat(projection.status()).isEqualTo(ActiveScanStatus.COMPLETED);
+        assertThat(projection.progress().opportunitiesFound()).isEqualTo(2);
+        assertThat(projection.markets()).singleElement().satisfies(result -> {
+            assertThat(result.outcome()).isEqualTo(ActiveScanMarketOutcome.OPPORTUNITY_FOUND);
+            assertThat(result.opportunities()).extracting(value -> value.id().value())
+                    .containsExactlyInAnyOrder(first.id().value(), second.id().value());
+        });
     }
 
     @Test
@@ -288,6 +343,47 @@ class ActiveScanReconciliationServiceTest {
     private ActiveScanScopeSnapshot snapshot(List<ActiveScanDecisionSnapshot> decisions, List<UUID> effective) {
         List<UUID> markets = decisions.stream().map(ActiveScanDecisionSnapshot::marketId).toList();
         return new ActiveScanScopeSnapshot(markets, markets, decisions, effective, now);
+    }
+
+    private StrategyMatch strategyMatch(UUID matchId, AnalysisExecution execution) {
+        return StrategyMatch.rehydrate(
+                matchId,
+                new StrategyId(UUID.randomUUID()),
+                1,
+                execution.provenance().marketId(),
+                execution.executionId(),
+                UUID.randomUUID(),
+                MatchedDirection.LONG,
+                "digest-" + matchId,
+                List.of(),
+                now,
+                now
+        );
+    }
+
+    private TradingOpportunity opportunity(UUID strategyMatchId, String score) {
+        return new OpportunityFactory().create(
+                new OpportunityId(UUID.randomUUID()),
+                new OpportunityVersion(1),
+                OpportunityStatus.ACTIVE,
+                "BTC/EUR",
+                com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection.LONG,
+                "Bullish breakout",
+                "5m",
+                com.hope.trading.market_intelligence.domain.opportunity.OpportunityType.SCALPING,
+                com.hope.trading.market_intelligence.domain.opportunity.OpportunityOrigin.PASSIVE_SCAN,
+                new OpportunityScore(new BigDecimal(score)),
+                "Confirmed",
+                Set.of(new com.hope.trading.market_intelligence.domain.opportunity.ObservationReference(
+                        UUID.randomUUID())),
+                Set.of(),
+                now,
+                now,
+                now.plusSeconds(300),
+                now,
+                strategyMatchId,
+                null
+        );
     }
 
     private AnalysisExecution requestedExecution() {
