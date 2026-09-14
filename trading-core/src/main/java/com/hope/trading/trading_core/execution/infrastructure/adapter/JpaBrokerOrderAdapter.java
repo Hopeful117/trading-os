@@ -13,16 +13,27 @@ import java.util.*;
 @Transactional
 public class JpaBrokerOrderAdapter implements BrokerOrderRepositoryPort {
     private final JpaBrokerOrderRepository repository;
+    private final JpaBrokerFillRepository fillRepository;
     private final BrokerOrderMapper mapper=new BrokerOrderMapper();
-    public JpaBrokerOrderAdapter(JpaBrokerOrderRepository repository){this.repository=repository;}
+    public JpaBrokerOrderAdapter(JpaBrokerOrderRepository repository, JpaBrokerFillRepository fillRepository){
+        this.repository=repository; this.fillRepository=fillRepository;
+    }
     @Override public BrokerOrder save(BrokerOrder order){
         BrokerOrderEntity entity=repository.findById(order.id().value()).orElseGet(BrokerOrderEntity::new);
-        return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(order,entity)));
+        BrokerOrderEntity saved = repository.saveAndFlush(mapper.toEntity(order,entity));
+        fillRepository.deleteAllByBrokerOrderId(order.id().value());
+        fillRepository.saveAll(order.fills().stream()
+                .map(fill -> mapper.toEntity(fill, order.id().value())).toList());
+        fillRepository.flush();
+        return mapper.toDomain(saved,
+                fillRepository.findAllByBrokerOrderIdOrderByExecutedAtAsc(order.id().value()));
     }
     @Override @Transactional(readOnly=true) public Optional<BrokerOrder> findById(BrokerOrderId id){
-        return repository.findById(id.value()).map(mapper::toDomain);
+        return repository.findById(id.value()).map(entity -> mapper.toDomain(entity,
+                fillRepository.findAllByBrokerOrderIdOrderByExecutedAtAsc(id.value())));
     }
     @Override @Transactional(readOnly=true) public Optional<BrokerOrder> findByIntentId(ExecutionIntentId id){
-        return repository.findByIntentId(id.value()).map(mapper::toDomain);
+        return repository.findByIntentId(id.value()).map(entity -> mapper.toDomain(entity,
+                fillRepository.findAllByBrokerOrderIdOrderByExecutedAtAsc(entity.id)));
     }
 }
