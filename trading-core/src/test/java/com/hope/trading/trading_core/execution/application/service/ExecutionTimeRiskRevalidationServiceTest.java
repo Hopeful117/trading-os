@@ -16,6 +16,7 @@ import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersist
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.model.Account;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -42,7 +43,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
     private final RequiredMarginPort requiredMargins = mock(RequiredMarginPort.class);
     private final RiskPersistence persistence = mock(RiskPersistence.class);
     private final PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
-    private final ExecutionLifecycleService lifecycle = new ExecutionLifecycleService();
+    private final ExecutionLifecycleService lifecycle = mock(ExecutionLifecycleService.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-08-01T12:00:00Z"), ZoneOffset.UTC);
 
     private ExecutionTimeRiskRevalidationService service;
@@ -94,6 +95,56 @@ class ExecutionTimeRiskRevalidationServiceTest {
         // When/Then: should not throw
         // Note: full integration test requires more mocking; this verifies construction
         assertThat(service).isInstanceOf(ExecutionTimeRiskRevalidationService.class);
+    }
+
+    @Test
+    void unavailableT1PersistsTradePlanFinancialAccountIdNotBrokerRoutingId() {
+        UUID financialAccountId = UUID.randomUUID();
+        UUID routingAccountId = intent.brokerAccountId();
+        UUID ownerId = intent.initiatorId();
+        when(transactionManager.getTransaction(any())).thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
+        when(tradePlans.load(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
+                tradePlanId, 1, "ACCEPTED", now, UUID.randomUUID(), 1, now, ownerId,
+                financialAccountId, "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1,
+                "BTC/USD", "LONG", new com.hope.trading.trading_core.shared.domain.model.EntryIntent(
+                        com.hope.trading.trading_core.shared.domain.model.EntryIntent.OrderType.MARKET,
+                        BigDecimal.ONE), BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE, "USD", "{}"));
+        when(accounts.findById(financialAccountId)).thenReturn(Optional.empty());
+
+        service.evaluateAndPersist(intent, now);
+
+        verify(persistence).t1Evaluation(any(), eq(intent.id().value()), eq(evaluationId),
+                eq(financialAccountId), any(), eq("CONTEXT_UNAVAILABLE"), isNull(),
+                eq("ACCOUNT_NOT_FOUND"), eq(1), any(), any(), any());
+        assertThat(financialAccountId).isNotEqualTo(routingAccountId);
+    }
+
+    @Test
+    void t1RejectsCanonicalBrokerRelationMismatch() {
+        UUID relationBrokerId = UUID.randomUUID();
+        UUID ownerId = intent.initiatorId();
+        Account account = com.hope.trading.trading_core.model.Account.builder()
+                .accountId(accountId).brokerAccountId(relationBrokerId)
+                .user(com.hope.trading.trading_core.model.User.builder().userId(ownerId).build())
+                .name("paper").baseCurrency("USD").build();
+        when(tradePlans.load(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
+                tradePlanId, 1, "ACCEPTED", now, UUID.randomUUID(), 1, now, ownerId,
+                accountId, "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1,
+                "BTC/USD", "LONG", new com.hope.trading.trading_core.shared.domain.model.EntryIntent(
+                        com.hope.trading.trading_core.shared.domain.model.EntryIntent.OrderType.MARKET,
+                        BigDecimal.ONE), BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE, "USD", "{}"));
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                accountId, relationBrokerId, "UTC", "USD", UUID.randomUUID())));
+
+        service.evaluateAndPersist(intent, now);
+
+        verify(persistence).t1Evaluation(any(), eq(intent.id().value()), eq(evaluationId), eq(accountId),
+                any(), eq("CONTEXT_UNAVAILABLE"), isNull(), eq("BROKER_ACCOUNT_MAPPING_INVALID"),
+                eq(1), any(), any(), any());
+        verify(brokerAccounts, never()).findByIdAndOwnerId(any(), any());
     }
 
     @Test

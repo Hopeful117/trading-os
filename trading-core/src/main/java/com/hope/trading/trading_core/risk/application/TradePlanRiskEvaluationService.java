@@ -24,9 +24,10 @@ import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Comma
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Reason;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Response;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Trace;
-import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
+import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
+import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import java.math.BigDecimal;
@@ -41,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -52,7 +54,7 @@ public class TradePlanRiskEvaluationService {
     private final AccountRepository accounts;
     private final BrokerAccountRepository brokerAccounts;
     private final TradePlanRiskPort tradePlans;
-    private final BrokerRiskFactsPort broker;
+    private final RiskFactsProvider facts;
     private final MarketValuationPort market;
     private final RequiredMarginPort requiredMargins;
     private final RiskPersistence persistence;
@@ -62,8 +64,9 @@ public class TradePlanRiskEvaluationService {
     private final RiskProfileValidator riskProfileValidator;
     private final TransactionTemplate transactions;
 
+    @Autowired
     public TradePlanRiskEvaluationService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
-                                          TradePlanRiskPort tradePlans, BrokerRiskFactsPort broker,
+                                           TradePlanRiskPort tradePlans, RiskFactsProvider facts,
                                            MarketValuationPort market, RequiredMarginPort requiredMargins,
                                            RiskPersistence persistence, Clock clock,
                                            RiskAcknowledgmentDeliveryService acknowledgmentDelivery,
@@ -72,7 +75,7 @@ public class TradePlanRiskEvaluationService {
         this.accounts = accounts;
         this.brokerAccounts = brokerAccounts;
         this.tradePlans = tradePlans;
-        this.broker = broker;
+        this.facts = facts;
         this.market = market;
         this.requiredMargins = requiredMargins;
         this.persistence = persistence;
@@ -81,6 +84,20 @@ public class TradePlanRiskEvaluationService {
         this.riskProfileValidator = riskProfileValidator;
         this.transactions = new TransactionTemplate(transactionManager);
         this.engine = RiskEngines.standard(ENGINE_VERSION, clock);
+    }
+
+    /** Compatibility constructor for focused unit tests that provide only LIVE facts. */
+    public TradePlanRiskEvaluationService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
+                                           TradePlanRiskPort tradePlans, BrokerRiskFactsPort broker,
+                                           MarketValuationPort market, RequiredMarginPort requiredMargins,
+                                           RiskPersistence persistence, Clock clock,
+                                           RiskAcknowledgmentDeliveryService acknowledgmentDelivery,
+                                           RiskProfileValidator riskProfileValidator,
+                                           PlatformTransactionManager transactionManager) {
+        this(accounts, brokerAccounts, tradePlans,
+                (account, brokerAccount, sourceId, from, to) -> RiskFactsProvider.fromBroker(broker.load(sourceId, from, to)),
+                market, requiredMargins, persistence, clock, acknowledgmentDelivery,
+                riskProfileValidator, transactionManager);
     }
 
     public Response evaluate(Command command) {
@@ -131,8 +148,12 @@ public class TradePlanRiskEvaluationService {
         var configuration = persistence.configuration(command.accountId())
                 .orElseThrow(() -> unavailable("ACCOUNT_RISK_CONFIGURATION_MISSING"));
         validateConfiguration(configuration);
-        brokerAccounts.findByIdAndOwnerId(configuration.brokerAccountId(), command.actorId())
+        if (account.getBrokerAccountId() == null || !account.getBrokerAccountId().equals(configuration.brokerAccountId()))
+            throw unavailable("BROKER_ACCOUNT_MAPPING_INVALID");
+        var brokerAccount = brokerAccounts.findByIdAndOwnerId(account.getBrokerAccountId(), command.actorId())
                 .orElseThrow(() -> unavailable("BROKER_ACCOUNT_MAPPING_INVALID"));
+        if (account.getBroker() != null && !account.getBroker().equalsIgnoreCase(brokerAccount.provider().name()))
+            throw unavailable("BROKER_ACCOUNT_MAPPING_INVALID");
         var profile = persistence.assignedProfile(command.accountId())
                 .orElseThrow(() -> unavailable("EFFECTIVE_RISK_PROFILE_MISSING"));
          EffectiveRiskRuleSet rules;
@@ -145,8 +166,9 @@ public class TradePlanRiskEvaluationService {
         TradePlanRiskPort.Snapshot plan = tradePlans.load(command.tradePlanId(), command.tradePlanVersion());
         validatePlan(command, plan, configuration.reportingCurrency());
         RiskDay riskDay = RiskDay.containing(command.requestedAt(), configuration.riskTimeZone());
-        BrokerRiskFactsPort.Snapshot brokerSnapshot = broker.load(configuration.brokerAccountId(),
-                riskDay.startsAt(), riskDay.endsAt());
+        RiskFactsProvider.Snapshot brokerSnapshot = facts.load(account, brokerAccount,
+                 brokerAccount.id(),
+                 riskDay.startsAt(), riskDay.endsAt());
         requireBroker(brokerSnapshot, riskDay);
 
         String currency = configuration.reportingCurrency();
@@ -189,7 +211,7 @@ public class TradePlanRiskEvaluationService {
         BigDecimal notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
         BigDecimal expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
-                        configuration.brokerAccountId(), plan.instrument(), plan.direction(), plan.quantity(),
+                        brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
                         plan.entryIntent().price(), brokerSnapshot.observedAt()))
                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
         BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
@@ -303,12 +325,14 @@ public class TradePlanRiskEvaluationService {
             throw unavailable("TRADE_PLAN_SIZING_CURRENCY_MISMATCH");
     }
 
-    private void requireBroker(BrokerRiskFactsPort.Snapshot snapshot, RiskDay riskDay) {
+    private void requireBroker(RiskFactsProvider.Snapshot snapshot, RiskDay riskDay) {
         if (!snapshot.complete() || snapshot.account() == null || snapshot.sourceVersion() < 1
                 || snapshot.observedAt() == null || !riskDay.contains(snapshot.observedAt())
                 || snapshot.assetBalances() == null || snapshot.positions() == null
                 || snapshot.closedTrades() == null || snapshot.ledgerEntries() == null) {
-            throw unavailable("BROKER_RISK_FACTS_INCOMPLETE");
+            String reason = snapshot.unavailabilityReasons() == null || snapshot.unavailabilityReasons().isEmpty()
+                    ? "BROKER_RISK_FACTS_INCOMPLETE" : snapshot.unavailabilityReasons().get(0);
+            throw unavailable(reason);
         }
         if (snapshot.closedTrades().stream().anyMatch(t -> t == null || t.closedAt() == null
                 || !riskDay.contains(t.closedAt()) || t.closedAt().isAfter(snapshot.observedAt()))
@@ -318,15 +342,15 @@ public class TradePlanRiskEvaluationService {
         }
     }
 
-    static Map<String, BigDecimal> reconstructStartBalances(BrokerRiskFactsPort.Snapshot snapshot, RiskDay day) {
+    static Map<String, BigDecimal> reconstructStartBalances(RiskFactsProvider.Snapshot snapshot, RiskDay day) {
         Map<String, BigDecimal> balances = new LinkedHashMap<>(snapshot.assetBalances());
-        Map<String, List<BrokerRiskFactsPort.LedgerEntry>> entriesByAsset = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, List<RiskFactsProvider.LedgerEntry>> entriesByAsset = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (var entry : snapshot.ledgerEntries()) {
             if (entry == null || entry.occurredAt() == null || !day.contains(entry.occurredAt())
                     || entry.occurredAt().isAfter(snapshot.observedAt()) || blank(entry.asset())
                     || entry.amount() == null || entry.fee() == null || entry.balance() == null)
                 throw unavailable("LEDGER_INTERVAL_INCOMPLETE");
-            if (entry.providerLedgerReference() == null || entry.providerLedgerReference().isBlank())
+            if (entry.sourceLedgerReference() == null || entry.sourceLedgerReference().isBlank())
                 throw unavailable("LEDGER_PROVENANCE_INCOMPLETE");
             if (entry.fee().signum() < 0) throw unavailable("LEDGER_FEE_INVALID");
             entriesByAsset.computeIfAbsent(entry.asset(), ignored -> new ArrayList<>()).add(entry);
@@ -334,9 +358,9 @@ public class TradePlanRiskEvaluationService {
         for (var assetEntries : entriesByAsset.entrySet()) {
             String balanceAsset = balances.keySet().stream().filter(asset -> asset.equalsIgnoreCase(assetEntries.getKey()))
                     .findFirst().orElseThrow(() -> unavailable("LEDGER_ASSET_BALANCE_MISSING"));
-            List<BrokerRiskFactsPort.LedgerEntry> entries = assetEntries.getValue();
-            entries.sort(Comparator.comparing(BrokerRiskFactsPort.LedgerEntry::occurredAt)
-                    .thenComparing(BrokerRiskFactsPort.LedgerEntry::providerLedgerReference));
+            List<RiskFactsProvider.LedgerEntry> entries = assetEntries.getValue();
+            entries.sort(Comparator.comparing(RiskFactsProvider.LedgerEntry::occurredAt)
+                    .thenComparing(RiskFactsProvider.LedgerEntry::sourceLedgerReference));
             for (int index = 1; index < entries.size(); index++) {
                 var previous = entries.get(index - 1);
                 var current = entries.get(index);
@@ -353,7 +377,11 @@ public class TradePlanRiskEvaluationService {
         return Map.copyOf(balances);
     }
 
-    private ClosedPnl closedPnl(BrokerRiskFactsPort.Snapshot snapshot, String currency, RiskDay riskDay) {
+    static Map<String, BigDecimal> reconstructStartBalances(BrokerRiskFactsPort.Snapshot snapshot, RiskDay day) {
+        return reconstructStartBalances(RiskFactsProvider.fromBroker(snapshot), day);
+    }
+
+    private ClosedPnl closedPnl(RiskFactsProvider.Snapshot snapshot, String currency, RiskDay riskDay) {
         BigDecimal total = BigDecimal.ZERO;
         List<String> payloads = new ArrayList<>();
         for (var trade : snapshot.closedTrades()) {
@@ -371,7 +399,7 @@ public class TradePlanRiskEvaluationService {
         return new ClosedPnl(total, List.copyOf(payloads));
     }
 
-    private List<PositionSnapshot> positions(List<BrokerRiskFactsPort.Position> brokerPositions,
+    private List<PositionSnapshot> positions(List<RiskFactsProvider.Position> brokerPositions,
                                              MarketValuationPort.Snapshot valuation, String currency,
                                              BigDecimal marginConversionRate) {
         List<PositionSnapshot> result = new ArrayList<>();
@@ -387,7 +415,7 @@ public class TradePlanRiskEvaluationService {
                     || stop.quantity().signum() <= 0 || stop.stopPrice() == null || stop.stopPrice().signum() <= 0)) {
                 throw unavailable("POSITION_PROTECTION_INCOMPLETE");
             }
-            BigDecimal protectedTotal = position.protectiveStops().stream().map(BrokerRiskFactsPort.Stop::quantity)
+            BigDecimal protectedTotal = position.protectiveStops().stream().map(RiskFactsProvider.Stop::quantity)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (protectedTotal.compareTo(position.signedQuantity().abs()) != 0)
                 throw unavailable("POSITION_PROTECTION_AMBIGUOUS");
@@ -446,7 +474,7 @@ public class TradePlanRiskEvaluationService {
     }
 
     private static String instrumentName(String factId, TradePlanRiskPort.Snapshot plan,
-                                         BrokerRiskFactsPort.Snapshot broker) {
+                                         RiskFactsProvider.Snapshot broker) {
         if ("proposed".equals(factId)) return plan.instrument().toUpperCase();
         if (factId.startsWith("position:")) {
             UUID id = UUID.fromString(factId.substring("position:".length()));

@@ -30,6 +30,7 @@ import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Trace
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
+import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationException;
@@ -54,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class ExecutionTimeRiskRevalidationService {
@@ -62,7 +64,7 @@ public class ExecutionTimeRiskRevalidationService {
     private final AccountRepository accounts;
     private final BrokerAccountRepository brokerAccounts;
     private final TradePlanRiskPort tradePlans;
-    private final BrokerRiskFactsPort broker;
+    private final RiskFactsProvider facts;
     private final MarketValuationPort market;
     private final RequiredMarginPort requiredMargins;
     private final RiskPersistence persistence;
@@ -73,10 +75,11 @@ public class ExecutionTimeRiskRevalidationService {
 
     private final ExecutionLifecycleService lifecycle;
 
+    @Autowired
     public ExecutionTimeRiskRevalidationService(AccountRepository accounts,
                                                 BrokerAccountRepository brokerAccounts,
                                                 TradePlanRiskPort tradePlans,
-                                                BrokerRiskFactsPort broker,
+                                                 RiskFactsProvider facts,
                                                 MarketValuationPort market,
                                                 RequiredMarginPort requiredMargins,
                                                  RiskPersistence persistence,
@@ -87,7 +90,7 @@ public class ExecutionTimeRiskRevalidationService {
         this.accounts = accounts;
         this.brokerAccounts = brokerAccounts;
         this.tradePlans = tradePlans;
-        this.broker = broker;
+        this.facts = facts;
         this.market = market;
         this.requiredMargins = requiredMargins;
         this.persistence = persistence;
@@ -96,6 +99,24 @@ public class ExecutionTimeRiskRevalidationService {
         this.engine = RiskEngines.standard(ENGINE_VERSION, clock);
         this.transactions = new TransactionTemplate(transactionManager);
         this.riskProfileValidator = riskProfileValidator;
+    }
+
+    /** Compatibility constructor for focused unit tests that provide only LIVE facts. */
+    public ExecutionTimeRiskRevalidationService(AccountRepository accounts,
+                                                BrokerAccountRepository brokerAccounts,
+                                                TradePlanRiskPort tradePlans,
+                                                BrokerRiskFactsPort broker,
+                                                MarketValuationPort market,
+                                                RequiredMarginPort requiredMargins,
+                                                RiskPersistence persistence,
+                                                Clock clock,
+                                                PlatformTransactionManager transactionManager,
+                                                ExecutionLifecycleService lifecycle,
+                                                RiskProfileValidator riskProfileValidator) {
+        this(accounts, brokerAccounts, tradePlans,
+                (account, brokerAccount, sourceId, from, to) -> RiskFactsProvider.fromBroker(broker.load(sourceId, from, to)),
+                market, requiredMargins, persistence, clock, transactionManager, lifecycle,
+                riskProfileValidator);
     }
 
     public record T1Outcome(UUID t1EvaluationId, RiskDecision decision, String reasonCode, boolean approved) {}
@@ -107,19 +128,25 @@ public class ExecutionTimeRiskRevalidationService {
     private T1Outcome evaluateOfficial(ExecutionIntent intent, Instant now) {
         UUID t1EvaluationId = UUID.randomUUID();
         UUID correlationId = UUID.randomUUID();
+        UUID accountId = null;
 
         try {
-            return evaluateAvailable(intent, t1EvaluationId, correlationId, now);
+            var planRef = intent.tradePlan();
+            var plan = tradePlans.load(planRef.tradePlanId(), planRef.version());
+            accountId = plan.tradingAccountId();
+            return evaluateAvailable(intent, plan, t1EvaluationId, correlationId, now);
         } catch (ContextUnavailable unavailable) {
-            return persistUnavailableAndTransition(intent, t1EvaluationId, correlationId, unavailable.code, unavailable.getMessage(), now);
+            return persistUnavailableAndTransition(intent, accountId, t1EvaluationId, correlationId,
+                    unavailable.code, unavailable.getMessage(), now);
         } catch (RuntimeException dependencyFailure) {
-            return persistUnavailableAndTransition(intent, t1EvaluationId, correlationId, "DEPENDENCY_UNAVAILABLE",
-                    "A required risk-context dependency is unavailable", now);
+            return persistUnavailableAndTransition(intent, accountId, t1EvaluationId, correlationId,
+                    "DEPENDENCY_UNAVAILABLE", "A required risk-context dependency is unavailable", now);
         }
     }
 
-    private T1Outcome evaluateAvailable(ExecutionIntent intent, UUID t1EvaluationId, UUID correlationId, Instant now) {
-        UUID accountId = intent.brokerAccountId();
+    private T1Outcome evaluateAvailable(ExecutionIntent intent, TradePlanRiskPort.Snapshot plan,
+                                        UUID t1EvaluationId, UUID correlationId, Instant now) {
+        UUID accountId = plan.tradingAccountId();
         var account = accounts.findById(accountId)
                 .orElseThrow(() -> unavailable("ACCOUNT_NOT_FOUND"));
         if (account.getUser() == null || !account.getUser().getUserId().equals(intent.initiatorId())) {
@@ -129,8 +156,13 @@ public class ExecutionTimeRiskRevalidationService {
         var configuration = persistence.configuration(accountId)
                 .orElseThrow(() -> unavailable("ACCOUNT_RISK_CONFIGURATION_MISSING"));
         validateConfiguration(configuration);
-        brokerAccounts.findByIdAndOwnerId(configuration.brokerAccountId(), intent.initiatorId())
+        if (account.getBrokerAccountId() == null || !account.getBrokerAccountId().equals(intent.brokerAccountId())
+                || !account.getBrokerAccountId().equals(configuration.brokerAccountId()))
+            throw unavailable("BROKER_ACCOUNT_MAPPING_INVALID");
+        var brokerAccount = brokerAccounts.findByIdAndOwnerId(account.getBrokerAccountId(), intent.initiatorId())
                 .orElseThrow(() -> unavailable("BROKER_ACCOUNT_MAPPING_INVALID"));
+        if (account.getBroker() != null && !account.getBroker().equalsIgnoreCase(brokerAccount.provider().name()))
+            throw unavailable("BROKER_ACCOUNT_MAPPING_INVALID");
         var profile = persistence.assignedProfile(accountId)
                 .orElseThrow(() -> unavailable("EFFECTIVE_RISK_PROFILE_MISSING"));
          EffectiveRiskRuleSet rules;
@@ -140,13 +172,12 @@ public class ExecutionTimeRiskRevalidationService {
              throw unavailable(invalid.code());
          }
 
-        var tradePlanRef = intent.tradePlan();
-        TradePlanRiskPort.Snapshot plan = tradePlans.load(tradePlanRef.tradePlanId(), tradePlanRef.version());
-        validatePlan(intent, plan, configuration.reportingCurrency());
+        validatePlan(intent, accountId, plan, configuration.reportingCurrency());
 
         RiskDay riskDay = RiskDay.containing(now, configuration.riskTimeZone());
-        BrokerRiskFactsPort.Snapshot brokerSnapshot = broker.load(configuration.brokerAccountId(),
-                riskDay.startsAt(), riskDay.endsAt());
+        RiskFactsProvider.Snapshot brokerSnapshot = facts.load(account, brokerAccount,
+                 brokerAccount.id(),
+                 riskDay.startsAt(), riskDay.endsAt());
         requireBroker(brokerSnapshot, riskDay);
 
         String currency = configuration.reportingCurrency();
@@ -189,7 +220,7 @@ public class ExecutionTimeRiskRevalidationService {
         BigDecimal notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
         BigDecimal expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
-                        configuration.brokerAccountId(), plan.instrument(), plan.direction(), plan.quantity(),
+                        brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
                         plan.entryIntent().price(), brokerSnapshot.observedAt()))
                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
         BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
@@ -271,17 +302,28 @@ public class ExecutionTimeRiskRevalidationService {
         return new T1Outcome(t1EvaluationId, null, "RISK_EVALUATION_INCOMPLETE", false);
     }
 
-    private T1Outcome persistUnavailableAndTransition(ExecutionIntent intent, UUID t1EvaluationId, UUID correlationId,
+    private T1Outcome persistUnavailableAndTransition(ExecutionIntent intent, UUID accountId,
+                                                      UUID t1EvaluationId, UUID correlationId,
                                                       String code, String message, Instant now) {
+        UUID persistedAccountId = accountId == null ? resolveTradePlanAccountId(intent) : accountId;
         Response response = new Response(t1EvaluationId, intent.tradePlan().tradePlanId(),
-                intent.tradePlan().version(), intent.brokerAccountId(), "CONTEXT_UNAVAILABLE", null, false,
+                intent.tradePlan().version(), persistedAccountId, "CONTEXT_UNAVAILABLE", null, false,
                 List.of(new Reason(code, null, "BLOCKING", message, Map.of())), List.of(), Map.of(), now,
                 new Trace(correlationId, ENGINE_VERSION, Map.of(), Map.of(), Map.of()));
         persistence.t1Evaluation(t1EvaluationId, intent.id().value(), intent.riskApproval().evaluationId(),
-                intent.brokerAccountId(), now, "CONTEXT_UNAVAILABLE", null, code,
+                persistedAccountId, now, "CONTEXT_UNAVAILABLE", null, code,
                 1, response, persistence.write(response), now);
         lifecycle.riskUnavailable(intent, t1EvaluationId, code, now);
         return new T1Outcome(t1EvaluationId, null, code, false);
+    }
+
+    private UUID resolveTradePlanAccountId(ExecutionIntent intent) {
+        try {
+            var reference = intent.tradePlan();
+            return tradePlans.load(reference.tradePlanId(), reference.version()).tradingAccountId();
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private void validateConfiguration(RiskPersistence.AccountConfiguration configuration) {
@@ -292,13 +334,14 @@ public class ExecutionTimeRiskRevalidationService {
         }
     }
 
-    private void validatePlan(ExecutionIntent intent, TradePlanRiskPort.Snapshot plan, String reportingCurrency) {
+    private void validatePlan(ExecutionIntent intent, UUID accountId, TradePlanRiskPort.Snapshot plan,
+                              String reportingCurrency) {
         if (!intent.tradePlan().tradePlanId().equals(plan.tradePlanId())
                 || intent.tradePlan().version() != plan.tradePlanVersion()) {
             throw new RiskEvaluationException("TRADE_PLAN_VERSION_MISMATCH", "Trade Plan version mismatch", 409);
         }
         if (!"ACCEPTED".equals(plan.status())) throw new RiskEvaluationException("TRADE_PLAN_NOT_ACCEPTED", "Trade Plan is not accepted", 422);
-        if (!intent.initiatorId().equals(plan.ownerId()) || !intent.brokerAccountId().equals(plan.tradingAccountId()))
+        if (!intent.initiatorId().equals(plan.ownerId()) || !accountId.equals(plan.tradingAccountId()))
             throw new RiskEvaluationException("TRADE_PLAN_FORBIDDEN", "Trade Plan ownership does not match account", 403);
         if (plan.sourcePayload() == null || plan.contextId() == null || plan.contextVersion() < 1)
             throw unavailable("TRADE_PLAN_PROVENANCE_INCOMPLETE");
@@ -310,12 +353,14 @@ public class ExecutionTimeRiskRevalidationService {
             throw unavailable("TRADE_PLAN_SIZING_CURRENCY_MISMATCH");
     }
 
-    private void requireBroker(BrokerRiskFactsPort.Snapshot snapshot, RiskDay riskDay) {
+    private void requireBroker(RiskFactsProvider.Snapshot snapshot, RiskDay riskDay) {
         if (!snapshot.complete() || snapshot.account() == null || snapshot.sourceVersion() < 1
                 || snapshot.observedAt() == null || !riskDay.contains(snapshot.observedAt())
                 || snapshot.assetBalances() == null || snapshot.positions() == null
                 || snapshot.closedTrades() == null || snapshot.ledgerEntries() == null) {
-            throw unavailable("BROKER_RISK_FACTS_INCOMPLETE");
+            String reason = snapshot.unavailabilityReasons() == null || snapshot.unavailabilityReasons().isEmpty()
+                    ? "BROKER_RISK_FACTS_INCOMPLETE" : snapshot.unavailabilityReasons().get(0);
+            throw unavailable(reason);
         }
         if (snapshot.closedTrades().stream().anyMatch(t -> t == null || t.closedAt() == null
                 || !riskDay.contains(t.closedAt()) || t.closedAt().isAfter(snapshot.observedAt()))
@@ -325,15 +370,15 @@ public class ExecutionTimeRiskRevalidationService {
         }
     }
 
-    private static Map<String, BigDecimal> reconstructStartBalances(BrokerRiskFactsPort.Snapshot snapshot, RiskDay day) {
+    private static Map<String, BigDecimal> reconstructStartBalances(RiskFactsProvider.Snapshot snapshot, RiskDay day) {
         Map<String, BigDecimal> balances = new LinkedHashMap<>(snapshot.assetBalances());
-        Map<String, List<BrokerRiskFactsPort.LedgerEntry>> entriesByAsset = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, List<RiskFactsProvider.LedgerEntry>> entriesByAsset = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (var entry : snapshot.ledgerEntries()) {
             if (entry == null || entry.occurredAt() == null || !day.contains(entry.occurredAt())
                     || entry.occurredAt().isAfter(snapshot.observedAt()) || blank(entry.asset())
                     || entry.amount() == null || entry.fee() == null || entry.balance() == null)
                 throw unavailable("LEDGER_INTERVAL_INCOMPLETE");
-            if (entry.providerLedgerReference() == null || entry.providerLedgerReference().isBlank())
+            if (entry.sourceLedgerReference() == null || entry.sourceLedgerReference().isBlank())
                 throw unavailable("LEDGER_PROVENANCE_INCOMPLETE");
             if (entry.fee().signum() < 0) throw unavailable("LEDGER_FEE_INVALID");
             entriesByAsset.computeIfAbsent(entry.asset(), ignored -> new ArrayList<>()).add(entry);
@@ -341,9 +386,9 @@ public class ExecutionTimeRiskRevalidationService {
         for (var assetEntries : entriesByAsset.entrySet()) {
             String balanceAsset = balances.keySet().stream().filter(asset -> asset.equalsIgnoreCase(assetEntries.getKey()))
                     .findFirst().orElseThrow(() -> unavailable("LEDGER_ASSET_BALANCE_MISSING"));
-            List<BrokerRiskFactsPort.LedgerEntry> entries = assetEntries.getValue();
-            entries.sort(Comparator.comparing(BrokerRiskFactsPort.LedgerEntry::occurredAt)
-                    .thenComparing(BrokerRiskFactsPort.LedgerEntry::providerLedgerReference));
+            List<RiskFactsProvider.LedgerEntry> entries = assetEntries.getValue();
+            entries.sort(Comparator.comparing(RiskFactsProvider.LedgerEntry::occurredAt)
+                    .thenComparing(RiskFactsProvider.LedgerEntry::sourceLedgerReference));
             for (int index = 1; index < entries.size(); index++) {
                 var previous = entries.get(index - 1);
                 var current = entries.get(index);
@@ -360,7 +405,7 @@ public class ExecutionTimeRiskRevalidationService {
         return Map.copyOf(balances);
     }
 
-    private ClosedPnl closedPnl(BrokerRiskFactsPort.Snapshot snapshot, String currency, RiskDay riskDay) {
+    private ClosedPnl closedPnl(RiskFactsProvider.Snapshot snapshot, String currency, RiskDay riskDay) {
         BigDecimal total = BigDecimal.ZERO;
         List<String> payloads = new ArrayList<>();
         for (var trade : snapshot.closedTrades()) {
@@ -378,7 +423,7 @@ public class ExecutionTimeRiskRevalidationService {
         return new ClosedPnl(total, List.copyOf(payloads));
     }
 
-    private List<PositionSnapshot> positions(List<BrokerRiskFactsPort.Position> brokerPositions,
+    private List<PositionSnapshot> positions(List<RiskFactsProvider.Position> brokerPositions,
                                              MarketValuationPort.Snapshot valuation, String currency,
                                              BigDecimal marginConversionRate) {
         List<PositionSnapshot> result = new ArrayList<>();
@@ -394,7 +439,7 @@ public class ExecutionTimeRiskRevalidationService {
                     || stop.quantity().signum() <= 0 || stop.stopPrice() == null || stop.stopPrice().signum() <= 0)) {
                 throw unavailable("POSITION_PROTECTION_INCOMPLETE");
             }
-            BigDecimal protectedTotal = position.protectiveStops().stream().map(BrokerRiskFactsPort.Stop::quantity)
+            BigDecimal protectedTotal = position.protectiveStops().stream().map(RiskFactsProvider.Stop::quantity)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (protectedTotal.compareTo(position.signedQuantity().abs()) != 0)
                 throw unavailable("POSITION_PROTECTION_AMBIGUOUS");
@@ -453,7 +498,7 @@ public class ExecutionTimeRiskRevalidationService {
     }
 
     private static String instrumentName(String factId, TradePlanRiskPort.Snapshot plan,
-                                         BrokerRiskFactsPort.Snapshot broker) {
+                                          RiskFactsProvider.Snapshot broker) {
         if ("proposed".equals(factId)) return plan.instrument().toUpperCase();
         if (factId.startsWith("position:")) {
             UUID id = UUID.fromString(factId.substring("position:".length()));

@@ -68,8 +68,15 @@ class TradePlanRiskEvaluationServiceTest {
         transactionManager = mock(PlatformTransactionManager.class);
         when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         User user = User.builder().userId(actorId).username("trader").build();
-        Account account = Account.builder().accountId(accountId).user(user).name("main").baseCurrency("USD").build();
+        Account account = Account.builder().accountId(accountId).brokerAccountId(brokerAccountId)
+                .user(user).name("main").baseCurrency("USD").build();
         when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        BrokerAccount linkedBrokerAccount = mock(BrokerAccount.class);
+        when(linkedBrokerAccount.id()).thenReturn(brokerAccountId);
+        when(linkedBrokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(linkedBrokerAccount.provider()).thenReturn(BrokerProvider.KRAKEN);
+        when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, actorId))
+                .thenReturn(Optional.of(linkedBrokerAccount));
         when(persistence.evaluation(actorId, "key")).thenReturn(Optional.empty());
         when(persistence.write(any())).thenReturn("{}");
         AtomicLong versions = new AtomicLong();
@@ -95,6 +102,37 @@ class TradePlanRiskEvaluationServiceTest {
                 .containsExactly("ACCOUNT_RISK_CONFIGURATION_MISSING");
         verify(plans, never()).load(any(), anyLong());
         verify(broker, never()).load(any(), any(), any());
+    }
+
+    @Test
+    void missingCanonicalAccountRelationFailsClosedEvenWhenConfigurationContainsBrokerId() {
+        User user = User.builder().userId(actorId).username("trader").build();
+        Account withoutRelation = Account.builder().accountId(accountId).user(user).name("main")
+                .baseCurrency("USD").build();
+        when(accounts.findById(accountId)).thenReturn(Optional.of(withoutRelation));
+        when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                accountId, brokerAccountId, "UTC", "USD", UUID.randomUUID())));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("BROKER_ACCOUNT_MAPPING_INVALID");
+        verify(brokerAccounts, never()).findByIdAndOwnerId(any(), any());
+    }
+
+    @Test
+    void inconsistentLegacyProviderMetadataFailsClosed() {
+        User user = User.builder().userId(actorId).username("trader").build();
+        Account inconsistent = Account.builder().accountId(accountId).brokerAccountId(brokerAccountId)
+                .broker("OTHER").user(user).name("main").baseCurrency("USD").build();
+        when(accounts.findById(accountId)).thenReturn(Optional.of(inconsistent));
+        when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
+                accountId, brokerAccountId, "UTC", "USD", UUID.randomUUID())));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("BROKER_ACCOUNT_MAPPING_INVALID");
     }
 
     @Test
