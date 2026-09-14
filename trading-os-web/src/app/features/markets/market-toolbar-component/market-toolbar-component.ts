@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, output, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, output } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged, startWith } from 'rxjs';
 import { MarketFilter } from '../../../core/models/market-filter.model';
@@ -11,6 +12,8 @@ import { MarketFilter } from '../../../core/models/market-filter.model';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MarketToolbarComponent {
+  private readonly destroyRef = inject(DestroyRef);
+
   readonly filterChange = output<MarketFilter>();
   readonly refreshRequested = output<void>();
 
@@ -21,6 +24,7 @@ export class MarketToolbarComponent {
   constructor() {
     this.searchControl.valueChanges
       .pipe(startWith(this.searchControl.value), debounceTime(250), distinctUntilChanged())
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((search) => {
         this.filterChange.emit({
           search: search.trim(),
