@@ -2,6 +2,8 @@ package com.hope.trading.trading_core.brokeraccount.application;
 
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Rules;
+import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
@@ -36,7 +38,8 @@ class BrokerAccountServiceTest {
                 rulesRepository,
                 mock(UserRepository.class),
                 mock(AccountMapper.class),
-                Clock.fixed(Instant.parse("2026-07-29T10:00:00Z"), ZoneOffset.UTC)
+                Clock.fixed(Instant.parse("2026-07-29T10:00:00Z"), ZoneOffset.UTC),
+                mock(RiskPersistence.class), mock(RiskProfileValidator.class)
         );
 
         assertThrows(BrokerAccountOwnershipException.class,

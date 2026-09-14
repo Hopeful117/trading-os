@@ -81,7 +81,7 @@ class TradePlanRiskEvaluationServiceTest {
                         1, "persisted-baseline"));
         service = new TradePlanRiskEvaluationService(accounts, brokerAccounts, plans, broker, market,
                 requiredMargins, persistence, Clock.fixed(now, ZoneOffset.UTC), acknowledgmentDelivery,
-                transactionManager);
+                new RiskProfileValidator(), transactionManager);
     }
 
     @Test

@@ -4,19 +4,14 @@ import com.hope.trading.risk.context.RiskEvaluationContextBuilder;
 import com.hope.trading.risk.domain.Money;
 import com.hope.trading.risk.domain.ProposedTrade;
 import com.hope.trading.risk.domain.RiskEvaluationRequest;
-import com.hope.trading.risk.domain.RiskRuleIds;
 import com.hope.trading.risk.domain.RiskTypes.EvaluationStatus;
-import com.hope.trading.risk.domain.RiskTypes.PolicyAuthority;
 import com.hope.trading.risk.domain.RiskTypes.RiskDecision;
-import com.hope.trading.risk.domain.RiskTypes.RuleCategory;
-import com.hope.trading.risk.domain.RiskTypes.RuleSeverity;
 import com.hope.trading.risk.domain.RiskTypes.TradeDirection;
 import com.hope.trading.risk.domain.RiskTypes.ValidationMode;
 import com.hope.trading.risk.domain.RiskValidationResult;
 import com.hope.trading.risk.engine.RiskEngine;
 import com.hope.trading.risk.engine.RiskEngines;
 import com.hope.trading.risk.policy.EffectiveRiskRuleSet;
-import com.hope.trading.risk.policy.RuleConfiguration;
 import com.hope.trading.risk.snapshot.AccountSnapshot;
 import com.hope.trading.risk.snapshot.MarketSnapshot;
 import com.hope.trading.risk.snapshot.PortfolioSnapshot;
@@ -44,7 +39,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -54,11 +48,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class TradePlanRiskEvaluationService {
     static final String ENGINE_VERSION = "adr-028-standard-1";
-    private static final Pattern SEMVER = Pattern.compile("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$");
     private static final Pattern CURRENCY = Pattern.compile("^[A-Z][A-Z0-9]{2,15}$");
-    private static final Set<String> REQUIRED_RULES = Set.of(RiskRuleIds.MAX_POSITION_RISK,
-            RiskRuleIds.MAX_EXPOSURE, RiskRuleIds.DAILY_DRAWDOWN);
-
     private final AccountRepository accounts;
     private final BrokerAccountRepository brokerAccounts;
     private final TradePlanRiskPort tradePlans;
@@ -69,14 +59,16 @@ public class TradePlanRiskEvaluationService {
     private final Clock clock;
     private final RiskEngine engine;
     private final RiskAcknowledgmentDeliveryService acknowledgmentDelivery;
+    private final RiskProfileValidator riskProfileValidator;
     private final TransactionTemplate transactions;
 
     public TradePlanRiskEvaluationService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
                                           TradePlanRiskPort tradePlans, BrokerRiskFactsPort broker,
                                            MarketValuationPort market, RequiredMarginPort requiredMargins,
                                            RiskPersistence persistence, Clock clock,
-                                          RiskAcknowledgmentDeliveryService acknowledgmentDelivery,
-                                          PlatformTransactionManager transactionManager) {
+                                           RiskAcknowledgmentDeliveryService acknowledgmentDelivery,
+                                           RiskProfileValidator riskProfileValidator,
+                                           PlatformTransactionManager transactionManager) {
         this.accounts = accounts;
         this.brokerAccounts = brokerAccounts;
         this.tradePlans = tradePlans;
@@ -86,6 +78,7 @@ public class TradePlanRiskEvaluationService {
         this.persistence = persistence;
         this.clock = clock;
         this.acknowledgmentDelivery = acknowledgmentDelivery;
+        this.riskProfileValidator = riskProfileValidator;
         this.transactions = new TransactionTemplate(transactionManager);
         this.engine = RiskEngines.standard(ENGINE_VERSION, clock);
     }
@@ -142,7 +135,12 @@ public class TradePlanRiskEvaluationService {
                 .orElseThrow(() -> unavailable("BROKER_ACCOUNT_MAPPING_INVALID"));
         var profile = persistence.assignedProfile(command.accountId())
                 .orElseThrow(() -> unavailable("EFFECTIVE_RISK_PROFILE_MISSING"));
-        EffectiveRiskRuleSet rules = effectiveRules(profile);
+         EffectiveRiskRuleSet rules;
+         try {
+             rules = riskProfileValidator.validate(profile, true);
+         } catch (RiskProfileValidationException invalid) {
+             throw unavailable(invalid.code());
+         }
 
         TradePlanRiskPort.Snapshot plan = tradePlans.load(command.tradePlanId(), command.tradePlanVersion());
         validatePlan(command, plan, configuration.reportingCurrency());
@@ -271,53 +269,6 @@ public class TradePlanRiskEvaluationService {
                 command.tradePlanVersion(), command.accountId(), command.requestedAt(),
                 "CONTEXT_UNAVAILABLE", null, null, response, response);
         return response;
-    }
-
-    private EffectiveRiskRuleSet effectiveRules(RiskPersistence.Profile profile) {
-        if (profile == null || profile.rules() == null || !semanticVersion(profile.semanticVersion()) || blank(profile.policyId())
-                || !semanticVersion(profile.policyVersion()) || blank(profile.provenance())
-                || blank(profile.assignmentProvenance()) || !validAuthority(profile.authority())) {
-            throw unavailable("EFFECTIVE_RISK_PROFILE_INVALID");
-        }
-        Set<String> ruleIds = profile.rules().stream().map(RiskPersistence.ProfileRule::ruleId)
-                .collect(java.util.stream.Collectors.toSet());
-        if (profile.rules().size() != REQUIRED_RULES.size() || !ruleIds.equals(REQUIRED_RULES)) {
-            throw unavailable("EFFECTIVE_RISK_PROFILE_INCOMPLETE");
-        }
-        List<RuleConfiguration> rules = profile.rules().stream().map(rule -> {
-            if (blank(rule.provenance()) || !semanticVersion(rule.ruleVersion())
-                    || rule.maximumRatio() == null || rule.maximumRatio().signum() <= 0
-                    || rule.priority() < 0 || !validRuleVocabulary(rule)) {
-                throw unavailable("EFFECTIVE_RISK_PROFILE_INVALID");
-            }
-            return new RuleConfiguration(rule.ruleId(), rule.ruleVersion(), RuleCategory.valueOf(rule.category()),
-                    RuleSeverity.valueOf(rule.severity()), rule.priority(), Map.of("maximumRatio", rule.maximumRatio()));
-        }).toList();
-        return new EffectiveRiskRuleSet(rules, Map.of(profile.policyId(), profile.policyVersion()));
-    }
-
-    private boolean validRuleVocabulary(RiskPersistence.ProfileRule rule) {
-        try {
-            RuleSeverity.valueOf(rule.severity());
-            RuleCategory category = RuleCategory.valueOf(rule.category());
-            return category == switch (rule.ruleId()) {
-                case RiskRuleIds.MAX_POSITION_RISK -> RuleCategory.POSITION;
-                case RiskRuleIds.MAX_EXPOSURE -> RuleCategory.PORTFOLIO;
-                case RiskRuleIds.DAILY_DRAWDOWN -> RuleCategory.ACCOUNT;
-                default -> null;
-            };
-        } catch (RuntimeException invalid) {
-            return false;
-        }
-    }
-
-    private boolean validAuthority(String authority) {
-        try { PolicyAuthority.valueOf(authority); return true; }
-        catch (RuntimeException invalid) { return false; }
-    }
-
-    private static boolean semanticVersion(String value) {
-        return value != null && SEMVER.matcher(value).matches();
     }
 
     private static boolean blank(String value) {

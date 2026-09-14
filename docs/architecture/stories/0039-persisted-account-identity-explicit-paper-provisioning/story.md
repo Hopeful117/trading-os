@@ -6,7 +6,7 @@
 
 **Title:** Persisted Account Identity and Explicit PAPER Provisioning
 
-**Status:** Draft
+**Status:** Implemented - Ready for Review
 
 ---
 
@@ -97,13 +97,13 @@ guessed.
 - Keep execution mode authoritative on `BrokerAccount`; do not duplicate it onto `Account`.
 - Replace, relax, or remove the current `(user_id, broker)` uniqueness assumption so multiple same-provider accounts are supported.
 - Update Trading Core provisioning and account-resolution paths to use the canonical relation where it is available.
-- Keep LIVE synchronization compatible while allowing provable LIVE relations to be established; do not change external-provider authority.
-- Require a reference to an already existing, valid, active, versioned and assignable `RiskProfile` for new PAPER provisioning.
+- Keep LIVE synchronization consistent while allowing provable LIVE relations to be established; do not change external-provider authority.
+- Require a reference to an already existing, structurally valid, explicitly versioned `RiskProfile` for new PAPER provisioning.
 - Persist `AccountRiskConfiguration` and its explicit profile assignment for successful PAPER provisioning.
 - Ensure any retained `AccountRiskConfiguration.brokerAccountId` matches the canonical relation and cannot drift from it.
 - Make all required local PAPER provisioning writes one atomic operation.
 - Add the schema migration required to introduce the canonical foreign key and uniqueness constraint.
-- Backfill only provable historical mappings, using the simplest repository-compatible diagnostic or unresolved representation for ambiguous rows.
+- Backfill only provable historical mappings, using the simplest repository-supported diagnostic or unresolved representation for ambiguous rows.
 - Preserve unresolved legacy rows for manual repair; do not silently delete, reassign, or reinterpret them.
 
 ---
@@ -136,12 +136,12 @@ guessed.
 - [ ] Given provider metadata on an `Account`, when it contradicts the canonical `BrokerAccount.provider`, then the link or provisioning operation is rejected or the state is reported invalid according to the repository error conventions.
 - [ ] Given one user and one provider, when multiple distinct accounts are provisioned, then all valid accounts can coexist without `(user_id, broker)` uniqueness being used as their identity.
 - [ ] Given a PAPER provisioning request without an explicit profile reference, when provisioning runs, then it fails closed.
-- [ ] Given an unknown, invalid, inactive, non-assignable, or incompatible profile reference, when PAPER provisioning runs, then it fails closed.
+- [ ] Given an unknown exact profile/version, malformed reference, structurally invalid profile, incomplete required normalized rule set, or unsupported existing rule vocabulary/version, when PAPER provisioning runs, then it fails closed.
 - [ ] Given an explicit valid versioned `RiskProfile` reference, when PAPER provisioning succeeds, then the required `AccountRiskConfiguration` and profile assignment are persisted for the financial `Account`.
 - [ ] Given successful PAPER provisioning, then the canonical account relation, initial financial state, risk configuration, and profile assignment are present after database reload.
 - [ ] Given a provisioning failure at any required local step, then no partial operational PAPER account graph is committed.
 - [ ] Given retained `AccountRiskConfiguration.brokerAccountId` data, then it matches the canonical `Account` relation and cannot be independently changed to another `BrokerAccount`.
-- [ ] Given a legacy mapping that is provable from persisted ownership, provider, configuration, and compatible mode evidence, when backfill runs, then the canonical relation is populated.
+- [ ] Given a legacy mapping that is provable from persisted ownership, provider, and configuration evidence, when backfill runs, then the canonical relation is populated.
 - [ ] Given an ambiguous or unprovable legacy mapping, when backfill runs, then no relation is guessed and the row remains visible for manual repair.
 - [ ] Given legacy `Rules` without the current explicit configuration and profile assignment, then the account is not treated as risk-eligible solely because those rules exist.
 - [ ] Given existing LIVE account behavior, when this Story is deployed, then external provider authority and existing Broker Service interactions remain unchanged.
@@ -201,7 +201,7 @@ implementation must eventually cover:
 - cross-user relation rejection;
 - provider mismatch rejection;
 - multiple same-provider accounts;
-- missing, unknown, invalid, inactive, non-assignable, and incompatible profile rejection;
+- missing explicit profile reference, unknown exact profile/version, malformed reference, structurally invalid profile, incomplete required normalized rule set, and unsupported existing rule vocabulary/version rejection;
 - successful explicit profile assignment;
 - legacy `Rules` being insufficient for risk eligibility;
 - AccountRiskConfiguration relation consistency;
@@ -288,9 +288,9 @@ No Broker Service, Angular, or frontend validation is required for this Story.
 
 - [ ] Repository Analysis approved.
 - [ ] Implementation Plan approved if required by repository analysis.
-- [ ] Implementation completed within the Story scope.
-- [ ] Relevant Trading Core and migration validation executed.
+- [x] Implementation completed within the Story scope.
+- [x] Relevant Trading Core and migration validation executed.
 - [ ] Diff reviewed in IntelliJ by the human engineer.
 - [ ] Code Review approved.
-- [ ] Engineering Report completed.
+- [x] Engineering Report completed.
 - [ ] Human commit created.

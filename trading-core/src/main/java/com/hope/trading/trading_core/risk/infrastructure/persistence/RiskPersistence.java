@@ -44,7 +44,13 @@ public class RiskPersistence {
 
     public Optional<AccountConfiguration> configuration(UUID accountId) {
         AccountRiskConfigurationEntity value = entityManager.find(AccountRiskConfigurationEntity.class, accountId);
-        return value == null ? Optional.empty() : Optional.of(new AccountConfiguration(value.accountId,
+        Account account = entityManager.find(Account.class, accountId);
+        if (value == null || account == null
+                || (account.getBrokerAccountId() != null
+                && !account.getBrokerAccountId().equals(value.brokerAccountId))) {
+            return Optional.empty();
+        }
+        return Optional.of(new AccountConfiguration(value.accountId,
                 value.brokerAccountId, value.riskTimeZone, value.reportingCurrency, value.portfolioId));
     }
 
@@ -54,15 +60,57 @@ public class RiskPersistence {
         RiskProfileEntity profile = entityManager.find(RiskProfileEntity.class,
                 new ProfileKey(assignment.profileId, assignment.profileSemanticVersion));
         if (profile == null) return Optional.empty();
+        return Optional.of(profile(profile, assignment.assignedAt, assignment.provenance));
+    }
+
+    public Optional<Profile> profile(UUID profileId, String semanticVersion) {
+        RiskProfileEntity profile = entityManager.find(RiskProfileEntity.class,
+                new ProfileKey(profileId, semanticVersion));
+        return profile == null ? Optional.empty() : Optional.of(profile(profile, null, null));
+    }
+
+    @Transactional
+    public void configuration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
+                              String reportingCurrency, UUID portfolioId) {
+        AccountRiskConfigurationEntity value = new AccountRiskConfigurationEntity();
+        value.accountId = accountId;
+        value.brokerAccountId = brokerAccountId;
+        value.riskTimeZone = riskTimeZone;
+        value.reportingCurrency = reportingCurrency;
+        value.portfolioId = portfolioId;
+        entityManager.persist(value);
+        entityManager.flush();
+    }
+
+    @Transactional
+    public void assignProfile(UUID accountId, UUID profileId, String semanticVersion,
+                              Instant assignedAt, String provenance) {
+        if (assignedAt == null || provenance == null || provenance.isBlank()) {
+            throw new IllegalArgumentException("Profile assignment provenance is required");
+        }
+        if (entityManager.find(RiskProfileEntity.class, new ProfileKey(profileId, semanticVersion)) == null) {
+            throw new IllegalArgumentException("Risk profile does not exist");
+        }
+        AccountRiskProfileAssignmentEntity value = new AccountRiskProfileAssignmentEntity();
+        value.accountId = accountId;
+        value.profileId = profileId;
+        value.profileSemanticVersion = semanticVersion;
+        value.assignedAt = assignedAt;
+        value.provenance = provenance;
+        entityManager.persist(value);
+        entityManager.flush();
+    }
+
+    private Profile profile(RiskProfileEntity profile, Instant assignedAt, String assignmentProvenance) {
         List<ProfileRule> rules = entityManager.createQuery(
                         "select r from RiskProfileRuleEntity r where r.profileId=:id and r.profileSemanticVersion=:version",
                         RiskProfileRuleEntity.class).setParameter("id", profile.id)
                 .setParameter("version", profile.semanticVersion).getResultList().stream()
                 .map(r -> new ProfileRule(r.ruleId, r.ruleVersion, r.category, r.severity,
                         r.priority, r.maximumRatio, r.provenance)).toList();
-        return Optional.of(new Profile(profile.id, profile.semanticVersion, profile.policyId,
+        return new Profile(profile.id, profile.semanticVersion, profile.policyId,
                 profile.policyVersion, profile.authority, profile.createdAt, profile.provenance,
-                assignment.assignedAt, assignment.provenance, rules));
+                assignedAt, assignmentProvenance, rules);
     }
 
     public long component(UUID evaluationId, String type, String sourceVersion,

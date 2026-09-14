@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus;
 import com.hope.trading.trading_core.brokeraccount.domain.CredentialReference;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
+import com.hope.trading.trading_core.brokeraccount.api.RiskProfileReference;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
@@ -13,6 +14,9 @@ import com.hope.trading.trading_core.model.Rules;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
+import com.hope.trading.trading_core.risk.application.RiskProfileValidationException;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,8 +38,23 @@ public class BrokerAccountService {
     private final UserRepository userRepository;
     private final AccountMapper accountMapper;
     private final Clock clock;
+    private final RiskPersistence riskPersistence;
+    private final RiskProfileValidator riskProfileValidator;
 
     public BrokerAccountResponse create(UUID ownerId, CreateBrokerAccountRequest request) {
+        RiskProfileReference profileReference = request.riskProfile();
+        if (request.executionMode() == ExecutionMode.PAPER) {
+            if (profileReference == null) {
+                throw new IllegalArgumentException("riskProfile is required for PAPER accounts");
+            }
+            var profile = riskPersistence.profile(profileReference.profileId(), profileReference.semanticVersion())
+                    .orElseThrow(() -> new IllegalArgumentException("Risk profile does not exist"));
+            try {
+                riskProfileValidator.validate(profile, false);
+            } catch (RiskProfileValidationException invalid) {
+                throw new IllegalArgumentException(invalid.code(), invalid);
+            }
+        }
         BrokerAccount account = BrokerAccount.create(
                 ownerId,
                 request.provider(),
@@ -52,19 +71,21 @@ public class BrokerAccountService {
             if (initialCapital == null || initialCapital.signum() <= 0) {
                 throw new IllegalArgumentException("initialCapital must be positive for PAPER accounts");
             }
-            createPaperAccount(ownerId, savedAccount, request.initialCapital());
+            createPaperAccount(ownerId, savedAccount, request.initialCapital(), profileReference);
         }
 
         return map(savedAccount);
     }
 
-    private void createPaperAccount(UUID ownerId, BrokerAccount brokerAccount, BigDecimal initialCapital) {
+    private void createPaperAccount(UUID ownerId, BrokerAccount brokerAccount, BigDecimal initialCapital,
+                                    RiskProfileReference profileReference) {
         // Get default rules (or create default if none exists)
         Rules rules = rulesRepository.findByName("Default Paper Trading Rules")
                 .orElseGet(() -> createDefaultRules());
 
         Account account = Account.builder()
-                .broker(brokerAccount.provider().name())
+                 .broker(brokerAccount.provider().name())
+                 .brokerAccountId(brokerAccount.id())
                 .name(brokerAccount.displayName())
                 .baseCurrency("USD") // PAPER accounts use USD as default base currency
                 .rules(rules)
@@ -81,7 +102,11 @@ public class BrokerAccountService {
 
         // Link the account to the user and broker account
         // Note: The user relationship is set via the owner in the service layer
-        accountRepository.save(account);
+        Account savedAccount = accountRepository.save(account);
+        riskPersistence.configuration(savedAccount.getAccountId(), brokerAccount.id(), "UTC",
+                savedAccount.getBaseCurrency(), savedAccount.getAccountId());
+        riskPersistence.assignProfile(savedAccount.getAccountId(), profileReference.profileId(),
+                profileReference.semanticVersion(), clock.instant(), "paper-account-provisioning");
     }
 
     private Rules createDefaultRules() {

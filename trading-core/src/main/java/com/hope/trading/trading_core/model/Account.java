@@ -11,10 +11,7 @@ import java.util.UUID;
 @Entity
 @Getter
 @Setter
-@Table(name = "accounts",
-        uniqueConstraints = @UniqueConstraint(
-                name = "accounts_user_broker_key",
-                columnNames = {"user_id", "broker"}))
+@Table(name = "accounts")
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -23,6 +20,9 @@ public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID accountId;
+
+    @Column(name = "broker_account_id", unique = true)
+    private UUID brokerAccountId;
 
     @Column
     private String broker;

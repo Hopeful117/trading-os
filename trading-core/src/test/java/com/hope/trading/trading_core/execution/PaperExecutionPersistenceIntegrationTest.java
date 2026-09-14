@@ -103,9 +103,9 @@ class PaperExecutionPersistenceIntegrationTest {
         brokerAccountId = brokerAccount.id();
         brokerAccounts.saveAndFlush(brokerAccount);
 
-        accountId = brokerAccountId;
-        jdbc.update("insert into accounts(account_id,broker,name,base_currency,equity,peak_equity,user_id) values(?,?,?,?,?,?,?)",
-                accountId, BrokerProvider.KRAKEN.name(), "Persisted Paper", "USD", decimal("10000"), decimal("10000"), ownerId);
+        accountId = UUID.randomUUID();
+        jdbc.update("insert into accounts(account_id,broker,broker_account_id,name,base_currency,equity,peak_equity,user_id) values(?,?,?,?,?,?,?,?)",
+                 accountId, BrokerProvider.KRAKEN.name(), brokerAccountId, "Persisted Paper", "USD", decimal("10000"), decimal("10000"), ownerId);
         jdbc.update("insert into \"account-balance\"(id,asset,amount,account_id) values(?,?,?,?)",
                 UUID.randomUUID(), "USD", decimal("10000"), accountId);
 
