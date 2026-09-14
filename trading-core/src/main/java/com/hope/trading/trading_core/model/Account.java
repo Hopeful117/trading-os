@@ -67,7 +67,9 @@ public class Account {
     @Builder.Default
     @OneToMany(
             fetch = FetchType.LAZY,
-            mappedBy = "account"
+            mappedBy = "account",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
     )
     private List<Trade> trades = new ArrayList<>();
 
@@ -84,4 +86,3 @@ public class Account {
 
 
 }
-
