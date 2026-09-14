@@ -33,4 +33,50 @@ class ExecutionDomainTest {
         assertThatThrownBy(()->intent.transition(ExecutionStatus.VALIDATED,Instant.now()))
                 .isInstanceOf(InvalidExecutionStateException.class);
     }
+    @Test void cancelledIntentCannotTransition(){
+        var intent=intent(ExecutionStatus.VALIDATED);
+        intent.transition(ExecutionStatus.CANCELLED,NOW);
+        assertThatThrownBy(()->intent.transition(ExecutionStatus.VALIDATED,NOW))
+                .isInstanceOf(InvalidExecutionStateException.class);
+    }
+    @Test void expiredIntentCannotTransition(){
+        var intent=intent(ExecutionStatus.VALIDATED);
+        intent.transition(ExecutionStatus.EXPIRED,NOW);
+        assertThatThrownBy(()->intent.transition(ExecutionStatus.VALIDATED,NOW))
+                .isInstanceOf(InvalidExecutionStateException.class);
+    }
+    @Test void validatedCanTransitionToCancelled(){
+        var intent=intent(ExecutionStatus.VALIDATED);
+        intent.transition(ExecutionStatus.CANCELLED,NOW);
+        assertThat(intent.status()).isEqualTo(ExecutionStatus.CANCELLED);
+    }
+    @Test void createdCanTransitionToCancelled(){
+        var intent=intent(ExecutionStatus.CREATED);
+        intent.transition(ExecutionStatus.CANCELLED,NOW);
+        assertThat(intent.status()).isEqualTo(ExecutionStatus.CANCELLED);
+    }
+    @Test void failedCanTransitionToCancelled(){
+        var intent=intent(ExecutionStatus.VALIDATED);
+        intent.transition(ExecutionStatus.SUBMISSION_IN_PROGRESS,NOW);
+        intent.transition(ExecutionStatus.FAILED,NOW);
+        intent.transition(ExecutionStatus.CANCELLED,NOW);
+        assertThat(intent.status()).isEqualTo(ExecutionStatus.CANCELLED);
+    }
+    @Test void invalidTransitionFromCreatedToSubmissionInProgress(){
+        var intent=intent(ExecutionStatus.CREATED);
+        assertThatThrownBy(()->intent.transition(ExecutionStatus.SUBMISSION_IN_PROGRESS,NOW))
+                .isInstanceOf(InvalidExecutionStateException.class);
+    }
+    @Test void invalidTransitionFromValidatedToCompleted(){
+        var intent=intent(ExecutionStatus.VALIDATED);
+        assertThatThrownBy(()->intent.transition(ExecutionStatus.COMPLETED,NOW))
+                .isInstanceOf(InvalidExecutionStateException.class);
+    }
+    @Test void invalidTransitionFromCompletedToFailed(){
+        var intent=intent(ExecutionStatus.VALIDATED);
+        intent.transition(ExecutionStatus.SUBMISSION_IN_PROGRESS,NOW);
+        intent.transition(ExecutionStatus.COMPLETED,NOW);
+        assertThatThrownBy(()->intent.transition(ExecutionStatus.FAILED,NOW))
+                .isInstanceOf(InvalidExecutionStateException.class);
+    }
 }

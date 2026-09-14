@@ -14,18 +14,18 @@ class BrokerAccountTest {
 
     @Test
     void createsAccountWithoutCredentialAndValidatesRequiredValues() {
-        BrokerAccount account = BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN, " Main Kraken ", NOW);
+        BrokerAccount account = BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN, ExecutionMode.LIVE, " Main Kraken ", NOW);
         assertEquals(BrokerConnectionStatus.CREATED, account.connectionStatus());
         assertEquals("Main Kraken", account.displayName());
         assertThrows(NullPointerException.class,
-                () -> BrokerAccount.create(null, BrokerProvider.KRAKEN, "name", NOW));
+                () -> BrokerAccount.create(null, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "name", NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN, " ", NOW));
+                () -> BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN, ExecutionMode.LIVE, " ", NOW));
     }
 
     @Test
     void enforcesLifecycleAndConnectedReference() {
-        BrokerAccount account = BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN, "Kraken", NOW);
+        BrokerAccount account = BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Kraken", NOW);
         assertThrows(InvalidBrokerConnectionTransitionException.class,
                 () -> account.markConnected(new CredentialReference(UUID.randomUUID()), null, NOW));
         account.markPendingValidation(NOW.plusSeconds(1));
@@ -37,7 +37,7 @@ class BrokerAccountTest {
     @Test
     void rotationKeepsIdentityAndRevokeDiffersFromDisconnect() {
         UUID owner = UUID.randomUUID();
-        BrokerAccount account = BrokerAccount.create(owner, BrokerProvider.KRAKEN, "Kraken", NOW);
+        BrokerAccount account = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Kraken", NOW);
         UUID id = account.id();
         account.markPendingValidation(NOW);
         CredentialReference first = new CredentialReference(UUID.randomUUID());

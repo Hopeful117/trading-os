@@ -8,6 +8,8 @@ import com.hope.trading.trading_core.execution.application.service.*;
 import com.hope.trading.trading_core.execution.domain.repository.*;
 import com.hope.trading.trading_core.execution.domain.service.*;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
+import com.hope.trading.trading_core.execution.infrastructure.adapter.*;
+import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import org.springframework.context.annotation.*;
@@ -36,19 +38,45 @@ public class ExecutionConfiguration {
         return new ValidateAndCreateService(riskPersistence, tradePlans, brokerAccounts,
                 intentCreation, lifecycle, clock);
     }
+    @Bean BrokerExecutionAdapter brokerExecutionAdapter(BrokerExecutionClient client){
+        return new BrokerExecutionAdapter(client);
+    }
+    @Bean SimulatedExecutionAdapter simulatedExecutionAdapter(BrokerAccountRepository brokerAccountRepository,
+            com.hope.trading.trading_core.market_data.apiClient.MarketDataClient marketDataClient){
+        return new SimulatedExecutionAdapter(brokerAccountRepository, marketDataClient);
+    }
+    @Bean
+    @Primary
+    BrokerExecutionPort brokerExecutionPort(BrokerExecutionAdapter liveAdapter,
+            SimulatedExecutionAdapter paperAdapter,
+            BrokerAccountRepository brokerAccountRepository){
+        return new RoutingBrokerExecutionAdapter(liveAdapter, paperAdapter, brokerAccountRepository);
+    }
+    @Bean PaperSettlementService paperSettlementService(BrokerAccountRepository brokerAccountRepository,
+            AccountRepository accountRepository){
+        return new PaperSettlementService(brokerAccountRepository, accountRepository);
+    }
+    @Bean ExecutionFinalizationStep executionFinalizationStep(ExecutionIntentRepositoryPort intents,
+            ExecutionAttemptRepositoryPort attempts, BrokerOrderRepositoryPort orders,
+            ExecutionLifecycleService lifecycle, ExecutionMetrics metrics,
+            PaperSettlementService paperSettlementService,
+            BrokerAccountRepository brokerAccountRepository){
+        return new ExecutionFinalizationStep(intents, attempts, orders, lifecycle, metrics,
+                paperSettlementService, brokerAccountRepository);
+    }
     @Bean ExecuteTradeService executeTradeService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
             BrokerExecutionPort broker,ExecutionIdGenerator ids,ExecutionEventPublisher events,
             ExecutionMetrics metrics,ExecutionValidationService validation,
             IdempotencyService idempotency,ExecutionLifecycleService lifecycle,Clock clock,
-            ExecutionTimeRiskRevalidationService t1Revalidation){
+            ExecutionTimeRiskRevalidationService t1Revalidation,
+            ExecutionFinalizationStep executionFinalizationStep){
         return new ExecuteTradeService(intents,new ExecutionValidationStep(validation,lifecycle),
                 new IdempotencyVerificationStep(idempotency),
                 new ExecutionAttemptCreationStep(attempts,ids),
                 new BrokerSubmissionStep(broker,intents,attempts,lifecycle),
                 new BrokerResponseProcessingStep(ids),
-                new ExecutionFinalizationStep(intents,attempts,orders,lifecycle,metrics),events,clock,
-                t1Revalidation);
+                executionFinalizationStep,events,clock, t1Revalidation);
     }
     @Bean RetryExecutionService retryExecutionService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,
