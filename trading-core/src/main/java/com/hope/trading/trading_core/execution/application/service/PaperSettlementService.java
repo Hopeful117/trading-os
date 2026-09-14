@@ -40,12 +40,15 @@ public class PaperSettlementService {
             return;
         }
 
-        Optional<Account> accountOpt = accountRepository.findByUser_UserIdAndBroker(
-                brokerAccount.ownerId(), brokerAccount.provider().name());
+        Optional<Account> accountOpt = accountRepository.findByBrokerAccountId(brokerAccount.id());
         if (accountOpt.isEmpty()) {
             return;
         }
         Account account = accountOpt.get();
+        if (account.getUser() == null || !brokerAccount.ownerId().equals(account.getUser().getUserId())
+                || (account.getBroker() != null && !brokerAccount.provider().name().equals(account.getBroker()))) {
+            throw new IllegalStateException("PAPER account identity is inconsistent");
+        }
         ExecutionParameters params = intent.parameters();
         BrokerOrder.Fill fill = getFill(order);
 

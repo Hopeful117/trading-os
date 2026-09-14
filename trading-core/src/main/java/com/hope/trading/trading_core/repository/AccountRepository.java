@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface AccountRepository extends JpaRepository<Account, UUID> {
+    Optional<Account> findByBrokerAccountId(UUID brokerAccountId);
     Optional<Account>findByUser_UserIdAndBroker(UUID uuid,String broker);
     Optional<Account>findByAccountIdAndUser_Username(UUID accountId,String username);
     boolean existsByUser_UserIdAndBroker(UUID uuid, String broker);

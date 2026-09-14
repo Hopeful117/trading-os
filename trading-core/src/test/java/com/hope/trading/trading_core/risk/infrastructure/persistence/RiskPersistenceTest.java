@@ -2,6 +2,14 @@ package com.hope.trading.trading_core.risk.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.hope.trading.trading_core.brokeraccount.api.CreateBrokerAccountRequest;
+import com.hope.trading.trading_core.brokeraccount.api.RiskProfileReference;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountService;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
+import com.hope.trading.trading_core.helper.Role;
+import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -19,6 +27,8 @@ import org.springframework.test.context.ActiveProfiles;
 class RiskPersistenceTest {
     @Autowired RiskPersistence persistence;
     @Autowired JdbcTemplate jdbc;
+    @Autowired BrokerAccountService brokerAccountService;
+    @Autowired UserRepository users;
 
     @Test
     void databaseIssuesIncreasingComponentVersions() {
@@ -58,6 +68,40 @@ class RiskPersistenceTest {
         assertThat(loaded.provenance()).isEqualTo("policy-source");
         assertThat(loaded.assignmentProvenance()).isEqualTo("assignment-source");
         assertThat(loaded.rules()).hasSize(3).allMatch(rule -> rule.provenance().startsWith("rule-source:"));
+    }
+
+    @Test
+    void paperProvisioningPersistsCanonicalIdentityConfigurationAndExactProfile() {
+        UUID profileId = UUID.randomUUID();
+        User user = users.save(User.builder().username("paper-provisioning")
+                .password("x").email("paper-provisioning@test.local").role(Role.ROLE_USER).build());
+        UUID userId = user.getUserId();
+        jdbc.update("insert into risk_profile(id,semantic_version,policy_id,policy_version,authority,created_at,provenance) values(?,?,?,?,?,?,?)",
+                profileId, "2.1.0", "policy", "7.0.0", "PLATFORM", Instant.now(), "policy-source");
+        insertRule(profileId, "2.1.0", "MAX_POSITION_RISK", "POSITION");
+        insertRule(profileId, "2.1.0", "MAX_EXPOSURE", "PORTFOLIO");
+        insertRule(profileId, "2.1.0", "DAILY_DRAWDOWN", "ACCOUNT");
+
+        var response = brokerAccountService.create(userId, new CreateBrokerAccountRequest(
+                BrokerProvider.KRAKEN, "paper", ExecutionMode.PAPER, new BigDecimal("10000"),
+                new RiskProfileReference(profileId, "2.1.0")));
+
+        UUID brokerAccountId = response.id();
+        UUID accountId = jdbc.queryForObject("select account_id from accounts where broker_account_id=?",
+                UUID.class, brokerAccountId);
+        assertThat(jdbc.queryForObject("select count(*) from accounts where broker_account_id=?",
+                Integer.class, brokerAccountId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select broker_account_id from account_risk_configuration where account_id=?",
+                UUID.class, accountId)).isEqualTo(brokerAccountId);
+        assertThat(jdbc.queryForObject("select profile_id from account_risk_profile_assignment where account_id=?",
+                UUID.class, accountId)).isEqualTo(profileId);
+        assertThat(jdbc.queryForObject("select profile_semantic_version from account_risk_profile_assignment where account_id=?",
+                String.class, accountId)).isEqualTo("2.1.0");
+    }
+
+    private void insertRule(UUID profileId, String version, String ruleId, String category) {
+        jdbc.update("insert into risk_profile_rule(profile_id,profile_semantic_version,rule_id,rule_version,category,severity,priority,maximum_ratio,provenance) values(?,?,?,?,?,?,?,?,?)",
+                profileId, version, ruleId, "3.0.0", category, "BLOCKING", 10, ".05", "rule-source:" + ruleId);
     }
 
     @Test

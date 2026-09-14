@@ -13,6 +13,7 @@ import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,7 +56,8 @@ class ExecutionTimeRiskRevalidationServiceTest {
     void setUp() {
         service = new ExecutionTimeRiskRevalidationService(
                 accounts, brokerAccounts, tradePlans, broker, market,
-                requiredMargins, persistence, clock, transactionManager, lifecycle
+                requiredMargins, persistence, clock, transactionManager, lifecycle,
+                new RiskProfileValidator()
         );
 
         now = clock.instant();

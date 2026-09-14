@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 
 import java.math.BigDecimal;
 
@@ -13,6 +14,7 @@ public record CreateBrokerAccountRequest(
         @NotNull BrokerProvider provider,
         @NotBlank @Size(max = 80) String displayName,
         @NotNull ExecutionMode executionMode,
-        BigDecimal initialCapital
+        BigDecimal initialCapital,
+        @Valid RiskProfileReference riskProfile
         ) {
 }

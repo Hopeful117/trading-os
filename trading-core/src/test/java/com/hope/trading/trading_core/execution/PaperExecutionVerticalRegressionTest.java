@@ -40,6 +40,7 @@ import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotStatus;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
 import com.hope.trading.trading_core.model.Account;
+import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import org.junit.jupiter.api.Test;
@@ -93,6 +94,7 @@ class PaperExecutionVerticalRegressionTest {
 
         Account account = Account.builder()
                 .accountId(UUID.randomUUID())
+                .user(User.builder().userId(ownerId).build())
                 .broker(BrokerProvider.KRAKEN.name())
                 .name("Paper Account")
                 .baseCurrency("USD")
@@ -106,7 +108,7 @@ class PaperExecutionVerticalRegressionTest {
         }
 
         AccountRepository accounts = mock(AccountRepository.class);
-        when(accounts.findByUser_UserIdAndBroker(ownerId, BrokerProvider.KRAKEN.name()))
+        when(accounts.findByBrokerAccountId(paperBrokerAccount.id()))
                 .thenReturn(Optional.of(account));
         when(accounts.save(account)).thenReturn(account);
 
