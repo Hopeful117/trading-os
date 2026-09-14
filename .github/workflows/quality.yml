@@ -275,12 +275,12 @@ jobs:
       - name: SonarQube Scan — ${{ matrix.project }}
         env:
           SONAR_TOKEN: ${{ secrets[matrix.secret] }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'http://localhost:9000' }}
         run: |
           if [ "${{ matrix.type }}" = "backend" ]; then
             cd "${{ matrix.module }}"
-            mvn -B sonar:sonar \
-              -Dsonar.projectKey=${{ matrix.project }} \
+            mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar \
+              -Dsonar.projectKey=trading-os:${{ matrix.project }} \
               -Dsonar.host.url="$SONAR_HOST_URL" \
               -Dsonar.token="$SONAR_TOKEN" \
               -Dsonar.qualitygate.wait=true \
@@ -288,13 +288,13 @@ jobs:
           else
             cd trading-os-web
             npm ci
-            npx sonar-scanner \
-              -Dsonar.projectKey=${{ matrix.project }} \
+            npm exec -- sonar-scanner-npm \
+              -Dsonar.projectKey=trading-os:${{ matrix.project }} \
               -Dsonar.host.url="$SONAR_HOST_URL" \
               -Dsonar.token="$SONAR_TOKEN" \
               -Dsonar.sources=src \
               -Dsonar.tests=src \
-              -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info \
+              -Dsonar.javascript.lcov.reportPaths=coverage/trading-os-web/lcov.info \
               -Dsonar.qualitygate.wait=true \
               -Dsonar.scm.revision="${{ github.sha }}"
           fi
