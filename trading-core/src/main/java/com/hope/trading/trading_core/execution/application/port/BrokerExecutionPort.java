@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.execution.application.port;
 
 import com.hope.trading.trading_core.execution.domain.model.ExecutionParameters;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
+import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -16,10 +17,16 @@ public interface BrokerExecutionPort {
             ExecutionParameters parameters
     ) {}
     sealed interface SubmissionResult permits Acknowledged, Rejected, Unknown {}
-    record Acknowledged(String externalOrderId, String correlationId)
+    record Acknowledged(String externalOrderId, String correlationId, BigDecimal fillPrice)
             implements SubmissionResult {
         public Acknowledged {
             Objects.requireNonNull(externalOrderId); Objects.requireNonNull(correlationId);
+            if (fillPrice != null && fillPrice.signum() <= 0) {
+                throw new IllegalArgumentException("fillPrice must be positive");
+            }
+        }
+        public Acknowledged(String externalOrderId, String correlationId) {
+            this(externalOrderId, correlationId, null);
         }
     }
     record Rejected(String externalOrderId, String reasonCode)

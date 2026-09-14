@@ -1,5 +1,9 @@
 package com.hope.trading.trading_core.brokeraccount.application;
 
+import com.hope.trading.trading_core.helper.AccountMapper;
+import com.hope.trading.trading_core.model.Rules;
+import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.repository.RulesRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -16,12 +20,22 @@ class BrokerAccountServiceTest {
     @Test
     void refusesCrossUserAccessWithoutRevealingAccountData() {
         BrokerAccountRepository repository = mock(BrokerAccountRepository.class);
+        AccountRepository accountRepository = mock(AccountRepository.class);
+        RulesRepository rulesRepository = mock(RulesRepository.class);
+        com.hope.trading.trading_core.helper.AccountMapper accountMapper = mock(AccountMapper.class);
+
         UUID accountId = UUID.randomUUID();
         when(repository.existsById(accountId)).thenReturn(true);
         when(repository.findByIdAndOwnerId(accountId, UUID.fromString("00000000-0000-0000-0000-000000000002")))
                 .thenReturn(Optional.empty());
-        BrokerAccountService service = new BrokerAccountService(repository,
-                Clock.fixed(Instant.parse("2026-07-29T10:00:00Z"), ZoneOffset.UTC));
+
+        BrokerAccountService service = new BrokerAccountService(
+                repository,
+                accountRepository,
+                rulesRepository,
+                mock(AccountMapper.class),
+                Clock.fixed(Instant.parse("2026-07-29T10:00:00Z"), ZoneOffset.UTC)
+        );
 
         assertThrows(BrokerAccountOwnershipException.class,
                 () -> service.get(UUID.fromString("00000000-0000-0000-0000-000000000002"), accountId));

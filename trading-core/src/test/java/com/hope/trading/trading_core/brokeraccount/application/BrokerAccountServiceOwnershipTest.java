@@ -4,12 +4,18 @@ import com.hope.trading.trading_core.brokeraccount.api.CreateBrokerAccountReques
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
+import com.hope.trading.trading_core.helper.AccountMapper;
+import com.hope.trading.trading_core.model.Rules;
+import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.repository.RulesRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,6 +33,9 @@ import static org.mockito.Mockito.when;
 class BrokerAccountServiceOwnershipTest {
 
     private final BrokerAccountRepository repository = mock(BrokerAccountRepository.class);
+    private final AccountRepository accountRepository = mock(AccountRepository.class);
+    private final RulesRepository rulesRepository = mock(RulesRepository.class);
+    private final AccountMapper accountMapper = mock(AccountMapper.class);
     private final Instant now = Instant.parse("2026-08-23T10:00:00Z");
 
     private BrokerAccountService service;
@@ -37,9 +46,15 @@ class BrokerAccountServiceOwnershipTest {
 
     @BeforeEach
     void setUp() {
-        service = new BrokerAccountService(repository, Clock.fixed(now, ZoneOffset.UTC));
+        service = new BrokerAccountService(
+                repository,
+                accountRepository,
+                rulesRepository,
+                accountMapper,
+                Clock.fixed(now, ZoneOffset.UTC)
+        );
         owned = BrokerAccount.create(
-                ownerId, BrokerProvider.KRAKEN, "main", now);
+                ownerId, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "main", now);
         when(repository.existsById(accountId)).thenReturn(true);
         // Default: the account belongs to ownerId.
         when(repository.findByIdAndOwnerId(accountId, ownerId))
@@ -50,7 +65,7 @@ class BrokerAccountServiceOwnershipTest {
 
     private CreateBrokerAccountRequest request() {
         return new CreateBrokerAccountRequest(
-                BrokerProvider.KRAKEN, "my kraken account");
+                BrokerProvider.KRAKEN, "my kraken account", ExecutionMode.LIVE, null);
     }
 
     @Test

@@ -8,6 +8,8 @@ import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.exception.InvalidExecutionStateException;
 import com.hope.trading.trading_core.execution.domain.service.*;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionStatus;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.risk.domain.RiskTypes.RiskDecision;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +18,7 @@ import java.util.UUID;
 
 import static com.hope.trading.trading_core.execution.ExecutionTestSupport.*;
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ExecutionPipelineTest {
@@ -240,6 +243,8 @@ class ExecutionPipelineTest {
         var intents=new Intents();var attempts=new Attempts();var orders=new Orders();
         var ids=new Ids();var broker=new Broker();var events=new Events();var metrics=new Metrics();
         var lifecycle=new ExecutionLifecycleService();
+        var brokerAccountRepository = mock(BrokerAccountRepository.class);
+        var paperSettlementService = mock(PaperSettlementService.class);
         var t1Revalidation = mock(ExecutionTimeRiskRevalidationService.class);
         var t1Outcome = new ExecutionTimeRiskRevalidationService.T1Outcome(UUID.randomUUID(), RiskDecision.APPROVED, null, true);
         when(t1Revalidation.evaluateAndPersist(any(), any())).thenReturn(t1Outcome);
@@ -249,7 +254,7 @@ class ExecutionPipelineTest {
                 new ExecutionAttemptCreationStep(attempts,ids),
                 new BrokerSubmissionStep(broker,intents,attempts,lifecycle),
                 new BrokerResponseProcessingStep(ids),
-                new ExecutionFinalizationStep(intents,attempts,orders,lifecycle,metrics),events,CLOCK, t1Revalidation);
+                new ExecutionFinalizationStep(intents,attempts,orders,lifecycle,metrics,paperSettlementService,brokerAccountRepository),events,CLOCK, t1Revalidation);
         return new Fixture(intents,attempts,orders,broker,events,metrics,execution,lifecycle,ids);
     }
     private record Fixture(Intents intents, Attempts attempts, Orders orders, Broker broker,

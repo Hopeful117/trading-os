@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
@@ -101,7 +102,7 @@ class TradePlanRiskEvaluationServiceTest {
         when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                 accountId, brokerAccountId, "UTC", "USD", UUID.randomUUID())));
         when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, actorId)).thenReturn(Optional.of(
-                BrokerAccount.create(actorId, BrokerProvider.KRAKEN, "Kraken", now)));
+                BrokerAccount.create(actorId, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Kraken", now)));
         when(persistence.assignedProfile(accountId)).thenReturn(Optional.empty());
 
         Response response = service.evaluate(command("key", 3));
@@ -366,7 +367,7 @@ class TradePlanRiskEvaluationServiceTest {
         when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                 accountId, brokerAccountId, "UTC", "USD", portfolioId)));
         when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, actorId)).thenReturn(Optional.of(
-                BrokerAccount.create(actorId, BrokerProvider.KRAKEN, "Kraken", now)));
+                BrokerAccount.create(actorId, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Kraken", now)));
         when(persistence.assignedProfile(accountId)).thenReturn(Optional.of(profile()));
         when(plans.load(planId, 3)).thenReturn(plan("USD", "USD"));
         when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(positions, List.of()));

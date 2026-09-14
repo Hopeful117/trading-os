@@ -55,7 +55,7 @@ class BrokerAccountControllerTest {
         mvc.perform(post("/api/v1/broker-accounts")
                         .principal(auth(userId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"provider\":\"KRAKEN\",\"displayName\":\"Test Account\"}"))
+                        .content("{\"provider\":\"KRAKEN\",\"displayName\":\"Test Account\",\"executionMode\":\"LIVE\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/v1/broker-accounts/" + accountId))
                 .andExpect(jsonPath("$.provider").value("KRAKEN"));

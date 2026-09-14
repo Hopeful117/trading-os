@@ -46,11 +46,14 @@ public class BrokerAccount {
     private Instant updatedAt;
     @Version
     private long version;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, updatable = false)
+    private ExecutionMode executionMode;
 
     protected BrokerAccount() {
     }
 
-    private BrokerAccount(BrokerAccountId id, UUID ownerId, BrokerProvider provider,
+    private BrokerAccount(BrokerAccountId id, UUID ownerId, BrokerProvider provider,ExecutionMode executionMode,
                           String displayName, Instant now) {
         this.id = Objects.requireNonNull(id, "id is required").value();
         this.ownerId = Objects.requireNonNull(ownerId, "ownerId is required");
@@ -59,11 +62,13 @@ public class BrokerAccount {
         this.connectionStatus = BrokerConnectionStatus.CREATED;
         this.createdAt = Objects.requireNonNull(now, "now is required");
         this.updatedAt = now;
+        this.executionMode =
+                Objects.requireNonNull(executionMode, "executionMode is required");
     }
 
-    public static BrokerAccount create(UUID ownerId, BrokerProvider provider,
+    public static BrokerAccount create(UUID ownerId, BrokerProvider provider,ExecutionMode executionMode,
                                        String displayName, Instant now) {
-        return new BrokerAccount(BrokerAccountId.newId(), ownerId, provider, displayName, now);
+        return new BrokerAccount(BrokerAccountId.newId(), ownerId, provider,executionMode, displayName, now);
     }
 
     public void markPendingValidation(Instant now) {
@@ -154,4 +159,9 @@ public class BrokerAccount {
     public Instant lastSynchronizedAt() { return lastSynchronizedAt; }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
+    public ExecutionMode executionMode() {
+        return executionMode;
+    }
+
+
 }
