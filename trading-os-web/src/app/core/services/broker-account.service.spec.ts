@@ -43,6 +43,7 @@ describe('BrokerAccountService', () => {
     expect(accountRequest.request.body).toEqual({
       provider: 'KRAKEN',
       displayName: 'Kraken lecture seule',
+      executionMode: 'LIVE',
     });
     accountRequest.flush({ id: 'account-1' });
 
@@ -56,6 +57,26 @@ describe('BrokerAccountService', () => {
       validatedAt: '2026-07-29T10:00:00Z',
       safeMessage: 'Broker credentials validated',
     });
+  });
+
+  it('creates a PAPER account with initial capital without submitting credentials', () => {
+    service
+      .createPaper({
+        provider: 'KRAKEN',
+        displayName: 'Paper account',
+        initialCapital: 10000,
+      })
+      .subscribe();
+
+    const request = http.expectOne('/api/v1/broker-accounts');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      provider: 'KRAKEN',
+      displayName: 'Paper account',
+      executionMode: 'PAPER',
+      initialCapital: 10000,
+    });
+    request.flush({ id: 'paper-account-1', executionMode: 'PAPER' });
   });
 
   it('createAndConnect passes passphrase when provided', () => {

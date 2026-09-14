@@ -12,20 +12,46 @@
       <input formControlName="displayName" maxlength="80" autocomplete="off" />
     </label>
     <label>
-      API key
-      <input formControlName="apiKey" type="password" maxlength="256" autocomplete="off" />
+      Mode d’exécution
+      <select formControlName="executionMode" data-testid="execution-mode-select">
+        <option value="LIVE">LIVE</option>
+        <option value="PAPER">PAPER</option>
+      </select>
     </label>
-    <label>
-      API secret
-      <input
-        formControlName="apiSecret"
-        type="password"
-        maxlength="512"
-        autocomplete="new-password"
-      />
-    </label>
-    <button type="submit" [disabled]="connecting()">
-      {{ connecting() ? 'Validation…' : 'Connecter le compte' }}
+    @if (isPaper()) {
+      <label>
+        Capital initial (USD)
+        <input
+          formControlName="initialCapital"
+          type="number"
+          min="0.01"
+          step="0.01"
+          data-testid="initial-capital-input"
+        />
+      </label>
+    } @else {
+      <label>
+        API key
+        <input formControlName="apiKey" type="password" maxlength="256" autocomplete="off" />
+      </label>
+      <label>
+        API secret
+        <input
+          formControlName="apiSecret"
+          type="password"
+          maxlength="512"
+          autocomplete="new-password"
+        />
+      </label>
+    }
+    <button type="submit" [disabled]="connecting()" data-testid="create-account-button">
+      {{
+        connecting()
+          ? 'Création…'
+          : isPaper()
+            ? 'Créer le compte PAPER'
+            : 'Connecter le compte LIVE'
+      }}
     </button>
   </form>
   @if (connectionFeedback(); as feedback) {
@@ -48,6 +74,7 @@
       <article>
         <strong>{{ brokerAccount.displayName }}</strong>
         <span>{{ brokerAccount.provider }}</span>
+        <span data-testid="execution-mode">{{ brokerAccount.executionMode }}</span>
         <span class="status">{{ brokerAccount.connectionStatus }}</span>
       </article>
     } @empty {

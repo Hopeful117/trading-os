@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Rules;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
+import com.hope.trading.trading_core.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -33,6 +34,7 @@ class BrokerAccountServiceTest {
                 repository,
                 accountRepository,
                 rulesRepository,
+                mock(UserRepository.class),
                 mock(AccountMapper.class),
                 Clock.fixed(Instant.parse("2026-07-29T10:00:00Z"), ZoneOffset.UTC)
         );

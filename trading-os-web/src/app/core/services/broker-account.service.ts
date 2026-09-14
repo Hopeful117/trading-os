@@ -18,6 +18,19 @@ export class BrokerAccountService {
     return this.http.get<BrokerAccount[]>(this.baseUrl);
   }
 
+  createPaper(command: {
+    provider: BrokerProvider;
+    displayName: string;
+    initialCapital: number;
+  }): Observable<BrokerAccount> {
+    return this.http.post<BrokerAccount>(this.baseUrl, {
+      provider: command.provider,
+      displayName: command.displayName,
+      executionMode: 'PAPER',
+      initialCapital: command.initialCapital,
+    });
+  }
+
   createAndConnect(command: {
     provider: BrokerProvider;
     displayName: string;
@@ -29,6 +42,7 @@ export class BrokerAccountService {
       .post<BrokerAccount>(this.baseUrl, {
         provider: command.provider,
         displayName: command.displayName,
+        executionMode: 'LIVE',
       })
       .pipe(
         switchMap((account) =>

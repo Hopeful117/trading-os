@@ -7,8 +7,10 @@ import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Rules;
+import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
+import com.hope.trading.trading_core.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +38,7 @@ class BrokerAccountServiceOwnershipTest {
     private final BrokerAccountRepository repository = mock(BrokerAccountRepository.class);
     private final AccountRepository accountRepository = mock(AccountRepository.class);
     private final RulesRepository rulesRepository = mock(RulesRepository.class);
+    private final UserRepository userRepository = mock(UserRepository.class);
     private final AccountMapper accountMapper = mock(AccountMapper.class);
     private final Instant now = Instant.parse("2026-08-23T10:00:00Z");
 
@@ -50,6 +54,7 @@ class BrokerAccountServiceOwnershipTest {
                 repository,
                 accountRepository,
                 rulesRepository,
+                userRepository,
                 accountMapper,
                 Clock.fixed(now, ZoneOffset.UTC)
         );
@@ -76,6 +81,27 @@ class BrokerAccountServiceOwnershipTest {
 
         assertThat(response.provider()).isEqualTo(BrokerProvider.KRAKEN);
         assertThat(response.displayName()).isEqualTo("my kraken account");
+    }
+
+    @Test
+    void paperCreationPersistsFinancialAccountForTheCaller() {
+        UUID paperOwner = UUID.randomUUID();
+        User user = User.builder().userId(paperOwner).build();
+        Rules rules = Rules.builder().name("paper-rules").build();
+        when(repository.existsById(any(UUID.class))).thenReturn(false);
+        when(rulesRepository.findByName("Default Paper Trading Rules")).thenReturn(Optional.of(rules));
+        when(userRepository.getReferenceById(paperOwner)).thenReturn(user);
+        when(accountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.create(paperOwner,
+                new CreateBrokerAccountRequest(BrokerProvider.KRAKEN, "paper", ExecutionMode.PAPER,
+                        new java.math.BigDecimal("10000")));
+
+        assertThat(response.executionMode()).isEqualTo(ExecutionMode.PAPER);
+        var accountCaptor = org.mockito.ArgumentCaptor.forClass(com.hope.trading.trading_core.model.Account.class);
+        verify(accountRepository).save(accountCaptor.capture());
+        assertThat(accountCaptor.getValue().getUser()).isSameAs(user);
+        assertThat(accountCaptor.getValue().getEquity()).isEqualByComparingTo("10000");
     }
 
     @Test
