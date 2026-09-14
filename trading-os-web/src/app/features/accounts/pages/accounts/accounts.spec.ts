@@ -14,6 +14,7 @@ describe('Accounts', () => {
   };
   let brokerAccountService: {
     list: ReturnType<typeof vi.fn>;
+    createPaper: ReturnType<typeof vi.fn>;
     createAndConnect: ReturnType<typeof vi.fn>;
   };
   let accounts: BehaviorSubject<Account[]>;
@@ -26,6 +27,7 @@ describe('Accounts', () => {
     };
     brokerAccountService = {
       list: vi.fn(() => of([])),
+      createPaper: vi.fn(() => of({ executionMode: 'PAPER' })),
       createAndConnect: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
     };
     await TestBed.configureTestingModule({
@@ -56,7 +58,9 @@ describe('Accounts', () => {
   it('shows visible success feedback in the DOM after connecting a broker', async () => {
     component.brokerForm.setValue({
       provider: 'KRAKEN',
+      executionMode: 'LIVE',
       displayName: 'My Kraken',
+      initialCapital: null,
       apiKey: 'a'.repeat(8),
       apiSecret: 'b'.repeat(16),
       passphrase: '',
@@ -75,7 +79,9 @@ describe('Accounts', () => {
     expect(component.connecting()).toBe(false);
     expect(component.brokerForm.getRawValue()).toEqual({
       provider: 'KRAKEN',
+      executionMode: 'LIVE',
       displayName: '',
+      initialCapital: null,
       apiKey: '',
       apiSecret: '',
       passphrase: '',
@@ -88,7 +94,9 @@ describe('Accounts', () => {
 
     component.brokerForm.setValue({
       provider: 'KRAKEN',
+      executionMode: 'LIVE',
       displayName: 'Test',
+      initialCapital: null,
       apiKey: 'a'.repeat(8),
       apiSecret: 'b'.repeat(16),
       passphrase: 'secret',
@@ -121,7 +129,9 @@ describe('Accounts', () => {
 
     component.brokerForm.setValue({
       provider: 'KRAKEN',
+      executionMode: 'LIVE',
       displayName: 'Test',
+      initialCapital: null,
       apiKey: 'a'.repeat(8),
       apiSecret: 'b'.repeat(16),
       passphrase: '',
@@ -156,7 +166,9 @@ describe('Accounts', () => {
 
     component.brokerForm.setValue({
       provider: 'KRAKEN',
+      executionMode: 'LIVE',
       displayName: 'Test',
+      initialCapital: null,
       apiKey: 'a'.repeat(8),
       apiSecret: 'b'.repeat(16),
       passphrase: '',
@@ -225,5 +237,44 @@ describe('Accounts', () => {
     expect(fixture.nativeElement.textContent).toContain(
       'Compte broker synchronisé via la configuration existante.',
     );
+  });
+
+  it('creates a PAPER account with initial capital without requesting credentials', async () => {
+    component.brokerForm.setValue({
+      provider: 'KRAKEN',
+      executionMode: 'PAPER',
+      displayName: 'Paper account',
+      initialCapital: 10000,
+      apiKey: '',
+      apiSecret: '',
+      passphrase: '',
+    });
+
+    component.connectBroker();
+    await fixture.whenStable();
+
+    expect(brokerAccountService.createPaper).toHaveBeenCalledWith({
+      provider: 'KRAKEN',
+      displayName: 'Paper account',
+      initialCapital: 10000,
+    });
+    expect(brokerAccountService.createAndConnect).not.toHaveBeenCalled();
+    expect(component.connectionFeedback()?.kind).toBe('success');
+  });
+
+  it('requires positive initial capital for a PAPER account', () => {
+    component.brokerForm.setValue({
+      provider: 'KRAKEN',
+      executionMode: 'PAPER',
+      displayName: 'Paper account',
+      initialCapital: null,
+      apiKey: '',
+      apiSecret: '',
+      passphrase: '',
+    });
+
+    component.connectBroker();
+
+    expect(brokerAccountService.createPaper).not.toHaveBeenCalled();
   });
 });

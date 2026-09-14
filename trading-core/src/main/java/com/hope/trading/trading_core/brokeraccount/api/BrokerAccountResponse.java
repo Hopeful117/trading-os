@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.brokeraccount.api;
 
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -9,6 +10,7 @@ import java.util.UUID;
 public record BrokerAccountResponse(
         UUID id,
         BrokerProvider provider,
+        ExecutionMode executionMode,
         String displayName,
         String externalAccountId,
         BrokerConnectionStatus connectionStatus,

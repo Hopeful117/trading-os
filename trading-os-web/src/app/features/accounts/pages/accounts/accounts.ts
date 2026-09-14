@@ -29,9 +29,13 @@ export class Accounts {
 
   readonly brokerForm = new FormGroup({
     provider: new FormControl<'KRAKEN'>('KRAKEN', { nonNullable: true }),
+    executionMode: new FormControl<'LIVE' | 'PAPER'>('LIVE', { nonNullable: true }),
     displayName: new FormControl('', {
       nonNullable: true,
       validators: [Validators.required, Validators.maxLength(80)],
+    }),
+    initialCapital: new FormControl<number | null>(null, {
+      validators: [Validators.min(0.01)],
     }),
     apiKey: new FormControl('', {
       nonNullable: true,
@@ -55,13 +59,28 @@ export class Accounts {
   }
 
   connectBroker(): void {
-    if (this.brokerForm.invalid || this.connecting()) {
+    if (this.connecting()) {
+      return;
+    }
+
+    const command = this.brokerForm.getRawValue();
+    if (command.executionMode === 'PAPER') {
+      if (!command.displayName || !command.initialCapital || command.initialCapital <= 0) {
+        this.brokerForm.controls.displayName.markAsTouched();
+        this.brokerForm.controls.initialCapital.markAsTouched();
+        return;
+      }
+      this.createPaperAccount(command);
+      return;
+    }
+
+    if (this.brokerForm.invalid) {
       this.brokerForm.markAllAsTouched();
       return;
     }
     this.connecting.set(true);
     this.connectionFeedback.set(null);
-    this.brokerAccountService.createAndConnect(this.brokerForm.getRawValue()).subscribe({
+    this.brokerAccountService.createAndConnect(command).subscribe({
       next: (result) => {
         this.connecting.set(false);
         if (result.outcome === 'VALID') {
@@ -72,7 +91,9 @@ export class Accounts {
           });
           this.brokerForm.reset({
             provider: 'KRAKEN',
+            executionMode: 'LIVE',
             displayName: '',
+            initialCapital: null,
             apiKey: '',
             apiSecret: '',
             passphrase: '',
@@ -98,6 +119,56 @@ export class Accounts {
         this.clearSensitiveFields();
       },
     });
+  }
+
+  isPaper(): boolean {
+    return this.brokerForm.controls.executionMode.value === 'PAPER';
+  }
+
+  private createPaperAccount(command: {
+    provider: 'KRAKEN';
+    executionMode: 'LIVE' | 'PAPER';
+    displayName: string;
+    initialCapital: number | null;
+    apiKey: string;
+    apiSecret: string;
+    passphrase: string;
+  }): void {
+    this.connecting.set(true);
+    this.connectionFeedback.set(null);
+    this.brokerAccountService
+      .createPaper({
+        provider: command.provider,
+        displayName: command.displayName,
+        initialCapital: command.initialCapital!,
+      })
+      .subscribe({
+        next: () => {
+          this.connecting.set(false);
+          this.connectionFeedback.set({
+            kind: 'success',
+            message: 'Compte PAPER créé. Le capital initial est disponible pour le trading simulé.',
+          });
+          this.brokerForm.reset({
+            provider: 'KRAKEN',
+            executionMode: 'LIVE',
+            displayName: '',
+            initialCapital: null,
+            apiKey: '',
+            apiSecret: '',
+            passphrase: '',
+          });
+          this.loadBrokerAccounts();
+          this.loadAccounts();
+        },
+        error: () => {
+          this.connecting.set(false);
+          this.connectionFeedback.set({
+            kind: 'error',
+            message: 'Le compte PAPER n’a pas pu être créé. Vérifiez le capital initial.',
+          });
+        },
+      });
   }
 
   sync(): void {

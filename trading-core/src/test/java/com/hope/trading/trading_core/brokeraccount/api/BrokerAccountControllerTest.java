@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountServ
 import com.hope.trading.trading_core.brokeraccount.application.BrokerConnectionCommandClient;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.dto.UserDto;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -40,7 +41,7 @@ class BrokerAccountControllerTest {
     }
 
     private BrokerAccountResponse response(UUID id) {
-        return new BrokerAccountResponse(id, BrokerProvider.KRAKEN, "Test Account",
+        return new BrokerAccountResponse(id, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Test Account",
                 "ext-123", BrokerConnectionStatus.CONNECTED,
                 Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"));

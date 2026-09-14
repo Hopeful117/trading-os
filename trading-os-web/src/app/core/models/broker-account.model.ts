@@ -1,4 +1,5 @@
 export type BrokerProvider = 'KRAKEN';
+export type ExecutionMode = 'LIVE' | 'PAPER';
 
 export type BrokerConnectionStatus =
   | 'CREATED'
@@ -14,6 +15,7 @@ export type BrokerConnectionStatus =
 export interface BrokerAccount {
   id: string;
   provider: BrokerProvider;
+  executionMode: ExecutionMode;
   displayName: string;
   externalAccountId: string | null;
   connectionStatus: BrokerConnectionStatus;

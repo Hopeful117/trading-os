@@ -12,6 +12,7 @@ import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.Rules;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
+import com.hope.trading.trading_core.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class BrokerAccountService {
     private final BrokerAccountRepository repository;
     private final AccountRepository accountRepository;
     private final RulesRepository rulesRepository;
+    private final UserRepository userRepository;
     private final AccountMapper accountMapper;
     private final Clock clock;
 
@@ -68,6 +70,7 @@ public class BrokerAccountService {
                 .rules(rules)
                 .equity(initialCapital)
                 .peakEquity(initialCapital)
+                .user(userRepository.getReferenceById(ownerId))
                 .build();
 
         // Add initial capital as balance
@@ -168,7 +171,7 @@ public class BrokerAccountService {
     }
 
     private BrokerAccountResponse map(BrokerAccount account) {
-        return new BrokerAccountResponse(account.id(), account.provider(), account.displayName(),
+        return new BrokerAccountResponse(account.id(), account.provider(), account.executionMode(), account.displayName(),
                 account.externalAccountId(), account.connectionStatus(), account.lastValidatedAt(),
                 account.lastSynchronizedAt(), account.createdAt(), account.updatedAt());
     }
