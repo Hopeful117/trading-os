@@ -7,6 +7,7 @@ import {
   BrokerProvider,
   CredentialValidation,
 } from '../models/broker-account.model';
+import { RiskProfileCatalogEntry } from '../models/risk-profile.model';
 
 @Injectable({ providedIn: 'root' })
 export class BrokerAccountService {
@@ -18,16 +19,24 @@ export class BrokerAccountService {
     return this.http.get<BrokerAccount[]>(this.baseUrl);
   }
 
+  eligibleRiskProfiles(): Observable<RiskProfileCatalogEntry[]> {
+    return this.http.get<RiskProfileCatalogEntry[]>(
+      `${environment.gatewayUrl}v1/risk-profiles/eligible`,
+    );
+  }
+
   createPaper(command: {
     provider: BrokerProvider;
     displayName: string;
     initialCapital: number;
+    riskProfile: { profileId: string; semanticVersion: string };
   }): Observable<BrokerAccount> {
     return this.http.post<BrokerAccount>(this.baseUrl, {
       provider: command.provider,
       displayName: command.displayName,
       executionMode: 'PAPER',
       initialCapital: command.initialCapital,
+      riskProfile: command.riskProfile,
     });
   }
 

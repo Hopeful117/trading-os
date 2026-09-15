@@ -63,8 +63,19 @@ class GatewayExecutionRouteTest {
                 "trade-plan-risk-evaluations",
                 "markets",
                 "market-intelligence",
-                "executions"
+                "executions",
+                "risk-profile-catalog"
         );
+    }
+
+    @Test
+    void riskProfileCatalogRouteForwardsToTradingCore() {
+        Route route = route("risk-profile-catalog");
+
+        assertThat(route).isNotNull();
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://trading-core"));
+        assertThat(matches(route, HttpMethod.GET, "/api/v1/risk-profiles/eligible"))
+                .as("risk profile catalog must match the Trading Core route").isTrue();
     }
 
     private Route route(String id) {

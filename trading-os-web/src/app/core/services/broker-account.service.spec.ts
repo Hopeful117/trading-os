@@ -29,6 +29,14 @@ describe('BrokerAccountService', () => {
     req.flush([]);
   });
 
+  it('retrieves the authenticated eligible risk profile catalog', () => {
+    service.eligibleRiskProfiles().subscribe();
+
+    const req = http.expectOne('/api/v1/risk-profiles/eligible');
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
+
   it('creates the business account before submitting write-only credentials', () => {
     service
       .createAndConnect({
@@ -65,6 +73,7 @@ describe('BrokerAccountService', () => {
         provider: 'KRAKEN',
         displayName: 'Paper account',
         initialCapital: 10000,
+        riskProfile: { profileId: 'profile-1', semanticVersion: '1.0.0' },
       })
       .subscribe();
 
@@ -75,6 +84,7 @@ describe('BrokerAccountService', () => {
       displayName: 'Paper account',
       executionMode: 'PAPER',
       initialCapital: 10000,
+      riskProfile: { profileId: 'profile-1', semanticVersion: '1.0.0' },
     });
     request.flush({ id: 'paper-account-1', executionMode: 'PAPER' });
   });
