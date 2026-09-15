@@ -12,12 +12,13 @@ export interface PositionCloseResponse {
   status: PositionCloseStatus;
   externalOrderId: string | null;
   failureReason: string | null;
-  resolvedMutationScope: string;
+  resolvedMutationScope: string | null;
   reconciliationResult: ReconciliationResult;
 }
 
 export interface PositionCloseRequest {
-  brokerPositionReference: string;
+  brokerPositionReference?: string;
+  tradeId?: string;
 }
 
 export interface ReconcileCloseRequest {

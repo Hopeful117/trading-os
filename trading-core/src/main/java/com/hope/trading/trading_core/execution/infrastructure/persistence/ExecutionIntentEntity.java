@@ -12,11 +12,13 @@ import java.util.UUID;
 })
 public class ExecutionIntentEntity {
     @Id public UUID id;
-    @Column(name="trade_plan_id", nullable=false, updatable=false) public UUID tradePlanId;
-    @Column(name="trade_plan_version", nullable=false, updatable=false) public long tradePlanVersion;
-    @Column(name="risk_evaluation_id", nullable=false, updatable=false) public UUID riskEvaluationId;
-    @Column(name="risk_decision", nullable=false, updatable=false) public String riskDecision;
-    @Column(name="risk_approved_at", nullable=false, updatable=false) public Instant riskApprovedAt;
+    @Column(name="trade_plan_id", updatable=false) public UUID tradePlanId;
+    @Column(name="trade_plan_version", updatable=false) public Long tradePlanVersion;
+    @Column(name="risk_evaluation_id", updatable=false) public UUID riskEvaluationId;
+    @Column(name="risk_decision", updatable=false) public String riskDecision;
+    @Column(name="risk_approved_at", updatable=false) public Instant riskApprovedAt;
+    @Column(name="purpose", nullable=false, updatable=false) public String purpose;
+    @Column(name="target_trade_id", updatable=false) public UUID targetTradeId;
     @Column(name="idempotency_key", nullable=false, updatable=false, length=160) public String idempotencyKey;
     @Column(name="initiator_id", nullable=false, updatable=false) public UUID initiatorId;
     @Column(name="broker_account_id", nullable=false, updatable=false) public UUID brokerAccountId;

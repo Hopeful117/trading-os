@@ -16,8 +16,8 @@ public record ExecutionDto(
         String failureReason
 ) {
     public static ExecutionDto from(ExecutionIntent value){
-        return new ExecutionDto(value.id().value(),value.tradePlan().tradePlanId(),
-                value.tradePlan().version(),value.riskApproval().evaluationId(),
+        return new ExecutionDto(value.id().value(),value.tradePlan() == null ? null : value.tradePlan().tradePlanId(),
+                value.tradePlan() == null ? 0 : value.tradePlan().version(),value.riskApproval() == null ? null : value.riskApproval().evaluationId(),
                 value.idempotencyKey().value(),value.brokerAccountId(),value.status(),
                 value.createdAt(),value.updatedAt(),value.expiresAt(),value.version(),
                 null,null,null,null,null,null);
@@ -43,8 +43,8 @@ public record ExecutionDto(
             }
         }
         String failReason=latestAttempt.map(a->mapFailureReason(a.resultCode(),intent.status())).orElse(null);
-        return new ExecutionDto(intent.id().value(),intent.tradePlan().tradePlanId(),
-                intent.tradePlan().version(),intent.riskApproval().evaluationId(),
+        return new ExecutionDto(intent.id().value(),intent.tradePlan() == null ? null : intent.tradePlan().tradePlanId(),
+                intent.tradePlan() == null ? 0 : intent.tradePlan().version(),intent.riskApproval() == null ? null : intent.riskApproval().evaluationId(),
                 intent.idempotencyKey().value(),intent.brokerAccountId(),intent.status(),
                 intent.createdAt(),intent.updatedAt(),intent.expiresAt(),intent.version(),
                 extId,brokerStatus,filledQty,avgPrice,fees,failReason);

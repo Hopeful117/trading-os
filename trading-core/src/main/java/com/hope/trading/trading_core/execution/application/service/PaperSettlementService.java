@@ -12,7 +12,7 @@ import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.repository.AccountRepository;
-import lombok.RequiredArgsConstructor;
+import com.hope.trading.trading_core.service.TradingCalculatorService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,11 +22,24 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class PaperSettlementService {
 
     private final BrokerAccountRepository brokerAccountRepository;
     private final AccountRepository accountRepository;
+    private final TradingCalculatorService tradingCalculatorService;
+
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                  AccountRepository accountRepository) {
+        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl());
+    }
+
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                  AccountRepository accountRepository,
+                                  TradingCalculatorService tradingCalculatorService) {
+        this.brokerAccountRepository = brokerAccountRepository;
+        this.accountRepository = accountRepository;
+        this.tradingCalculatorService = tradingCalculatorService;
+    }
 
     @Transactional
     public void settle(ExecutionIntent intent, ExecutionAttempt attempt, BrokerOrder order) {
@@ -52,11 +65,57 @@ public class PaperSettlementService {
         ExecutionParameters params = intent.parameters();
         BrokerOrder.Fill fill = getFill(order);
 
-        updateBalances(account, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
-        updatePosition(account, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
-        recalculateEquity(account, fill.fee());
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT) {
+            settleExit(account, intent, fill);
+        } else {
+            updateBalances(account, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
+            updatePosition(account, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
+            recalculateEquity(account, fill.fee());
+        }
 
         accountRepository.save(account);
+    }
+
+    private void settleExit(Account account, ExecutionIntent intent, BrokerOrder.Fill fill) {
+        UUID targetId = intent.targetTradeId().orElseThrow(() -> new IllegalStateException("EXIT target is required"));
+        Trade trade = account.getTrades().stream().filter(candidate -> targetId.equals(candidate.getTradeId()))
+                .findFirst().orElseThrow(() -> new IllegalStateException("EXIT target trade not found"));
+        if (trade.getTradeStatus() != TradeStatus.OPEN || trade.getClosedAt() != null) {
+            throw new IllegalStateException("EXIT target trade is already closed");
+        }
+        if (fill.quantity().compareTo(trade.getQuantity()) != 0) {
+            throw new IllegalStateException("EXIT fill quantity must equal target quantity");
+        }
+        ExecutionParameters.Side expectedSide = trade.getType() == TradeType.BUY
+                ? ExecutionParameters.Side.SELL : ExecutionParameters.Side.BUY;
+        if (intent.parameters().side() != expectedSide) {
+            throw new IllegalStateException("EXIT side does not match target trade");
+        }
+
+        updateExitBalances(account, trade, fill);
+        BigDecimal pnl = tradingCalculatorService.calculatePnL(trade.getType(), trade.getEntryPrice(),
+                fill.price(), trade.getQuantity());
+        trade.setExitPrice(fill.price());
+        trade.setCurrentPrice(fill.price());
+        trade.setClosedAt(fill.executedAt());
+        trade.setPnl(pnl);
+        trade.setTradeStatus(TradeStatus.CLOSED);
+        account.setEquity(account.getEquity().add(pnl).subtract(fill.fee()));
+        if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
+            account.setPeakEquity(account.getEquity());
+        }
+    }
+
+    private void updateExitBalances(Account account, Trade trade, BrokerOrder.Fill fill) {
+        String base = extractBaseAsset(trade.getSymbol());
+        BigDecimal notional = fill.price().multiply(fill.quantity());
+        if (trade.getType() == TradeType.BUY) {
+            deductBalance(account, base, fill.quantity());
+            addBalance(account, "USD", notional.subtract(fill.fee()));
+        } else {
+            addBalance(account, base, fill.quantity());
+            deductBalance(account, "USD", notional.add(fill.fee()));
+        }
     }
 
     private BrokerOrder.Fill getFill(BrokerOrder order) {

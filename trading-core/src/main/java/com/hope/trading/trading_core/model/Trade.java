@@ -21,6 +21,10 @@ public class Trade {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID tradeId;
 
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Column(nullable = false)
     private String symbol;
 

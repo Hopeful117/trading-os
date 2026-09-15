@@ -11,8 +11,9 @@ import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionStatu
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import org.springframework.transaction.annotation.Transactional;
 
-public final class ExecuteTradeService {
+public class ExecuteTradeService {
     private final ExecutionIntentRepositoryPort intents;
     private final ExecutionValidationStep validation;
     private final IdempotencyVerificationStep idempotency;
@@ -38,6 +39,7 @@ public final class ExecuteTradeService {
         this.events = Objects.requireNonNull(events); this.clock = Objects.requireNonNull(clock);
         this.t1Revalidation = Objects.requireNonNull(t1Revalidation);
     }
+    @Transactional
     public ExecutionIntent execute(ExecutionIntentId id) {
         ExecutionIntent intent = intents.findById(id).orElseThrow(
                 () -> new InvalidExecutionStateException("Execution intent not found"));
@@ -51,19 +53,17 @@ public final class ExecuteTradeService {
             throw new ExecutionExpiredException();
         }
 
-        // Mandatory T1 gate
-        var t1Outcome = t1Revalidation.evaluateAndPersist(intent, now);
-
-        // If T1 not approved, return early (T1 service already updated intent status and published events)
-        if (!t1Outcome.approved()) {
-            intents.save(intent);
-            events.publish(intent.pullEvents());
-            return intent;
-        }
-
         // T1 APPROVED - continue existing pipeline
         ExecutionPipelineContext context = new ExecutionPipelineContext(intent, now);
-        context.t1EvaluationId(t1Outcome.t1EvaluationId());
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
+            var t1Outcome = t1Revalidation.evaluateAndPersist(intent, now);
+            if (!t1Outcome.approved()) {
+                intents.save(intent);
+                events.publish(intent.pullEvents());
+                return intent;
+            }
+            context.t1EvaluationId(t1Outcome.t1EvaluationId());
+        }
 
         validation.execute(context);
         idempotency.execute(context);

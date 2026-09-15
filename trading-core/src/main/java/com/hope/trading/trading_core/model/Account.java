@@ -21,6 +21,10 @@ public class Account {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID accountId;
 
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Column(name = "broker_account_id", unique = true)
     private UUID brokerAccountId;
 
