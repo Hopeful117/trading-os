@@ -4,7 +4,7 @@ Trading OS est un assistant de trading intelligent destiné aux traders discrét
 
 Le produit n'est ni un bot autonome, ni une plateforme HFT, ni un outil limité aux challenges de prop firms. Les règles déterministes ont toujours priorité sur les recommandations de l'IA et toute exécution reste soumise à une validation humaine explicite.
 
-Le projet est en développement actif. L'architecture microservices, l'authentification, la synchronisation Kraken, le moteur de risque, le Dashboard, l'interface Angular, les fondations de Market Intelligence et le pipeline d'exécution broker sont présents. Aucun AI Engine réel ni mécanisme de décision ou d'exécution autonome n'est actuellement intégré : une exécution doit provenir d'une intention explicitement autorisée.
+Le projet est en développement actif. L'architecture microservices, l'authentification, la synchronisation Kraken, le moteur de risque, le Dashboard, l'interface Angular, les fondations de Market Intelligence et le pipeline d'exécution broker sont présents. Les comptes PAPER peuvent être provisionnés, recevoir une exécution simulée persistée et exposer leurs positions locales via l'API. Aucun AI Engine réel ni mécanisme de décision ou d'exécution autonome n'est actuellement intégré : une exécution doit provenir d'une intention explicitement autorisée.
 
 ## Principes directeurs
 
@@ -49,9 +49,12 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 
 - Authentification et autorisation JWT : disponible.
 - Comptes broker et synchronisation Kraken : disponible.
+- Identité financière et routage canoniques : `Account.accountId` et `BrokerAccount.id` sont des identités distinctes reliées par `Account.brokerAccountId`, avec contrôle d'appartenance côté serveur.
+- Comptes PAPER : provisioning persistant, simulation d'entrée, mise à jour locale des balances/equity et persistance des trades ouverts disponibles.
+- Positions PAPER : `GET /api/v1/accounts/{accountId}/positions` lit les `Trade` locaux `OPEN` après rechargement de la persistance, sans dépendre de Broker Service. La valorisation utilise Market Data, avec bid pour les positions BUY, ask pour les positions SELL et un statut explicite en cas de prix indisponible.
 - Référentiel et affichage des marchés Kraken : disponible.
 - Règles et moteur de risque : première version implémentée ; les profils configurables complets restent à construire.
-- Cycle de vie local des trades et statistiques : API implémentée, intégration UI incomplète.
+- Cycle de vie local des trades et statistiques : API implémentée, positions PAPER observables dans l'interface ; fermeture PAPER et intégration Analytics complète restent à construire.
 - Exécution broker : intentions, tentatives, idempotence, soumission Kraken, annulation, récupération et réconciliation implémentées. La validation contractuelle contre le sandbox Kraken et le parcours déployé de bout en bout restent à exécuter.
 - Flux temps réel : ticker, OHLC, carnet d'ordres et transactions récentes avec abonnements dynamiques.
 - Dashboard : orchestration dans Trading Core, valorisation des positions, risque, fraîcheur et états dégradés.
@@ -67,6 +70,30 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Execution Domain ADR-029 : cycle de vie, idempotence, audit, retry contrôlé, annulation et récupération dans Trading Core.
 - Broker Architecture ADR-030 : contrats broker-neutres, capacités, registre de providers, adaptateur Kraken, résilience et observabilité.
 - News Service, scheduling passif, interface Scanner et AI Engine réel : non commencés.
+
+### Avancées récentes
+
+Les dernières Stories ont consolidé le premier parcours PAPER sans modifier
+l'autorité broker des comptes LIVE :
+
+- [Story 0038](docs/architecture/stories/0038-persisted-paper-execution-regression/story.md) : exécution PAPER simulée et état final persisté après rechargement.
+- [Story 0039](docs/architecture/stories/0039-persisted-account-identity-explicit-paper-provisioning/story.md) : provisioning PAPER explicite et relation canonique entre compte financier et compte de routage.
+- [Story 0040](docs/architecture/stories/0040-mode-aware-neutral-risk-facts/story.md) : séparation des sources de Risk Facts selon le mode, avec comportement fail-closed pour les faits PAPER incomplets.
+- [Story 0041](docs/architecture/stories/0041-paper-local-position-query-valuation/story.md) : consultation HTTP des positions PAPER locales après `flush/clear`, identité basée sur le `Trade`, valorisation Market Data et suppression des actions de clôture LIVE pour PAPER.
+
+Le parcours PAPER couvert à ce stade est donc :
+
+```text
+provisioning PAPER
+    -> entrée simulée
+    -> Trade OPEN persisté
+    -> consultation des positions après reload
+    -> valorisation Market Data
+```
+
+La sortie PAPER reste une capacité de lecture et de simulation. La clôture,
+le settlement réalisé et le suivi actif des positions ne sont pas encore
+implémentés.
 
 ### Market Intelligence
 
@@ -229,6 +256,8 @@ progresser avec chaque fonctionnalité.
 - [x] Authentification JWT et interface de connexion
 - [x] Première intégration Kraken et synchronisation des comptes
 - [x] Référentiel de marchés et affichage Angular
+- [x] Provisioning des comptes PAPER et entrée simulée persistée
+- [x] Consultation des positions PAPER locales et valorisation Market Data
 - [ ] Stabilisation Docker, healthchecks et migrations de base
 - [x] Domaine de risque déterministe et tests métier associés
 - [ ] Intégration complète du domaine Risk aux parcours de trades et d'exécution
