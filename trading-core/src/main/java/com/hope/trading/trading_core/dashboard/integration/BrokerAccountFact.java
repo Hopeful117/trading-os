@@ -11,7 +11,7 @@ public record BrokerAccountFact(
         String currency,
         Map<String, BigDecimal> balances,
         BigDecimal brokerEquity,
-        List<BrokerPositionFact> positions,
+        List<PositionFact> positions,
         Instant dataAt
 ) {
     public BrokerAccountFact {

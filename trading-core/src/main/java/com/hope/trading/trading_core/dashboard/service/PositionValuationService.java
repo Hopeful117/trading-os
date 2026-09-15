@@ -1,6 +1,6 @@
 package com.hope.trading.trading_core.dashboard.service;
 
-import com.hope.trading.trading_core.dashboard.integration.BrokerPositionFact;
+import com.hope.trading.trading_core.dashboard.integration.PositionFact;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,7 +14,7 @@ public class PositionValuationService {
     private static final int PERCENT_SCALE = 4;
     private final TradingCalculatorService tradingCalculatorService;
 
-    public PositionValuation value(BrokerPositionFact position, BigDecimal currentPrice, BigDecimal equity) {
+    public PositionValuation value(PositionFact position, BigDecimal currentPrice, BigDecimal equity) {
         if (position.entryPrice() == null || position.quantity() == null) {
             BigDecimal exposure = position.exposure() == null
                     ? BigDecimal.ZERO
@@ -47,7 +47,7 @@ public class PositionValuationService {
         );
     }
 
-    private BigDecimal risk(BrokerPositionFact position) {
+    private BigDecimal risk(PositionFact position) {
         if (position.stopLoss() == null) {
             return BigDecimal.ZERO;
         }

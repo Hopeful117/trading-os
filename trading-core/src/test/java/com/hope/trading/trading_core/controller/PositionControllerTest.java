@@ -6,9 +6,13 @@ import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.dashboard.integration.BrokerDashboardMapper;
 import com.hope.trading.trading_core.dashboard.model.OpenPositionDashboardView;
 import com.hope.trading.trading_core.dashboard.service.PositionQueryService;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.model.Account;
+import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.service.AccountService;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,25 +42,39 @@ class PositionControllerTest {
 
     private final AccountService accountService = mock(AccountService.class);
     private final BrokerApiClient brokerApiClient = mock(BrokerApiClient.class);
+    private final BrokerAccountRepository brokerAccountRepository = mock(BrokerAccountRepository.class);
     private final BrokerDashboardMapper brokerMapper = new BrokerDashboardMapper();
     private final PositionQueryService positionQueryService = mock(PositionQueryService.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
-            new PositionController(accountService, brokerApiClient, brokerMapper, positionQueryService)
+            new PositionController(accountService, brokerApiClient, brokerMapper, positionQueryService,
+                    brokerAccountRepository)
     ).build();
 
     private UUID accountId;
+    private UUID brokerAccountId;
+    private UUID userId;
     private String username;
     private Account account;
 
     @BeforeEach
     void setUp() {
         accountId = UUID.randomUUID();
+        brokerAccountId = UUID.randomUUID();
+        userId = UUID.randomUUID();
         username = "trader@test.com";
         account = new Account();
         account.setAccountId(accountId);
         account.setName("Test Account");
         account.setBaseCurrency("USD");
+        account.setBrokerAccountId(brokerAccountId);
+        User owner = new User();
+        owner.setUserId(userId);
+        account.setUser(owner);
         account.setBalances(List.of());
+        BrokerAccount brokerAccount = mock(BrokerAccount.class);
+        when(brokerAccount.ownerId()).thenReturn(userId);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccountRepository.findById(brokerAccountId)).thenReturn(java.util.Optional.of(brokerAccount));
     }
 
     @Test
@@ -69,6 +87,24 @@ class PositionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void paperPositionsUseLocalStateWithoutCallingBroker() throws Exception {
+        when(accountService.getAccountById(accountId, username)).thenReturn(account);
+        BrokerAccount paper = mock(BrokerAccount.class);
+        when(paper.ownerId()).thenReturn(userId);
+        when(paper.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccountRepository.findById(brokerAccountId)).thenReturn(java.util.Optional.of(paper));
+        when(positionQueryService.findPaperPositions(eq(account), any())).thenReturn(List.of());
+
+        mvc.perform(get("/api/v1/accounts/{accountId}/positions", accountId)
+                        .principal(authentication()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        org.mockito.Mockito.verifyNoInteractions(brokerApiClient);
+        org.mockito.Mockito.verify(positionQueryService).findPaperPositions(eq(account), any());
     }
 
     @Test
@@ -97,7 +133,9 @@ class PositionControllerTest {
                 new BigDecimal("100"), new BigDecimal("2"),
                 new BigDecimal("100"), new BigDecimal("0"), new BigDecimal("0"),
                 new BigDecimal("5100"), com.hope.trading.trading_core.dashboard.model.PositionProtectionStatus.MISSING_STOP_LOSS,
-                true, Instant.now(), Instant.now(), Instant.now()
+                 true, Instant.now(), Instant.now(), Instant.now(),
+                 com.hope.trading.trading_core.dashboard.model.PositionSource.BROKER,
+                 com.hope.trading.trading_core.dashboard.model.PositionValuationStatus.FRESH
         );
         when(positionQueryService.findPositions(eq(accountId), any(), any(), any()))
                 .thenReturn(List.of(position));
@@ -139,6 +177,7 @@ class PositionControllerTest {
     private UsernamePasswordAuthenticationToken authentication() {
         UserDto user = new UserDto();
         user.setUsername(username);
+        user.setUserId(userId);
         return new UsernamePasswordAuthenticationToken(user, null,
                 List.of(new SimpleGrantedAuthority("ROLE_USER")));
     }

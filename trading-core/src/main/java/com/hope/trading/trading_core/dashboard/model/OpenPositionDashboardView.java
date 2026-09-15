@@ -27,6 +27,8 @@ public record OpenPositionDashboardView(
         boolean marketTradable,
         Instant openedAt,
         Instant priceOccurredAt,
-        Instant calculatedAt
+        Instant calculatedAt,
+        PositionSource source,
+        PositionValuationStatus valuationStatus
 ) {
 }

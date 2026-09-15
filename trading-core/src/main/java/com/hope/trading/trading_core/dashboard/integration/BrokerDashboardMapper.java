@@ -17,7 +17,7 @@ public class BrokerDashboardMapper {
                 || dto.getBalances().getBalances() == null
                 ? Map.of()
                 : dto.getBalances().getBalances();
-        List<BrokerPositionFact> positions = dto.getOpenTrades() == null
+        List<PositionFact> positions = dto.getOpenTrades() == null
                 ? List.of()
                 : dto.getOpenTrades().stream().map(this::toPositionFact).toList();
 
@@ -32,7 +32,7 @@ public class BrokerDashboardMapper {
         );
     }
 
-    public BrokerPositionFact toPositionFact(Position position) {
+    public PositionFact toPositionFact(Position position) {
         BigDecimal entryPrice = position.getEntryPrice();
         if (entryPrice == null
                 && position.getEntryValue() != null
@@ -43,7 +43,7 @@ public class BrokerDashboardMapper {
             );
         }
 
-        return new BrokerPositionFact(
+        return new PositionFact(
                 position.getBrokerPositionId(),
                 position.getSymbol(),
                 TradeType.valueOf(position.getSide().toUpperCase()),

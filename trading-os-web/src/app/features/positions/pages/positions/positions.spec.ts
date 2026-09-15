@@ -162,6 +162,15 @@ describe('Positions', () => {
     expect(button.textContent).toContain("Fermer l'exposition");
   });
 
+  it('does not expose the LIVE close action for a PAPER position', async () => {
+    const paperPosition = { ...positions[0], source: 'TRADING_CORE' as const };
+    positionService.getPositions.mockReturnValue(of([paperPosition]));
+    await create();
+
+    expect(fixture.nativeElement.querySelector('button.btn-close-exposure')).toBeNull();
+    expect(text()).not.toContain('Kraken réglera');
+  });
+
   it('no legacy close button exists', async () => {
     await create();
     expect(fixture.nativeElement.querySelector('[close]')).toBeNull();
@@ -414,6 +423,8 @@ describe('Positions', () => {
       openedAt: now,
       priceOccurredAt: now,
       calculatedAt: now,
+      source: 'BROKER',
+      valuationStatus: 'FRESH',
     };
   }
 });

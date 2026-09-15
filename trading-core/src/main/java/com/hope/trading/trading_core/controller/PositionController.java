@@ -5,6 +5,9 @@ import com.hope.trading.trading_core.dashboard.integration.BrokerAccountFact;
 import com.hope.trading.trading_core.dashboard.integration.BrokerDashboardMapper;
 import com.hope.trading.trading_core.dashboard.model.OpenPositionDashboardView;
 import com.hope.trading.trading_core.dashboard.service.PositionQueryService;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.service.AccountService;
@@ -31,6 +34,7 @@ public class PositionController {
     private final BrokerApiClient brokerApiClient;
     private final BrokerDashboardMapper brokerMapper;
     private final PositionQueryService positionQueryService;
+    private final BrokerAccountRepository brokerAccountRepository;
 
     @GetMapping("/{accountId}/positions")
     public ResponseEntity<List<OpenPositionDashboardView>> findPositions(
@@ -39,6 +43,22 @@ public class PositionController {
     ) {
         UserDto user = (UserDto) authentication.getPrincipal();
         Account account = accountService.getAccountById(accountId, user.getUsername());
+
+        BrokerAccount linkedBrokerAccount = account.getBrokerAccountId() == null
+                ? null
+                : brokerAccountRepository.findById(account.getBrokerAccountId()).orElse(null);
+        if (linkedBrokerAccount == null || linkedBrokerAccount.ownerId() == null
+                || account.getUser() == null
+                || !linkedBrokerAccount.ownerId().equals(account.getUser().getUserId())) {
+            throw new IllegalStateException("Account to BrokerAccount relation is invalid");
+        }
+
+        if (linkedBrokerAccount.executionMode() == ExecutionMode.PAPER) {
+            return ResponseEntity.ok(positionQueryService.findPaperPositions(account, Instant.now()));
+        }
+        if (linkedBrokerAccount.executionMode() != ExecutionMode.LIVE) {
+            throw new IllegalStateException("Execution mode is unavailable");
+        }
 
         BrokerAccountFact broker;
         try {

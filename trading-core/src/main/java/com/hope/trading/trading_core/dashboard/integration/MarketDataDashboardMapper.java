@@ -10,6 +10,8 @@ public class MarketDataDashboardMapper {
                 dto.marketId(),
                 dto.symbol(),
                 dto.lastPrice(),
+                dto.bid(),
+                dto.ask(),
                 dto.tradable(),
                 dto.occurredAt(),
                 dto.status()

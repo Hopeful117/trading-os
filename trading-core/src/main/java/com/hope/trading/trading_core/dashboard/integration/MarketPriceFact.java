@@ -10,6 +10,8 @@ public record MarketPriceFact(
         UUID marketId,
         String symbol,
         BigDecimal price,
+        BigDecimal bid,
+        BigDecimal ask,
         boolean tradable,
         Instant occurredAt,
         MarketPriceSnapshotStatus status

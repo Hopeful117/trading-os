@@ -1,15 +1,20 @@
 package com.hope.trading.trading_core.dashboard.service;
 
-import com.hope.trading.trading_core.dashboard.integration.BrokerPositionFact;
+import com.hope.trading.trading_core.dashboard.integration.PositionFact;
 import com.hope.trading.trading_core.dashboard.integration.MarketDataDashboardMapper;
 import com.hope.trading.trading_core.dashboard.integration.MarketPriceFact;
 import com.hope.trading.trading_core.dashboard.model.OpenPositionDashboardView;
+import com.hope.trading.trading_core.dashboard.model.PositionSource;
 import com.hope.trading.trading_core.dashboard.model.PositionProtectionStatus;
+import com.hope.trading.trading_core.dashboard.model.PositionValuationStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotStatus;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
+import com.hope.trading.trading_core.model.Account;
+import com.hope.trading.trading_core.model.Trade;
+import com.hope.trading.trading_core.helper.TradeStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,9 +35,20 @@ public class PositionQueryService {
 
     public List<OpenPositionDashboardView> findPositions(
             UUID accountId,
-            List<BrokerPositionFact> brokerPositions,
+            List<PositionFact> brokerPositions,
             BigDecimal equity,
             Instant calculatedAt
+    ) {
+        return findPositions(accountId, brokerPositions, equity, calculatedAt, PositionSource.BROKER, null);
+    }
+
+    private List<OpenPositionDashboardView> findPositions(
+            UUID accountId,
+            List<PositionFact> brokerPositions,
+            BigDecimal equity,
+            Instant calculatedAt,
+            PositionSource source,
+            String accountCurrency
     ) {
         if (brokerPositions.isEmpty()) {
             return List.of();
@@ -43,23 +59,25 @@ public class PositionQueryService {
         Map<UUID, MarketPriceFact> prices = loadPrices(marketLookup.marketIds(), warnings);
         Map<UUID, MarketPriceFact> safePrices = prices == null ? Map.of() : prices;
 
-        return buildPositions(accountId, brokerPositions, marketLookup.bySymbol(), safePrices, equity, calculatedAt);
+        return buildPositions(accountId, brokerPositions, marketLookup.bySymbol(), safePrices, equity,
+                calculatedAt, source, accountCurrency, marketLookup.available());
     }
 
     private List<OpenPositionDashboardView> buildPositions(
             UUID accountId,
-            List<BrokerPositionFact> brokerPositions,
+            List<PositionFact> brokerPositions,
             Map<String, MarketResponse> markets,
             Map<UUID, MarketPriceFact> prices,
             BigDecimal equity,
-            Instant calculatedAt
+            Instant calculatedAt,
+            PositionSource source,
+            String accountCurrency,
+            boolean marketCatalogAvailable
     ) {
         return brokerPositions.stream().map(position -> {
             MarketResponse market = markets.get(position.symbol());
             MarketPriceFact price = market == null ? null : prices.get(market.getMarketId());
-            BigDecimal currentPrice = price != null
-                    && price.status() == MarketPriceSnapshotStatus.FRESH
-                    ? price.price() : null;
+            BigDecimal currentPrice = currentPrice(position, market, price, accountCurrency);
             PositionValuation value = valuationService.value(position, currentPrice, equity);
             return new OpenPositionDashboardView(
                     position.positionId(), accountId,
@@ -67,36 +85,91 @@ public class PositionQueryService {
                     position.symbol(), position.side(), position.quantity(),
                     position.entryPrice(), currentPrice, position.stopLoss(), position.takeProfit(),
                     value.pnl(), value.pnlPercentage(), position.brokerUnrealizedPnl(),
-                    value.riskAmount(), value.riskPercentage(), value.exposure(),
+                    value.riskAmount(), value.riskPercentage(), currentPrice == null ? null : value.exposure(),
                     position.stopLoss() == null
                             ? PositionProtectionStatus.MISSING_STOP_LOSS
                             : PositionProtectionStatus.PROTECTED,
                     price != null && price.tradable(),
-                    position.openedAt(), price == null ? null : price.occurredAt(), calculatedAt
+                    position.openedAt(), price == null ? null : price.occurredAt(), calculatedAt,
+                    source, valuationStatus(market, price, currentPrice, accountCurrency, marketCatalogAvailable)
             );
         }).toList();
     }
 
-    private MarketLookup loadMarkets(List<BrokerPositionFact> positions, List<String> warnings) {
+    public List<OpenPositionDashboardView> findPaperPositions(Account account, Instant calculatedAt) {
+        List<PositionFact> positions = account.getTrades().stream()
+                .filter(trade -> trade.getTradeStatus() == TradeStatus.OPEN)
+                .map(this::toPositionFact)
+                .toList();
+        return findPositions(account.getAccountId(), positions, account.getEquity(), calculatedAt,
+                PositionSource.TRADING_CORE, account.getBaseCurrency());
+    }
+
+    private PositionFact toPositionFact(Trade trade) {
+        if (trade.getTradeId() == null || trade.getType() == null || trade.getQuantity() == null
+                || trade.getQuantity().signum() <= 0 || trade.getEntryPrice() == null
+                || trade.getEntryPrice().signum() <= 0 || trade.getSymbol() == null
+                || trade.getSymbol().isBlank()) {
+            throw new IllegalStateException("Invalid PAPER position state");
+        }
+        return new PositionFact(
+                trade.getTradeId().toString(), trade.getSymbol(), trade.getType(), trade.getQuantity(),
+                trade.getEntryPrice(), trade.getStopLoss(), trade.getTakeProfit(), null, null, null,
+                trade.getOpenedAt(), null
+        );
+    }
+
+    private BigDecimal currentPrice(PositionFact position, MarketResponse market, MarketPriceFact price,
+                                    String accountCurrency) {
+        if (market == null || price == null || price.status() != MarketPriceSnapshotStatus.FRESH
+                || price.occurredAt() == null) {
+            return null;
+        }
+        if (accountCurrency != null && (market.getQuoteAsset() == null
+                || !market.getQuoteAsset().equalsIgnoreCase(accountCurrency))) {
+            return null;
+        }
+        BigDecimal mark = position.side() == TradeType.BUY ? price.bid() : price.ask();
+        return mark != null && mark.signum() > 0 ? mark : null;
+    }
+
+    private PositionValuationStatus valuationStatus(MarketResponse market, MarketPriceFact price,
+                                                     BigDecimal currentPrice, String accountCurrency,
+                                                     boolean marketCatalogAvailable) {
+        if (market == null) {
+            return marketCatalogAvailable ? PositionValuationStatus.UNKNOWN_MARKET
+                    : PositionValuationStatus.UNAVAILABLE;
+        }
+        if (accountCurrency != null && (market.getQuoteAsset() == null
+                || !market.getQuoteAsset().equalsIgnoreCase(accountCurrency))) {
+            return PositionValuationStatus.UNSUPPORTED_CURRENCY;
+        }
+        if (currentPrice != null) return PositionValuationStatus.FRESH;
+        if (price == null || price.status() == null) return PositionValuationStatus.UNAVAILABLE;
+        return switch (price.status()) {
+            case FRESH -> PositionValuationStatus.UNAVAILABLE;
+            case STALE -> PositionValuationStatus.STALE;
+            case UNAVAILABLE -> PositionValuationStatus.UNAVAILABLE;
+            case UNKNOWN_MARKET -> PositionValuationStatus.UNKNOWN_MARKET;
+        };
+    }
+
+    private MarketLookup loadMarkets(List<PositionFact> positions, List<String> warnings) {
         if (positions.isEmpty()) {
             return new MarketLookup(Map.of(), List.of(), true);
         }
         try {
-            Map<String, MarketResponse> bySymbol = marketDataClient.findAll().stream()
-                    .collect(Collectors.toMap(
-                            market -> normalize(market.getSymbol()),
-                            Function.identity(),
-                            (first, ignored) -> first
-                    ));
+            Map<String, List<MarketResponse>> bySymbol = marketDataClient.findAll().stream()
+                    .collect(Collectors.groupingBy(market -> normalize(market.getSymbol())));
             Map<String, MarketResponse> resolved = positions.stream()
-                    .map(BrokerPositionFact::symbol)
+                    .map(PositionFact::symbol)
                     .distinct()
-                    .filter(symbol -> bySymbol.containsKey(normalize(symbol)))
+                    .filter(symbol -> bySymbol.getOrDefault(normalize(symbol), List.of()).size() == 1)
                     .collect(Collectors.toMap(
-                            Function.identity(), symbol -> bySymbol.get(normalize(symbol))
+                            Function.identity(), symbol -> bySymbol.get(normalize(symbol)).getFirst()
                     ));
             positions.stream()
-                    .map(BrokerPositionFact::symbol)
+                    .map(PositionFact::symbol)
                     .filter(symbol -> !resolved.containsKey(symbol))
                     .forEach(symbol -> warnings.add("Marché interne introuvable pour " + symbol));
             return new MarketLookup(
