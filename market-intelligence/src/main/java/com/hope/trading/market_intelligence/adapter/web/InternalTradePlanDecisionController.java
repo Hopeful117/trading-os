@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -33,8 +34,10 @@ public class InternalTradePlanDecisionController {
     @PostMapping("/decisions")
     public ResponseEntity<TradePlanResponse> decide(
             @PathVariable UUID planId, @PathVariable long version,
-            @Valid @RequestBody DecisionRequest request) {
-        var decided = service.decide(planId, version, request.actorId(),
+            @Valid @RequestBody DecisionRequest request, Authentication authentication) {
+        UUID actorId = ((com.hope.trading.market_intelligence.security.MiServicePrincipal)
+                authentication.getPrincipal()).requireMatchingActor(request.actorId());
+        var decided = service.decide(planId, version, actorId,
                 TradePlanDecisionService.Decision.valueOf(request.decision()));
         return ResponseEntity.ok(view(decided));
     }
@@ -42,7 +45,9 @@ public class InternalTradePlanDecisionController {
     @GetMapping
     public ResponseEntity<TradePlanResponse> load(
             @PathVariable UUID planId, @PathVariable long version,
-            @RequestParam UUID actorId) {
+            Authentication authentication) {
+        UUID actorId = ((com.hope.trading.market_intelligence.security.MiServicePrincipal)
+                authentication.getPrincipal()).requireDelegatedActor();
         return ResponseEntity.ok(view(service.loadForActor(planId, version, actorId)));
     }
 

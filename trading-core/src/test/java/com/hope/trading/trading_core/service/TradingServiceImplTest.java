@@ -9,6 +9,7 @@ import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Trade;
+import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.TradeRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +54,8 @@ class TradingServiceImplTest {
 
     private final UUID accountId = UUID.randomUUID();
     private final UUID tradeId = UUID.randomUUID();
+    private final UUID actorId = UUID.randomUUID();
+    private final UUID otherActorId = UUID.randomUUID();
     private final String username = "trader";
     private Account account;
 
@@ -66,6 +69,7 @@ class TradingServiceImplTest {
         account = new Account();
         account.setAccountId(accountId);
         account.setEquity(new BigDecimal("1000"));
+        account.setUser(User.builder().userId(actorId).username(username).build());
     }
 
     private Trade openTrade(TradeType type) {
@@ -90,7 +94,7 @@ class TradingServiceImplTest {
         when(tradeRepository.save(any(Trade.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        TradeDto dto = service.closeTrade(tradeId, new BigDecimal("110"), username);
+        TradeDto dto = service.closeTrade(tradeId, new BigDecimal("110"), actorId);
 
         assertThat(dto.getExitPrice()).isEqualByComparingTo("110");
         assertThat(dto.getPnl()).isEqualByComparingTo("20");
@@ -106,7 +110,7 @@ class TradingServiceImplTest {
         when(tradeRepository.save(any(Trade.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        TradeDto dto = service.closeTrade(tradeId, new BigDecimal("90"), username);
+        TradeDto dto = service.closeTrade(tradeId, new BigDecimal("90"), actorId);
 
         assertThat(dto.getPnl()).isEqualByComparingTo("20");
     }
@@ -117,7 +121,7 @@ class TradingServiceImplTest {
         trade.setClosedAt(Instant.parse("2026-08-23T09:00:00Z"));
 
         assertThatThrownBy(() -> service.closeTrade(
-                tradeId, new BigDecimal("110"), username))
+                tradeId, new BigDecimal("110"), actorId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already closed");
     }
@@ -127,7 +131,7 @@ class TradingServiceImplTest {
         when(tradeRepository.findById(tradeId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.closeTrade(
-                tradeId, new BigDecimal("110"), username))
+                tradeId, new BigDecimal("110"), actorId))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("Trade not found");
     }
@@ -140,7 +144,7 @@ class TradingServiceImplTest {
                 .thenAnswer(inv -> inv.getArgument(0));
 
         TradeDto dto = service.partialClose(
-                tradeId, new BigDecimal("1"), new BigDecimal("110"), username);
+                tradeId, new BigDecimal("1"), new BigDecimal("110"), actorId);
 
         assertThat(dto.getQuantity()).isEqualByComparingTo("1");
         assertThat(dto.getPnl()).isEqualByComparingTo("10");
@@ -155,7 +159,7 @@ class TradingServiceImplTest {
         when(tradeRepository.save(any(Trade.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        service.partialClose(tradeId, new BigDecimal("2"), new BigDecimal("105"), username);
+        service.partialClose(tradeId, new BigDecimal("2"), new BigDecimal("105"), actorId);
 
         assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
         assertThat(trade.getClosedAt()).isNotNull();
@@ -166,7 +170,7 @@ class TradingServiceImplTest {
         openTrade(TradeType.BUY);
 
         assertThatThrownBy(() -> service.partialClose(
-                tradeId, new BigDecimal("3"), new BigDecimal("105"), username))
+                tradeId, new BigDecimal("3"), new BigDecimal("105"), actorId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("exceeds");
     }
@@ -180,10 +184,11 @@ class TradingServiceImplTest {
         when(tradeRepository.findAllByAccount_AccountId(accountId))
                 .thenReturn(List.of(buyBtc, sellBtc, buyEth));
 
-        List<TradeDto> buysOnly = service.getTradesByFilters(accountId, TradeType.BUY, null);
-        List<TradeDto> btcOnly = service.getTradesByFilters(accountId, null, "BTC/USD");
-        List<TradeDto> all = service.getTradesByFilters(accountId, null, null);
-        List<TradeDto> buyBtcExact = service.getTradesByFilters(accountId, TradeType.BUY, "BTC/USD");
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        List<TradeDto> buysOnly = service.getTradesByFilters(accountId, TradeType.BUY, null, actorId);
+        List<TradeDto> btcOnly = service.getTradesByFilters(accountId, null, "BTC/USD", actorId);
+        List<TradeDto> all = service.getTradesByFilters(accountId, null, null, actorId);
+        List<TradeDto> buyBtcExact = service.getTradesByFilters(accountId, TradeType.BUY, "BTC/USD", actorId);
 
         assertThat(buysOnly).extracting(TradeDto::getType)
                 .containsOnly(TradeType.BUY);
@@ -198,17 +203,47 @@ class TradingServiceImplTest {
         when(tradeRepository.save(any(Trade.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        TradeDto afterSl = service.updateStopLoss(tradeId, new BigDecimal("94"));
+        TradeDto afterSl = service.updateStopLoss(tradeId, new BigDecimal("94"), actorId);
         assertThat(afterSl.getStopLoss()).isEqualByComparingTo("94");
 
-        TradeDto afterTp = service.updateTakeProfit(tradeId, new BigDecimal("120"));
+        TradeDto afterTp = service.updateTakeProfit(tradeId, new BigDecimal("120"), actorId);
         assertThat(afterTp.getTakeProfit()).isEqualByComparingTo("120");
     }
 
     @Test
     void getTradeByIdFailsForUnknownId() {
         when(tradeRepository.findById(tradeId)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.getTradeById(tradeId))
+        assertThatThrownBy(() -> service.getTradeById(tradeId, actorId))
                 .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void anotherUserCannotReadTradeById() {
+        openTrade(TradeType.BUY);
+
+        assertThatThrownBy(() -> service.getTradeById(tradeId, otherActorId))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void anotherUserCannotListTradesFromAnAccount() {
+        openTrade(TradeType.BUY);
+        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> service.getTradesByFilters(accountId, null, null, otherActorId))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void anotherUserCannotChangeTradeProtection() {
+        Trade trade = openTrade(TradeType.BUY);
+
+        assertThatThrownBy(() -> service.updateStopLoss(tradeId, new BigDecimal("80"), otherActorId))
+                .isInstanceOf(EntityNotFoundException.class);
+        assertThatThrownBy(() -> service.updateTakeProfit(tradeId, new BigDecimal("130"), otherActorId))
+                .isInstanceOf(EntityNotFoundException.class);
+        assertThat(trade.getStopLoss()).isEqualByComparingTo("95");
+        assertThat(trade.getTakeProfit()).isEqualByComparingTo("110");
+        Mockito.verify(tradeRepository, Mockito.never()).save(any(Trade.class));
     }
 }

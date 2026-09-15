@@ -8,12 +8,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.cloud.openfeign.FeignClient;
+import com.hope.trading.trading_core.config.BrokerServiceFeignConfiguration;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 
-@FeignClient(name = "broker-service", contextId = "brokerRiskFactsClient")
+@FeignClient(name = "broker-service", contextId = "brokerRiskFactsClient",
+        configuration = BrokerServiceFeignConfiguration.class)
 interface BrokerRiskFeignClient {
     @GetMapping("/internal/v1/broker-accounts/{id}/risk-snapshot")
     BrokerRiskTransport get(@PathVariable UUID id, @RequestParam Instant from, @RequestParam Instant to);

@@ -12,13 +12,13 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TradingService {
-    TradeDto openTrade (TradeRequest tradeRequest,String username);
-    TradeDto closeTrade (UUID tradeId,BigDecimal exitPrice,String username);
-    TradeDto partialClose (UUID tradeId,BigDecimal quantity,BigDecimal exitPrice,String username);
-    TradeDto getTradeById(UUID tradeId);
-    List<TradeDto>getTradesByFilters(UUID accountId,TradeType type,String symbol);
-    TradeDto updateStopLoss(UUID tradeId, BigDecimal stopLoss);
-    TradeDto updateTakeProfit(UUID tradeId,BigDecimal takeProfit);
+    TradeDto openTrade (TradeRequest tradeRequest, UUID actorId);
+    TradeDto closeTrade (UUID tradeId,BigDecimal exitPrice, UUID actorId);
+    TradeDto partialClose (UUID tradeId,BigDecimal quantity,BigDecimal exitPrice, UUID actorId);
+    TradeDto getTradeById(UUID tradeId, UUID actorId);
+    List<TradeDto>getTradesByFilters(UUID accountId,TradeType type,String symbol, UUID actorId);
+    TradeDto updateStopLoss(UUID tradeId, BigDecimal stopLoss, UUID actorId);
+    TradeDto updateTakeProfit(UUID tradeId,BigDecimal takeProfit, UUID actorId);
 
 
 

@@ -13,6 +13,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -53,6 +54,24 @@ class JwtSecurityBoundaryTest {
     }
 
     // ---- JwtService contract -----------------------------------------------
+
+    @Test
+    void defaultSecretIsRejected() {
+        JwtProperties insecure = new JwtProperties("default-secret-must-change", 3600000L, "issuer");
+
+        assertThatThrownBy(insecure::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT secret");
+    }
+
+    @Test
+    void blankSecretIsRejected() {
+        JwtProperties insecure = new JwtProperties(" ", 3600000L, "issuer");
+
+        assertThatThrownBy(insecure::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT secret");
+    }
 
     @Test
     void generatedTokenCarriesIdentityAndSurvivesRoundTrip() {

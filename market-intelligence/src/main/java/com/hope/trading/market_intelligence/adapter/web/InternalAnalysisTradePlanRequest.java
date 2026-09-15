@@ -12,6 +12,10 @@ public record InternalAnalysisTradePlanRequest(
         @NotNull UUID accountId,
         @NotNull @Valid Context context
 ) {
+    public InternalAnalysisTradePlanRequest withActorId(UUID value) {
+        return new InternalAnalysisTradePlanRequest(value, accountId, context);
+    }
+
     public record Context(
             @NotNull UUID id,
             @Min(1) long version,

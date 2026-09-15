@@ -1,12 +1,14 @@
 package com.hope.trading.trading_core.positionclose.infrastructure.adapter;
 
 import org.springframework.cloud.openfeign.FeignClient;
+import com.hope.trading.trading_core.config.BrokerServiceFeignConfiguration;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.UUID;
 
-@FeignClient(name = "broker-service", contextId = "position-close-client", url = "${broker-service.base-url:}")
+@FeignClient(name = "broker-service", contextId = "position-close-client", url = "${broker-service.base-url:}",
+        configuration = BrokerServiceFeignConfiguration.class)
 public interface BrokerPositionCloseClient {
     @PostMapping("/internal/v1/positions/resolve-target")
     ResolvedTargetResponse resolveTarget(@RequestBody ResolveTargetRequest request);

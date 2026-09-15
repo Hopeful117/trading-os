@@ -13,7 +13,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 
 import org.springframework.web.bind.annotation.*;
 
-import java.util.UUID;
 
 /**
  * Controller for managing user-related operations.
@@ -42,17 +41,6 @@ public class UserController {
     }
 
 
-
-    /**
-     * Fetch a user
-     * @param id id of the desired user
-     * @return user as a DTO
-     */
-    @GetMapping("/{id}")
-    public ResponseEntity<User> getUser(@PathVariable UUID id) {
-        User user = userService.getUserById(id);
-        return ResponseEntity.ok(user);
-    }
 
     @PostMapping("/login")
     public ResponseEntity<AuthenticationResponse> login(

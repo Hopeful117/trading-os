@@ -9,8 +9,6 @@ import com.hope.trading.trading_core.service.TradingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -35,7 +33,7 @@ public class TradeController {
      */
     @PostMapping
     public ResponseEntity<TradeDto> createTrade(@RequestBody TradeRequest tradeRequest, Authentication authentication ){
-        TradeDto trade = tradingService.openTrade(tradeRequest, authentication.getName());
+        TradeDto trade = tradingService.openTrade(tradeRequest, actorId(authentication));
         return ResponseEntity.ok(trade);
     }
 
@@ -46,8 +44,8 @@ public class TradeController {
      */
 
     @GetMapping("/{tradeId}")
-    public ResponseEntity<TradeDto> getTrade(@PathVariable UUID tradeId) {
-        return ResponseEntity.ok(tradingService.getTradeById(tradeId));
+    public ResponseEntity<TradeDto> getTrade(@PathVariable UUID tradeId, Authentication authentication) {
+        return ResponseEntity.ok(tradingService.getTradeById(tradeId, actorId(authentication)));
     }
 
     /**
@@ -62,9 +60,10 @@ public class TradeController {
     public ResponseEntity<List<TradeDto>> getTrades(
             @RequestParam UUID accountId,
             @RequestParam(required = false) TradeType type,
-            @RequestParam(required = false) String symbol
+            @RequestParam(required = false) String symbol,
+            Authentication authentication
     ) {
-        List<TradeDto> trades = tradingService.getTradesByFilters(accountId, type, symbol);
+        List<TradeDto> trades = tradingService.getTradesByFilters(accountId, type, symbol, actorId(authentication));
         return ResponseEntity.ok(trades);
     }
 
@@ -76,7 +75,7 @@ public class TradeController {
      */
     @PostMapping("/{tradeId}/close")
     public ResponseEntity<TradeDto> closeTrade(@PathVariable UUID tradeId, @RequestParam BigDecimal exitPrice, Authentication authentication) {
-        TradeDto trade = tradingService.closeTrade(tradeId, exitPrice, authentication.getName());
+        TradeDto trade = tradingService.closeTrade(tradeId, exitPrice, actorId(authentication));
         return ResponseEntity.ok(trade);
     }
 
@@ -94,7 +93,7 @@ public class TradeController {
             @RequestParam BigDecimal exitPrice,
             Authentication authentication
     ) {
-        TradeDto trade = tradingService.partialClose(tradeId, quantity, exitPrice, authentication.getName());
+        TradeDto trade = tradingService.partialClose(tradeId, quantity, exitPrice, actorId(authentication));
         return ResponseEntity.ok(trade);
     }
 
@@ -107,9 +106,10 @@ public class TradeController {
     @PatchMapping("/{tradeId}/stop-loss")
     public ResponseEntity<TradeDto> updateStopLoss(
             @PathVariable UUID tradeId,
-            @RequestParam BigDecimal stopLoss
+            @RequestParam BigDecimal stopLoss,
+            Authentication authentication
     ) {
-        TradeDto trade = tradingService.updateStopLoss(tradeId, stopLoss);
+        TradeDto trade = tradingService.updateStopLoss(tradeId, stopLoss, actorId(authentication));
         return ResponseEntity.ok(trade);
     }
 
@@ -122,9 +122,14 @@ public class TradeController {
     @PatchMapping("/{tradeId}/take-profit")
     public ResponseEntity<TradeDto> updateTakeProfit(
             @PathVariable UUID tradeId,
-            @RequestParam BigDecimal takeProfit
+            @RequestParam BigDecimal takeProfit,
+            Authentication authentication
     ) {
-        TradeDto trade = tradingService.updateTakeProfit(tradeId, takeProfit);
+        TradeDto trade = tradingService.updateTakeProfit(tradeId, takeProfit, actorId(authentication));
         return ResponseEntity.ok(trade);
+    }
+
+    private UUID actorId(Authentication authentication) {
+        return ((com.hope.trading.trading_core.dto.UserDto) authentication.getPrincipal()).getUserId();
     }
 }

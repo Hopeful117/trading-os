@@ -1,13 +1,15 @@
 package com.hope.trading.trading_core.tradeplanning.infrastructure;
 
 import org.springframework.cloud.openfeign.FeignClient;
+import com.hope.trading.trading_core.config.MarketIntelligenceFeignConfiguration;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.UUID;
 
-@FeignClient(name = "market-intelligence", contextId = "analysisTradePlanningClient")
+@FeignClient(name = "market-intelligence", contextId = "analysisTradePlanningClient",
+        configuration = MarketIntelligenceFeignConfiguration.class)
 public interface MarketIntelligenceTradePlanningClient {
     @PostMapping("/internal/v1/intelligence/analyses/{analysisExecutionId}/trade-plans")
     Response generate(
@@ -29,9 +31,12 @@ public interface MarketIntelligenceTradePlanningClient {
 
     @GetMapping("/internal/v1/trade-plans/{planId}/versions/{version}")
     PlanTransport load(
-            @PathVariable UUID planId,
-            @PathVariable long version,
-            @RequestParam UUID actorId);
+             @PathVariable UUID planId,
+             @PathVariable long version);
+
+    default PlanTransport load(UUID planId, long version, UUID ignoredCompatibilityActor) {
+        return load(planId, version);
+    }
 
     record Request(UUID actorId, UUID accountId, Context context) { }
     record Context(UUID id, long version, Instant capturedAt, UUID ownerId,
