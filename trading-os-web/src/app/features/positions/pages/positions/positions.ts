@@ -171,9 +171,10 @@ export class Positions {
     const state = this.getCloseState(position.positionId);
     const idempotencyKey = uuidv4();
 
-    const closeRequest = position.source === 'TRADING_CORE'
-      ? this.positionService.closePaperPosition(accountId, position.positionId, idempotencyKey)
-      : this.positionService.closePosition(accountId, position.positionId, idempotencyKey);
+    const closeRequest =
+      position.source === 'TRADING_CORE'
+        ? this.positionService.closePaperPosition(accountId, position.positionId, idempotencyKey)
+        : this.positionService.closePosition(accountId, position.positionId, idempotencyKey);
     closeRequest.subscribe({
       next: (response) => {
         state.status = response.status as PositionCloseStatus;
