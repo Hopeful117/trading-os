@@ -1,6 +1,6 @@
 package com.hope.trading.trading_core.dashboard.service;
 
-import com.hope.trading.trading_core.dashboard.integration.BrokerPositionFact;
+import com.hope.trading.trading_core.dashboard.integration.PositionFact;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.service.TradingCalculatorServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -47,8 +47,8 @@ class PositionValuationServiceTest {
         return service.value(position(side), new BigDecimal(price), new BigDecimal("1000"));
     }
 
-    private BrokerPositionFact position(TradeType side) {
-        return new BrokerPositionFact(
+    private PositionFact position(TradeType side) {
+        return new PositionFact(
                 "p1", "BTC/USD", side, new BigDecimal("2"),
                 new BigDecimal("100"), new BigDecimal("95"), null,
                 null, null, null, null, null

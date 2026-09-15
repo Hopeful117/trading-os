@@ -5,7 +5,7 @@ import com.hope.trading.trading_core.helper.TradeType;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-public record BrokerPositionFact(
+public record PositionFact(
         String positionId,
         String symbol,
         TradeType side,

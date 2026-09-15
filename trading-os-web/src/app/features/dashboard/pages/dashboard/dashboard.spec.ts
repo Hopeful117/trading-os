@@ -488,6 +488,8 @@ describe('Dashboard', () => {
       openedAt: now,
       priceOccurredAt: now,
       calculatedAt: now,
+      source: 'BROKER' as const,
+      valuationStatus: 'FRESH' as const,
     };
   }
 

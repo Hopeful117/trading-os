@@ -3,6 +3,14 @@ export type DashboardAlertSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
 export type PositionProtectionStatus = 'PROTECTED' | 'MISSING_STOP_LOSS' | 'UNKNOWN';
 export type RiskStatus = 'SAFE' | 'WARNING' | 'BREACHED' | 'UNAVAILABLE';
 export type PositionSide = 'BUY' | 'SELL';
+export type PositionSource = 'BROKER' | 'TRADING_CORE';
+export type PositionValuationStatus =
+  | 'FRESH'
+  | 'STALE'
+  | 'UNAVAILABLE'
+  | 'UNKNOWN_MARKET'
+  | 'UNSUPPORTED_CURRENCY'
+  | 'INVALID';
 
 export interface AccountDashboardSummary {
   accountId: string;
@@ -34,12 +42,14 @@ export interface OpenPositionDashboardView {
   brokerUnrealizedPnl: number | null;
   riskAmount: number;
   riskPercentage: number;
-  exposure: number;
+  exposure: number | null;
   protectionStatus: PositionProtectionStatus;
   marketTradable: boolean;
   openedAt: string | null;
   priceOccurredAt: string | null;
   calculatedAt: string;
+  source: PositionSource;
+  valuationStatus: PositionValuationStatus;
 }
 
 export interface RiskRuleDashboardView {
