@@ -29,6 +29,44 @@
           data-testid="initial-capital-input"
         />
       </label>
+      @if (riskProfileState | async; as profileState) {
+        @if (profileState.loading) {
+          <p data-testid="risk-profile-loading" role="status">
+            Chargement des politiques de risque…
+          </p>
+        } @else if (profileState.error) {
+          <p class="connection-message error" data-testid="risk-profile-error" role="alert">
+            Les politiques de risque PAPER sont indisponibles. Réessayez plus tard.
+          </p>
+        } @else if (profileState.profiles.length === 0) {
+          <p class="connection-message error" data-testid="risk-profile-empty" role="alert">
+            Aucune politique de risque PAPER valide n’est disponible. Un administrateur doit en
+            provisionner une avant de créer un compte.
+          </p>
+        } @else {
+          <label>
+            Politique de risque
+            <select [formControl]="riskProfileSelection" data-testid="risk-profile-select">
+              <option value="">Sélectionner une politique</option>
+              @for (profile of profileState.profiles; track riskProfileKey(profile)) {
+                <option [value]="riskProfileKey(profile)">
+                  {{ profile.policyId }} v{{ profile.semanticVersion }}
+                </option>
+              }
+            </select>
+          </label>
+          @for (profile of profileState.profiles; track riskProfileKey(profile)) {
+            @if (riskProfileKey(profile) === riskProfileSelection.value) {
+              <small data-testid="risk-profile-summary">
+                {{ profile.authority }} ·
+                @for (rule of profile.rules; track rule.ruleId) {
+                  {{ rule.ruleId }} {{ rule.maximumRatio * 100 }}%
+                }
+              </small>
+            }
+          }
+        }
+      }
     } @else {
       <label>
         API key
@@ -44,7 +82,11 @@
         />
       </label>
     }
-    <button type="submit" [disabled]="connecting()" data-testid="create-account-button">
+    <button
+      type="submit"
+      [disabled]="connecting() || (isPaper() && !riskProfileSelection.value)"
+      data-testid="create-account-button"
+    >
       {{
         connecting()
           ? 'Création…'

@@ -2,11 +2,18 @@ import { Component, signal } from '@angular/core';
 import { AccountService } from '../../../../core/services/account.service';
 import { Account } from '../../../../core/models/account.model';
 import { AccountCard } from '../../components/account-card/account-card';
-import { combineLatest, Observable, shareReplay } from 'rxjs';
+import { catchError, combineLatest, map, Observable, of, shareReplay, startWith } from 'rxjs';
 import { AsyncPipe } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 import { BrokerAccount } from '../../../../core/models/broker-account.model';
+import { RiskProfileCatalogEntry } from '../../../../core/models/risk-profile.model';
+
+type RiskProfileState = {
+  profiles: RiskProfileCatalogEntry[];
+  loading: boolean;
+  error: boolean;
+};
 
 export type ConnectionFeedback =
   { kind: 'success'; message: string } | { kind: 'error'; message: string } | null;
@@ -21,11 +28,13 @@ export class Accounts {
   accounts!: Observable<Account[]>;
   brokerAccounts!: Observable<BrokerAccount[]>;
   accountState!: Observable<{ accounts: Account[]; brokerAccounts: BrokerAccount[] }>;
+  riskProfileState!: Observable<RiskProfileState>;
 
   readonly connecting = signal(false);
   readonly connectionFeedback = signal<ConnectionFeedback>(null);
   readonly syncing = signal(false);
   readonly syncFeedback = signal<ConnectionFeedback>(null);
+  readonly riskProfileSelection = new FormControl('', { nonNullable: true });
 
   readonly brokerForm = new FormGroup({
     provider: new FormControl<'KRAKEN'>('KRAKEN', { nonNullable: true }),
@@ -56,6 +65,7 @@ export class Accounts {
   ngOnInit(): void {
     this.loadAccounts();
     this.loadBrokerAccounts();
+    this.loadRiskProfiles();
   }
 
   connectBroker(): void {
@@ -65,9 +75,15 @@ export class Accounts {
 
     const command = this.brokerForm.getRawValue();
     if (command.executionMode === 'PAPER') {
-      if (!command.displayName || !command.initialCapital || command.initialCapital <= 0) {
+      if (
+        !command.displayName ||
+        !command.initialCapital ||
+        command.initialCapital <= 0 ||
+        !this.riskProfileSelection.value
+      ) {
         this.brokerForm.controls.displayName.markAsTouched();
         this.brokerForm.controls.initialCapital.markAsTouched();
+        this.riskProfileSelection.markAsTouched();
         return;
       }
       this.createPaperAccount(command);
@@ -134,6 +150,7 @@ export class Accounts {
     apiSecret: string;
     passphrase: string;
   }): void {
+    const [profileId, semanticVersion] = this.riskProfileSelection.value.split('::');
     this.connecting.set(true);
     this.connectionFeedback.set(null);
     this.brokerAccountService
@@ -141,6 +158,7 @@ export class Accounts {
         provider: command.provider,
         displayName: command.displayName,
         initialCapital: command.initialCapital!,
+        riskProfile: { profileId, semanticVersion },
       })
       .subscribe({
         next: () => {
@@ -158,6 +176,7 @@ export class Accounts {
             apiSecret: '',
             passphrase: '',
           });
+          this.riskProfileSelection.reset('');
           this.loadBrokerAccounts();
           this.loadAccounts();
         },
@@ -165,10 +184,24 @@ export class Accounts {
           this.connecting.set(false);
           this.connectionFeedback.set({
             kind: 'error',
-            message: 'Le compte PAPER n’a pas pu être créé. Vérifiez le capital initial.',
+            message:
+              'Le compte PAPER n’a pas pu être créé. La politique sélectionnée est peut-être devenue indisponible. Rechargez les politiques puis réessayez.',
           });
         },
       });
+  }
+
+  private loadRiskProfiles(): void {
+    this.riskProfileState = this.brokerAccountService.eligibleRiskProfiles().pipe(
+      map((profiles) => ({ profiles, loading: false, error: false })),
+      startWith({ profiles: [], loading: true, error: false }),
+      catchError(() => of({ profiles: [], loading: false, error: true })),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+  }
+
+  riskProfileKey(profile: RiskProfileCatalogEntry): string {
+    return `${profile.profileId}::${profile.semanticVersion}`;
   }
 
   sync(): void {

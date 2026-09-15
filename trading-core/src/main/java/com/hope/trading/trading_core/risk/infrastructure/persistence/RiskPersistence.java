@@ -69,6 +69,14 @@ public class RiskPersistence {
         return profile == null ? Optional.empty() : Optional.of(profile(profile, null, null));
     }
 
+    public List<Profile> profiles() {
+        return entityManager.createQuery("select e from RiskProfileEntity e order by e.createdAt desc, e.id, e.semanticVersion",
+                        RiskProfileEntity.class)
+                .getResultList().stream()
+                .map(e -> profile(e, null, null))
+                .toList();
+    }
+
     @Transactional
     public void configuration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
                               String reportingCurrency, UUID portfolioId) {

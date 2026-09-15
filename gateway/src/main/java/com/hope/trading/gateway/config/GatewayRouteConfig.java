@@ -62,6 +62,10 @@ public class GatewayRouteConfig {
                 .route("broker-accounts", r -> r
                         .path("/api/v1/broker-accounts/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                 )
+                .route("risk-profile-catalog", r -> r
+                        .path("/api/v1/risk-profiles/**")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
                 )
                 .route("trade-plan-risk-evaluations", r -> r
                         // Covers public TradePlan orchestration and creation

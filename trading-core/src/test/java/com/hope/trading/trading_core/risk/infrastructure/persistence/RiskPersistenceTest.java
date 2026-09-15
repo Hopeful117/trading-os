@@ -10,6 +10,8 @@ import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.helper.Role;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.risk.application.RiskProfileCatalogService;
+import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -25,10 +27,15 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 @Transactional
 class RiskPersistenceTest {
+    private static final UUID PAPER_STANDARD_ID =
+            UUID.fromString("0a10c7e2-9d1e-4f5a-b6c8-123456789043");
+
     @Autowired RiskPersistence persistence;
     @Autowired JdbcTemplate jdbc;
     @Autowired BrokerAccountService brokerAccountService;
     @Autowired UserRepository users;
+    @Autowired RiskProfileCatalogService catalog;
+    @Autowired RiskProfileValidator validator;
 
     @Test
     void databaseIssuesIncreasingComponentVersions() {
@@ -43,6 +50,37 @@ class RiskPersistenceTest {
         assertThat(portfolio).isGreaterThan(account);
         assertThat(market).isGreaterThan(portfolio);
         assertThat(rules).isGreaterThan(market);
+    }
+
+    @Test
+    void flywayProvisionsPaperStandardProfileWithoutAssignmentOrAccount() {
+        RiskPersistence.Profile profile = persistence.profile(PAPER_STANDARD_ID, "1.0.0").orElseThrow();
+
+        validator.validate(profile, false);
+        assertThat(profile.policyId()).isEqualTo("TRADING_OS_STANDARD_RISK");
+        assertThat(profile.policyVersion()).isEqualTo("1.0.0");
+        assertThat(profile.authority()).isEqualTo("PLATFORM");
+        assertThat(profile.provenance()).isEqualTo(
+                "Trading OS PAPER Standard Risk Policy v1, human-approved product policy, 2026-09-15");
+        assertThat(profile.rules()).extracting(RiskPersistence.ProfileRule::ruleId)
+                .containsExactlyInAnyOrder("MAX_POSITION_RISK", "MAX_EXPOSURE", "DAILY_DRAWDOWN");
+        assertThat(profile.rules()).filteredOn(rule -> "MAX_POSITION_RISK".equals(rule.ruleId()))
+                .singleElement().extracting(RiskPersistence.ProfileRule::maximumRatio)
+                .isEqualTo(new BigDecimal("0.010000000000"));
+        assertThat(profile.rules()).filteredOn(rule -> "MAX_EXPOSURE".equals(rule.ruleId()))
+                .singleElement().extracting(RiskPersistence.ProfileRule::maximumRatio)
+                .isEqualTo(new BigDecimal("0.030000000000"));
+        assertThat(profile.rules()).filteredOn(rule -> "DAILY_DRAWDOWN".equals(rule.ruleId()))
+                .singleElement().extracting(RiskPersistence.ProfileRule::maximumRatio)
+                .isEqualTo(new BigDecimal("0.030000000000"));
+        assertThat(catalog.eligiblePlatformProfiles()).anySatisfy(entry -> {
+            assertThat(entry.profileId()).isEqualTo(PAPER_STANDARD_ID);
+            assertThat(entry.semanticVersion()).isEqualTo("1.0.0");
+        });
+        assertThat(jdbc.queryForObject("select count(*) from account_risk_profile_assignment where profile_id=?",
+                Integer.class, PAPER_STANDARD_ID)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from accounts", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from broker_account", Integer.class)).isZero();
     }
 
     @Test

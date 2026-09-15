@@ -14,6 +14,7 @@ describe('Accounts', () => {
   };
   let brokerAccountService: {
     list: ReturnType<typeof vi.fn>;
+    eligibleRiskProfiles: ReturnType<typeof vi.fn>;
     createPaper: ReturnType<typeof vi.fn>;
     createAndConnect: ReturnType<typeof vi.fn>;
   };
@@ -27,6 +28,7 @@ describe('Accounts', () => {
     };
     brokerAccountService = {
       list: vi.fn(() => of([])),
+      eligibleRiskProfiles: vi.fn(() => of([])),
       createPaper: vi.fn(() => of({ executionMode: 'PAPER' })),
       createAndConnect: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
     };
@@ -53,6 +55,36 @@ describe('Accounts', () => {
 
   it('should load broker accounts on init', () => {
     expect(brokerAccountService.list).toHaveBeenCalled();
+  });
+
+  it('loads eligible risk profiles on init', () => {
+    expect(brokerAccountService.eligibleRiskProfiles).toHaveBeenCalled();
+  });
+
+  it('shows an actionable empty state when no PAPER profile is available', () => {
+    component.brokerForm.controls.executionMode.setValue('PAPER');
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="risk-profile-empty"]'),
+    ).not.toBeNull();
+    expect(
+      (
+        fixture.nativeElement.querySelector(
+          '[data-testid="create-account-button"]',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it('shows an actionable catalog error state', () => {
+    component.riskProfileState = of({ profiles: [], loading: false, error: true });
+    component.brokerForm.controls.executionMode.setValue('PAPER');
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="risk-profile-error"]'),
+    ).not.toBeNull();
   });
 
   it('shows visible success feedback in the DOM after connecting a broker', async () => {
@@ -240,6 +272,7 @@ describe('Accounts', () => {
   });
 
   it('creates a PAPER account with initial capital without requesting credentials', async () => {
+    component.riskProfileSelection.setValue('profile-1::1.0.0');
     component.brokerForm.setValue({
       provider: 'KRAKEN',
       executionMode: 'PAPER',
@@ -257,9 +290,26 @@ describe('Accounts', () => {
       provider: 'KRAKEN',
       displayName: 'Paper account',
       initialCapital: 10000,
+      riskProfile: { profileId: 'profile-1', semanticVersion: '1.0.0' },
     });
     expect(brokerAccountService.createAndConnect).not.toHaveBeenCalled();
     expect(component.connectionFeedback()?.kind).toBe('success');
+  });
+
+  it('requires explicit risk profile selection for PAPER accounts', () => {
+    component.brokerForm.setValue({
+      provider: 'KRAKEN',
+      executionMode: 'PAPER',
+      displayName: 'Paper account',
+      initialCapital: 10000,
+      apiKey: '',
+      apiSecret: '',
+      passphrase: '',
+    });
+
+    component.connectBroker();
+
+    expect(brokerAccountService.createPaper).not.toHaveBeenCalled();
   });
 
   it('requires positive initial capital for a PAPER account', () => {
