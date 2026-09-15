@@ -18,6 +18,8 @@ public final class ExecutionValidationService {
             throw new InvalidExecutionStateException(
                     "Execution cannot start from " + intent.status());
         }
-        Objects.requireNonNull(intent.riskApproval(), "Risk approval is mandatory");
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
+            Objects.requireNonNull(intent.riskApproval(), "Risk approval is mandatory");
+        }
     }
 }

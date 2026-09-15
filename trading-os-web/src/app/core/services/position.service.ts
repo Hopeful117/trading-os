@@ -31,6 +31,20 @@ export class PositionService {
     );
   }
 
+  closePaperPosition(
+    accountId: string,
+    tradeId: string,
+    idempotencyKey: string,
+  ): Observable<PositionCloseResponse> {
+    const headers = { 'Idempotency-Key': idempotencyKey };
+    const body: PositionCloseRequest = { tradeId };
+    return this.http.post<PositionCloseResponse>(
+      `${environment.gatewayUrl}v1/accounts/${accountId}/positions/close`,
+      body,
+      { headers },
+    );
+  }
+
   reconcileClose(accountId: string, commandId: string): Observable<PositionCloseResponse> {
     return this.http.post<PositionCloseResponse>(
       `${environment.gatewayUrl}v1/accounts/${accountId}/positions/close/${commandId}/reconcile`,

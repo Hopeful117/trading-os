@@ -11,6 +11,8 @@ public final class ExecutionIntent {
     private final ExecutionIntentId id;
     private final TradePlanReference tradePlan;
     private final RiskApprovalReference riskApproval;
+    private final ExecutionPurpose purpose;
+    private final UUID targetTradeId;
     private final IdempotencyKey idempotencyKey;
     private final UUID initiatorId;
     private final UUID brokerAccountId;
@@ -23,116 +25,106 @@ public final class ExecutionIntent {
     private long version;
     private final List<ExecutionEvent> events = new ArrayList<>();
 
-    private ExecutionIntent(
-            ExecutionIntentId id, TradePlanReference tradePlan,
-            RiskApprovalReference riskApproval, IdempotencyKey idempotencyKey,
-            UUID initiatorId, UUID brokerAccountId, ExecutionParameters parameters,
-            ExecutionStatus status, ExecutionAttemptId activeAttemptId,
-            Instant createdAt, Instant updatedAt, Instant expiresAt, long version
-    ) {
-        this.id = Objects.requireNonNull(id); this.tradePlan = Objects.requireNonNull(tradePlan);
-        this.riskApproval = Objects.requireNonNull(riskApproval);
-        this.idempotencyKey = Objects.requireNonNull(idempotencyKey);
+    private ExecutionIntent(ExecutionIntentId id, TradePlanReference tradePlan,
+            RiskApprovalReference riskApproval, ExecutionPurpose purpose, UUID targetTradeId,
+            IdempotencyKey idempotencyKey, UUID initiatorId, UUID brokerAccountId,
+            ExecutionParameters parameters, ExecutionStatus status, ExecutionAttemptId activeAttemptId,
+            Instant createdAt, Instant updatedAt, Instant expiresAt, long version) {
+        this.id = Objects.requireNonNull(id); this.tradePlan = tradePlan;
+        this.riskApproval = riskApproval; this.purpose = Objects.requireNonNull(purpose);
+        this.targetTradeId = targetTradeId; this.idempotencyKey = Objects.requireNonNull(idempotencyKey);
         this.initiatorId = Objects.requireNonNull(initiatorId);
         this.brokerAccountId = Objects.requireNonNull(brokerAccountId);
-        this.parameters = Objects.requireNonNull(parameters);
-        this.status = Objects.requireNonNull(status); this.activeAttemptId = activeAttemptId;
-        this.createdAt = Objects.requireNonNull(createdAt);
-        this.updatedAt = Objects.requireNonNull(updatedAt);
-        this.expiresAt = Objects.requireNonNull(expiresAt);
+        this.parameters = Objects.requireNonNull(parameters); this.status = Objects.requireNonNull(status);
+        this.activeAttemptId = activeAttemptId; this.createdAt = Objects.requireNonNull(createdAt);
+        this.updatedAt = Objects.requireNonNull(updatedAt); this.expiresAt = Objects.requireNonNull(expiresAt);
         this.version = version;
         if (!expiresAt.isAfter(createdAt)) throw new IllegalArgumentException("expiration must be after creation");
+        if (purpose == ExecutionPurpose.EXIT) Objects.requireNonNull(targetTradeId);
+        if (purpose == ExecutionPurpose.ENTRY) {
+            Objects.requireNonNull(tradePlan); Objects.requireNonNull(riskApproval);
+        }
     }
 
-    public static ExecutionIntent create(
-            ExecutionIntentId id, TradePlanReference tradePlan,
+    public static ExecutionIntent create(ExecutionIntentId id, TradePlanReference tradePlan,
             RiskApprovalReference approval, IdempotencyKey key, UUID initiatorId,
-            UUID brokerAccountId, ExecutionParameters parameters,
-            Instant now, Instant expiresAt
-    ) {
-        ExecutionIntent intent = new ExecutionIntent(id, tradePlan, approval, key,
-                initiatorId, brokerAccountId, parameters, ExecutionStatus.CREATED,
+            UUID brokerAccountId, ExecutionParameters parameters, Instant now, Instant expiresAt) {
+        ExecutionIntent intent = new ExecutionIntent(id, tradePlan, approval, ExecutionPurpose.ENTRY, null,
+                key, initiatorId, brokerAccountId, parameters, ExecutionStatus.CREATED,
                 null, now, now, expiresAt, 0);
         intent.events.add(new ExecutionEvent.ExecutionIntentCreated(id, now));
         return intent;
     }
 
-    public static ExecutionIntent rehydrate(
-            ExecutionIntentId id, TradePlanReference tradePlan,
+    public static ExecutionIntent createExit(ExecutionIntentId id, UUID initiatorId,
+            UUID brokerAccountId, UUID targetTradeId, ExecutionParameters parameters,
+            IdempotencyKey key, Instant now, Instant expiresAt) {
+        ExecutionIntent intent = new ExecutionIntent(id, null, null, ExecutionPurpose.EXIT, targetTradeId,
+                key, initiatorId, brokerAccountId, parameters, ExecutionStatus.CREATED,
+                null, now, now, expiresAt, 0);
+        intent.events.add(new ExecutionEvent.ExecutionIntentCreated(id, now));
+        return intent;
+    }
+
+    public static ExecutionIntent rehydrate(ExecutionIntentId id, TradePlanReference tradePlan,
             RiskApprovalReference approval, IdempotencyKey key, UUID initiatorId,
             UUID brokerAccountId, ExecutionParameters parameters, ExecutionStatus status,
             ExecutionAttemptId activeAttemptId, Instant createdAt, Instant updatedAt,
-            Instant expiresAt, long version
-    ) {
-        return new ExecutionIntent(id, tradePlan, approval, key, initiatorId,
-                brokerAccountId, parameters, status, activeAttemptId, createdAt,
-                updatedAt, expiresAt, version);
+            Instant expiresAt, long version) {
+        return new ExecutionIntent(id, tradePlan, approval, ExecutionPurpose.ENTRY, null, key,
+                initiatorId, brokerAccountId, parameters, status, activeAttemptId,
+                createdAt, updatedAt, expiresAt, version);
+    }
+
+    public static ExecutionIntent rehydrateExit(ExecutionIntentId id, UUID targetTradeId,
+            IdempotencyKey key, UUID initiatorId, UUID brokerAccountId, ExecutionParameters parameters,
+            ExecutionStatus status, ExecutionAttemptId activeAttemptId, Instant createdAt,
+            Instant updatedAt, Instant expiresAt, long version) {
+        return new ExecutionIntent(id, null, null, ExecutionPurpose.EXIT, targetTradeId, key,
+                initiatorId, brokerAccountId, parameters, status, activeAttemptId,
+                createdAt, updatedAt, expiresAt, version);
     }
 
     public void transition(ExecutionStatus target, Instant now) {
-        if (!allowed(status, target)) {
-            throw new InvalidExecutionStateException(
-                    "Execution cannot transition from " + status + " to " + target);
-        }
+        if (!allowed(status, target)) throw new InvalidExecutionStateException(
+                "Execution cannot transition from " + status + " to " + target);
         status = target; updatedAt = Objects.requireNonNull(now); version++;
-        if (target == ExecutionStatus.VALIDATED) {
-            events.add(new ExecutionEvent.ExecutionIntentValidated(id, now));
-        } else if (target == ExecutionStatus.CANCELLED) {
-            events.add(new ExecutionEvent.ExecutionIntentCancelled(id, now));
-        }
+        if (target == ExecutionStatus.VALIDATED) events.add(new ExecutionEvent.ExecutionIntentValidated(id, now));
+        else if (target == ExecutionStatus.CANCELLED) events.add(new ExecutionEvent.ExecutionIntentCancelled(id, now));
     }
-
     public void activateAttempt(ExecutionAttemptId attemptId, Instant now) {
-        if (activeAttemptId != null) {
-            throw new InvalidExecutionStateException("Only one active attempt is allowed");
-        }
-        activeAttemptId = Objects.requireNonNull(attemptId);
-        updatedAt = Objects.requireNonNull(now); version++;
+        if (activeAttemptId != null) throw new InvalidExecutionStateException("Only one active attempt is allowed");
+        activeAttemptId = Objects.requireNonNull(attemptId); updatedAt = Objects.requireNonNull(now); version++;
     }
-
     public void clearActiveAttempt(ExecutionAttemptId attemptId, Instant now) {
-        if (!Objects.equals(activeAttemptId, attemptId)) {
-            throw new InvalidExecutionStateException("Attempt is not active");
-        }
+        if (!Objects.equals(activeAttemptId, attemptId)) throw new InvalidExecutionStateException("Attempt is not active");
         activeAttemptId = null; updatedAt = Objects.requireNonNull(now); version++;
     }
-
     public void addEvent(ExecutionEvent event) { events.add(Objects.requireNonNull(event)); }
-    public List<ExecutionEvent> pullEvents() {
-        List<ExecutionEvent> copy = List.copyOf(events); events.clear(); return copy;
-    }
+    public List<ExecutionEvent> pullEvents() { List<ExecutionEvent> copy = List.copyOf(events); events.clear(); return copy; }
 
     private static boolean allowed(ExecutionStatus from, ExecutionStatus to) {
         return switch (from) {
-            case CREATED -> to == ExecutionStatus.VALIDATED || to == ExecutionStatus.EXPIRED
-                    || to == ExecutionStatus.CANCELLED;
-            case VALIDATED -> to == ExecutionStatus.SUBMISSION_IN_PROGRESS
-                    || to == ExecutionStatus.CANCELLED || to == ExecutionStatus.EXPIRED
-                    || to == ExecutionStatus.RISK_REVALIDATION_REJECTED
-                    || to == ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE;
-            case SUBMISSION_IN_PROGRESS -> to == ExecutionStatus.COMPLETED
-                    || to == ExecutionStatus.FAILED
-                    || to == ExecutionStatus.SUBMISSION_OUTCOME_UNKNOWN
-                    || to == ExecutionStatus.RECONCILIATION_IN_PROGRESS;
+            case CREATED -> to == ExecutionStatus.VALIDATED || to == ExecutionStatus.EXPIRED || to == ExecutionStatus.CANCELLED;
+            case VALIDATED -> to == ExecutionStatus.SUBMISSION_IN_PROGRESS || to == ExecutionStatus.CANCELLED || to == ExecutionStatus.EXPIRED
+                    || to == ExecutionStatus.RISK_REVALIDATION_REJECTED || to == ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE;
+            case SUBMISSION_IN_PROGRESS -> to == ExecutionStatus.COMPLETED || to == ExecutionStatus.FAILED
+                    || to == ExecutionStatus.SUBMISSION_OUTCOME_UNKNOWN || to == ExecutionStatus.RECONCILIATION_IN_PROGRESS;
             case SUBMISSION_OUTCOME_UNKNOWN -> to == ExecutionStatus.RECONCILIATION_IN_PROGRESS;
-            case RECONCILIATION_IN_PROGRESS -> to == ExecutionStatus.COMPLETED
-                    || to == ExecutionStatus.FAILED
-                    || to == ExecutionStatus.RECOVERY_BLOCKED
-                    || to == ExecutionStatus.VALIDATED;
+            case RECONCILIATION_IN_PROGRESS -> to == ExecutionStatus.COMPLETED || to == ExecutionStatus.FAILED
+                    || to == ExecutionStatus.RECOVERY_BLOCKED || to == ExecutionStatus.VALIDATED;
             case FAILED -> to == ExecutionStatus.VALIDATED || to == ExecutionStatus.CANCELLED;
-            case RECOVERY_BLOCKED -> to == ExecutionStatus.RECONCILIATION_IN_PROGRESS
-                    || to == ExecutionStatus.CANCELLED;
+            case RECOVERY_BLOCKED -> to == ExecutionStatus.RECONCILIATION_IN_PROGRESS || to == ExecutionStatus.CANCELLED;
             case RISK_REVALIDATION_REJECTED -> false;
-            case RISK_REVALIDATION_UNAVAILABLE -> to == ExecutionStatus.VALIDATED
-                    || to == ExecutionStatus.CANCELLED
-                    || to == ExecutionStatus.EXPIRED;
+            case RISK_REVALIDATION_UNAVAILABLE -> to == ExecutionStatus.VALIDATED || to == ExecutionStatus.CANCELLED || to == ExecutionStatus.EXPIRED;
             case COMPLETED, CANCELLED, EXPIRED -> false;
         };
     }
-
     public ExecutionIntentId id() { return id; }
     public TradePlanReference tradePlan() { return tradePlan; }
     public RiskApprovalReference riskApproval() { return riskApproval; }
+    public ExecutionPurpose purpose() { return purpose; }
+    public Optional<UUID> targetTradeId() { return Optional.ofNullable(targetTradeId); }
     public IdempotencyKey idempotencyKey() { return idempotencyKey; }
     public UUID initiatorId() { return initiatorId; }
     public UUID brokerAccountId() { return brokerAccountId; }

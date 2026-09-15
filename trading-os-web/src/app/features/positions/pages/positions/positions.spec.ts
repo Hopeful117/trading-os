@@ -162,12 +162,12 @@ describe('Positions', () => {
     expect(button.textContent).toContain("Fermer l'exposition");
   });
 
-  it('does not expose the LIVE close action for a PAPER position', async () => {
+  it('exposes the local close action without LIVE broker messaging for a PAPER position', async () => {
     const paperPosition = { ...positions[0], source: 'TRADING_CORE' as const };
     positionService.getPositions.mockReturnValue(of([paperPosition]));
     await create();
 
-    expect(fixture.nativeElement.querySelector('button.btn-close-exposure')).toBeNull();
+    expect(fixture.nativeElement.querySelector('button.btn-close-exposure')).not.toBeNull();
     expect(text()).not.toContain('Kraken réglera');
   });
 

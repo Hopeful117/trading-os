@@ -7,6 +7,8 @@ import com.hope.trading.trading_core.execution.domain.exception.DuplicateExecuti
 import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntentRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.service.IdempotencyService;
 import java.time.Clock;
+import java.time.Instant;
+import java.util.UUID;
 import java.util.Objects;
 
 public final class CreateExecutionIntentService {
@@ -34,6 +36,22 @@ public final class CreateExecutionIntentService {
                 command.tradePlan(), command.riskApproval(), command.idempotencyKey(),
                 command.initiatorId(), command.brokerAccountId(), command.parameters(),
                 clock.instant(), command.expiresAt());
+        intents.save(intent); events.publish(intent.pullEvents()); metrics.executionCreated();
+        return intent;
+    }
+
+    public ExecutionIntent createExit(UUID initiatorId, UUID brokerAccountId, UUID targetTradeId,
+                                      com.hope.trading.trading_core.execution.domain.model.ExecutionParameters parameters,
+                                      com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey key,
+                                      Instant expiresAt) {
+        try {
+            idempotency.ensureUnique(key, intents);
+        } catch (DuplicateExecutionException exception) {
+            metrics.duplicatePrevented();
+            throw exception;
+        }
+        ExecutionIntent intent = ExecutionIntent.createExit(ids.nextIntentId(), initiatorId,
+                brokerAccountId, targetTradeId, parameters, key, clock.instant(), expiresAt);
         intents.save(intent); events.publish(intent.pullEvents()); metrics.executionCreated();
         return intent;
     }

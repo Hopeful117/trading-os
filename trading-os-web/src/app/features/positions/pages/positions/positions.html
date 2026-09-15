@@ -155,7 +155,7 @@
             </div>
 
             <div class="position-actions">
-              @if (position.source === 'BROKER') {
+              @if (position.source === 'BROKER' || position.source === 'TRADING_CORE') {
                 @if (!getCloseState(position.positionId).showConfirmation) {
                   <button
                     class="btn-close-exposure"
@@ -174,10 +174,12 @@
                         Fermer complètement l'exposition {{ position.symbol }}
                         {{ position.side === 'BUY' ? 'Long' : 'Short' }} ?
                       </p>
-                      <p class="confirmation-fifo">
+                      @if (position.source === 'BROKER') {
+                        <p class="confirmation-fifo">
                         Kraken réglera toutes les positions ouvertes pour cette paire selon le
                         principe FIFO.
-                      </p>
+                        </p>
+                      }
                       <p class="confirmation-warning">Cette action ne peut pas être annulée.</p>
                       <div class="confirmation-buttons">
                         <button
@@ -210,7 +212,7 @@
                         getCloseState(position.positionId).failureReason
                       }}</span>
                     }
-                    @if (isReconcilable(getCloseState(position.positionId).status!)) {
+                    @if (position.source === 'BROKER' && isReconcilable(getCloseState(position.positionId).status!)) {
                       <button
                         class="btn-reconcile"
                         (click)="reconcile(vm.selectedAccountId!, position.positionId)"
