@@ -5,12 +5,7 @@ export type RiskStatus = 'SAFE' | 'WARNING' | 'BREACHED' | 'UNAVAILABLE';
 export type PositionSide = 'BUY' | 'SELL';
 export type PositionSource = 'BROKER' | 'TRADING_CORE';
 export type PositionValuationStatus =
-  | 'FRESH'
-  | 'STALE'
-  | 'UNAVAILABLE'
-  | 'UNKNOWN_MARKET'
-  | 'UNSUPPORTED_CURRENCY'
-  | 'INVALID';
+  'FRESH' | 'STALE' | 'UNAVAILABLE' | 'UNKNOWN_MARKET' | 'UNSUPPORTED_CURRENCY' | 'INVALID';
 
 export interface AccountDashboardSummary {
   accountId: string;
