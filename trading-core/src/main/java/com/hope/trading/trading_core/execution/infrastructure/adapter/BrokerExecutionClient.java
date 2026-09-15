@@ -1,11 +1,13 @@
 package com.hope.trading.trading_core.execution.infrastructure.adapter;
 
 import org.springframework.cloud.openfeign.FeignClient;
+import com.hope.trading.trading_core.config.BrokerServiceFeignConfiguration;
 import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-@FeignClient(name="broker-service",contextId="execution-broker-client")
+@FeignClient(name="broker-service",contextId="execution-broker-client",
+        configuration = BrokerServiceFeignConfiguration.class)
 public interface BrokerExecutionClient {
     @PostMapping("/internal/v1/executions") BrokerResponse submit(@RequestBody BrokerRequest request);
     @PostMapping("/internal/v1/executions/reconcile") BrokerResponse reconcile(@RequestBody ReconcileRequest request);

@@ -19,6 +19,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SpringSecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ServiceJwtService serviceJwtService;
+    private final ServiceJwtProperties serviceJwtProperties;
 
 
     @Bean
@@ -37,6 +39,9 @@ public class SpringSecurityConfig {
                         .anyRequest().authenticated()
 
                 )  .addFilterBefore(
+                        new ServiceJwtAuthenticationFilter(serviceJwtService, serviceJwtProperties),
+                        UsernamePasswordAuthenticationFilter.class
+                ).addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
                 );
@@ -61,4 +66,3 @@ public class SpringSecurityConfig {
 
 
     }
-

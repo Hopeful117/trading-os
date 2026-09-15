@@ -11,13 +11,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.cloud.openfeign.FeignClient;
+import com.hope.trading.trading_core.config.MarketIntelligenceFeignConfiguration;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(name = "market-intelligence", contextId = "tradePlanRiskClient")
+@FeignClient(name = "market-intelligence", contextId = "tradePlanRiskClient",
+        configuration = MarketIntelligenceFeignConfiguration.class)
 interface MarketIntelligenceRiskFeignClient {
     @GetMapping("/internal/v1/trade-plans/{id}/versions/{version}/risk-validation-snapshot")
     TradePlanTransport get(@PathVariable UUID id, @PathVariable long version);

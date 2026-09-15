@@ -9,12 +9,17 @@ import com.hope.trading.market_intelligence.adapter.web.ActiveScanSummary;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import com.hope.trading.market_intelligence.security.MiUserPrincipal;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,9 +30,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class ActiveScanControllerTest {
+    private static RequestPostProcessor authenticated(UUID actorId) {
+        return request -> {
+            request.setUserPrincipal(new UsernamePasswordAuthenticationToken(
+                    new MiUserPrincipal(actorId, "trader", "trader@example.com"),
+                    null, AuthorityUtils.NO_AUTHORITIES));
+            return request;
+        };
+    }
+
     @Test
     void createReturnsAcceptedLocationAndBody() throws Exception {
         UUID actorId = UUID.randomUUID();
+        UUID conflictingHeaderActor = UUID.randomUUID();
         UUID scanId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         UUID marketId = UUID.randomUUID();
@@ -88,7 +103,8 @@ class ActiveScanControllerTest {
 
         mvc.perform(post("/api/v1/intelligence/scans")
                         .header("Idempotency-Key", "scan-key")
-                        .header("X-Actor-Id", actorId.toString())
+                        .with(authenticated(actorId))
+                        .header("X-Actor-Id", conflictingHeaderActor.toString())
                         .contentType("application/json")
                         .content("""
                                 {
@@ -104,7 +120,7 @@ class ActiveScanControllerTest {
                 .andExpect(jsonPath("$.progress.totalCandidates").value(1))
                 .andExpect(jsonPath("$.markets[0].outcome").value("RUNNING"));
 
-        verify(scans).create(any());
+        verify(scans).create(argThat(command -> command.actorId().equals(actorId)));
     }
 
     @Test
@@ -142,7 +158,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans/{scanId}", scanId)
-                        .header("X-Actor-Id", actorId.toString()))
+                        .with(authenticated(actorId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ACTIVE_SCAN_NOT_FOUND"));
     }
@@ -190,7 +206,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans/{scanId}", scanId)
-                        .header("X-Actor-Id", actorId.toString()))
+                        .with(authenticated(actorId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.progress.completed").value(1))
@@ -220,7 +236,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans/{scanId}", scanId)
-                        .header("X-Actor-Id", actorId.toString()))
+                        .with(authenticated(actorId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ACTIVE_SCAN_NOT_FOUND"));
     }
@@ -240,7 +256,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans")
-                        .header("X-Actor-Id", actorId.toString()))
+                        .with(authenticated(actorId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$").isEmpty());
@@ -266,7 +282,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans")
-                        .header("X-Actor-Id", actorId.toString()))
+                        .with(authenticated(actorId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].scanId").value(scanId.toString()))
                 .andExpect(jsonPath("$[0].status").value("COMPLETED"))
@@ -288,7 +304,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans")
-                        .header("X-Actor-Id", actorId.toString())
+                        .with(authenticated(actorId))
                         .param("limit", "3"))
                 .andExpect(status().isOk());
 
@@ -309,7 +325,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans")
-                        .header("X-Actor-Id", actorId.toString())
+                        .with(authenticated(actorId))
                         .param("limit", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_LIMIT"));
@@ -329,7 +345,7 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans")
-                        .header("X-Actor-Id", actorId.toString())
+                        .with(authenticated(actorId))
                         .param("limit", "101"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_LIMIT"));
@@ -371,13 +387,13 @@ class ActiveScanControllerTest {
                 .build();
 
         mvc.perform(get("/api/v1/intelligence/scans")
-                        .header("X-Actor-Id", actorA.toString()))
+                        .with(authenticated(actorA)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$").isNotEmpty());
 
         mvc.perform(get("/api/v1/intelligence/scans")
-                        .header("X-Actor-Id", actorB.toString()))
+                        .with(authenticated(actorB)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$").isEmpty());

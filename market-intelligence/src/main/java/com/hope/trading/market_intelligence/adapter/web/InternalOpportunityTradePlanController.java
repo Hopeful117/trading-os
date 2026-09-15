@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.pipeline.OpportunityTradePlanGenerationService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,9 +21,12 @@ public class InternalOpportunityTradePlanController {
     public ResponseEntity<OpportunityTradePlanGenerationService.GenerationResponse> generate(
             @PathVariable UUID opportunityId,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @Valid @RequestBody InternalOpportunityTradePlanRequest request) {
+            @Valid @RequestBody InternalOpportunityTradePlanRequest request,
+            Authentication authentication) {
+        UUID actorId = ((com.hope.trading.market_intelligence.security.MiServicePrincipal)
+                authentication.getPrincipal()).requireMatchingActor(request.actorId());
         return ResponseEntity.ok(service.generate(
-                opportunityId, request.actorId(), request.accountId(),
+                opportunityId, actorId, request.accountId(),
                 context(request)));
     }
 

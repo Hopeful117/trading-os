@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.market_data.dto.MarketResponse;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotDto;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import org.springframework.cloud.openfeign.FeignClient;
+import com.hope.trading.trading_core.config.UserAuthorizationFeignConfiguration;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,7 +15,8 @@ import java.util.List;
 import java.util.UUID;
 
 @FeignClient(
-        name = "market-data"
+        name = "market-data",
+        configuration = UserAuthorizationFeignConfiguration.class
 )
 public interface MarketDataClient {
     @GetMapping("/api/v1/markets")

@@ -13,6 +13,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class BrokerSecurityConfiguration {
     private final BrokerJwtAuthenticationFilter filter;
+    private final ServiceJwtService serviceJwtService;
+    private final ServiceJwtProperties serviceJwtProperties;
 
     @Bean
     SecurityFilterChain brokerSecurityFilterChain(HttpSecurity http) throws Exception {
@@ -24,6 +26,8 @@ public class BrokerSecurityConfiguration {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
+                .addFilterBefore(new ServiceJwtAuthenticationFilter(serviceJwtService, serviceJwtProperties),
+                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

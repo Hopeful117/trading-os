@@ -36,16 +36,17 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public TradeDto openTrade(TradeRequest tradeRequest,String username) {
+    public TradeDto openTrade(TradeRequest tradeRequest, UUID actorId) {
         Account account = accountRepository.findById(tradeRequest.getAccountId())
                 .orElseThrow(() ->
                         new EntityNotFoundException("Account not found with id: " + tradeRequest.getAccountId()));
+        requireAccountOwner(account, actorId);
         validator.validate(tradeRequest);
         BigDecimal availableFunds =
                 accountService.getAvailableBalance(
                         account.getAccountId(),
                         tradeRequest.getQuoteAsset(),
-                        username
+                        account.getUser().getUsername()
                 );
         BigDecimal entryPrice = null;
         //remplacer par brokerService.getCurrentPrice(tradeRequest.getSymbol());
@@ -73,11 +74,12 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public TradeDto closeTrade(UUID tradeId, BigDecimal exitPrice,String username) {
+    public TradeDto closeTrade(UUID tradeId, BigDecimal exitPrice, UUID actorId) {
         // 1. load trade
         Trade trade = tradeRepository.findById(tradeId)
                 .orElseThrow(() ->
                         new EntityNotFoundException("Trade not found with id: " + tradeId));
+        requireTradeOwner(trade, actorId);
 
         // 2. safety check
         if (trade.getClosedAt() != null) {
@@ -107,7 +109,7 @@ public class TradingServiceImpl implements TradingService {
                 account.getEquity().add(pnl)
         );
 
-        accountService.updateEquity(account.getAccountId(), pnl,username);
+        accountService.updateEquity(account.getAccountId(), pnl, account.getUser().getUsername());
 
         // 6. persist trade
       return tradeMapper.toDto(tradeRepository.save(trade));
@@ -117,10 +119,11 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public TradeDto partialClose(UUID tradeId, BigDecimal quantity, BigDecimal exitPrice,String username) {
+    public TradeDto partialClose(UUID tradeId, BigDecimal quantity, BigDecimal exitPrice, UUID actorId) {
         Trade trade = tradeRepository.findById(tradeId)
                 .orElseThrow(() ->
                         new EntityNotFoundException("Trade not found with id: " + tradeId));
+        requireTradeOwner(trade, actorId);
 
         if (trade.getClosedAt() != null) {
             throw new IllegalStateException("Trade already closed");
@@ -153,21 +156,24 @@ public class TradingServiceImpl implements TradingService {
         // Update account equity
         Account account = trade.getAccount();
         account.setEquity(account.getEquity().add(pnl));
-        accountService.updateEquity(account.getAccountId(), pnl,username);
+        accountService.updateEquity(account.getAccountId(), pnl, account.getUser().getUsername());
 
         return tradeMapper.toDto(tradeRepository.save(trade));
     }
 
     @Override
-    public TradeDto getTradeById(UUID tradeId) {
-        return tradeRepository.findById(tradeId)
-                .map(tradeMapper::toDto)
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Trade not found with id: " + tradeId));
+    public TradeDto getTradeById(UUID tradeId, UUID actorId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new EntityNotFoundException("Trade not found with id: " + tradeId));
+        requireTradeOwner(trade, actorId);
+        return tradeMapper.toDto(trade);
     }
 
     @Override
-    public List<TradeDto> getTradesByFilters(UUID accountId, TradeType type, String symbol) {
+    public List<TradeDto> getTradesByFilters(UUID accountId, TradeType type, String symbol, UUID actorId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account not found with id: " + accountId));
+        requireAccountOwner(account, actorId);
         return tradeRepository.findAllByAccount_AccountId(accountId).stream().filter(trade -> {
             boolean matchesType = type == null || trade.getType() == type;
             boolean matchesSymbol = symbol == null || trade.getSymbol().equals(symbol);
@@ -177,26 +183,35 @@ public class TradingServiceImpl implements TradingService {
 
     @Override
     @Transactional
-    public TradeDto updateStopLoss(UUID tradeId, BigDecimal stopLoss) {
-        return tradeRepository.findById(tradeId)
-                .map(trade -> {
-                    trade.setStopLoss(stopLoss);
-                    return tradeMapper.toDto(tradeRepository.save(trade));
-                })
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Trade not found with id: " + tradeId));
+    public TradeDto updateStopLoss(UUID tradeId, BigDecimal stopLoss, UUID actorId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new EntityNotFoundException("Trade not found with id: " + tradeId));
+        requireTradeOwner(trade, actorId);
+        trade.setStopLoss(stopLoss);
+        return tradeMapper.toDto(tradeRepository.save(trade));
     }
 
     @Override
     @Transactional
-    public TradeDto updateTakeProfit(UUID tradeId, BigDecimal takeProfit) {
-        return tradeRepository.findById(tradeId)
-                .map(trade -> {
-                    trade.setTakeProfit(takeProfit);
-                    return tradeMapper.toDto(tradeRepository.save(trade));
-                })
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Trade not found with id: " + tradeId));
+    public TradeDto updateTakeProfit(UUID tradeId, BigDecimal takeProfit, UUID actorId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new EntityNotFoundException("Trade not found with id: " + tradeId));
+        requireTradeOwner(trade, actorId);
+        trade.setTakeProfit(takeProfit);
+        return tradeMapper.toDto(tradeRepository.save(trade));
+    }
+
+    private void requireTradeOwner(Trade trade, UUID actorId) {
+        if (trade.getAccount() == null || trade.getAccount().getUser() == null
+                || !actorId.equals(trade.getAccount().getUser().getUserId())) {
+            throw new EntityNotFoundException("Trade not found with id: " + trade.getTradeId());
+        }
+    }
+
+    private void requireAccountOwner(Account account, UUID actorId) {
+        if (account.getUser() == null || !actorId.equals(account.getUser().getUserId())) {
+            throw new EntityNotFoundException("Account not found with id: " + account.getAccountId());
+        }
     }
 
 
