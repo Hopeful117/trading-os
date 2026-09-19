@@ -58,6 +58,7 @@ class GatewayExecutionRouteTest {
         assertThat(ids).contains(
                 "authentication",
                 "accounts",
+                "trades",
                 "broker-credential-commands",
                 "broker-accounts",
                 "trade-plan-risk-evaluations",
@@ -76,6 +77,18 @@ class GatewayExecutionRouteTest {
         assertThat(route.getUri()).isEqualTo(URI.create("lb://trading-core"));
         assertThat(matches(route, HttpMethod.GET, "/api/v1/risk-profiles/eligible"))
                 .as("risk profile catalog must match the Trading Core route").isTrue();
+    }
+
+    @Test
+    void tradesRouteForwardsToTradingCore() {
+        Route route = route("trades");
+
+        assertThat(route).isNotNull();
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://trading-core"));
+        assertThat(matches(route, HttpMethod.POST, "/api/v1/trades"))
+                .as("trade creation must match the Trading Core route").isTrue();
+        assertThat(matches(route, HttpMethod.GET, "/api/v1/trades?accountId=11111111-1111-1111-1111-111111111111"))
+                .as("trade listing must match the Trading Core route").isTrue();
     }
 
     private Route route(String id) {

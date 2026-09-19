@@ -48,8 +48,7 @@ public class TradingServiceImpl implements TradingService {
                         tradeRequest.getQuoteAsset(),
                         account.getUser().getUsername()
                 );
-        BigDecimal entryPrice = null;
-        //remplacer par brokerService.getCurrentPrice(tradeRequest.getSymbol());
+        BigDecimal entryPrice = tradeRequest.getEntryPrice();
 
         // 2. CALCULS
         TradeCalculation calc = tradingCalculatorService.calculate(tradeRequest,entryPrice,availableFunds);

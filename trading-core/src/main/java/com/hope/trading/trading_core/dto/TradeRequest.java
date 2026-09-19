@@ -36,6 +36,10 @@ public class TradeRequest {
 
 
     @NotNull
+    private BigDecimal entryPrice;
+
+
+    @NotNull
     private BigDecimal quantity;
 
 

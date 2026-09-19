@@ -75,6 +75,7 @@ public class TradingCalculatorServiceImpl implements TradingCalculatorService {
         BigDecimal ratio = calculateRiskRewardRatio(reward, risk);
 
         return TradeCalculation.builder()
+                .entryPrice(entryPrice)
                 .riskAmount(risk)
                 .rewardAmount(reward)
                 .riskRewardRatio(ratio)

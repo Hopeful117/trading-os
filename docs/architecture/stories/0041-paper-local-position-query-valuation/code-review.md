@@ -50,6 +50,9 @@ without a timestamp is classified as unavailable and covered by
 - The Angular production build passes with existing bundle-size budget
   warnings.
 - Existing unrelated worktree changes require separate human diff review.
+- The Angular UI has no direct trade-entry surface; UI onboarding and position
+  reading pass, but trade creation still requires the existing trade-plan flow
+  or the backend API.
 
 ## Validation
 
@@ -61,6 +64,11 @@ without a timestamp is classified as unavailable and covered by
 - `git diff --check` passed.
 
 The focused backend suite was rerun after the corrective change and passed.
+
+The rebuilt runtime stack was also exercised through Gateway. Fractional PAPER
+quantity persisted correctly after the Flyway precision migration. When Market
+Data did not provide a usable current snapshot, the position remained
+explicitly unvalued rather than receiving a fabricated price or PnL.
 
 ## Approval
 
