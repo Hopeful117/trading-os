@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
-import { Observable, of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Observable, of, throwError } from 'rxjs';
+import { vi } from 'vitest';
 
 import { RiskDecisionResponse, TradePlanResponse } from '../../../core/models/trade-plan.model';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
@@ -173,5 +175,67 @@ describe('PlanPage', () => {
       fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]'),
     ).toBeFalsy();
     expect(fixture.nativeElement.querySelector('[data-testid="execute-button"]')).toBeFalsy();
+  });
+
+  it('renders persisted risk-validated plans without offering a new risk evaluation', () => {
+    configureMocks(of(fakePlan('RISK_VALIDATED')));
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="risk-validated-state"]'),
+    ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')).toBeFalsy();
+  });
+
+  it('renders a retryable message when loading fails with a conflict', () => {
+    configureMocks(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: { code: 'VERSION_CONFLICT' },
+          }),
+      ),
+    );
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="error-state"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('trade plan changed');
+    expect(fixture.nativeElement.querySelector('[data-testid="retry-load-button"]')).toBeTruthy();
+  });
+
+  it('does not allow a second decision while the first decision is pending', () => {
+    const decide = vi.fn(() => new Observable<TradePlanResponse>(() => {}));
+    const tradePlanService = {
+      getPlan: () => of(fakePlan('PROPOSED')),
+      decide,
+      evaluateRisk: () => of(fakeRiskDecision('APPROVED')),
+    };
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        { provide: TradePlanService, useValue: tradePlanService },
+        {
+          provide: ExecutionService,
+          useValue: {
+            validate: () => of({ id: 'exec-1', status: 'COMPLETED' }),
+            execute: () => of({}),
+          },
+        },
+      ],
+    });
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="accept-button"]')?.click();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="accept-button"]')?.click();
+
+    expect(decide).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('[data-testid="deciding-state"]')).toBeTruthy();
   });
 });

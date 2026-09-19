@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ActivatedRoute } from '@angular/router';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
+import { vi } from 'vitest';
 
 import { OpportunityResponse } from '../../../core/models/opportunity.model';
 import { AccountService } from '../../../core/services/account.service';
@@ -104,5 +106,34 @@ describe('PreparePlanPage', () => {
     fixture.detectChanges();
     const btn = fixture.nativeElement.querySelector('[data-testid="create-plan-button"]');
     expect(btn.disabled).toBe(true);
+  });
+
+  it('shows a retryable error when plan creation fails', async () => {
+    const createFromOpportunity = vi.fn(() => throwError(() => new Error('unavailable')));
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [PreparePlanPage],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ opportunityId: 'opp-1' }) },
+        {
+          provide: OpportunityService,
+          useValue: { findById: () => of(fakeOpportunity('ACTIVE')) },
+        },
+        { provide: AccountService, useValue: { getAccounts: () => of(fakeAccounts) } },
+        { provide: TradePlanService, useValue: { createFromOpportunity } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(PreparePlanPage);
+    fixture.detectChanges();
+    fixture.componentInstance.accountId = 'acc-1';
+    fixture.componentInstance.createPlan('opp-1');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="error-state"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="retry-create-button"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('trade plan could not be created');
+    expect(createFromOpportunity).toHaveBeenCalledTimes(1);
   });
 });

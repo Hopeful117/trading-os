@@ -10,7 +10,28 @@
       @case ('error') {
         <div class="state-card error" data-testid="error-state">
           <h2>Unable to load trade plan</h2>
-          <p>Market Intelligence is temporarily unavailable. Try again later.</p>
+          <p>{{ view.message }}</p>
+          @if (view.plan && view.retryAction) {
+            <button
+              type="button"
+              class="btn-primary"
+              (click)="retryCommand(view)"
+              [disabled]="busy$ | async"
+              data-testid="retry-command-button"
+            >
+              Retry action
+            </button>
+          } @else if (view.retryable) {
+            <button
+              type="button"
+              class="btn-primary"
+              (click)="retryLoad()"
+              [disabled]="busy$ | async"
+              data-testid="retry-load-button"
+            >
+              Reload plan
+            </button>
+          }
         </div>
       }
       @case ('deciding') {
@@ -112,10 +133,20 @@
           </section>
 
           <footer class="card-actions">
-            <button class="btn-reject" (click)="reject(view.plan)" data-testid="reject-button">
+            <button
+              class="btn-reject"
+              (click)="reject(view.plan)"
+              [disabled]="busy$ | async"
+              data-testid="reject-button"
+            >
               Reject
             </button>
-            <button class="btn-accept" (click)="accept(view.plan)" data-testid="accept-button">
+            <button
+              class="btn-accept"
+              (click)="accept(view.plan)"
+              [disabled]="busy$ | async"
+              data-testid="accept-button"
+            >
               Accept Plan
             </button>
           </footer>
@@ -165,6 +196,7 @@
             <button
               class="btn-accept"
               (click)="evaluateRisk(view.plan)"
+              [disabled]="busy$ | async"
               data-testid="evaluate-risk-button"
             >
               Evaluate Risk
@@ -263,6 +295,7 @@
             <button
               class="btn-accept"
               (click)="execute(view.plan, view.decision)"
+              [disabled]="busy$ | async"
               data-testid="execute-button"
             >
               Execute Trade
@@ -527,6 +560,30 @@
             <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
           </footer>
         </article>
+      }
+      @case ('riskValidated') {
+        <div class="state-card" data-testid="risk-validated-state">
+          <h2>Risk evaluation completed</h2>
+          <p>This plan is risk-validated. Reload the latest execution state before continuing.</p>
+        </div>
+      }
+      @case ('readyToExecute') {
+        <div class="state-card" data-testid="ready-to-execute-state">
+          <h2>Trade plan ready</h2>
+          <p>This plan is ready for execution, but its authorization context must be reloaded.</p>
+        </div>
+      }
+      @case ('executed') {
+        <div class="state-card" data-testid="executed-state">
+          <h2>Trade plan executed</h2>
+          <p>The authoritative execution result is available from the execution flow.</p>
+        </div>
+      }
+      @case ('expired') {
+        <div class="state-card" data-testid="expired-state">
+          <h2>Trade plan expired</h2>
+          <p>This plan can no longer be accepted or executed.</p>
+        </div>
       }
     }
   }

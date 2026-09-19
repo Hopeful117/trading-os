@@ -3,6 +3,7 @@ import { Component, inject, OnDestroy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   catchError,
+  finalize,
   map,
   merge,
   Observable,
@@ -13,6 +14,7 @@ import {
   switchMap,
   timer,
   takeWhile,
+  take,
 } from 'rxjs';
 
 import { RiskDecisionResponse, TradePlanResponse } from '../../../core/models/trade-plan.model';
@@ -24,10 +26,18 @@ import {
 } from '../../../core/models/execution.model';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
 import { ExecutionService } from '../../../core/services/execution.service';
+import { tradeFlowErrorMessage } from '../../../core/utils/trade-flow-error';
 
 export type PlanView =
   | { status: 'loading' }
-  | { status: 'error' }
+  | {
+      status: 'error';
+      message: string;
+      retryable: boolean;
+      plan?: TradePlanResponse;
+      retryAction?: 'ACCEPT' | 'REJECT' | 'RISK' | 'EXECUTE';
+      decision?: RiskDecisionResponse;
+    }
   | { status: 'proposal'; plan: TradePlanResponse }
   | { status: 'deciding' }
   | { status: 'accepted'; plan: TradePlanResponse }
@@ -37,7 +47,11 @@ export type PlanView =
   | { status: 'executionReady'; plan: TradePlanResponse; decision: RiskDecisionResponse }
   | { status: 'executionSubmitting' }
   | { status: 'executionPolling'; execution: ExecutionDto }
-  | { status: 'executionResult'; execution: ExecutionDto };
+  | { status: 'executionResult'; execution: ExecutionDto }
+  | { status: 'riskValidated'; plan: TradePlanResponse }
+  | { status: 'readyToExecute'; plan: TradePlanResponse }
+  | { status: 'executed'; plan: TradePlanResponse }
+  | { status: 'expired'; plan: TradePlanResponse };
 
 const STATUS_LABELS: Record<ExecutionStatus, string> = {
   CREATED: 'Created',
@@ -84,25 +98,43 @@ export class PlanPage implements OnDestroy {
   private readonly retrySubject = new Subject<string>();
   private readonly retryT1Subject = new Subject<string>();
   private readonly reconcileSubject = new Subject<string>();
+  private readonly reloadSubject = new Subject<void>();
 
   readonly view$: Observable<PlanView>;
   readonly busy$: Observable<boolean>;
 
   private destroyed = false;
+  private commandInFlight = false;
 
   constructor() {
-    const plan$ = this.route.paramMap.pipe(
-      switchMap((params) => {
-        const planId = params.get('planId');
-        const version = Number(params.get('version'));
-        if (!planId || isNaN(version)) {
-          return of<PlanView>({ status: 'error' });
-        }
-        return this.tradePlanService.getPlan(planId, version).pipe(
-          map((plan) => this.toViewForPlan(plan)),
-          catchError(() => of<PlanView>({ status: 'error' })),
-        );
-      }),
+    const plan$ = this.reloadSubject.pipe(
+      startWith(void 0),
+      switchMap(() =>
+        this.route.paramMap.pipe(
+          take(1),
+          switchMap((params) => {
+            const planId = params.get('planId');
+            const version = Number(params.get('version'));
+            if (!planId || isNaN(version)) {
+              return of<PlanView>({
+                status: 'error',
+                message: 'The trade plan reference is invalid.',
+                retryable: false,
+              });
+            }
+            return this.tradePlanService.getPlan(planId, version).pipe(
+              map((plan) => this.toViewForPlan(plan)),
+              catchError((error: unknown) =>
+                of<PlanView>({
+                  status: 'error',
+                  message: tradeFlowErrorMessage(error, 'The trade plan could not be loaded.'),
+                  retryable: true,
+                }),
+              ),
+            );
+          }),
+        ),
+      ),
       startWith<PlanView>({ status: 'loading' }),
     );
 
@@ -110,7 +142,17 @@ export class PlanPage implements OnDestroy {
       switchMap((plan) =>
         this.tradePlanService.decide(plan.id, plan.version, 'ACCEPT').pipe(
           map((updated) => this.toViewForPlan(updated)),
-          catchError(() => of<PlanView>({ status: 'error' })),
+          catchError((error: unknown) =>
+            of<PlanView>({
+              status: 'error',
+              message: tradeFlowErrorMessage(error, 'The decision could not be recorded.'),
+              retryable: true,
+              plan,
+              retryAction: 'ACCEPT',
+            }),
+          ),
+          startWith<PlanView>({ status: 'deciding' }),
+          finalize(() => (this.commandInFlight = false)),
         ),
       ),
     );
@@ -119,7 +161,17 @@ export class PlanPage implements OnDestroy {
       switchMap((plan) =>
         this.tradePlanService.decide(plan.id, plan.version, 'REJECT').pipe(
           map((updated) => this.toViewForPlan(updated)),
-          catchError(() => of<PlanView>({ status: 'error' })),
+          catchError((error: unknown) =>
+            of<PlanView>({
+              status: 'error',
+              message: tradeFlowErrorMessage(error, 'The decision could not be recorded.'),
+              retryable: true,
+              plan,
+              retryAction: 'REJECT',
+            }),
+          ),
+          startWith<PlanView>({ status: 'deciding' }),
+          finalize(() => (this.commandInFlight = false)),
         ),
       ),
     );
@@ -128,7 +180,13 @@ export class PlanPage implements OnDestroy {
       switchMap((plan) => {
         const accountId = plan.tradingAccountId;
         if (!accountId) {
-          return of<PlanView>({ status: 'error' });
+          this.commandInFlight = false;
+          return of<PlanView>({
+            status: 'error',
+            message: 'The trade plan has no trading account.',
+            retryable: false,
+            plan,
+          });
         }
         return this.tradePlanService
           .evaluateRisk(plan.id, plan.version, accountId, crypto.randomUUID())
@@ -138,7 +196,17 @@ export class PlanPage implements OnDestroy {
                 ? { status: 'executionReady', plan, decision }
                 : { status: 'riskDecision', plan, decision },
             ),
-            catchError(() => of<PlanView>({ status: 'error' })),
+            catchError((error: unknown) =>
+              of<PlanView>({
+                status: 'error',
+                message: tradeFlowErrorMessage(error, 'Risk evaluation could not be completed.'),
+                retryable: true,
+                plan,
+                retryAction: 'RISK',
+              }),
+            ),
+            startWith<PlanView>({ status: 'evaluatingRisk' }),
+            finalize(() => (this.commandInFlight = false)),
           );
       }),
     );
@@ -147,29 +215,37 @@ export class PlanPage implements OnDestroy {
       switchMap(({ plan, decision }) => {
         const idempotencyKey = crypto.randomUUID();
         const expiresAt = new Date(Date.now() + 3600_000).toISOString();
-        return of<PlanView>({ status: 'executionSubmitting' }).pipe(
-          switchMap(() =>
-            this.executionService
-              .validate(
-                {
-                  tradePlanId: plan.id,
-                  tradePlanVersion: plan.version,
-                  evaluationId: decision.evaluationId,
-                  brokerAccountId: plan.tradingAccountId,
-                  expiresAt,
-                },
-                idempotencyKey,
-              )
-              .pipe(
-                switchMap((validated) =>
-                  this.executionService.execute(validated.id).pipe(
-                    switchMap((execution) => this.pollOrResult(execution)),
-                    catchError(() => of<PlanView>({ status: 'error' })),
-                  ),
-                ),
-                catchError(() => of<PlanView>({ status: 'error' })),
-              ),
-          ),
+        const executionFlow$ = this.executionService
+          .validate(
+            {
+              tradePlanId: plan.id,
+              tradePlanVersion: plan.version,
+              evaluationId: decision.evaluationId,
+              brokerAccountId: plan.tradingAccountId,
+              expiresAt,
+            },
+            idempotencyKey,
+          )
+          .pipe(
+            switchMap((validated) =>
+              this.executionService
+                .execute(validated.id)
+                .pipe(switchMap((execution) => this.pollOrResult(execution))),
+            ),
+            catchError((error: unknown) =>
+              of<PlanView>({
+                status: 'error',
+                message: tradeFlowErrorMessage(error, 'The trade could not be submitted.'),
+                retryable: true,
+                plan,
+                retryAction: 'EXECUTE',
+                decision,
+              }),
+            ),
+          );
+        return executionFlow$.pipe(
+          startWith<PlanView>({ status: 'executionSubmitting' }),
+          finalize(() => (this.commandInFlight = false)),
         );
       }),
     );
@@ -178,7 +254,13 @@ export class PlanPage implements OnDestroy {
       switchMap((executionId) =>
         this.executionService.retry(executionId).pipe(
           switchMap((execution) => this.pollOrResult(execution)),
-          catchError(() => of<PlanView>({ status: 'error' })),
+          catchError(() =>
+            of<PlanView>({
+              status: 'error',
+              message: 'The execution retry could not be completed.',
+              retryable: true,
+            }),
+          ),
         ),
       ),
     );
@@ -187,7 +269,13 @@ export class PlanPage implements OnDestroy {
       switchMap((executionId) =>
         this.executionService.reconcile(executionId).pipe(
           switchMap((execution) => this.pollOrResult(execution)),
-          catchError(() => of<PlanView>({ status: 'error' })),
+          catchError(() =>
+            of<PlanView>({
+              status: 'error',
+              message: 'The broker status could not be reconciled.',
+              retryable: true,
+            }),
+          ),
         ),
       ),
     );
@@ -196,7 +284,13 @@ export class PlanPage implements OnDestroy {
       switchMap((executionId) =>
         this.executionService.retryT1(executionId).pipe(
           switchMap((execution) => this.pollOrResult(execution)),
-          catchError(() => of<PlanView>({ status: 'error' })),
+          catchError(() =>
+            of<PlanView>({
+              status: 'error',
+              message: 'The execution risk revalidation could not be retried.',
+              retryable: true,
+            }),
+          ),
         ),
       ),
     );
@@ -228,18 +322,26 @@ export class PlanPage implements OnDestroy {
   }
 
   accept(plan: TradePlanResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
     this.acceptSubject.next(plan);
   }
 
   reject(plan: TradePlanResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
     this.rejectSubject.next(plan);
   }
 
   evaluateRisk(plan: TradePlanResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
     this.evaluateRiskSubject.next(plan);
   }
 
   execute(plan: TradePlanResponse, decision: RiskDecisionResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
     this.executeSubject.next({ plan, decision });
   }
 
@@ -249,6 +351,28 @@ export class PlanPage implements OnDestroy {
 
   retryT1(executionId: string): void {
     this.retryT1Subject.next(executionId);
+  }
+
+  retryLoad(): void {
+    this.reloadSubject.next();
+  }
+
+  retryCommand(view: Extract<PlanView, { status: 'error' }>): void {
+    if (!view.plan || !view.retryAction) return;
+    switch (view.retryAction) {
+      case 'ACCEPT':
+        this.accept(view.plan);
+        break;
+      case 'REJECT':
+        this.reject(view.plan);
+        break;
+      case 'RISK':
+        this.evaluateRisk(view.plan);
+        break;
+      case 'EXECUTE':
+        if (view.decision) this.execute(view.plan, view.decision);
+        break;
+    }
   }
 
   reconcile(executionId: string): void {
@@ -277,7 +401,9 @@ export class PlanPage implements OnDestroy {
         }
         return of(null);
       }),
-      switchMap(() => this.executionService.getExecution(execution.id)),
+      switchMap(() =>
+        this.executionService.getExecution(execution.id).pipe(catchError(() => of(execution))),
+      ),
       takeWhile(
         (exec) =>
           !this.destroyed &&
@@ -304,8 +430,21 @@ export class PlanPage implements OnDestroy {
         return { status: 'rejected', plan };
       case 'DRAFT':
         return { status: 'proposal', plan };
+      case 'RISK_VALIDATED':
+        return { status: 'riskValidated', plan };
+      case 'READY_TO_EXECUTE':
+        return { status: 'readyToExecute', plan };
+      case 'EXECUTED':
+        return { status: 'executed', plan };
+      case 'EXPIRED':
+        return { status: 'expired', plan };
       default:
-        return { status: 'accepted', plan };
+        return {
+          status: 'error',
+          message: 'This trade plan has an unsupported state.',
+          retryable: false,
+          plan,
+        };
     }
   }
 }
