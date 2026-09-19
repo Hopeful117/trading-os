@@ -46,8 +46,8 @@ export type PlanView =
   | { status: 'riskDecision'; plan: TradePlanResponse; decision: RiskDecisionResponse }
   | { status: 'executionReady'; plan: TradePlanResponse; decision: RiskDecisionResponse }
   | { status: 'executionSubmitting' }
-  | { status: 'executionPolling'; execution: ExecutionDto }
-  | { status: 'executionResult'; execution: ExecutionDto }
+  | { status: 'executionPolling'; plan: TradePlanResponse; execution: ExecutionDto }
+  | { status: 'executionResult'; plan: TradePlanResponse; execution: ExecutionDto }
   | { status: 'riskValidated'; plan: TradePlanResponse }
   | { status: 'readyToExecute'; plan: TradePlanResponse }
   | { status: 'executed'; plan: TradePlanResponse }
@@ -95,9 +95,18 @@ export class PlanPage implements OnDestroy {
     plan: TradePlanResponse;
     decision: RiskDecisionResponse;
   }>();
-  private readonly retrySubject = new Subject<string>();
-  private readonly retryT1Subject = new Subject<string>();
-  private readonly reconcileSubject = new Subject<string>();
+  private readonly retrySubject = new Subject<{
+    executionId: string;
+    plan: TradePlanResponse;
+  }>();
+  private readonly retryT1Subject = new Subject<{
+    executionId: string;
+    plan: TradePlanResponse;
+  }>();
+  private readonly reconcileSubject = new Subject<{
+    executionId: string;
+    plan: TradePlanResponse;
+  }>();
   private readonly reloadSubject = new Subject<void>();
 
   readonly view$: Observable<PlanView>;
@@ -230,7 +239,7 @@ export class PlanPage implements OnDestroy {
             switchMap((validated) =>
               this.executionService
                 .execute(validated.id)
-                .pipe(switchMap((execution) => this.pollOrResult(execution))),
+                .pipe(switchMap((execution) => this.pollOrResult(plan, execution))),
             ),
             catchError((error: unknown) =>
               of<PlanView>({
@@ -251,9 +260,9 @@ export class PlanPage implements OnDestroy {
     );
 
     const retry$ = this.retrySubject.pipe(
-      switchMap((executionId) =>
+      switchMap(({ executionId, plan }) =>
         this.executionService.retry(executionId).pipe(
-          switchMap((execution) => this.pollOrResult(execution)),
+          switchMap((execution) => this.pollOrResult(plan, execution)),
           catchError(() =>
             of<PlanView>({
               status: 'error',
@@ -266,9 +275,9 @@ export class PlanPage implements OnDestroy {
     );
 
     const reconcile$ = this.reconcileSubject.pipe(
-      switchMap((executionId) =>
+      switchMap(({ executionId, plan }) =>
         this.executionService.reconcile(executionId).pipe(
-          switchMap((execution) => this.pollOrResult(execution)),
+          switchMap((execution) => this.pollOrResult(plan, execution)),
           catchError(() =>
             of<PlanView>({
               status: 'error',
@@ -281,9 +290,9 @@ export class PlanPage implements OnDestroy {
     );
 
     const retryT1$ = this.retryT1Subject.pipe(
-      switchMap((executionId) =>
+      switchMap(({ executionId, plan }) =>
         this.executionService.retryT1(executionId).pipe(
-          switchMap((execution) => this.pollOrResult(execution)),
+          switchMap((execution) => this.pollOrResult(plan, execution)),
           catchError(() =>
             of<PlanView>({
               status: 'error',
@@ -345,12 +354,12 @@ export class PlanPage implements OnDestroy {
     this.executeSubject.next({ plan, decision });
   }
 
-  retry(executionId: string): void {
-    this.retrySubject.next(executionId);
+  retry(executionId: string, plan: TradePlanResponse): void {
+    this.retrySubject.next({ executionId, plan });
   }
 
-  retryT1(executionId: string): void {
-    this.retryT1Subject.next(executionId);
+  retryT1(executionId: string, plan: TradePlanResponse): void {
+    this.retryT1Subject.next({ executionId, plan });
   }
 
   retryLoad(): void {
@@ -375,8 +384,8 @@ export class PlanPage implements OnDestroy {
     }
   }
 
-  reconcile(executionId: string): void {
-    this.reconcileSubject.next(executionId);
+  reconcile(executionId: string, plan: TradePlanResponse): void {
+    this.reconcileSubject.next({ executionId, plan });
   }
 
   statusLabel(status: ExecutionStatus): string {
@@ -387,9 +396,9 @@ export class PlanPage implements OnDestroy {
     return status ? (BROKER_ORDER_LABELS[status] ?? status) : '';
   }
 
-  private pollOrResult(execution: ExecutionDto): Observable<PlanView> {
+  private pollOrResult(plan: TradePlanResponse, execution: ExecutionDto): Observable<PlanView> {
     if (!shouldPoll(execution.status)) {
-      return of<PlanView>({ status: 'executionResult', execution });
+      return of<PlanView>({ status: 'executionResult', plan, execution });
     }
     const startTime = Date.now();
     const maxDuration = 5 * 60 * 1000;
@@ -414,8 +423,8 @@ export class PlanPage implements OnDestroy {
       ),
       map((exec) =>
         shouldPoll(exec.status) && !isTerminal(exec.status) && exec.status !== 'FAILED'
-          ? { status: 'executionPolling' as const, execution: exec }
-          : { status: 'executionResult' as const, execution: exec },
+          ? { status: 'executionPolling' as const, plan, execution: exec }
+          : { status: 'executionResult' as const, plan, execution: exec },
       ),
     );
   }
