@@ -1,14 +1,17 @@
 import { AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import {
   BehaviorSubject,
   catchError,
   combineLatest,
   map,
+  merge,
   Observable,
   of,
   shareReplay,
   startWith,
+  Subject,
   switchMap,
   timer,
 } from 'rxjs';
@@ -17,6 +20,7 @@ import { Account } from '../../../../core/models/account.model';
 import {
   OpenPositionDashboardView,
   PositionProtectionStatus,
+  PositionSource,
 } from '../../../../core/models/dashboard-summary.model';
 import {
   PositionCloseResponse,
@@ -33,6 +37,9 @@ interface AccountsState {
 }
 
 interface PositionCloseState {
+  positionId: string;
+  symbol: string | null;
+  source: PositionSource | null;
   status: PositionCloseStatus | null;
   externalOrderId: string | null;
   failureReason: string | null;
@@ -49,6 +56,7 @@ interface PositionsViewModel {
   positionsLoading: boolean;
   positionsError: string | null;
   closeStates: Map<string, PositionCloseState>;
+  closeResults: PositionCloseState[];
 }
 
 @Component({
@@ -58,9 +66,13 @@ interface PositionsViewModel {
   styleUrl: './positions.scss',
 })
 export class Positions {
+  private readonly route = inject(ActivatedRoute);
   private readonly accountService = inject(AccountService);
   private readonly positionService = inject(PositionService);
-  private readonly selectedAccountId = new BehaviorSubject<string | null>(null);
+  private readonly selectedAccountId = new BehaviorSubject<string | null>(
+    this.route.snapshot.queryParamMap.get('accountId'),
+  );
+  private readonly refreshPositions = new Subject<void>();
   private readonly lastPositionsByAccount = new Map<string, OpenPositionDashboardView[]>();
   private readonly closeStates = new Map<string, PositionCloseState>();
 
@@ -94,10 +106,11 @@ export class Positions {
           positionsLoading: false,
           positionsError: null,
           closeStates: new Map(),
+          closeResults: this.closeResultStates(),
         });
       }
 
-      return timer(0, 10_000).pipe(
+      return merge(timer(0, 10_000), this.refreshPositions).pipe(
         switchMap(() =>
           this.positionService.getPositions(selectedAccountId).pipe(
             map((positions) => {
@@ -109,6 +122,7 @@ export class Positions {
                 positionsLoading: false,
                 positionsError: null,
                 closeStates: this.closeStates,
+                closeResults: this.closeResultStates(),
               };
             }),
             catchError(() =>
@@ -119,6 +133,7 @@ export class Positions {
                 positionsLoading: false,
                 positionsError: 'Les données des positions sont temporairement indisponibles.',
                 closeStates: this.closeStates,
+                closeResults: this.closeResultStates(),
               }),
             ),
           ),
@@ -130,6 +145,7 @@ export class Positions {
           positionsLoading: true,
           positionsError: null,
           closeStates: new Map(),
+          closeResults: this.closeResultStates(),
         }),
       );
     }),
@@ -144,6 +160,9 @@ export class Positions {
     let state = this.closeStates.get(positionId);
     if (!state) {
       state = {
+        positionId,
+        symbol: null,
+        source: null,
         status: null,
         externalOrderId: null,
         failureReason: null,
@@ -159,6 +178,8 @@ export class Positions {
 
   showCloseConfirmation(position: OpenPositionDashboardView): void {
     const state = this.getCloseState(position.positionId);
+    state.symbol = position.symbol;
+    state.source = position.source;
     state.showConfirmation = true;
   }
 
@@ -169,6 +190,8 @@ export class Positions {
 
   confirmFullExposureClose(accountId: string, position: OpenPositionDashboardView): void {
     const state = this.getCloseState(position.positionId);
+    state.symbol = position.symbol;
+    state.source = position.source;
     const idempotencyKey = uuidv4();
 
     const closeRequest =
@@ -184,11 +207,13 @@ export class Positions {
         state.reconciliationResult = response.reconciliationResult;
         state.commandId = response.commandId;
         state.showConfirmation = false;
+        this.refreshPositions.next();
       },
       error: (err) => {
         state.status = 'REJECTED';
         state.failureReason = err.error?.message ?? 'Erreur lors de la fermeture';
         state.showConfirmation = false;
+        this.refreshPositions.next();
       },
     });
   }
@@ -299,5 +324,9 @@ export class Positions {
       case 'RECONCILIATION_INCONCLUSIVE':
         return 'Réconciliation inconclusive';
     }
+  }
+
+  private closeResultStates(): PositionCloseState[] {
+    return Array.from(this.closeStates.values()).filter((state) => state.status !== null);
   }
 }

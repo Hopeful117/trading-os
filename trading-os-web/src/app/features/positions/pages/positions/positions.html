@@ -21,6 +21,33 @@
       }
     </header>
 
+    @if (vm.closeResults.length > 0) {
+      <section class="state-panel" data-testid="close-results">
+        @for (result of vm.closeResults; track result.positionId) {
+          <div class="close-result" [class]="closeStatusClass(result.status)">
+            <strong>{{ result.symbol ?? result.positionId }}</strong>
+            <span>{{ closeStatusLabel(result.status) }}</span>
+            @if (result.failureReason) {
+              <span>{{ result.failureReason }}</span>
+            }
+            @if (result.source === 'BROKER' && isReconcilable(result.status)) {
+              <button
+                type="button"
+                class="btn-reconcile"
+                (click)="reconcile(vm.selectedAccountId!, result.positionId)"
+                data-testid="close-result-reconcile-button"
+              >
+                Réconcilier
+              </button>
+            }
+            @if (result.reconciliationResult) {
+              <span>{{ reconciliationLabel(result.reconciliationResult) }}</span>
+            }
+          </div>
+        }
+      </section>
+    }
+
     @if (vm.accountsState.loading) {
       <section class="state-panel">Chargement des comptes…</section>
     } @else if (vm.accountsState.error) {

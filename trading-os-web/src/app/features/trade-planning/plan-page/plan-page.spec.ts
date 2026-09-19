@@ -158,6 +158,10 @@ describe('PlanPage', () => {
     expect(
       fixture.nativeElement.querySelector('[data-testid="execution-result-state"]'),
     ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="execution-context"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('BTC/EUR');
+    expect(fixture.nativeElement.textContent).toContain('acc-1');
+    expect(fixture.nativeElement.querySelector('[data-testid="positions-link"]')).toBeTruthy();
   });
 
   it('does not show execute button for REJECTED risk decision', () => {

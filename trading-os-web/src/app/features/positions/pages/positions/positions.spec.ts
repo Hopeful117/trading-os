@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { Account } from '../../../../core/models/account.model';
@@ -133,6 +134,13 @@ describe('Positions', () => {
     expect(positionService.getPositions).toHaveBeenCalledWith('account-1');
   });
 
+  it('starts with the account provided by the route query', async () => {
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService, 'account-2');
+    await create();
+
+    expect(positionService.getPositions).toHaveBeenCalledWith('account-2');
+  });
+
   it('pnlClass returns correct classes', () => {
     const comp = TestBed.createComponent(Positions).componentInstance;
     expect(comp.pnlClass(null)).toBe('');
@@ -239,6 +247,35 @@ describe('Positions', () => {
     const state = comp.getCloseState('p1');
     expect(state.status).toBe('REJECTED');
     expect(state.failureReason).toBe('Broker error');
+  });
+
+  it('refreshes positions after close and keeps the close result visible', async () => {
+    let requestCount = 0;
+    positionService.getPositions = vi.fn(() => of(requestCount++ === 0 ? positions : []));
+    positionService.closePosition = vi.fn(() =>
+      of({
+        commandId: 'cmd-closed',
+        status: 'CLOSED',
+        externalOrderId: 'order-1',
+        failureReason: null,
+        resolvedMutationScope: 'scope',
+        reconciliationResult: 'EXPOSURE_CONFIRMED_ABSENT',
+      }),
+    );
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
+    fixture = TestBed.createComponent(Positions);
+    fixture.detectChanges();
+    await nextTask();
+    fixture.detectChanges();
+
+    fixture.componentInstance.confirmFullExposureClose('account-1', positions[0]);
+    await nextTask();
+    fixture.detectChanges();
+
+    expect(positionService.getPositions).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelector('[data-testid="close-results"]')).not.toBeNull();
+    expect(text()).toContain('Fermée');
+    expect(text()).toContain('BTC/USD');
   });
 
   it('reconcile calls service when commandId exists', async () => {
@@ -352,12 +389,23 @@ describe('Positions', () => {
       closePosition: ReturnType<typeof vi.fn>;
       reconcileClose: ReturnType<typeof vi.fn>;
     },
+    initialAccountId: string | null = null,
   ): Promise<void> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [Positions],
       providers: [
         provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: {
+                get: (key: string) => (key === 'accountId' ? initialAccountId : null),
+              },
+            },
+          },
+        },
         { provide: AccountService, useValue: accountProvider },
         { provide: PositionService, useValue: posService },
       ],

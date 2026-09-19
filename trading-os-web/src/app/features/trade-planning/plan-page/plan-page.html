@@ -307,7 +307,7 @@
         <article class="plan-card" data-testid="execution-polling-state">
           <header class="card-header">
             <div>
-              <h1>Execution Result</h1>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
               <p>
                 Status:
                 <span class="status-badge polling">
@@ -316,6 +316,17 @@
               </p>
             </div>
           </header>
+
+          <section class="facts-grid execution-context">
+            <div class="fact">
+              <span class="label">Quantity</span>
+              <span class="value">{{ view.plan.quantity | number: '1.4-4' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Account</span>
+              <span class="value">{{ view.plan.tradingAccountId }}</span>
+            </div>
+          </section>
 
           <section class="facts-grid">
             <div class="fact">
@@ -347,7 +358,7 @@
         <article class="plan-card" data-testid="execution-result-state">
           <header class="card-header">
             <div>
-              <h1>Execution Result</h1>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
               <p>
                 Status:
                 <span
@@ -362,6 +373,17 @@
               </p>
             </div>
           </header>
+
+          <section class="facts-grid execution-context" data-testid="execution-context">
+            <div class="fact">
+              <span class="label">Quantity</span>
+              <span class="value">{{ view.plan.quantity | number: '1.4-4' }}</span>
+            </div>
+            <div class="fact">
+              <span class="label">Account</span>
+              <span class="value">{{ view.plan.tradingAccountId }}</span>
+            </div>
+          </section>
 
           <section class="facts-grid">
             <div class="fact">
@@ -461,7 +483,7 @@
             @if (view.execution.status === 'FAILED') {
               <button
                 class="btn-retry"
-                (click)="retry(view.execution.id)"
+                (click)="retry(view.execution.id, view.plan)"
                 data-testid="retry-button"
               >
                 Retry
@@ -470,7 +492,7 @@
             @if (view.execution.status === 'RISK_REVALIDATION_UNAVAILABLE') {
               <button
                 class="btn-retry"
-                (click)="retryT1(view.execution.id)"
+                (click)="retryT1(view.execution.id, view.plan)"
                 data-testid="retry-t1-button"
               >
                 Retry execution
@@ -482,12 +504,20 @@
             ) {
               <button
                 class="btn-reconcile"
-                (click)="reconcile(view.execution.id)"
+                (click)="reconcile(view.execution.id, view.plan)"
                 data-testid="reconcile-button"
               >
                 Check broker status
               </button>
             }
+            <a
+              class="btn-primary"
+              [routerLink]="['/positions']"
+              [queryParams]="{ accountId: view.plan.tradingAccountId }"
+              data-testid="positions-link"
+            >
+              View account positions
+            </a>
             <a routerLink="/opportunities" class="back-link">← Back to opportunities</a>
           </footer>
         </article>
