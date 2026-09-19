@@ -10,20 +10,29 @@ import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Component
 public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     private final BrokerRiskFactsPort liveFacts;
     private final ObjectMapper mapper;
+    private final Clock clock;
 
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper) {
+        this(liveFacts, mapper, Clock.systemUTC());
+    }
+
+    @Autowired
+    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock) {
         this.liveFacts = liveFacts;
         this.mapper = mapper;
+        this.clock = clock;
     }
 
     @Override
@@ -41,7 +50,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
 
     private RiskFactsProvider.Snapshot paperSnapshot(com.hope.trading.trading_core.model.Account account,
                                                       BrokerAccount brokerAccount,
-                                                       Instant from, Instant to) {
+                                                        Instant from, Instant to) {
         Map<String, BigDecimal> balances = account.getBalances().stream()
                 .collect(Collectors.toMap(value -> value.getAsset().toUpperCase(),
                         value -> value.getAmount(), BigDecimal::add));
@@ -58,15 +67,20 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 .toList();
         BigDecimal balance = balances.get(account.getBaseCurrency().toUpperCase());
         String payload = writePayload(account, balances, positions, closedTrades);
+        List<String> reasons = new java.util.ArrayList<>();
+        if (positions.stream().anyMatch(position -> position.protectedQuantity() == null
+                || position.protectedQuantity().compareTo(position.signedQuantity().abs()) != 0
+                || position.protectiveStops().isEmpty())) {
+            reasons.add("PAPER_POSITION_PROTECTION_UNAVAILABLE");
+        }
         return new RiskFactsProvider.Snapshot(
                 brokerAccount.id(),
-                account.getTrades().size(),
-                Instant.now(),
-                false,
-                List.of("PAPER_RISK_LEDGER_UNAVAILABLE", "PAPER_MARGIN_UNAVAILABLE",
-                        "PAPER_POSITION_PROTECTION_UNAVAILABLE"),
+                Math.max(1, account.getVersion()),
+                clock.instant(),
+                reasons.isEmpty(),
+                reasons,
                 balances,
-                new RiskFactsProvider.Account(account.getBaseCurrency(), balance, account.getEquity(), null),
+                new RiskFactsProvider.Account(account.getBaseCurrency(), balance, account.getEquity(), account.getEquity()),
                 positions,
                 closedTrades,
                 List.of(),
@@ -74,14 +88,27 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     }
 
     private RiskFactsProvider.Position paperPosition(Trade trade) {
+        BigDecimal quantity = signedQuantity(trade);
+        BigDecimal absoluteQuantity = quantity.abs();
+        BigDecimal currentPrice = trade.getCurrentPrice() == null ? trade.getEntryPrice() : trade.getCurrentPrice();
+        List<RiskFactsProvider.Stop> stops = trade.getStopLoss() == null ? List.of()
+                : List.of(new RiskFactsProvider.Stop("paper-trade-stop:" + trade.getTradeId(),
+                        "TRADING_CORE", absoluteQuantity, trade.getStopLoss()));
         return new RiskFactsProvider.Position(trade.getTradeId(), "paper-trade:" + trade.getTradeId(),
-                "TRADING_CORE", trade.getSymbol(), signedQuantity(trade), trade.getEntryPrice(),
-                null, null, BigDecimal.ZERO, List.of());
+                "TRADING_CORE", trade.getSymbol(), quantity, trade.getEntryPrice(),
+                currentPrice.multiply(absoluteQuantity), trade.getEntryPrice().multiply(absoluteQuantity),
+                trade.getStopLoss() == null ? BigDecimal.ZERO : absoluteQuantity, stops);
     }
 
     private RiskFactsProvider.ClosedTrade paperClosedTrade(Trade trade) {
         return new RiskFactsProvider.ClosedTrade("paper-trade:" + trade.getTradeId(), trade.getSymbol(),
-                null, null, trade.getPnl(), trade.getClosedAt());
+                accountCurrency(trade), BigDecimal.ZERO, trade.getPnl() == null ? BigDecimal.ZERO : trade.getPnl(),
+                trade.getClosedAt());
+    }
+
+    private String accountCurrency(Trade trade) {
+        return trade.getAccount() == null || trade.getAccount().getBaseCurrency() == null
+                ? "USD" : trade.getAccount().getBaseCurrency();
     }
 
     private BigDecimal signedQuantity(Trade trade) {
