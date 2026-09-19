@@ -12,7 +12,27 @@
       @case ('error') {
         <div class="state-card error" data-testid="error-state">
           <h2>Unable to prepare trade plan</h2>
-          <p>The opportunity must be ACTIVE to create a trade plan.</p>
+          <p>{{ view.message }}</p>
+          @if (view.retryAction === 'CREATE' && view.opportunityId; as opportunityId) {
+            <button
+              type="button"
+              class="btn-primary"
+              (click)="retryCreate(opportunityId)"
+              [disabled]="busy$ | async"
+              data-testid="retry-create-button"
+            >
+              Retry creation
+            </button>
+          } @else if (view.retryable) {
+            <button
+              type="button"
+              class="btn-primary"
+              (click)="retryLoad()"
+              data-testid="retry-button"
+            >
+              Retry
+            </button>
+          }
         </div>
       }
       @case ('ready') {
@@ -79,7 +99,7 @@
           <footer class="card-actions">
             <button
               class="btn-primary"
-              [disabled]="!accountId"
+              [disabled]="!accountId || (busy$ | async)"
               (click)="createPlan(view.opportunity.id)"
               data-testid="create-plan-button"
             >
