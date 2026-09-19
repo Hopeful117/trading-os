@@ -35,8 +35,10 @@ public class RoutingBrokerExecutionAdapter implements BrokerExecutionPort {
 
         if (brokerAccount.executionMode() == ExecutionMode.PAPER) {
             return paperAdapter.submit(request);
-        } else {
+        } else if (brokerAccount.executionMode() == ExecutionMode.LIVE) {
             return liveAdapter.submit(request);
+        } else {
+            return new Rejected(null, "EXECUTION_MODE_UNAVAILABLE");
         }
     }
 
@@ -51,8 +53,10 @@ public class RoutingBrokerExecutionAdapter implements BrokerExecutionPort {
 
         if (brokerAccount.executionMode() == ExecutionMode.PAPER) {
             paperAdapter.cancel(brokerAccountId, externalOrderId);
-        } else {
+        } else if (brokerAccount.executionMode() == ExecutionMode.LIVE) {
             liveAdapter.cancel(brokerAccountId, externalOrderId);
+        } else {
+            throw new IllegalStateException("Execution mode is unavailable");
         }
     }
 
@@ -67,8 +71,10 @@ public class RoutingBrokerExecutionAdapter implements BrokerExecutionPort {
 
         if (brokerAccount.executionMode() == ExecutionMode.PAPER) {
             return paperAdapter.reconcile(request);
-        } else {
+        } else if (brokerAccount.executionMode() == ExecutionMode.LIVE) {
             return liveAdapter.reconcile(request);
+        } else {
+            return new Inconsistent("EXECUTION_MODE_UNAVAILABLE");
         }
     }
 }

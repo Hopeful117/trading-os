@@ -12,6 +12,8 @@ import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,18 +29,28 @@ public class PaperSettlementService {
     private final BrokerAccountRepository brokerAccountRepository;
     private final AccountRepository accountRepository;
     private final TradingCalculatorService tradingCalculatorService;
+    private final TradePlanRiskPort tradePlans;
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                   AccountRepository accountRepository) {
-        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl());
+        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                   AccountRepository accountRepository,
                                   TradingCalculatorService tradingCalculatorService) {
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null);
+    }
+
+    @Autowired
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                  AccountRepository accountRepository,
+                                  TradingCalculatorService tradingCalculatorService,
+                                  TradePlanRiskPort tradePlans) {
         this.brokerAccountRepository = brokerAccountRepository;
         this.accountRepository = accountRepository;
         this.tradingCalculatorService = tradingCalculatorService;
+        this.tradePlans = tradePlans;
     }
 
     @Transactional
@@ -69,7 +81,7 @@ public class PaperSettlementService {
             settleExit(account, intent, fill);
         } else {
             updateBalances(account, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
-            updatePosition(account, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
+            updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
             recalculateEquity(account, fill.fee());
         }
 
@@ -147,8 +159,9 @@ public class PaperSettlementService {
         return instrument;
     }
 
-    private void updatePosition(Account account, ExecutionParameters.Side side, BigDecimal quantity,
-                                BigDecimal fillPrice, Instant executedAt, ExecutionParameters params) {
+    private void updatePosition(Account account, ExecutionIntent intent, ExecutionParameters.Side side, BigDecimal quantity,
+                                 BigDecimal fillPrice, Instant executedAt, ExecutionParameters params) {
+        BigDecimal stopPrice = resolveStopPrice(intent);
         Optional<Trade> existingTrade = account.getTrades().stream()
                 .filter(t -> t.getSymbol().equals(params.instrument())
                         && t.getTradeStatus() == TradeStatus.OPEN
@@ -163,6 +176,7 @@ public class PaperSettlementService {
             BigDecimal newEntryPrice = totalCost.divide(totalQuantity, 8, java.math.RoundingMode.HALF_UP);
             trade.setQuantity(totalQuantity);
             trade.setEntryPrice(newEntryPrice);
+            if (trade.getStopLoss() == null) trade.setStopLoss(stopPrice);
         } else {
             Trade trade = Trade.builder()
                     .symbol(params.instrument())
@@ -171,10 +185,17 @@ public class PaperSettlementService {
                     .quantity(quantity)
                     .currentPrice(fillPrice)
                     .openedAt(executedAt)
+                    .stopLoss(stopPrice)
                     .tradeStatus(TradeStatus.OPEN)
                     .build();
             account.addTrade(trade);
         }
+    }
+
+    private BigDecimal resolveStopPrice(ExecutionIntent intent) {
+        if (tradePlans == null || intent.tradePlan() == null) return null;
+        TradePlanRiskPort.Snapshot plan = tradePlans.load(intent.tradePlan().tradePlanId(), intent.tradePlan().version());
+        return plan.stopPrice();
     }
 
     private void recalculateEquity(Account account, BigDecimal fee) {
