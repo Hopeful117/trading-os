@@ -39,7 +39,7 @@ public class Trade {
 
     private BigDecimal exitPrice;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 38, scale = 12)
     private BigDecimal quantity;
 
     private BigDecimal pnl;

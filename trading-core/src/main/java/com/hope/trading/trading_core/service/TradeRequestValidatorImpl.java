@@ -19,9 +19,12 @@ public class TradeRequestValidatorImpl implements TradeRequestValidator {
             throw new IllegalArgumentException("Symbol is required");
         }
 
+        if (request.getEntryPrice() == null || request.getEntryPrice().signum() <= 0) {
+            throw new IllegalArgumentException("EntryPrice must be positive");
+        }
 
-        if (request.getQuantity() == null) {
-            throw new IllegalArgumentException("Quantity is required");
+        if (request.getQuantity() == null || request.getQuantity().signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive");
         }
 
         if (request.getStopLoss() == null) {

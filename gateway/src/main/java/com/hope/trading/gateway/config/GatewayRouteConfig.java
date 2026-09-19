@@ -51,6 +51,10 @@ public class GatewayRouteConfig {
                         .path("/api/v1/accounts/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))
                  )
+                .route("trades", r -> r
+                        .path("/api/v1/trades/**")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                )
                 .route("broker-credential-commands", r -> r
                         .path(
                                 "/api/v1/broker-accounts/*/credentials",

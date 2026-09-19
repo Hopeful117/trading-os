@@ -21,6 +21,7 @@ class TradeRequestValidatorImplTest {
         TradeRequest request = new TradeRequest();
         request.setAccountId(UUID.randomUUID());
         request.setSymbol("BTC/USD");
+        request.setEntryPrice(BigDecimal.valueOf(60000));
         request.setQuantity(BigDecimal.ONE);
         request.setStopLoss(BigDecimal.TEN);
         request.setTakeProfit(BigDecimal.valueOf(20));
@@ -42,10 +43,11 @@ class TradeRequestValidatorImplTest {
 
     @Test
     void eachMissingMandatoryFieldIsRejected() {
-        for (String field : new String[] {"AccountId", "Quantity", "StopLoss", "TakeProfit"}) {
+        for (String field : new String[] {"AccountId", "EntryPrice", "Quantity", "StopLoss", "TakeProfit"}) {
             TradeRequest request = validRequest();
             switch (field) {
                 case "AccountId" -> request.setAccountId(null);
+                case "EntryPrice" -> request.setEntryPrice(null);
                 case "Quantity" -> request.setQuantity(null);
                 case "StopLoss" -> request.setStopLoss(null);
                 case "TakeProfit" -> request.setTakeProfit(null);
@@ -65,5 +67,15 @@ class TradeRequestValidatorImplTest {
         assertThatThrownBy(() -> validator.validate(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Symbol");
+    }
+
+    @Test
+    void nonPositiveQuantityIsRejected() {
+        TradeRequest request = validRequest();
+        request.setQuantity(BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> validator.validate(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Quantity");
     }
 }

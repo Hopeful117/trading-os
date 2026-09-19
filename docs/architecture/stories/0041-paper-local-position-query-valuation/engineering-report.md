@@ -54,6 +54,34 @@ FIFO messaging for PAPER positions.
 - Angular production build: passed with bundle-size budget warnings.
 - `git diff --check`: passed.
 
+## Final Runtime Check
+
+The deployed stack was rebuilt after resolving the Flyway version collision and
+Trading Core registered successfully with Eureka. Through Gateway, an
+authenticated PAPER account accepted a BUY trade with `entryPrice=60000` and
+`quantity=0.001`. The subsequent positions query returned the persisted local
+position with the same fractional quantity.
+
+No usable current Market Data snapshot was available for the matching XBT
+market during the check. The response therefore returned
+`valuationStatus=UNAVAILABLE`, `currentPrice=null`, `unrealizedPnl=null`, and
+`exposure=null`. This confirms the fail-closed valuation behavior and absence
+of fabricated pricing.
+
+## UI Smoke Check
+
+The Angular application was exercised with a fresh trader identity. Registration,
+login, PAPER mode selection, capital entry, risk-profile selection, account
+creation, dashboard navigation, and positions navigation all completed through
+the interface. The account creation confirmation was rendered and the new
+PAPER account was visible to the dashboard.
+
+The current frontend exposes trade-plan execution but no direct trade-entry
+form or client call to `POST /api/v1/trades`. Consequently, a complete UI-only
+journey ending in a newly created position cannot be executed without a separate
+trade-plan/opportunity flow. This is an existing product-surface limitation,
+not a position-query failure.
+
 ## Limitations
 
 PAPER close, settlement, realized PnL, fees, slippage, and generalized position

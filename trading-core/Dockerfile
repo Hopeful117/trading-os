@@ -19,7 +19,7 @@ WORKDIR /app
 
 COPY --from=build /risk-domain/target/risk-domain-0.0.1-SNAPSHOT.jar /opt/risk-domain/risk-domain-0.0.1-SNAPSHOT.jar
 
-COPY --from=build /trading-core/target/trading-core-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /trading-core/target/trading-core-0.0.1-SNAPSHOT-exec.jar app.jar
 
 
 
