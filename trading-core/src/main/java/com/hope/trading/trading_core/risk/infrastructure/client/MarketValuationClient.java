@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.risk.infrastructure.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
+import com.hope.trading.trading_core.config.MarketDataFeignConfiguration;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -12,7 +13,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(name = "market-data", contextId = "riskMarketValuationClient")
+@FeignClient(name = "market-data", contextId = "riskMarketValuationClient",
+        configuration = MarketDataFeignConfiguration.class)
 interface MarketValuationFeignClient {
     @GetMapping("/api/v1/markets")
     List<CatalogueMarket> markets();

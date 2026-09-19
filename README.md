@@ -164,6 +164,7 @@ KRAKEN_API_KEY=
 KRAKEN_API_SECRET=
 BROKER_MASTER_KEY=
 BROKER_MASTER_KEY_VERSION=v1
+TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET=
 SPRING_PROFILES_ACTIVE=prod
 ```
 
@@ -172,6 +173,11 @@ Base64. Elle peut être générée hors du dépôt avec `openssl rand -base64 32
 Elle ne doit jamais être commitée. Le profil production utilise
 `BROKER_CREDENTIAL_SOURCE=stored`; le mode `environment` est réservé au
 développement et aux démonstrations explicitement configurées.
+
+`TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET` est une clé Base64 de 32 octets
+partagée uniquement par Trading Core et Market Data pour les appels internes.
+Elle doit être distincte de la clé JWT utilisateur et ne doit jamais être
+exposée au frontend.
 
 Ne jamais journaliser ni committer les clés Kraken, le JWT, les mots de passe ou les en-têtes `Authorization`.
 
