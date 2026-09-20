@@ -70,18 +70,30 @@
                       </a>
                     </div>
                   } @else {
-                    <p class="detail-state">Trade Plan continuity is unavailable for this execution.</p>
+                    <p class="detail-state">
+                      Trade Plan continuity is unavailable for this execution.
+                    </p>
                   }
 
                   <div class="execution-metrics">
-                    <span>Broker status: {{ fullExecution.brokerOrderStatus ?? 'Unavailable' }}</span>
+                    <span
+                      >Broker status: {{ fullExecution.brokerOrderStatus ?? 'Unavailable' }}</span
+                    >
                     <span>
                       Filled:
-                      {{ fullExecution.filledQuantity !== null ? (fullExecution.filledQuantity | number: '1.0-8') : '—' }}
+                      {{
+                        fullExecution.filledQuantity !== null
+                          ? (fullExecution.filledQuantity | number: '1.0-8')
+                          : '—'
+                      }}
                     </span>
                     <span>
                       Average price:
-                      {{ fullExecution.averageFillPrice !== null ? (fullExecution.averageFillPrice | number: '1.2-8') : '—' }}
+                      {{
+                        fullExecution.averageFillPrice !== null
+                          ? (fullExecution.averageFillPrice | number: '1.2-8')
+                          : '—'
+                      }}
                     </span>
                   </div>
 
