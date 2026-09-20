@@ -14,12 +14,13 @@ import org.springframework.stereotype.Component;
 public class KrakenMarketMapper {
     private final MarketStateBuilder marketStateBuilder;
     public Market toDomain(KrakenAssetPairDto dto) {
+        String[] assets = dto.getWsname().split("/", 2);
 
         return Market.builder()
                 .provider(MarketProvider.KRAKEN)
                 .symbol(dto.getWsname())
-                .baseAsset(dto.getBase())
-                .quoteAsset(dto.getQuote())
+                .baseAsset(assets[0])
+                .quoteAsset(assets[1])
                 .marketState(marketStateBuilder.buildInitialState("online".equalsIgnoreCase(dto.getStatus()) ? MarketAvailability.AVAILABLE : MarketAvailability.UNAVAILABLE))
                 .marketConstraints(
                         MarketConstraints.builder()
