@@ -151,13 +151,265 @@
         }
 
         @if (selectedMarketId; as marketId) {
-          <section class="state-card" data-testid="selected-market-state">
-            <h2>Market selected</h2>
-            <p>The next Workspace slice will load the live context for {{ marketId }}.</p>
-            <button type="button" class="primary-button" (click)="openMarket(marketId)">
-              Open market exploration
-            </button>
-          </section>
+          @if (marketView$ | async; as marketView) {
+            @switch (marketView.status) {
+              @case ('loading') {
+                <section class="state-card" data-testid="market-loading">
+                  <p>Loading selected market...</p>
+                </section>
+              }
+              @case ('ineligible') {
+                <section class="state-card error" data-testid="market-ineligible">
+                  <h2>Market is no longer eligible</h2>
+                  <p>The account context changed or the market is no longer available.</p>
+                </section>
+              }
+              @case ('error') {
+                <section class="state-card error" data-testid="market-error">
+                  <h2>Unable to load selected market</h2>
+                  <p>Market Data is temporarily unavailable. No live stream was opened.</p>
+                </section>
+              }
+              @case ('loaded') {
+                <section class="market-context" data-testid="market-context">
+                  <header class="market-header">
+                    <div>
+                      <span class="eyebrow">Step 3 · Account-scoped market</span>
+                      <span class="provider">{{ marketView.market.provider }}</span>
+                      <h2>{{ marketView.market.symbol }}</h2>
+                      <p>{{ marketView.market.baseAsset }} / {{ marketView.market.quoteAsset }}</p>
+                    </div>
+                    <div class="market-status-block">
+                      <span
+                        class="market-status"
+                        [class.open]="marketView.market.marketState.tradable"
+                      >
+                        {{ marketView.market.marketState.tradingStatus }}
+                      </span>
+                      <small>
+                        State updated
+                        {{ marketView.market.marketState.lastUpdated | date: 'mediumTime' }}
+                      </small>
+                    </div>
+                  </header>
+
+                  <section class="market-section" aria-labelledby="workspace-ticker-title">
+                    <div class="section-heading">
+                      <div>
+                        <span class="eyebrow">Live market</span>
+                        <h3 id="workspace-ticker-title">Ticker</h3>
+                      </div>
+                      @if (ticker$ | async; as ticker) {
+                        <span class="stream-badge">{{
+                          marketFreshness(
+                            ticker,
+                            ticker.status === 'live' ? ticker.data.occurredAt : null
+                          )
+                        }}</span>
+                      }
+                    </div>
+
+                    @if (ticker$ | async; as ticker) {
+                      @switch (ticker.status) {
+                        @case ('waiting') {
+                          <p class="section-placeholder">Waiting for live market data...</p>
+                        }
+                        @case ('error') {
+                          <p class="section-placeholder error">Ticker data unavailable.</p>
+                        }
+                        @case ('live') {
+                          <div class="ticker-grid">
+                            <article class="ticker-card ticker-card--primary">
+                              <span>Last price</span>
+                              <strong>{{ ticker.data.last }}</strong>
+                              <small>{{ ticker.data.occurredAt | date: 'mediumTime' }}</small>
+                            </article>
+                            <article class="ticker-card">
+                              <span>Bid</span>
+                              <strong>{{ ticker.data.bid }}</strong>
+                            </article>
+                            <article class="ticker-card">
+                              <span>Ask</span>
+                              <strong>{{ ticker.data.ask }}</strong>
+                            </article>
+                            <article class="ticker-card">
+                              <span>Spread</span>
+                              <strong>{{ ticker.data.ask - ticker.data.bid }}</strong>
+                            </article>
+                            @if (ticker.data.volume !== null) {
+                              <article class="ticker-card">
+                                <span>Volume</span>
+                                <strong>{{ ticker.data.volume }}</strong>
+                              </article>
+                            }
+                          </div>
+                        }
+                      }
+                    }
+                  </section>
+
+                  <section class="market-section" aria-labelledby="workspace-chart-title">
+                    <div class="section-heading">
+                      <div>
+                        <span class="eyebrow">Price history</span>
+                        <h3 id="workspace-chart-title">Market chart</h3>
+                      </div>
+                      <div class="timeframe-selector">
+                        @if (selectedTimeframe$ | async; as selectedTimeframe) {
+                          @for (timeframe of ohlcIntervals; track timeframe.minutes) {
+                            <button
+                              type="button"
+                              [class.active]="selectedTimeframe.minutes === timeframe.minutes"
+                              (click)="selectOhlcInterval(timeframe)"
+                            >
+                              {{ timeframe.label }}
+                            </button>
+                          }
+                        }
+                      </div>
+                      @if (ohlc$ | async; as liveOhlc) {
+                        <span class="stream-badge">{{
+                          marketFreshness(
+                            liveOhlc,
+                            liveOhlc.status === 'live' ? liveOhlc.data.occurredAt : null
+                          )
+                        }}</span>
+                      }
+                    </div>
+
+                    @if (ohlcHistory$ | async; as history) {
+                      @switch (history.status) {
+                        @case ('loading') {
+                          <p class="section-placeholder">Loading OHLC history...</p>
+                        }
+                        @case ('error') {
+                          <p class="section-placeholder error">OHLC history unavailable.</p>
+                        }
+                        @case ('loaded') {
+                          <app-market-chart
+                            [history]="history.data"
+                            [liveCandle]="liveCandle(ohlc$ | async)"
+                            [resetKey]="(chartReset$ | async) ?? 0"
+                          />
+                        }
+                      }
+                    }
+                  </section>
+
+                  <div class="market-secondary-grid">
+                    <section class="market-section" aria-labelledby="workspace-order-book-title">
+                      <div class="section-heading">
+                        <h3 id="workspace-order-book-title">Order book</h3>
+                        <div class="timeframe-selector" aria-label="Order-book depth">
+                          @if (selectedOrderBookDepth$ | async; as selectedDepth) {
+                            @for (depth of orderBookDepths; track depth) {
+                              <button
+                                type="button"
+                                [class.active]="selectedDepth === depth"
+                                (click)="selectOrderBookDepth(depth)"
+                              >
+                                {{ depth }} levels
+                              </button>
+                            }
+                          }
+                        </div>
+                        @if (orderBook$ | async; as orderBook) {
+                          <span class="stream-badge">{{
+                            marketFreshness(
+                              orderBook,
+                              orderBook.status === 'live' ? orderBook.data.occurredAt : null
+                            )
+                          }}</span>
+                        }
+                      </div>
+                      @if (orderBook$ | async; as orderBook) {
+                        @switch (orderBook.status) {
+                          @case ('waiting') {
+                            <p class="section-placeholder section-placeholder--compact">
+                              Waiting for order-book snapshot...
+                            </p>
+                          }
+                          @case ('error') {
+                            <p class="section-placeholder section-placeholder--compact error">
+                              Order book unavailable.
+                            </p>
+                          }
+                          @case ('live') {
+                            <app-order-book [snapshot]="orderBook.data" />
+                          }
+                        }
+                      }
+                    </section>
+
+                    <section class="market-section" aria-labelledby="workspace-trades-title">
+                      <div class="section-heading">
+                        <h3 id="workspace-trades-title">Recent trades</h3>
+                        @if (recentTrades$ | async; as recentTrades) {
+                          <span class="stream-badge">{{
+                            marketFreshness(
+                              recentTrades,
+                              recentTrades.status === 'live' ? recentTrades.data.generatedAt : null
+                            )
+                          }}</span>
+                        }
+                      </div>
+                      @if (recentTrades$ | async; as recentTrades) {
+                        @switch (recentTrades.status) {
+                          @case ('waiting') {
+                            <p class="section-placeholder section-placeholder--compact">
+                              Waiting for recent trades...
+                            </p>
+                          }
+                          @case ('error') {
+                            <p class="section-placeholder section-placeholder--compact error">
+                              Recent trades unavailable.
+                            </p>
+                          }
+                          @case ('live') {
+                            <app-recent-trades [snapshot]="recentTrades.data" />
+                          }
+                        }
+                      }
+                    </section>
+                  </div>
+
+                  <section class="market-section" aria-labelledby="workspace-information-title">
+                    <div class="section-heading">
+                      <h3 id="workspace-information-title">Market information</h3>
+                    </div>
+                    <div class="detail-grid">
+                      <article class="detail-card">
+                        <span class="card-label">Minimum order size</span>
+                        <strong>{{ marketView.market.marketConstraints.minimumOrderSize }}</strong>
+                      </article>
+                      <article class="detail-card">
+                        <span class="card-label">Minimum cost</span>
+                        <strong>{{ marketView.market.marketConstraints.minimumCost }}</strong>
+                      </article>
+                      <article class="detail-card">
+                        <span class="card-label">Tick size</span>
+                        <strong>{{ marketView.market.marketConstraints.tickSize }}</strong>
+                      </article>
+                      <article class="detail-card">
+                        <span class="card-label">Quantity precision</span>
+                        <strong>{{ marketView.market.marketConstraints.quantityPrecision }}</strong>
+                      </article>
+                      <article class="detail-card">
+                        <span class="card-label">Price precision</span>
+                        <strong>{{ marketView.market.marketConstraints.pricePrecision }}</strong>
+                      </article>
+                    </div>
+                    @if (marketView.market.marketState.closureReason) {
+                      <div class="market-notice">
+                        <strong>Market status information</strong>
+                        <p>{{ marketView.market.marketState.closureReason }}</p>
+                      </div>
+                    }
+                  </section>
+                </section>
+              }
+            }
+          }
         }
       }
     }
