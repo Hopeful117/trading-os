@@ -13,7 +13,7 @@ final class TradePlanBuilder {
 
     TradePlan build(
             TradePlanId id, TradePlanVersion version, TradePlanVersion previous,
-            PlanningInput input, TradePlanDraft draft, Instant createdAt) {
+            PlanningInput input, TradePlanDraft draft, Instant createdAt, UUID authorId) {
         if (!draft.conflicts().isEmpty()) throw new IllegalStateException("Conflicted draft");
         EntryStrategy entry = required(draft, ContributionType.ENTRY, EntryStrategy.class);
         StopLoss stop = required(draft, ContributionType.STOP_LOSS, StopLoss.class);
@@ -55,13 +55,36 @@ final class TradePlanBuilder {
                 opportunities, observations, ai, thesis, confirmation, invalidation);
         return factory.create(
                 id, version, previous, TradePlanStatus.PROPOSED, input.context().reference(),
-                execution, rationale, createdAt);
+                execution, rationale, createdAt, TradePlanOrigin.OPPORTUNITY, authorId);
+    }
+
+    TradePlan buildManual(
+            TradePlanId id, TradePlanVersion version, ManualTradePlanningRequest request,
+            TradePlanningContext context, Instant createdAt) {
+        BigDecimal referencePrice = request.referencePrice();
+        BigDecimal risk = referencePrice.subtract(request.stopLoss().price()).abs();
+        if (risk.signum() == 0) throw new IllegalArgumentException("Reference and stop prices must differ");
+        BigDecimal reward = request.takeProfits().getFirst().price()
+                .subtract(referencePrice).abs();
+        ExecutionParameters execution = new ExecutionParameters(
+                request.instrument(), request.direction(), request.entry(), request.stopLoss(),
+                request.takeProfits(), request.positionSizing(),
+                new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
+                new PlanExpiration(request.expiresAt(), request.expirationPolicy()),
+                request.managementRules());
+        TradingRationale rationale = new TradingRationale(
+                Set.of(), Set.of(), Set.of(), request.thesis(),
+                request.confirmationConditions(), request.invalidationConditions());
+        return factory.create(
+                id, version, null, TradePlanStatus.PROPOSED, context.reference(), execution,
+                rationale, createdAt, TradePlanOrigin.MANUAL, request.actorId());
     }
 
     TradePlan transition(TradePlan previous, TradePlanStatus target, Instant createdAt) {
         return factory.create(
                 previous.id(), previous.version().next(), previous.version(), target,
-                previous.planningContext(), previous.execution(), previous.rationale(), createdAt);
+                previous.planningContext(), previous.execution(), previous.rationale(), createdAt,
+                previous.origin(), previous.authorId().orElse(null));
     }
     private <T> T required(TradePlanDraft draft, ContributionType type, Class<T> expected) {
         Object value = requiredRaw(draft, type);

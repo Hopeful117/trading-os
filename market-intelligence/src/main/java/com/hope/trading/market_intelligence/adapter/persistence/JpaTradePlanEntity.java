@@ -22,6 +22,10 @@ class JpaTradePlanEntity {
     Long previousVersion;
     @Column(nullable = false, length = 32)
     String status;
+    @Column(nullable = false, length = 32)
+    String origin;
+    @Column(name = "author_id")
+    UUID authorId;
     @Column(name = "trading_context_id", nullable = false)
     UUID tradingContextId;
     @Column(name = "trading_context_version", nullable = false)

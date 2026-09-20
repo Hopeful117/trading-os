@@ -4,7 +4,7 @@
 
 **ID:** `0057`
 **Title:** Account-Scoped Market Workspace
-**Status:** Draft
+**Status:** IMPLEMENTATION_COMPLETE - HUMAN REVIEW PENDING
 
 ---
 
@@ -130,31 +130,31 @@ configuration or be explicitly introduced as part of implementation.
 
 ## Acceptance Criteria
 
-* [ ] A trader cannot select a market before an account context is resolved.
-* [ ] Only markets in the latest account-context `eligibleMarketIds` can be
+* [x] A trader cannot select a market before an account context is resolved.
+* [x] Only markets in the latest account-context `eligibleMarketIds` can be
       selected in the Decision Workspace.
-* [ ] A market id supplied in the URL but absent from the resolved eligible
+* [x] A market id supplied in the URL but absent from the resolved eligible
       set is rejected or cleared without opening a stream.
-* [ ] Changing the account clears the selected market and unsubscribes all
+* [x] Changing the account clears the selected market and unsubscribes all
       account-dependent market streams.
-* [ ] Changing the selected market unsubscribes the previous market streams
+* [x] Changing the selected market unsubscribes the previous market streams
       before activating the new subscriptions.
-* [ ] The selected market displays its identity, tradability, closure reason,
+* [x] The selected market displays its identity, tradability, closure reason,
       constraints, and last market-state update.
-* [ ] Ticker data displays explicit loading, live, unavailable, and error
+* [x] Ticker data displays explicit loading, live, unavailable, and error
       states.
-* [ ] OHLC, order-book, and recent-trades sections preserve their existing
+* [x] OHLC, order-book, and recent-trades sections preserve their existing
       backend truth and expose explicit unavailable/error states.
-* [ ] Market timestamps and freshness state are visible; stale data is not
+* [x] Market timestamps and freshness state are visible; stale data is not
       presented as live.
-* [ ] A closed or non-tradable market cannot be newly selected from the
+* [x] A closed or non-tradable market cannot be newly selected from the
       account-scoped eligible list.
-* [ ] The workspace does not load opportunities, create Trade Plans, evaluate
+* [x] The workspace does not load opportunities, create Trade Plans, evaluate
       Risk, or expose execution actions in this Story.
-* [ ] Existing standalone `/markets` behavior remains unchanged.
-* [ ] Focused Angular tests cover account switching, market switching, URL
+* [x] Existing standalone `/markets` behavior remains unchanged.
+* [x] Focused Angular tests cover account switching, market switching, URL
       validation, state transitions, and stream cleanup.
-* [ ] Affected backend/frontend tests, Angular production build, Prettier, and
+* [x] Affected backend/frontend tests, Angular production build, Prettier, and
       `git diff --check` pass.
 
 ---
@@ -213,10 +213,10 @@ for account eligibility.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved.
-* [ ] Implementation Plan approved.
-* [ ] Story scope approved.
-* [ ] Implementation completed within this Story's scope.
-* [ ] Acceptance criteria validated with evidence.
+* [x] Repository Analysis approved.
+* [x] Implementation Plan approved.
+* [x] Story scope approved.
+* [x] Implementation completed within this Story's scope.
+* [x] Acceptance criteria validated with evidence.
 * [ ] Human code review completed.
 * [ ] Human commit created.

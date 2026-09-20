@@ -80,11 +80,30 @@ public final class TradePlanningEngine {
                     predecessor == null ? identifiers.next() : predecessor.id(),
                     predecessor == null ? new TradePlanVersion(1)
                             : predecessor.version().next(),
-                    predecessor == null ? null : predecessor.version(),
-                    input, draft, clock.instant());
+                    predecessor == null ? null : predecessor.version(), input, draft,
+                    clock.instant(), request.actorId());
             return new TradePlanningResult.Success(plan, draft.warnings());
         } catch (IllegalArgumentException missing) {
             return failure(PlanningFailureReason.INSUFFICIENT_DATA, missing.getMessage());
+        } catch (RuntimeException invariant) {
+            return failure(PlanningFailureReason.DOMAIN_INVARIANT, invariant.getMessage());
+        }
+    }
+
+    public TradePlanningResult planManual(ManualTradePlanningRequest request) {
+        try {
+            TradePlanningContext context = contexts.find(
+                            request.planningContextId(), request.contextVersion())
+                    .orElse(null);
+            if (context == null || !access.mayUse(request.actorId(), context)) {
+                return failure(PlanningFailureReason.INVALID_TRADING_CONTEXT,
+                        "Trading Context is missing or unauthorized");
+            }
+            TradePlan plan = builder.buildManual(
+                    identifiers.next(), new TradePlanVersion(1), request, context, clock.instant());
+            return new TradePlanningResult.Success(plan, List.of());
+        } catch (IllegalArgumentException invalid) {
+            return failure(PlanningFailureReason.INSUFFICIENT_DATA, invalid.getMessage());
         } catch (RuntimeException invariant) {
             return failure(PlanningFailureReason.DOMAIN_INVARIANT, invariant.getMessage());
         }

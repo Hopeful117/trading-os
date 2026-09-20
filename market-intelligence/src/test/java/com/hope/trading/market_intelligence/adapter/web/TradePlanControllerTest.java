@@ -7,6 +7,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import com.hope.trading.market_intelligence.security.MiUserPrincipal;
 
 class TradePlanControllerTest {
     @Test
@@ -75,5 +77,46 @@ class TradePlanControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trade_plans_created").value(1))
                 .andExpect(jsonPath("$.trade_planning_total_nanos").value(0));
+    }
+
+    @Test
+    void createsManualPlanFromAuthenticatedActorWithoutClientActorId() throws Exception {
+        var environment = TradePlanTestFixtures.environment();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new ManualTradePlanController(environment.service(), environment.contexts())).build();
+        String body = """
+                {
+                  "planningContextId":"%s",
+                  "contextVersion":1,
+                  "instrument":"BTC/EUR",
+                  "direction":"LONG",
+                  "entryType":"LIMIT",
+                  "entryPrice":100,
+                  "referencePrice":100,
+                  "stopLoss":99,
+                  "stopRationale":"manual invalidation",
+                  "takeProfits":[{"price":102,"allocationPercent":100}],
+                  "quantity":1,
+                  "notional":100,
+                  "monetaryRisk":1,
+                  "currency":"EUR",
+                  "expiresAt":"2026-07-30T15:00:00Z",
+                  "expirationPolicy":"MANUAL_VALIDITY",
+                  "thesis":"Human discretionary setup",
+                  "confirmationConditions":["Price confirms setup"],
+                  "invalidationConditions":["Stop is reached"],
+                  "managementRules":[]
+                }
+                """.formatted(environment.context().id());
+
+        mvc.perform(post("/api/v1/intelligence/trade-plans/manual")
+                        .principal(new TestingAuthenticationToken(
+                                new MiUserPrincipal(environment.owner(), "user", "user@example.test"),
+                                null))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.origin").value("MANUAL"))
+                .andExpect(jsonPath("$.authorId").value(environment.owner().toString()))
+                .andExpect(jsonPath("$.opportunityIds").isEmpty());
     }
 }
