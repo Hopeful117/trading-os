@@ -43,12 +43,10 @@ The implementation preserves the existing responsibility split:
 
 ```text
 BRANCH = story/0056-account-first-market-decision-context
+IMPLEMENTATION_COMMIT = 58c95e2
 PUSH = NO
 MERGE = NO
 ```
-
-The commit identifier is recorded after the human-authorized commit is
-created.
 
 ## Remaining Follow-up
 
