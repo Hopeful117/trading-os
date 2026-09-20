@@ -1,0 +1,165 @@
+<section class="decision-workspace">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Decision context</span>
+      <h1>Market Decision Workspace</h1>
+      <p>Select an account first. Available markets depend on that trading context.</p>
+    </div>
+  </header>
+
+  <section class="account-card" aria-labelledby="account-context-title">
+    <div class="section-heading">
+      <div>
+        <span class="eyebrow">Step 1</span>
+        <h2 id="account-context-title">Trading account</h2>
+      </div>
+      <button type="button" class="secondary-button" (click)="refreshAccounts()">Refresh</button>
+    </div>
+
+    @if (accounts$ | async; as accounts) {
+      @switch (accounts.status) {
+        @case ('loading') {
+          <p class="state-message">Loading your accounts...</p>
+        }
+        @case ('error') {
+          <div class="state-message error" data-testid="accounts-error">
+            <p>Unable to load your accounts.</p>
+            <button type="button" class="secondary-button" (click)="refreshAccounts()">
+              Retry
+            </button>
+          </div>
+        }
+        @case ('loaded') {
+          @if (accounts.accounts.length === 0) {
+            <p class="state-message" data-testid="accounts-empty">
+              No trading account is available for this decision context.
+            </p>
+          } @else {
+            <label class="field">
+              <span>Account</span>
+              <select
+                data-testid="account-select"
+                [value]="selectedAccountId ?? ''"
+                (change)="selectAccount($any($event.target).value)"
+              >
+                <option value="">Select an account</option>
+                @for (account of accounts.accounts; track account.accountId) {
+                  <option [value]="account.accountId">
+                    {{ account.name }} · {{ account.baseCurrency }}
+                  </option>
+                }
+              </select>
+            </label>
+          }
+        }
+      }
+    }
+  </section>
+
+  @if (context$ | async; as view) {
+    @switch (view.status) {
+      @case ('select-account') {
+        <section class="state-card" data-testid="select-account-state">
+          <h2>Select an account to continue</h2>
+          <p>Market availability and trading rules are resolved from the selected account.</p>
+        </section>
+      }
+      @case ('loading') {
+        <section class="state-card" data-testid="context-loading">
+          <p>Resolving available markets for this account...</p>
+        </section>
+      }
+      @case ('error') {
+        <section class="state-card error" data-testid="context-error">
+          <h2>Unable to resolve account context</h2>
+          <p>The account or its available markets could not be loaded.</p>
+        </section>
+      }
+      @case ('ready') {
+        <section class="context-grid">
+          <article class="context-card account-summary">
+            <span class="eyebrow">Selected account</span>
+            <h2>{{ view.context.account.name }}</h2>
+            <dl>
+              <div>
+                <dt>Currency</dt>
+                <dd>{{ view.context.account.baseCurrency }}</dd>
+              </div>
+              <div>
+                <dt>Risk profile</dt>
+                <dd>{{ view.context.account.riskProfileSemanticVersion ?? 'Unavailable' }}</dd>
+              </div>
+              <div>
+                <dt>Planning profile</dt>
+                <dd>{{ view.context.account.tradePlanningProfileVersion ?? 'Unavailable' }}</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="context-card markets-summary">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">Step 2</span>
+                <h2>Available markets</h2>
+              </div>
+              <span class="count-badge">{{ view.context.eligibleMarketIds.length }}</span>
+            </div>
+
+            @if (view.context.eligibleMarketIds.length === 0) {
+              <p class="state-message" data-testid="no-eligible-markets">
+                No market is currently eligible for this account.
+              </p>
+            } @else {
+              <div class="market-list" data-testid="eligible-markets">
+                @for (market of view.context.markets; track market.marketId) {
+                  @if (market.eligible) {
+                    <button
+                      type="button"
+                      class="market-option"
+                      [class.selected]="selectedMarketId === market.marketId"
+                      (click)="selectMarket(market.marketId, view.context)"
+                    >
+                      <strong>{{ market.symbol ?? market.marketId }}</strong>
+                      <span>{{ market.provider ?? 'Unknown provider' }}</span>
+                    </button>
+                  }
+                }
+              </div>
+            }
+          </article>
+        </section>
+
+        @if (view.context.markets.length > view.context.eligibleMarketIds.length) {
+          <section class="context-card excluded-markets" data-testid="excluded-markets">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">Backend decision</span>
+                <h2>Unavailable markets</h2>
+              </div>
+            </div>
+            <ul>
+              @for (market of view.context.markets; track market.marketId) {
+                @if (!market.eligible) {
+                  <li>
+                    <strong>{{ market.symbol ?? market.marketId }}</strong>
+                    <span>{{ market.reasons.join(', ') }}</span>
+                  </li>
+                }
+              }
+            </ul>
+          </section>
+        }
+
+        @if (selectedMarketId; as marketId) {
+          <section class="state-card" data-testid="selected-market-state">
+            <h2>Market selected</h2>
+            <p>The next Workspace slice will load the live context for {{ marketId }}.</p>
+            <button type="button" class="primary-button" (click)="openMarket(marketId)">
+              Open market exploration
+            </button>
+          </section>
+        }
+      }
+    }
+  }
+</section>

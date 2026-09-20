@@ -93,6 +93,27 @@ class ActiveScanScopeResolutionServiceTest {
         verifyNoInteractions(marketData);
     }
 
+    @Test
+    void resolvesDecisionContextWithAccountFactsAndEffectiveMarkets() {
+        UUID accountId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        TradingCoreAccountClient.TradingCoreAccountResponse account = account(accountId);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account);
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(marketId, "KRAKEN", "BTC/USD", true)
+        ));
+
+        DecisionContextResolution result = service(accounts, marketData)
+                .resolveDecisionContext(accountId);
+
+        assertThat(result.account()).isSameAs(account);
+        assertThat(result.scope().effectiveScope().marketIds()).containsExactly(marketId);
+        verify(accounts).findOwnedAccount(accountId);
+        verify(marketData).findAllMarkets();
+    }
+
     private ActiveScanScopeResolutionService service(
             TradingCoreAccountClient accounts,
             MarketDataClient marketData
@@ -103,8 +124,8 @@ class ActiveScanScopeResolutionServiceTest {
 
     private TradingCoreAccountClient.TradingCoreAccountResponse account(UUID accountId) {
         return new TradingCoreAccountClient.TradingCoreAccountResponse(
-                accountId, "Main", "EUR", BigDecimal.ONE, BigDecimal.ONE, UUID.randomUUID(),
-                UUID.randomUUID());
+                accountId, UUID.randomUUID(), "Main", "EUR", BigDecimal.ONE, BigDecimal.ONE,
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "1.0.0", UUID.randomUUID(), 1L);
     }
 
     private MarketResponse market(UUID marketId, String provider, String symbol, boolean tradable) {

@@ -18,12 +18,17 @@ public interface TradingCoreAccountClient {
 
     record TradingCoreAccountResponse(
             UUID accountId,
+            UUID brokerAccountId,
             String name,
             String baseCurrency,
             BigDecimal equity,
             BigDecimal peakEquity,
             UUID rulesId,
-            UUID userId
+            UUID userId,
+            UUID riskProfileId,
+            String riskProfileSemanticVersion,
+            UUID tradePlanningProfileId,
+            Long tradePlanningProfileVersion
     ) {
     }
 }

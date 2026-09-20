@@ -15,6 +15,7 @@ import { PreparePlanPage } from './features/trade-planning/prepare-plan-page/pre
 import { PlanPage } from './features/trade-planning/plan-page/plan-page';
 import { Positions } from './features/positions/pages/positions/positions';
 import { ExecutionHistory } from './features/executions/pages/execution-history/execution-history';
+import { DecisionWorkspace } from './features/decision-workspace/decision-workspace';
 
 export const routes: Routes = [
   {
@@ -51,6 +52,11 @@ export const routes: Routes = [
   {
     path: 'markets',
     component: Markets,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'decision-workspace',
+    component: DecisionWorkspace,
     canActivate: [authGuard],
   },
   {
