@@ -1,11 +1,16 @@
 package com.hope.trading.trading_core.risk.infrastructure.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.config.MarketDataFeignConfiguration;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.stereotype.Component;
@@ -20,6 +25,8 @@ interface MarketValuationFeignClient {
     List<CatalogueMarket> markets();
     @PostMapping("/internal/v1/valuation-snapshots/batch")
     ValuationTransport value(@RequestBody ValuationRequest request);
+    @PostMapping("/internal/markets/prices/snapshot")
+    void refresh(@RequestBody MarketPriceSnapshotRequest request);
 }
 
 record CatalogueMarket(UUID marketId, String provider, String symbol, String baseAsset, String quoteAsset) { }
@@ -42,10 +49,12 @@ record ValuationTransport(UUID snapshotId, long version, String reportingCurrenc
 public final class MarketValuationClient implements MarketValuationPort {
     private final MarketValuationFeignClient client;
     private final ObjectMapper mapper;
+    private final Clock clock;
 
-    public MarketValuationClient(MarketValuationFeignClient client, ObjectMapper mapper) {
+    public MarketValuationClient(MarketValuationFeignClient client, ObjectMapper mapper, Clock clock) {
         this.client = client;
         this.mapper = mapper;
+        this.clock = clock;
     }
 
     @Override
@@ -62,7 +71,13 @@ public final class MarketValuationClient implements MarketValuationPort {
         if (instrumentRequests.stream().anyMatch(item -> item.marketId() == null)) {
             throw new IllegalStateException("Market catalogue has a missing or ambiguous instrument");
         }
-        ValuationTransport value = client.value(new ValuationRequest(reportingCurrency, at,
+        Instant valuationAt = at;
+        if (!instruments.isEmpty()) {
+            client.refresh(new MarketPriceSnapshotRequest(refreshMarketIds(catalogue, instrumentRequests,
+                    assets, reportingCurrency)));
+            valuationAt = clock.instant();
+        }
+        ValuationTransport value = client.value(new ValuationRequest(reportingCurrency, valuationAt,
                 instrumentRequests, assets.stream().map(a -> new AssetRequest(a.id(), a.currency())).toList()));
         try {
             List<Fact> facts = value.facts().stream().map(f -> new Fact(f.type(), f.id(), f.marketId(),
@@ -76,6 +91,31 @@ public final class MarketValuationClient implements MarketValuationPort {
         } catch (Exception failure) {
             throw new IllegalStateException("Market valuation cannot be preserved", failure);
         }
+    }
+
+    private List<UUID> refreshMarketIds(List<CatalogueMarket> catalogue,
+                                        List<InstrumentRequest> instruments,
+                                        List<Asset> assets,
+                                        String reportingCurrency) {
+        LinkedHashSet<UUID> marketIds = new LinkedHashSet<>(instruments.stream()
+                .map(InstrumentRequest::marketId)
+                .toList());
+        String normalizedReportingCurrency = reportingCurrency.toUpperCase(Locale.ROOT);
+        for (Asset asset : assets) {
+            String normalizedAsset = asset.currency().toUpperCase(Locale.ROOT);
+            if (normalizedAsset.equals(normalizedReportingCurrency)) {
+                continue;
+            }
+            catalogue.stream()
+                    .filter(market -> (normalizedAsset.equalsIgnoreCase(market.baseAsset())
+                            && normalizedReportingCurrency.equalsIgnoreCase(market.quoteAsset()))
+                            || (normalizedReportingCurrency.equalsIgnoreCase(market.baseAsset())
+                            && normalizedAsset.equalsIgnoreCase(market.quoteAsset())))
+                    .map(CatalogueMarket::marketId)
+                    .findFirst()
+                    .ifPresent(marketIds::add);
+        }
+        return new ArrayList<>(marketIds);
     }
 
     private String preserve(Object source, List<?> legs) {

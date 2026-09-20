@@ -53,7 +53,7 @@ public class MarketPriceSnapshotService {
         this.staleAfter = staleAfter;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<MarketPriceSnapshot> findSnapshots(List<UUID> marketIds) {
         List<UUID> requestedIds = marketIds.stream().distinct().toList();
         Map<UUID, Market> markets = marketRepository.findAllById(requestedIds)

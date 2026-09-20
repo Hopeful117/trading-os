@@ -2,12 +2,16 @@ package com.hope.trading.trading_core.risk.infrastructure.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -28,7 +32,8 @@ class MarketValuationClientTest {
         when(feign.value(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(UUID.randomUUID(),
                 9, "USD", Instant.parse("2026-08-01T12:00:00Z"), capturedAt,
                 "conservative-v2", "PT30S", "COMPLETE", List.of(fact)));
-        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules());
+        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules(),
+                Clock.fixed(Instant.parse("2026-08-01T12:00:00Z"), ZoneOffset.UTC));
 
         MarketValuationPort.Snapshot result = client.value("USD", Instant.parse("2026-08-01T12:00:00Z"),
                 List.of(new MarketValuationPort.Instrument("position", "BTCEUR",
@@ -39,5 +44,6 @@ class MarketValuationClientTest {
         assertThat(result.facts().getFirst().sourceProvenance())
                 .contains("observationAge", "PT10S", "capturedAt");
         assertThat(result.sourcePayload()).contains("maxObservationAge", "PT30S");
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId)));
     }
 }
