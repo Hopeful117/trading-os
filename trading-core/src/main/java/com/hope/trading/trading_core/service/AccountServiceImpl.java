@@ -8,6 +8,8 @@ import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,8 @@ public class AccountServiceImpl implements AccountService {
     private final AccountRepository accountRepository;
     private final AccountMapper accountMapper;
     private final UserRepository userRepository;
+    private final RiskPersistence riskPersistence;
+    private final TradePlanningProfileRepository tradePlanningProfiles;
 
 
     @Override
@@ -116,8 +120,21 @@ public class AccountServiceImpl implements AccountService {
 
         return accountRepository.findAllByUser_UserId(user.getUserId())
                 .stream()
-                .map(accountMapper::toDto)
+                .map(this::toDto)
                 .toList();
+    }
+
+    private AccountDto toDto(Account account) {
+        AccountDto dto = accountMapper.toDto(account);
+        riskPersistence.assignedProfile(account.getAccountId()).ifPresent(profile -> {
+            dto.setRiskProfileId(profile.id());
+            dto.setRiskProfileSemanticVersion(profile.semanticVersion());
+        });
+        tradePlanningProfiles.findAssigned(account.getAccountId()).ifPresent(profile -> {
+            dto.setTradePlanningProfileId(profile.id());
+            dto.setTradePlanningProfileVersion(profile.version());
+        });
+        return dto;
     }
 
     @Override

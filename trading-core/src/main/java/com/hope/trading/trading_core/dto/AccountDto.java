@@ -16,6 +16,8 @@ import java.util.UUID;
 public class AccountDto {
     private UUID accountId;
 
+    private UUID brokerAccountId;
+
     private String name;
 
     private String baseCurrency;
@@ -29,5 +31,13 @@ public class AccountDto {
     private UUID rulesId;
 
     private UUID userId;
+
+    private UUID riskProfileId;
+
+    private String riskProfileSemanticVersion;
+
+    private UUID tradePlanningProfileId;
+
+    private Long tradePlanningProfileVersion;
 
 }

@@ -7,6 +7,7 @@ import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersist
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -39,7 +40,8 @@ class BrokerAccountServiceTest {
                 mock(UserRepository.class),
                 mock(AccountMapper.class),
                 Clock.fixed(Instant.parse("2026-07-29T10:00:00Z"), ZoneOffset.UTC),
-                mock(RiskPersistence.class), mock(RiskProfileValidator.class)
+                mock(RiskPersistence.class), mock(RiskProfileValidator.class),
+                mock(TradePlanningProfileService.class)
         );
 
         assertThrows(BrokerAccountOwnershipException.class,

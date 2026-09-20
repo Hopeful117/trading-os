@@ -152,7 +152,15 @@ post-approbation reste une Story future.
 
 ## Configuration
 
-Créer un fichier `.env` à la racine. Il n'est jamais versionné.
+Initialiser la configuration locale avec le script idempotent suivant. Il crée
+`.env` si nécessaire, génère les secrets JWT manquants et applique le mode
+`600`. Le fichier n'est jamais versionné.
+
+```bash
+./scripts/bootstrap-local-env.sh
+```
+
+Le fichier généré contient notamment les valeurs suivantes :
 
 ```dotenv
 JWT_SECRET=change-me-with-at-least-32-random-bytes
@@ -164,7 +172,11 @@ KRAKEN_API_KEY=
 KRAKEN_API_SECRET=
 BROKER_MASTER_KEY=
 BROKER_MASTER_KEY_VERSION=v1
-TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET=
+TRADING_CORE_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
+BROKER_SERVICE_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
+MARKET_INTELLIGENCE_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
+TRADING_CORE_MI_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
+TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
 SPRING_PROFILES_ACTIVE=prod
 ```
 
@@ -179,7 +191,16 @@ partagée uniquement par Trading Core et Market Data pour les appels internes.
 Elle doit être distincte de la clé JWT utilisateur et ne doit jamais être
 exposée au frontend.
 
+Les secrets `TRADING_CORE_SERVICE_JWT_SECRET`,
+`BROKER_SERVICE_SERVICE_JWT_SECRET`, `MARKET_INTELLIGENCE_SERVICE_JWT_SECRET`
+et `TRADING_CORE_MI_SERVICE_JWT_SECRET` servent aux identités et relations de
+confiance inter-services. Ils doivent être renseignés en production-like,
+être distincts des clés utilisateur et ne doivent jamais être journalisés,
+committés ou exposés au frontend.
+
 Ne jamais journaliser ni committer les clés Kraken, le JWT, les mots de passe ou les en-têtes `Authorization`.
+Compose refuse désormais explicitement de démarrer lorsque la configuration
+JWT obligatoire est absente ou vide.
 
 ## Démarrage
 

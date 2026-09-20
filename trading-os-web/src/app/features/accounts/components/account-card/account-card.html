@@ -9,6 +9,22 @@
       <strong>{{ account.baseCurrency }}</strong>
     </p>
 
+    @if (account.riskProfileId && account.riskProfileSemanticVersion) {
+      <p data-testid="risk-profile-reference">
+        Risk profile :
+        <strong>{{ account.riskProfileId }} v{{ account.riskProfileSemanticVersion }}</strong>
+      </p>
+    }
+
+    @if (account.tradePlanningProfileId && account.tradePlanningProfileVersion) {
+      <p data-testid="trade-planning-profile-reference">
+        Trade planning profile :
+        <strong
+          >{{ account.tradePlanningProfileId }} v{{ account.tradePlanningProfileVersion }}</strong
+        >
+      </p>
+    }
+
     <h3>Balances</h3>
 
     @for (balance of balances; track balance.asset) {

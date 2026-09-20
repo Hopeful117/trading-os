@@ -6,6 +6,8 @@ import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,7 +41,8 @@ class AccountServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new AccountServiceImpl(accountRepository, accountMapper, userRepository);
+        service = new AccountServiceImpl(accountRepository, accountMapper, userRepository,
+                mock(RiskPersistence.class), mock(TradePlanningProfileRepository.class));
         account = new Account();
         account.setAccountId(accountId);
         account.setEquity(new BigDecimal("1000"));

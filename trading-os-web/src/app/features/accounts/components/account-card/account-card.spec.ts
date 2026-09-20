@@ -29,6 +29,28 @@ describe('AccountCard', () => {
     expect(component).toBeTruthy();
   });
 
+  it('shows risk and trade planning profile references when available', async () => {
+    const profileFixture = TestBed.createComponent(AccountCard);
+    profileFixture.componentInstance.account = {
+      ...component.account,
+      riskProfileId: 'risk-profile-1',
+      riskProfileSemanticVersion: '1.0.0',
+      tradePlanningProfileId: 'planning-profile-1',
+      tradePlanningProfileVersion: 1,
+    };
+
+    profileFixture.detectChanges();
+
+    expect(
+      profileFixture.nativeElement.querySelector('[data-testid="risk-profile-reference"]')
+        .textContent,
+    ).toContain('risk-profile-1 v1.0.0');
+    expect(
+      profileFixture.nativeElement.querySelector('[data-testid="trade-planning-profile-reference"]')
+        .textContent,
+    ).toContain('planning-profile-1 v1');
+  });
+
   it('should return entries when balances exist', () => {
     component.account = {
       ...component.account,
