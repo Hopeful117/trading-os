@@ -54,8 +54,9 @@ public class ExecutionConfiguration {
     }
     @Bean PaperSettlementService paperSettlementService(BrokerAccountRepository brokerAccountRepository,
             AccountRepository accountRepository,
-            com.hope.trading.trading_core.service.TradingCalculatorService calculator){
-        return new PaperSettlementService(brokerAccountRepository, accountRepository, calculator);
+            com.hope.trading.trading_core.service.TradingCalculatorService calculator,
+            com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort tradePlans){
+        return new PaperSettlementService(brokerAccountRepository, accountRepository, calculator, tradePlans);
     }
     @Bean ExecutionFinalizationStep executionFinalizationStep(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts, BrokerOrderRepositoryPort orders,

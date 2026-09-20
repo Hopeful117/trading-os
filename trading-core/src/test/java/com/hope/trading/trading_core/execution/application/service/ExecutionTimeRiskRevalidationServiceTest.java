@@ -103,12 +103,12 @@ class ExecutionTimeRiskRevalidationServiceTest {
         UUID routingAccountId = intent.brokerAccountId();
         UUID ownerId = intent.initiatorId();
         when(transactionManager.getTransaction(any())).thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
-        when(tradePlans.load(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
-                tradePlanId, 1, "ACCEPTED", now, UUID.randomUUID(), 1, now, ownerId,
+        when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
+                tradePlanId, 1, "READY_TO_EXECUTE", now, UUID.randomUUID(), 1, now, ownerId,
                 financialAccountId, "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1,
                 "BTC/USD", "LONG", new com.hope.trading.trading_core.shared.domain.model.EntryIntent(
                         com.hope.trading.trading_core.shared.domain.model.EntryIntent.OrderType.MARKET,
-                        BigDecimal.ONE), BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
+                         BigDecimal.ONE), BigDecimal.ONE, BigDecimal.TWO, BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ONE, "USD", "{}"));
         when(accounts.findById(financialAccountId)).thenReturn(Optional.empty());
 
@@ -128,12 +128,12 @@ class ExecutionTimeRiskRevalidationServiceTest {
                 .accountId(accountId).brokerAccountId(relationBrokerId)
                 .user(com.hope.trading.trading_core.model.User.builder().userId(ownerId).build())
                 .name("paper").baseCurrency("USD").build();
-        when(tradePlans.load(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
-                tradePlanId, 1, "ACCEPTED", now, UUID.randomUUID(), 1, now, ownerId,
+        when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
+                tradePlanId, 1, "READY_TO_EXECUTE", now, UUID.randomUUID(), 1, now, ownerId,
                 accountId, "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1,
                 "BTC/USD", "LONG", new com.hope.trading.trading_core.shared.domain.model.EntryIntent(
                         com.hope.trading.trading_core.shared.domain.model.EntryIntent.OrderType.MARKET,
-                        BigDecimal.ONE), BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
+                         BigDecimal.ONE), BigDecimal.ONE, BigDecimal.TWO, BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ONE, "USD", "{}"));
         when(accounts.findById(accountId)).thenReturn(Optional.of(account));
         when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(

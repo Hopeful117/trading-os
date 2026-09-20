@@ -17,6 +17,8 @@ import com.hope.trading.trading_core.market_data.dto.*;
 import com.hope.trading.trading_core.model.*;
 import com.hope.trading.trading_core.positionclose.application.service.PaperExitService;
 import com.hope.trading.trading_core.repository.*;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
@@ -70,6 +72,7 @@ class PaperExitAcceptanceIntegrationTest {
     @MockitoBean private BrokerExecutionClient liveBroker;
     @MockitoBean private ExecutionTimeRiskRevalidationService riskRevalidation;
     @MockitoBean private BrokerApiClient brokerApi;
+    @MockitoBean private TradePlanRiskPort tradePlans;
 
     @DynamicPropertySource
     static void isolatedDatabase(DynamicPropertyRegistry registry) {
@@ -84,6 +87,11 @@ class PaperExitAcceptanceIntegrationTest {
         when(riskRevalidation.evaluateAndPersist(any(), any())).thenReturn(
                 new ExecutionTimeRiskRevalidationService.T1Outcome(UUID.randomUUID(),
                         com.hope.trading.risk.domain.RiskTypes.RiskDecision.APPROVED, null, true));
+        when(tradePlans.loadReady(any(), anyLong())).thenReturn(new TradePlanRiskPort.Snapshot(
+                UUID.randomUUID(), 1, "READY_TO_EXECUTE", NOW, UUID.randomUUID(), 1, NOW, UUID.randomUUID(),
+                UUID.randomUUID(), "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1, "BTC/USD", "LONG",
+                new EntryIntent(EntryIntent.OrderType.MARKET, null), decimal("90"), decimal("120"),
+                decimal("2"), decimal("200"), decimal("20"), "USD", "{}"));
         when(marketData.findAll()).thenReturn(List.of(MarketResponse.builder().marketId(MARKET_ID)
                 .symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD").build()));
         when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class))).thenAnswer(invocation ->
