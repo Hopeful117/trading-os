@@ -6,7 +6,7 @@
 
 **Title:** Validate the PAPER trading journey through the web application
 
-**Status:** Review
+**Status:** Completed
 
 ---
 
@@ -143,13 +143,13 @@ runtime use.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved
-* [ ] Implementation Plan approved when required
-* [ ] Runtime scenario approved
-* [ ] Implementation or regression fixes completed when required
-* [ ] Relevant validation executed
-* [ ] Runtime acceptance evidence completed
-* [ ] Diff reviewed in IntelliJ
-* [ ] Code Review approved
-* [ ] Engineering Report completed
-* [ ] Human commit created
+* [x] Repository Analysis approved
+* [x] Implementation Plan approved when required
+* [x] Runtime scenario approved
+* [x] Implementation or regression fixes completed when required
+* [x] Relevant validation executed
+* [x] Runtime acceptance evidence completed
+* [x] Diff reviewed in IntelliJ
+* [x] Code Review approved
+* [x] Engineering Report completed
+* [x] Human commit created
