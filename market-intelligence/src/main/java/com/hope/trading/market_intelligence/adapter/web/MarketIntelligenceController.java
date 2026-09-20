@@ -83,6 +83,15 @@ public class MarketIntelligenceController {
         );
     }
 
+    @GetMapping("/decision-context/{accountId}")
+    public ResponseEntity<DecisionContextResponse> resolveDecisionContext(
+            @PathVariable UUID accountId
+    ) {
+        return ResponseEntity.ok(
+                DecisionContextResponse.from(activeScanScopeResolution.resolveDecisionContext(accountId))
+        );
+    }
+
     @PostMapping("/scans")
     public ResponseEntity<ActiveScanResponse> createScan(
             @RequestHeader("Idempotency-Key") String idempotencyKey,

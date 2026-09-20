@@ -29,7 +29,22 @@ public class ActiveScanScopeResolutionService {
     }
 
     public ActiveScanScopeResolutionResult resolve(ActiveScanScopeResolutionRequest request) {
-        requireOwnedAccount(request.accountId());
+        TradingCoreAccountClient.TradingCoreAccountResponse account =
+                requireOwnedAccount(request.accountId());
+        return resolveMarkets(request, account);
+    }
+
+    public DecisionContextResolution resolveDecisionContext(UUID accountId) {
+        TradingCoreAccountClient.TradingCoreAccountResponse account = requireOwnedAccount(accountId);
+        ActiveScanScopeResolutionResult scope = resolveMarkets(
+                new ActiveScanScopeResolutionRequest(accountId, "", null), account);
+        return new DecisionContextResolution(account, scope);
+    }
+
+    private ActiveScanScopeResolutionResult resolveMarkets(
+            ActiveScanScopeResolutionRequest request,
+            TradingCoreAccountClient.TradingCoreAccountResponse account
+    ) {
         List<MarketResponse> catalog = loadCatalog();
         Map<UUID, MarketResponse> byId = catalog.stream().collect(Collectors.toMap(
                 MarketResponse::marketId,
@@ -58,18 +73,18 @@ public class ActiveScanScopeResolutionService {
         );
     }
 
-    private void requireOwnedAccount(UUID accountId) {
+    private TradingCoreAccountClient.TradingCoreAccountResponse requireOwnedAccount(UUID accountId) {
         try {
-            accounts.findOwnedAccount(accountId);
+            return accounts.findOwnedAccount(accountId);
         } catch (FeignException.NotFound exception) {
             throw ActiveScanScopeResolutionException.notFound(
-                    "Account is not available for active scan scope resolution");
+                    "Account is not available for decision context resolution");
         } catch (FeignException exception) {
             throw ActiveScanScopeResolutionException.unavailable(
-                    "Account lookup failed for active scan scope resolution");
+                    "Account lookup failed for decision context resolution");
         } catch (RuntimeException exception) {
             throw ActiveScanScopeResolutionException.unavailable(
-                    "Account lookup failed for active scan scope resolution");
+                    "Account lookup failed for decision context resolution");
         }
     }
 
@@ -84,10 +99,10 @@ public class ActiveScanScopeResolutionService {
                     .toList();
         } catch (FeignException exception) {
             throw ActiveScanScopeResolutionException.unavailable(
-                    "Market catalog is unavailable for active scan scope resolution");
+                    "Market catalog is unavailable for decision context resolution");
         } catch (RuntimeException exception) {
             throw ActiveScanScopeResolutionException.unavailable(
-                    "Market catalog is unavailable for active scan scope resolution");
+                    "Market catalog is unavailable for decision context resolution");
         }
     }
 
