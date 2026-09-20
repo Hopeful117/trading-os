@@ -43,7 +43,7 @@ printf '\nInstalling frontend dependencies from package-lock.json\n'
 npm --prefix "${project_root}/trading-os-web" ci
 
 printf '\nChecking frontend lint (Prettier)\n'
-npm --prefix "${project_root}/trading-os-web" exec -- prettier --check . || {
+(cd "${project_root}/trading-os-web" && npm exec -- prettier --check .) || {
   printf '\nLint check failed. Run: npx prettier --write .\n' >&2
   exit 1
 }

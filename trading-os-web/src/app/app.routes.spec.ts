@@ -23,6 +23,14 @@ describe('app routes', () => {
     expect(route?.component).toBeDefined();
   });
 
+  it('exposes the trade history route behind authentication', () => {
+    const route = findRoute('analytics');
+
+    expect(route).toBeDefined();
+    expect(route?.canActivate).toContain(authGuard);
+    expect(route?.component).toBeDefined();
+  });
+
   it('keeps every trader-facing feature route authenticated', () => {
     const traderPaths: Routes = routes.filter(
       (route) =>

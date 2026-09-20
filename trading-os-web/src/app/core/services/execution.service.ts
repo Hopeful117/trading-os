@@ -2,7 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ExecutionDto, ValidateExecutionRequest } from '../models/execution.model';
+import {
+  ExecutionDto,
+  ExecutionSummaryDto,
+  ValidateExecutionRequest,
+} from '../models/execution.model';
 
 @Injectable({
   providedIn: 'root',
@@ -27,6 +31,10 @@ export class ExecutionService {
 
   getExecution(executionId: string): Observable<ExecutionDto> {
     return this.http.get<ExecutionDto>(`${environment.gatewayUrl}v1/executions/${executionId}`);
+  }
+
+  list(): Observable<ExecutionSummaryDto[]> {
+    return this.http.get<ExecutionSummaryDto[]>(`${environment.gatewayUrl}v1/executions`);
   }
 
   retry(executionId: string): Observable<ExecutionDto> {
