@@ -16,6 +16,12 @@ public final class BrokerCapabilities {
     public interface RiskSnapshotCapability {
         RiskSnapshot snapshot(UUID brokerAccountId, Instant closedFrom, Instant closedTo);
     }
+    public interface TechnicalCapability {
+        TechnicalCapabilities capabilities(UUID brokerAccountId, String instrument);
+    }
+    public interface MarginCapability {
+        MarginPreview preview(MarginPreviewRequest request);
+    }
     public interface PositionManagementCapability {
         ResolvedPositionCloseTarget resolveTarget(ResolveTargetRequest request);
         CloseResult executeClose(ExecuteCloseRequest request);

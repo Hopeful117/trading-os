@@ -15,6 +15,48 @@ public final class BrokerModels {
     public enum OrderStatus { ACKNOWLEDGED, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED, UNKNOWN }
     public enum SnapshotCompleteness { COMPLETE, INCOMPLETE }
 
+    public record TechnicalCapabilities(UUID brokerAccountId, String provider, String instrument, long sourceVersion,
+            Instant observedAt, List<OrderType> supportedOrderTypes,
+            List<BigDecimal> supportedLeverageLevels) {
+            public TechnicalCapabilities {
+            Objects.requireNonNull(brokerAccountId);
+            provider = required(provider, "provider");
+            instrument = required(instrument, "instrument");
+            if (sourceVersion < 1) throw new IllegalArgumentException("sourceVersion must be positive");
+            Objects.requireNonNull(observedAt);
+            supportedOrderTypes = List.copyOf(supportedOrderTypes);
+            supportedLeverageLevels = supportedLeverageLevels.stream()
+                    .map(Objects::requireNonNull).peek(level -> {
+                        if (level.signum() <= 0) throw new IllegalArgumentException("leverage must be positive");
+                    }).sorted().toList();
+        }
+    }
+
+    public record MarginPreviewRequest(UUID brokerAccountId, String instrument, Side side,
+            BigDecimal quantity, BigDecimal price, BigDecimal leverage) {
+        public MarginPreviewRequest {
+            Objects.requireNonNull(brokerAccountId);
+            instrument = required(instrument, "instrument");
+            Objects.requireNonNull(side);
+            if (Objects.requireNonNull(quantity).signum() <= 0) throw new IllegalArgumentException("quantity must be positive");
+            if (Objects.requireNonNull(price).signum() <= 0) throw new IllegalArgumentException("price must be positive");
+            if (leverage != null && leverage.signum() <= 0) throw new IllegalArgumentException("leverage must be positive");
+        }
+    }
+
+    public record MarginPreview(UUID brokerAccountId, String instrument, BigDecimal amount,
+            String currency, String sourceId, long sourceVersion, Instant observedAt) {
+        public MarginPreview {
+            Objects.requireNonNull(brokerAccountId);
+            instrument = required(instrument, "instrument");
+            if (Objects.requireNonNull(amount).signum() <= 0) throw new IllegalArgumentException("amount must be positive");
+            currency = required(currency, "currency");
+            sourceId = required(sourceId, "sourceId");
+            if (sourceVersion < 1) throw new IllegalArgumentException("sourceVersion must be positive");
+            Objects.requireNonNull(observedAt);
+        }
+    }
+
     public record ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
             String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
             OrderType orderType, BigDecimal quantity, BigDecimal limitPrice) {

@@ -9,11 +9,14 @@ import com.hope.trading.trading_core.execution.domain.aggregate.BrokerOrder;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionAttempt;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.model.ExecutionParameters;
+import com.hope.trading.trading_core.execution.domain.model.RiskApprovalReference;
+import com.hope.trading.trading_core.execution.domain.model.TradePlanReference;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.model.*;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.service.TradingCalculatorServiceImpl;
 import org.junit.jupiter.api.Test;
 
@@ -50,6 +53,45 @@ class PaperSettlementExitTest {
         assertThat(s.account.getEquity()).isEqualByComparingTo("10020");
         assertThat(s.trade.getPnl()).isEqualByComparingTo("20");
         assertThat(s.trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+    }
+
+    @Test
+    void entrySettlementPersistsTheApprovedTradePlanStopLoss() {
+        UUID owner = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "paper", NOW);
+        Account account = Account.builder().accountId(UUID.randomUUID()).brokerAccountId(broker.id())
+                .broker("KRAKEN").name("paper").baseCurrency("USD").equity(new BigDecimal("10000"))
+                .peakEquity(new BigDecimal("10000")).user(User.builder().userId(owner).build()).build();
+        account.addBalance(AccountBalance.builder().asset("USD").amount(new BigDecimal("10000")).build());
+
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        TradePlanRiskPort plans = mock(TradePlanRiskPort.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
+        when(accounts.save(account)).thenReturn(account);
+        UUID planId = UUID.randomUUID();
+        when(plans.load(planId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(planId, 1, "ACCEPTED",
+                NOW, UUID.randomUUID(), 1, NOW, owner, account.getAccountId(), "USD", UUID.randomUUID(), 1,
+                UUID.randomUUID(), 1, "BTC/USD", "LONG", null, new BigDecimal("90"), BigDecimal.ONE,
+                new BigDecimal("100"), new BigDecimal("10"), "USD", "{}"));
+
+        PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
+                new TradingCalculatorServiceImpl(), plans);
+        ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
+                new TradePlanReference(planId, 1),
+                new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
+                new IdempotencyKey("paper-entry-stop"), owner, broker.id(),
+                new ExecutionParameters("BTC/USD", ExecutionParameters.Side.BUY,
+                        ExecutionParameters.OrderType.MARKET, BigDecimal.ONE, null), NOW, NOW.plusSeconds(300));
+        ExecutionAttempt attempt = ExecutionAttempt.create(ExecutionAttemptId.newId(), intent.id(), 1, NOW, null);
+        BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(), attempt.id(), "SIM", NOW);
+        order.addFill(new BrokerOrder.Fill("fill", BigDecimal.ONE, new BigDecimal("100"), BigDecimal.ZERO, NOW), true, NOW);
+
+        settlement.settle(intent, attempt, order);
+
+        assertThat(account.getTrades()).singleElement().satisfies(trade ->
+                assertThat(trade.getStopLoss()).isEqualByComparingTo("90"));
     }
 
     private Scenario scenario(TradeType type, String initialBase, String entryFee) {

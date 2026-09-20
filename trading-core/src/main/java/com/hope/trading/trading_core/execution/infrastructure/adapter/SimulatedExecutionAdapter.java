@@ -102,8 +102,7 @@ public class SimulatedExecutionAdapter implements BrokerExecutionPort {
 
     @Override
     public ReconciliationResult reconcile(ReconciliationRequest request) {
-        // For PAPER, all acknowledged orders are considered filled
-        // In a real implementation, we would track order state
-        return new ConfirmedAbsent();
+        // PAPER state is local; external broker reconciliation cannot prove it.
+        return new Inconsistent("PAPER_RECONCILIATION_NOT_SUPPORTED");
     }
 }

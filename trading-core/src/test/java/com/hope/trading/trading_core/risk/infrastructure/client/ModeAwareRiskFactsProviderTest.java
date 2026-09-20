@@ -67,7 +67,7 @@ class ModeAwareRiskFactsProviderTest {
         assertThat(snapshot.positions()).singleElement().extracting(RiskFactsProvider.Position::positionId)
                 .isEqualTo(tradeId);
         assertThat(snapshot.complete()).isFalse();
-        assertThat(snapshot.unavailabilityReasons()).contains("PAPER_MARGIN_UNAVAILABLE");
+        assertThat(snapshot.unavailabilityReasons()).contains("PAPER_POSITION_PROTECTION_UNAVAILABLE");
         verifyNoInteractions(liveFacts);
     }
 
@@ -79,6 +79,25 @@ class ModeAwareRiskFactsProviderTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.load(
                 mock(Account.class), brokerAccount, UUID.randomUUID(), from, to))
                 .isInstanceOf(IllegalStateException.class);
+        verifyNoInteractions(liveFacts);
+    }
+
+    @Test
+    void paperWithoutOpenPositionsProvidesLocalAccountMarginFacts() {
+        UUID brokerId = UUID.randomUUID();
+        Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency("USD")
+                .equity(new BigDecimal("1000")).balances(List.of(
+                        AccountBalance.builder().asset("USD").amount(new BigDecimal("1000")).build()))
+                .trades(List.of()).build();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccount.id()).thenReturn(brokerId);
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper())
+                .load(account, brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.account().margin()).isEqualByComparingTo("1000");
+        assertThat(snapshot.unavailabilityReasons()).isEmpty();
         verifyNoInteractions(liveFacts);
     }
 }

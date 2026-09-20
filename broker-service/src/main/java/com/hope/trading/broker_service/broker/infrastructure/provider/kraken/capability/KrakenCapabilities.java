@@ -8,17 +8,24 @@ import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.aut
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.client.KrakenProviderClient;
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.mapper.KrakenOrderMapper;
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.mapper.KrakenAssetNormalizer;
+import com.hope.trading.broker_service.kraken.config.KrakenProperties;
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.Clock;
 import java.util.*;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Component
 public final class KrakenCapabilities implements AuthenticationCapability,AccountCapability,
-        PositionCapability,OrderCapability,ExecutionCapability,ReconciliationCapability {
+        PositionCapability,OrderCapability,ExecutionCapability,ReconciliationCapability,
+        TechnicalCapability,MarginCapability {
+    private static final String PROVIDER = "KRAKEN";
     private final ProviderCredentialSession sessions; private final KrakenProviderClient client;
-    private final KrakenOrderMapper mapper; private final Clock clock;
-    public KrakenCapabilities(ProviderCredentialSession sessions,KrakenProviderClient client,KrakenOrderMapper mapper,Clock clock){this.sessions=sessions;this.client=client;this.mapper=mapper;this.clock=clock;}
+    private final KrakenOrderMapper mapper; private final Clock clock; private final KrakenProperties properties;
+    public KrakenCapabilities(ProviderCredentialSession sessions,KrakenProviderClient client,KrakenOrderMapper mapper,Clock clock){this(sessions,client,mapper,clock,new KrakenProperties());}
+    @Autowired
+    public KrakenCapabilities(ProviderCredentialSession sessions,KrakenProviderClient client,KrakenOrderMapper mapper,Clock clock,KrakenProperties properties){this.sessions=sessions;this.client=client;this.mapper=mapper;this.clock=clock;this.properties=properties;}
     public void verify(UUID accountId){sessions.withCredentials(accountId,c->{client.privatePost("/0/private/Balance",Map.of(),c);return null;});}
     public AccountSnapshot account(UUID accountId){return sessions.withCredentials(accountId,c->{
         JsonNode result=client.privatePost("/0/private/Balance",Map.of(),c);Map<String,BigDecimal> balances=new TreeMap<>();
@@ -46,6 +53,21 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
         try{return sessions.withCredentials(request.brokerAccountId(),c->{List<OrderSnapshot> matches=readOrders(c,clientOrderId(request.idempotencyKey()));
             if(matches.isEmpty())return new ConfirmedAbsent();if(matches.size()>1)return new Inconsistent("MULTIPLE_MATCHING_ORDERS");OrderSnapshot order=matches.get(0);return new ReconciledOrder(order.externalOrderId(),request.executionAttemptId().toString(),order.status());});
         }catch(BrokerTechnicalException e){return new Inconsistent(safeCode(e));}
+    }
+    @Override public TechnicalCapabilities capabilities(UUID accountId,String instrument) {
+        return new TechnicalCapabilities(accountId,PROVIDER,instrument,properties.getCapabilityVersion(),clock.instant(),
+                List.of(OrderType.MARKET,OrderType.LIMIT),properties.getSupportedLeverageLevels());
+    }
+    @Override public MarginPreview preview(MarginPreviewRequest request) {
+        BigDecimal leverage=request.leverage()==null
+                ?properties.getSupportedLeverageLevels().stream().min(Comparator.naturalOrder()).orElseThrow(
+                        ()->new BrokerTechnicalException("No supported leverage configured"))
+                :request.leverage();
+        if (!properties.getSupportedLeverageLevels().contains(leverage))
+            throw new BrokerTechnicalException("Unsupported leverage");
+        return new MarginPreview(request.brokerAccountId(),request.instrument(),
+                request.quantity().multiply(request.price()).divide(leverage,MathContext.DECIMAL128),
+                properties.getMarginCurrency(),PROVIDER+":MARGIN_PREVIEW",properties.getCapabilityVersion(),clock.instant());
     }
     private List<OrderSnapshot> readOrders(com.hope.trading.broker_service.credential.domain.CredentialMaterial c,String clientId){
         List<OrderSnapshot> result=new ArrayList<>();collect(client.privatePost("/0/private/OpenOrders",Map.of(),c).path("open"),clientId,result);collect(client.privatePost("/0/private/ClosedOrders",Map.of(),c).path("closed"),clientId,result);return List.copyOf(result);
