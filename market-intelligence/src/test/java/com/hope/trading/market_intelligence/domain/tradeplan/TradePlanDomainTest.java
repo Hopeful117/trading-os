@@ -47,4 +47,33 @@ class TradePlanDomainTest {
         assertThat(context.reference()).isEqualTo(new TradePlanningContextReference(
                 id, 2, TradePlanTestFixtures.NOW));
     }
+
+    @Test
+    void opportunityOriginRejectsEmptyProvenanceWhileManualOriginAcceptsIt() {
+        TradePlanningContextReference context = new TradePlanningContextReference(
+                UUID.randomUUID(), 1, TradePlanTestFixtures.NOW);
+        ExecutionParameters execution = new ExecutionParameters(
+                "BTC/EUR", TradeDirection.LONG,
+                new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
+                new StopLoss(BigDecimal.valueOf(99), "manual"),
+                List.of(new TakeProfit(BigDecimal.valueOf(102), BigDecimal.valueOf(100))),
+                new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
+                new RiskReward(BigDecimal.valueOf(2)),
+                new PlanExpiration(TradePlanTestFixtures.NOW.plusSeconds(3600), "manual"), Set.of());
+        TradingRationale rationale = new TradingRationale(
+                Set.of(), Set.of(), Set.of(), "manual", Set.of("confirm"), Set.of("invalidate"));
+        TradePlanFactory factory = new TradePlanFactory();
+
+        assertThatThrownBy(() -> factory.create(
+                new TradePlanId(UUID.randomUUID()), new TradePlanVersion(1), null,
+                TradePlanStatus.PROPOSED, context, execution, rationale,
+                TradePlanTestFixtures.NOW, TradePlanOrigin.OPPORTUNITY, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Opportunity");
+        assertThat(factory.create(
+                new TradePlanId(UUID.randomUUID()), new TradePlanVersion(1), null,
+                TradePlanStatus.PROPOSED, context, execution, rationale,
+                TradePlanTestFixtures.NOW, TradePlanOrigin.MANUAL, UUID.randomUUID())
+                .origin()).isEqualTo(TradePlanOrigin.MANUAL);
+    }
 }

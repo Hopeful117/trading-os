@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanFactory;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanId;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanVersion;
+import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanOrigin;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContextReference;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradingRationale;
 import java.util.List;
@@ -85,6 +86,8 @@ public class JpaTradePlanRepository implements TradePlanRepository {
         entity.version = plan.version().value();
         entity.previousVersion = plan.previousVersion().map(TradePlanVersion::value).orElse(null);
         entity.status = plan.status().name();
+        entity.origin = plan.origin().name();
+        entity.authorId = plan.authorId().orElse(null);
         entity.tradingContextId = plan.planningContext().id();
         entity.tradingContextVersion = plan.planningContext().version();
         entity.tradingContextSnapshotAt = plan.planningContext().capturedAt();
@@ -103,7 +106,15 @@ public class JpaTradePlanRepository implements TradePlanRepository {
                         entity.tradingContextId, entity.tradingContextVersion,
                         entity.tradingContextSnapshotAt),
                 read(entity.executionPayload, ExecutionParameters.class),
-                read(entity.rationalePayload, TradingRationale.class), entity.createdAt);
+                read(entity.rationalePayload, TradingRationale.class), entity.createdAt,
+                new TradePlanOriginValue(entity.origin).origin(), entity.authorId);
+    }
+
+    private record TradePlanOriginValue(String value) {
+        TradePlanOriginValue {
+            if (value == null || value.isBlank()) value = TradePlanOrigin.OPPORTUNITY.name();
+        }
+        TradePlanOrigin origin() { return TradePlanOrigin.valueOf(value); }
     }
 
     private String write(Object value) {

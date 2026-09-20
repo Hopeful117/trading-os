@@ -8,7 +8,8 @@ final class TradePlanMapper {
         return new TradePlanEntity(
                 plan.id().value(), plan.version().value(),
                 plan.previousVersion().map(TradePlanVersion::value).orElse(null),
-                plan.status().name(), plan.planningContext().id(),
+                plan.status().name(), plan.origin().name(), plan.authorId().orElse(null),
+                plan.planningContext().id(),
                 plan.planningContext().version(), plan.planningContext().capturedAt(),
                 plan.execution(), plan.rationale(), plan.createdAt());
     }
@@ -20,6 +21,14 @@ final class TradePlanMapper {
                 TradePlanStatus.valueOf(entity.status()),
                 new TradePlanningContextReference(
                         entity.contextId(), entity.contextVersion(), entity.contextSnapshotAt()),
-                entity.execution(), entity.rationale(), entity.createdAt());
+                entity.execution(), entity.rationale(), entity.createdAt(),
+                new TradePlanOriginValue(entity.origin()).origin(), entity.authorId());
+    }
+
+    private record TradePlanOriginValue(String value) {
+        TradePlanOriginValue {
+            if (value == null || value.isBlank()) value = TradePlanOrigin.OPPORTUNITY.name();
+        }
+        TradePlanOrigin origin() { return TradePlanOrigin.valueOf(value); }
     }
 }

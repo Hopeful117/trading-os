@@ -45,6 +45,19 @@ public final class TradePlanApplicationService {
         return result;
     }
 
+    public TradePlanningResult createManual(ManualTradePlanningRequest request) {
+        Instant started = clock.instant();
+        TradePlanningResult result = engine.planManual(request);
+        metrics.recordDuration(Duration.between(started, clock.instant()));
+        if (result instanceof TradePlanningResult.Success success) {
+            repository.append(success.plan());
+            metrics.increment("trade_plans_created");
+            events.publish(new TradePlanEvent.Created(
+                    success.plan().id(), success.plan().version(), clock.instant()));
+        }
+        return result;
+    }
+
     public TradePlan transition(TradePlanId id, TradePlanStatus target) {
         TradePlan current = repository.findLatest(id)
                 .orElseThrow(() -> new NoSuchElementException("TradePlan not found"));

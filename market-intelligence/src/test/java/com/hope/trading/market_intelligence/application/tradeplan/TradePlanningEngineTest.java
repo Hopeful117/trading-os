@@ -33,6 +33,36 @@ class TradePlanningEngineTest {
     }
 
     @Test
+    void manualFlowBuildsPlanWithoutOpportunityAndPreservesAuthor() {
+        var environment = TradePlanTestFixtures.environment();
+        ManualTradePlanningRequest request = new ManualTradePlanningRequest(
+                environment.context().id(), environment.context().version(), environment.owner(),
+                "BTC/EUR", TradeDirection.LONG,
+                new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
+                new StopLoss(BigDecimal.valueOf(99), "Manual invalidation"),
+                List.of(new TakeProfit(BigDecimal.valueOf(102), BigDecimal.valueOf(100))),
+                new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
+                BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
+                "Human discretionary setup", Set.of("Price confirms setup"),
+                Set.of("Stop is reached"), Set.of());
+
+        TradePlanningResult result = environment.service().createManual(request);
+
+        assertThat(result).isInstanceOfSatisfying(TradePlanningResult.Success.class, success -> {
+            TradePlan plan = success.plan();
+            assertThat(plan.origin()).isEqualTo(TradePlanOrigin.MANUAL);
+            assertThat(plan.authorId()).contains(environment.owner());
+            assertThat(plan.rationale().opportunities()).isEmpty();
+            assertThat(plan.rationale().observations()).isEmpty();
+            assertThat(environment.plans().find(plan.id(), plan.version()))
+                    .isPresent()
+                    .get()
+                    .extracting(TradePlan::origin, TradePlan::authorId)
+                    .containsExactly(TradePlanOrigin.MANUAL, plan.authorId());
+        });
+    }
+
+    @Test
     void unauthorizedContextAndIncompletePoliciesReturnExplicitFailures() {
         var environment = TradePlanTestFixtures.environment();
         TradePlanningRequest valid = TradePlanTestFixtures.request(environment);

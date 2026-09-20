@@ -13,9 +13,7 @@ public record TradingRationale(
 ) {
     public TradingRationale {
         opportunities = Set.copyOf(opportunities);
-        if (opportunities.isEmpty()) throw new IllegalArgumentException("Opportunity is required");
         observations = Set.copyOf(observations);
-        if (observations.isEmpty()) throw new IllegalArgumentException("Observation is required");
         aiAnalyses = Set.copyOf(aiAnalyses);
         thesis = Objects.requireNonNull(thesis).trim();
         if (thesis.isEmpty()) throw new IllegalArgumentException("thesis is required");
