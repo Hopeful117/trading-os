@@ -42,7 +42,7 @@ class MarketIntelligenceRiskClientTest {
 
     private TradePlanTransport buildTransport(String entryType, BigDecimal entryPrice) {
         return new TradePlanTransport(
-                tradePlanId, version, "APPROVED", now,
+                tradePlanId, version, "APPROVED", "MANUAL", now,
                 new TradePlanTransport.Context(
                         UUID.randomUUID(), 1L, now, UUID.randomUUID(), UUID.randomUUID(),
                         "USD", UUID.randomUUID(), 1L, UUID.randomUUID(), 1L),
@@ -75,6 +75,17 @@ class MarketIntelligenceRiskClientTest {
         assertThat(snapshot.direction()).isEqualTo("BUY");
         assertThat(snapshot.quantity()).isEqualByComparingTo("0.5");
         assertThat(snapshot.sourcePayload()).isNotBlank();
+    }
+
+    @Test
+    void preservesManualOriginInRiskProvenancePayload() throws Exception {
+        when(feignClient.get(tradePlanId, version))
+                .thenReturn(buildTransport("MARKET", null));
+
+        TradePlanRiskPort.Snapshot snapshot = new MarketIntelligenceRiskClient(
+                feignClient, new ObjectMapper().findAndRegisterModules()).load(tradePlanId, version);
+
+        assertThat(snapshot.sourcePayload()).contains("\"origin\":\"MANUAL\"");
     }
 
     @Test

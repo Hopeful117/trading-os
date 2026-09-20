@@ -2,6 +2,11 @@ package com.hope.trading.market_intelligence.application.tradeplan;
 
 import com.hope.trading.market_intelligence.adapter.persistence.InMemoryRiskValidationAcknowledgmentRepository;
 import com.hope.trading.market_intelligence.domain.tradeplan.PositionSizing;
+import com.hope.trading.market_intelligence.domain.tradeplan.EntryStrategy;
+import com.hope.trading.market_intelligence.domain.tradeplan.EntryType;
+import com.hope.trading.market_intelligence.domain.tradeplan.StopLoss;
+import com.hope.trading.market_intelligence.domain.tradeplan.TakeProfit;
+import com.hope.trading.market_intelligence.domain.tradeplan.TradeDirection;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlan;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContext;
@@ -11,6 +16,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -55,6 +62,29 @@ class TradePlanRiskHandoffServiceTest {
         assertThat(snapshot.rationale().observationIds()).isNotEmpty();
         assertThat(snapshot.rationale().confirmationConditions()).isNotEmpty();
         assertThat(snapshot.rationale().invalidationConditions()).isNotEmpty();
+    }
+
+    @Test
+    void exposesManualOriginWithoutOpportunityProvenance() {
+        var environment = TradePlanTestFixtures.environment();
+        var result = environment.service().createManual(new ManualTradePlanningRequest(
+                environment.context().id(), environment.context().version(), environment.owner(),
+                "BTC/EUR", TradeDirection.LONG,
+                new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
+                new StopLoss(BigDecimal.valueOf(99), "Manual invalidation"),
+                List.of(new TakeProfit(BigDecimal.valueOf(102), BigDecimal.valueOf(100))),
+                new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
+                BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
+                "Human discretionary setup", Set.of("Price confirms"), Set.of("Stop is reached"), Set.of()));
+        TradePlan proposed = ((TradePlanningResult.Success) result).plan();
+        TradePlan accepted = environment.service().transition(proposed.id(), TradePlanStatus.ACCEPTED);
+
+        TradePlanRiskSnapshot snapshot = service(environment).loadAcceptedSnapshot(
+                accepted.id(), accepted.version());
+
+        assertThat(snapshot.origin()).isEqualTo("MANUAL");
+        assertThat(snapshot.rationale().opportunities()).isEmpty();
+        assertThat(snapshot.rationale().observationIds()).isEmpty();
     }
 
     @Test
