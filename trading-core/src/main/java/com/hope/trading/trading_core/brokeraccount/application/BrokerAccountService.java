@@ -17,6 +17,8 @@ import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidationException;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileService;
+import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +43,7 @@ public class BrokerAccountService {
     private final Clock clock;
     private final RiskPersistence riskPersistence;
     private final RiskProfileValidator riskProfileValidator;
+    private final TradePlanningProfileService tradePlanningProfiles;
 
     public BrokerAccountResponse create(UUID ownerId, CreateBrokerAccountRequest request) {
         RiskProfileReference profileReference = request.riskProfile();
@@ -107,6 +111,18 @@ public class BrokerAccountService {
                 savedAccount.getBaseCurrency(), savedAccount.getAccountId());
         riskPersistence.assignProfile(savedAccount.getAccountId(), profileReference.profileId(),
                 profileReference.semanticVersion(), clock.instant(), "paper-account-provisioning");
+        TradePlanningProfile profile = tradePlanningProfiles.create(ownerId,
+                new TradePlanningProfileService.Values(
+                        initialCapital.multiply(new BigDecimal("0.01")),
+                        savedAccount.getBaseCurrency(),
+                        TradePlanningProfile.EntryType.LIMIT,
+                        TradePlanningProfile.StopStrategy.PERCENTAGE_DISTANCE,
+                        new BigDecimal("1"),
+                        TradePlanningProfile.TargetStrategy.RISK_MULTIPLE,
+                        new BigDecimal("2"),
+                        TradePlanningProfile.PlanningHorizon.INTRADAY,
+                        Duration.ofHours(1)));
+        tradePlanningProfiles.assign(ownerId, savedAccount.getAccountId(), profile.id(), profile.version());
     }
 
     private Rules createDefaultRules() {

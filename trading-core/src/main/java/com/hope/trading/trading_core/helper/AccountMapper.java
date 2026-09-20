@@ -19,6 +19,7 @@ public class AccountMapper {
 
             return AccountDto.builder()
                     .accountId(account.getAccountId())
+                    .brokerAccountId(account.getBrokerAccountId())
                     .name(account.getName())
                     .baseCurrency(account.getBaseCurrency())
                     .equity(account.getEquity())
@@ -86,6 +87,5 @@ public class AccountMapper {
                 .build();
     }
         }
-
 
 

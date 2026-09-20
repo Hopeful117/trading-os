@@ -9,6 +9,7 @@ import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Rules;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
+import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileService;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
@@ -16,7 +17,9 @@ import com.hope.trading.trading_core.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -45,6 +48,7 @@ class BrokerAccountServiceOwnershipTest {
     private final AccountMapper accountMapper = mock(AccountMapper.class);
     private final RiskPersistence riskPersistence = mock(RiskPersistence.class);
     private final RiskProfileValidator riskProfileValidator = mock(RiskProfileValidator.class);
+    private final TradePlanningProfileService tradePlanningProfiles = mock(TradePlanningProfileService.class);
     private final Instant now = Instant.parse("2026-08-23T10:00:00Z");
 
     private BrokerAccountService service;
@@ -63,7 +67,8 @@ class BrokerAccountServiceOwnershipTest {
                 accountMapper,
                 Clock.fixed(now, ZoneOffset.UTC),
                 riskPersistence,
-                riskProfileValidator
+                 riskProfileValidator,
+                 tradePlanningProfiles
         );
         owned = BrokerAccount.create(
                 ownerId, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "main", now);
@@ -73,6 +78,20 @@ class BrokerAccountServiceOwnershipTest {
                 .thenReturn(Optional.of(owned));
         when(repository.save(any(BrokerAccount.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
+        UUID profileId = UUID.randomUUID();
+        when(tradePlanningProfiles.create(any(), any())).thenReturn(new com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile(
+                profileId, 1, ownerId,
+                new com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile.RiskBudget(
+                        BigDecimal.ONE, "USD", profileId, 1),
+                new com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile.PlanningPreferences(
+                        profileId, 1,
+                        com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile.EntryType.LIMIT,
+                        com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile.StopStrategy.PERCENTAGE_DISTANCE,
+                        BigDecimal.ONE,
+                        com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile.TargetStrategy.RISK_MULTIPLE,
+                        BigDecimal.TWO,
+                        com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile.PlanningHorizon.INTRADAY,
+                        Duration.ofHours(1)), now));
     }
 
     private CreateBrokerAccountRequest request() {
