@@ -19,6 +19,8 @@ import com.hope.trading.trading_core.risk.application.RiskProfileValidationExcep
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileService;
 import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
+import com.hope.trading.risk.domain.RiskRuleIds;
+import com.hope.trading.risk.policy.EffectiveRiskRuleSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Transactional
 public class BrokerAccountService {
+    private static final BigDecimal PAPER_STOP_DISTANCE_PERCENT = BigDecimal.ONE;
     private final BrokerAccountRepository repository;
     private final AccountRepository accountRepository;
     private final RulesRepository rulesRepository;
@@ -47,6 +50,7 @@ public class BrokerAccountService {
 
     public BrokerAccountResponse create(UUID ownerId, CreateBrokerAccountRequest request) {
         RiskProfileReference profileReference = request.riskProfile();
+        EffectiveRiskRuleSet effectiveRiskProfile = null;
         if (request.executionMode() == ExecutionMode.PAPER) {
             if (profileReference == null) {
                 throw new IllegalArgumentException("riskProfile is required for PAPER accounts");
@@ -54,7 +58,7 @@ public class BrokerAccountService {
             var profile = riskPersistence.profile(profileReference.profileId(), profileReference.semanticVersion())
                     .orElseThrow(() -> new IllegalArgumentException("Risk profile does not exist"));
             try {
-                riskProfileValidator.validate(profile, false);
+                effectiveRiskProfile = riskProfileValidator.validate(profile, false);
             } catch (RiskProfileValidationException invalid) {
                 throw new IllegalArgumentException(invalid.code(), invalid);
             }
@@ -75,14 +79,16 @@ public class BrokerAccountService {
             if (initialCapital == null || initialCapital.signum() <= 0) {
                 throw new IllegalArgumentException("initialCapital must be positive for PAPER accounts");
             }
-            createPaperAccount(ownerId, savedAccount, request.initialCapital(), profileReference);
+            createPaperAccount(ownerId, savedAccount, request.initialCapital(), profileReference,
+                    effectiveRiskProfile);
         }
 
         return map(savedAccount);
     }
 
     private void createPaperAccount(UUID ownerId, BrokerAccount brokerAccount, BigDecimal initialCapital,
-                                    RiskProfileReference profileReference) {
+                                    RiskProfileReference profileReference,
+                                    EffectiveRiskRuleSet effectiveRiskProfile) {
         // Get default rules (or create default if none exists)
         Rules rules = rulesRepository.findByName("Default Paper Trading Rules")
                 .orElseGet(() -> createDefaultRules());
@@ -113,16 +119,36 @@ public class BrokerAccountService {
                 profileReference.semanticVersion(), clock.instant(), "paper-account-provisioning");
         TradePlanningProfile profile = tradePlanningProfiles.create(ownerId,
                 new TradePlanningProfileService.Values(
-                        initialCapital.multiply(new BigDecimal("0.01")),
+                        compatiblePaperRiskBudget(initialCapital, effectiveRiskProfile,
+                                PAPER_STOP_DISTANCE_PERCENT),
                         savedAccount.getBaseCurrency(),
                         TradePlanningProfile.EntryType.LIMIT,
                         TradePlanningProfile.StopStrategy.PERCENTAGE_DISTANCE,
-                        new BigDecimal("1"),
+                        PAPER_STOP_DISTANCE_PERCENT,
                         TradePlanningProfile.TargetStrategy.RISK_MULTIPLE,
                         new BigDecimal("2"),
                         TradePlanningProfile.PlanningHorizon.INTRADAY,
                         Duration.ofHours(1)));
         tradePlanningProfiles.assign(ownerId, savedAccount.getAccountId(), profile.id(), profile.version());
+    }
+
+    static BigDecimal compatiblePaperRiskBudget(BigDecimal initialCapital,
+                                                EffectiveRiskRuleSet riskProfile,
+                                                BigDecimal stopDistancePercent) {
+        BigDecimal maxPositionRisk = maximumRatio(riskProfile, RiskRuleIds.MAX_POSITION_RISK);
+        BigDecimal maxExposure = maximumRatio(riskProfile, RiskRuleIds.MAX_EXPOSURE);
+        BigDecimal stopDistanceRatio = stopDistancePercent.movePointLeft(2);
+        BigDecimal positionRiskBudget = initialCapital.multiply(maxPositionRisk);
+        BigDecimal exposureRiskBudget = initialCapital.multiply(maxExposure).multiply(stopDistanceRatio);
+        return positionRiskBudget.min(exposureRiskBudget).stripTrailingZeros();
+    }
+
+    private static BigDecimal maximumRatio(EffectiveRiskRuleSet riskProfile, String ruleId) {
+        return riskProfile.rules().stream()
+                .filter(rule -> rule.ruleId().equals(ruleId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Missing risk rule: " + ruleId))
+                .requiredParameter("maximumRatio");
     }
 
     private Rules createDefaultRules() {
