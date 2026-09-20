@@ -46,7 +46,11 @@ public class TradePlanRiskHandoffService {
                 TradePlanRiskHandoffException.notFound("Trade Plan version not found"));
         TradePlan latest = plans.findLatest(id).orElseThrow(() ->
                 TradePlanRiskHandoffException.notFound("Trade Plan not found"));
-        if (!latest.version().equals(version)) {
+        boolean acknowledgedAcceptedVersion = requested.status() == TradePlanStatus.ACCEPTED
+                && acknowledgments.find(id, version).isPresent()
+                && (latest.status() == TradePlanStatus.RISK_VALIDATED
+                || latest.status() == TradePlanStatus.READY_TO_EXECUTE);
+        if (!latest.version().equals(version) && !acknowledgedAcceptedVersion) {
             throw TradePlanRiskHandoffException.conflict(
                     "STALE_TRADE_PLAN_VERSION", "Risk evaluation requires the latest Trade Plan version");
         }
@@ -68,6 +72,40 @@ public class TradePlanRiskHandoffService {
                     "Position sizing currency must equal the account currency");
         }
         return snapshot(requested, context);
+    }
+
+    @Transactional
+    public TradePlanRiskSnapshot prepareForExecution(
+            TradePlanId id, TradePlanVersion acceptedVersion, UUID evaluationId) {
+        RiskValidationAcknowledgment acknowledgment = acknowledgments.find(id, acceptedVersion)
+                .filter(item -> item.evaluationId().equals(evaluationId))
+                .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
+                        "Risk validation acknowledgment not found"));
+        TradePlan latest = plans.findLatestForUpdate(id).orElseThrow(() ->
+                TradePlanRiskHandoffException.notFound("Trade Plan not found"));
+        TradePlan ready = latest.status() == TradePlanStatus.READY_TO_EXECUTE
+                ? latest
+                : lifecycle.markReadyToExecute(id, new TradePlanVersion(
+                        acknowledgment.riskValidatedTradePlanVersion()));
+        TradePlanningContext context = contexts.find(
+                        ready.planningContext().id(), ready.planningContext().version())
+                .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
+                        "Referenced Trading Context snapshot not found"));
+        return snapshot(ready, context);
+    }
+
+    public TradePlanRiskSnapshot loadReadySnapshot(TradePlanId id, TradePlanVersion version) {
+        TradePlan ready = plans.find(id, version).orElseThrow(() ->
+                TradePlanRiskHandoffException.notFound("Ready Trade Plan version not found"));
+        if (ready.status() != TradePlanStatus.READY_TO_EXECUTE) {
+            throw TradePlanRiskHandoffException.conflict(
+                    "TRADE_PLAN_NOT_READY", "Execution requires a READY_TO_EXECUTE Trade Plan");
+        }
+        TradePlanningContext context = contexts.find(
+                        ready.planningContext().id(), ready.planningContext().version())
+                .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
+                        "Referenced Trading Context snapshot not found"));
+        return snapshot(ready, context);
     }
 
     @Transactional

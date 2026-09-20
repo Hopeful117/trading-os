@@ -24,21 +24,30 @@ interface MarketIntelligenceRiskFeignClient {
     @GetMapping("/internal/v1/trade-plans/{id}/versions/{version}/risk-validation-snapshot")
     TradePlanTransport get(@PathVariable UUID id, @PathVariable long version);
 
+    @PostMapping("/internal/v1/trade-plans/{id}/versions/{version}/execution-readiness")
+    TradePlanTransport prepareForExecution(@PathVariable UUID id, @PathVariable long version,
+                                            @RequestBody ExecutionReadinessRequest body);
+
+    @GetMapping("/internal/v1/trade-plans/{id}/versions/{version}/execution-snapshot")
+    TradePlanTransport getReady(@PathVariable UUID id, @PathVariable long version);
+
     @PostMapping("/internal/v1/trade-plans/{id}/versions/{version}/risk-validation-acknowledgments")
     Object acknowledge(@PathVariable UUID id, @PathVariable long version, @RequestBody Acknowledgment body);
 }
 
 record Acknowledgment(UUID evaluationId, String decision, Instant evaluatedAt) { }
+record ExecutionReadinessRequest(UUID evaluationId) { }
 record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status, Instant createdAt,
-                          Context context, Execution execution, Object rationale) {
+                           Context context, Execution execution, Object rationale) {
     record Context(UUID id, long version, Instant capturedAt, UUID ownerId, UUID tradingAccountId,
                    String accountCurrency, UUID riskBudgetSourceId, long riskBudgetSourceVersion,
                    UUID planningPreferencesId, long planningPreferencesVersion) { }
     record Execution(String instrument, String direction, Entry entry, StopLoss stopLoss,
-                     List<Object> takeProfits, PositionSizing positionSizing,
+                     List<TakeProfit> takeProfits, PositionSizing positionSizing,
                      BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules) { }
     record Entry(String type, BigDecimal price, Set<String> conditions) { }
     record StopLoss(BigDecimal price, String rationale) { }
+    record TakeProfit(BigDecimal price, BigDecimal allocationPercent) { }
     record PositionSizing(BigDecimal quantity, BigDecimal notional,
                           BigDecimal expectedMonetaryRisk, String currency) { }
 }
@@ -73,7 +82,8 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
                      value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
                      value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
                     value.execution().instrument(), value.execution().direction(), entryIntent,
-                    value.execution().stopLoss().price(), value.execution().positionSizing().quantity(),
+                     value.execution().stopLoss().price(), firstTakeProfit(value),
+                     value.execution().positionSizing().quantity(),
                     value.execution().positionSizing().notional(),
                     value.execution().positionSizing().expectedMonetaryRisk(),
                     value.execution().positionSizing().currency(), mapper.writeValueAsString(value));
@@ -83,9 +93,38 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
     }
 
     @Override
+    public Snapshot prepareForExecution(UUID tradePlanId, long acceptedVersion, UUID evaluationId) {
+        return loadTransport(client.prepareForExecution(tradePlanId, acceptedVersion,
+                new ExecutionReadinessRequest(evaluationId)));
+    }
+
+    @Override
+    public Snapshot loadReady(UUID tradePlanId, long version) {
+        return loadTransport(client.getReady(tradePlanId, version));
+    }
+
+    @Override
     public void acknowledge(UUID tradePlanId, long version, UUID evaluationId,
                             String decision, Instant evaluatedAt) {
         client.acknowledge(tradePlanId, version, new Acknowledgment(evaluationId, decision, evaluatedAt));
+    }
+
+    private Snapshot loadTransport(TradePlanTransport value) {
+        try {
+            EntryIntent entryIntent = toEntryIntent(value.execution().entry());
+            return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.createdAt(),
+                    value.context().id(), value.context().version(), value.context().capturedAt(),
+                    value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
+                    value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
+                    value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
+                    value.execution().instrument(), value.execution().direction(), entryIntent,
+                     value.execution().stopLoss().price(), firstTakeProfit(value),
+                     value.execution().positionSizing().quantity(),
+                    value.execution().positionSizing().notional(), value.execution().positionSizing().expectedMonetaryRisk(),
+                    value.execution().positionSizing().currency(), mapper.writeValueAsString(value));
+        } catch (Exception failure) {
+            throw new IllegalStateException("Trade Plan snapshot cannot be preserved", failure);
+        }
     }
 
     private static EntryIntent toEntryIntent(TradePlanTransport.Entry entry) {
@@ -96,5 +135,12 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
             default -> throw new IllegalArgumentException("Unknown entry type: " + entry.type());
         };
         return new EntryIntent(orderType, entry.price());
+    }
+
+    private BigDecimal firstTakeProfit(TradePlanTransport value) {
+        if (value.execution().takeProfits() == null || value.execution().takeProfits().isEmpty()) {
+            return null;
+        }
+        return value.execution().takeProfits().get(0).price();
     }
 }

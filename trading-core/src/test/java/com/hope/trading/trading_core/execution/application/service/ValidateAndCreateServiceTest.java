@@ -69,6 +69,7 @@ class ValidateAndCreateServiceTest {
 
         when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(plan);
+        when(tradePlans.prepareForExecution(tradePlanId, 3, evaluationId)).thenReturn(plan);
         when(riskPersistence.configuration(tradingAccountId))
                 .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                         tradingAccountId, brokerAccountId, "UTC", "USD", null)));
@@ -136,6 +137,7 @@ class ValidateAndCreateServiceTest {
 
         when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(plan);
+        when(tradePlans.prepareForExecution(tradePlanId, 3, evaluationId)).thenReturn(plan);
         when(riskPersistence.configuration(tradingAccountId))
                 .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                         tradingAccountId, brokerAccountId, "UTC", "USD", null)));
@@ -164,6 +166,7 @@ class ValidateAndCreateServiceTest {
 
         when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(marketPlan());
+        when(tradePlans.prepareForExecution(tradePlanId, 3, evaluationId)).thenReturn(marketPlan());
         when(riskPersistence.configuration(tradingAccountId))
                 .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                         tradingAccountId, brokerAccountId, "UTC", "USD", null)));
@@ -183,6 +186,7 @@ class ValidateAndCreateServiceTest {
         when(riskPersistence.evaluationById(evaluationId))
                 .thenReturn(Optional.of(storedEvaluation("COMPLETED", "APPROVED")));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(marketPlan());
+        when(tradePlans.prepareForExecution(tradePlanId, 3, evaluationId)).thenReturn(marketPlan());
         when(riskPersistence.configuration(tradingAccountId))
                 .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                         tradingAccountId, brokerAccountId, "UTC", "USD", null)));
@@ -220,6 +224,7 @@ class ValidateAndCreateServiceTest {
 
         when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
         when(tradePlans.load(tradePlanId, 3)).thenReturn(plan);
+        when(tradePlans.prepareForExecution(tradePlanId, 3, evaluationId)).thenReturn(plan);
         when(riskPersistence.configuration(tradingAccountId))
                 .thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                         tradingAccountId, brokerAccountId, "UTC", "USD", null)));
@@ -259,7 +264,7 @@ class ValidateAndCreateServiceTest {
                 tradePlanId, 3, "ACCEPTED", now,
                 UUID.randomUUID(), 1, now, initiatorId, tradingAccountId, "USD",
                 UUID.randomUUID(), 1, UUID.randomUUID(), 1,
-                "ETHUSD", "LONG", entryIntent, new BigDecimal("90"),
+                 "ETHUSD", "LONG", entryIntent, new BigDecimal("90"), new BigDecimal("120"),
                 BigDecimal.ONE, new BigDecimal("1000"), new BigDecimal("100"),
                 "USD", "{}");
     }
@@ -270,7 +275,7 @@ class ValidateAndCreateServiceTest {
                 tradePlanId, 3, "ACCEPTED", now,
                 UUID.randomUUID(), 1, now, initiatorId, tradingAccountId, "USD",
                 UUID.randomUUID(), 1, UUID.randomUUID(), 1,
-                "BTCUSD", "LONG", entryIntent, new BigDecimal("48000"),
+                 "BTCUSD", "LONG", entryIntent, new BigDecimal("48000"), new BigDecimal("51000"),
                 BigDecimal.ONE, new BigDecimal("50000"), new BigDecimal("1000"),
                 "USD", "{}");
     }

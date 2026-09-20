@@ -161,7 +161,9 @@ public class PaperSettlementService {
 
     private void updatePosition(Account account, ExecutionIntent intent, ExecutionParameters.Side side, BigDecimal quantity,
                                  BigDecimal fillPrice, Instant executedAt, ExecutionParameters params) {
-        BigDecimal stopPrice = resolveStopPrice(intent);
+        TradePlanRiskPort.Snapshot plan = resolvePlan(intent);
+        BigDecimal stopPrice = plan == null ? null : plan.stopPrice();
+        BigDecimal takeProfit = plan == null ? null : plan.takeProfit();
         Optional<Trade> existingTrade = account.getTrades().stream()
                 .filter(t -> t.getSymbol().equals(params.instrument())
                         && t.getTradeStatus() == TradeStatus.OPEN
@@ -177,6 +179,7 @@ public class PaperSettlementService {
             trade.setQuantity(totalQuantity);
             trade.setEntryPrice(newEntryPrice);
             if (trade.getStopLoss() == null) trade.setStopLoss(stopPrice);
+            if (trade.getTakeProfit() == null) trade.setTakeProfit(takeProfit);
         } else {
             Trade trade = Trade.builder()
                     .symbol(params.instrument())
@@ -186,16 +189,16 @@ public class PaperSettlementService {
                     .currentPrice(fillPrice)
                     .openedAt(executedAt)
                     .stopLoss(stopPrice)
+                    .takeProfit(takeProfit)
                     .tradeStatus(TradeStatus.OPEN)
                     .build();
             account.addTrade(trade);
         }
     }
 
-    private BigDecimal resolveStopPrice(ExecutionIntent intent) {
+    private TradePlanRiskPort.Snapshot resolvePlan(ExecutionIntent intent) {
         if (tradePlans == null || intent.tradePlan() == null) return null;
-        TradePlanRiskPort.Snapshot plan = tradePlans.load(intent.tradePlan().tradePlanId(), intent.tradePlan().version());
-        return plan.stopPrice();
+        return tradePlans.loadReady(intent.tradePlan().tradePlanId(), intent.tradePlan().version());
     }
 
     private void recalculateEquity(Account account, BigDecimal fee) {

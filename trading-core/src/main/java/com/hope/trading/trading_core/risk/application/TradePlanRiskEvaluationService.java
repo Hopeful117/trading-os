@@ -43,12 +43,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class TradePlanRiskEvaluationService {
+    private static final Logger log = LoggerFactory.getLogger(TradePlanRiskEvaluationService.class);
     static final String ENGINE_VERSION = "adr-028-standard-1";
     private static final Pattern CURRENCY = Pattern.compile("^[A-Z][A-Z0-9]{2,15}$");
     private final AccountRepository accounts;
@@ -133,6 +136,9 @@ public class TradePlanRiskEvaluationService {
         } catch (RiskEvaluationException commandFailure) {
             throw commandFailure;
         } catch (RuntimeException dependencyFailure) {
+            log.warn("Risk evaluation dependency failed evaluationId={} type={} message={}",
+                    evaluationId, dependencyFailure.getClass().getSimpleName(), dependencyFailure.getMessage(),
+                    dependencyFailure);
             return unavailable(command, evaluationId, correlationId, "DEPENDENCY_UNAVAILABLE",
                     "A required risk-context dependency is unavailable");
         }

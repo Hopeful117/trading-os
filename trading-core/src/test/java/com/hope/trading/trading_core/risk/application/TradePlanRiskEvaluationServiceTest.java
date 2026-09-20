@@ -446,7 +446,7 @@ class TradePlanRiskEvaluationServiceTest {
         return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", now,
                 UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
                 UUID.randomUUID(), 2, UUID.randomUUID(), 4,
-                "ETHUSD", "LONG", entryIntent, new BigDecimal("90"), BigDecimal.ONE,
+                 "ETHUSD", "LONG", entryIntent, new BigDecimal("90"), new BigDecimal("120"), BigDecimal.ONE,
                 new BigDecimal("1000"), new BigDecimal("100"), sizingCurrency, "{\"accepted\":true}");
     }
 

@@ -7,6 +7,8 @@ import java.util.UUID;
 
 public interface TradePlanRiskPort {
     Snapshot load(UUID tradePlanId, long version);
+    Snapshot prepareForExecution(UUID tradePlanId, long acceptedVersion, UUID evaluationId);
+    Snapshot loadReady(UUID tradePlanId, long version);
     void acknowledge(UUID tradePlanId, long version, UUID evaluationId, String decision, Instant evaluatedAt);
 
     record Snapshot(UUID tradePlanId, long tradePlanVersion, String status, Instant createdAt,
@@ -14,7 +16,8 @@ public interface TradePlanRiskPort {
                     UUID ownerId, UUID tradingAccountId, String accountCurrency,
                     UUID riskBudgetSourceId, long riskBudgetSourceVersion,
                     UUID planningPreferencesId, long planningPreferencesVersion,
-                    String instrument, String direction, EntryIntent entryIntent, BigDecimal stopPrice,
-                    BigDecimal quantity, BigDecimal notional, BigDecimal expectedMonetaryRisk,
+                     String instrument, String direction, EntryIntent entryIntent, BigDecimal stopPrice,
+                     BigDecimal takeProfit,
+                     BigDecimal quantity, BigDecimal notional, BigDecimal expectedMonetaryRisk,
                     String sizingCurrency, String sourcePayload) { }
 }

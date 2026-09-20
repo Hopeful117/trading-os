@@ -39,4 +39,19 @@ public final class InternalTradePlanRiskController {
                 new TradePlanId(tradePlanId), new TradePlanVersion(version),
                 request.evaluationId(), request.decision(), request.evaluatedAt()));
     }
+
+    @PostMapping("/execution-readiness")
+    public ResponseEntity<TradePlanRiskSnapshot> prepareForExecution(
+            @PathVariable UUID tradePlanId, @PathVariable long version,
+            @Valid @RequestBody ExecutionReadinessRequest request) {
+        return ResponseEntity.ok(service.prepareForExecution(
+                new TradePlanId(tradePlanId), new TradePlanVersion(version), request.evaluationId()));
+    }
+
+    @GetMapping("/execution-snapshot")
+    public ResponseEntity<TradePlanRiskSnapshot> readySnapshot(
+            @PathVariable UUID tradePlanId, @PathVariable long version) {
+        return ResponseEntity.ok(service.loadReadySnapshot(
+                new TradePlanId(tradePlanId), new TradePlanVersion(version)));
+    }
 }

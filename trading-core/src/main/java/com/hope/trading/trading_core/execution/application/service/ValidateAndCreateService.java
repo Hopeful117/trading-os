@@ -137,8 +137,11 @@ public final class ValidateAndCreateService {
                 .orElseThrow(() -> new ExecutionValidationException("BROKER_ACCOUNT_FORBIDDEN",
                         "Broker Account does not belong to the authenticated user", 403));
 
+        TradePlanRiskPort.Snapshot readyPlan = tradePlans.prepareForExecution(
+                command.tradePlanId(), command.tradePlanVersion(), command.evaluationId());
+
         // 13. Derive ExecutionParameters from authoritative TradePlan
-        ExecutionParameters parameters = deriveParameters(plan);
+        ExecutionParameters parameters = deriveParameters(readyPlan);
 
         // 14. Create ExecutionIntent from authoritative data
         RiskApprovalReference approval = new RiskApprovalReference(
@@ -148,7 +151,7 @@ public final class ValidateAndCreateService {
 
         ExecutionIntent intent = intentCreation.create(
                 new com.hope.trading.trading_core.execution.application.command.CreateExecutionIntentCommand(
-                        new TradePlanReference(plan.tradePlanId(), plan.tradePlanVersion()),
+                        new TradePlanReference(readyPlan.tradePlanId(), readyPlan.tradePlanVersion()),
                         approval,
                         command.idempotencyKey(),
                         command.initiatorId(),

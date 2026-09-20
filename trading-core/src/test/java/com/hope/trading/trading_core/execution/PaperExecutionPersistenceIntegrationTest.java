@@ -32,6 +32,8 @@ import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
@@ -50,6 +52,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -77,6 +80,7 @@ class PaperExecutionPersistenceIntegrationTest {
     @MockitoBean private MarketDataClient marketData;
     @MockitoBean private BrokerExecutionClient liveBroker;
     @MockitoBean private ExecutionTimeRiskRevalidationService riskRevalidation;
+    @MockitoBean private TradePlanRiskPort tradePlans;
 
     private UUID ownerId;
     private UUID accountId;
@@ -89,6 +93,11 @@ class PaperExecutionPersistenceIntegrationTest {
         when(riskRevalidation.evaluateAndPersist(any(), any())).thenReturn(
                 new ExecutionTimeRiskRevalidationService.T1Outcome(
                         UUID.randomUUID(), com.hope.trading.risk.domain.RiskTypes.RiskDecision.APPROVED, null, true));
+        when(tradePlans.loadReady(any(), anyLong())).thenReturn(new TradePlanRiskPort.Snapshot(
+                PLAN_ID, 1, "READY_TO_EXECUTE", NOW, UUID.randomUUID(), 1, NOW, ownerId, accountId,
+                "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1, "BTC/USD", "LONG",
+                new EntryIntent(EntryIntent.OrderType.MARKET, null), decimal("49000"), decimal("51000"),
+                decimal("0.1"), decimal("5010"), decimal("10"), "USD", "{}"));
 
         User owner = users.save(User.builder()
                 .username("paper-integration-" + UUID.randomUUID())

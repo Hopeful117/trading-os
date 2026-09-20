@@ -132,7 +132,7 @@ public class ExecutionTimeRiskRevalidationService {
 
         try {
             var planRef = intent.tradePlan();
-            var plan = tradePlans.load(planRef.tradePlanId(), planRef.version());
+            var plan = tradePlans.loadReady(planRef.tradePlanId(), planRef.version());
             accountId = plan.tradingAccountId();
             return evaluateAvailable(intent, plan, t1EvaluationId, correlationId, now);
         } catch (ContextUnavailable unavailable) {
@@ -340,7 +340,7 @@ public class ExecutionTimeRiskRevalidationService {
                 || intent.tradePlan().version() != plan.tradePlanVersion()) {
             throw new RiskEvaluationException("TRADE_PLAN_VERSION_MISMATCH", "Trade Plan version mismatch", 409);
         }
-        if (!"ACCEPTED".equals(plan.status())) throw new RiskEvaluationException("TRADE_PLAN_NOT_ACCEPTED", "Trade Plan is not accepted", 422);
+        if (!"READY_TO_EXECUTE".equals(plan.status())) throw new RiskEvaluationException("TRADE_PLAN_NOT_READY", "Trade Plan is not ready to execute", 422);
         if (!intent.initiatorId().equals(plan.ownerId()) || !accountId.equals(plan.tradingAccountId()))
             throw new RiskEvaluationException("TRADE_PLAN_FORBIDDEN", "Trade Plan ownership does not match account", 403);
         if (plan.sourcePayload() == null || plan.contextId() == null || plan.contextVersion() < 1)

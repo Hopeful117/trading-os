@@ -71,9 +71,9 @@ class PaperSettlementExitTest {
         when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
         when(accounts.save(account)).thenReturn(account);
         UUID planId = UUID.randomUUID();
-        when(plans.load(planId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(planId, 1, "ACCEPTED",
+        when(plans.loadReady(planId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(planId, 1, "READY_TO_EXECUTE",
                 NOW, UUID.randomUUID(), 1, NOW, owner, account.getAccountId(), "USD", UUID.randomUUID(), 1,
-                UUID.randomUUID(), 1, "BTC/USD", "LONG", null, new BigDecimal("90"), BigDecimal.ONE,
+                 UUID.randomUUID(), 1, "BTC/USD", "LONG", null, new BigDecimal("90"), new BigDecimal("120"), BigDecimal.ONE,
                 new BigDecimal("100"), new BigDecimal("10"), "USD", "{}"));
 
         PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
@@ -90,8 +90,10 @@ class PaperSettlementExitTest {
 
         settlement.settle(intent, attempt, order);
 
-        assertThat(account.getTrades()).singleElement().satisfies(trade ->
-                assertThat(trade.getStopLoss()).isEqualByComparingTo("90"));
+        assertThat(account.getTrades()).singleElement().satisfies(trade -> {
+            assertThat(trade.getStopLoss()).isEqualByComparingTo("90");
+            assertThat(trade.getTakeProfit()).isEqualByComparingTo("120");
+        });
     }
 
     private Scenario scenario(TradeType type, String initialBase, String entryFee) {

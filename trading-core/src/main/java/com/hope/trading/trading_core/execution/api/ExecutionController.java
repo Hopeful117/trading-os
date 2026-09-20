@@ -15,7 +15,7 @@ import java.net.URI;
 import java.util.List;
 
 @RestController
-@RequestMapping("/executions")
+@RequestMapping("/api/v1/executions")
 public class ExecutionController {
     private final ValidateAndCreateService validation;
     private final ExecuteTradeService execution;
