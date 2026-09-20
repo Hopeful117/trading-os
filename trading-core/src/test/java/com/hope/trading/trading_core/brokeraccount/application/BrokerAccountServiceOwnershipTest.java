@@ -11,6 +11,9 @@ import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileService;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.risk.domain.RiskTypes;
+import com.hope.trading.risk.policy.EffectiveRiskRuleSet;
+import com.hope.trading.risk.policy.RuleConfiguration;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
@@ -33,6 +36,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
 
 /**
  * STORY-0020A-3C: protects the broker-account ownership boundary — accounts
@@ -121,6 +125,7 @@ class BrokerAccountServiceOwnershipTest {
         UUID profileId = UUID.randomUUID();
         when(riskPersistence.profile(profileId, "1.0.0"))
                 .thenReturn(Optional.of(mock(RiskPersistence.Profile.class)));
+        when(riskProfileValidator.validate(any(), eq(false))).thenReturn(paperRiskProfile());
 
         var response = service.create(paperOwner,
                 new CreateBrokerAccountRequest(BrokerProvider.KRAKEN, "paper", ExecutionMode.PAPER,
@@ -133,6 +138,9 @@ class BrokerAccountServiceOwnershipTest {
         assertThat(accountCaptor.getValue().getUser()).isSameAs(user);
         assertThat(accountCaptor.getValue().getEquity()).isEqualByComparingTo("10000");
         assertThat(accountCaptor.getValue().getBrokerAccountId()).isNotNull();
+        var planningValues = org.mockito.ArgumentCaptor.forClass(TradePlanningProfileService.Values.class);
+        verify(tradePlanningProfiles).create(eq(paperOwner), planningValues.capture());
+        assertThat(planningValues.getValue().riskBudgetAmount()).isEqualByComparingTo("3");
     }
 
     @Test
@@ -159,6 +167,19 @@ class BrokerAccountServiceOwnershipTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("does not exist");
         verify(repository, never()).save(any(BrokerAccount.class));
+    }
+
+    private EffectiveRiskRuleSet paperRiskProfile() {
+        return new EffectiveRiskRuleSet(List.of(
+                rule("MAX_POSITION_RISK", "0.01", RiskTypes.RuleCategory.POSITION),
+                rule("MAX_EXPOSURE", "0.03", RiskTypes.RuleCategory.PORTFOLIO),
+                rule("DAILY_DRAWDOWN", "0.05", RiskTypes.RuleCategory.ACCOUNT)),
+                java.util.Map.of("paper-policy", "1.0.0"));
+    }
+
+    private RuleConfiguration rule(String id, String ratio, RiskTypes.RuleCategory category) {
+        return new RuleConfiguration(id, "1.0.0", category, RiskTypes.RuleSeverity.BLOCKING,
+                10, java.util.Map.of("maximumRatio", new BigDecimal(ratio)));
     }
 
     @Test
