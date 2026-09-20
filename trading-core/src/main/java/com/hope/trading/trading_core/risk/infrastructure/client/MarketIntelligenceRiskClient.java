@@ -37,7 +37,7 @@ interface MarketIntelligenceRiskFeignClient {
 
 record Acknowledgment(UUID evaluationId, String decision, Instant evaluatedAt) { }
 record ExecutionReadinessRequest(UUID evaluationId) { }
-record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status, Instant createdAt,
+record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status, String origin, Instant createdAt,
                            Context context, Execution execution, Object rationale) {
     record Context(UUID id, long version, Instant capturedAt, UUID ownerId, UUID tradingAccountId,
                    String accountCurrency, UUID riskBudgetSourceId, long riskBudgetSourceVersion,

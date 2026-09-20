@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public record TradePlanRiskSnapshot(
-        UUID tradePlanId, long tradePlanVersion, String status, Instant createdAt,
+        UUID tradePlanId, long tradePlanVersion, String status, String origin, Instant createdAt,
         Context context, Execution execution, Rationale rationale
 ) {
     public record Context(

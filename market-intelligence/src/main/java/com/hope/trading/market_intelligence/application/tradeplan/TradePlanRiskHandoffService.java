@@ -158,7 +158,7 @@ public class TradePlanRiskHandoffService {
     private TradePlanRiskSnapshot snapshot(TradePlan plan, TradePlanningContext context) {
         ExecutionParameters execution = plan.execution();
         return new TradePlanRiskSnapshot(
-                plan.id().value(), plan.version().value(), plan.status().name(), plan.createdAt(),
+                plan.id().value(), plan.version().value(), plan.status().name(), plan.origin().name(), plan.createdAt(),
                 new TradePlanRiskSnapshot.Context(
                         context.id(), context.version(), context.capturedAt(), context.ownerId(),
                         context.tradingAccountId(), context.accountCurrency(),
