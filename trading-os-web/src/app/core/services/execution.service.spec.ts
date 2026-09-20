@@ -48,6 +48,14 @@ describe('ExecutionService', () => {
     req.flush({});
   });
 
+  it('should list owned executions', () => {
+    service.list().subscribe();
+
+    const req = httpMock.expectOne(`${environment.gatewayUrl}v1/executions`);
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
+
   it('should retry execution', () => {
     service.retry('exec-1').subscribe();
 

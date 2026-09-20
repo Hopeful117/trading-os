@@ -14,6 +14,7 @@ import { OpportunityDetail } from './features/opportunities/opportunity-details/
 import { PreparePlanPage } from './features/trade-planning/prepare-plan-page/prepare-plan-page';
 import { PlanPage } from './features/trade-planning/plan-page/plan-page';
 import { Positions } from './features/positions/pages/positions/positions';
+import { ExecutionHistory } from './features/executions/pages/execution-history/execution-history';
 
 export const routes: Routes = [
   {
@@ -80,6 +81,11 @@ export const routes: Routes = [
   {
     path: 'positions',
     component: Positions,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'analytics',
+    component: ExecutionHistory,
     canActivate: [authGuard],
   },
 ];

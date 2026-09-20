@@ -56,6 +56,13 @@ export interface ExecutionDto {
   failureReason: string | null;
 }
 
+export interface ExecutionSummaryDto {
+  id: string;
+  tradePlanId: string | null;
+  status: ExecutionStatus;
+  updatedAt: string;
+}
+
 export function isTerminal(status: ExecutionStatus): boolean {
   return TERMINAL_STATUSES.has(status);
 }

@@ -1,0 +1,108 @@
+<div class="history-container">
+  <header class="history-header">
+    <div>
+      <p class="eyebrow">Trading record</p>
+      <h1>Trade history</h1>
+      <p>Review your executions and return to the related decision when available.</p>
+    </div>
+  </header>
+
+  @if (viewModel$ | async; as vm) {
+    @if (vm.loading) {
+      <section class="state-panel" data-testid="history-loading" role="status">
+        Loading executions…
+      </section>
+    } @else if (vm.error) {
+      <section class="state-panel error" data-testid="history-error" role="alert">
+        Executions are temporarily unavailable. Please try again later.
+      </section>
+    } @else if (vm.executions.length === 0) {
+      <section class="state-panel empty" data-testid="history-empty">
+        No executions have been recorded yet.
+      </section>
+    } @else {
+      <section class="history-list" aria-label="Execution history">
+        @for (execution of vm.executions; track execution.id) {
+          <article class="execution-card" data-testid="execution-card">
+            <div class="execution-heading">
+              <div>
+                <h2>Execution {{ execution.id.slice(0, 8) }}</h2>
+                <p>Updated {{ execution.updatedAt | date: 'medium' }}</p>
+              </div>
+              <span class="status-badge" [class]="statusClass(execution.status)">
+                {{ statusLabel(execution.status) }}
+              </span>
+            </div>
+
+            @if (isUncertain(execution.status)) {
+              <p class="notice uncertain" data-testid="uncertain-status">
+                The outcome is not confirmed. No action is available from history.
+              </p>
+            }
+
+            @if (detailFor(execution.id); as detail) {
+              @if (detail.loading) {
+                <p class="detail-state" data-testid="details-loading">Loading execution context…</p>
+              } @else if (detail.error) {
+                <p class="detail-state error" data-testid="details-error">
+                  Execution details are temporarily unavailable. The owned record remains visible.
+                </p>
+              } @else if (detail.execution; as fullExecution) {
+                <div class="execution-details">
+                  @if (detail.plan; as plan) {
+                    <div class="context-line">
+                      <span>{{ plan.instrument }} · {{ plan.direction }}</span>
+                      <span>Trade Plan v{{ plan.version }}</span>
+                    </div>
+                    <div class="actions">
+                      <a
+                        [routerLink]="['/trade-planning/plans', plan.id, 'versions', plan.version]"
+                        data-testid="trade-plan-link"
+                      >
+                        View Trade Plan
+                      </a>
+                      <a
+                        [routerLink]="['/positions']"
+                        [queryParams]="{ accountId: plan.tradingAccountId }"
+                        data-testid="positions-link"
+                      >
+                        View account positions
+                      </a>
+                    </div>
+                  } @else {
+                    <p class="detail-state">Trade Plan continuity is unavailable for this execution.</p>
+                  }
+
+                  <div class="execution-metrics">
+                    <span>Broker status: {{ fullExecution.brokerOrderStatus ?? 'Unavailable' }}</span>
+                    <span>
+                      Filled:
+                      {{ fullExecution.filledQuantity !== null ? (fullExecution.filledQuantity | number: '1.0-8') : '—' }}
+                    </span>
+                    <span>
+                      Average price:
+                      {{ fullExecution.averageFillPrice !== null ? (fullExecution.averageFillPrice | number: '1.2-8') : '—' }}
+                    </span>
+                  </div>
+
+                  @if (fullExecution.failureReason) {
+                    <p class="failure-reason">{{ fullExecution.failureReason }}</p>
+                  }
+                </div>
+              }
+            } @else {
+              <button
+                type="button"
+                class="context-button"
+                (click)="loadDetails(execution)"
+                data-testid="load-details-button"
+              >
+                View execution context
+              </button>
+            }
+          </article>
+        }
+      </section>
+    }
+  }
+</div>
