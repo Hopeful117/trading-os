@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +38,7 @@ public class KrakenMarketData implements MarketDataProvider {
     private final KrakenRestOhlcMapper restOhlcMapper;
     private final KrakenRestTickerMapper restTickerMapper;
     private final OhlcHistoryNormalizer historyNormalizer;
+    private final Clock clock;
 
     @Override
     public List<Market> getMarkets() {
@@ -130,10 +132,11 @@ public class KrakenMarketData implements MarketDataProvider {
                     return restOhlcMapper.toEvent(
                             entry,
                             market,
-                            interval,
-                            closed,
-                            occurredAt
-                    );
+                interval,
+                closed,
+                occurredAt,
+                clock.instant()
+        );
                 })
                 .toList();
     }

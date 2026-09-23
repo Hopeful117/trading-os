@@ -25,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,7 +61,8 @@ class KrakenMarketDataTest {
                 new KrakenProviderSymbolResolver(),
                 restOhlcMapper,
                 restTickerMapper,
-                historyNormalizer
+                historyNormalizer,
+                Clock.fixed(Instant.parse("2026-07-28T10:04:00Z"), java.time.ZoneOffset.UTC)
         );
     }
 
@@ -104,13 +106,16 @@ class KrakenMarketDataTest {
         when(client.findOhlcHistory("XBTEUR", 1)).thenReturn(response);
         when(restOhlcMapper.extract(response)).thenReturn(result);
         when(restOhlcMapper.toEvent(
-                entries.get(0), market, interval, true, responseTimestamp
+                entries.get(0), market, interval, true, responseTimestamp,
+                Instant.parse("2026-07-28T10:04:00Z")
         )).thenReturn(first);
         when(restOhlcMapper.toEvent(
-                entries.get(1), market, interval, true, responseTimestamp
+                entries.get(1), market, interval, true, responseTimestamp,
+                Instant.parse("2026-07-28T10:04:00Z")
         )).thenReturn(second);
         when(restOhlcMapper.toEvent(
-                entries.get(2), market, interval, false, responseTimestamp
+                entries.get(2), market, interval, false, responseTimestamp,
+                Instant.parse("2026-07-28T10:04:00Z")
         )).thenReturn(current);
         when(historyNormalizer.fillMissingIntervals(
                 List.of(first, second, current), interval
