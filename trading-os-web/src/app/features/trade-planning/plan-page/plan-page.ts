@@ -498,13 +498,15 @@ export class PlanPage implements OnDestroy {
             execution.status !== 'CANCELLED',
         );
         return existing
-          ? this.executionService.getExecution(existing.id).pipe(
-              map((execution) =>
-                isTerminal(execution.status)
-                  ? { status: 'executionResult' as const, plan, execution }
-                  : { status: 'authorizedExecution' as const, plan, execution },
-              ),
-            )
+          ? this.executionService
+              .getExecution(existing.id)
+              .pipe(
+                map((execution) =>
+                  isTerminal(execution.status)
+                    ? { status: 'executionResult' as const, plan, execution }
+                    : { status: 'authorizedExecution' as const, plan, execution },
+                ),
+              )
           : of<PlanView>(this.toViewForPlan(plan));
       }),
       catchError(() => of<PlanView>(this.toViewForPlan(plan))),

@@ -212,7 +212,8 @@ describe('PlanPage', () => {
         {
           provide: ExecutionService,
           useValue: {
-            list: () => of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 1, status: 'CREATED' }]),
+            list: () =>
+              of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 1, status: 'CREATED' }]),
             getExecution: () => of({ id: 'exec-1', status: 'CREATED' }),
             execute,
           },
@@ -222,7 +223,9 @@ describe('PlanPage', () => {
 
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
-    fixture.nativeElement.querySelector('[data-testid="resume-authorized-execution-button"]')?.click();
+    fixture.nativeElement
+      .querySelector('[data-testid="resume-authorized-execution-button"]')
+      ?.click();
     fixture.detectChanges();
 
     expect(evaluateRisk).not.toHaveBeenCalled();

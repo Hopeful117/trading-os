@@ -80,7 +80,9 @@ describe('ManualTradePage', () => {
   });
 
   it('shows the manual form with the ready PAPER account and market', () => {
-    expect(fixture.nativeElement.querySelector('[data-testid="manual-account-select"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="manual-account-select"]'),
+    ).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('BTC/USD');
     expect(fixture.nativeElement.textContent).toContain('Paper account');
   });
@@ -93,7 +95,11 @@ describe('ManualTradePage', () => {
         provideRouter([{ path: '**', redirectTo: '' }]),
         {
           provide: ActivatedRoute,
-          useValue: { queryParamMap: of(convertToParamMap({ accountId: 'paper-account', marketId: 'market-1' })) },
+          useValue: {
+            queryParamMap: of(
+              convertToParamMap({ accountId: 'paper-account', marketId: 'market-1' }),
+            ),
+          },
         },
         { provide: AccountService, useValue: { getAccounts: () => of(accounts) } },
         { provide: BrokerAccountService, useValue: { list: () => of(brokerAccounts) } },
@@ -106,7 +112,9 @@ describe('ManualTradePage', () => {
     contextFixture.detectChanges();
     await contextFixture.whenStable();
 
-    expect(contextFixture.componentInstance.selectionForm.controls.accountId.value).toBe('paper-account');
+    expect(contextFixture.componentInstance.selectionForm.controls.accountId.value).toBe(
+      'paper-account',
+    );
     expect(contextFixture.componentInstance.selectionForm.controls.marketId.value).toBe('market-1');
   });
 });
