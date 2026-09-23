@@ -32,6 +32,8 @@ mat-card-header {
   h2 {
     margin: 0;
 
+    overflow-wrap: anywhere;
+
     color: #38bdf8;
 
     font-size: 1.3rem;
@@ -41,6 +43,8 @@ mat-card-header {
 mat-card-content {
   p {
     color: #cbd5e1;
+
+    overflow-wrap: anywhere;
   }
 
   h3 {
@@ -72,6 +76,9 @@ mat-card-content {
   }
 
   .amount {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
     color: #f8fafc;
   }
 }

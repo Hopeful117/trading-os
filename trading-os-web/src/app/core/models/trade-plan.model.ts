@@ -3,11 +3,31 @@ export interface CreateTradePlanResponse {
   tradePlanVersion: number;
 }
 
+export interface ManualTradePlanRequest {
+  accountId: string;
+  marketId: string;
+  direction: 'LONG' | 'SHORT';
+  entryType: 'MARKET' | 'LIMIT';
+  entryPrice: number | null;
+  referencePrice: number;
+  stopLoss: number;
+  stopRationale: string;
+  takeProfits: { price: number; allocationPercent: number }[];
+  quantity: number;
+  monetaryRisk: number;
+  thesis: string;
+  confirmationConditions: string[];
+  invalidationConditions: string[];
+  managementRules?: string[];
+}
+
 export interface TradePlanResponse {
   id: string;
   version: number;
   previousVersion: number | null;
   status: string;
+  origin?: 'OPPORTUNITY' | 'MANUAL';
+  authorId?: string | null;
   planningContextId: string;
   planningContextVersion: number;
   contextCapturedAt: string;

@@ -442,7 +442,7 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency) {
-        EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.MARKET, new BigDecimal("100"));
+        EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.MARKET, null);
         return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", now,
                 UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
                 UUID.randomUUID(), 2, UUID.randomUUID(), 4,

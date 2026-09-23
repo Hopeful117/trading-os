@@ -21,6 +21,7 @@ class MarketValuationClientTest {
     void preservesHardenedFreshnessAndConversionProvenance() {
         MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
         UUID marketId = UUID.randomUUID();
+        UUID conversionMarketId = UUID.randomUUID();
         Instant effectiveAt = Instant.parse("2026-08-01T11:59:50Z");
         Instant capturedAt = Instant.parse("2026-08-01T11:59:51Z");
         var source = new ValuationTransport.Source(UUID.randomUUID(), marketId, "KRAKEN", "BTCEUR",
@@ -28,7 +29,9 @@ class MarketValuationClientTest {
         var leg = new ValuationTransport.ConversionLeg("EUR", "USD", new BigDecimal("1.2"), source);
         var fact = new ValuationTransport.Fact("INSTRUMENT", "position", marketId, null,
                 "CONSERVATIVE_SELL", new BigDecimal("120"), "AVAILABLE", source, List.of(leg));
-        when(feign.markets()).thenReturn(List.of(new CatalogueMarket(marketId, "KRAKEN", "BTCEUR", "BTC", "EUR")));
+        when(feign.markets()).thenReturn(List.of(
+                new CatalogueMarket(marketId, "KRAKEN", "BTCEUR", "BTC", "EUR"),
+                new CatalogueMarket(conversionMarketId, "KRAKEN", "EURUSD", "EUR", "USD")));
         when(feign.value(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(UUID.randomUUID(),
                 9, "USD", Instant.parse("2026-08-01T12:00:00Z"), capturedAt,
                 "conservative-v2", "PT30S", "COMPLETE", List.of(fact)));
@@ -44,6 +47,6 @@ class MarketValuationClientTest {
         assertThat(result.facts().getFirst().sourceProvenance())
                 .contains("observationAge", "PT10S", "capturedAt");
         assertThat(result.sourcePayload()).contains("maxObservationAge", "PT30S");
-        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId)));
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId, conversionMarketId)));
     }
 }

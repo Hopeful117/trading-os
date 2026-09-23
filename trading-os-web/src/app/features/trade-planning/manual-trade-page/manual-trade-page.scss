@@ -1,0 +1,160 @@
+:host {
+  display: block;
+}
+
+.manual-trade-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2rem;
+  color: #dce7f4;
+}
+
+.page-header,
+.section-heading,
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-header {
+  margin-bottom: 1.5rem;
+}
+
+.page-header h1,
+.section-heading h2 {
+  margin: 0.25rem 0;
+}
+
+.page-header p,
+.state-card p,
+.field small {
+  color: #8ea4ba;
+}
+
+.eyebrow {
+  color: #5ca8ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.manual-form,
+.selection-card,
+.state-card {
+  border: 1px solid #24364b;
+  border-radius: 0.75rem;
+  background: #101b29;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 18%);
+}
+
+.selection-card {
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.form-section {
+  padding: 1.5rem;
+  border-bottom: 1px solid #24364b;
+}
+
+.form-section:last-of-type {
+  border-bottom: 0;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  color: #b9c9da;
+  font-size: 0.88rem;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #314a65;
+  border-radius: 0.45rem;
+  padding: 0.7rem;
+  background: #0b1420;
+  color: #eef6ff;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.form-actions {
+  padding: 1.25rem 1.5rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.45rem;
+  padding: 0.7rem 1rem;
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary {
+  background: #1f7ae0;
+}
+
+.secondary {
+  background: #26384d;
+}
+
+.state-card {
+  padding: 2rem;
+}
+
+.state-card.error,
+.form-error {
+  color: #ffb6b6;
+}
+
+.form-error {
+  margin: 1.25rem 1.5rem 0;
+}
+
+.back-link {
+  color: #8ec5ff;
+}
+
+@media (max-width: 760px) {
+  .manual-trade-page {
+    padding: 1rem;
+  }
+
+  .page-header,
+  .form-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .field-grid,
+  .three-columns {
+    grid-template-columns: 1fr;
+  }
+}

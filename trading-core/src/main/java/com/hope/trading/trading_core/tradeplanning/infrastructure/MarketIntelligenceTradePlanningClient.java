@@ -23,6 +23,11 @@ public interface MarketIntelligenceTradePlanningClient {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestBody Request request);
 
+    @PostMapping("/internal/v1/intelligence/trade-plans/manual")
+    PlanTransport createManual(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody ManualRequest request);
+
     @PostMapping("/internal/v1/trade-plans/{planId}/versions/{version}/decisions")
     PlanTransport decide(
             @PathVariable UUID planId,
@@ -39,6 +44,16 @@ public interface MarketIntelligenceTradePlanningClient {
     }
 
     record Request(UUID actorId, UUID accountId, Context context) { }
+    record ManualRequest(UUID actorId, UUID accountId, Context context,
+                         String instrument, String direction, String entryType,
+                         BigDecimal entryPrice, BigDecimal referencePrice, BigDecimal stopLoss,
+                         String stopRationale, java.util.List<TakeProfit> takeProfits,
+                         BigDecimal quantity, BigDecimal notional, BigDecimal monetaryRisk,
+                         Instant expiresAt, String expirationPolicy, String thesis,
+                         java.util.Set<String> confirmationConditions,
+                         java.util.Set<String> invalidationConditions,
+                         java.util.Set<String> managementRules) { }
+    record TakeProfit(BigDecimal price, BigDecimal allocationPercent) { }
     record Context(UUID id, long version, Instant capturedAt, UUID ownerId,
                    UUID tradingAccountId, String accountCurrency,
                    RiskBudget riskBudget, Preferences preferences) { }
@@ -50,6 +65,7 @@ public interface MarketIntelligenceTradePlanningClient {
     record Response(UUID tradePlanId, long tradePlanVersion) { }
     record DecisionRequest(UUID actorId, String decision) { }
     record PlanTransport(UUID id, long version, Long previousVersion, String status,
+                         String origin, UUID authorId,
                          UUID planningContextId, long planningContextVersion,
                          Instant contextCapturedAt, String instrument, String direction,
                          String entryType, BigDecimal entryPrice, BigDecimal stopLoss,

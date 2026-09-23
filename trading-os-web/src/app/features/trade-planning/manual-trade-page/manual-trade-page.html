@@ -1,0 +1,82 @@
+<section class="manual-trade-page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Human decision</span>
+      <h1>Prepare a manual trade</h1>
+      <p>
+        Your trade becomes a normal Trade Plan and still requires acceptance, risk approval and
+        execution confirmation.
+      </p>
+    </div>
+    <a routerLink="/decision-workspace" class="back-link">Back to workspace</a>
+  </header>
+
+  @if (view$ | async; as view) {
+    @switch (view.status) {
+      @case ('loading') {
+        <section class="state-card"><p>Loading PAPER accounts and markets…</p></section>
+      }
+      @case ('error') {
+        <section class="state-card error" data-testid="manual-loading-error">
+          <h2>Manual trading is unavailable</h2>
+          <p>{{ view.message }}</p>
+        </section>
+      }
+      @case ('ready') {
+        @if (view.accounts.length === 0) {
+          <section class="state-card error" data-testid="manual-account-unavailable">
+            <h2>No ready PAPER account</h2>
+            <p>
+              Create a PAPER account and assign a trade-planning profile before preparing a manual
+              trade.
+            </p>
+            <a routerLink="/accounts" class="button secondary">Open accounts</a>
+          </section>
+        } @else {
+          <section class="selection-card" [formGroup]="selectionForm">
+            <div class="section-heading">
+              <span class="eyebrow">Fallback context</span>
+              <h2>Market and account</h2>
+            </div>
+            <div class="field-grid">
+              <label class="field"
+                ><span>Paper account</span>
+                <select formControlName="accountId" data-testid="manual-account-select">
+                  <option value="">Select account</option>
+                  @for (account of view.accounts; track account.accountId) {
+                    <option [value]="account.accountId">
+                      {{ account.name }} · {{ account.baseCurrency }}
+                    </option>
+                  }
+                </select>
+              </label>
+              <label class="field"
+                ><span>Market</span>
+                <select formControlName="marketId" data-testid="manual-market-select">
+                  <option value="">Select market</option>
+                  @for (market of view.markets; track market.marketId) {
+                    <option [value]="market.marketId">{{ market.symbol }}</option>
+                  }
+                </select>
+              </label>
+            </div>
+          </section>
+
+          @if (selectedAccount(view); as account) {
+            @if (selectedMarket(view); as market) {
+              <app-manual-trade-ticket [account]="account" [market]="market" />
+            } @else {
+              <section class="state-card" data-testid="manual-market-selection-state">
+                <p>Select a tradable market to open the manual trade ticket.</p>
+              </section>
+            }
+          } @else {
+            <section class="state-card" data-testid="manual-account-selection-state">
+              <p>Select a PAPER account and a tradable market to open the manual trade ticket.</p>
+            </section>
+          }
+        }
+      }
+    }
+  }
+</section>

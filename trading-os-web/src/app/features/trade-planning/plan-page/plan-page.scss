@@ -133,6 +133,21 @@
     background: rgba(34, 197, 94, 0.15);
     color: #86efac;
   }
+
+  &.polling {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+  }
+
+  &.unknown {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fcd34d;
+  }
+
+  &.blocked {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+  }
 }
 
 .facts-grid {
@@ -269,20 +284,49 @@
 .card-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding-top: 1rem;
   border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
+.btn-primary,
 .btn-accept,
-.btn-reject {
+.btn-reject,
+.btn-retry,
+.btn-reconcile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease;
+  text-decoration: none;
+  transition:
+    background 0.2s ease,
+    opacity 0.2s ease;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+  }
+}
+
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+
+  &:hover {
+    background: #1d4ed8;
+  }
 }
 
 .btn-accept {
@@ -300,5 +344,81 @@
 
   &:hover {
     background: rgba(239, 68, 68, 0.25);
+  }
+}
+
+.btn-retry {
+  background: #d97706;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: #b45309;
+  }
+}
+
+.btn-reconcile {
+  background: #2563eb;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: #1d4ed8;
+  }
+}
+
+.failure-reason,
+.unknown-explanation {
+  margin-bottom: 1.5rem;
+  padding: 0.9rem 1rem;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.failure-reason {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.unknown-explanation {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+
+.failure-reason p,
+.unknown-explanation p {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .plan-page {
+    padding: 1rem;
+  }
+
+  .plan-card,
+  .state-card {
+    padding: 1.25rem;
+  }
+
+  .card-header {
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+
+    h1 {
+      font-size: 1.5rem;
+    }
+  }
+
+  .badges {
+    flex-wrap: wrap;
+  }
+
+  .card-actions {
+    justify-content: stretch;
+
+    > * {
+      flex: 1 1 100%;
+    }
   }
 }

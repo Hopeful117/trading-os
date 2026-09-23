@@ -101,21 +101,35 @@ public final class MarketValuationClient implements MarketValuationPort {
                 .map(InstrumentRequest::marketId)
                 .toList());
         String normalizedReportingCurrency = reportingCurrency.toUpperCase(Locale.ROOT);
+        for (InstrumentRequest instrument : instruments) {
+            catalogue.stream()
+                    .filter(market -> market.marketId().equals(instrument.marketId()))
+                    .map(CatalogueMarket::quoteAsset)
+                    .filter(quoteAsset -> quoteAsset != null
+                            && !quoteAsset.equalsIgnoreCase(normalizedReportingCurrency))
+                    .forEach(quoteAsset -> addConversionMarket(
+                            catalogue, marketIds, quoteAsset, normalizedReportingCurrency));
+        }
         for (Asset asset : assets) {
             String normalizedAsset = asset.currency().toUpperCase(Locale.ROOT);
             if (normalizedAsset.equals(normalizedReportingCurrency)) {
                 continue;
             }
-            catalogue.stream()
-                    .filter(market -> (normalizedAsset.equalsIgnoreCase(market.baseAsset())
-                            && normalizedReportingCurrency.equalsIgnoreCase(market.quoteAsset()))
-                            || (normalizedReportingCurrency.equalsIgnoreCase(market.baseAsset())
-                            && normalizedAsset.equalsIgnoreCase(market.quoteAsset())))
-                    .map(CatalogueMarket::marketId)
-                    .findFirst()
-                    .ifPresent(marketIds::add);
+            addConversionMarket(catalogue, marketIds, normalizedAsset, normalizedReportingCurrency);
         }
         return new ArrayList<>(marketIds);
+    }
+
+    private void addConversionMarket(List<CatalogueMarket> catalogue, LinkedHashSet<UUID> marketIds,
+                                     String asset, String reportingCurrency) {
+        catalogue.stream()
+                .filter(market -> (asset.equalsIgnoreCase(market.baseAsset())
+                        && reportingCurrency.equalsIgnoreCase(market.quoteAsset()))
+                        || (reportingCurrency.equalsIgnoreCase(market.baseAsset())
+                        && asset.equalsIgnoreCase(market.quoteAsset())))
+                .map(CatalogueMarket::marketId)
+                .findFirst()
+                .ifPresent(marketIds::add);
     }
 
     private String preserve(Object source, List<?> legs) {

@@ -16,6 +16,11 @@ h1 {
   color: #f8fafc;
 }
 
+h2 {
+  margin: 0 0 1rem;
+  color: #f8fafc;
+}
+
 /* Bouton synchronisation */
 
 button {
@@ -81,9 +86,13 @@ button {
   color: #cbd5e1;
 }
 
-.broker-connect input {
+.broker-connect input,
+.broker-connect select {
+  width: 100%;
+  min-height: 40px;
   min-width: 0;
   padding: 0.7rem;
+  font: inherit;
   color: #f8fafc;
   border: 1px solid #334155;
   border-radius: 0.45rem;
@@ -92,10 +101,20 @@ button {
 
 .broker-list article {
   display: grid;
-  grid-template-columns: minmax(10rem, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
   gap: 1rem;
   padding: 0.75rem 0;
   border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.broker-list article strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.broker-list article span {
+  white-space: nowrap;
 }
 
 .status,
@@ -113,4 +132,28 @@ button {
 
 .connection-message.error {
   color: #fca5a5;
+}
+
+@media (max-width: 767px) {
+  .broker-connect,
+  .broker-list {
+    padding: 1rem;
+  }
+
+  .broker-connect form {
+    grid-template-columns: 1fr;
+  }
+
+  .broker-list article {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .broker-list article strong {
+    grid-column: 1 / -1;
+  }
+
+  .broker-list article .status {
+    grid-column: 1 / -1;
+  }
 }

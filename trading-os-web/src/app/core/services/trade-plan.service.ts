@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   CreateTradePlanResponse,
+  ManualTradePlanRequest,
   RiskDecisionResponse,
   TradePlanResponse,
 } from '../models/trade-plan.model';
@@ -22,6 +23,17 @@ export class TradePlanService {
     return this.http.post<CreateTradePlanResponse>(
       `${environment.gatewayUrl}v1/trade-plans/opportunities/${opportunityId}/trade-plans`,
       { accountId },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
+  }
+
+  createManual(
+    request: ManualTradePlanRequest,
+    idempotencyKey: string,
+  ): Observable<CreateTradePlanResponse> {
+    return this.http.post<CreateTradePlanResponse>(
+      `${environment.gatewayUrl}v1/trade-plans/manual`,
+      request,
       { headers: { 'Idempotency-Key': idempotencyKey } },
     );
   }

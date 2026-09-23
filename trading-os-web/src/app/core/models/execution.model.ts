@@ -59,6 +59,7 @@ export interface ExecutionDto {
 export interface ExecutionSummaryDto {
   id: string;
   tradePlanId: string | null;
+  tradePlanVersion: number | null;
   status: ExecutionStatus;
   updatedAt: string;
 }

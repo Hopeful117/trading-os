@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
-@FeignClient(name = "market-data")
+@FeignClient(name = "market-data", configuration = MarketDataFeignConfiguration.class)
 public interface MarketDataClient {
     @GetMapping("/api/v1/markets")
     List<MarketResponse> findAllMarkets();

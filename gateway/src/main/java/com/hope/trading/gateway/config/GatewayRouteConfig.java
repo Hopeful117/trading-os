@@ -71,6 +71,10 @@ public class GatewayRouteConfig {
                         .path("/api/v1/risk-profiles/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))
                 )
+                .route("trade-planning-profiles", r -> r
+                        .path("/api/v1/trade-planning-profiles/**")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                )
                 .route("trade-plan-risk-evaluations", r -> r
                         // Covers public TradePlan orchestration and creation
                         // (/api/v1/trade-plans/analyses/**) owned by Trading Core.

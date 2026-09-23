@@ -338,6 +338,30 @@ dd {
   color: white;
 }
 
+.trading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #315a7d;
+  border-radius: 0.8rem;
+  background: #14263a;
+  padding: 1.25rem;
+}
+
+.trading-actions h3 {
+  margin: 0.25rem 0;
+}
+
+.trading-actions p {
+  margin: 0;
+  color: #91a4ba;
+}
+
+.trading-action-close {
+  justify-self: end;
+}
+
 @media (max-width: 760px) {
   .decision-workspace {
     padding: 1rem;
@@ -354,6 +378,7 @@ dd {
   .page-header,
   .section-heading,
   .market-header,
+  .trading-actions,
   dl div,
   .excluded-markets li {
     align-items: flex-start;
