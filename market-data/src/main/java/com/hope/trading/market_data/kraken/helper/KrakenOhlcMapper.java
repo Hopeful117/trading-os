@@ -6,10 +6,17 @@ import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 
 @Component
 public class KrakenOhlcMapper {
+    private final Clock clock;
+
+    public KrakenOhlcMapper(Clock clock) {
+        this.clock = clock;
+    }
+
     public OhlcEvent toEvent(
             KrakenOhlcEntry entry,
             Market market,
@@ -34,7 +41,16 @@ public class KrakenOhlcMapper {
                 entry.vwap(),
                 entry.trades(),
                 closed,
-                messageTimestamp
+                messageTimestamp,
+                false,
+                OhlcEvent.defaultSourceId(
+                        market.getMarketId(),
+                        market.getProvider(),
+                        market.getSymbol(),
+                        interval,
+                        entry.intervalBegin()
+                ),
+                clock.instant()
         );
     }
 }

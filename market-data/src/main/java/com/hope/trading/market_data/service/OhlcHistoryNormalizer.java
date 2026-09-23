@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 @Component
 public class OhlcHistoryNormalizer {
@@ -24,25 +25,47 @@ public class OhlcHistoryNormalizer {
                 .sorted(
                         Comparator.comparing(
                                 OhlcEvent::openTime
-                        )
+                        ).thenComparing(OhlcEvent::closeTime)
+                                .thenComparing(OhlcEvent::sourceId)
                 )
                 .toList();
+
+        List<OhlcEvent> deduplicatedEvents = new ArrayList<>();
+        for (OhlcEvent event : sortedEvents) {
+            if (!event.interval().equals(interval)) {
+                throw new IllegalArgumentException(
+                        "OHLC event interval does not match requested interval");
+            }
+
+            OhlcEvent duplicate = deduplicatedEvents.stream()
+                    .filter(existing -> existing.openTime().equals(event.openTime()))
+                    .findFirst()
+                    .orElse(null);
+            if (duplicate == null) {
+                deduplicatedEvents.add(event);
+                continue;
+            }
+            if (!sameCandleContent(duplicate, event)) {
+                throw new IllegalArgumentException(
+                        "Conflicting OHLC duplicate at " + event.openTime());
+            }
+        }
 
         List<OhlcEvent> normalizedEvents =
                 new ArrayList<>();
 
         OhlcEvent previous =
-                sortedEvents.getFirst();
+                deduplicatedEvents.getFirst();
 
         normalizedEvents.add(previous);
 
         for (
                 int index = 1;
-                index < sortedEvents.size();
-                index++
-        ) {
+                        index < deduplicatedEvents.size();
+                        index++
+                ) {
             OhlcEvent current =
-                    sortedEvents.get(index);
+                    deduplicatedEvents.get(index);
 
             Instant expectedOpenTime =
                     previous.openTime()
@@ -74,10 +97,29 @@ public class OhlcHistoryNormalizer {
             }
 
             normalizedEvents.add(current);
-            previous = current;
+                previous = current;
         }
 
         return List.copyOf(normalizedEvents);
+    }
+
+    private boolean sameCandleContent(OhlcEvent first, OhlcEvent second) {
+        return Objects.equals(first.marketId(), second.marketId())
+                && first.provider() == second.provider()
+                && Objects.equals(first.symbol(), second.symbol())
+                && first.interval() == second.interval()
+                && Objects.equals(first.openTime(), second.openTime())
+                && Objects.equals(first.closeTime(), second.closeTime())
+                && Objects.equals(first.open(), second.open())
+                && Objects.equals(first.high(), second.high())
+                && Objects.equals(first.low(), second.low())
+                && Objects.equals(first.close(), second.close())
+                && Objects.equals(first.volume(), second.volume())
+                && Objects.equals(first.vwap(), second.vwap())
+                && Objects.equals(first.trades(), second.trades())
+                && first.closed() == second.closed()
+                && Objects.equals(first.occurredAt(), second.occurredAt())
+                && first.synthetic() == second.synthetic();
     }
 
     private OhlcEvent createSyntheticEvent(
@@ -105,7 +147,16 @@ public class OhlcHistoryNormalizer {
                 previousClose,
                 0,
                 true,
-                previous.occurredAt()
+                previous.occurredAt(),
+                true,
+                OhlcEvent.defaultSourceId(
+                        previous.marketId(),
+                        previous.provider(),
+                        previous.symbol(),
+                        interval,
+                        openTime
+                ),
+                previous.fetchedAt()
         );
     }
 }
