@@ -27,6 +27,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -181,5 +183,69 @@ class ExecutionTimeRiskRevalidationServiceTest {
         assertThat(outcome.approved()).isFalse();
         assertThat(outcome.decision()).isNull();
         assertThat(outcome.reasonCode()).isEqualTo("CONTEXT_UNAVAILABLE");
+    }
+
+    @Test
+    void validatesRiskRevalidationHelpers() throws Exception {
+        assertThat(invoke("direction", new Class<?>[]{String.class}, "LONG"))
+                .isEqualTo(com.hope.trading.risk.domain.RiskTypes.TradeDirection.LONG);
+        assertThatThrownBy(() -> invoke("direction", new Class<?>[]{String.class}, "INVALID"))
+                .hasMessage("PLAN_DIRECTION_INVALID");
+
+        assertThat(invoke("positive", new Class<?>[]{BigDecimal.class, String.class}, BigDecimal.ONE, "INVALID"))
+                .isEqualTo(BigDecimal.ONE);
+        assertThatThrownBy(() -> invoke("positive", new Class<?>[]{BigDecimal.class, String.class}, BigDecimal.ZERO, "INVALID"))
+                .hasMessage("INVALID");
+        assertThat(invoke("positiveOrZero", new Class<?>[]{BigDecimal.class, String.class}, BigDecimal.ZERO, "INVALID"))
+                .isEqualTo(BigDecimal.ZERO);
+        assertThatThrownBy(() -> invoke("positiveOrZero", new Class<?>[]{BigDecimal.class, String.class}, BigDecimal.valueOf(-1), "INVALID"))
+                .hasMessage("INVALID");
+
+        assertThat(invoke("normalizedCurrency", new Class<?>[]{String.class}, " usd ")).isEqualTo("USD");
+        assertThat(invoke("blank", new Class<?>[]{String.class}, (Object) null)).isEqualTo(true);
+        assertThat(invoke("blank", new Class<?>[]{String.class}, "USD")).isEqualTo(false);
+
+        Instant observedAt = now.minusSeconds(1);
+        RequiredMarginPort.Fact margin = new RequiredMarginPort.Fact(
+                BigDecimal.TEN, "USD", "broker-margin", 1, observedAt);
+        assertThat(invoke("authoritativeMargin",
+                new Class<?>[]{RequiredMarginPort.Fact.class, String.class, Instant.class}, margin, "USD", now))
+                .isEqualTo(BigDecimal.TEN);
+        assertThatThrownBy(() -> invoke("authoritativeMargin",
+                new Class<?>[]{RequiredMarginPort.Fact.class, String.class, Instant.class},
+                new RequiredMarginPort.Fact(BigDecimal.ZERO, "USD", "broker-margin", 1, observedAt), "USD", now))
+                .hasMessage("REQUIRED_MARGIN_INVALID");
+
+        MarketValuationPort.Fact asset = new MarketValuationPort.Fact(
+                "ASSET", "usd", null, "USD", null, BigDecimal.ONE, null, null, "AVAILABLE", "source");
+        MarketValuationPort.Fact fact = new MarketValuationPort.Fact(
+                "INSTRUMENT", "BTC", null, null, null, BigDecimal.TEN, BigDecimal.TEN,
+                BigDecimal.ONE, "AVAILABLE", "source");
+        MarketValuationPort.Snapshot valuation = new MarketValuationPort.Snapshot(
+                UUID.randomUUID(), 1, "USD", now, now, "policy", "1m", true,
+                List.of(asset, fact), "payload");
+        assertThat(invoke("assetRate",
+                new Class<?>[]{MarketValuationPort.Snapshot.class, String.class}, valuation, "USD"))
+                .isEqualTo(BigDecimal.ONE);
+        assertThat(invoke("fact",
+                new Class<?>[]{MarketValuationPort.Snapshot.class, String.class}, valuation, "BTC"))
+                .isEqualTo(fact);
+        assertThat(invoke("requireComplete",
+                new Class<?>[]{MarketValuationPort.Snapshot.class, String.class}, valuation, "INVALID"))
+                .isNull();
+    }
+
+    private static Object invoke(String name, Class<?>[] parameterTypes, Object... arguments) throws Exception {
+        Method method = ExecutionTimeRiskRevalidationService.class.getDeclaredMethod(name, parameterTypes);
+        method.setAccessible(true);
+        try {
+            return method.invoke(null, arguments);
+        } catch (InvocationTargetException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof Exception checked) {
+                throw checked;
+            }
+            throw exception;
+        }
     }
 }

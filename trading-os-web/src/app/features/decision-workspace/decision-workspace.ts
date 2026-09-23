@@ -1,4 +1,5 @@
 import { AsyncPipe, DatePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -34,6 +35,7 @@ import { MarketService } from '../../core/services/market.service';
 import { MarketChartComponent } from '../markets/market-chart-component/market-chart-component';
 import { OrderBookComponent } from '../markets/order-book-component/order-book-component';
 import { RecentTradesComponent } from '../markets/recent-trades-component/recent-trades-component';
+import { ManualTradeTicket } from '../trade-planning/manual-trade-ticket/manual-trade-ticket';
 
 export type DecisionWorkspaceContextView =
   | { status: 'select-account' }
@@ -62,7 +64,14 @@ export type HistoryView<T> =
 
 @Component({
   selector: 'app-decision-workspace',
-  imports: [AsyncPipe, DatePipe, MarketChartComponent, OrderBookComponent, RecentTradesComponent],
+  imports: [
+    AsyncPipe,
+    DatePipe,
+    MarketChartComponent,
+    OrderBookComponent,
+    RecentTradesComponent,
+    ManualTradeTicket,
+  ],
   templateUrl: './decision-workspace.html',
   styleUrl: './decision-workspace.scss',
 })
@@ -92,6 +101,7 @@ export class DecisionWorkspace {
 
   selectedAccountId: string | null = null;
   selectedMarketId: string | null = null;
+  manualTradeOpen = false;
 
   readonly accounts$ = this.accountsRefreshSubject.pipe(
     startWith(undefined),
@@ -222,12 +232,14 @@ export class DecisionWorkspace {
       if (accountId !== this.selectedAccountId) {
         this.selectedAccountId = accountId;
         this.selectedMarketId = null;
+        this.manualTradeOpen = false;
         this.selectedMarketSubject.next(null);
         this.selectedAccountSubject.next(accountId);
       }
 
       if (marketId !== this.selectedMarketId) {
         this.selectedMarketId = marketId;
+        this.manualTradeOpen = false;
         if (marketId !== null) {
           this.clearActiveSubscriptions();
         }
@@ -246,6 +258,7 @@ export class DecisionWorkspace {
   selectAccount(accountId: string): void {
     this.selectedAccountId = accountId || null;
     this.selectedMarketId = null;
+    this.manualTradeOpen = false;
     this.selectedMarketSubject.next(null);
     this.selectedAccountSubject.next(accountId || null);
     void this.router.navigate([], {
@@ -257,6 +270,7 @@ export class DecisionWorkspace {
   refreshAccounts(): void {
     this.selectedAccountId = null;
     this.selectedMarketId = null;
+    this.manualTradeOpen = false;
     this.selectedMarketSubject.next(null);
     this.selectedAccountSubject.next(null);
     void this.router.navigate([], {
@@ -272,12 +286,33 @@ export class DecisionWorkspace {
     }
 
     this.selectedMarketId = marketId;
+    this.manualTradeOpen = false;
     this.clearActiveSubscriptions();
     this.selectedMarketSubject.next(marketId);
     void this.router.navigate([], {
       queryParams: { marketId },
       queryParamsHandling: 'merge',
     });
+  }
+
+  openManualTrade(): void {
+    if (this.selectedAccountId === null || this.selectedMarketId === null) {
+      return;
+    }
+
+    this.manualTradeOpen = true;
+  }
+
+  closeManualTrade(): void {
+    this.manualTradeOpen = false;
+  }
+
+  manualReferencePrice(view: StreamView<TickerEvent> | null): number | null {
+    if (view?.status !== 'live' || !Number.isFinite(view.data.last)) {
+      return null;
+    }
+
+    return view.data.last;
   }
 
   selectOhlcInterval(timeframe: OhlcTimeframe): void {

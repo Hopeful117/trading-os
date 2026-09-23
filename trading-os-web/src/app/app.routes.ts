@@ -16,6 +16,7 @@ import { PlanPage } from './features/trade-planning/plan-page/plan-page';
 import { Positions } from './features/positions/pages/positions/positions';
 import { ExecutionHistory } from './features/executions/pages/execution-history/execution-history';
 import { DecisionWorkspace } from './features/decision-workspace/decision-workspace';
+import { ManualTradePage } from './features/trade-planning/manual-trade-page/manual-trade-page';
 
 export const routes: Routes = [
   {
@@ -77,6 +78,11 @@ export const routes: Routes = [
   {
     path: 'trade-planning/prepare/:opportunityId',
     component: PreparePlanPage,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'trade-planning/manual',
+    component: ManualTradePage,
     canActivate: [authGuard],
   },
   {

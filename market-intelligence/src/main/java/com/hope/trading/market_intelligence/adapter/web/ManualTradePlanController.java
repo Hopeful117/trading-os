@@ -57,7 +57,7 @@ public final class ManualTradePlanController {
             @NotBlank String instrument,
             @NotNull TradeDirection direction,
             @NotNull EntryType entryType,
-            @Positive BigDecimal entryPrice,
+            BigDecimal entryPrice,
             @NotNull @Positive BigDecimal referencePrice,
             @NotNull @Positive BigDecimal stopLoss,
             @NotBlank String stopRationale,

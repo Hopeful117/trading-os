@@ -9,6 +9,7 @@ import { AccountService } from '../../core/services/account.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketService } from '../../core/services/market.service';
+import { TradePlanService } from '../../core/services/trade-plan.service';
 import { OhlcInterval } from '../../core/models/ohlc-interval';
 import { DecisionWorkspace } from './decision-workspace';
 
@@ -145,6 +146,7 @@ describe('DecisionWorkspace', () => {
         { provide: DecisionContextService, useValue: contextServiceMock },
         { provide: MarketService, useValue: marketServiceMock },
         { provide: MarketDataStreamService, useValue: marketDataStreamServiceMock },
+        { provide: TradePlanService, useValue: { createManual: vi.fn() } },
         { provide: Router, useValue: routerMock },
         {
           provide: ActivatedRoute,
@@ -164,6 +166,7 @@ describe('DecisionWorkspace', () => {
     expect(
       fixture.nativeElement.querySelector('[data-testid="select-account-state"]'),
     ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="manual-trade-ticket"]')).toBeNull();
   });
 
   it('resolves account-scoped markets after account selection', async () => {
@@ -250,6 +253,21 @@ describe('DecisionWorkspace', () => {
     expect(element.textContent).toContain('LIVE');
     expect(element.textContent).toContain('Minimum order size');
     expect(element.textContent).toContain('101');
+  });
+
+  it('opens the manual ticket inside the selected market context', async () => {
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    component.openManualTrade();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('[data-testid="manual-trade-ticket"]')).toBeTruthy();
+    expect(element.textContent).toContain('Paper account');
+    expect(element.textContent).toContain('BTC/USD');
+    expect(element.querySelector('[data-testid="manual-account-select"]')).toBeNull();
+    expect(element.querySelector('[data-testid="manual-market-select"]')).toBeNull();
   });
 
   it('renders market-data errors without fabricating values', async () => {

@@ -219,9 +219,17 @@ public class ExecutionTimeRiskRevalidationService {
         BigDecimal sizingRate = assetRate(current, plan.sizingCurrency());
         BigDecimal notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
         BigDecimal expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
+        BigDecimal marginPrice = plan.entryIntent().price() != null
+                ? plan.entryIntent().price()
+                : current.facts().stream()
+                .filter(fact -> "INSTRUMENT".equals(fact.type()) && "proposed".equals(fact.id()))
+                .map(MarketValuationPort.Fact::sourcePrice)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
                         brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                        plan.entryIntent().price(), brokerSnapshot.observedAt()))
+                        marginPrice, brokerSnapshot.observedAt()))
                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
         BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
 

@@ -16,6 +16,7 @@ describe('ExecutionHistory', () => {
   const summary: ExecutionSummaryDto = {
     id: 'execution-1',
     tradePlanId: 'plan-1',
+    tradePlanVersion: 4,
     status: 'COMPLETED',
     updatedAt: '2026-09-20T12:00:00Z',
   };

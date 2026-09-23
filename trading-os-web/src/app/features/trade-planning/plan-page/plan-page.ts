@@ -45,6 +45,7 @@ export type PlanView =
   | { status: 'rejected'; plan: TradePlanResponse }
   | { status: 'riskDecision'; plan: TradePlanResponse; decision: RiskDecisionResponse }
   | { status: 'executionReady'; plan: TradePlanResponse; decision: RiskDecisionResponse }
+  | { status: 'authorizedExecution'; plan: TradePlanResponse; execution: ExecutionDto }
   | { status: 'executionSubmitting' }
   | { status: 'executionPolling'; plan: TradePlanResponse; execution: ExecutionDto }
   | { status: 'executionResult'; plan: TradePlanResponse; execution: ExecutionDto }
@@ -95,6 +96,10 @@ export class PlanPage implements OnDestroy {
     plan: TradePlanResponse;
     decision: RiskDecisionResponse;
   }>();
+  private readonly authorizedExecutionSubject = new Subject<{
+    plan: TradePlanResponse;
+    execution: ExecutionDto;
+  }>();
   private readonly retrySubject = new Subject<{
     executionId: string;
     plan: TradePlanResponse;
@@ -132,7 +137,7 @@ export class PlanPage implements OnDestroy {
               });
             }
             return this.tradePlanService.getPlan(planId, version).pipe(
-              map((plan) => this.toViewForPlan(plan)),
+              switchMap((plan) => this.loadPlanView(plan)),
               catchError((error: unknown) =>
                 of<PlanView>({
                   status: 'error',
@@ -259,6 +264,23 @@ export class PlanPage implements OnDestroy {
       }),
     );
 
+    const authorizedExecution$ = this.authorizedExecutionSubject.pipe(
+      switchMap(({ plan, execution }) =>
+        this.executionService.execute(execution.id).pipe(
+          switchMap((updated) => this.pollOrResult(plan, updated)),
+          catchError((error: unknown) =>
+            of<PlanView>({
+              status: 'error',
+              message: tradeFlowErrorMessage(error, 'The authorized trade could not be submitted.'),
+              retryable: true,
+              plan,
+            }),
+          ),
+        ),
+      ),
+      finalize(() => (this.commandInFlight = false)),
+    );
+
     const retry$ = this.retrySubject.pipe(
       switchMap(({ executionId, plan }) =>
         this.executionService.retry(executionId).pipe(
@@ -310,6 +332,7 @@ export class PlanPage implements OnDestroy {
       reject$,
       evaluateRisk$,
       execute$,
+      authorizedExecution$,
       retry$,
       reconcile$,
       retryT1$,
@@ -352,6 +375,12 @@ export class PlanPage implements OnDestroy {
     if (this.commandInFlight) return;
     this.commandInFlight = true;
     this.executeSubject.next({ plan, decision });
+  }
+
+  executeAuthorized(plan: TradePlanResponse, execution: ExecutionDto): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
+    this.authorizedExecutionSubject.next({ plan, execution });
   }
 
   retry(executionId: string, plan: TradePlanResponse): void {
@@ -455,5 +484,32 @@ export class PlanPage implements OnDestroy {
           plan,
         };
     }
+  }
+
+  private loadPlanView(plan: TradePlanResponse): Observable<PlanView> {
+    if (plan.status !== 'READY_TO_EXECUTE') return of(this.toViewForPlan(plan));
+
+    return this.executionService.list().pipe(
+      switchMap((summaries) => {
+        const existing = summaries.find(
+          (execution) =>
+            execution.tradePlanId === plan.id &&
+            execution.tradePlanVersion === plan.version &&
+            execution.status !== 'CANCELLED',
+        );
+        return existing
+          ? this.executionService
+              .getExecution(existing.id)
+              .pipe(
+                map((execution) =>
+                  isTerminal(execution.status)
+                    ? { status: 'executionResult' as const, plan, execution }
+                    : { status: 'authorizedExecution' as const, plan, execution },
+                ),
+              )
+          : of<PlanView>(this.toViewForPlan(plan));
+      }),
+      catchError(() => of<PlanView>(this.toViewForPlan(plan))),
+    );
   }
 }

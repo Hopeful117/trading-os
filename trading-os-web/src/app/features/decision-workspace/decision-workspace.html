@@ -193,6 +193,38 @@
                     </div>
                   </header>
 
+                  @if (manualTradeOpen) {
+                    <app-manual-trade-ticket
+                      [account]="view.context.account"
+                      [market]="marketView.market"
+                      [referencePrice]="manualReferencePrice(ticker$ | async)"
+                    />
+                    <button
+                      type="button"
+                      class="secondary-button trading-action-close"
+                      (click)="closeManualTrade()"
+                      data-testid="close-manual-trade"
+                    >
+                      Close manual ticket
+                    </button>
+                  } @else {
+                    <section class="trading-actions" aria-labelledby="trading-actions-title">
+                      <div>
+                        <span class="eyebrow">Trading actions</span>
+                        <h3 id="trading-actions-title">Prepare a discretionary proposal</h3>
+                        <p>Keep the market context visible while describing a MANUAL Trade Plan.</p>
+                      </div>
+                      <button
+                        type="button"
+                        class="primary-button"
+                        (click)="openManualTrade()"
+                        data-testid="open-manual-trade"
+                      >
+                        Prepare manual trade
+                      </button>
+                    </section>
+                  }
+
                   <section class="market-section" aria-labelledby="workspace-ticker-title">
                     <div class="section-heading">
                       <div>

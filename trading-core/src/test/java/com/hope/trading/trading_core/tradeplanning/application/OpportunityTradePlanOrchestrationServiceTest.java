@@ -173,6 +173,7 @@ class OpportunityTradePlanOrchestrationServiceTest {
             String status, long version) {
         return new MarketIntelligenceTradePlanningClient.PlanTransport(
                 UUID.randomUUID(), version, null, status,
+                "OPPORTUNITY", null,
                 UUID.randomUUID(), 1, Instant.now(), "BTC/EUR", "LONG",
                 "LIMIT", BigDecimal.valueOf(101), BigDecimal.valueOf(99),
                 java.util.List.of(BigDecimal.valueOf(105)), BigDecimal.valueOf(0.05),

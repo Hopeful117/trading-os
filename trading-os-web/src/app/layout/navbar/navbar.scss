@@ -92,3 +92,31 @@
     }
   }
 }
+
+@media (max-width: 767px) {
+  .navbar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .navbar-brand a {
+    font-size: 1.05rem;
+    white-space: nowrap;
+  }
+
+  .navbar-links {
+    min-width: 0;
+    gap: 8px;
+
+    a {
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
+    button {
+      padding: 6px 10px;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+  }
+}

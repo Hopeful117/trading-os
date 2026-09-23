@@ -1,0 +1,148 @@
+<article class="manual-ticket" data-testid="manual-trade-ticket">
+  <header class="ticket-header">
+    <div>
+      <span class="eyebrow">MANUAL proposal</span>
+      <h2>Prepare manual Trade Plan</h2>
+      <p>Review the selected context, then describe the discretionary trade idea.</p>
+    </div>
+    <div class="context-summary">
+      <strong>{{ market.symbol }}</strong>
+      <span>{{ account.name }} · {{ account.baseCurrency }}</span>
+    </div>
+  </header>
+
+  <section class="context-strip" aria-label="Trade context">
+    <div>
+      <span>Account</span>
+      <strong>{{ account.name }}</strong>
+    </div>
+    <div>
+      <span>Market</span>
+      <strong>{{ market.symbol }}</strong>
+    </div>
+    <div>
+      <span>Market state</span>
+      <strong [class.tradable]="market.marketState.tradable">
+        {{ market.marketState.tradingStatus }}
+      </strong>
+    </div>
+    @if (referencePrice !== null) {
+      <div>
+        <span>Reference price</span>
+        <strong>{{ referencePrice }}</strong>
+      </div>
+    }
+  </section>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <section class="form-section">
+      <div class="section-heading">
+        <span class="eyebrow">1</span>
+        <h3>Trade intention</h3>
+      </div>
+      <div class="field-grid three-columns">
+        <label class="field"
+          ><span>Direction</span>
+          <select formControlName="direction">
+            <option value="LONG">Long</option>
+            <option value="SHORT">Short</option>
+          </select>
+        </label>
+        <label class="field"
+          ><span>Order type</span>
+          <select formControlName="entryType">
+            <option value="MARKET">Market</option>
+            <option value="LIMIT">Limit</option>
+          </select>
+        </label>
+        <label class="field"
+          ><span>Reference price</span>
+          <input
+            type="number"
+            step="any"
+            formControlName="referencePrice"
+            data-testid="reference-price"
+          />
+          <small>Current price used to describe the manual setup.</small>
+        </label>
+      </div>
+      @if (form.controls.entryType.value === 'LIMIT') {
+        <label class="field"
+          ><span>Limit price</span>
+          <input type="number" step="any" formControlName="entryPrice" data-testid="limit-price" />
+        </label>
+      }
+      <div class="field-grid three-columns">
+        <label class="field"
+          ><span>Quantity</span><input type="number" step="any" formControlName="quantity"
+        /></label>
+        <label class="field"
+          ><span>Stop loss</span><input type="number" step="any" formControlName="stopLoss"
+        /></label>
+        <label class="field"
+          ><span>Expected monetary risk</span
+          ><input type="number" step="any" formControlName="monetaryRisk"
+        /></label>
+      </div>
+      <label class="field"
+        ><span>Stop rationale</span><input type="text" formControlName="stopRationale"
+      /></label>
+      <label class="field"
+        ><span>Take profit</span><input type="number" step="any" formControlName="takeProfit"
+      /></label>
+    </section>
+
+    <section class="form-section">
+      <div class="section-heading">
+        <span class="eyebrow">2</span>
+        <h3>Decision rationale</h3>
+      </div>
+      <label class="field"
+        ><span>Thesis</span><textarea rows="3" formControlName="thesis"></textarea>
+      </label>
+      <div class="field-grid">
+        <label class="field"
+          ><span>Confirmation conditions</span
+          ><textarea
+            rows="3"
+            formControlName="confirmationConditions"
+            placeholder="One condition per line"
+          ></textarea>
+        </label>
+        <label class="field"
+          ><span>Invalidation conditions</span
+          ><textarea
+            rows="3"
+            formControlName="invalidationConditions"
+            placeholder="One condition per line"
+          ></textarea>
+        </label>
+      </div>
+      <label class="field"
+        ><span>Management rules <small>(optional)</small></span
+        ><textarea
+          rows="2"
+          formControlName="managementRules"
+          placeholder="One rule per line"
+        ></textarea>
+      </label>
+    </section>
+
+    @if (state() === 'error' && errorMessage()) {
+      <p class="form-error" data-testid="manual-submit-error">{{ errorMessage() }}</p>
+    }
+    <footer class="form-actions">
+      <span class="proposal-note"
+        >Creation produces a PROPOSED MANUAL Trade Plan. It does not execute an order.</span
+      >
+      <button
+        type="submit"
+        class="button primary"
+        [disabled]="state() === 'submitting'"
+        data-testid="create-manual-plan"
+      >
+        {{ state() === 'submitting' ? 'Creating plan…' : 'Create manual Trade Plan' }}
+      </button>
+    </footer>
+  </form>
+</article>

@@ -83,6 +83,8 @@ describe('PlanPage', () => {
     const executionService = {
       validate: () => of({ id: 'exec-1', status: 'VALIDATED' } as any),
       execute: () => of({ id: 'exec-1', status: 'COMPLETED' } as any),
+      list: () => of([]),
+      getExecution: () => of({ id: 'exec-1', status: 'CREATED' } as any),
     };
     return TestBed.configureTestingModule({
       imports: [PlanPage],
@@ -191,6 +193,43 @@ describe('PlanPage', () => {
       fixture.nativeElement.querySelector('[data-testid="risk-validated-state"]'),
     ).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')).toBeFalsy();
+  });
+
+  it('resumes an existing authorized execution intent without evaluating risk again', () => {
+    const plan = fakePlan('READY_TO_EXECUTE');
+    const evaluateRisk = vi.fn(() => of(fakeRiskDecision('APPROVED')));
+    const execute = vi.fn(() => of({ id: 'exec-1', status: 'COMPLETED' } as any));
+    const tradePlanService = {
+      getPlan: () => of(plan),
+      decide: () => of(plan),
+      evaluateRisk,
+    };
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '4' }) },
+        { provide: TradePlanService, useValue: tradePlanService },
+        {
+          provide: ExecutionService,
+          useValue: {
+            list: () =>
+              of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 1, status: 'CREATED' }]),
+            getExecution: () => of({ id: 'exec-1', status: 'CREATED' }),
+            execute,
+          },
+        },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.nativeElement
+      .querySelector('[data-testid="resume-authorized-execution-button"]')
+      ?.click();
+    fixture.detectChanges();
+
+    expect(evaluateRisk).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith('exec-1');
   });
 
   it('renders a retryable message when loading fails with a conflict', () => {

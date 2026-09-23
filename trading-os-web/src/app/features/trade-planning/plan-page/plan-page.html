@@ -303,6 +303,44 @@
           </footer>
         </article>
       }
+      @case ('authorizedExecution') {
+        <article class="plan-card" data-testid="authorized-execution-state">
+          <header class="card-header">
+            <div>
+              <h1>{{ view.plan.instrument }} — {{ view.plan.direction }}</h1>
+              <p>
+                Status:
+                <span class="status-badge approved">Execution authorized</span>
+              </p>
+            </div>
+          </header>
+
+          <section class="risk-summary">
+            <h2>Existing execution intent</h2>
+            <div class="risk-grid">
+              <div class="fact">
+                <span class="label">Execution Intent</span>
+                <span class="value">{{ view.execution.id }}</span>
+              </div>
+              <div class="fact">
+                <span class="label">Status</span>
+                <span class="value">{{ statusLabel(view.execution.status) }}</span>
+              </div>
+            </div>
+          </section>
+
+          <footer class="card-actions">
+            <button
+              class="btn-accept"
+              (click)="executeAuthorized(view.plan, view.execution)"
+              [disabled]="busy$ | async"
+              data-testid="resume-authorized-execution-button"
+            >
+              Continue Authorized Execution
+            </button>
+          </footer>
+        </article>
+      }
       @case ('executionPolling') {
         <article class="plan-card" data-testid="execution-polling-state">
           <header class="card-header">

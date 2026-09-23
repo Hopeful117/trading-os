@@ -1,0 +1,164 @@
+:host {
+  display: block;
+}
+
+.manual-ticket {
+  overflow: hidden;
+  border: 1px solid #3778ad;
+  border-radius: 0.8rem;
+  background: #101b29;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 18%);
+}
+
+.ticket-header,
+.context-strip,
+.section-heading,
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ticket-header {
+  padding: 1.25rem 1.5rem;
+  background: #14263a;
+}
+
+.ticket-header h2,
+.section-heading h3 {
+  margin: 0.25rem 0;
+}
+
+.ticket-header p,
+.field small,
+.proposal-note {
+  color: #8ea4ba;
+}
+
+.eyebrow {
+  color: #5ca8ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.context-summary {
+  display: grid;
+  gap: 0.25rem;
+  text-align: right;
+}
+
+.context-summary span,
+.context-strip span {
+  color: #91a4ba;
+  font-size: 0.78rem;
+}
+
+.context-strip {
+  align-items: stretch;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #24364b;
+  padding: 1rem 1.5rem;
+}
+
+.context-strip div {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 10rem;
+}
+
+.context-strip strong.tradable {
+  color: #b9f3d8;
+}
+
+.form-section {
+  padding: 1.5rem;
+  border-bottom: 1px solid #24364b;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  color: #b9c9da;
+  font-size: 0.88rem;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #314a65;
+  border-radius: 0.45rem;
+  padding: 0.7rem;
+  background: #0b1420;
+  color: #eef6ff;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.form-actions {
+  align-items: flex-end;
+  padding: 1.25rem 1.5rem;
+}
+
+.proposal-note {
+  max-width: 32rem;
+  font-size: 0.82rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.45rem;
+  padding: 0.7rem 1rem;
+  color: #fff;
+  cursor: pointer;
+}
+
+.primary {
+  background: #1f7ae0;
+}
+
+.form-error {
+  margin: 1.25rem 1.5rem 0;
+  color: #ffb6b6;
+}
+
+@media (max-width: 760px) {
+  .ticket-header,
+  .form-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .context-summary {
+    text-align: left;
+  }
+
+  .field-grid,
+  .three-columns {
+    grid-template-columns: 1fr;
+  }
+}
