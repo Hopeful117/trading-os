@@ -8,6 +8,8 @@ public final class ProductionArtifactTypes {
     public static final ArtifactType OHLC_HISTORY = new ArtifactType("normalized-ohlc-history");
     public static final ArtifactType SPREAD_ANALYSIS = new ArtifactType("spread-analysis-result");
     public static final ArtifactType OHLC_RANGE_ANALYSIS = new ArtifactType("ohlc-range-analysis-result");
+    public static final ArtifactType TREND_CONTEXT_HISTORY = new ArtifactType("trend-context-history");
+    public static final ArtifactType TREND_CONTEXT_ASSESSMENT = new ArtifactType("trend-context-assessment");
     public static final ArtifactVersion V1 = new ArtifactVersion("1.0.0");
 
     private ProductionArtifactTypes() {

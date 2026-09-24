@@ -14,6 +14,8 @@ interface SpringDataAnalysisExecutionRepository
 
     List<JpaAnalysisExecutionEntity> findByExecutionIdIn(Collection<UUID> executionIds);
 
+    Optional<JpaAnalysisExecutionEntity> findFirstByMarketIdOrderByUpdatedAtDesc(UUID marketId);
+
     @Modifying
     @Query("""
             update JpaAnalysisExecutionEntity entity

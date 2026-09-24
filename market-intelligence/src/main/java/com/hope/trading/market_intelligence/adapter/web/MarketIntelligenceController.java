@@ -3,6 +3,8 @@ package com.hope.trading.market_intelligence.adapter.web;
 import com.hope.trading.market_intelligence.application.scan.ActiveScanApplicationService;
 import com.hope.trading.market_intelligence.application.scan.CreateActiveScanCommand;
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService;
+import com.hope.trading.market_intelligence.application.observation.TrendContextReadModel;
+import com.hope.trading.market_intelligence.application.observation.TrendContextReadService;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
@@ -11,6 +13,7 @@ import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 import com.hope.trading.market_intelligence.security.MiUserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,6 +28,7 @@ public class MarketIntelligenceController {
     private final ActiveScanScopeResolutionService activeScanScopeResolution;
     private final ActiveScanApplicationService scans;
     private final com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches;
+    private final TrendContextReadService trendContextReads;
 
     public MarketIntelligenceController(
             AnalysisExecutionService executions,
@@ -32,10 +36,22 @@ public class MarketIntelligenceController {
             ActiveScanApplicationService scans,
             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches
     ) {
+        this(executions, activeScanScopeResolution, scans, matches, null);
+    }
+
+    @Autowired
+    public MarketIntelligenceController(
+            AnalysisExecutionService executions,
+            ActiveScanScopeResolutionService activeScanScopeResolution,
+            ActiveScanApplicationService scans,
+            com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches,
+            TrendContextReadService trendContextReads
+    ) {
         this.executions = executions;
         this.activeScanScopeResolution = activeScanScopeResolution;
         this.scans = scans;
         this.matches = matches;
+        this.trendContextReads = trendContextReads;
     }
 
     @PostMapping("/analyses")
@@ -149,6 +165,13 @@ public class MarketIntelligenceController {
         return ResponseEntity.ok(
                 AnalysisExecutionResponse.from(executions.find(executionId))
         );
+    }
+
+    @GetMapping("/trend-context/{marketId}")
+    public ResponseEntity<TrendContextReadModel> trendContext(
+            Authentication authentication, @PathVariable UUID marketId) {
+        actorId(authentication);
+        return ResponseEntity.ok(trendContextReads.find(marketId));
     }
 
     @GetMapping("/analyses/{executionId}/result")

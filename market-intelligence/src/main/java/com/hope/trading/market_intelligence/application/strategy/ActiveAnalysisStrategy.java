@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.strategy;
 import com.hope.trading.market_intelligence.application.capability.DisabledAiAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.SpreadAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.OhlcRangeAnalysisCapability;
+import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
 import com.hope.trading.market_intelligence.domain.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ public class ActiveAnalysisStrategy implements AnalysisExecutionStrategy {
     public AnalysisExecutionPlan plan(IntelligenceAnalysisRequest request) {
         return new AnalysisExecutionPlan(
                 List.of(
+                        TrendContextAnalysisCapability.CAPABILITY_ID,
                         SpreadAnalysisCapability.CAPABILITY_ID,
                         OhlcRangeAnalysisCapability.CAPABILITY_ID,
                         DisabledAiAnalysisCapability.CAPABILITY_ID

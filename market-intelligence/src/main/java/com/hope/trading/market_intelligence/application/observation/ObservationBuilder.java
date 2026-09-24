@@ -70,7 +70,8 @@ public final class ObservationBuilder {
                 current == null ? 1 : current.version() + 1,
                 instrument, result.type(), result.title(), result.explanation(),
                 result.categories(), result.horizon(), clock.instant(), result.validFrom(),
-                result.validUntil(), current == null ? null : current.id(), rule.version(), evidence);
+                result.validUntil(), current == null ? null : current.id(), rule.version(), evidence,
+                result.payload());
 
         if (current == null) {
             return observations.save(next);

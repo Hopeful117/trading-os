@@ -39,6 +39,11 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
         }
         return repository.findByExecutionIdIn(ids).stream().map(this::domain).toList();
     }
+
+    @Override @Transactional(readOnly = true)
+    public Optional<AnalysisExecution> findLatestByMarketId(UUID marketId) {
+        return repository.findFirstByMarketIdOrderByUpdatedAtDesc(marketId).map(this::domain);
+    }
     @Override @Transactional(readOnly = true)
     public Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now) {
         return repository.findByIdempotencyKey(key.value()).map(this::domain)
