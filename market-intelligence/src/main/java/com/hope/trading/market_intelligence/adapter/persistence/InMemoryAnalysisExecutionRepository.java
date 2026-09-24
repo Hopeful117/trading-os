@@ -40,6 +40,13 @@ public class InMemoryAnalysisExecutionRepository implements AnalysisExecutionRep
     }
 
     @Override
+    public Optional<AnalysisExecution> findLatestByMarketId(UUID marketId) {
+        return executions.values().stream()
+                .filter(value -> value.provenance().marketId().equals(marketId))
+                .max(java.util.Comparator.comparing(AnalysisExecution::updatedAt));
+    }
+
+    @Override
     public Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now) {
         return executions.values().stream()
                 .filter(execution -> execution.idempotencyKey().equals(key))

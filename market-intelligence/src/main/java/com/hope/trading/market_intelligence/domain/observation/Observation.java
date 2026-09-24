@@ -26,13 +26,15 @@ public final class Observation {
     private final String consolidationRuleVersion;
     private final List<ObservationEvidence> evidence;
     private final ObservationConfidence confidence;
+    private final ObservationPayload payload;
 
     Observation(
             UUID id, UUID lineageId, long version, String instrument, ObservationType type,
             ObservationStatus status, String title, String explanation, Set<String> categories,
             String horizon, Instant createdAt, Instant validFrom, Instant validUntil,
             UUID supersedes, UUID supersededBy, String consolidationRuleVersion,
-            List<ObservationEvidence> evidence, ObservationConfidence confidence
+            List<ObservationEvidence> evidence, ObservationConfidence confidence,
+            ObservationPayload payload
     ) {
         this.id = Objects.requireNonNull(id);
         this.lineageId = Objects.requireNonNull(lineageId);
@@ -58,6 +60,7 @@ public final class Observation {
         this.evidence = List.copyOf(evidence);
         if (this.evidence.isEmpty()) throw new IllegalArgumentException("Evidence is required");
         this.confidence = Objects.requireNonNull(confidence);
+        this.payload = payload;
     }
 
     private static String required(String value, String name) {
@@ -84,4 +87,5 @@ public final class Observation {
     public String consolidationRuleVersion() { return consolidationRuleVersion; }
     public List<ObservationEvidence> evidence() { return evidence; }
     public ObservationConfidence confidence() { return confidence; }
+    public Optional<ObservationPayload> payload() { return Optional.ofNullable(payload); }
 }

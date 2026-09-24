@@ -1,6 +1,8 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.application.port.ObservationRepository;
 import com.hope.trading.market_intelligence.application.port.ObservationRehydrator;
@@ -88,7 +90,8 @@ public class JpaObservationRepository implements ObservationRepository {
         Details details = new Details(
                 value.title(), value.explanation(), value.categories(), value.horizon(),
                 value.validFrom(), value.validUntil().orElse(null),
-                value.supersedes().orElse(null), value.supersededBy().orElse(null), value.evidence());
+                value.supersedes().orElse(null), value.supersededBy().orElse(null), value.evidence(),
+                value.payload().orElse(null));
         entity.payload = write(details);
         entity.fingerprint = fingerprint(value);
         return entity;
@@ -101,7 +104,7 @@ public class JpaObservationRepository implements ObservationRepository {
                 new ObservationType(entity.observationType), ObservationStatus.valueOf(entity.status),
                 value.title(), value.explanation(), value.categories(), value.horizon(),
                 entity.createdAt, value.validFrom(), value.validUntil(), value.supersedes(),
-                value.supersededBy(), entity.ruleVersion, value.evidence()));
+                value.supersededBy(), entity.ruleVersion, value.evidence(), value.payload()));
     }
 
     private void persistEvidence(Observation observation) {
@@ -127,15 +130,18 @@ public class JpaObservationRepository implements ObservationRepository {
     }
 
     private String write(Object value) {
-        try { return mapper.writeValueAsString(value); }
+        try { return observationMapper().writeValueAsString(value); }
         catch (JsonProcessingException e) { throw new IllegalStateException("Cannot serialize Observation", e); }
     }
     private <T> T read(String value, Class<T> type) {
-        try { return mapper.readValue(value, type); }
+        try { return observationMapper().readValue(value, type); }
         catch (JsonProcessingException e) { throw new IllegalStateException("Cannot deserialize Observation", e); }
+    }
+    private com.fasterxml.jackson.databind.ObjectMapper observationMapper() {
+        return mapper.copy().setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
     }
     private record Details(String title, String explanation, Set<String> categories,
                            String horizon, Instant validFrom, Instant validUntil,
                            UUID supersedes, UUID supersededBy,
-                           List<ObservationEvidence> evidence) { }
+                           List<ObservationEvidence> evidence, ObservationPayload payload) { }
 }

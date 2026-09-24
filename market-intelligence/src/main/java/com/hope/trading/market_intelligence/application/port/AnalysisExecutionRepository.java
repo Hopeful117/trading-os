@@ -21,6 +21,8 @@ public interface AnalysisExecutionRepository {
 
     List<AnalysisExecution> findAllById(Collection<UUID> executionIds);
 
+    Optional<AnalysisExecution> findLatestByMarketId(UUID marketId);
+
     Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now);
 
     boolean transitionStatus(

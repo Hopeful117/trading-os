@@ -13,5 +13,5 @@ public interface ObservationRehydrator {
             ObservationStatus status, String title, String explanation, Set<String> categories,
             String horizon, Instant createdAt, Instant validFrom, Instant validUntil,
             UUID supersedes, UUID supersededBy, String ruleVersion,
-            List<ObservationEvidence> evidence) { }
+            List<ObservationEvidence> evidence, ObservationPayload payload) { }
 }

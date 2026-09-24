@@ -4,6 +4,7 @@ public enum ContextSectionType {
     MARKET_IDENTITY,
     MARKET_SNAPSHOT,
     HISTORICAL_OHLC,
+    TREND_CONTEXT,
     ORDER_FLOW,
     DETERMINISTIC_FINDINGS,
     NEWS,

@@ -21,7 +21,7 @@ public class ObservationConfiguration {
                 snapshot.type(), snapshot.status(), snapshot.title(), snapshot.explanation(),
                 snapshot.categories(), snapshot.horizon(), snapshot.createdAt(),
                 snapshot.validFrom(), snapshot.validUntil(), snapshot.supersedes(),
-                snapshot.supersededBy(), snapshot.ruleVersion(), snapshot.evidence());
+                snapshot.supersededBy(), snapshot.ruleVersion(), snapshot.evidence(), snapshot.payload());
     }
 
     @Bean ObservationBuilder observationBuilder(
