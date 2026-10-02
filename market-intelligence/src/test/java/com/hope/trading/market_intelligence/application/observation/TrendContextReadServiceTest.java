@@ -109,6 +109,7 @@ class TrendContextReadServiceTest {
         AnalysisExecution execution = mock(AnalysisExecution.class);
         when(execution.status()).thenReturn(status);
         when(execution.capabilities()).thenReturn(List.of("trend-context-analysis"));
+        when(execution.requestedAt()).thenReturn(completedAt.minusSeconds(600));
         when(execution.completedAt()).thenReturn(Optional.of(completedAt));
         when(execution.provenance()).thenReturn(new AnalysisExecutionProvenance(
                 TrendContextTestFixtures.MARKET_ID,

@@ -1,8 +1,11 @@
 package com.hope.trading.market_intelligence.domain.trendcontext;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+
 import java.util.List;
 import java.util.Objects;
 
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 public final class TrendContextTimeframeAssessment {
     private final TrendContextRole role;
     private final String interval;

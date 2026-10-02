@@ -42,6 +42,30 @@ class IntelligenceContextAssemblerTest {
                 .isEqualTo(ContextSectionStatus.MISSING);
     }
 
+    @Test
+    void convertsContributorFailureToUnavailableWithoutLeakingTheException() {
+        ContextSectionType type = ContextSectionType.TREND_CONTEXT;
+        ContextContributor failing = new ContextContributor() {
+            @Override
+            public ContextSectionType sectionType() {
+                return type;
+            }
+
+            @Override
+            public ContextSection contribute(IntelligenceAnalysisRequest request) {
+                throw new IllegalStateException("market-data unavailable");
+            }
+        };
+
+        ContextSection section = new IntelligenceContextAssembler(List.of(failing))
+                .assemble(request(), List.of(ContextRequirement.optionalPublic(type)))
+                .section(type)
+                .orElseThrow();
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.UNAVAILABLE);
+        assertThat(section.message()).isEqualTo("Contributor failed for TREND_CONTEXT");
+    }
+
     private ContextContributor contributor(
             ContextSectionType type,
             AtomicInteger calls

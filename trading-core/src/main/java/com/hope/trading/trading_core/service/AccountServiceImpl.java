@@ -40,6 +40,12 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     @Transactional(readOnly = true)
+    public AccountDto getAccountDtoById(UUID accountId, String username) {
+        return toDto(getAccountById(accountId, username));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public BigDecimal getTotalBalance(UUID accountId,String username) {
 
         return getAccountById(accountId,username)

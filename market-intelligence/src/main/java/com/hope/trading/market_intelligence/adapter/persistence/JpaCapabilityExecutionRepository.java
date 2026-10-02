@@ -1,6 +1,8 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.application.port.CapabilityExecutionRepository;
 import com.hope.trading.market_intelligence.domain.capability.*;
@@ -16,7 +18,9 @@ public class JpaCapabilityExecutionRepository implements CapabilityExecutionRepo
     private final ObjectMapper mapper;
     public JpaCapabilityExecutionRepository(
             SpringDataCapabilityExecutionRepository repository, ObjectMapper mapper) {
-        this.repository = repository; this.mapper = mapper;
+        this.repository = repository;
+        this.mapper = mapper.copy().setVisibility(
+                PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
     }
     @Override @Transactional
     public CapabilityExecution save(CapabilityExecution value) {

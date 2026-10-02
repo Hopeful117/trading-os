@@ -2,8 +2,6 @@ package com.hope.trading.trading_core.controller;
 
 import com.hope.trading.trading_core.dto.AccountDto;
 import com.hope.trading.trading_core.dto.UserDto;
-import com.hope.trading.trading_core.helper.AccountMapper;
-import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.service.AccountService;
 import com.hope.trading.trading_core.broker.service.BrokerSynchronizationService;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +26,6 @@ import java.util.UUID;
 public class AccountController {
     private final AccountService accountService;
     private final BrokerSynchronizationService brokerSynchronizationService;
-    private final AccountMapper accountMapper;
 
 
     /**
@@ -42,8 +39,7 @@ public class AccountController {
         UserDto user =
                 (UserDto) authentication.getPrincipal();
         assert user != null;
-        Account account = accountService.getAccountById(accountId, user.getUsername());
-        return ResponseEntity.ok(accountMapper.toDto(account));
+        return ResponseEntity.ok(accountService.getAccountDtoById(accountId, user.getUsername()));
     }
 
     /**

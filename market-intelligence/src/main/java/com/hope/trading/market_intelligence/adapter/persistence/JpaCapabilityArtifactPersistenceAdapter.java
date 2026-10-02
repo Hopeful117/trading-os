@@ -1,6 +1,8 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.application.port.ArtifactPersistencePort;
 import com.hope.trading.market_intelligence.domain.capability.*;
@@ -15,7 +17,9 @@ public class JpaCapabilityArtifactPersistenceAdapter implements ArtifactPersiste
     private final ObjectMapper mapper;
     public JpaCapabilityArtifactPersistenceAdapter(
             SpringDataCapabilityArtifactRepository repository, ObjectMapper mapper) {
-        this.repository = repository; this.mapper = mapper;
+        this.repository = repository;
+        this.mapper = mapper.copy().setVisibility(
+                PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
     }
     @Override @Transactional(readOnly = true)
     public List<ProducedArtifact> find(UUID analysisId, ArtifactType type, ArtifactVersion version) {
