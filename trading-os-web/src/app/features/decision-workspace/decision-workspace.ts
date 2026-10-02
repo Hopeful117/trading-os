@@ -116,6 +116,8 @@ export class DecisionWorkspace {
   selectedAccountId: string | null = null;
   selectedMarketId: string | null = null;
   manualTradeOpen = false;
+  marketSearch = '';
+  showUnavailableMarkets = false;
 
   readonly accounts$ = this.accountsRefreshSubject.pipe(
     startWith(undefined),
@@ -312,6 +314,8 @@ export class DecisionWorkspace {
     this.selectedAccountId = accountId || null;
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
+    this.marketSearch = '';
+    this.showUnavailableMarkets = false;
     this.selectedMarketSubject.next(null);
     this.selectedAccountSubject.next(accountId || null);
     void this.router.navigate([], {
@@ -324,6 +328,8 @@ export class DecisionWorkspace {
     this.selectedAccountId = null;
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
+    this.marketSearch = '';
+    this.showUnavailableMarkets = false;
     this.selectedMarketSubject.next(null);
     this.selectedAccountSubject.next(null);
     void this.router.navigate([], {
@@ -346,6 +352,30 @@ export class DecisionWorkspace {
       queryParams: { marketId },
       queryParamsHandling: 'merge',
     });
+  }
+
+  setMarketSearch(value: string): void {
+    this.marketSearch = value.trim().toUpperCase();
+  }
+
+  eligibleMarkets(context: DecisionContextResponse): DecisionContextResponse['markets'] {
+    const query = this.marketSearch;
+    return context.markets
+      .filter((market) => market.eligible)
+      .filter((market) => {
+        if (query.length < 2) {
+          return false;
+        }
+
+        return `${market.symbol ?? ''} ${market.provider ?? ''} ${market.marketId}`
+          .toUpperCase()
+          .includes(query);
+      })
+      .slice(0, 40);
+  }
+
+  unavailableMarkets(context: DecisionContextResponse): DecisionContextResponse['markets'] {
+    return context.markets.filter((market) => !market.eligible).slice(0, 40);
   }
 
   openManualTrade(): void {

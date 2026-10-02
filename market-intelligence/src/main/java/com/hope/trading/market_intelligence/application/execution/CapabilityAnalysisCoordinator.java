@@ -200,6 +200,7 @@ public class CapabilityAnalysisCoordinator {
                 .flatMap(item -> item.result().stream())
                 .filter(item -> item.completeness() == CapabilityCompleteness.COMPLETE)
                 .filter(item -> !item.metrics().isEmpty())
+                .filter(this::hasDeterministicMeasurementsArtifact)
                 .map(result -> finding(request, result, completedAt))
                 .toList();
         List<String> warnings = new ArrayList<>();
@@ -249,6 +250,13 @@ public class CapabilityAnalysisCoordinator {
                 capabilityId, AnalysisOrigin.DETERMINISTIC,
                 FindingType.DETERMINISTIC_FINDING, details.title(), details.explanation(),
                 result.metrics(), BigDecimal.ONE, Set.of(), generatedAt);
+    }
+
+    private boolean hasDeterministicMeasurementsArtifact(CapabilityResult result) {
+        return result.artifacts().stream()
+                .map(ProducedArtifact::artifact)
+                .map(StoredArtifact::content)
+                .anyMatch(DeterministicMeasurements.class::isInstance);
     }
 
     private ContextSectionSummary summary(ContextSection section) {

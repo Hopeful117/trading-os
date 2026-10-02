@@ -47,8 +47,7 @@ public class TrendContextReadService {
                 && latestObservation.status() == ObservationStatus.ACTIVE
                 && latestObservation.validUntil().map(now::isBefore).orElse(true);
         boolean current = valid && execution.map(this::isCompleted).orElse(true)
-                && execution.flatMap(AnalysisExecution::completedAt)
-                .map(completed -> !completed.isAfter(latestObservation.createdAt()))
+                && execution.map(value -> !value.requestedAt().isAfter(latestObservation.createdAt()))
                 .orElse(execution.isEmpty());
         String operationalStatus = operationalStatus(execution, valid, latestObservation);
         return new TrendContextReadModel(

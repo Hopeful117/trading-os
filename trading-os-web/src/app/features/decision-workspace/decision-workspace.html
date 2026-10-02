@@ -100,9 +100,9 @@
             <div class="section-heading">
               <div>
                 <span class="eyebrow">Step 2</span>
-                <h2>Available markets</h2>
+                <h2>Choose a market</h2>
               </div>
-              <span class="count-badge">{{ view.context.eligibleMarketIds.length }}</span>
+              <span class="count-badge">{{ view.context.eligibleMarketIds.length }} eligible</span>
             </div>
 
             @if (view.context.eligibleMarketIds.length === 0) {
@@ -110,9 +110,33 @@
                 No market is currently eligible for this account.
               </p>
             } @else {
-              <div class="market-list" data-testid="eligible-markets">
-                @for (market of view.context.markets; track market.marketId) {
-                  @if (market.eligible) {
+              <label class="market-search">
+                <input
+                  type="search"
+                  data-testid="market-search"
+                  aria-label="Search available markets"
+                  placeholder="Search symbol, e.g. BNT/USD"
+                  [value]="marketSearch"
+                  (input)="setMarketSearch($any($event.target).value)"
+                />
+                <small
+                  >Type at least 2 characters to search
+                  {{ view.context.eligibleMarketIds.length }} markets.</small
+                >
+              </label>
+
+              @if (marketSearch.length < 2) {
+                <div class="market-picker-empty" data-testid="market-search-hint">
+                  <strong>Search when you know what to inspect</strong>
+                  <span>The full market catalogue stays out of the way until you filter it.</span>
+                </div>
+              } @else if (eligibleMarkets(view.context).length === 0) {
+                <p class="state-message" data-testid="market-search-empty">
+                  No eligible market matches “{{ marketSearch }}”.
+                </p>
+              } @else {
+                <div class="market-list" data-testid="eligible-markets">
+                  @for (market of eligibleMarkets(view.context); track market.marketId) {
                     <button
                       type="button"
                       class="market-option"
@@ -123,30 +147,50 @@
                       <span>{{ market.provider ?? 'Unknown provider' }}</span>
                     </button>
                   }
+                </div>
+                @if (eligibleMarkets(view.context).length === 40) {
+                  <small class="market-list-note"
+                    >Showing the first 40 matches. Refine your search.</small
+                  >
                 }
-              </div>
+              }
             }
           </article>
         </section>
 
         @if (view.context.markets.length > view.context.eligibleMarketIds.length) {
           <section class="context-card excluded-markets" data-testid="excluded-markets">
-            <div class="section-heading">
-              <div>
+            <button
+              type="button"
+              class="disclosure-button"
+              [attr.aria-expanded]="showUnavailableMarkets"
+              (click)="showUnavailableMarkets = !showUnavailableMarkets"
+            >
+              <span>
                 <span class="eyebrow">Backend decision</span>
-                <h2>Unavailable markets</h2>
-              </div>
-            </div>
-            <ul>
-              @for (market of view.context.markets; track market.marketId) {
-                @if (!market.eligible) {
-                  <li>
-                    <strong>{{ market.symbol ?? market.marketId }}</strong>
-                    <span>{{ market.reasons.join(', ') }}</span>
-                  </li>
+                <strong>Unavailable markets</strong>
+              </span>
+              <span class="disclosure-summary">
+                {{ view.context.markets.length - view.context.eligibleMarketIds.length }} hidden
+                <span aria-hidden="true">{{ showUnavailableMarkets ? '−' : '+' }}</span>
+              </span>
+            </button>
+            @if (showUnavailableMarkets) {
+              <div class="excluded-markets-content">
+                <p>These markets are excluded from this account context and cannot be selected.</p>
+                <ul>
+                  @for (market of unavailableMarkets(view.context); track market.marketId) {
+                    <li>
+                      <strong>{{ market.symbol ?? market.marketId }}</strong>
+                      <span>{{ market.reasons.join(', ') }}</span>
+                    </li>
+                  }
+                </ul>
+                @if (view.context.markets.length - view.context.eligibleMarketIds.length > 40) {
+                  <small>Showing the first 40 unavailable markets.</small>
                 }
-              }
-            </ul>
+              </div>
+            }
           </section>
         }
 

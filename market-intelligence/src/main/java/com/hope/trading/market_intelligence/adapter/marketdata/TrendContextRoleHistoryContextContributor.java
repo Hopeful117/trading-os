@@ -3,6 +3,8 @@ package com.hope.trading.market_intelligence.adapter.marketdata;
 import com.hope.trading.market_intelligence.application.context.ContextContributor;
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -12,6 +14,7 @@ import java.util.*;
 /** Acquires all Trend Context roles inside one cutoff boundary. */
 @Component
 public class TrendContextRoleHistoryContextContributor implements ContextContributor {
+    private static final Logger log = LoggerFactory.getLogger(TrendContextRoleHistoryContextContributor.class);
     public static final String RULE_VERSION = "trend-context-rules-v1";
     private static final int MAX_OHLC_LIMIT = 720;
     private static final int MAX_ATTEMPTS = 5;
@@ -48,11 +51,14 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
         Map<TrendContextRole, List<OhlcResponse>> responses = Map.of();
         TrendContextAssessmentInput mapped = null;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            responses = acquire(request.marketId(), limits);
+            responses = acquire(request, limits);
             try {
                 mapped = inputMapper.map(
                         responses, profile, boundary, boundary, RULE_VERSION);
             } catch (IllegalArgumentException exception) {
+                log.warn("Trend Context input mapping failed analysis={} market={} attempt={} errorType={} message={}",
+                        request.analysisId(), request.marketId(), attempt + 1,
+                        exception.getClass().getSimpleName(), exception.getMessage());
                 if (!increaseMissingRequiredRole(responses, limits)) throw exception;
                 continue;
             }
@@ -85,14 +91,22 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
     }
 
     private Map<TrendContextRole, List<OhlcResponse>> acquire(
-            UUID marketId, Map<TrendContextRole, Integer> limits) {
+            IntelligenceAnalysisRequest request, Map<TrendContextRole, Integer> limits) {
         EnumMap<TrendContextRole, List<OhlcResponse>> responses =
                 new EnumMap<>(TrendContextRole.class);
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleDefinition definition = profile.roles().get(role);
             if (definition == null) continue;
-            List<OhlcResponse> values = marketDataClient.findOhlc(
-                    marketId, definition.interval(), limits.get(role));
+            List<OhlcResponse> values;
+            try {
+                values = marketDataClient.findOhlc(
+                        request.marketId(), definition.interval(), limits.get(role));
+            } catch (RuntimeException exception) {
+                log.warn("Trend Context OHLC acquisition failed analysis={} market={} role={} interval={} limit={} errorType={} message={}",
+                        request.analysisId(), request.marketId(), role, definition.interval(),
+                        limits.get(role), exception.getClass().getSimpleName(), exception.getMessage());
+                throw exception;
+            }
             if (!values.isEmpty() || definition.required()) responses.put(role, List.copyOf(values));
         }
         return Map.copyOf(responses);

@@ -10,6 +10,8 @@ import java.util.UUID;
 public interface AccountService {
     Account getAccountById(UUID accountId,String username);
 
+    AccountDto getAccountDtoById(UUID accountId, String username);
+
 
     BigDecimal getTotalBalance(UUID accountId,String username);
 

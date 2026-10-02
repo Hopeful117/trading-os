@@ -35,11 +35,12 @@ class TrendContextControllerTest {
     void authenticatedReadReturnsTypedApplicationModel() throws Exception {
         UUID marketId = TrendContextTestFixtures.MARKET_ID;
         TrendContextReadService reads = mock(TrendContextReadService.class);
+        var assessment = TrendContextTestFixtures.assessment();
         when(reads.find(marketId)).thenReturn(new TrendContextReadModel(
                 marketId, "AVAILABLE", true, "VALID", UUID.randomUUID(),
                 UUID.randomUUID(), 1L, ObservationStatus.ACTIVE,
                 TrendContextTestFixtures.ASSESSMENT_AT,
-                TrendContextTestFixtures.ASSESSMENT_AT.plusSeconds(3600), null, null));
+                TrendContextTestFixtures.ASSESSMENT_AT.plusSeconds(3600), assessment, assessment));
         MockMvc mvc = mvc(reads);
 
         mvc.perform(get("/api/v1/intelligence/trend-context/{marketId}", marketId)
@@ -48,7 +49,8 @@ class TrendContextControllerTest {
                 .andExpect(jsonPath("$.operationalStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.assessmentPresent").value(true))
                 .andExpect(jsonPath("$.assessmentValidity").value("VALID"))
-                .andExpect(jsonPath("$.assessment").doesNotExist());
+                .andExpect(jsonPath("$.assessment.direction").value(assessment.direction().name()))
+                .andExpect(jsonPath("$.assessment.timeframes").exists());
         verify(reads).find(marketId);
     }
 

@@ -197,8 +197,35 @@ describe('DecisionWorkspace', () => {
     await fixture.whenStable();
 
     expect(contextServiceMock.resolve).toHaveBeenCalledWith(account.accountId);
-    expect(fixture.nativeElement.querySelector('[data-testid="eligible-markets"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="market-search-hint"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="excluded-markets"]')).toBeTruthy();
+  });
+
+  it('filters the market catalogue only after a focused search', async () => {
+    component.selectAccount(account.accountId);
+    component.setMarketSearch('btc');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('[data-testid="eligible-markets"]')).toBeTruthy();
+    expect(element.textContent).toContain('BTC/USD');
+    expect(element.textContent).not.toContain('ETH/USD');
+  });
+
+  it('keeps unavailable markets collapsed until explicitly opened', async () => {
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.excluded-markets-content')).toBeNull();
+
+    (element.querySelector('.disclosure-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(element.querySelector('.excluded-markets-content')).toBeTruthy();
+    expect(element.textContent).toContain('MARKET_NOT_TRADABLE');
   });
 
   it('clears the selected market when the account changes', () => {

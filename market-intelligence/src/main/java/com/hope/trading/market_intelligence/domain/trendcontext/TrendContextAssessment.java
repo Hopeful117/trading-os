@@ -1,11 +1,14 @@
 package com.hope.trading.market_intelligence.domain.trendcontext;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 public final class TrendContextAssessment {
     private final UUID marketId; private final String provider; private final String symbol;
     private final Instant assessmentAt; private final Instant cutOffAt;

@@ -1,5 +1,8 @@
 package com.hope.trading.market_intelligence.application.capability;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.hope.trading.market_intelligence.adapter.marketdata.TrendContextInputMapper;
 import com.hope.trading.market_intelligence.adapter.marketdata.TrendContextRoleHistory;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
@@ -109,5 +112,47 @@ class TrendContextAnalysisCapabilityTest {
         assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.DEGRADED);
         assertThat(result.artifacts()).isEmpty();
         assertThat(result.diagnostics()).noneMatch(finding -> finding.contains("UNKNOWN"));
+    }
+
+    @Test
+    void resultCanBeSerializedForDurableCapabilityExecution() throws Exception {
+        TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
+        TrendContextEngine engine = mock(TrendContextEngine.class);
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        TrendContextAssessmentInput input = mock(TrendContextAssessmentInput.class);
+        TrendContextAssessment assessment = TrendContextTestFixtures.assessment();
+        when(input.roleSeries()).thenReturn(Map.of());
+        when(input.assessmentAt()).thenReturn(assessment.assessmentAt());
+        when(input.cutOffAt()).thenReturn(assessment.cutOffAt());
+        when(mapper.map(any(), same(profile), any(), any(), any())).thenReturn(input);
+        when(engine.assess(input)).thenReturn(assessment);
+
+        TrendContextAnalysisCapability capability =
+                new TrendContextAnalysisCapability(mapper, engine, profile);
+        com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement requirement =
+                capability.metadata().requirements().getFirst();
+        StoredArtifact history = new StoredArtifact(
+                new ArtifactCacheKey(
+                        new ArtifactIdentity("trend-context-history", "test", "1.0.0"),
+                        ArtifactScope.publicMarket(TrendContextTestFixtures.MARKET_ID,
+                                "TREND_CONTEXT", AnalysisExecutionMode.ACTIVE),
+                        ArtifactFingerprint.empty(), ArtifactFingerprint.empty()),
+                new TrendContextRoleHistory(Map.of(), assessment.assessmentAt(), assessment.cutOffAt(),
+                        profile.profileId(), profile.profileVersion(), TrendContextTestFixtures.RULE_VERSION,
+                        Map.of()),
+                ArtifactFreshness.validUntil(assessment.assessmentAt(),
+                        assessment.assessmentAt().plusSeconds(60), "source"),
+                new ArtifactProvenance("test", "1.0.0", EXECUTION_ID,
+                        assessment.assessmentAt(), Set.of(), Set.of()),
+                AnalysisResultQuality.COMPLETE);
+        CapabilityResult result = capability.execute(new CapabilityContext(
+                ANALYSIS_ID, EXECUTION_ID, Map.of(requirement, List.of(history)), Set.of(), Map.of(), List.of(),
+                mock(CancellationToken.class)));
+
+        assertThat(result.artifacts()).hasSize(1);
+        ObjectMapper jsonMapper = new ObjectMapper().findAndRegisterModules()
+                .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+        String json = jsonMapper.writeValueAsString(result);
+        jsonMapper.readValue(json, CapabilityResult.class);
     }
 }

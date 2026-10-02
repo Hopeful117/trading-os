@@ -1,17 +1,21 @@
 package com.hope.trading.trading_core.service;
 
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
+import com.hope.trading.trading_core.dto.AccountDto;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -32,6 +37,8 @@ class AccountServiceImplTest {
     private final AccountRepository accountRepository = mock(AccountRepository.class);
     private final AccountMapper accountMapper = mock(AccountMapper.class);
     private final UserRepository userRepository = mock(UserRepository.class);
+    private final RiskPersistence riskPersistence = mock(RiskPersistence.class);
+    private final TradePlanningProfileRepository tradePlanningProfiles = mock(TradePlanningProfileRepository.class);
 
     private AccountServiceImpl service;
 
@@ -42,7 +49,7 @@ class AccountServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new AccountServiceImpl(accountRepository, accountMapper, userRepository,
-                mock(RiskPersistence.class), mock(TradePlanningProfileRepository.class));
+                riskPersistence, tradePlanningProfiles);
         account = new Account();
         account.setAccountId(accountId);
         account.setEquity(new BigDecimal("1000"));
@@ -78,6 +85,40 @@ class AccountServiceImplTest {
         assertThatThrownBy(() -> service.getAccountById(accountId, "other"))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("account not found");
+    }
+
+    @Test
+    void singularAccountDtoIncludesAssignedProfiles() {
+        ownedByAuthenticatedUser();
+        AccountDto mapped = AccountDto.builder().accountId(accountId).build();
+        when(accountMapper.toDto(account)).thenReturn(mapped);
+
+        UUID riskProfileId = UUID.randomUUID();
+        when(riskPersistence.assignedProfile(accountId)).thenReturn(Optional.of(
+                new RiskPersistence.Profile(riskProfileId, "1.0.0", "paper", "1", "platform",
+                        Instant.parse("2026-01-01T00:00:00Z"), "test", null, null, List.of())));
+
+        UUID planningProfileId = UUID.randomUUID();
+        TradePlanningProfile planningProfile = new TradePlanningProfile(
+                planningProfileId,
+                1,
+                UUID.randomUUID(),
+                new TradePlanningProfile.RiskBudget(new BigDecimal("10"), "USD", planningProfileId, 1),
+                new TradePlanningProfile.PlanningPreferences(
+                        planningProfileId, 1, TradePlanningProfile.EntryType.LIMIT,
+                        TradePlanningProfile.StopStrategy.PERCENTAGE_DISTANCE, new BigDecimal("1"),
+                        TradePlanningProfile.TargetStrategy.RISK_MULTIPLE, new BigDecimal("2"),
+                        TradePlanningProfile.PlanningHorizon.INTRADAY, Duration.ofHours(1)),
+                Instant.parse("2026-01-01T00:00:00Z"));
+        when(tradePlanningProfiles.findAssigned(accountId)).thenReturn(Optional.of(planningProfile));
+
+        AccountDto result = service.getAccountDtoById(accountId, username);
+
+        assertThat(result.getRiskProfileId()).isEqualTo(riskProfileId);
+        assertThat(result.getRiskProfileSemanticVersion()).isEqualTo("1.0.0");
+        assertThat(result.getTradePlanningProfileId()).isEqualTo(planningProfileId);
+        assertThat(result.getTradePlanningProfileVersion()).isEqualTo(1L);
+        verify(accountMapper).toDto(account);
     }
 
     @Test
