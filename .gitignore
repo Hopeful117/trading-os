@@ -39,3 +39,7 @@ build/
 **/.scannerwork/
 **/.sonar/
 **/coverage/
+
+### Local browser artifacts ###
+.playwright-mcp/
+*.png

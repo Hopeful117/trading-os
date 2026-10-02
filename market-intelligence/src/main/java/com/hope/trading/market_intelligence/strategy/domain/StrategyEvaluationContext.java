@@ -27,6 +27,7 @@ public final class StrategyEvaluationContext {
     private final StrategyApplicability.Timeframe timeframe;
     private final Instant evaluatedAt;
     private final Map<RequiredSemanticInput, SemanticValue> inputs;
+    private final StrategyEvidenceProvenance provenance;
     private final String digest;
 
     private StrategyEvaluationContext(
@@ -34,13 +35,15 @@ public final class StrategyEvaluationContext {
             String instrument,
             StrategyApplicability.Timeframe timeframe,
             Instant evaluatedAt,
-            Map<RequiredSemanticInput, SemanticValue> inputs
+            Map<RequiredSemanticInput, SemanticValue> inputs,
+            StrategyEvidenceProvenance provenance
     ) {
         this.marketId = Objects.requireNonNull(marketId, "marketId is required");
         this.instrument = requireText(instrument, "instrument");
         this.timeframe = Objects.requireNonNull(timeframe, "timeframe is required");
         this.evaluatedAt = Objects.requireNonNull(evaluatedAt, "evaluatedAt is required");
         this.inputs = Map.copyOf(inputs);
+        this.provenance = provenance;
         this.digest = computeDigest();
     }
 
@@ -59,6 +62,8 @@ public final class StrategyEvaluationContext {
      * never read wall-clock time.
      */
     public Instant evaluatedAt() { return evaluatedAt; }
+
+    public StrategyEvidenceProvenance provenance() { return provenance; }
 
     public boolean has(RequiredSemanticInput input) {
         return inputs.containsKey(input);
@@ -84,12 +89,13 @@ public final class StrategyEvaluationContext {
                 && instrument.equals(context.instrument)
                 && timeframe == context.timeframe
                 && evaluatedAt.equals(context.evaluatedAt)
-                && inputs.equals(context.inputs);
+                && inputs.equals(context.inputs)
+                && Objects.equals(provenance, context.provenance);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(marketId, instrument, timeframe, evaluatedAt, inputs);
+        return Objects.hash(marketId, instrument, timeframe, evaluatedAt, inputs, provenance);
     }
 
     private String computeDigest() {
@@ -98,6 +104,9 @@ public final class StrategyEvaluationContext {
                 .append("instrument=").append(instrument).append(';')
                 .append("timeframe=").append(timeframe).append(';')
                 .append("evaluatedAt=").append(evaluatedAt);
+        if (provenance != null) {
+            canonical.append(';').append("provenance=").append(provenance);
+        }
         List<Map.Entry<RequiredSemanticInput, SemanticValue>> ordered = new ArrayList<>(inputs.entrySet());
         ordered.sort(Map.Entry.comparingByKey());
         for (Map.Entry<RequiredSemanticInput, SemanticValue> entry : ordered) {
@@ -201,6 +210,7 @@ public final class StrategyEvaluationContext {
         private StrategyApplicability.Timeframe timeframe;
         private Instant evaluatedAt;
         private final Map<RequiredSemanticInput, SemanticValue> inputs = new LinkedHashMap<>();
+        private StrategyEvidenceProvenance provenance;
 
         private Builder() {
         }
@@ -232,9 +242,14 @@ public final class StrategyEvaluationContext {
             return this;
         }
 
+        public Builder provenance(StrategyEvidenceProvenance provenance) {
+            this.provenance = provenance;
+            return this;
+        }
+
         public StrategyEvaluationContext build() {
             return new StrategyEvaluationContext(marketId, instrument, timeframe,
-                    evaluatedAt, inputs);
+                    evaluatedAt, inputs, provenance);
         }
     }
 }

@@ -84,6 +84,8 @@ class ProductionIntelligencePipelineTest {
             mock(StrategyMatchOpportunityFactory.class);
     private final StrategyDefinitionRepository definitions =
             mock(StrategyDefinitionRepository.class);
+    private final com.hope.trading.market_intelligence.strategy.application.TrendContextEvidenceSelector
+            trendContextEvidence = mock(com.hope.trading.market_intelligence.strategy.application.TrendContextEvidenceSelector.class);
 
     private ProductionIntelligencePipeline pipeline;
 
@@ -94,7 +96,7 @@ class ProductionIntelligencePipelineTest {
     void setUp() {
         pipeline = new ProductionIntelligencePipeline(observations, opportunities,
                 marketData, runs, clock, evaluationRunner, parity, matchPersister,
-                matchOpportunities, definitions);
+                matchOpportunities, definitions, trendContextEvidence);
         when(runs.findByAnalysisExecutionIdAndPipelineVersion(
                 any(UUID.class), anyString())).thenReturn(Optional.empty());
         when(runs.save(any())).thenAnswer(inv -> inv.getArgument(0));

@@ -7,7 +7,7 @@ RUN mvn clean package -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=builder /app/target/broker-service-*.jar app.jar
+COPY --from=builder /app/target/broker-service-0.0.1-SNAPSHOT-exec.jar app.jar
 
 
 

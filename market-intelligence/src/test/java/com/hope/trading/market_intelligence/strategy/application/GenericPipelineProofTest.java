@@ -188,11 +188,12 @@ class GenericPipelineProofTest {
     void productionBuiltinStrategiesDoesNotContainFakeStrategy() {
         BuiltinStrategies builtins = new BuiltinStrategies();
         List<StrategyDefinition> all = builtins.all();
-        assertThat(all).hasSize(2);
+        assertThat(all).hasSize(3);
         assertThat(all).extracting(definition -> definition.strategyId().value())
                 .containsExactlyInAnyOrder(
                         BuiltinStrategies.LEGACY_OHLC_TREND_ID,
-                        BuiltinStrategies.OHLC_RANGE_EXPANSION_ID);
+                        BuiltinStrategies.OHLC_RANGE_EXPANSION_ID,
+                        BuiltinStrategies.CONSERVATIVE_TREND_FOLLOWING_ID);
         assertThat(all.stream().map(StrategyDefinition::name))
                 .doesNotContain("Fake Momentum");
     }

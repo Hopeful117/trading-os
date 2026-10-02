@@ -181,12 +181,14 @@ class Story0014SecondProductionStrategyTest {
                 .toList();
 
         assertThat(evaluations).hasSize(strategies.size());
-        assertThat(evaluations).allSatisfy(evaluation ->
+        assertThat(evaluations.subList(0, 2)).allSatisfy(evaluation ->
                 assertThat(evaluation.status()).isEqualTo(StrategyEvaluationStatus.MATCH));
+        assertThat(evaluations.get(2).status()).isEqualTo(StrategyEvaluationStatus.NOT_EVALUABLE);
         assertThat(evaluations.stream().map(StrategyEvaluation::strategyId).map(StrategyId::value))
                 .containsExactlyInAnyOrder(
                         BuiltinStrategies.LEGACY_OHLC_TREND_ID,
-                        BuiltinStrategies.OHLC_RANGE_EXPANSION_ID);
+                        BuiltinStrategies.OHLC_RANGE_EXPANSION_ID,
+                        BuiltinStrategies.CONSERVATIVE_TREND_FOLLOWING_ID);
     }
 
     @Test
@@ -266,7 +268,8 @@ class Story0014SecondProductionStrategyTest {
         return new LiveStrategyEvaluationRunner(
                 new StrategyEvaluationContextFactory(),
                 new StrategyEvaluationService(new StrategyEvaluatorRegistry(List.of(
-                        new LegacyOhlcTrendEvaluator(), new OhlcRangeExpansionEvaluator()))),
+                        new LegacyOhlcTrendEvaluator(), new OhlcRangeExpansionEvaluator(),
+                        new ConservativeTrendFollowingEvaluator()))),
                 new BuiltinStrategies());
     }
 

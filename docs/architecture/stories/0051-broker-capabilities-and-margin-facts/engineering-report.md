@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION EVIDENCE PARTIAL`
+`IMPLEMENTED - RUNTIME VALIDATION PENDING`
 
 ## Outcome
 
@@ -14,16 +14,20 @@ domains.
 
 ## Validation
 
-Focused capability and margin-client tests are present in the implementation
-commit. The required full Maven validation was not rerun during this
-documentation remediation, so this report does not claim a fresh passing
-result.
+Fresh Maven validation completed after the documentation remediation:
+
+* Broker Service: `201` tests passed.
+* Trading Core: `543` tests passed.
+* Risk Domain: `21` tests passed.
+* `git diff --check`: passed.
 
 ## Known Limitations
 
 * Runtime evidence for authenticated internal calls is not attached here.
 * Staleness and unavailable-fact behavior require integrated verification.
 * No provider other than Kraken is covered by the current implementation.
+* Docker Compose is unavailable in the current execution environment, so the
+  Kraken sandbox and deployed E2E proof were not run.
 
 ## Git State
 
@@ -37,6 +41,6 @@ MERGE = NO
 ## Human Actions Required
 
 1. Review the boundary against ADR-006, ADR-028, ADR-030, ADR-042, and ADR-044.
-2. Run Broker Service, Trading Core, and Risk Domain tests.
-3. Verify service authentication and fail-closed behavior in the runtime.
+2. Verify service authentication and fail-closed behavior in the runtime.
+3. Execute one controlled Kraken sandbox or equivalent deployed E2E proof.
 4. Update the Story status after evidence review.

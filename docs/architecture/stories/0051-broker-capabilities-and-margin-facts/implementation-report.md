@@ -26,15 +26,16 @@ authority into Broker Service.
 ## Validation Evidence
 
 The implementation commit includes `KrakenCapabilitiesTest` and
-`BrokerRequiredMarginClientTest`. The implementation plan identifies the
-Broker Service, Trading Core, and Risk Domain Maven suites as the validation
-boundary. Fresh Maven output was not produced during this documentation
-remediation.
+`BrokerRequiredMarginClientTest`. Fresh Maven validation covered the planned
+Broker Service, Trading Core, and Risk Domain boundary.
 
 ```text
 implementation commit: 40e5258
-focused capability/margin tests: present in the implementation commit
-fresh Maven execution: not run during documentation remediation
+Broker Service: 201 tests passed
+Trading Core: 543 tests passed
+Risk Domain: 21 tests passed
+git diff --check: passed
+runtime/sandbox E2E: pending; Docker Compose unavailable in this environment
 ```
 
 ## Remaining Evidence
@@ -42,4 +43,5 @@ fresh Maven execution: not run during documentation remediation
 * verify service-JWT enforcement for every internal capability and margin route;
 * verify stale and unavailable facts fail closed in the integrated path;
 * verify provider-specific payloads do not cross the Broker Service boundary;
-* record the affected Maven test results before final Story completion.
+* execute and record a controlled runtime or Kraken sandbox E2E proof before
+  final Story completion.
