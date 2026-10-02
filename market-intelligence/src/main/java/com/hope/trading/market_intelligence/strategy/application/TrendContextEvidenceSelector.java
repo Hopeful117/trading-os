@@ -1,9 +1,9 @@
 package com.hope.trading.market_intelligence.strategy.application;
 
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
-import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
+import com.hope.trading.market_intelligence.application.port.CapabilityExecutionRepository;
 import com.hope.trading.market_intelligence.application.port.ObservationRepository;
-import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
+import com.hope.trading.market_intelligence.domain.capability.CapabilityExecutionState;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.ObservationStatus;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
@@ -20,11 +20,11 @@ import java.util.UUID;
 @Component
 public class TrendContextEvidenceSelector {
     private final ObservationRepository observations;
-    private final AnalysisExecutionRepository executions;
+    private final CapabilityExecutionRepository executions;
 
     public TrendContextEvidenceSelector(
             ObservationRepository observations,
-            AnalysisExecutionRepository executions) {
+            CapabilityExecutionRepository executions) {
         this.observations = observations;
         this.executions = executions;
     }
@@ -34,25 +34,27 @@ public class TrendContextEvidenceSelector {
     }
 
     public Optional<Observation> select(
+            UUID analysisExecutionId,
             UUID marketId,
             Collection<RequiredSemanticInput> inputs,
             Instant evaluatedAt) {
         if (!requiresTrendContext(inputs)) {
             return Optional.empty();
         }
-        Instant completedAt = executions.findLatestByMarketId(marketId)
-                .filter(execution -> execution.capabilities().contains(
-                        TrendContextAnalysisCapability.CAPABILITY_ID))
-                .filter(execution -> execution.status() == AnalysisExecutionStatus.COMPLETED)
-                .flatMap(execution -> execution.completedAt())
-                .orElse(null);
-        if (completedAt == null) {
-            return Optional.empty();
-        }
+        var trendContextExecutionIds = executions.findByAnalysisExecutionId(analysisExecutionId)
+                .stream()
+                .filter(execution -> execution.state() == CapabilityExecutionState.COMPLETED)
+                .filter(execution -> execution.capabilityId().value()
+                        .equals(TrendContextAnalysisCapability.CAPABILITY_ID))
+                .map(execution -> execution.id())
+                .collect(java.util.stream.Collectors.toSet());
+        if (trendContextExecutionIds.isEmpty()) return Optional.empty();
         return observations.findByType(new com.hope.trading.market_intelligence.domain.observation.ObservationType("TREND_CONTEXT"))
                 .stream()
                 .filter(observation -> observation.status() == ObservationStatus.ACTIVE)
-                .filter(observation -> !observation.createdAt().isBefore(completedAt))
+                .filter(observation -> observation.evidence().stream()
+                        .anyMatch(evidence -> trendContextExecutionIds.contains(
+                                evidence.capabilityResult().capabilityExecutionId())))
                 .filter(observation -> observation.payload()
                         .filter(TrendContextObservationPayload.class::isInstance)
                         .map(TrendContextObservationPayload.class::cast)

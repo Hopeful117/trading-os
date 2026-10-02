@@ -17,6 +17,11 @@
   Context analysis.
 - Wired generic evidence selection into the existing production pipeline while
   preserving legacy OHLC evaluation and existing match/opportunity boundaries.
+- Replaced latest-execution/time heuristic selection with exact membership in the
+  requested analysis execution's completed Trend Context capability executions.
+- Propagated the selected strategy evidence through MATCH persistence,
+  opportunity projection, detection-time reference-price extraction, and the
+  single-opportunity pipeline completion reference.
 - Added focused Story 0065 tests and updated affected catalogue/regression tests.
 
 ## Not Changed
@@ -31,5 +36,8 @@
 - `mvn -q -Dtest='Story0065TrendContextStrategyTest,GenericPipelineProofTest,Story0014SecondProductionStrategyTest' test`
 - `mvn -q test`
 - `git diff --check`
+- `mvn -q -DskipTests compile`
 
-All commands completed successfully. Changes remain unstaged and uncommitted.
+All commands completed successfully. Maven emitted normal Mockito/JDK agent and
+Spring/H2/Flyway warnings during the test suite. Changes remain unstaged and
+uncommitted.
