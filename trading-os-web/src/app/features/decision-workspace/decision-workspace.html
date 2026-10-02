@@ -119,7 +119,10 @@
                   [value]="marketSearch"
                   (input)="setMarketSearch($any($event.target).value)"
                 />
-                <small>Type at least 2 characters to search {{ view.context.eligibleMarketIds.length }} markets.</small>
+                <small
+                  >Type at least 2 characters to search
+                  {{ view.context.eligibleMarketIds.length }} markets.</small
+                >
               </label>
 
               @if (marketSearch.length < 2) {
@@ -146,7 +149,9 @@
                   }
                 </div>
                 @if (eligibleMarkets(view.context).length === 40) {
-                  <small class="market-list-note">Showing the first 40 matches. Refine your search.</small>
+                  <small class="market-list-note"
+                    >Showing the first 40 matches. Refine your search.</small
+                  >
                 }
               }
             }
