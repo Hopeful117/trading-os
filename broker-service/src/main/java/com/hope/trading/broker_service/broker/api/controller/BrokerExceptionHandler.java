@@ -14,6 +14,7 @@ public final class BrokerExceptionHandler {
     @ExceptionHandler(BrokerRateLimitException.class) ResponseEntity<Problem> rate(BrokerRateLimitException e){return response(HttpStatus.TOO_MANY_REQUESTS,"BROKER_RATE_LIMITED","Broker rate limit reached");}
     @ExceptionHandler(BrokerUnavailableException.class) ResponseEntity<Problem> unavailable(BrokerUnavailableException e){return response(HttpStatus.SERVICE_UNAVAILABLE,"BROKER_UNAVAILABLE","Broker is temporarily unavailable");}
     @ExceptionHandler(BrokerTechnicalException.class) ResponseEntity<Problem> technical(BrokerTechnicalException e){return response(HttpStatus.BAD_GATEWAY,"BROKER_PROTOCOL_ERROR","Broker communication failed");}
+    @ExceptionHandler(IllegalArgumentException.class) ResponseEntity<Problem> invalidRequest(IllegalArgumentException e){return response(HttpStatus.BAD_REQUEST,"INVALID_BROKER_REQUEST","Broker request is invalid");}
     private ResponseEntity<Problem> response(HttpStatus status,String code,String message){return ResponseEntity.status(status).body(new Problem(code,message,Instant.now()));}
     record Problem(String code,String message,Instant timestamp){}
 }

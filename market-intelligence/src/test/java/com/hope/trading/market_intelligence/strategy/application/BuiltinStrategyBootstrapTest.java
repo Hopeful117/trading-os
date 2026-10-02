@@ -27,7 +27,8 @@ class BuiltinStrategyBootstrapTest {
                     context.getBean(StrategyDefinitionRepository.class);
             List<StrategyDefinition> all = repository.findAll();
             assertThat(all).extracting(StrategyDefinition::name)
-                    .containsExactlyInAnyOrder("Legacy OHLC Trend", "OHLC Range Expansion");
+                    .containsExactlyInAnyOrder("Legacy OHLC Trend", "OHLC Range Expansion",
+                            "Conservative Trend Following V1");
 
             StrategyDefinition legacy = byName(all, "Legacy OHLC Trend");
             assertThat(legacy.validationStatus().name()).isEqualTo("UNVALIDATED");
@@ -96,7 +97,7 @@ class BuiltinStrategyBootstrapTest {
         // Restart: missing catalogue entry inserted, modified row preserved.
         try (ConfigurableApplicationContext context = context("boot_newversion")) {
             List<StrategyDefinition> all = repository(context).findAll();
-            assertThat(all).hasSize(2);
+            assertThat(all).hasSize(3);
             assertThat(byName(all, "Legacy OHLC Trend").operationalStatus().name())
                     .isEqualTo("RETIRED");
             StrategyDefinition expansion = byName(all, "OHLC Range Expansion");

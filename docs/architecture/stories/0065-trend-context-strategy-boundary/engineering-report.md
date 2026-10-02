@@ -1,0 +1,29 @@
+# Story 0065 - Engineering Report
+
+## Result
+
+The approved evidence boundary is implemented using the existing strategy
+context, evaluator registry, governance filtering, match persistence, and
+opportunity projection. Typed Trend Context observations retain observation
+identity/version, cut-off, profile/rule versions, input fingerprint, assessment
+fingerprint, and deterministic context digest provenance.
+
+The conservative strategy is deliberately persisted only in its disabled and
+unvalidated initial state. Therefore the production governance gate prevents it
+from producing a live match until a separate validation and activation decision
+is made.
+
+## Verification
+
+Focused strategy and pipeline tests pass, including legacy strategy behavior,
+builtin bootstrap behavior, typed strategy outcomes, missing evidence handling,
+and context provenance. The complete Market Intelligence Maven test suite also
+passes. `git diff --check` passes.
+
+## Human Review
+
+- Review the unstaged diff, especially the new typed input names and conservative
+  criteria.
+- Confirm the desired governance process before any future enablement or
+  validation of `Conservative Trend Following V1`.
+- No commit, push, merge, or Story 0066 implementation was performed.

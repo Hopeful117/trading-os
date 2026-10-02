@@ -2,11 +2,14 @@ package com.hope.trading.market_intelligence.strategy.application;
 
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.ObservationEvidence;
+import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
+import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextAssessment;
 import com.hope.trading.market_intelligence.strategy.domain.RequiredSemanticInput;
 import com.hope.trading.market_intelligence.strategy.domain.SemanticInputType;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyApplicability;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluationContext;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyEvidenceProvenance;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -50,23 +53,94 @@ public class StrategyEvaluationContextFactory {
                 .timeframe(firstTimeframe(definition))
                 .evaluatedAt(evaluatedAt);
 
+        observation.payload().filter(TrendContextObservationPayload.class::isInstance)
+                .map(TrendContextObservationPayload.class::cast)
+                .map(TrendContextObservationPayload::content)
+                .ifPresent(content -> builder.provenance(provenanceOf(observation, content)));
+
         for (RequiredSemanticInput required : definition.requiredInputs()) {
-            resolveInput(required, observation, builder);
+            resolveInput(required, observation, evaluatedAt, builder);
         }
 
         return builder.build();
     }
 
+    private StrategyEvidenceProvenance provenanceOf(
+            Observation observation,
+            com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapabilityContent content) {
+        TrendContextAssessment assessment = content.assessment();
+        return new StrategyEvidenceProvenance(
+                observation.id(), observation.lineageId(), observation.version(),
+                content.cutOffAt(), assessment.profileVersion(), assessment.ruleVersion(),
+                content.inputFingerprint(), content.assessmentFingerprint());
+    }
+
     private void resolveInput(
             RequiredSemanticInput required,
             Observation observation,
+            Instant evaluatedAt,
             StrategyEvaluationContext.Builder builder
     ) {
+        if (observation.payload().filter(TrendContextObservationPayload.class::isInstance).isPresent()
+                && required.key().startsWith("TREND_CONTEXT_")) {
+            resolveTrendContextInput(required, observation, evaluatedAt, builder);
+            return;
+        }
         if (required.type() == SemanticInputType.OBSERVATION) {
             resolveObservationInput(required, observation, builder);
         }
         // FEATURE-type inputs will be resolved from capability outputs when
         // Market Intelligence capabilities produce feature artifacts.
+    }
+
+    private void resolveTrendContextInput(
+            RequiredSemanticInput required,
+            Observation observation,
+            Instant evaluatedAt,
+            StrategyEvaluationContext.Builder builder) {
+        TrendContextObservationPayload payload = observation.payload()
+                .filter(TrendContextObservationPayload.class::isInstance)
+                .map(TrendContextObservationPayload.class::cast)
+                .orElseThrow();
+        var content = payload.content();
+        TrendContextAssessment assessment = content.assessment();
+        if (assessment == null) {
+            return;
+        }
+        String key = required.key();
+        if (key.equals("TREND_CONTEXT_ATTENTION")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    assessment.attention().name()));
+        } else if (key.equals("TREND_CONTEXT_DIRECTION")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    assessment.direction().name()));
+        } else if (key.equals("TREND_CONTEXT_REGIME")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    assessment.regime().name()));
+        } else if (key.equals("TREND_CONTEXT_PHASE")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    assessment.phase().name()));
+        } else if (key.equals("TREND_CONTEXT_ALIGNMENT")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    assessment.alignment().name()));
+        } else if (key.equals("TREND_CONTEXT_HARD_EXCLUSION")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    Boolean.toString(!assessment.exclusions().isEmpty())));
+        } else if (key.equals("TREND_CONTEXT_MATERIAL_CONTRADICTION")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    Boolean.toString(!assessment.contradictions().isEmpty())));
+        } else if (key.equals("TREND_CONTEXT_INVALIDATION")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(
+                    Boolean.toString(!assessment.invalidations().isEmpty())));
+        } else if (key.equals("TREND_CONTEXT_CUTOFF_AT")) {
+            builder.input(required, StrategyEvaluationContext.SemanticValue.instant(content.cutOffAt()));
+        } else if (key.equals("TREND_CONTEXT_VALID")) {
+            boolean valid = observation.status()
+                    == com.hope.trading.market_intelligence.domain.observation.ObservationStatus.ACTIVE
+                    && observation.validUntil().map(until -> evaluatedAt.isBefore(until)).orElse(true)
+                    && !content.cutOffAt().isAfter(evaluatedAt);
+            builder.input(required, StrategyEvaluationContext.SemanticValue.string(Boolean.toString(valid)));
+        }
     }
 
     private void resolveObservationInput(

@@ -58,6 +58,20 @@ class BrokerApiSecurityIntegrationTest {
                 .header("X-Service-Authorization","Bearer "+serviceTokenWithoutActor()))
                 .andExpect(status().isForbidden());
     }
+    @Test void technicalCapabilitiesRequiresDelegatedActor() throws Exception {
+        mvc.perform(get("/internal/v1/broker-accounts/{id}/capabilities",UUID.randomUUID())
+                .queryParam("instrument","BTC/USD")
+                .header("X-Service-Authorization","Bearer "+serviceTokenWithoutActor()))
+                .andExpect(status().isForbidden());
+    }
+    @Test void marginPreviewRejectsPathAndBodyAccountMismatch() throws Exception {
+        UUID pathAccount=UUID.randomUUID(),bodyAccount=UUID.randomUUID();
+        mvc.perform(post("/internal/v1/broker-accounts/{id}/margin-preview",pathAccount)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"brokerAccountId\":\""+bodyAccount+"\",\"instrument\":\"BTC/USD\",\"side\":\"BUY\",\"quantity\":1,\"price\":100}")
+                .header("X-Service-Authorization","Bearer "+serviceToken()))
+                .andExpect(status().isBadRequest());
+    }
     @Test void rejectsInvalidSignature() throws Exception {assertUnauthorized(serviceTokenWithKey("broker-service", Instant.now().plusSeconds(60),
             java.util.Base64.getDecoder().decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")));}
     @Test void rejectsExpiredToken() throws Exception {assertUnauthorized(serviceTokenWithKey("broker-service", Instant.now().minusSeconds(1),

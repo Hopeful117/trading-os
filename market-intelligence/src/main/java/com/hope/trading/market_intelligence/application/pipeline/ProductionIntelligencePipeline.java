@@ -12,6 +12,7 @@ import com.hope.trading.market_intelligence.strategy.application.LiveStrategyEva
 import com.hope.trading.market_intelligence.strategy.application.ShadowStrategyParityMonitor;
 import com.hope.trading.market_intelligence.strategy.application.StrategyDefinitionRepository;
 import com.hope.trading.market_intelligence.strategy.application.StrategyMatchPersister;
+import com.hope.trading.market_intelligence.strategy.application.TrendContextEvidenceSelector;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyApplicability;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluation;
@@ -64,6 +65,7 @@ public class ProductionIntelligencePipeline {
     private final StrategyMatchPersister matches;
     private final StrategyMatchOpportunityFactory matchOpportunities;
     private final StrategyDefinitionRepository definitions;
+    private final TrendContextEvidenceSelector trendContextEvidence;
 
     public ProductionIntelligencePipeline(
             ObservationBuilder observations, OpportunityEngine opportunities,
@@ -71,7 +73,8 @@ public class ProductionIntelligencePipeline {
             Clock clock, LiveStrategyEvaluationRunner strategyEvaluation,
             ShadowStrategyParityMonitor parity, StrategyMatchPersister matches,
             StrategyMatchOpportunityFactory matchOpportunities,
-            StrategyDefinitionRepository definitions) {
+            StrategyDefinitionRepository definitions,
+            TrendContextEvidenceSelector trendContextEvidence) {
         this.observations = observations;
         this.opportunities = opportunities;
         this.marketData = marketData;
@@ -82,6 +85,7 @@ public class ProductionIntelligencePipeline {
         this.matches = matches;
         this.matchOpportunities = matchOpportunities;
         this.definitions = definitions;
+        this.trendContextEvidence = trendContextEvidence;
     }
 
     @Transactional
@@ -140,8 +144,11 @@ public class ProductionIntelligencePipeline {
         List<TradingOpportunity> createdOpportunities = new ArrayList<>();
 
         for (StrategyDefinition definition : applicableStrategies) {
+            Observation strategyEvidence = trendContextEvidence
+                    .select(marketId, definition.requiredInputs(), evaluatedAt)
+                    .orElse(observation);
             var evaluation = strategyEvaluation.evaluate(
-                    definition, observation, marketId, evaluatedAt);
+                    definition, strategyEvidence, marketId, evaluatedAt);
 
             // Shadow parity for the bootstrap legacy strategy during transition.
             if (BuiltinStrategies.LEGACY_OHLC_TREND_ID.equals(

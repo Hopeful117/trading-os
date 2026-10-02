@@ -71,6 +71,26 @@ public final class BuiltinStrategies {
     public static final String CONDITION_SIGNIFICANT_MOVE = "significant_directional_move";
     public static final String CONDITION_RANGE_EXPANSION = "range_expansion";
 
+    public static final UUID CONSERVATIVE_TREND_FOLLOWING_ID =
+            UUID.fromString("0a10c7e2-9d1e-4f5a-b6c8-123456789003");
+    public static final String CONSERVATIVE_TREND_FOLLOWING_TYPE = "CONSERVATIVE_TREND_FOLLOWING_V1";
+    public static final int CONSERVATIVE_TREND_FOLLOWING_VERSION = 1;
+    public static final String CONSERVATIVE_TREND_FOLLOWING_SCENARIO = "TREND_CONTEXT";
+    public static final RequiredSemanticInput TREND_ATTENTION = trendInput("ATTENTION");
+    public static final RequiredSemanticInput TREND_DIRECTION = trendInput("DIRECTION");
+    public static final RequiredSemanticInput TREND_REGIME = trendInput("REGIME");
+    public static final RequiredSemanticInput TREND_PHASE = trendInput("PHASE");
+    public static final RequiredSemanticInput TREND_ALIGNMENT = trendInput("ALIGNMENT");
+    public static final RequiredSemanticInput TREND_HARD_EXCLUSION = trendInput("HARD_EXCLUSION");
+    public static final RequiredSemanticInput TREND_CONTRADICTION = trendInput("MATERIAL_CONTRADICTION");
+    public static final RequiredSemanticInput TREND_INVALIDATION = trendInput("INVALIDATION");
+    public static final RequiredSemanticInput TREND_CUTOFF_AT = trendInput("CUTOFF_AT");
+    public static final RequiredSemanticInput TREND_VALID = trendInput("VALID");
+
+    private static RequiredSemanticInput trendInput(String key) {
+        return new RequiredSemanticInput(SemanticInputType.OBSERVATION, "TREND_CONTEXT_" + key);
+    }
+
     public StrategyDefinition ohlcRangeExpansion() {
         return StrategyDefinition.create(
                 new StrategyId(OHLC_RANGE_EXPANSION_ID),
@@ -131,8 +151,24 @@ public final class BuiltinStrategies {
                 .transitionTo(StrategyOperationalStatus.BOOTSTRAP_CONTROLLED_RUN, Instant.EPOCH);
     }
 
+    public StrategyDefinition conservativeTrendFollowing() {
+        return StrategyDefinition.create(
+                new StrategyId(CONSERVATIVE_TREND_FOLLOWING_ID),
+                CONSERVATIVE_TREND_FOLLOWING_VERSION,
+                "Conservative Trend Following V1",
+                "Conservative setup criteria over persisted Trend Context evidence. Disabled and unvalidated.",
+                CONSERVATIVE_TREND_FOLLOWING_SCENARIO,
+                StrategyDirection.DYNAMIC,
+                new StrategyApplicability(Set.of("CRYPTO"),
+                        Set.of(StrategyApplicability.Timeframe.M15), Set.of("KRAKEN")),
+                Set.of(TREND_ATTENTION, TREND_DIRECTION, TREND_REGIME, TREND_PHASE,
+                        TREND_ALIGNMENT, TREND_HARD_EXCLUSION, TREND_CONTRADICTION,
+                        TREND_INVALIDATION, TREND_CUTOFF_AT, TREND_VALID),
+                StrategyParameters.empty(), null, Instant.EPOCH);
+    }
+
     public List<StrategyDefinition> all() {
-        return List.of(legacyOhlcTrend(), ohlcRangeExpansion());
+        return List.of(legacyOhlcTrend(), ohlcRangeExpansion(), conservativeTrendFollowing());
     }
 }
 
@@ -219,4 +255,67 @@ class LegacyOhlcTrendEvaluator implements StrategyEvaluator {
     }
 
     private static final RequiredSemanticInput PRICE_CHANGE = BuiltinStrategies.PRICE_CHANGE;
+}
+
+@Component
+class ConservativeTrendFollowingEvaluator implements StrategyEvaluator {
+    @Override
+    public String strategyType() { return BuiltinStrategies.CONSERVATIVE_TREND_FOLLOWING_TYPE; }
+
+    @Override
+    public boolean supports(StrategyDefinition definition) {
+        return BuiltinStrategies.CONSERVATIVE_TREND_FOLLOWING_ID.equals(definition.strategyId().value())
+                && definition.version() == BuiltinStrategies.CONSERVATIVE_TREND_FOLLOWING_VERSION;
+    }
+
+    @Override
+    public StrategyEvaluation evaluate(StrategyDefinition definition, StrategyEvaluationContext context) {
+        if (context.provenance() == null || !hasAll(context, definition.requiredInputs())) {
+            return StrategyEvaluation.notEvaluable(definition, context,
+                    "Current Trend Context evidence is unavailable or incomplete");
+        }
+        var provenance = context.provenance();
+        boolean valid = Boolean.parseBoolean(context.get(BuiltinStrategies.TREND_VALID).stringValue())
+                && !provenance.cutOffAt().isAfter(context.evaluatedAt());
+        boolean attractive = value(context, BuiltinStrategies.TREND_ATTENTION, "CONTEXTUALLY_ATTRACTIVE");
+        String direction = context.get(BuiltinStrategies.TREND_DIRECTION).stringValue();
+        boolean directional = direction.equals("UP") || direction.equals("DOWN");
+        boolean regime = value(context, BuiltinStrategies.TREND_REGIME, "TRENDING");
+        String phase = context.get(BuiltinStrategies.TREND_PHASE).stringValue();
+        boolean acceptedPhase = phase.equals("DIRECTIONAL") || phase.equals("PULLBACK");
+        String alignment = context.get(BuiltinStrategies.TREND_ALIGNMENT).stringValue();
+        boolean compatible = direction.equals("UP")
+                ? alignment.equals("ALIGNED_UP") || alignment.equals("PULLBACK_WITHIN_UP_BIAS")
+                : alignment.equals("ALIGNED_DOWN") || alignment.equals("PULLBACK_WITHIN_DOWN_BIAS");
+        boolean excluded = Boolean.parseBoolean(context.get(BuiltinStrategies.TREND_HARD_EXCLUSION).stringValue());
+        boolean contradicted = Boolean.parseBoolean(context.get(BuiltinStrategies.TREND_CONTRADICTION).stringValue());
+        boolean invalidated = Boolean.parseBoolean(context.get(BuiltinStrategies.TREND_INVALIDATION).stringValue());
+        List<ConditionResult> conditions = List.of(
+                new ConditionResult("attention_contextually_attractive", attractive, context.get(BuiltinStrategies.TREND_ATTENTION).stringValue()),
+                new ConditionResult("directional_bias", directional, direction),
+                new ConditionResult("trending_regime", regime, context.get(BuiltinStrategies.TREND_REGIME).stringValue()),
+                new ConditionResult("accepted_phase", acceptedPhase, phase),
+                new ConditionResult("compatible_alignment", compatible, alignment),
+                new ConditionResult("no_hard_exclusion", !excluded, Boolean.toString(excluded)),
+                new ConditionResult("no_material_contradiction", !contradicted, Boolean.toString(contradicted)),
+                new ConditionResult("no_analytical_invalidation", !invalidated, Boolean.toString(invalidated)),
+                new ConditionResult("current_valid_evidence", valid, provenance.cutOffAt().toString()));
+        if (!(attractive && directional && regime && acceptedPhase && compatible
+                && !excluded && !contradicted && !invalidated && valid)) {
+            return StrategyEvaluation.noMatch(definition, context, conditions,
+                    "Conservative Trend Following criteria were not all satisfied",
+                    definition.requiredInputs());
+        }
+        MatchedDirection matched = direction.equals("UP") ? MatchedDirection.LONG : MatchedDirection.SHORT;
+        return StrategyEvaluation.match(definition, context, matched, conditions, BigDecimal.ONE,
+                "Conservative Trend Context criteria satisfied", definition.requiredInputs());
+    }
+
+    private static boolean hasAll(StrategyEvaluationContext context, Set<RequiredSemanticInput> inputs) {
+        return inputs.stream().allMatch(context::has);
+    }
+
+    private static boolean value(StrategyEvaluationContext context, RequiredSemanticInput input, String expected) {
+        return context.get(input).stringValue().equals(expected);
+    }
 }
