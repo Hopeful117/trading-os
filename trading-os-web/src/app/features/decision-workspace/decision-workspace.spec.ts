@@ -7,6 +7,8 @@ import { Account } from '../../core/models/account.model';
 import { DecisionContextResponse } from '../../core/models/decision-context.model';
 import { AccountService } from '../../core/services/account.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
+import { TrendAttention, TrendContextReadModel } from '../../core/models/trend-context.model';
+import { TrendContextService } from '../../core/services/trend-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketService } from '../../core/services/market.service';
 import { TradePlanService } from '../../core/services/trade-plan.service';
@@ -18,6 +20,7 @@ describe('DecisionWorkspace', () => {
   let component: DecisionWorkspace;
   let accountServiceMock: { getAccounts: ReturnType<typeof vi.fn> };
   let contextServiceMock: { resolve: ReturnType<typeof vi.fn> };
+  let trendContextServiceMock: { findTrendContext: ReturnType<typeof vi.fn> };
   let marketServiceMock: {
     findById: ReturnType<typeof vi.fn>;
     findOhlcHistory: ReturnType<typeof vi.fn>;
@@ -100,9 +103,27 @@ describe('DecisionWorkspace', () => {
     },
   };
 
+  const unavailableTrendContext: TrendContextReadModel = {
+    marketId: 'market-1',
+    operationalStatus: 'MISSING',
+    assessmentPresent: false,
+    assessmentValidity: 'NONE',
+    observationId: null,
+    lineageId: null,
+    observationVersion: null,
+    observationStatus: null,
+    validFrom: null,
+    validUntil: null,
+    assessment: null,
+    lastSuccessfulAssessment: null,
+  };
+
   beforeEach(async () => {
     accountServiceMock = { getAccounts: vi.fn().mockReturnValue(of([account])) };
     contextServiceMock = { resolve: vi.fn().mockReturnValue(of(context)) };
+    trendContextServiceMock = {
+      findTrendContext: vi.fn().mockReturnValue(of(unavailableTrendContext)),
+    };
     marketServiceMock = {
       findById: vi.fn().mockReturnValue(of(market)),
       findOhlcHistory: vi.fn().mockReturnValue(of([])),
@@ -144,6 +165,7 @@ describe('DecisionWorkspace', () => {
       providers: [
         { provide: AccountService, useValue: accountServiceMock },
         { provide: DecisionContextService, useValue: contextServiceMock },
+        { provide: TrendContextService, useValue: trendContextServiceMock },
         { provide: MarketService, useValue: marketServiceMock },
         { provide: MarketDataStreamService, useValue: marketDataStreamServiceMock },
         { provide: TradePlanService, useValue: { createManual: vi.fn() } },
@@ -391,4 +413,168 @@ describe('DecisionWorkspace', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="context-error"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="eligible-markets"]')).toBeNull();
   });
+
+  it('does not request Trend Context before an eligible market is selected', () => {
+    expect(trendContextServiceMock.findTrendContext).not.toHaveBeenCalled();
+
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-2', context);
+
+    expect(trendContextServiceMock.findTrendContext).not.toHaveBeenCalled();
+  });
+
+  it('requests Trend Context for the selected eligible market', async () => {
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(trendContextServiceMock.findTrendContext).toHaveBeenCalledWith('market-1');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="trend-context-no-assessment"]'),
+    ).toBeTruthy();
+  });
+
+  it('clears the assessment while changing markets', async () => {
+    trendContextServiceMock.findTrendContext.mockReturnValue(
+      of({
+        ...unavailableTrendContext,
+        operationalStatus: 'AVAILABLE',
+        assessmentPresent: true,
+        assessmentValidity: 'VALID',
+        assessment: minimalAssessment('market-1', 'CONTEXTUALLY_ATTRACTIVE'),
+      }),
+    );
+
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="trend-context-assessment"]'),
+    ).toBeTruthy();
+
+    component.selectMarket('market-3', context);
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="trend-context-assessment"]'),
+    ).toBeNull();
+  });
+
+  it('renders backend operational and analytical states without translating them', async () => {
+    trendContextServiceMock.findTrendContext.mockReturnValue(
+      of({
+        ...unavailableTrendContext,
+        operationalStatus: 'STALE',
+        assessmentValidity: 'HISTORICAL',
+        lastSuccessfulAssessment: minimalAssessment('market-1', 'NO_SETUP'),
+      }),
+    );
+
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('[data-testid="trend-context-status"]')?.textContent).toContain(
+      'STALE',
+    );
+    expect(
+      element.querySelector('[data-testid="trend-context-historical"]')?.textContent,
+    ).toContain('NO_SETUP');
+  });
+
+  it.each([
+    'NO_SETUP',
+    'WATCH',
+    'UNKNOWN',
+    'CONTEXTUALLY_ATTRACTIVE',
+    'CONTEXTUALLY_DANGEROUS',
+  ] as const)('preserves the analytical attention outcome %s', async (attention) => {
+    trendContextServiceMock.findTrendContext.mockReturnValue(
+      of({
+        ...unavailableTrendContext,
+        operationalStatus: 'AVAILABLE',
+        assessmentPresent: true,
+        assessmentValidity: 'VALID',
+        assessment: minimalAssessment('market-1', attention),
+      }),
+    );
+
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.textContent).toContain(attention);
+  });
+
+  it('renders request failure as unavailable rather than an analytical outcome', async () => {
+    trendContextServiceMock.findTrendContext.mockReturnValue(
+      throwError(() => new Error('trend context failed')),
+    );
+
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="trend-context-unavailable"]'),
+    ).toBeTruthy();
+    expect(fixture.nativeElement.textContent).not.toContain('NO_SETUP');
+    expect(fixture.nativeElement.textContent).not.toContain('UNKNOWN');
+  });
+
+  it('keeps a favorable assessment analytical and preserves the manual ticket workflow', async () => {
+    trendContextServiceMock.findTrendContext.mockReturnValue(
+      of({
+        ...unavailableTrendContext,
+        operationalStatus: 'AVAILABLE',
+        assessmentPresent: true,
+        assessmentValidity: 'VALID',
+        assessment: minimalAssessment('market-1', 'CONTEXTUALLY_ATTRACTIVE'),
+      }),
+    );
+
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.openManualTrade();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('[data-testid="trend-context-panel"]')).toBeTruthy();
+    expect(component.manualTradeOpen).toBe(true);
+    expect(element.textContent).toContain('Analytical evidence only');
+    expect(element.textContent).toContain('Not Risk approval');
+    expect(element.textContent).toContain('No optional trigger assessment was provided.');
+  });
 });
+
+function minimalAssessment(marketId: string, attention: TrendAttention) {
+  return {
+    marketId,
+    provider: 'KRAKEN',
+    symbol: 'BTC/USD',
+    assessmentAt: '2026-09-20T10:00:00Z',
+    cutOffAt: '2026-09-20T09:55:00Z',
+    inputFingerprint: 'input-fingerprint',
+    profileId: 'CONSERVATIVE',
+    profileVersion: '1.0.0',
+    ruleVersion: '1.0.0',
+    timeframes: {},
+    alignment: 'INSUFFICIENT_DIRECTION' as const,
+    direction: 'UNKNOWN' as const,
+    regime: 'UNKNOWN' as const,
+    phase: 'UNDETERMINED' as const,
+    attention,
+    findings: [],
+    contradictions: [],
+    exclusions: [],
+    invalidations: [],
+    fingerprint: 'assessment-fingerprint',
+  };
+}

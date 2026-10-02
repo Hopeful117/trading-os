@@ -193,6 +193,289 @@
                     </div>
                   </header>
 
+                  @if (trendContext$ | async; as trendContext) {
+                    @switch (trendContext.status) {
+                      @case ('loading') {
+                        <section class="trend-context-panel" data-testid="trend-context-loading">
+                          <div class="section-heading">
+                            <div>
+                              <span class="eyebrow">Analytical evidence</span>
+                              <h3>Trend Context</h3>
+                            </div>
+                          </div>
+                          <p class="section-placeholder">Loading deterministic Trend Context...</p>
+                        </section>
+                      }
+                      @case ('unavailable') {
+                        <section
+                          class="trend-context-panel trend-context-panel--unavailable"
+                          data-testid="trend-context-unavailable"
+                        >
+                          <div class="section-heading">
+                            <div>
+                              <span class="eyebrow">Analytical evidence</span>
+                              <h3>Trend Context unavailable</h3>
+                            </div>
+                            <span class="trend-context-authority">Not Risk approval</span>
+                          </div>
+                          <p class="section-placeholder error">{{ trendContext.message }}</p>
+                        </section>
+                      }
+                      @case ('loaded') {
+                        <section class="trend-context-panel" data-testid="trend-context-panel">
+                          <div class="section-heading">
+                            <div>
+                              <span class="eyebrow">Analytical evidence only</span>
+                              <h3>Trend Context</h3>
+                            </div>
+                            <span class="trend-context-authority">Not Risk approval</span>
+                          </div>
+
+                          <div class="trend-context-meta" data-testid="trend-context-status">
+                            <span>Status: {{ trendContext.readModel.operationalStatus }}</span>
+                            <span>Validity: {{ trendContext.readModel.assessmentValidity }}</span>
+                            @if (trendContext.readModel.assessment) {
+                              <span>
+                                Assessed
+                                {{
+                                  trendContext.readModel.assessment.assessmentAt | date: 'medium'
+                                }}
+                              </span>
+                            }
+                            @if (trendContext.readModel.observationVersion !== null) {
+                              <span
+                                >Observation v{{ trendContext.readModel.observationVersion }}</span
+                              >
+                            }
+                          </div>
+
+                          @if (trendContext.readModel.assessment; as assessment) {
+                            <div
+                              class="trend-context-summary"
+                              data-testid="trend-context-assessment"
+                            >
+                              <article class="trend-context-value">
+                                <span>Direction</span>
+                                <strong>{{ assessment.direction }}</strong>
+                              </article>
+                              <article class="trend-context-value">
+                                <span>Regime</span>
+                                <strong>{{ assessment.regime }}</strong>
+                              </article>
+                              <article class="trend-context-value">
+                                <span>Phase</span>
+                                <strong>{{ assessment.phase }}</strong>
+                              </article>
+                              <article
+                                class="trend-context-value trend-context-value--attention"
+                                [attr.data-attention]="assessment.attention"
+                              >
+                                <span>Attention outcome</span>
+                                <strong>{{ assessment.attention }}</strong>
+                              </article>
+                            </div>
+
+                            <div class="trend-context-roles" data-testid="trend-context-roles">
+                              @for (role of ['BIAS', 'SETUP', 'TRIGGER']; track role) {
+                                @if (roleAssessment(assessment, role); as roleAssessmentValue) {
+                                  <article class="trend-context-role">
+                                    <div class="section-heading">
+                                      <h4>{{ role }}</h4>
+                                      <span class="trend-context-role-state">
+                                        {{ roleAssessmentValue.fresh ? 'FRESH' : 'STALE' }}
+                                      </span>
+                                    </div>
+                                    <div class="trend-context-role-grid">
+                                      <span
+                                        >Interval
+                                        <strong>{{ roleAssessmentValue.interval }}</strong></span
+                                      >
+                                      <span
+                                        >Direction
+                                        <strong>{{ roleAssessmentValue.direction }}</strong></span
+                                      >
+                                      <span
+                                        >Regime
+                                        <strong>{{ roleAssessmentValue.regime }}</strong></span
+                                      >
+                                      <span
+                                        >Phase
+                                        <strong>{{ roleAssessmentValue.phase }}</strong></span
+                                      >
+                                      <span
+                                        >High relation
+                                        <strong>{{
+                                          valueOrUnavailable(roleAssessmentValue.highRelation)
+                                        }}</strong></span
+                                      >
+                                      <span
+                                        >Low relation
+                                        <strong>{{
+                                          valueOrUnavailable(roleAssessmentValue.lowRelation)
+                                        }}</strong></span
+                                      >
+                                      <span
+                                        >EMA
+                                        <strong>{{
+                                          roleAssessmentValue.ema.available
+                                            ? valueOrUnavailable(roleAssessmentValue.ema.current)
+                                            : 'Unavailable'
+                                        }}</strong></span
+                                      >
+                                      <span
+                                        >ATR
+                                        <strong>{{
+                                          roleAssessmentValue.atr.available
+                                            ? valueOrUnavailable(roleAssessmentValue.atr.current)
+                                            : 'Unavailable'
+                                        }}</strong></span
+                                      >
+                                    </div>
+                                    <p class="trend-context-role-detail">
+                                      Structural break:
+                                      <strong>{{
+                                        roleAssessmentValue.structuralBreak.status
+                                      }}</strong>
+                                      · Confirmed swings: {{ roleAssessmentValue.swings.length }}
+                                    </p>
+                                  </article>
+                                } @else if (role === 'TRIGGER') {
+                                  <article
+                                    class="trend-context-role trend-context-role--unavailable"
+                                  >
+                                    <div class="section-heading">
+                                      <h4>TRIGGER</h4>
+                                      <span class="trend-context-role-state">UNAVAILABLE</span>
+                                    </div>
+                                    <p class="section-placeholder">
+                                      No optional trigger assessment was provided.
+                                    </p>
+                                  </article>
+                                }
+                              }
+                            </div>
+
+                            <div class="trend-context-evidence-grid">
+                              <article>
+                                <span class="card-label">Alignment</span>
+                                <strong>{{ assessment.alignment }}</strong>
+                              </article>
+                              <article>
+                                <span class="card-label">Profile / rules</span>
+                                <strong
+                                  >{{ assessment.profileId }} · {{ assessment.profileVersion }} /
+                                  {{ assessment.ruleVersion }}</strong
+                                >
+                              </article>
+                              <article>
+                                <span class="card-label">Cut-off</span>
+                                <strong>{{ assessment.cutOffAt | date: 'medium' }}</strong>
+                              </article>
+                            </div>
+
+                            @if (assessment.contradictions.length > 0) {
+                              <div
+                                class="trend-context-list"
+                                data-testid="trend-context-contradictions"
+                              >
+                                <h4>Contradictions</h4>
+                                <ul>
+                                  @for (
+                                    contradiction of assessment.contradictions;
+                                    track contradiction.code
+                                  ) {
+                                    <li>
+                                      <strong>{{ contradiction.code }}</strong>
+                                      {{ contradiction.message }}
+                                    </li>
+                                  }
+                                </ul>
+                              </div>
+                            }
+
+                            @if (assessment.exclusions.length > 0) {
+                              <div
+                                class="trend-context-list"
+                                data-testid="trend-context-exclusions"
+                              >
+                                <h4>Exclusions</h4>
+                                <ul>
+                                  @for (
+                                    exclusion of assessment.exclusions;
+                                    track exclusion.code + exclusion.role
+                                  ) {
+                                    <li>
+                                      <strong>{{ exclusion.code }}</strong> {{ exclusion.detail }}
+                                    </li>
+                                  }
+                                </ul>
+                              </div>
+                            }
+
+                            @if (assessment.invalidations.length > 0) {
+                              <div
+                                class="trend-context-list"
+                                data-testid="trend-context-invalidations"
+                              >
+                                <h4>Invalidation</h4>
+                                <ul>
+                                  @for (
+                                    invalidation of assessment.invalidations;
+                                    track invalidation.ruleId + invalidation.level
+                                  ) {
+                                    <li>
+                                      <strong>{{ invalidation.ruleId }}</strong> level
+                                      {{ valueOrUnavailable(invalidation.level) }}
+                                    </li>
+                                  }
+                                </ul>
+                              </div>
+                            }
+
+                            @if (assessment.findings.length > 0) {
+                              <div class="trend-context-list" data-testid="trend-context-why">
+                                <h4>Why / evidence findings</h4>
+                                <ul>
+                                  @for (
+                                    finding of assessment.findings;
+                                    track finding.code + finding.role
+                                  ) {
+                                    <li>
+                                      <strong>{{ finding.code }}</strong> {{ finding.message }}
+                                    </li>
+                                  }
+                                </ul>
+                              </div>
+                            }
+                          } @else if (
+                            trendContext.readModel.lastSuccessfulAssessment;
+                            as historical
+                          ) {
+                            <div
+                              class="trend-context-historical"
+                              data-testid="trend-context-historical"
+                            >
+                              <strong>Historical assessment only</strong>
+                              <p>
+                                The current Trend Context is not available. The following result is
+                                retained for context and is not current:
+                                {{ historical.attention }} ·
+                                {{ historical.assessmentAt | date: 'medium' }}
+                              </p>
+                            </div>
+                          } @else {
+                            <p
+                              class="section-placeholder"
+                              data-testid="trend-context-no-assessment"
+                            >
+                              No current Trend Context assessment is available.
+                            </p>
+                          }
+                        </section>
+                      }
+                    }
+                  }
+
                   @if (manualTradeOpen) {
                     <app-manual-trade-ticket
                       [account]="view.context.account"
