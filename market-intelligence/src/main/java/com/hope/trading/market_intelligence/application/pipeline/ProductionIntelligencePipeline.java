@@ -142,10 +142,11 @@ public class ProductionIntelligencePipeline {
                 .toList();
         Instant evaluatedAt = clock.instant();
         List<TradingOpportunity> createdOpportunities = new ArrayList<>();
+        Observation completionEvidence = observation;
 
         for (StrategyDefinition definition : applicableStrategies) {
             Observation strategyEvidence = trendContextEvidence
-                    .select(marketId, definition.requiredInputs(), evaluatedAt)
+                    .select(analysisExecutionId, marketId, definition.requiredInputs(), evaluatedAt)
                     .orElse(observation);
             var evaluation = strategyEvaluation.evaluate(
                     definition, strategyEvidence, marketId, evaluatedAt);
@@ -158,9 +159,10 @@ public class ProductionIntelligencePipeline {
 
             if (evaluation.status() == StrategyEvaluationStatus.MATCH) {
                 TradingOpportunity opportunity = handleMatch(
-                        evaluation, definition, analysisExecutionId, observation,
+                        evaluation, definition, analysisExecutionId, strategyEvidence,
                         instrument, mode);
                 createdOpportunities.add(opportunity);
+                completionEvidence = strategyEvidence;
                 log.info("Strategy {}v{} MATCH for market {}: created opportunity {}",
                         definition.name(), definition.version(), marketId,
                         opportunity.id());
@@ -179,7 +181,7 @@ public class ProductionIntelligencePipeline {
             run.noSignal("No strategy produced a matching setup", clock.instant());
         } else if (createdOpportunities.size() == 1) {
             TradingOpportunity only = createdOpportunities.getFirst();
-            run.complete(observation.id(), observation.version(), only.id().value(),
+            run.complete(completionEvidence.id(), completionEvidence.version(), only.id().value(),
                     only.version().value(), clock.instant());
         } else {
             run.complete(observation.id(), observation.version(), null, 0, clock.instant());

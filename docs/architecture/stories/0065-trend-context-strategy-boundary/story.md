@@ -4,9 +4,47 @@
 
 **ID:** `0065`
 **Title:** Connect Trend Context to Strategy Evaluation and Strategy Match
-**Status:** DRAFT - ANALYSIS COMPLETE - HUMAN APPROVAL REQUIRED
+**Status:** FORMALIZED - IMPLEMENTATION COMPLETE - HUMAN REVIEW REQUIRED
 **Size:** LARGE
 **Implementation Risk:** HIGH
+
+## Formalization State
+
+This document is the canonical Story 0065 specification. It formalizes the
+bounded integration between the persisted Trend Context observation and the
+existing generic Strategy evaluation pipeline.
+
+The implementation is present in the repository, but the Story remains subject
+to human review and approval. No commit, merge, enablement, or production
+validation of the Conservative Trend Following strategy is implied.
+
+### Implemented Boundary
+
+- Trend Context semantic inputs are resolved from the persisted typed observation.
+- Evidence selection is scoped to the requested analysis execution and its
+  completed Trend Context capability executions.
+- Observation identity and version are preserved through evaluation, match
+  persistence, opportunity projection, and pipeline completion.
+- `Conservative Trend Following V1` remains `DISABLED` and `UNVALIDATED`.
+- Existing legacy OHLC strategy behavior remains the fallback for strategies
+  that do not declare Trend Context inputs.
+
+### Validation Evidence
+
+- Market Intelligence compilation passes.
+- Market Intelligence unit and integration tests pass.
+- Focused provenance regression coverage rejects evidence from another analysis
+  execution.
+- `git diff --check` passes.
+
+### Human Review Required
+
+- Confirm the acceptance criteria below against the complete diff.
+- Confirm the implementation report and repository analysis are accepted as
+  supporting artifacts.
+- Decide whether the Story may move from human review to integration.
+- Keep the Conservative Trend Following strategy disabled until separately
+  validated and approved.
 
 ## Goal
 
