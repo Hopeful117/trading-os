@@ -28,10 +28,17 @@ import { OhlcInterval } from '../../core/models/ohlc-interval';
 import { OrderBookSnapshot } from '../../core/models/order-book-snapshot.model';
 import { RecentTradesSnapshot } from '../../core/models/recent-trades-snapshot.model';
 import { TickerEvent } from '../../core/models/ticker-event.model';
+import {
+  TrendContextAssessment,
+  TrendContextReadModel,
+  TrendContextRole,
+  TrendContextTimeframeAssessment,
+} from '../../core/models/trend-context.model';
 import { AccountService } from '../../core/services/account.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketService } from '../../core/services/market.service';
+import { TrendContextService } from '../../core/services/trend-context.service';
 import { MarketChartComponent } from '../markets/market-chart-component/market-chart-component';
 import { OrderBookComponent } from '../markets/order-book-component/order-book-component';
 import { RecentTradesComponent } from '../markets/recent-trades-component/recent-trades-component';
@@ -54,6 +61,12 @@ export type DecisionWorkspaceMarketView =
   | { status: 'ineligible' }
   | { status: 'loaded'; market: MarketResponse }
   | { status: 'error' };
+
+export type DecisionWorkspaceTrendContextView =
+  | { status: 'none' }
+  | { status: 'loading' }
+  | { status: 'loaded'; readModel: TrendContextReadModel }
+  | { status: 'unavailable'; message: string };
 
 export type StreamView<T> =
   { status: 'waiting' } | { status: 'live'; data: T } | { status: 'error' };
@@ -78,6 +91,7 @@ export type HistoryView<T> =
 export class DecisionWorkspace {
   private readonly accountService = inject(AccountService);
   private readonly contextService = inject(DecisionContextService);
+  private readonly trendContextService = inject(TrendContextService);
   private readonly marketService = inject(MarketService);
   private readonly marketDataStreamService = inject(MarketDataStreamService);
   private readonly route = inject(ActivatedRoute);
@@ -157,6 +171,45 @@ export class DecisionWorkspace {
         map((market) => ({ status: 'loaded' as const, market })),
         catchError(() => of<DecisionWorkspaceMarketView>({ status: 'error' })),
         startWith<DecisionWorkspaceMarketView>({ status: 'loading' }),
+      );
+    }),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
+
+  readonly trendContext$ = combineLatest([this.marketView$, this.selectedMarketSubject]).pipe(
+    switchMap(([marketView, selectedMarketId]) => {
+      if (selectedMarketId === null) {
+        return of<DecisionWorkspaceTrendContextView>({ status: 'none' });
+      }
+
+      if (marketView.status === 'loading') {
+        return of<DecisionWorkspaceTrendContextView>({ status: 'loading' });
+      }
+
+      if (marketView.status === 'none' || marketView.status === 'ineligible') {
+        return of<DecisionWorkspaceTrendContextView>({ status: 'none' });
+      }
+
+      if (marketView.status === 'error') {
+        return of<DecisionWorkspaceTrendContextView>({
+          status: 'unavailable',
+          message: 'The selected market context is unavailable.',
+        });
+      }
+
+      if (marketView.market.marketId !== selectedMarketId) {
+        return of<DecisionWorkspaceTrendContextView>({ status: 'loading' });
+      }
+
+      return this.trendContextService.findTrendContext(selectedMarketId).pipe(
+        map((readModel) => ({ status: 'loaded' as const, readModel })),
+        catchError(() =>
+          of<DecisionWorkspaceTrendContextView>({
+            status: 'unavailable',
+            message: 'Trend Context is temporarily unavailable.',
+          }),
+        ),
+        startWith<DecisionWorkspaceTrendContextView>({ status: 'loading' }),
       );
     }),
     shareReplay({ bufferSize: 1, refCount: true }),
@@ -333,6 +386,17 @@ export class DecisionWorkspace {
 
   liveCandle(view: StreamView<OhlcEvent> | null): OhlcEvent | null {
     return view?.status === 'live' ? view.data : null;
+  }
+
+  roleAssessment(
+    assessment: TrendContextAssessment | null,
+    role: string,
+  ): TrendContextTimeframeAssessment | null {
+    return assessment?.timeframes[role as TrendContextRole] ?? null;
+  }
+
+  valueOrUnavailable(value: string | number | null | undefined): string | number {
+    return value ?? 'Unavailable';
   }
 
   marketFreshness<T>(view: StreamView<T> | null, occurredAt: string | null): MarketFreshness {
