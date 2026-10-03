@@ -1,6 +1,11 @@
 package com.hope.trading.market_intelligence.domain.marketstructure;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -119,11 +124,81 @@ class MarketStructureEngineTest {
         assertThat(result.retained()).isEmpty();
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "HH,2;5;3;6;4",
+            "LH,2;6;3;5;4",
+            "EQ_HIGH,2;5;3;5;4"
+    })
+    void derivesExactHighRelationsFromConsecutiveRetainedHighs(String expected, String highValues) {
+        MarketStructureResult result = engine.extract(new MarketStructureInput(
+                candles(values(highValues), new int[]{9, 1, 8, 2, 7}), List.of(), at(5), 1, 1));
+
+        assertThat(result.latestRelation(MarketStructureSwingType.HIGH, at(5)))
+                .get().extracting(MarketStructureRelationEvidence::relation)
+                .isEqualTo(MarketStructureRelation.valueOf(expected));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "HL,9;1;8;2;7",
+            "LL,9;2;8;1;7",
+            "EQ_LOW,9;1;8;1;7"
+    })
+    void derivesExactLowRelationsFromConsecutiveRetainedLows(String expected, String lowValues) {
+        MarketStructureResult result = engine.extract(new MarketStructureInput(
+                candles(new int[]{2, 6, 3, 5, 4}, values(lowValues)), List.of(), at(5), 1, 1));
+
+        assertThat(result.latestRelation(MarketStructureSwingType.LOW, at(5)))
+                .get().extracting(MarketStructureRelationEvidence::relation)
+                .isEqualTo(MarketStructureRelation.valueOf(expected));
+    }
+
+    @Test
+    void doesNotExposeARelationBeforeItsLatestSwingConfirmation() throws Exception {
+        MarketStructureResult result = engine.extract(new MarketStructureInput(
+                candles(new int[]{2, 5, 3, 6, 4}, new int[]{9, 1, 8, 2, 7}),
+                List.of(), at(5), 1, 1));
+
+        assertThat(result.latestRelation(MarketStructureSwingType.HIGH, at(4))).isEmpty();
+        assertThat(result.latestRelation(MarketStructureSwingType.HIGH, at(5)))
+                .get().extracting(MarketStructureRelationEvidence::relation)
+                .isEqualTo(MarketStructureRelation.HH);
+    }
+
+    @Test
+    void serializesAndRehydratesRelationEvidence() throws Exception {
+        MarketStructureResult result = engine.extract(new MarketStructureInput(
+                candles(new int[]{2, 5, 3, 6, 4}, new int[]{9, 1, 8, 2, 7}),
+                List.of(), at(5), 1, 1));
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules()
+                .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+
+        MarketStructureResult restored = mapper.readValue(mapper.writeValueAsString(result),
+                MarketStructureResult.class);
+
+        assertThat(restored.resultFingerprint()).isEqualTo(result.resultFingerprint());
+        assertThat(restored.relations()).hasSize(result.relations().size());
+        assertThat(restored.latestRelation(MarketStructureSwingType.HIGH, at(5)))
+                .get().extracting(MarketStructureRelationEvidence::relation)
+                .isEqualTo(MarketStructureRelation.HH);
+    }
+
     private List<MarketStructureCandle> candles(int... highs) {
+        int[] lows = java.util.stream.IntStream.range(0, highs.length).map(i -> 0).toArray();
+        return candles(highs, lows);
+    }
+
+    private List<MarketStructureCandle> candles(int[] highs, int[] lows) {
         return java.util.stream.IntStream.range(0, highs.length)
                 .mapToObj(i -> new MarketStructureCandle(at(i), at(i + 1),
-                        BigDecimal.valueOf(highs[i]), BigDecimal.ZERO, "c" + i, true, false))
+                        BigDecimal.valueOf(highs[i]), BigDecimal.valueOf(lows[i]), "c" + i, true, false))
                 .toList();
+    }
+
+    private int[] values(String encoded) {
+        return java.util.Arrays.stream(encoded.split(";"))
+                .mapToInt(Integer::parseInt).toArray();
     }
 
     private Instant at(int value) {

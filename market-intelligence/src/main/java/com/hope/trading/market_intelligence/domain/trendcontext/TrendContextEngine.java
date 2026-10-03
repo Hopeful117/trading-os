@@ -5,7 +5,6 @@ import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructu
 import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureSwingType;
 import java.math.BigDecimal;
 import java.math.MathContext;
-import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -14,12 +13,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.EnumMap;
 
 /** Pure, replayable implementation of the retained Trend Context V1 rules. */
 public final class TrendContextEngine {
@@ -90,8 +86,8 @@ public final class TrendContextEngine {
         List<ConfirmedSwing> suppressed = swing.all.stream().filter(ConfirmedSwing::suppressed).toList();
         List<ConfirmedSwing> highs = retained.stream().filter(s -> s.type() == SwingType.HIGH).toList();
         List<ConfirmedSwing> lows = retained.stream().filter(s -> s.type() == SwingType.LOW).toList();
-        SwingRelation highRelation = relation(highs, true);
-        SwingRelation lowRelation = relation(lows, false);
+        SwingRelation highRelation = relation(structure, MarketStructureSwingType.HIGH, input.cutOffAt());
+        SwingRelation lowRelation = relation(structure, MarketStructureSwingType.LOW, input.cutOffAt());
         if (highs.size() < p.minimumConfirmedSwings() || lows.size() < p.minimumConfirmedSwings()) {
             findings.add(finding(input, role, "INSUFFICIENT_SWINGS", "RELATIONS_V1", "Fewer than the required confirmed swings", swingEvidence(input, role, "RELATIONS_V1", retained, "insufficient-swings")));
         }
@@ -102,7 +98,7 @@ public final class TrendContextEngine {
         ProtectedLevel protectedLevel = protectedLevel(structuralDirection, highs, lows);
         BreakWork breakWork = breaks(input, role, structuralDirection, protectedLevel, candles);
         if (breakWork.result.status() == BreakStatus.NONE && (structuralDirection == TrendDirection.UNKNOWN || structuralDirection == TrendDirection.NEUTRAL)) {
-            StructureReplay replay = replayBeforeBreak(input, role, retained, candles);
+            StructureReplay replay = replayBeforeBreak(input, role, retained, candles, structure);
             if (replay != null) {
                 structuralDirection = replay.direction;
                 highRelation = replay.highRelation;
@@ -122,7 +118,8 @@ public final class TrendContextEngine {
                 findings.add(finding(input, role, "FAILED_BREAK_RECLAIM", "TRANSITION_V1", "Broken level was reclaimed inside the reclaim window", breakWork.result.evidence()));
                 finalDirection = structuralDirection; finalRegime = TrendRegime.TRENDING; phase = TrendPhase.TRANSITION;
             } else {
-                TrendDirection opposite = oppositeStructureAfterBreak(breakWork.confirmed.candle(), retained, breakWork.confirmed.status());
+                TrendDirection opposite = oppositeStructureAfterBreak(breakWork.confirmed.candle(), retained,
+                        breakWork.confirmed.status(), structure);
                 if (opposite != TrendDirection.UNKNOWN) {
                     finalDirection = opposite; finalRegime = TrendRegime.TRENDING; phase = TrendPhase.DIRECTIONAL;
                 } else { finalRegime = TrendRegime.TRANSITIONING; phase = TrendPhase.TRANSITION; }
@@ -178,29 +175,37 @@ public final class TrendContextEngine {
     }
 
     private StructureReplay replayBeforeBreak(TrendContextAssessmentInput input, TrendContextRole role,
-                                               List<ConfirmedSwing> swings, List<TrendContextCandle> candles) {
+                                               List<ConfirmedSwing> swings, List<TrendContextCandle> candles,
+                                               MarketStructureResult structure) {
         List<ConfirmedSwing> events = swings.stream().sorted(Comparator.comparing(ConfirmedSwing::pivotTime)).toList();
         for (int end = 0; end < events.size(); end++) {
             Instant eventTime = events.get(end).pivotTime();
             List<ConfirmedSwing> prefix = events.stream().filter(s -> !s.pivotTime().isAfter(eventTime)).toList();
             List<ConfirmedSwing> highs = prefix.stream().filter(s -> s.type() == SwingType.HIGH).toList();
             List<ConfirmedSwing> lows = prefix.stream().filter(s -> s.type() == SwingType.LOW).toList();
-            TrendDirection direction = direction(relation(highs, true), relation(lows, false));
+            SwingRelation highRelation = relation(structure, MarketStructureSwingType.HIGH, eventTime);
+            SwingRelation lowRelation = relation(structure, MarketStructureSwingType.LOW, eventTime);
+            TrendDirection direction = direction(highRelation, lowRelation);
             if (direction != TrendDirection.UP && direction != TrendDirection.DOWN) continue;
             ProtectedLevel level = protectedLevel(direction, highs, lows);
             BreakWork breakWork = breaks(input, role, direction, level, candles);
             if (breakWork.result.status() != BreakStatus.NONE) {
-                return new StructureReplay(direction, relation(highs, true), relation(lows, false), level, breakWork);
+                return new StructureReplay(direction, highRelation, lowRelation, level, breakWork);
             }
         }
         return null;
     }
 
-    private SwingRelation relation(List<ConfirmedSwing> swings, boolean high) {
-        if (swings.size() < 2) return null; BigDecimal previous = swings.get(swings.size() - 2).price();
-        BigDecimal latest = swings.getLast().price(); int comparison = latest.compareTo(previous);
-        if (high) return comparison > 0 ? SwingRelation.HH : comparison < 0 ? SwingRelation.LH : SwingRelation.EQ_HIGH;
-        return comparison > 0 ? SwingRelation.HL : comparison < 0 ? SwingRelation.LL : SwingRelation.EQ_LOW;
+    private SwingRelation relation(MarketStructureResult structure, MarketStructureSwingType type, Instant atOrBefore) {
+        return structure.latestRelation(type, atOrBefore)
+                .map(value -> switch (value.relation()) {
+                    case HH -> SwingRelation.HH;
+                    case LH -> SwingRelation.LH;
+                    case EQ_HIGH -> SwingRelation.EQ_HIGH;
+                    case HL -> SwingRelation.HL;
+                    case LL -> SwingRelation.LL;
+                    case EQ_LOW -> SwingRelation.EQ_LOW;
+                }).orElse(null);
     }
 
     private TrendDirection direction(SwingRelation high, SwingRelation low) {
@@ -245,14 +250,29 @@ public final class TrendContextEngine {
         return new BreakWork(result, unconfirmed, result, reclaimed);
     }
 
-    private TrendDirection oppositeStructureAfterBreak(TrendContextCandle breakCandle, List<ConfirmedSwing> swings, BreakStatus status) {
+    private TrendDirection oppositeStructureAfterBreak(TrendContextCandle breakCandle, List<ConfirmedSwing> swings,
+                                                       BreakStatus status, MarketStructureResult structure) {
         TrendDirection target = status == BreakStatus.CONFIRMED_BEARISH_BREAK ? TrendDirection.DOWN : TrendDirection.UP;
         List<ConfirmedSwing> afterHigh = swings.stream().filter(s -> s.pivotTime().isAfter(breakCandle.closeTime()) && s.type() == SwingType.HIGH).toList();
         List<ConfirmedSwing> afterLow = swings.stream().filter(s -> s.pivotTime().isAfter(breakCandle.closeTime()) && s.type() == SwingType.LOW).toList();
         if (afterHigh.size() < 2 || afterLow.size() < 2) return TrendDirection.UNKNOWN;
-        SwingRelation high = relation(afterHigh, true), low = relation(afterLow, false);
+        SwingRelation high = relationAfter(structure, MarketStructureSwingType.HIGH, breakCandle.closeTime());
+        SwingRelation low = relationAfter(structure, MarketStructureSwingType.LOW, breakCandle.closeTime());
         return target == TrendDirection.DOWN && high == SwingRelation.LH && low == SwingRelation.LL ? target
                 : target == TrendDirection.UP && high == SwingRelation.HH && low == SwingRelation.HL ? target : TrendDirection.UNKNOWN;
+    }
+
+    private SwingRelation relationAfter(MarketStructureResult structure, MarketStructureSwingType type,
+                                         Instant after) {
+        return structure.latestRelationAfter(type, after, structure.cutOffAt())
+                .map(value -> switch (value.relation()) {
+                    case HH -> SwingRelation.HH;
+                    case LH -> SwingRelation.LH;
+                    case EQ_HIGH -> SwingRelation.EQ_HIGH;
+                    case HL -> SwingRelation.HL;
+                    case LL -> SwingRelation.LL;
+                    case EQ_LOW -> SwingRelation.EQ_LOW;
+                }).orElse(null);
     }
 
     private TrendEmaEvidence ema(TrendContextAssessmentInput input, TrendContextRole role, TrendContextProfile p, List<TrendContextCandle> candles, TrendAtrEvidence atr) {

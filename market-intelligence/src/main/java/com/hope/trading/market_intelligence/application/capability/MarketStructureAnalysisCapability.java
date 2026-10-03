@@ -15,7 +15,7 @@ import java.util.*;
 @Component
 public final class MarketStructureAnalysisCapability implements Capability {
     public static final String CAPABILITY_ID = "market-structure-analysis";
-    public static final String CAPABILITY_VERSION = "1.0.0";
+    public static final String CAPABILITY_VERSION = "1.1.0";
 
     private final com.hope.trading.market_intelligence.adapter.marketdata.TrendContextInputMapper mapper;
     private final TrendContextProfile profile;
@@ -36,7 +36,7 @@ public final class MarketStructureAnalysisCapability implements Capability {
                         ProductionArtifactTypes.V1, VersionCompatibilityMode.EXACT,
                         true, ArtifactCardinality.ONE, true)), List.of(
                 new ProducedContribution.ArtifactContribution(ProductionArtifactTypes.MARKET_STRUCTURE,
-                        ProductionArtifactTypes.V1, Set.of())), Duration.ofSeconds(5), null);
+                        ProductionArtifactTypes.MARKET_STRUCTURE_V2, Set.of())), Duration.ofSeconds(5), null);
     }
 
     @Override
@@ -57,7 +57,7 @@ public final class MarketStructureAnalysisCapability implements Capability {
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleSeries series = mapped.roleSeries().get(role);
             if (series == null) continue;
-            MarketStructureResult result = extract(mapped, role, series);
+            MarketStructureResult result = extract(mapped, series);
             StoredArtifact artifact = new StoredArtifact(
                             new ArtifactCacheKey(new ArtifactIdentity(ProductionArtifactTypes.MARKET_STRUCTURE.value(),
                             CAPABILITY_ID, CAPABILITY_VERSION),
@@ -74,7 +74,7 @@ public final class MarketStructureAnalysisCapability implements Capability {
                             ? com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE
                             : com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.DEGRADED);
             outputs.add(new ProducedArtifact(ProductionArtifactTypes.MARKET_STRUCTURE,
-                    ProductionArtifactTypes.V1, artifact));
+                    ProductionArtifactTypes.MARKET_STRUCTURE_V2, artifact));
         }
         if (outputs.isEmpty()) return degraded("No structural interval evidence is available");
         boolean complete = outputs.stream().map(value -> (MarketStructureArtifactContent)
@@ -87,8 +87,7 @@ public final class MarketStructureAnalysisCapability implements Capability {
                 complete ? CapabilityCompleteness.COMPLETE : CapabilityCompleteness.DEGRADED);
     }
 
-    private MarketStructureResult extract(TrendContextAssessmentInput input, TrendContextRole role,
-            TrendContextRoleSeries series) {
+    private MarketStructureResult extract(TrendContextAssessmentInput input, TrendContextRoleSeries series) {
         List<TrendContextCandle> candles = series.candles();
         MarketStructureInput structureInput = new MarketStructureInput(
                 input.marketId(), input.provider(), input.symbol(), series.interval(),
