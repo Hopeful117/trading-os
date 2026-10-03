@@ -134,3 +134,27 @@ No `continue-on-error` is used. See ADR-039 for architecture details.
 - `Trading OS Quality Gate` is a required merge check;
 - `SonarQube Quality` is a required merge check (main only);
 - direct pushes to `main` are not part of the normal engineering workflow.
+
+## Deterministic Market Facts Testing
+
+Market Facts and other deterministic decision-support foundations require both
+structural coverage and semantic coverage. JaCoCo/Sonar line coverage remains a
+quality gate, but a high line percentage does not prove temporal or provider
+contract correctness.
+
+Market Facts tests must use deterministic clocks and provider-shaped OHLC
+evidence where the completed/open state is explicit. Focused tests must cover
+temporal boundaries, normalized-versus-provider evidence, duplicates and
+conflicts, freshness, status/diagnostic consistency, and negative scenarios
+that attempt to falsify `AVAILABLE`.
+
+Every correctness defect found during runtime validation must first become a
+minimal deterministic regression test that reproduces the failure, then the
+production correction, followed by the relevant regression and module suite.
+Provider adapter and service integration tests should preserve the real
+provider-shaped boundary rather than mocking away the behavior that failed.
+
+Lightweight parameterized or generated tests are preferred for repeated
+temporal invariants when the existing test stack expresses them clearly. A new
+property-testing dependency is not justified for Story 0069; deterministic
+parameterized fixtures provide sufficient value without adding framework cost.

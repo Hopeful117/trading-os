@@ -13,6 +13,7 @@ import com.hope.trading.market_data.kraken.helper.KrakenProviderSymbolResolver;
 import com.hope.trading.market_data.kraken.helper.KrakenRestTickerMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketHistorySnapshot;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.model.TickerEvent;
@@ -86,6 +87,15 @@ public class KrakenMarketData implements MarketDataProvider {
             OhlcInterval interval,
             int limit
     ) {
+        return findOhlcHistorySnapshot(market, interval, limit).normalizedEvents();
+    }
+
+    @Override
+    public MarketHistorySnapshot findOhlcHistorySnapshot(
+            Market market,
+            OhlcInterval interval,
+            int limit
+    ) {
         validateArguments(
                 market,
                 interval,
@@ -111,7 +121,10 @@ public class KrakenMarketData implements MarketDataProvider {
         List<OhlcEvent> normalizedEvents =
                 historyNormalizer.fillMissingIntervals(mappedEvents, interval);
 
-        return takeLastEvents(normalizedEvents, limit);
+        return new MarketHistorySnapshot(
+                takeLastEvents(mappedEvents, limit),
+                takeLastEvents(normalizedEvents, limit)
+        );
     }
 
     private List<OhlcEvent> mapEntries(
