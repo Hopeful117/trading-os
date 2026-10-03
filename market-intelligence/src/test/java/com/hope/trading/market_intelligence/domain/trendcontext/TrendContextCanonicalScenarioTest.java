@@ -290,7 +290,7 @@ class TrendContextCanonicalScenarioTest {
     }
 
     private TrendContextAssessment assess(Shape bias, Shape setup, Mode mode, Shape trigger, boolean withTrigger) {
-        return new TrendContextEngine().assess(input(bias, setup, mode, trigger, withTrigger));
+        return TrendContextStructureFixtures.assess(input(bias, setup, mode, trigger, withTrigger));
     }
 
     private TrendContextAssessmentInput input(Shape bias, Shape setup, Mode mode, Shape trigger, boolean withTrigger) {

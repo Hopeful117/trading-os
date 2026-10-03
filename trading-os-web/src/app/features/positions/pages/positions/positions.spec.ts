@@ -473,6 +473,7 @@ describe('Positions', () => {
       calculatedAt: now,
       source: 'BROKER',
       valuationStatus: 'FRESH',
+      quoteAsset: 'USD',
     };
   }
 });

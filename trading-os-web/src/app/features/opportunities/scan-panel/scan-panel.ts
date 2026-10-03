@@ -16,6 +16,7 @@ import {
   takeWhile,
   tap,
   timer,
+  throwError,
 } from 'rxjs';
 
 import { Account } from '../../../core/models/account.model';
@@ -23,6 +24,7 @@ import {
   ActiveScanMarketResult,
   ActiveScanResponse,
   CreateActiveScanRequest,
+  ActiveScanScopeResolutionResponse,
   isActiveScanTerminal,
 } from '../../../core/models/active-scan.model';
 import { MarketResponse } from '../../../core/models/market-response';
@@ -32,7 +34,7 @@ import { MarketService } from '../../../core/services/market.service';
 import { MarketDiscoveryService } from '../../../core/services/market-discovery.service';
 import { SCAN_POLL_INTERVAL_MS } from './scan-poll-interval';
 
-export type ScanSessionError = 'CONFLICT' | 'UNAUTHORIZED' | 'UNAVAILABLE';
+export type ScanSessionError = 'CONFLICT' | 'UNAUTHORIZED' | 'UNAVAILABLE' | 'INELIGIBLE';
 
 export interface ScanAccountsState {
   loaded: boolean;
@@ -54,7 +56,7 @@ export type ScanPanelView =
   | { status: 'submitting' }
   | { status: 'running'; scan: ActiveScanResponse }
   | { status: 'terminal'; scan: ActiveScanResponse }
-  | { status: 'error'; error: ScanSessionError };
+  | { status: 'error'; error: ScanSessionError; reasons?: string[] };
 
 @Component({
   selector: 'app-scan-panel',
@@ -113,6 +115,14 @@ export class ScanPanel {
             this.catalogueAvailable = true;
             const sortedMarkets = this.marketDiscovery.sortMarkets(markets);
             this.marketById = new Map(sortedMarkets.map((market) => [market.marketId, market]));
+            const selectableIds = new Set(
+              sortedMarkets
+                .filter((market) => market.marketState.tradable)
+                .map((market) => market.marketId),
+            );
+            this.selectedMarketIds = this.selectedMarketIds.filter((marketId) =>
+              selectableIds.has(marketId),
+            );
             return { status: 'loaded' as const, markets: sortedMarkets };
           }),
           catchError(() => {
@@ -170,6 +180,7 @@ export class ScanPanel {
       accountId: this.accountId,
       objective: this.objective.trim() || undefined,
       ...(this.scopeMode === 'SPECIFIC' ? { requestedMarketIds: [...this.selectedMarketIds] } : {}),
+      scopeMode: this.scopeMode === 'SPECIFIC' ? 'SELECTED' : 'ALL_ELIGIBLE',
     });
   }
 
@@ -204,6 +215,10 @@ export class ScanPanel {
     return this.marketById.get(marketId)?.provider ?? null;
   }
 
+  selectableMarkets(markets: MarketResponse[]): MarketResponse[] {
+    return markets.filter((market) => market.marketState.tradable);
+  }
+
   readable(value: string): string {
     return value.replaceAll('_', ' ').toLowerCase();
   }
@@ -212,7 +227,8 @@ export class ScanPanel {
     command: CreateActiveScanRequest,
     pollIntervalMs: number,
   ): Observable<ScanPanelView> {
-    return this.activeScanService.createScan(command, crypto.randomUUID()).pipe(
+    return this.preflight(command).pipe(
+      switchMap(() => this.activeScanService.createScan(command, crypto.randomUUID())),
       switchMap((created) => {
         const scans$ = isActiveScanTerminal(created.status)
           ? of(created)
@@ -229,6 +245,30 @@ export class ScanPanel {
       catchError((error: unknown) => of(this.toErrorView(error))),
       startWith<ScanPanelView>({ status: 'submitting' }),
     );
+  }
+
+  private preflight(command: CreateActiveScanRequest): Observable<void> {
+    if (command.scopeMode !== 'SELECTED' || !command.requestedMarketIds?.length) {
+      return of(undefined);
+    }
+
+    return this.activeScanService
+      .resolveScope({
+        accountId: command.accountId,
+        requestedMarketIds: command.requestedMarketIds,
+        scopeMode: 'SELECTED',
+      })
+      .pipe(
+        switchMap((resolution: ActiveScanScopeResolutionResponse) => {
+          const excluded = resolution.decisions.filter((decision) => !decision.eligible);
+          if (excluded.length > 0) {
+            return throwError(
+              () => new IneligibleMarketsError(excluded.flatMap((decision) => decision.reasons)),
+            );
+          }
+          return of(undefined);
+        }),
+      );
   }
 
   private pollUntilTerminal(
@@ -248,6 +288,10 @@ export class ScanPanel {
   }
 
   private toErrorView(error: unknown): ScanPanelView {
+    if (error instanceof IneligibleMarketsError) {
+      return { status: 'error', error: 'INELIGIBLE', reasons: error.reasons };
+    }
+
     if (error instanceof HttpErrorResponse) {
       if (error.status === 409) {
         return { status: 'error', error: 'CONFLICT' };
@@ -256,8 +300,18 @@ export class ScanPanel {
       if (error.status === 401 || error.status === 403) {
         return { status: 'error', error: 'UNAUTHORIZED' };
       }
+
+      if (error.status === 422) {
+        return { status: 'error', error: 'INELIGIBLE', reasons: ['INELIGIBLE_MARKET_SCOPE'] };
+      }
     }
 
     return { status: 'error', error: 'UNAVAILABLE' };
+  }
+}
+
+class IneligibleMarketsError extends Error {
+  constructor(readonly reasons: string[]) {
+    super('Selected markets are not eligible for scanning');
   }
 }

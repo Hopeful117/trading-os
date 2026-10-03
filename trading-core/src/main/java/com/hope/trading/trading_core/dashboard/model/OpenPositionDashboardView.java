@@ -29,6 +29,7 @@ public record OpenPositionDashboardView(
         Instant priceOccurredAt,
         Instant calculatedAt,
         PositionSource source,
-        PositionValuationStatus valuationStatus
+        PositionValuationStatus valuationStatus,
+        String quoteAsset
 ) {
 }

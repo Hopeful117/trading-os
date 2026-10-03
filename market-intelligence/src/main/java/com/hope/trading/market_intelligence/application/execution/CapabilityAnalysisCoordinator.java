@@ -73,10 +73,10 @@ public class CapabilityAnalysisCoordinator {
         validateRequiredContext(context, requirements);
         Set<ArtifactDescriptor> descriptors = materializeInitialArtifacts(
                 analysisExecutionId, request, context);
-        Set<CapabilityId> selected = strategy.capabilityIds().stream()
+        Set<CapabilityId> selected = new HashSet<>(strategy.capabilityIds().stream()
                 .limit(strategy.maximumCapabilities())
                 .map(CapabilityId::new)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .collect(java.util.stream.Collectors.toSet()));
         ExecutionControl control = new ExecutionControl();
         controls.put(analysisExecutionId, control);
         try {

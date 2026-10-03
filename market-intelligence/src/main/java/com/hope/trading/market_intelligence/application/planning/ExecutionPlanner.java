@@ -23,9 +23,10 @@ public class ExecutionPlanner {
     public ExecutionPlan plan(PlanningRequest request) {
         List<PlanningDecision> decisions = new ArrayList<>();
         List<PlanningDecision> exclusions = new ArrayList<>();
-        List<Capability> selected = capabilities.all().stream()
+        List<Capability> selected = new ArrayList<>(capabilities.all().stream()
                 .filter(capability -> selected(capability, request, decisions, exclusions))
-                .toList();
+                .toList());
+        resolveArtifactDependencies(selected, request, decisions);
 
         Map<Capability, UUID> ids = selected.stream().collect(Collectors.toMap(
                 capability -> capability, ignored -> UUID.randomUUID()));
@@ -91,6 +92,32 @@ public class ExecutionPlanner {
                 UUID.randomUUID(), request.analysisExecutionId(), nodes, edges,
                 producers, adapterBindings, List.of("DIRECT_ADAPTERS_ONLY"),
                 decisions, exclusions);
+    }
+
+    private void resolveArtifactDependencies(List<Capability> selected, PlanningRequest request,
+            List<PlanningDecision> decisions) {
+        boolean changed;
+        do {
+            changed = false;
+            for (Capability consumer : List.copyOf(selected)) {
+                for (ArtifactRequirement requirement : consumer.metadata().requirements()) {
+                    if (providedInitially(requirement, request.initialArtifacts())) continue;
+                    List<Capability> producers = capabilities.all().stream()
+                            .filter(candidate -> candidate != consumer)
+                            .filter(candidate -> candidate.metadata().producedContributions().stream()
+                                    .filter(ProducedContribution.ArtifactContribution.class::isInstance)
+                                    .map(ProducedContribution.ArtifactContribution.class::cast)
+                                    .anyMatch(contribution -> contribution.satisfies(requirement)))
+                            .toList();
+                    if (producers.size() == 1 && !selected.contains(producers.getFirst())) {
+                        selected.add(producers.getFirst());
+                        decisions.add(new PlanningDecision(producers.getFirst().metadata().id(), true,
+                                "ARTIFACT_DEPENDENCY"));
+                        changed = true;
+                    }
+                }
+            }
+        } while (changed);
     }
 
     private boolean selected(

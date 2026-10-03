@@ -87,6 +87,14 @@ public class ActiveScanApplicationService {
                 command.scopeMode()
                 )
         );
+        if (command.scopeMode() == com.hope.trading.market_intelligence.domain.scope.MarketScopeMode.SELECTED
+                && resolved.decisions().stream().anyMatch(decision -> !decision.eligible())) {
+            throw new ActiveScanException(
+                    "INELIGIBLE_MARKET_SCOPE",
+                    "Selected market scope contains an ineligible market",
+                    422
+            );
+        }
         ActiveScanScopeSnapshot snapshot = ActiveScanScopeSnapshot.from(resolved);
         UUID scanId = UUID.randomUUID();
         ActiveScan scan = snapshot.effectiveMarketIds().isEmpty()

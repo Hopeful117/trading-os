@@ -125,7 +125,7 @@ class TrendContextEngineTest {
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP, "1H", candles));
         TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(MARKET, "KRAKEN", "BTC/EUR",
                 ASSESSMENT, START.plus(Duration.ofHours(79)), profile, "rules-1", roles);
-        return new TrendContextEngine().assess(input);
+        return TrendContextStructureFixtures.assess(input);
     }
 
     private TrendContextProfile profile() {

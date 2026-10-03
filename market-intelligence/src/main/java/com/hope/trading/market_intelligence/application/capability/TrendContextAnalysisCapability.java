@@ -4,6 +4,9 @@ import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureArtifactContent;
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureAvailability;
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult;
 import com.hope.trading.market_intelligence.adapter.marketdata.TrendContextRoleHistory;
 import org.springframework.stereotype.Component;
 
@@ -39,7 +42,11 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
                 List.of(new com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement(
                         ProductionArtifactTypes.TREND_CONTEXT_HISTORY,
                         ProductionArtifactTypes.V1, VersionCompatibilityMode.EXACT,
-                        true, ArtifactCardinality.ONE, true)),
+                        true, ArtifactCardinality.ONE, true),
+                        new com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement(
+                                ProductionArtifactTypes.MARKET_STRUCTURE,
+                                ProductionArtifactTypes.V1, VersionCompatibilityMode.EXACT,
+                                false, ArtifactCardinality.ZERO_OR_MORE, true)),
                 List.of(new ProducedContribution.ArtifactContribution(
                         ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT,
                         ProductionArtifactTypes.V1, Set.of())),
@@ -49,7 +56,8 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
     @Override
     public CapabilityResult execute(CapabilityContext context) {
         Optional<StoredArtifact> input = context.resolvedArtifacts().values().stream()
-                .flatMap(Collection::stream).findFirst();
+                .flatMap(Collection::stream)
+                .filter(value -> value.content() instanceof TrendContextRoleHistory).findFirst();
         if (input.isEmpty() || !(input.get().content() instanceof TrendContextRoleHistory history)) {
             return new CapabilityResult(List.of(), List.of(), Map.of(),
                     List.of("Trend Context history is unavailable"), CapabilityCompleteness.DEGRADED);
@@ -65,7 +73,34 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
                     CapabilityCompleteness.DEGRADED);
         }
 
-        TrendContextAssessment assessment = engine.assess(assessmentInput);
+        EnumMap<TrendContextRole, MarketStructureResult> structures = new EnumMap<>(TrendContextRole.class);
+        List<MarketStructureResult> structuralResults = context.resolvedArtifacts().values().stream()
+                .flatMap(Collection::stream)
+                .map(StoredArtifact::content)
+                .filter(MarketStructureArtifactContent.class::isInstance)
+                .map(MarketStructureArtifactContent.class::cast)
+                .map(MarketStructureArtifactContent::result).toList();
+        for (TrendContextRole role : TrendContextRole.values()) {
+            TrendContextRoleSeries series = assessmentInput.roleSeries().get(role);
+            if (series == null) continue;
+            Optional<MarketStructureResult> structuralResult = structuralResults.stream()
+                    .filter(value -> value.interval().equals(series.interval())).findFirst();
+            if (structuralResult.isEmpty()) {
+                if (!profile.roles().get(role).required()) continue;
+                return new CapabilityResult(List.of(), List.of(), Map.of(),
+                        List.of("Market Structure artifact is unavailable for " + series.interval()),
+                        CapabilityCompleteness.DEGRADED);
+            }
+            if (structuralResult.get().availability() != MarketStructureAvailability.AVAILABLE) {
+                if (!profile.roles().get(role).required()) continue;
+                return new CapabilityResult(List.of(), List.of(), Map.of(),
+                        List.of("Market Structure evidence is "
+                                + structuralResult.get().availability().name().toLowerCase()
+                                + " for " + series.interval()), CapabilityCompleteness.DEGRADED);
+            }
+            structures.put(role, structuralResult.get());
+        }
+        TrendContextAssessment assessment = engine.assess(assessmentInput, structures);
         TrendContextCapabilityContent content = content(assessmentInput, assessment);
         Instant observedAt = assessment.assessmentAt();
         StoredArtifact output = new StoredArtifact(
@@ -136,4 +171,5 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
         return exception.getMessage() == null
                 ? exception.getClass().getSimpleName() : exception.getMessage();
     }
+
 }

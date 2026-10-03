@@ -17,7 +17,7 @@ public final class TrendContextTestFixtures {
                 new EnumMap<>(TrendContextRole.class);
         series.put(TrendContextRole.BIAS, emptySeries(profile, TrendContextRole.BIAS));
         series.put(TrendContextRole.SETUP, emptySeries(profile, TrendContextRole.SETUP));
-        return new TrendContextEngine().assess(TrendContextAssessmentInput.accept(
+        return TrendContextStructureFixtures.assess(TrendContextAssessmentInput.accept(
                 MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, ASSESSMENT_AT,
                 profile, RULE_VERSION, series));
     }

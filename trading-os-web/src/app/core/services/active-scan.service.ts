@@ -6,6 +6,8 @@ import {
   ActiveScanResponse,
   ActiveScanSummary,
   CreateActiveScanRequest,
+  ActiveScanScopeResolutionResponse,
+  ResolveActiveScanScopeRequest,
 } from '../models/active-scan.model';
 
 @Injectable({
@@ -24,6 +26,15 @@ export class ActiveScanService {
       {
         headers: { 'Idempotency-Key': idempotencyKey },
       },
+    );
+  }
+
+  resolveScope(
+    request: ResolveActiveScanScopeRequest,
+  ): Observable<ActiveScanScopeResolutionResponse> {
+    return this.http.post<ActiveScanScopeResolutionResponse>(
+      `${environment.gatewayUrl}v1/intelligence/scans/scope`,
+      request,
     );
   }
 

@@ -39,7 +39,7 @@ class TrendContextAnalysisCapabilityTest {
         when(input.assessmentAt()).thenReturn(assessment.assessmentAt());
         when(input.cutOffAt()).thenReturn(assessment.cutOffAt());
         when(mapper.map(any(), same(profile), any(), any(), any())).thenReturn(input);
-        when(engine.assess(input)).thenReturn(assessment);
+        when(engine.assess(eq(input), anyMap())).thenReturn(assessment);
 
         TrendContextAnalysisCapability capability =
                 new TrendContextAnalysisCapability(mapper, engine, profile);
@@ -52,7 +52,7 @@ class TrendContextAnalysisCapabilityTest {
                 .containsSame(capability);
         assertThat(capability.supportedModes()).containsExactlyInAnyOrder(
                 AnalysisExecutionMode.ACTIVE, AnalysisExecutionMode.PASSIVE);
-        assertThat(capability.metadata().requirements()).singleElement().satisfies(requirement -> {
+        assertThat(capability.metadata().requirements()).anySatisfy(requirement -> {
             assertThat(requirement.artifactType()).isEqualTo(ProductionArtifactTypes.TREND_CONTEXT_HISTORY);
             assertThat(requirement.required()).isTrue();
         });
@@ -115,6 +115,30 @@ class TrendContextAnalysisCapabilityTest {
     }
 
     @Test
+    void plannerAddsMarketStructureProducerForTrendContextDependency() {
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        TrendContextAnalysisCapability trend = new TrendContextAnalysisCapability(
+                mock(TrendContextInputMapper.class), mock(TrendContextEngine.class), profile);
+        MarketStructureAnalysisCapability structure = new MarketStructureAnalysisCapability(
+                mock(TrendContextInputMapper.class), profile);
+        CapabilityRegistry registry = new CapabilityRegistry();
+        registry.register(trend);
+        registry.register(structure);
+
+        var plan = new ExecutionPlanner(registry, new ArtifactAdapterRegistry(), java.time.Clock.systemUTC())
+                .plan(new PlanningRequest(ANALYSIS_ID,
+                        Set.of(new CapabilityId(TrendContextAnalysisCapability.CAPABILITY_ID)), Set.of(),
+                        Set.of(new ArtifactDescriptor(ProductionArtifactTypes.TREND_CONTEXT_HISTORY,
+                                ProductionArtifactTypes.V1))));
+
+        assertThat(plan.nodes().values()).extracting(node -> node.capability().metadata().id().value())
+                .containsExactlyInAnyOrder(TrendContextAnalysisCapability.CAPABILITY_ID,
+                        MarketStructureAnalysisCapability.CAPABILITY_ID);
+        assertThat(plan.edges()).anySatisfy(edge ->
+                assertThat(edge.requirement().artifactType()).isEqualTo(ProductionArtifactTypes.MARKET_STRUCTURE));
+    }
+
+    @Test
     void resultCanBeSerializedForDurableCapabilityExecution() throws Exception {
         TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
         TrendContextEngine engine = mock(TrendContextEngine.class);
@@ -125,7 +149,7 @@ class TrendContextAnalysisCapabilityTest {
         when(input.assessmentAt()).thenReturn(assessment.assessmentAt());
         when(input.cutOffAt()).thenReturn(assessment.cutOffAt());
         when(mapper.map(any(), same(profile), any(), any(), any())).thenReturn(input);
-        when(engine.assess(input)).thenReturn(assessment);
+        when(engine.assess(eq(input), anyMap())).thenReturn(assessment);
 
         TrendContextAnalysisCapability capability =
                 new TrendContextAnalysisCapability(mapper, engine, profile);

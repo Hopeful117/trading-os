@@ -79,19 +79,24 @@ public class PositionQueryService {
             MarketPriceFact price = market == null ? null : prices.get(market.getMarketId());
             BigDecimal currentPrice = currentPrice(position, market, price, accountCurrency);
             PositionValuation value = valuationService.value(position, currentPrice, equity);
+            boolean accountCurrencyMatches = accountCurrency == null || market == null
+                    || market.getQuoteAsset() == null
+                    || market.getQuoteAsset().equalsIgnoreCase(accountCurrency);
             return new OpenPositionDashboardView(
                     position.positionId(), accountId,
                     market == null ? null : market.getMarketId(),
                     position.symbol(), position.side(), position.quantity(),
                     position.entryPrice(), currentPrice, position.stopLoss(), position.takeProfit(),
                     value.pnl(), value.pnlPercentage(), position.brokerUnrealizedPnl(),
-                    value.riskAmount(), value.riskPercentage(), currentPrice == null ? null : value.exposure(),
+                    value.riskAmount(), accountCurrencyMatches ? value.riskPercentage() : null,
+                    currentPrice == null ? null : value.exposure(),
                     position.stopLoss() == null
                             ? PositionProtectionStatus.MISSING_STOP_LOSS
                             : PositionProtectionStatus.PROTECTED,
                     price != null && price.tradable(),
                     position.openedAt(), price == null ? null : price.occurredAt(), calculatedAt,
-                    source, valuationStatus(market, price, currentPrice, accountCurrency, marketCatalogAvailable)
+                    source, valuationStatus(market, price, currentPrice, accountCurrency, marketCatalogAvailable),
+                    market == null ? null : market.getQuoteAsset()
             );
         }).toList();
     }
@@ -110,7 +115,7 @@ public class PositionQueryService {
                 || trade.getQuantity().signum() <= 0 || trade.getEntryPrice() == null
                 || trade.getEntryPrice().signum() <= 0 || trade.getSymbol() == null
                 || trade.getSymbol().isBlank()) {
-            throw new IllegalStateException("Invalid PAPER position state");
+            throw new PositionDataIntegrityException("Invalid PAPER position state");
         }
         return new PositionFact(
                 trade.getTradeId().toString(), trade.getSymbol(), trade.getType(), trade.getQuantity(),
@@ -123,10 +128,6 @@ public class PositionQueryService {
                                     String accountCurrency) {
         if (market == null || price == null || price.status() != MarketPriceSnapshotStatus.FRESH
                 || price.occurredAt() == null) {
-            return null;
-        }
-        if (accountCurrency != null && (market.getQuoteAsset() == null
-                || !market.getQuoteAsset().equalsIgnoreCase(accountCurrency))) {
             return null;
         }
         BigDecimal mark = position.side() == TradeType.BUY ? price.bid() : price.ask();
