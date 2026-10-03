@@ -59,7 +59,8 @@ public class ActiveScanApplicationService {
                 command.actorId(),
                 command.accountId(),
                 command.objective(),
-                command.requestedMarketIds()
+                command.requestedMarketIds(),
+                command.scopeMode()
         );
         ActiveScan existing = scans.findByActorIdAndIdempotencyKey(
                 command.actorId(),
@@ -80,9 +81,10 @@ public class ActiveScanApplicationService {
         Instant now = clock.instant();
         ActiveScanScopeResolutionResult resolved = scopeResolution.resolve(
                 new ActiveScanScopeResolutionRequest(
-                        command.accountId(),
-                        command.objective(),
-                        command.requestedMarketIds()
+                command.accountId(),
+                command.objective(),
+                command.requestedMarketIds(),
+                command.scopeMode()
                 )
         );
         ActiveScanScopeSnapshot snapshot = ActiveScanScopeSnapshot.from(resolved);
@@ -146,14 +148,12 @@ public class ActiveScanApplicationService {
         for (MarketEligibilityDecision decision : resolved.decisions()) {
             UUID scanMarketId = UUID.randomUUID();
             if (!decision.eligible()) {
-                markets.add(ActiveScanMarket.excluded(
-                        scanMarketId,
-                        scan.scanId(),
-                        ordinal++,
-                        decision.marketId(),
-                        decision.reasons(),
-                        now
-                ));
+                ActiveScanMarket market = decision.status() == com.hope.trading.market_intelligence.domain.scope.MarketEligibilityStatus.NOT_EVALUABLE
+                        ? ActiveScanMarket.notEvaluable(
+                                scanMarketId, scan.scanId(), ordinal++, decision.marketId(), decision.reasons(), now)
+                        : ActiveScanMarket.excluded(
+                                scanMarketId, scan.scanId(), ordinal++, decision.marketId(), decision.reasons(), now);
+                markets.add(market);
                 continue;
             }
             AnalysisExecution execution = executions.register(

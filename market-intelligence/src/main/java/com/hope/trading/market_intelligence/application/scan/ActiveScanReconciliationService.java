@@ -11,6 +11,7 @@ import com.hope.trading.market_intelligence.domain.opportunity.OpportunityVersio
 import com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScan;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScanMarket;
+import com.hope.trading.market_intelligence.domain.scan.ActiveScanMarketStatus;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScanScopeSnapshot;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScanStatus;
 import com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository;
@@ -253,7 +254,9 @@ public class ActiveScanReconciliationService {
                             null,
                             null,
                             null,
-                            ActiveScanMarketOutcome.EXCLUDED,
+                            market.status() == ActiveScanMarketStatus.NOT_EVALUABLE
+                                    ? ActiveScanMarketOutcome.NOT_EVALUABLE
+                                    : ActiveScanMarketOutcome.EXCLUDED,
                             null,
                             List.of()
                     ),

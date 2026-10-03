@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import com.hope.trading.market_intelligence.domain.scope.MarketScopeMode;
 
 @Component
 public class ActiveScanFingerprintFactory {
@@ -21,15 +22,24 @@ public class ActiveScanFingerprintFactory {
     }
 
     public String fingerprint(
+            UUID actorId, UUID accountId, String objective, List<UUID> requestedMarketIds) {
+        return fingerprint(actorId, accountId, objective, requestedMarketIds,
+                requestedMarketIds != null && requestedMarketIds.stream().anyMatch(Objects::nonNull)
+                        ? MarketScopeMode.SELECTED : null);
+    }
+
+    public String fingerprint(
             UUID actorId,
             UUID accountId,
             String objective,
-            List<UUID> requestedMarketIds
+            List<UUID> requestedMarketIds,
+            MarketScopeMode scopeMode
     ) {
         FingerprintPayload payload = new FingerprintPayload(
                 Objects.requireNonNull(actorId).toString(),
                 Objects.requireNonNull(accountId).toString(),
                 normalizeObjective(objective),
+                scopeMode,
                 normalizeRequestedMarketIds(requestedMarketIds).stream().map(UUID::toString).toList()
         );
         try {
@@ -71,6 +81,7 @@ public class ActiveScanFingerprintFactory {
             String actorId,
             String accountId,
             String objective,
+            MarketScopeMode scopeMode,
             List<String> requestedMarketIds
     ) {
         private FingerprintPayload {

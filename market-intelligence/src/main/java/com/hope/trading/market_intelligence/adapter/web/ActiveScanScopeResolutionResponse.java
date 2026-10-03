@@ -9,6 +9,7 @@ import java.util.UUID;
 public record ActiveScanScopeResolutionResponse(
         UUID accountId,
         String objective,
+        MarketScopeMode scopeMode,
         List<UUID> requestedMarketIds,
         List<UUID> candidateMarketIds,
         List<MarketEligibilityDecisionResponse> decisions,
@@ -19,6 +20,7 @@ public record ActiveScanScopeResolutionResponse(
         return new ActiveScanScopeResolutionResponse(
                 result.accountId(),
                 result.objective(),
+                result.scopeMode(),
                 result.requestedMarketIds(),
                 result.candidateMarketIds(),
                 result.decisions().stream().map(MarketEligibilityDecisionResponse::from).toList(),
@@ -32,7 +34,11 @@ public record ActiveScanScopeResolutionResponse(
             String symbol,
             String provider,
             boolean eligible,
-            List<MarketEligibilityReason> reasons
+            List<MarketEligibilityReason> reasons,
+            MarketEligibilityStatus status,
+            String marketFactsStatus,
+            String marketFactsCalculationVersion,
+            MarketFactsProvenance marketFactsProvenance
     ) {
         static MarketEligibilityDecisionResponse from(MarketEligibilityDecision value) {
             return new MarketEligibilityDecisionResponse(
@@ -40,7 +46,11 @@ public record ActiveScanScopeResolutionResponse(
                     value.symbol(),
                     value.provider(),
                     value.eligible(),
-                    value.reasons()
+                    value.reasons(),
+                    value.status(),
+                    value.marketFactsStatus(),
+                    value.marketFactsCalculationVersion(),
+                    value.marketFactsProvenance()
             );
         }
     }

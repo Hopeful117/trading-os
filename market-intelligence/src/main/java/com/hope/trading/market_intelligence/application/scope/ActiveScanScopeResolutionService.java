@@ -5,9 +5,11 @@ import com.hope.trading.market_intelligence.adapter.marketdata.MarketResponse;
 import com.hope.trading.market_intelligence.adapter.tradingcore.TradingCoreAccountClient;
 import com.hope.trading.market_intelligence.domain.scope.*;
 import feign.FeignException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -17,15 +19,27 @@ public class ActiveScanScopeResolutionService {
     private final TradingCoreAccountClient accounts;
     private final MarketDataClient marketData;
     private final Clock clock;
+    private final MarketEligibilityPolicy eligibilityPolicy;
 
     public ActiveScanScopeResolutionService(
             TradingCoreAccountClient accounts,
             MarketDataClient marketData,
             Clock clock
     ) {
+        this(accounts, marketData, clock, null);
+    }
+
+    @Autowired
+    public ActiveScanScopeResolutionService(
+            TradingCoreAccountClient accounts,
+            MarketDataClient marketData,
+            Clock clock,
+            MarketEligibilityPolicy eligibilityPolicy
+    ) {
         this.accounts = accounts;
         this.marketData = marketData;
         this.clock = clock;
+        this.eligibilityPolicy = eligibilityPolicy;
     }
 
     public ActiveScanScopeResolutionResult resolve(ActiveScanScopeResolutionRequest request) {
@@ -37,7 +51,8 @@ public class ActiveScanScopeResolutionService {
     public DecisionContextResolution resolveDecisionContext(UUID accountId) {
         TradingCoreAccountClient.TradingCoreAccountResponse account = requireOwnedAccount(accountId);
         ActiveScanScopeResolutionResult scope = resolveMarkets(
-                new ActiveScanScopeResolutionRequest(accountId, "", null), account);
+                new ActiveScanScopeResolutionRequest(accountId, "", null, MarketScopeMode.ALL_ELIGIBLE), account,
+                false);
         return new DecisionContextResolution(account, scope);
     }
 
@@ -45,6 +60,15 @@ public class ActiveScanScopeResolutionService {
             ActiveScanScopeResolutionRequest request,
             TradingCoreAccountClient.TradingCoreAccountResponse account
     ) {
+        return resolveMarkets(request, account, true);
+    }
+
+    private ActiveScanScopeResolutionResult resolveMarkets(
+            ActiveScanScopeResolutionRequest request,
+            TradingCoreAccountClient.TradingCoreAccountResponse account,
+            boolean applyEligibilityPolicy
+    ) {
+        MarketScopeMode mode = resolveScopeMode(request);
         List<MarketResponse> catalog = loadCatalog();
         Map<UUID, MarketResponse> byId = catalog.stream().collect(Collectors.toMap(
                 MarketResponse::marketId,
@@ -53,23 +77,36 @@ public class ActiveScanScopeResolutionService {
                 LinkedHashMap::new
         ));
 
-        List<UUID> candidateIds = requestedCandidateIds(request.requestedMarketIds(), catalog);
+        List<UUID> candidateIds = requestedCandidateIds(mode, request.requestedMarketIds(), catalog);
+        EvaluationBudget budget = new EvaluationBudget(
+                !applyEligibilityPolicy || eligibilityPolicy == null ? Integer.MAX_VALUE
+                        : eligibilityPolicy.properties().maxMarketFactEvaluationsPerScan());
         List<MarketEligibilityDecision> decisions = candidateIds.stream()
-                .map(marketId -> evaluateMarket(marketId, byId))
+                .map(marketId -> evaluateMarket(marketId, byId, budget, applyEligibilityPolicy))
                 .toList();
         List<UUID> effectiveMarketIds = decisions.stream()
                 .filter(MarketEligibilityDecision::eligible)
                 .map(MarketEligibilityDecision::marketId)
                 .toList();
 
+        Instant resolvedAt = clock.instant();
         return new ActiveScanScopeResolutionResult(
                 request.accountId(),
                 normalizeObjective(request.objective()),
+                mode,
+                applyEligibilityPolicy && eligibilityPolicy != null ? MarketEligibilityPolicy.POLICY_NAME : null,
+                applyEligibilityPolicy && eligibilityPolicy != null ? MarketEligibilityPolicy.POLICY_VERSION : null,
                 normalizeRequested(request.requestedMarketIds()),
                 candidateIds,
                 decisions,
                 new EffectiveScanScope(effectiveMarketIds),
-                clock.instant()
+                resolvedAt,
+                resolvedAt,
+                List.of(
+                        "market-existence:v1",
+                        "market-tradability:v1",
+                        "market-facts-readiness:v1"
+                )
         );
     }
 
@@ -106,11 +143,26 @@ public class ActiveScanScopeResolutionService {
         }
     }
 
-    private List<UUID> requestedCandidateIds(List<UUID> requestedMarketIds, List<MarketResponse> catalog) {
-        if (requestedMarketIds == null || requestedMarketIds.isEmpty()) {
+    private List<UUID> requestedCandidateIds(
+            MarketScopeMode mode, List<UUID> requestedMarketIds, List<MarketResponse> catalog) {
+        if (mode == MarketScopeMode.ALL_ELIGIBLE) {
             return catalog.stream().map(MarketResponse::marketId).toList();
         }
         return normalizeRequested(requestedMarketIds);
+    }
+
+    private MarketScopeMode resolveScopeMode(ActiveScanScopeResolutionRequest request) {
+        MarketScopeMode mode = request.scopeMode();
+        List<UUID> requested = normalizeRequested(request.requestedMarketIds());
+        if (mode == MarketScopeMode.ALL_ELIGIBLE && !requested.isEmpty()) {
+            throw ActiveScanScopeResolutionException.invalid(
+                    "ALL_ELIGIBLE scope must not contain selected market IDs");
+        }
+        if (mode == null || (mode == MarketScopeMode.SELECTED && requested.isEmpty())) {
+            throw ActiveScanScopeResolutionException.invalid(
+                    "An explicit SELECTED or ALL_ELIGIBLE scope is required");
+        }
+        return mode;
     }
 
     private List<UUID> normalizeRequested(List<UUID> requestedMarketIds) {
@@ -126,7 +178,9 @@ public class ActiveScanScopeResolutionService {
 
     private MarketEligibilityDecision evaluateMarket(
             UUID marketId,
-            Map<UUID, MarketResponse> byId
+            Map<UUID, MarketResponse> byId,
+            EvaluationBudget budget,
+            boolean applyEligibilityPolicy
     ) {
         MarketResponse market = byId.get(marketId);
         if (market == null) {
@@ -135,7 +189,8 @@ public class ActiveScanScopeResolutionService {
                     null,
                     null,
                     false,
-                    List.of(MarketEligibilityReason.MARKET_NOT_FOUND)
+                    List.of(MarketEligibilityReason.MARKET_NOT_FOUND),
+                    MarketEligibilityStatus.EXCLUDED, null, null, null
             );
         }
         boolean tradable = market.marketState() != null && market.marketState().tradable();
@@ -145,8 +200,37 @@ public class ActiveScanScopeResolutionService {
                     market.symbol(),
                     market.provider(),
                     false,
-                    List.of(MarketEligibilityReason.MARKET_NOT_TRADABLE)
+                    List.of(MarketEligibilityReason.MARKET_NOT_TRADABLE),
+                    MarketEligibilityStatus.EXCLUDED, null, null, null
             );
+        }
+        if (applyEligibilityPolicy && eligibilityPolicy != null) {
+            if (!budget.consume()) {
+                return new MarketEligibilityDecision(
+                        market.marketId(), market.symbol(), market.provider(), false,
+                        List.of(MarketEligibilityReason.MARKET_FACT_EVALUATION_BUDGET_EXHAUSTED),
+                        MarketEligibilityStatus.NOT_EVALUABLE, null, null, null);
+            }
+            try {
+                MarketEligibilityPolicy.Evaluation evaluation = eligibilityPolicy.evaluate(
+                        marketData.findMarketFacts(
+                                market.marketId(),
+                                eligibilityPolicy.properties().interval(),
+                                eligibilityPolicy.properties().activityWindowMinutes(),
+                                eligibilityPolicy.properties().readinessLookbackCandles(),
+                                eligibilityPolicy.properties().minimumCompletedCandles(),
+                                eligibilityPolicy.properties().maxObservationAgeSeconds()));
+                return new MarketEligibilityDecision(
+                        market.marketId(), market.symbol(), market.provider(),
+                        evaluation.status() == MarketEligibilityStatus.ELIGIBLE,
+                        evaluation.reasons(), evaluation.status(),
+                        evaluation.factsStatus(), evaluation.factsCalculationVersion(), evaluation.provenance());
+            } catch (RuntimeException exception) {
+                return new MarketEligibilityDecision(
+                        market.marketId(), market.symbol(), market.provider(), false,
+                        List.of(MarketEligibilityReason.DATA_UNAVAILABLE),
+                        MarketEligibilityStatus.NOT_EVALUABLE, "UNAVAILABLE", null, null);
+            }
         }
         return new MarketEligibilityDecision(
                 market.marketId(),
@@ -155,6 +239,22 @@ public class ActiveScanScopeResolutionService {
                 true,
                 List.of()
         );
+    }
+
+    private static final class EvaluationBudget {
+        private int remaining;
+
+        private EvaluationBudget(int maximum) {
+            this.remaining = maximum;
+        }
+
+        private boolean consume() {
+            if (remaining == 0) {
+                return false;
+            }
+            remaining--;
+            return true;
+        }
     }
 
     private String normalizeObjective(String objective) {

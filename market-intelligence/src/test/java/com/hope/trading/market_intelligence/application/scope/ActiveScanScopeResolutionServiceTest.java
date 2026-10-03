@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.scope;
 
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
+import com.hope.trading.market_intelligence.adapter.marketdata.MarketFactsResponse;
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketResponse;
 import com.hope.trading.market_intelligence.adapter.tradingcore.TradingCoreAccountClient;
 import com.hope.trading.market_intelligence.domain.scope.*;
@@ -14,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,7 +41,7 @@ class ActiveScanScopeResolutionServiceTest {
         ));
 
         ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
-                new ActiveScanScopeResolutionRequest(accountId, "scan", List.of()));
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
 
         assertThat(result.candidateMarketIds()).containsExactly(aaa, zzz);
         assertThat(result.effectiveScope().marketIds()).containsExactly(aaa, zzz);
@@ -94,6 +96,59 @@ class ActiveScanScopeResolutionServiceTest {
     }
 
     @Test
+    void nullOrEmptyLegacyScopeNeverExpandsToTheCatalogue() {
+        UUID accountId = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+
+        assertThatThrownBy(() -> service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null)))
+                .isInstanceOf(ActiveScanScopeResolutionException.class)
+                .hasMessageContaining("explicit SELECTED or ALL_ELIGIBLE");
+        verifyNoInteractions(marketData);
+    }
+
+    @Test
+    void factsAreRequestedOnlyAfterCheapGatesAndBudgetExhaustionIsNotEvaluable() {
+        UUID accountId = UUID.randomUUID();
+        UUID tradable = UUID.randomUUID();
+        UUID closed = UUID.randomUUID();
+        UUID deferred = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(tradable, "KRAKEN", "BTC/EUR", true),
+                market(closed, "KRAKEN", "ETH/EUR", false),
+                market(deferred, "KRAKEN", "SOL/EUR", true)));
+        when(marketData.findMarketFacts(eq(tradable), any(), anyLong(), anyInt(), anyInt(), anyLong()))
+                .thenReturn(availableFacts(tradable));
+
+        MarketEligibilityProperties properties = new MarketEligibilityProperties();
+        properties.setInterval(com.hope.trading.market_intelligence.adapter.marketdata.OhlcInterval.ONE_HOUR);
+        properties.setActivityWindowMinutes(60);
+        properties.setReadinessLookbackCandles(24);
+        properties.setMinimumCompletedCandles(12);
+        properties.setMaxObservationAgeSeconds(300);
+        properties.setMaxMarketFactEvaluationsPerScan(1);
+
+        ActiveScanScopeResolutionResult result = new ActiveScanScopeResolutionService(
+                accounts, marketData, Clock.fixed(NOW, ZoneOffset.UTC),
+                new MarketEligibilityPolicy(properties)).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan",
+                        List.of(tradable, closed, deferred)));
+
+        assertThat(result.effectiveScope().marketIds()).containsExactly(tradable);
+        assertThat(result.decisions()).extracting(MarketEligibilityDecision::status)
+                .containsExactly(MarketEligibilityStatus.ELIGIBLE,
+                        MarketEligibilityStatus.EXCLUDED, MarketEligibilityStatus.NOT_EVALUABLE);
+        verify(marketData, times(1)).findMarketFacts(eq(tradable), any(), anyLong(), anyInt(), anyInt(), anyLong());
+        verify(marketData, never()).findMarketFacts(eq(closed), any(), anyLong(), anyInt(), anyInt(), anyLong());
+        verify(marketData, never()).findMarketFacts(eq(deferred), any(), anyLong(), anyInt(), anyInt(), anyLong());
+    }
+
+    @Test
     void resolvesDecisionContextWithAccountFactsAndEffectiveMarkets() {
         UUID accountId = UUID.randomUUID();
         UUID marketId = UUID.randomUUID();
@@ -140,6 +195,24 @@ class ActiveScanScopeResolutionServiceTest {
                         "OPEN", tradable, null, NOW
                 )
         );
+    }
+
+    private MarketFactsResponse availableFacts(UUID marketId) {
+        return new MarketFactsResponse(marketId, "BTC/EUR", "BTC", "EUR", NOW,
+                new MarketFactsResponse.MarketActivityResponse(
+                        marketId, "KRAKEN", "BTC/EUR", "BTC", "EUR",
+                        com.hope.trading.market_intelligence.adapter.marketdata.OhlcInterval.ONE_HOUR,
+                        Duration.ofHours(24), NOW.minus(Duration.ofHours(24)), NOW, NOW,
+                        Duration.ofMinutes(5), null, 24, 24, 24, 0, 0, 0,
+                        com.hope.trading.market_intelligence.adapter.marketdata.MarketFactStatus.AVAILABLE,
+                        null, "market-facts-v1"),
+                new MarketFactsResponse.MarketReadinessResponse(
+                        marketId,
+                        com.hope.trading.market_intelligence.adapter.marketdata.OhlcInterval.ONE_HOUR,
+                        24, 24, 12, 24, 24, 0, 0, 0, 0, 0,
+                         NOW, NOW, NOW, Duration.ofMinutes(5),
+                         com.hope.trading.market_intelligence.adapter.marketdata.MarketFactStatus.AVAILABLE,
+                         null, "market-facts-v1"));
     }
 
     private FeignException.NotFound notFoundException() {
