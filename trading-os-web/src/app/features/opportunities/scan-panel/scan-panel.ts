@@ -29,6 +29,7 @@ import { MarketResponse } from '../../../core/models/market-response';
 import { AccountService } from '../../../core/services/account.service';
 import { ActiveScanService } from '../../../core/services/active-scan.service';
 import { MarketService } from '../../../core/services/market.service';
+import { MarketDiscoveryService } from '../../../core/services/market-discovery.service';
 import { SCAN_POLL_INTERVAL_MS } from './scan-poll-interval';
 
 export type ScanSessionError = 'CONFLICT' | 'UNAUTHORIZED' | 'UNAVAILABLE';
@@ -65,6 +66,7 @@ export class ScanPanel {
   private readonly activeScanService = inject(ActiveScanService);
   private readonly accountService = inject(AccountService);
   private readonly marketService = inject(MarketService);
+  private readonly marketDiscovery = inject(MarketDiscoveryService);
 
   /** Emitted once when a tracked scan reaches any terminal backend status. */
   readonly scanCompleted = output<ActiveScanResponse>();
@@ -109,8 +111,9 @@ export class ScanPanel {
         this.marketService.findAll().pipe(
           map((markets) => {
             this.catalogueAvailable = true;
-            this.marketById = new Map(markets.map((market) => [market.marketId, market]));
-            return { status: 'loaded' as const, markets };
+            const sortedMarkets = this.marketDiscovery.sortMarkets(markets);
+            this.marketById = new Map(sortedMarkets.map((market) => [market.marketId, market]));
+            return { status: 'loaded' as const, markets: sortedMarkets };
           }),
           catchError(() => {
             this.catalogueAvailable = false;

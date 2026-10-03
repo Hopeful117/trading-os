@@ -37,6 +37,7 @@ import {
 import { AccountService } from '../../core/services/account.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
+import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
 import { MarketService } from '../../core/services/market.service';
 import { TrendContextService } from '../../core/services/trend-context.service';
 import { MarketChartComponent } from '../markets/market-chart-component/market-chart-component';
@@ -94,6 +95,7 @@ export class DecisionWorkspace {
   private readonly trendContextService = inject(TrendContextService);
   private readonly marketService = inject(MarketService);
   private readonly marketDataStreamService = inject(MarketDataStreamService);
+  private readonly marketDiscovery = inject(MarketDiscoveryService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -367,9 +369,10 @@ export class DecisionWorkspace {
           return false;
         }
 
-        return `${market.symbol ?? ''} ${market.provider ?? ''} ${market.marketId}`
-          .toUpperCase()
-          .includes(query);
+        return (
+          this.marketDiscovery.matchesSearch(market, query) ||
+          market.marketId.toUpperCase().includes(query)
+        );
       })
       .slice(0, 40);
   }

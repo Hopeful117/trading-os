@@ -6,7 +6,12 @@
     </div>
   </div>
   <app-market-toolbar-component
+    [providers]="(marketOptions$ | async)?.providers ?? []"
+    [baseAssets]="(marketOptions$ | async)?.baseAssets ?? []"
+    [quoteAssets]="(marketOptions$ | async)?.quoteAssets ?? []"
+    [statuses]="(marketOptions$ | async)?.statuses ?? []"
     (filterChange)="applyFilter($event)"
+    (sortChange)="applySort($event)"
     (refreshRequested)="refreshMarkets()"
   />
 

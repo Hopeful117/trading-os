@@ -24,5 +24,79 @@
     }
   </div>
 
+  <div class="filter-fields" aria-label="Market filters">
+    <label>
+      <span class="sr-only">Provider</span>
+      <select [formControl]="providerControl" aria-label="Filter by provider">
+        <option value="">All providers</option>
+        @for (provider of providers(); track provider) {
+          <option [value]="provider">{{ provider }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      <span class="sr-only">Base asset</span>
+      <select [formControl]="baseAssetControl" aria-label="Filter by base asset">
+        <option value="">All base assets</option>
+        @for (asset of baseAssets(); track asset) {
+          <option [value]="asset">{{ asset }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      <span class="sr-only">Quote asset</span>
+      <select [formControl]="quoteAssetControl" aria-label="Filter by quote asset">
+        <option value="">All quote assets</option>
+        @for (asset of quoteAssets(); track asset) {
+          <option [value]="asset">{{ asset }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      <span class="sr-only">Trading status</span>
+      <select [formControl]="statusControl" aria-label="Filter by trading status">
+        <option value="">All statuses</option>
+        @for (status of statuses(); track status) {
+          <option [value]="status">{{ status }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      <span class="sr-only">Tradability</span>
+      <select [formControl]="tradableControl" aria-label="Filter by tradability">
+        <option value="">Any tradability</option>
+        <option value="true">Tradable</option>
+        <option value="false">Not tradable</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="sort-fields">
+    <label>
+      <span class="sr-only">Sort markets by</span>
+      <select [formControl]="sortFieldControl" aria-label="Sort markets by">
+        <option value="SYMBOL">Symbol</option>
+        <option value="PROVIDER">Provider</option>
+        <option value="BASE_ASSET">Base asset</option>
+        <option value="QUOTE_ASSET">Quote asset</option>
+        <option value="STATUS">Status</option>
+        <option value="TRADABILITY">Tradability</option>
+      </select>
+    </label>
+    <label>
+      <span class="sr-only">Sort direction</span>
+      <select [formControl]="sortDirectionControl" aria-label="Sort direction">
+        <option value="ASC">A-Z</option>
+        <option value="DESC">Z-A</option>
+      </select>
+    </label>
+  </div>
+
+  <button type="button" class="clear-filters-button" (click)="reset()">Clear filters</button>
+
   <button type="button" class="refresh-button" (click)="refresh()">Refresh</button>
 </section>

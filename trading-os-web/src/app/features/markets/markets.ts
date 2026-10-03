@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import {
   BehaviorSubject,
   combineLatest,
+  combineLatestWith,
   map,
   shareReplay,
   startWith,
@@ -11,8 +12,12 @@ import {
   switchMap,
 } from 'rxjs';
 
-import { MarketFilter } from '../../core/models/market-filter.model';
-import { MarketResponse } from '../../core/models/market-response';
+import {
+  DEFAULT_MARKET_SORT,
+  MarketFilter,
+  MarketSort,
+} from '../../core/models/market-filter.model';
+import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
 import { MarketService } from '../../core/services/market.service';
 import { MarketToolbarComponent } from './market-toolbar-component/market-toolbar-component';
 
@@ -24,6 +29,7 @@ import { MarketToolbarComponent } from './market-toolbar-component/market-toolba
 })
 export class Markets {
   private readonly marketService = inject(MarketService);
+  private readonly marketDiscovery = inject(MarketDiscoveryService);
   private readonly router = inject(Router);
 
   private readonly refreshSubject = new Subject<void>();
@@ -31,8 +37,10 @@ export class Markets {
   private readonly filterSubject = new BehaviorSubject<MarketFilter>({
     search: '',
   });
+  private readonly sortSubject = new BehaviorSubject<MarketSort>(DEFAULT_MARKET_SORT);
 
   readonly filter$ = this.filterSubject.asObservable();
+  readonly sort$ = this.sortSubject.asObservable();
 
   readonly markets$ = this.refreshSubject.pipe(
     startWith(undefined),
@@ -44,11 +52,22 @@ export class Markets {
   );
 
   readonly filteredMarkets$ = combineLatest([this.markets$, this.filter$]).pipe(
-    map(([markets, filter]) => this.filterMarkets(markets, filter)),
+    combineLatestWith(this.sort$),
+    map(([[markets, filter], sort]) => this.marketDiscovery.filterAndSort(markets, filter, sort)),
     shareReplay({
       bufferSize: 1,
       refCount: true,
     }),
+  );
+
+  readonly marketOptions$ = this.markets$.pipe(
+    map((markets) => ({
+      providers: this.uniqueValues(markets.map((market) => market.provider)),
+      baseAssets: this.uniqueValues(markets.map((market) => market.baseAsset)),
+      quoteAssets: this.uniqueValues(markets.map((market) => market.quoteAsset)),
+      statuses: this.uniqueValues(markets.map((market) => market.marketState?.tradingStatus)),
+    })),
+    shareReplay({ bufferSize: 1, refCount: true }),
   );
 
   openMarket(marketId: string): void {
@@ -59,21 +78,17 @@ export class Markets {
     this.filterSubject.next(filter);
   }
 
+  applySort(sort: MarketSort): void {
+    this.sortSubject.next(sort);
+  }
+
   refreshMarkets(): void {
     this.refreshSubject.next();
   }
 
-  private filterMarkets(markets: MarketResponse[], filter: MarketFilter): MarketResponse[] {
-    const search = filter.search.trim().toLowerCase();
-
-    if (!search) {
-      return markets;
-    }
-
-    return markets.filter((market) =>
-      [market.symbol, market.baseAsset, market.quoteAsset, market.provider].some((value) =>
-        value?.toLowerCase().includes(search),
-      ),
+  private uniqueValues(values: readonly (string | null | undefined)[]): string[] {
+    return [...new Set(values.filter((value): value is string => Boolean(value)))].sort((a, b) =>
+      a.localeCompare(b),
     );
   }
 }

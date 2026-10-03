@@ -1,6 +1,7 @@
 .market-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -14,6 +15,7 @@
 }
 
 .search-field input {
+  box-sizing: border-box;
   width: 100%;
   min-height: 2.75rem;
   padding: 0.75rem 2.75rem;
@@ -34,6 +36,31 @@
 
 .search-field input:focus {
   border-color: rgba(96, 165, 250, 0.65);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.filter-fields,
+.sort-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filter-fields select,
+.sort-fields select {
+  min-height: 2.75rem;
+  max-width: 10rem;
+  padding: 0.65rem 0.75rem;
+  color: #cbd5e1;
+  background: #1e293b;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.65rem;
+}
+
+.filter-fields select:focus,
+.sort-fields select:focus {
+  border-color: rgba(96, 165, 250, 0.65);
+  outline: none;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
@@ -79,6 +106,21 @@
     transform 160ms ease;
 }
 
+.clear-filters-button {
+  min-height: 2.75rem;
+  padding: 0.75rem 1rem;
+  color: #cbd5e1;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  cursor: pointer;
+}
+
+.clear-filters-button:hover {
+  color: #f8fafc;
+  background: rgba(148, 163, 184, 0.1);
+}
+
 .refresh-button:hover {
   background: rgba(37, 99, 235, 0.24);
   border-color: rgba(96, 165, 250, 0.5);
@@ -105,5 +147,28 @@
 
   .refresh-button {
     width: 100%;
+  }
+
+  .search-field,
+  .filter-fields,
+  .sort-fields {
+    width: 100%;
+  }
+
+  .search-field {
+    flex: 0 0 auto;
+  }
+
+  .filter-fields,
+  .sort-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-fields select,
+  .sort-fields select,
+  .clear-filters-button {
+    width: 100%;
+    max-width: none;
   }
 }
