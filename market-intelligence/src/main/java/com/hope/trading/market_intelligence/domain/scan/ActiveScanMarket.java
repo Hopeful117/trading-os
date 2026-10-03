@@ -42,8 +42,9 @@ public final class ActiveScanMarket {
         this.analysisExecutionId = analysisExecutionId;
         this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = Objects.requireNonNull(updatedAt);
-        if (!eligible && status != ActiveScanMarketStatus.EXCLUDED) {
-            throw new IllegalArgumentException("Excluded markets must use EXCLUDED status");
+        if (!eligible && status != ActiveScanMarketStatus.EXCLUDED
+                && status != ActiveScanMarketStatus.NOT_EVALUABLE) {
+            throw new IllegalArgumentException("Non-eligible markets must use EXCLUDED or NOT_EVALUABLE status");
         }
         if (!eligible && analysisExecutionId != null) {
             throw new IllegalArgumentException("Excluded markets cannot link an analysis execution");
@@ -72,6 +73,28 @@ public final class ActiveScanMarket {
                 false,
                 exclusionReasons,
                 ActiveScanMarketStatus.EXCLUDED,
+                null,
+                createdAt,
+                createdAt
+        );
+    }
+
+    public static ActiveScanMarket notEvaluable(
+            UUID scanMarketId,
+            UUID scanId,
+            int ordinal,
+            UUID marketId,
+            List<MarketEligibilityReason> reasons,
+            Instant createdAt
+    ) {
+        return new ActiveScanMarket(
+                scanMarketId,
+                scanId,
+                ordinal,
+                marketId,
+                false,
+                reasons,
+                ActiveScanMarketStatus.NOT_EVALUABLE,
                 null,
                 createdAt,
                 createdAt

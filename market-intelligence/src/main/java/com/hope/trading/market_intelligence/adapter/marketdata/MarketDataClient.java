@@ -25,4 +25,14 @@ public interface MarketDataClient {
             @RequestParam String interval,
             @RequestParam int limit
     );
+
+    @GetMapping("/internal/v1/market-facts/{marketId}")
+    MarketFactsResponse findMarketFacts(
+            @PathVariable UUID marketId,
+            @RequestParam OhlcInterval interval,
+            @RequestParam long activityWindowMinutes,
+            @RequestParam int readinessLookbackCandles,
+            @RequestParam int minimumCompletedCandles,
+            @RequestParam long maxObservationAgeSeconds
+    );
 }

@@ -8,6 +8,31 @@ public record MarketEligibilityDecision(
         String symbol,
         String provider,
         boolean eligible,
-        List<MarketEligibilityReason> reasons
+        List<MarketEligibilityReason> reasons,
+        MarketEligibilityStatus status,
+        String marketFactsStatus,
+        String marketFactsCalculationVersion,
+        MarketFactsProvenance marketFactsProvenance
 ) {
+    public MarketEligibilityDecision(
+            UUID marketId,
+            String symbol,
+            String provider,
+            boolean eligible,
+            List<MarketEligibilityReason> reasons
+    ) {
+        this(marketId, symbol, provider, eligible,
+                reasons,
+                eligible ? MarketEligibilityStatus.ELIGIBLE : MarketEligibilityStatus.EXCLUDED,
+                null,
+                null,
+                null);
+    }
+
+    public MarketEligibilityDecision {
+        reasons = List.copyOf(reasons);
+        status = status == null
+                ? (eligible ? MarketEligibilityStatus.ELIGIBLE : MarketEligibilityStatus.EXCLUDED)
+                : status;
+    }
 }

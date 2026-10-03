@@ -90,11 +90,7 @@ public class MarketIntelligenceController {
     ) {
         return ResponseEntity.ok(
                 ActiveScanScopeResolutionResponse.from(
-                        activeScanScopeResolution.resolve(
-                                new com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest(
-                                        request.accountId(), request.objective(), request.requestedMarketIds()
-                                )
-                        )
+                        activeScanScopeResolution.resolve(scopeRequest(request))
                 )
         );
     }
@@ -123,7 +119,8 @@ public class MarketIntelligenceController {
                                 idempotencyKey,
                                 request.accountId(),
                                 request.objective(),
-                                request.requestedMarketIds()
+                                request.requestedMarketIds(),
+                                request.scopeMode()
                         )).scanId()),
                 matches);
         return ResponseEntity.accepted()
@@ -202,5 +199,15 @@ public class MarketIntelligenceController {
             );
         }
         return principal.userId();
+    }
+
+    private com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest scopeRequest(
+            ActiveScanScopeResolutionRequestDto request) {
+        if (request.scopeMode() == null) {
+            return new com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest(
+                    request.accountId(), request.objective(), request.requestedMarketIds());
+        }
+        return new com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest(
+                request.accountId(), request.objective(), request.requestedMarketIds(), request.scopeMode());
     }
 }

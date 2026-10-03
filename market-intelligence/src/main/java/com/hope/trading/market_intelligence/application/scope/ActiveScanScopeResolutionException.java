@@ -20,6 +20,10 @@ public final class ActiveScanScopeResolutionException extends RuntimeException {
                 "ACTIVE_SCAN_SCOPE_UNAVAILABLE", 503, message);
     }
 
+    public static ActiveScanScopeResolutionException invalid(String message) {
+        return new ActiveScanScopeResolutionException("INVALID_ACTIVE_SCAN_SCOPE", 400, message);
+    }
+
     public String code() {
         return code;
     }

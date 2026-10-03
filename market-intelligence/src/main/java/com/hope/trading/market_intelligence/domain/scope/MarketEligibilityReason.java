@@ -2,5 +2,11 @@ package com.hope.trading.market_intelligence.domain.scope;
 
 public enum MarketEligibilityReason {
     MARKET_NOT_FOUND,
-    MARKET_NOT_TRADABLE
+    MARKET_NOT_TRADABLE,
+    DATA_UNAVAILABLE,
+    UNSUPPORTED_DATA,
+    STALE_DATA,
+    INSUFFICIENT_HISTORY,
+    DATA_INTEGRITY_FAILURE,
+    MARKET_FACT_EVALUATION_BUDGET_EXHAUSTED
 }
