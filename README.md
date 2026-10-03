@@ -24,6 +24,7 @@ Le projet est en développement actif. L'architecture microservices, l'authentif
 | `broker-service` | 17082 | 8082 | Connexions broker, credentials chiffrés, capacités broker-neutres et exécution Kraken |
 | `market-data` | 17083 | 8083 | Référentiel de marchés, OHLC, snapshots de prix et flux Kraken |
 | `market-intelligence` | interne | 8084 | Analyses, observations, opportunités, trade plans, orchestration et artefacts d'intelligence |
+| `news-service` | 17086 | 8085 | Événements économiques et actualités normalisés, persistés et provider-neutral |
 | `eureka-server` | 17084 | 8761 | Découverte des services |
 | `trading-web` | 17085 | 80 | Application Angular servie par Nginx |
 | PostgreSQL | interne | 5432 | Bases séparées `trading_os`, `market_data`, `broker_service` et `market_intelligence` |
@@ -33,11 +34,11 @@ disponibles pour d'autres applications développées en parallèle sur la même
 machine. Seuls les mappings hôtes du Compose ont été déplacés ; les ports
 internes des conteneurs et la communication inter-services restent inchangés.
 
-Services prévus par l'architecture cible, mais pas encore implémentés :
+Services ou composants encore incomplets dans l'architecture cible :
 
 | Service ou composant | Responsabilité cible |
 | --- | --- |
-| `news-service` | Calendrier économique, actualités et contexte macroéconomique normalisés |
+| `news-service` | Calendrier économique, actualités et contexte macroéconomique normalisés (fondation implémentée, provider réel à intégrer) |
 | `ai-engine` | Interprétation, scénarios, explications et classement d'opportunités |
 | Passive Scanner | Planification continue de la stratégie passive Market Intelligence |
 | Active Scanner UI | Déclenchement et présentation de l'analyse approfondie |
@@ -69,7 +70,8 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Risk Domain ADR-028 : moteur déterministe autonome et testé ; autorisation des Trade Plans via le pipeline Trading Core, rendue accessible à travers le Gateway (Story 0003).
 - Execution Domain ADR-029 : cycle de vie, idempotence, audit, retry contrôlé, annulation et récupération dans Trading Core.
 - Broker Architecture ADR-030 : contrats broker-neutres, capacités, registre de providers, adaptateur Kraken, résilience et observabilité.
-- News Service, scheduling passif, interface Scanner et AI Engine réel : non commencés.
+- News Service : fondation provider-neutral implémentée ; fournisseur externe et synchronisation réelle non commencés.
+- Scheduling passif, interface Scanner et AI Engine réel : non commencés.
 
 ### Avancées récentes
 
