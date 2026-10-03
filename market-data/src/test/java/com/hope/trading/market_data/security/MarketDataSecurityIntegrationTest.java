@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.security;
 
 import com.hope.trading.market_data.service.MarketPriceSnapshotService;
+import com.hope.trading.market_data.service.MarketFactsService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,9 @@ class MarketDataSecurityIntegrationTest {
     @MockitoBean
     private MarketPriceSnapshotService snapshotService;
 
+    @MockitoBean
+    private MarketFactsService marketFactsService;
+
     @Test
     void internalSnapshotRequiresServiceCredential() throws Exception {
         mockMvc.perform(post("/internal/markets/prices/snapshot")
@@ -57,6 +61,36 @@ class MarketDataSecurityIntegrationTest {
                         .header("X-Service-Authorization", "Bearer " + serviceToken("other-service"))
                         .contentType("application/json")
                         .content("{\"marketIds\":[]}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void marketIntelligenceCredentialCanUseOnlyMarketFactsEndpoint() throws Exception {
+        mockMvc.perform(get("/internal/v1/market-facts/00000000-0000-0000-0000-000000000001")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                        .param("interval", "ONE_MINUTE")
+                        .param("activityWindowMinutes", "3")
+                        .param("readinessLookbackCandles", "3")
+                        .param("minimumCompletedCandles", "1")
+                        .param("maxObservationAgeSeconds", "300"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/internal/markets/prices/snapshot")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                        .contentType("application/json")
+                        .content("{\"marketIds\":[]}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unknownServiceCannotUseMarketFactsEndpoint() throws Exception {
+        mockMvc.perform(get("/internal/v1/market-facts/00000000-0000-0000-0000-000000000001")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("other-service"))
+                        .param("interval", "ONE_MINUTE")
+                        .param("activityWindowMinutes", "3")
+                        .param("readinessLookbackCandles", "3")
+                        .param("minimumCompletedCandles", "1")
+                        .param("maxObservationAgeSeconds", "300"))
                 .andExpect(status().isUnauthorized());
     }
 

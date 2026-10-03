@@ -36,7 +36,7 @@ public final class ServiceJwtAuthenticationFilter extends OncePerRequestFilter {
         }
         try {
             ServicePrincipal principal = serviceJwt.validate(header.substring(7));
-            if (!properties.getAuthorizedCaller().equals(principal.serviceName())) {
+            if (!properties.isAuthorizedCaller(request.getRequestURI(), principal.serviceName())) {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN,
                         "Service is not authorized for this endpoint");
                 return;
