@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.dashboard.integration.BrokerAccountFact;
 import com.hope.trading.trading_core.dashboard.integration.BrokerDashboardMapper;
 import com.hope.trading.trading_core.dashboard.model.OpenPositionDashboardView;
 import com.hope.trading.trading_core.dashboard.service.PositionQueryService;
+import com.hope.trading.trading_core.dashboard.service.PositionDataIntegrityException;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
@@ -13,8 +14,10 @@ import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.service.AccountService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -50,7 +53,7 @@ public class PositionController {
         if (linkedBrokerAccount == null || linkedBrokerAccount.ownerId() == null
                 || account.getUser() == null
                 || !linkedBrokerAccount.ownerId().equals(account.getUser().getUserId())) {
-            throw new IllegalStateException("Account to BrokerAccount relation is invalid");
+            throw new PositionDataIntegrityException("Account to BrokerAccount relation is invalid");
         }
 
         if (linkedBrokerAccount.executionMode() == ExecutionMode.PAPER) {
@@ -76,5 +79,12 @@ public class PositionController {
         );
 
         return ResponseEntity.ok(positions);
+    }
+
+    @ExceptionHandler(PositionDataIntegrityException.class)
+    public ResponseEntity<String> handlePositionDataIntegrity(PositionDataIntegrityException exception) {
+        log.error("Position data integrity failure: {}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Position data integrity failure");
     }
 }

@@ -83,12 +83,13 @@
           [(ngModel)]="selectedMarketIds"
           data-testid="market-select"
         >
-          @for (market of catalogue.markets; track market.marketId) {
+          @for (market of selectableMarkets(catalogue.markets); track market.marketId) {
             <option [value]="market.marketId">{{ market.symbol }} · {{ market.provider }}</option>
           }
         </select>
         <small
-          >{{ selectedMarketIds.length }} selected. Eligibility is resolved by the backend.</small
+          >{{ selectedMarketIds.length }} selected. Closed or non-tradable markets are not
+          selectable; data freshness is checked by the backend when the scan starts.</small
         >
       </label>
     }
@@ -219,8 +220,18 @@
               @case ('UNAVAILABLE') {
                 Market Intelligence is unavailable. Try again later.
               }
+              @case ('INELIGIBLE') {
+                One or more selected markets are not eligible. No scan was created.
+              }
             }
           </h3>
+          @if (view.error === 'INELIGIBLE' && view.reasons?.length) {
+            <ul class="reason-list" data-testid="scan-ineligible-reasons">
+              @for (reason of view.reasons; track reason) {
+                <li>{{ readable(reason) }}</li>
+              }
+            </ul>
+          }
         </div>
       }
     }

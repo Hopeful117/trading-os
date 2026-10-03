@@ -490,6 +490,7 @@ describe('Dashboard', () => {
       calculatedAt: now,
       source: 'BROKER' as const,
       valuationStatus: 'FRESH' as const,
+      quoteAsset: 'USD',
     };
   }
 

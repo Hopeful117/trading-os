@@ -71,7 +71,7 @@ class ActiveScanApplicationServiceTest {
     }
 
     @Test
-    void createPersistsMixedScopeAndDefersDispatchUntilAfterCommit() {
+    void createPersistsMixedAllEligibleScopeAndDefersDispatchUntilAfterCommit() {
         UUID actorId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         UUID eligible = UUID.randomUUID();
@@ -105,8 +105,9 @@ class ActiveScanApplicationServiceTest {
                         "scan-key",
                         accountId,
                         "scan",
-                        List.of(eligible, excluded)
-                )).scanId()
+                         null,
+                         MarketScopeMode.ALL_ELIGIBLE
+                 )).scanId()
         );
 
         assertThat(created.scan().status()).isEqualTo(ActiveScanStatus.READY_TO_DISPATCH);
@@ -121,6 +122,35 @@ class ActiveScanApplicationServiceTest {
 
         verify(coordinator, timeout(2000)).resumeAsync(created.scan().scanId());
         assertThat(executionBefore.executionId()).isNotNull();
+    }
+
+    @Test
+    void createRejectsIneligibleSelectedScopeBeforePersistence() {
+        UUID actorId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID excluded = UUID.randomUUID();
+        when(scopeResolution.resolve(any())).thenReturn(new ActiveScanScopeResolutionResult(
+                accountId,
+                "scan",
+                List.of(excluded),
+                List.of(excluded),
+                List.of(new MarketEligibilityDecision(excluded, "AI3/EUR", "KRAKEN", false,
+                        List.of(MarketEligibilityReason.STALE_DATA))),
+                new EffectiveScanScope(List.of()),
+                now
+        ));
+
+        assertThatThrownBy(() -> service.create(new CreateActiveScanCommand(
+                actorId,
+                "scan-key",
+                accountId,
+                "scan",
+                List.of(excluded),
+                MarketScopeMode.SELECTED
+        ))).isInstanceOfSatisfying(ActiveScanException.class, exception -> {
+            assertThat(exception.code()).isEqualTo("INELIGIBLE_MARKET_SCOPE");
+            assertThat(exception.status()).isEqualTo(422);
+        });
     }
 
     @Test
@@ -229,7 +259,7 @@ class ActiveScanApplicationServiceTest {
         ActiveScanApplicationService.ActiveScanView created = service.findOwned(
                 actorId,
                 service.create(new CreateActiveScanCommand(
-                        actorId, "scan-key", accountId, "scan", List.of(marketId)
+                         actorId, "scan-key", accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE
                 )).scanId()
         );
 

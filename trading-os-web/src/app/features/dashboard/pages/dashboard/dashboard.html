@@ -144,13 +144,14 @@
                     <td>
                       @if (position.currentPrice !== null) {
                         {{ position.currentPrice | number: '1.2-8' }}
+                        {{ position.quoteAsset ?? '' }}
                       } @else {
                         Indisponible
                       }
                     </td>
                     <td [class]="pnlClass(position.unrealizedPnl)">
                       @if (position.unrealizedPnl !== null) {
-                        {{ position.unrealizedPnl | currency: dashboard.account.currency }}
+                        {{ position.unrealizedPnl | currency: position.quoteAsset ?? undefined }}
                         · {{ position.unrealizedPnlPercentage | number: '1.2-2' }} %
                       } @else {
                         —
@@ -158,11 +159,15 @@
                     </td>
                     <td>{{ position.stopLoss ?? '—' }} / {{ position.takeProfit ?? '—' }}</td>
                     <td>
-                      {{ position.riskAmount | currency: dashboard.account.currency }}
-                      · {{ position.riskPercentage | number: '1.2-2' }} %
+                      {{ position.riskAmount | currency: position.quoteAsset ?? undefined }}
+                      @if (position.riskPercentage !== null) {
+                        · {{ position.riskPercentage | number: '1.2-2' }} %
+                      } @else {
+                        · conversion compte indisponible
+                      }
                     </td>
                     <td>
-                      {{ position.exposure | currency: dashboard.account.currency }}
+                      {{ position.exposure | currency: position.quoteAsset ?? undefined }}
                     </td>
                     <td>
                       {{ position.openedAt ? (position.openedAt | date: 'short') : '—' }}

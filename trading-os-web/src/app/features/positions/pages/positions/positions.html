@@ -98,7 +98,7 @@
                 <span class="metric-label">Prix courant</span>
                 <span class="metric-value">
                   @if (position.currentPrice !== null) {
-                    {{ position.currentPrice | number: '1.2-8' }}
+                    {{ position.currentPrice | number: '1.2-8' }} {{ position.quoteAsset ?? '' }}
                   } @else {
                     <span class="unavailable">Indisponible</span>
                   }
@@ -109,7 +109,9 @@
             <div class="position-pnl">
               <div class="pnl-main" [class]="pnlClass(position.unrealizedPnl)">
                 @if (position.unrealizedPnl !== null) {
-                  <span class="pnl-amount">{{ position.unrealizedPnl | currency: 'USD' }}</span>
+                  <span class="pnl-amount">{{
+                    position.unrealizedPnl | currency: position.quoteAsset ?? undefined
+                  }}</span>
                   <span class="pnl-percentage"
                     >{{ position.unrealizedPnlPercentage | number: '1.2-2' }} %</span
                   >
@@ -153,14 +155,20 @@
             <div class="position-details">
               <div class="detail">
                 <span class="detail-label">Exposition</span>
-                <span class="detail-value">{{ position.exposure | currency: 'USD' }}</span>
+                <span class="detail-value">{{
+                  position.exposure | currency: position.quoteAsset ?? undefined
+                }}</span>
               </div>
 
               <div class="detail">
                 <span class="detail-label">Risque</span>
                 <span class="detail-value">
-                  {{ position.riskAmount | currency: 'USD' }}
-                  · {{ position.riskPercentage | number: '1.2-2' }} %
+                  {{ position.riskAmount | currency: position.quoteAsset ?? undefined }}
+                  @if (position.riskPercentage !== null) {
+                    · {{ position.riskPercentage | number: '1.2-2' }} %
+                  } @else {
+                    · conversion compte indisponible
+                  }
                 </span>
               </div>
 

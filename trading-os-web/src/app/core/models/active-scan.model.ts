@@ -33,10 +33,38 @@ export type AnalysisExecutionStatus =
 
 export type MarketEligibilityReason = 'MARKET_NOT_FOUND' | 'MARKET_NOT_TRADABLE';
 
+export type ActiveScanScopeMode = 'SELECTED' | 'ALL_ELIGIBLE';
+
+export interface ResolveActiveScanScopeRequest {
+  accountId: string;
+  requestedMarketIds?: string[];
+  scopeMode: ActiveScanScopeMode;
+}
+
+export interface ActiveScanEligibilityDecision {
+  marketId: string;
+  symbol: string | null;
+  provider: string | null;
+  eligible: boolean;
+  reasons: string[];
+  status: string;
+  marketFactsStatus: string | null;
+}
+
+export interface ActiveScanScopeResolutionResponse {
+  accountId: string;
+  scopeMode: ActiveScanScopeMode;
+  requestedMarketIds: string[];
+  effectiveMarketIds: string[];
+  decisions: ActiveScanEligibilityDecision[];
+  resolvedAt: string;
+}
+
 export interface CreateActiveScanRequest {
   accountId: string;
   objective?: string;
   requestedMarketIds?: string[];
+  scopeMode?: ActiveScanScopeMode;
 }
 
 export interface ActiveScanProgress {

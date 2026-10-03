@@ -45,6 +45,7 @@ export interface OpenPositionDashboardView {
   calculatedAt: string;
   source: PositionSource;
   valuationStatus: PositionValuationStatus;
+  quoteAsset: string | null;
 }
 
 export interface RiskRuleDashboardView {

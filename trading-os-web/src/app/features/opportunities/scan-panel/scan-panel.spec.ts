@@ -20,6 +20,7 @@ describe('ScanPanel', () => {
   let activeScanServiceMock: {
     createScan: ReturnType<typeof vi.fn>;
     findScan: ReturnType<typeof vi.fn>;
+    resolveScope: ReturnType<typeof vi.fn>;
   };
   let accountServiceMock: { getAccounts: ReturnType<typeof vi.fn> };
   let marketServiceMock: { findAll: ReturnType<typeof vi.fn> };
@@ -63,6 +64,26 @@ describe('ScanPanel', () => {
       },
       marketConstraints: {
         minimumOrderSize: 0.001,
+        minimumCost: 10,
+        tickSize: 0.01,
+        quantityPrecision: 8,
+        pricePrecision: 2,
+      },
+    },
+    {
+      marketId: 'm3',
+      provider: 'KRAKEN',
+      symbol: 'CLOSED/EUR',
+      baseAsset: 'CLOSED',
+      quoteAsset: 'EUR',
+      marketState: {
+        tradingStatus: 'CLOSED',
+        tradable: false,
+        closureReason: 'MARKET_CLOSED',
+        lastUpdated: '2026-08-25T10:00:00Z',
+      },
+      marketConstraints: {
+        minimumOrderSize: 1,
         minimumCost: 10,
         tickSize: 0.01,
         quantityPrecision: 8,
@@ -177,6 +198,7 @@ describe('ScanPanel', () => {
     activeScanServiceMock = {
       createScan: vi.fn().mockReturnValue(of(scan({ status: 'READY_TO_DISPATCH' }))),
       findScan: vi.fn().mockReturnValue(of(scan())),
+      resolveScope: vi.fn().mockReturnValue(of({ decisions: [] })),
     };
     accountServiceMock = { getAccounts: vi.fn().mockReturnValue(of(accounts)) };
     marketServiceMock = { findAll: vi.fn().mockReturnValue(of(markets)) };
@@ -241,7 +263,11 @@ describe('ScanPanel', () => {
 
       expect(activeScanServiceMock.createScan).toHaveBeenCalledTimes(1);
       const [request] = activeScanServiceMock.createScan.mock.calls[0];
-      expect(request).toEqual({ accountId: 'a1', objective: 'trend setups' });
+      expect(request).toEqual({
+        accountId: 'a1',
+        objective: 'trend setups',
+        scopeMode: 'ALL_ELIGIBLE',
+      });
     });
 
     it('sends every specifically selected market id', async () => {
@@ -249,12 +275,46 @@ describe('ScanPanel', () => {
       fixture.componentInstance.accountId = 'a1';
       fixture.componentInstance.scopeMode = 'SPECIFIC';
       fixture.componentInstance.selectedMarketIds = ['m1', 'm2'];
+      activeScanServiceMock.resolveScope.mockReturnValue(
+        of({
+          decisions: [
+            { marketId: 'm1', eligible: true, reasons: [] },
+            { marketId: 'm2', eligible: true, reasons: [] },
+          ],
+        }),
+      );
 
       fixture.componentInstance.runScan();
       await fixture.whenStable();
 
       const [request] = activeScanServiceMock.createScan.mock.calls[0];
-      expect(request).toEqual({ accountId: 'a1', requestedMarketIds: ['m1', 'm2'] });
+      expect(request).toEqual({
+        accountId: 'a1',
+        requestedMarketIds: ['m1', 'm2'],
+        scopeMode: 'SELECTED',
+      });
+    });
+
+    it('does not create a scan when scope preflight rejects a selected market', async () => {
+      await createComponent();
+      fixture.componentInstance.accountId = 'a1';
+      fixture.componentInstance.scopeMode = 'SPECIFIC';
+      fixture.componentInstance.selectedMarketIds = ['m1'];
+      activeScanServiceMock.resolveScope.mockReturnValue(
+        of({
+          decisions: [
+            { marketId: 'm1', eligible: false, reasons: ['STALE_DATA', 'DATA_UNAVAILABLE'] },
+          ],
+        }),
+      );
+
+      fixture.componentInstance.runScan();
+      await fixture.whenStable();
+
+      expect(activeScanServiceMock.createScan).not.toHaveBeenCalled();
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="scan-ineligible-reasons"]')?.textContent,
+      ).toContain('stale data');
     });
 
     it('ignores repeated triggers while a scan session is active', async () => {
@@ -289,6 +349,26 @@ describe('ScanPanel', () => {
       );
       expect(options.length).toBe(2);
       expect(fixture.nativeElement.textContent).toContain('BTC/EUR');
+      expect(fixture.nativeElement.textContent).not.toContain('CLOSED/EUR');
+    });
+
+    it('removes non-tradable markets from the selectable catalogue', async () => {
+      await createComponent();
+
+      expect(
+        fixture.componentInstance.selectableMarkets(markets).map((market) => market.marketId),
+      ).toEqual(['m1', 'm2']);
+    });
+
+    it('purges a selected market when a refresh marks it non-tradable', async () => {
+      await createComponent();
+      fixture.componentInstance.selectedMarketIds = ['m1', 'm3'];
+
+      marketServiceMock.findAll.mockReturnValue(of(markets));
+      fixture.componentInstance.reloadMarkets();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.selectedMarketIds).toEqual(['m1']);
     });
 
     it('keeps all-eligible available when catalogue loading fails and supports retry', async () => {
@@ -306,7 +386,11 @@ describe('ScanPanel', () => {
       fixture.componentInstance.scopeMode = 'ALL_ELIGIBLE';
       fixture.componentInstance.runScan();
       await fixture.whenStable();
-      expect(activeScanServiceMock.createScan.mock.calls[0][0]).toEqual({ accountId: 'a1' });
+      expect(activeScanServiceMock.createScan.mock.calls[0][0]).toEqual({
+        accountId: 'a1',
+        scopeMode: 'ALL_ELIGIBLE',
+        objective: undefined,
+      });
 
       marketServiceMock.findAll.mockReturnValue(of(markets));
       fixture.nativeElement.querySelector('[data-testid="markets-error"] button').click();
@@ -437,6 +521,10 @@ describe('ScanPanel', () => {
 
     it('maps HTTP 401 to an unauthorized message', async () => {
       await runExpectingError(new HttpErrorResponse({ status: 401 }), 'UNAUTHORIZED');
+    });
+
+    it('maps HTTP 422 to an ineligible scope message', async () => {
+      await runExpectingError(new HttpErrorResponse({ status: 422 }), 'INELIGIBLE');
     });
 
     it('maps other backend failures to an unavailable message', async () => {

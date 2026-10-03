@@ -19,6 +19,7 @@ describe('Opportunities', () => {
   let activeScanServiceMock: {
     createScan: ReturnType<typeof vi.fn>;
     findScan: ReturnType<typeof vi.fn>;
+    resolveScope: ReturnType<typeof vi.fn>;
   };
 
   const mockOpportunities: OpportunityResponse[] = [
@@ -78,6 +79,7 @@ describe('Opportunities', () => {
     activeScanServiceMock = {
       createScan: vi.fn(),
       findScan: vi.fn(),
+      resolveScope: vi.fn(),
     };
 
     await TestBed.configureTestingModule({

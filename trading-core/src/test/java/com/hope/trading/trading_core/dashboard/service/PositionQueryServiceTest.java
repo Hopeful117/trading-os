@@ -76,7 +76,7 @@ class PositionQueryServiceTest {
     }
 
     @Test
-    void makesCurrencyMismatchUnavailableWithoutUsingLastPrice() {
+    void keepsNativePriceAndValuationWhenAccountCurrencyDiffers() {
         UUID marketId = UUID.randomUUID();
         Account account = account();
         account.addTrade(trade(TradeType.BUY, "BTC/EUR", "100", "2"));
@@ -86,8 +86,11 @@ class PositionQueryServiceTest {
 
         var result = service.findPaperPositions(account, Instant.now());
 
-        assertThat(result.getFirst().currentPrice()).isNull();
+        assertThat(result.getFirst().currentPrice()).isEqualByComparingTo("99");
         assertThat(result.getFirst().valuationStatus()).isEqualTo(PositionValuationStatus.UNSUPPORTED_CURRENCY);
+        assertThat(result.getFirst().quoteAsset()).isEqualTo("EUR");
+        assertThat(result.getFirst().unrealizedPnl()).isEqualByComparingTo("-2");
+        assertThat(result.getFirst().riskPercentage()).isNull();
     }
 
     @Test

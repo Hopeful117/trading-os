@@ -32,11 +32,13 @@ public class Trade {
     @Column(nullable = false)
     private TradeType type;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 38, scale = 12)
     private BigDecimal entryPrice;
 
+    @Column(precision = 38, scale = 12)
     private BigDecimal currentPrice;
 
+    @Column(precision = 38, scale = 12)
     private BigDecimal exitPrice;
 
     @Column(nullable = false, precision = 38, scale = 12)
@@ -48,8 +50,10 @@ public class Trade {
 
     private Instant closedAt;
 
+    @Column(precision = 38, scale = 12)
     private BigDecimal stopLoss;
 
+    @Column(precision = 38, scale = 12)
     private BigDecimal takeProfit;
 
     private BigDecimal riskAmount;

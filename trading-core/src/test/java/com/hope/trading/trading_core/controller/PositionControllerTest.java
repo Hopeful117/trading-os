@@ -90,6 +90,16 @@ class PositionControllerTest {
     }
 
     @Test
+    void findPositionsReturnsInternalServerErrorWhenAccountBrokerRelationIsInvalid() throws Exception {
+        when(accountService.getAccountById(accountId, username)).thenReturn(account);
+        when(brokerAccountRepository.findById(brokerAccountId)).thenReturn(java.util.Optional.empty());
+
+        mvc.perform(get("/api/v1/accounts/{accountId}/positions", accountId)
+                        .principal(authentication()))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
     void paperPositionsUseLocalStateWithoutCallingBroker() throws Exception {
         when(accountService.getAccountById(accountId, username)).thenReturn(account);
         BrokerAccount paper = mock(BrokerAccount.class);
@@ -133,10 +143,11 @@ class PositionControllerTest {
                 new BigDecimal("100"), new BigDecimal("2"),
                 new BigDecimal("100"), new BigDecimal("0"), new BigDecimal("0"),
                 new BigDecimal("5100"), com.hope.trading.trading_core.dashboard.model.PositionProtectionStatus.MISSING_STOP_LOSS,
-                 true, Instant.now(), Instant.now(), Instant.now(),
-                 com.hope.trading.trading_core.dashboard.model.PositionSource.BROKER,
-                 com.hope.trading.trading_core.dashboard.model.PositionValuationStatus.FRESH
-        );
+                  true, Instant.now(), Instant.now(), Instant.now(),
+                  com.hope.trading.trading_core.dashboard.model.PositionSource.BROKER,
+                  com.hope.trading.trading_core.dashboard.model.PositionValuationStatus.FRESH,
+                  "USD"
+         );
         when(positionQueryService.findPositions(eq(accountId), any(), any(), any()))
                 .thenReturn(List.of(position));
 

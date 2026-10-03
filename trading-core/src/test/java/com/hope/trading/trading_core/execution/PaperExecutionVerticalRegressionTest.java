@@ -80,6 +80,13 @@ class PaperExecutionVerticalRegressionTest {
                 "2995", "12995", "0", "12995");
     }
 
+    @Test
+    void paperExecutionPreservesSubCentCryptoPrices() {
+        verifyScenario(ExecutionParameters.Side.SELL, "PEPE/EUR", "75000000",
+                "0.000003829", "0.000003829", "10000", "75000000",
+                "0.000003829", "10287.175", "0", "10000");
+    }
+
     private void verifyScenario(ExecutionParameters.Side side, String instrument, String quantity,
                                 String bid, String ask, String initialEquity,
                                 String initialBaseBalance, String expectedFillPrice,

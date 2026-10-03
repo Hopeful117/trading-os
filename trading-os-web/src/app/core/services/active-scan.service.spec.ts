@@ -61,6 +61,21 @@ describe('ActiveScanService', () => {
     req.flush(mockScan);
   });
 
+  it('resolveScope posts the explicit selected scope', () => {
+    const request = {
+      accountId: 'account-1',
+      requestedMarketIds: ['m1'],
+      scopeMode: 'SELECTED' as const,
+    };
+
+    service.resolveScope(request).subscribe();
+
+    const req = httpMock.expectOne(`${environment.gatewayUrl}v1/intelligence/scans/scope`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(request);
+    req.flush({});
+  });
+
   it('findScan gets the scan projection by id', () => {
     service.findScan('scan-1').subscribe((scan) => {
       expect(scan).toEqual(mockScan);

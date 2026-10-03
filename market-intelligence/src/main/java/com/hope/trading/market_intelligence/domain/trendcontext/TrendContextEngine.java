@@ -1,5 +1,8 @@
 package com.hope.trading.market_intelligence.domain.trendcontext;
 
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult;
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureSwing;
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureSwingType;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
@@ -16,13 +19,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.EnumMap;
 
 /** Pure, replayable implementation of the retained Trend Context V1 rules. */
 public final class TrendContextEngine {
     private static final MathContext MC = MathContext.DECIMAL128;
     private static final BigDecimal ZERO = BigDecimal.ZERO;
-
-    public TrendContextAssessment assess(TrendContextAssessmentInput input) {
+    public TrendContextAssessment assess(TrendContextAssessmentInput input,
+            Map<TrendContextRole, com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult> structures) {
         Objects.requireNonNull(input, "input is required");
         TrendContextProfile profile = input.profile();
         EnumMap<TrendContextRole, TrendContextTimeframeAssessment> roles = new EnumMap<>(TrendContextRole.class);
@@ -36,7 +40,9 @@ public final class TrendContextEngine {
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleSeries series = input.roleSeries().get(role);
             if (series == null) continue;
-            TrendContextTimeframeAssessment assessment = assessRole(input, role, series);
+            if (structures.get(role) == null && !required(input, role)) continue;
+            TrendContextTimeframeAssessment assessment = assessRole(input, role, series,
+                    Objects.requireNonNull(structures.get(role), "Market Structure result is required for " + role));
             roles.put(role, assessment); findings.addAll(assessment.findings());
             for (String exclusion : series.exclusionFindings()) {
                 exclusions.add(exclusion(input, role, code(exclusion), exclusion));
@@ -66,7 +72,8 @@ public final class TrendContextEngine {
     }
 
     private TrendContextTimeframeAssessment assessRole(TrendContextAssessmentInput input,
-            TrendContextRole role, TrendContextRoleSeries series) {
+            TrendContextRole role, TrendContextRoleSeries series,
+            com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult structure) {
         TrendContextProfile p = input.profile();
         TrendContextRoleDefinition definition = p.roles().get(role);
         List<TrendContextCandle> candles = series.calculationReadyCandles().stream()
@@ -78,7 +85,7 @@ public final class TrendContextEngine {
         if (!fresh) findings.add(finding(input, role, "ROLE_STALE", "FRESHNESS_V1", "Role evidence is stale or unavailable", roleEvidenceCandles(input, role, "FRESHNESS_V1", candles, "freshness")));
         if (candles.isEmpty()) findings.add(finding(input, role, "NO_CLOSED_CANDLES", "CANDLE_VALIDATION_V1", "No closed real candle is eligible", roleEvidenceCandles(input, role, "CANDLE_VALIDATION_V1", candles, "closed-candles")));
 
-        SwingWork swing = swings(input, role, candles);
+        SwingWork swing = structure(input, role, structure);
         List<ConfirmedSwing> retained = swing.retained;
         List<ConfirmedSwing> suppressed = swing.all.stream().filter(ConfirmedSwing::suppressed).toList();
         List<ConfirmedSwing> highs = retained.stream().filter(s -> s.type() == SwingType.HIGH).toList();
@@ -154,47 +161,20 @@ public final class TrendContextEngine {
                 breakWork.result, pullback, extension, ema, atr, levels, invalidation, fresh, findings, evidence);
     }
 
-    private SwingWork swings(TrendContextAssessmentInput input, TrendContextRole role, List<TrendContextCandle> candles) {
-        int radius = input.profile().pivotRadius(); List<ConfirmedSwing> candidates = new ArrayList<>();
-        for (int i = radius; i < candles.size() - radius; i++) {
-            TrendContextCandle pivot = candles.get(i); boolean high = true; boolean low = true;
-            for (int j = i - radius; j <= i + radius; j++) if (j != i) {
-                high &= pivot.high().compareTo(candles.get(j).high()) > 0;
-                low &= pivot.low().compareTo(candles.get(j).low()) < 0;
-            }
-            Instant confirmation = candles.get(i + radius).closeTime();
-            if (confirmation.isAfter(input.cutOffAt())) continue;
-            if (!windowIntersectsGap(input, role, candles, i, radius)) {
-                if (high) candidates.add(swing(input, role, candles, i, SwingType.HIGH, pivot.high(), confirmation));
-                if (low) candidates.add(swing(input, role, candles, i, SwingType.LOW, pivot.low(), confirmation));
-            }
-        }
-        candidates.sort(Comparator.comparing(ConfirmedSwing::pivotTime).thenComparing(ConfirmedSwing::type));
-        List<ConfirmedSwing> retained = new ArrayList<>(); List<ConfirmedSwing> all = new ArrayList<>();
-        for (ConfirmedSwing candidate : candidates) {
-            ConfirmedSwing prior = retained.stream().filter(s -> s.type() == candidate.type())
-                    .reduce((a, b) -> b).orElse(null);
-            if (prior != null && candidate.index() - prior.index() < input.profile().minimumSeparationBars()) {
-                boolean replace = candidate.type() == SwingType.HIGH
-                        ? candidate.price().compareTo(prior.price()) > 0
-                        : candidate.price().compareTo(prior.price()) < 0;
-                if (replace) {
-                    retained.remove(prior);
-                    all.replaceAll(s -> s == prior ? suppressed(prior, "REPLACED_BY_STRONGER_SAME_TYPE") : s);
-                    retained.add(candidate); all.add(candidate);
-                } else { all.add(suppressed(candidate, candidate.price().compareTo(prior.price()) == 0 ? "EQUAL_RETAINED_EARLIER" : "WITHIN_MINIMUM_SEPARATION")); }
-            } else { retained.add(candidate); all.add(candidate); }
-        }
-        retained.sort(Comparator.comparing(ConfirmedSwing::pivotTime).thenComparing(ConfirmedSwing::type));
-        return new SwingWork(retained, all);
+    private SwingWork structure(TrendContextAssessmentInput input, TrendContextRole role,
+            com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult result) {
+        return new SwingWork(result.retained().stream().map(s -> convert(input, role, s)).toList(),
+                result.all().stream().map(s -> convert(input, role, s)).toList());
     }
 
-    private boolean windowIntersectsGap(TrendContextAssessmentInput input, TrendContextRole role, List<TrendContextCandle> candles, int index, int radius) {
-        TrendContextRoleSeries series = input.roleSeries().get(role);
-        if (series == null || series.gapFindings().isEmpty()) return false;
-        Instant from = candles.get(index - radius).openTime();
-        Instant to = candles.get(index + radius).closeTime();
-        return series.gapFindings().stream().anyMatch(gap -> gap.from().isBefore(to) && gap.to().isAfter(from));
+    private ConfirmedSwing convert(TrendContextAssessmentInput input, TrendContextRole role, MarketStructureSwing swing) {
+        return new ConfirmedSwing(role,
+                swing.type() == MarketStructureSwingType.HIGH ? SwingType.HIGH : SwingType.LOW,
+                swing.index(), swing.pivotTime(), swing.price(), swing.confirmationTime(),
+                swing.pivotSourceId(), swing.confirmationSourceId(), swing.suppressed(), swing.suppressionReason(),
+                evidence(input, role, swing.type() == MarketStructureSwingType.HIGH ? "SWING_HIGH_V1" : "SWING_LOW_V1",
+                        List.of(swing.pivotSourceId(), swing.confirmationSourceId()), swing.pivotTime(),
+                        swing.confirmationTime(), swing.index() + ":" + swing.type()));
     }
 
     private StructureReplay replayBeforeBreak(TrendContextAssessmentInput input, TrendContextRole role,
@@ -214,20 +194,6 @@ public final class TrendContextEngine {
             }
         }
         return null;
-    }
-
-    private ConfirmedSwing swing(TrendContextAssessmentInput input, TrendContextRole role,
-            List<TrendContextCandle> candles, int index, SwingType type, BigDecimal price, Instant confirmation) {
-        int from = index - input.profile().pivotRadius(), to = index + input.profile().pivotRadius();
-        List<String> ids = candles.subList(from, to + 1).stream().map(TrendContextCandle::sourceId).toList();
-        TrendContextCandle pivot = candles.get(index), confirm = candles.get(to);
-        return new ConfirmedSwing(role, type, index, pivot.closeTime(), price, confirmation,
-                pivot.sourceId(), confirm.sourceId(), false, "", evidence(input, role, type == SwingType.HIGH ? "SWING_HIGH_V1" : "SWING_LOW_V1", ids, pivot.closeTime(), confirmation, index + ":" + type));
-    }
-
-    private ConfirmedSwing suppressed(ConfirmedSwing value, String reason) {
-        return new ConfirmedSwing(value.role(), value.type(), value.index(), value.pivotTime(), value.price(), value.confirmationTime(),
-                value.pivotSourceId(), value.confirmationSourceId(), true, reason, value.evidence());
     }
 
     private SwingRelation relation(List<ConfirmedSwing> swings, boolean high) {
