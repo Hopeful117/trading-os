@@ -109,7 +109,9 @@
             <div class="position-pnl">
               <div class="pnl-main" [class]="pnlClass(position.unrealizedPnl)">
                 @if (position.unrealizedPnl !== null) {
-                  <span class="pnl-amount">{{ position.unrealizedPnl | currency: position.quoteAsset ?? undefined }}</span>
+                  <span class="pnl-amount">{{
+                    position.unrealizedPnl | currency: position.quoteAsset ?? undefined
+                  }}</span>
                   <span class="pnl-percentage"
                     >{{ position.unrealizedPnlPercentage | number: '1.2-2' }} %</span
                   >
@@ -153,7 +155,9 @@
             <div class="position-details">
               <div class="detail">
                 <span class="detail-label">Exposition</span>
-                <span class="detail-value">{{ position.exposure | currency: position.quoteAsset ?? undefined }}</span>
+                <span class="detail-value">{{
+                  position.exposure | currency: position.quoteAsset ?? undefined
+                }}</span>
               </div>
 
               <div class="detail">

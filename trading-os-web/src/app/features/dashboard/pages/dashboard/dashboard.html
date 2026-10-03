@@ -143,7 +143,8 @@
                     <td>{{ position.entryPrice | number: '1.2-8' }}</td>
                     <td>
                       @if (position.currentPrice !== null) {
-                        {{ position.currentPrice | number: '1.2-8' }} {{ position.quoteAsset ?? '' }}
+                        {{ position.currentPrice | number: '1.2-8' }}
+                        {{ position.quoteAsset ?? '' }}
                       } @else {
                         Indisponible
                       }
