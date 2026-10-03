@@ -146,4 +146,20 @@ describe('MarketToolbarComponent', () => {
       expect(emissions[0]).toEqual({ search: '' });
     });
   });
+
+  describe('reset()', () => {
+    it('clears filter and sort controls', () => {
+      component.searchControl.setValue('BTC');
+      component.providerControl.setValue('KRAKEN');
+      component.sortFieldControl.setValue('PROVIDER');
+      component.sortDirectionControl.setValue('DESC');
+
+      component.reset();
+
+      expect(component.searchControl.value).toBe('');
+      expect(component.providerControl.value).toBe('');
+      expect(component.sortFieldControl.value).toBe('SYMBOL');
+      expect(component.sortDirectionControl.value).toBe('ASC');
+    });
+  });
 });

@@ -191,6 +191,35 @@ describe('Markets', () => {
 
       expect(markets.length).toBe(0);
     });
+
+    it('should filter by provider, base asset, quote asset, status, and tradability', () => {
+      component.applyFilter({
+        search: '',
+        provider: 'BINANCE',
+        baseAsset: 'SOL',
+        quoteAsset: 'BTC',
+        tradingStatus: 'CLOSED',
+        tradable: false,
+      });
+
+      let markets: MarketResponse[] = [];
+      component.filteredMarkets$.subscribe((m) => (markets = m));
+
+      expect(markets.map((market) => market.marketId)).toEqual(['m3']);
+    });
+
+    it('should apply stable sorting without changing the catalogue source', () => {
+      component.applySort({ field: 'SYMBOL', direction: 'DESC' });
+
+      let visibleMarkets: MarketResponse[] = [];
+      component.filteredMarkets$.subscribe((markets) => (visibleMarkets = markets));
+
+      expect(visibleMarkets.map((market) => market.marketId)).toEqual(['m3', 'm2', 'm1']);
+
+      let catalogue: MarketResponse[] = [];
+      component.markets$.subscribe((markets) => (catalogue = markets));
+      expect(catalogue.map((market) => market.marketId)).toEqual(['m1', 'm2', 'm3']);
+    });
   });
 
   describe('openMarket', () => {
