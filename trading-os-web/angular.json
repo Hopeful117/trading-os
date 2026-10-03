@@ -76,7 +76,8 @@
             "coverageReporters": ["html", "lcov", "text-summary"],
             "coverageThresholds": {
               "lines": 80
-            }
+            },
+            "setupFiles": ["src/test-setup.ts"]
           }
         }
       }

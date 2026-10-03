@@ -10,7 +10,7 @@ import java.util.List;
 public final class MarketStructureEngine {
     public MarketStructureResult extract(MarketStructureInput input) {
         if (input.evidenceStatus() != MarketStructureEvidenceStatus.COMPLETE) {
-            return result(input, availability(input.evidenceStatus()), List.of(), List.of(), input.findings());
+            return result(input, availability(input.evidenceStatus()), List.of(), List.of(), List.of(), input.findings());
         }
         List<MarketStructureCandle> sorted = input.candles().stream()
                 .sorted(Comparator.comparing(MarketStructureCandle::closeTime)
@@ -21,14 +21,14 @@ public final class MarketStructureEngine {
                     .filter(value -> value.openTime().equals(candle.openTime())).findFirst().orElse(null);
             if (previous == null) candles.add(candle);
             else if (!sameEvidence(previous, candle)) {
-                return result(input, MarketStructureAvailability.INVALID, List.of(), List.of(),
+                return result(input, MarketStructureAvailability.INVALID, List.of(), List.of(), List.of(),
                         List.of("DUPLICATE_CONFLICT:" + candle.openTime()));
             }
         }
         long eligibleCount = candles.stream().filter(c -> c.closed() && !c.synthetic()
                 && !c.closeTime().isAfter(input.cutOffAt())).count();
         if (eligibleCount < input.pivotRadius() * 2L + 1) {
-            return result(input, MarketStructureAvailability.INSUFFICIENT, List.of(), List.of(),
+            return result(input, MarketStructureAvailability.INSUFFICIENT, List.of(), List.of(), List.of(),
                     List.of("INSUFFICIENT_HISTORY"));
         }
         List<MarketStructureSwing> candidates = new ArrayList<>();
@@ -68,7 +68,8 @@ public final class MarketStructureEngine {
         }
         retained.sort(Comparator.comparing(MarketStructureSwing::pivotTime)
                 .thenComparing(MarketStructureSwing::type));
-        return result(input, MarketStructureAvailability.AVAILABLE, retained, all, input.findings());
+        return result(input, MarketStructureAvailability.AVAILABLE, retained, all,
+                relations(retained), input.findings());
     }
 
     private MarketStructureSwing swing(MarketStructureInput input, List<MarketStructureCandle> candles,
@@ -119,8 +120,9 @@ public final class MarketStructureEngine {
     }
 
     private MarketStructureResult result(MarketStructureInput input, MarketStructureAvailability availability,
-            List<MarketStructureSwing> retained, List<MarketStructureSwing> all, List<String> findings) {
-        StringBuilder canonical = new StringBuilder("MARKET_STRUCTURE_V1|")
+            List<MarketStructureSwing> retained, List<MarketStructureSwing> all,
+            List<MarketStructureRelationEvidence> relations, List<String> findings) {
+        StringBuilder canonical = new StringBuilder("MARKET_STRUCTURE_V2|")
                 .append(input.marketId()).append('|').append(input.provider()).append('|')
                 .append(input.symbol()).append('|').append(input.interval()).append('|')
                 .append(input.cutOffAt()).append('|').append(input.algorithmId()).append('|')
@@ -134,10 +136,36 @@ public final class MarketStructureEngine {
                 .append(s.confirmationSourceId()));
         all.stream().filter(MarketStructureSwing::suppressed).forEach(s -> canonical.append("|suppressed=")
                 .append(s.type()).append('|').append(s.index()).append('|').append(s.suppressionReason()));
+        relations.forEach(relation -> canonical.append("|relation=").append(relation.swingType()).append('|')
+                .append(relation.relation()).append('|').append(relation.previous().pivotSourceId()).append('|')
+                .append(relation.latest().pivotSourceId()));
         return new MarketStructureResult(input.marketId(), input.provider(), input.symbol(), input.interval(),
                 input.cutOffAt(), input.algorithmId(), input.ruleVersion(), input.policyId(),
                 input.policyVersion(), input.parameterFingerprint(), input.inputFingerprint(), availability,
-                findings, retained, all, sha256(canonical.toString()));
+                findings, retained, all, relations, sha256(canonical.toString()));
+    }
+
+    private List<MarketStructureRelationEvidence> relations(List<MarketStructureSwing> retained) {
+        List<MarketStructureRelationEvidence> result = new ArrayList<>();
+        for (MarketStructureSwingType type : MarketStructureSwingType.values()) {
+            List<MarketStructureSwing> sameType = retained.stream()
+                    .filter(value -> value.type() == type)
+                    .sorted(Comparator.comparing(MarketStructureSwing::pivotTime))
+                    .toList();
+            for (int i = 1; i < sameType.size(); i++) {
+                MarketStructureSwing previous = sameType.get(i - 1);
+                MarketStructureSwing latest = sameType.get(i);
+                int comparison = latest.price().compareTo(previous.price());
+                MarketStructureRelation relation = switch (type) {
+                    case HIGH -> comparison > 0 ? MarketStructureRelation.HH
+                            : comparison < 0 ? MarketStructureRelation.LH : MarketStructureRelation.EQ_HIGH;
+                    case LOW -> comparison > 0 ? MarketStructureRelation.HL
+                            : comparison < 0 ? MarketStructureRelation.LL : MarketStructureRelation.EQ_LOW;
+                };
+                result.add(new MarketStructureRelationEvidence(type, relation, previous, latest));
+            }
+        }
+        return result.stream().sorted(Comparator.comparing(value -> value.latest().pivotTime())).toList();
     }
 
     private String sha256(String value) {

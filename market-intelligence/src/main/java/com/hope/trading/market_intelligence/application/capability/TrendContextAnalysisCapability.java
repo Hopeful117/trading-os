@@ -18,7 +18,7 @@ import java.util.*;
 @Component
 public class TrendContextAnalysisCapability implements DeterministicAnalysisCapability, Capability {
     public static final String CAPABILITY_ID = "trend-context-analysis";
-    public static final String CAPABILITY_VERSION = "1.0.0";
+    public static final String CAPABILITY_VERSION = "1.1.0";
 
     private final com.hope.trading.market_intelligence.adapter.marketdata.TrendContextInputMapper mapper;
     private final TrendContextEngine engine;
@@ -43,9 +43,9 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
                         ProductionArtifactTypes.TREND_CONTEXT_HISTORY,
                         ProductionArtifactTypes.V1, VersionCompatibilityMode.EXACT,
                         true, ArtifactCardinality.ONE, true),
-                        new com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement(
-                                ProductionArtifactTypes.MARKET_STRUCTURE,
-                                ProductionArtifactTypes.V1, VersionCompatibilityMode.EXACT,
+                                 new com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement(
+                                 ProductionArtifactTypes.MARKET_STRUCTURE,
+                                 ProductionArtifactTypes.MARKET_STRUCTURE_V2, VersionCompatibilityMode.EXACT,
                                 false, ArtifactCardinality.ZERO_OR_MORE, true)),
                 List.of(new ProducedContribution.ArtifactContribution(
                         ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT,

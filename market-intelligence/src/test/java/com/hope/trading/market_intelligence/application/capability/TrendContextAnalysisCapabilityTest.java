@@ -136,6 +136,11 @@ class TrendContextAnalysisCapabilityTest {
                         MarketStructureAnalysisCapability.CAPABILITY_ID);
         assertThat(plan.edges()).anySatisfy(edge ->
                 assertThat(edge.requirement().artifactType()).isEqualTo(ProductionArtifactTypes.MARKET_STRUCTURE));
+        assertThat(trend.metadata().requirements()).anySatisfy(requirement -> {
+            if (requirement.artifactType().equals(ProductionArtifactTypes.MARKET_STRUCTURE)) {
+                assertThat(requirement.expectedVersion()).isEqualTo(ProductionArtifactTypes.MARKET_STRUCTURE_V2);
+            }
+        });
     }
 
     @Test

@@ -12,6 +12,7 @@ public final class ProductionArtifactTypes {
     public static final ArtifactType MARKET_STRUCTURE = new ArtifactType("market-structure");
     public static final ArtifactType TREND_CONTEXT_ASSESSMENT = new ArtifactType("trend-context-assessment");
     public static final ArtifactVersion V1 = new ArtifactVersion("1.0.0");
+    public static final ArtifactVersion MARKET_STRUCTURE_V2 = new ArtifactVersion("2.0.0");
 
     private ProductionArtifactTypes() {
     }
