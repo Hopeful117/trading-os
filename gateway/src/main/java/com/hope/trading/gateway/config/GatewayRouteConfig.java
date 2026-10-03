@@ -96,6 +96,10 @@ public class GatewayRouteConfig {
                         .path("/ws/market-data")
                         .uri(uriFor.apply("market-data-ws", "lb:ws://market-data"))
                 )
+                .route("news", r -> r
+                        .path("/api/v1/news/**")
+                        .uri(uriFor.apply("news-service", "lb://news-service"))
+                )
                 .route("market-intelligence", r -> r
                         .path("/api/v1/intelligence/**")
                         .uri(uriFor.apply("market-intelligence", "lb://market-intelligence"))
