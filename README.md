@@ -259,8 +259,8 @@ Exécuter toute la validation :
 ./scripts/test-all.sh
 ```
 
-Le script couvre les six applications Maven et le frontend. Le module
-autonome `risk-domain` se valide séparément :
+Le script couvre les sept applications Maven et le frontend, ainsi que le
+module autonome `risk-domain` qui réutilise le wrapper de `trading-core` :
 
 ```bash
 cd risk-domain && mvn test
@@ -274,10 +274,35 @@ cd market-intelligence && ../trading-core/mvnw test
 cd trading-os-web && npm run check
 ```
 
-Une branche n'est intégrable que si les six suites applicatives Maven, la suite
-`risk-domain`, les tests Angular et le build Angular passent. Les tests
+Une branche n'est intégrable que si les neuf modules Maven, les tests Angular
+et le build Angular passent. Les tests
 `contextLoads` constituent seulement un smoke test : la couverture métier doit
 progresser avec chaque fonctionnalité.
+
+## Validation qualité
+
+Les services Maven sont vérifiés indépendamment : le dépôt ne contient pas de
+build Maven racine. La validation complète génère les rapports JaCoCo backend,
+le rapport LCOV Angular, vérifie le formatage frontend et construit l'application
+de production :
+
+```bash
+./scripts/quality-verify.sh
+```
+
+Pour exécuter ensuite les analyses SonarQube et attendre le Quality Gate de
+chaque module :
+
+```bash
+export SONAR_HOST_URL=http://localhost:9000
+export SONAR_TOKEN='<analysis-token>'
+./scripts/quality-scan.sh
+```
+
+Le Quality Gate sur le nouveau code exige au minimum 80 % de couverture, au
+maximum 3 % de duplication et aucune nouvelle violation. Le token SonarQube
+reste uniquement dans l'environnement local ou le gestionnaire de secrets CI ;
+il ne doit jamais être ajouté au dépôt.
 
 ## Roadmap
 

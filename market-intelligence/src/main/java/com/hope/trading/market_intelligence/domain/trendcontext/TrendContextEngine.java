@@ -21,6 +21,9 @@ import java.util.Objects;
 public final class TrendContextEngine {
     private static final MathContext MC = MathContext.DECIMAL128;
     private static final BigDecimal ZERO = BigDecimal.ZERO;
+    private static final String CANDLE_VALIDATION_RULE = "CANDLE_VALIDATION_V1";
+    private static final String BREAK_CONFIRM_RULE = "BREAK_CONFIRM_V1";
+    private static final String MTF_ALIGNMENT_RULE = "MTF_ALIGNMENT_V1";
     public TrendContextAssessment assess(TrendContextAssessmentInput input,
             Map<TrendContextRole, com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult> structures) {
         Objects.requireNonNull(input, "input is required");
@@ -35,11 +38,13 @@ public final class TrendContextEngine {
         }
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleSeries series = input.roleSeries().get(role);
-            if (series == null) continue;
-            if (structures.get(role) == null && !required(input, role)) continue;
+            if (series == null || (structures.get(role) == null && !required(input, role))) {
+                continue;
+            }
             TrendContextTimeframeAssessment assessment = assessRole(input, role, series,
                     Objects.requireNonNull(structures.get(role), "Market Structure result is required for " + role));
-            roles.put(role, assessment); findings.addAll(assessment.findings());
+            roles.put(role, assessment);
+            findings.addAll(assessment.findings());
             for (String exclusion : series.exclusionFindings()) {
                 exclusions.add(exclusion(input, role, code(exclusion), exclusion));
             }
@@ -58,13 +63,15 @@ public final class TrendContextEngine {
         TrendPhase phase = setup == null ? TrendPhase.UNDETERMINED : setup.phase();
         List<TrendInvalidation> invalidations = roles.values().stream()
                 .map(TrendContextTimeframeAssessment::invalidation).filter(Objects::nonNull).toList();
-        TrendAttention attention = outcome(input, roles, bias, setup, trigger, alignment, contradictions, exclusions);
-        String fingerprint = fingerprint(input, roles, alignment, direction, regime, phase, attention,
-                findings, contradictions, exclusions, invalidations);
-        return new TrendContextAssessment(input.marketId(), input.provider(), input.symbol(), input.assessmentAt(),
+        TrendAttention attention = outcome(new OutcomeValues(input, roles, bias, setup, trigger,
+                alignment, contradictions, exclusions));
+        String fingerprint = fingerprint(new FingerprintValues(input, roles, alignment, direction,
+                regime, phase, attention, findings, contradictions, exclusions, invalidations));
+        return new TrendContextAssessment(new TrendContextAssessment.Values(
+                input.marketId(), input.provider(), input.symbol(), input.assessmentAt(),
                 input.cutOffAt(), input.fingerprint(), profile.profileId(), profile.profileVersion(),
                 input.ruleVersion(), roles, alignment, direction, regime, phase, attention, findings,
-                contradictions, exclusions, invalidations, fingerprint);
+                contradictions, exclusions, invalidations, fingerprint));
     }
 
     private TrendContextTimeframeAssessment assessRole(TrendContextAssessmentInput input,
@@ -79,56 +86,19 @@ public final class TrendContextEngine {
         List<TrendContextFinding> findings = new ArrayList<>();
         boolean fresh = fresh(input.assessmentAt(), definition, p.freshnessMultiplier(), candles);
         if (!fresh) findings.add(finding(input, role, "ROLE_STALE", "FRESHNESS_V1", "Role evidence is stale or unavailable", roleEvidenceCandles(input, role, "FRESHNESS_V1", candles, "freshness")));
-        if (candles.isEmpty()) findings.add(finding(input, role, "NO_CLOSED_CANDLES", "CANDLE_VALIDATION_V1", "No closed real candle is eligible", roleEvidenceCandles(input, role, "CANDLE_VALIDATION_V1", candles, "closed-candles")));
+        if (candles.isEmpty()) findings.add(finding(input, role, "NO_CLOSED_CANDLES", CANDLE_VALIDATION_RULE, "No closed real candle is eligible", roleEvidenceCandles(input, role, CANDLE_VALIDATION_RULE, candles, "closed-candles")));
 
-        SwingWork swing = structure(input, role, structure);
-        List<ConfirmedSwing> retained = swing.retained;
-        List<ConfirmedSwing> suppressed = swing.all.stream().filter(ConfirmedSwing::suppressed).toList();
-        List<ConfirmedSwing> highs = retained.stream().filter(s -> s.type() == SwingType.HIGH).toList();
-        List<ConfirmedSwing> lows = retained.stream().filter(s -> s.type() == SwingType.LOW).toList();
-        SwingRelation highRelation = relation(structure, MarketStructureSwingType.HIGH, input.cutOffAt());
-        SwingRelation lowRelation = relation(structure, MarketStructureSwingType.LOW, input.cutOffAt());
-        if (highs.size() < p.minimumConfirmedSwings() || lows.size() < p.minimumConfirmedSwings()) {
-            findings.add(finding(input, role, "INSUFFICIENT_SWINGS", "RELATIONS_V1", "Fewer than the required confirmed swings", swingEvidence(input, role, "RELATIONS_V1", retained, "insufficient-swings")));
-        }
-        TrendDirection structuralDirection = direction(highRelation, lowRelation);
-        TrendRegime structuralRegime = structuralDirection == TrendDirection.UNKNOWN
-                ? TrendRegime.UNKNOWN : structuralDirection == TrendDirection.NEUTRAL
-                ? TrendRegime.NON_DIRECTIONAL : TrendRegime.TRENDING;
-        ProtectedLevel protectedLevel = protectedLevel(structuralDirection, highs, lows);
-        BreakWork breakWork = breaks(input, role, structuralDirection, protectedLevel, candles);
-        if (breakWork.result.status() == BreakStatus.NONE && (structuralDirection == TrendDirection.UNKNOWN || structuralDirection == TrendDirection.NEUTRAL)) {
-            StructureReplay replay = replayBeforeBreak(input, role, retained, candles, structure);
-            if (replay != null) {
-                structuralDirection = replay.direction;
-                highRelation = replay.highRelation;
-                lowRelation = replay.lowRelation;
-                structuralRegime = TrendRegime.TRENDING;
-                protectedLevel = replay.protectedLevel;
-                breakWork = replay.breakWork;
-            }
-        }
-        TrendDirection finalDirection = structuralDirection;
-        TrendRegime finalRegime = structuralRegime;
-        TrendPhase phase = structuralDirection == TrendDirection.UNKNOWN || structuralDirection == TrendDirection.NEUTRAL
-                ? TrendPhase.UNDETERMINED : TrendPhase.DIRECTIONAL;
-        if (breakWork.confirmed != null) {
-            findings.add(finding(input, role, "TRANSITION_ACTIVE", "TRANSITION_V1", "Confirmed adverse break is active", breakWork.result.evidence()));
-            if (breakWork.reclaimed) {
-                findings.add(finding(input, role, "FAILED_BREAK_RECLAIM", "TRANSITION_V1", "Broken level was reclaimed inside the reclaim window", breakWork.result.evidence()));
-                finalDirection = structuralDirection; finalRegime = TrendRegime.TRENDING; phase = TrendPhase.TRANSITION;
-            } else {
-                TrendDirection opposite = oppositeStructureAfterBreak(breakWork.confirmed.candle(), retained,
-                        breakWork.confirmed.status(), structure);
-                if (opposite != TrendDirection.UNKNOWN) {
-                    finalDirection = opposite; finalRegime = TrendRegime.TRENDING; phase = TrendPhase.DIRECTIONAL;
-                } else { finalRegime = TrendRegime.TRANSITIONING; phase = TrendPhase.TRANSITION; }
-            }
-        } else if (breakWork.unconfirmed != null) {
-            findings.add(finding(input, role, breakWork.unconfirmed.status().name(), "BREAK_CONFIRM_V1", "Wick crossed the protected level without a confirming close", breakWork.unconfirmed.evidence()));
-        }
+        StructuralAnalysis structural = analyzeStructure(input, role, structure, candles, p, findings);
+        List<ConfirmedSwing> retained = structural.retained();
+        List<ConfirmedSwing> suppressed = structural.all().stream().filter(ConfirmedSwing::suppressed).toList();
+        TrendDirection finalDirection = structural.direction();
+        TrendRegime finalRegime = structural.regime();
+        TrendPhase phase = structural.phase();
+        ProtectedLevel protectedLevel = structural.protectedLevel();
+        BreakWork breakWork = structural.breakWork();
+        SwingRelation highRelation = structural.highRelation();
+        SwingRelation lowRelation = structural.lowRelation();
 
-        protectedLevel = protectedLevel(finalDirection, highs, lows);
         TrendAtrEvidence atr = atr(input, role, p, candles);
         TrendEmaEvidence ema = ema(input, role, p, candles, atr);
         TrendPullbackAssessment pullback = pullback(input, role, p, finalDirection, retained, candles,
@@ -153,9 +123,11 @@ public final class TrendContextEngine {
         if (ema.evidence() != null) evidence.add(ema.evidence());
         if (atr.evidence() != null) evidence.add(atr.evidence());
         if (invalidation != null) evidence.add(invalidation.evidence());
-        return new TrendContextTimeframeAssessment(role, series.interval(), finalDirection, finalRegime, phase,
+        return new TrendContextTimeframeAssessment(new TrendContextTimeframeAssessment.Values(
+                role, series.interval(), finalDirection, finalRegime, phase,
                 retained, suppressed, highRelation, lowRelation, protectedLevel,
-                breakWork.result, pullback, extension, ema, atr, levels, invalidation, fresh, findings, evidence);
+                breakWork.result, pullback, extension, ema, atr, levels, invalidation, fresh,
+                findings, evidence));
     }
 
     private SwingWork structure(TrendContextAssessmentInput input, TrendContextRole role,
@@ -215,6 +187,16 @@ public final class TrendContextEngine {
         return TrendDirection.NEUTRAL;
     }
 
+    private TrendRegime regime(TrendDirection direction) {
+        if (direction == TrendDirection.UNKNOWN) {
+            return TrendRegime.UNKNOWN;
+        }
+        if (direction == TrendDirection.NEUTRAL) {
+            return TrendRegime.NON_DIRECTIONAL;
+        }
+        return TrendRegime.TRENDING;
+    }
+
     private ProtectedLevel protectedLevel(TrendDirection direction, List<ConfirmedSwing> highs, List<ConfirmedSwing> lows) {
         if (direction == TrendDirection.UP && highs.size() >= 2) {
             Instant hh = highs.getLast().pivotTime(); return lows.stream().filter(s -> s.pivotTime().isBefore(hh)).reduce((a,b)->b).map(s -> new ProtectedLevel(SwingType.LOW, s.price(), s)).orElse(null);
@@ -225,29 +207,167 @@ public final class TrendContextEngine {
         return null;
     }
 
-    private BreakWork breaks(TrendContextAssessmentInput input, TrendContextRole role, TrendDirection direction, ProtectedLevel level, List<TrendContextCandle> candles) {
-        if (level == null || (direction != TrendDirection.UP && direction != TrendDirection.DOWN)) return new BreakWork(null, null, StructuralBreak.none(), false);
-        StructuralBreak unconfirmed = null, confirmed = null; int breakIndex = -1;
-        for (int i = 0; i < candles.size(); i++) {
-            TrendContextCandle candle = candles.get(i); if (!candle.closeTime().isAfter(level.source().confirmationTime())) continue;
-            boolean wick = direction == TrendDirection.UP ? candle.low().compareTo(level.price()) < 0 : candle.high().compareTo(level.price()) > 0;
-            boolean close = direction == TrendDirection.UP ? candle.close().compareTo(level.price()) < 0 : candle.close().compareTo(level.price()) > 0;
-            if (wick && !close && unconfirmed == null) unconfirmed = new StructuralBreak(direction == TrendDirection.UP ? BreakStatus.UNCONFIRMED_BEARISH_BREAK : BreakStatus.UNCONFIRMED_BULLISH_BREAK, level.price(), candle, level, 0, null, evidence(input, role, "BREAK_CONFIRM_V1", List.of(candle.sourceId(), level.source().pivotSourceId()), level.source().confirmationTime(), candle.closeTime(), "unconfirmed-break"));
-            if (close) { confirmed = new StructuralBreak(direction == TrendDirection.UP ? BreakStatus.CONFIRMED_BEARISH_BREAK : BreakStatus.CONFIRMED_BULLISH_BREAK, level.price(), candle, level, 0, null, evidence(input, role, "BREAK_CONFIRM_V1", List.of(candle.sourceId(), level.source().pivotSourceId()), level.source().confirmationTime(), candle.closeTime(), "confirmed-break")); breakIndex = i; break; }
+    private BreakWork breaks(TrendContextAssessmentInput input, TrendContextRole role,
+            TrendDirection direction, ProtectedLevel level, List<TrendContextCandle> candles) {
+        if (level == null || (direction != TrendDirection.UP && direction != TrendDirection.DOWN)) {
+            return new BreakWork(null, null, StructuralBreak.none(), false);
         }
-        if (confirmed == null) return new BreakWork(null, unconfirmed, unconfirmed == null ? StructuralBreak.none() : unconfirmed, false);
-        boolean reclaimed = false; int bars = 0;
-        for (int i = breakIndex + 1; i < candles.size() && bars < input.profile().reclaimWindowBars(); i++, bars++) {
-            boolean reclaim = direction == TrendDirection.UP ? candles.get(i).close().compareTo(level.price()) >= 0 : candles.get(i).close().compareTo(level.price()) <= 0;
-            if (reclaim) { reclaimed = true; break; }
+        BreakDiscovery discovery = discoverBreak(input, role, direction, level, candles);
+        if (discovery.confirmed() == null) {
+            StructuralBreak result = discovery.unconfirmed() == null
+                    ? StructuralBreak.none() : discovery.unconfirmed();
+            return new BreakWork(null, discovery.unconfirmed(), result, false);
         }
+        ReclaimResult reclaim = findReclaim(direction, level, candles, discovery.breakIndex(),
+                input.profile().reclaimWindowBars());
+        StructuralBreak result = new StructuralBreak(discovery.confirmed().status(),
+                discovery.confirmed().level(), discovery.confirmed().candle(),
+                discovery.confirmed().protectedLevel(), reclaim.bars(), reclaim.candle(),
+                discovery.confirmed().evidence());
+        return new BreakWork(result, discovery.unconfirmed(), result, reclaim.found());
+    }
+
+    private BreakDiscovery discoverBreak(TrendContextAssessmentInput input, TrendContextRole role,
+            TrendDirection direction, ProtectedLevel level, List<TrendContextCandle> candles) {
+        StructuralBreak unconfirmed = null;
+        StructuralBreak confirmed = null;
+        int breakIndex = -1;
+        for (int i = 0; i < candles.size() && breakIndex < 0; i++) {
+            TrendContextCandle candle = candles.get(i);
+            if (candle.closeTime().isAfter(level.source().confirmationTime())) {
+                boolean wick = crossedByWick(direction, candle, level);
+                boolean close = crossedByClose(direction, candle, level);
+                if (wick && !close && unconfirmed == null) {
+                    unconfirmed = structuralBreak(input, role, direction, level, candle,
+                            "unconfirmed-break", false);
+                }
+                if (close) {
+                    confirmed = structuralBreak(input, role, direction, level, candle,
+                            "confirmed-break", true);
+                    breakIndex = i;
+                }
+            }
+        }
+        return new BreakDiscovery(unconfirmed, confirmed, breakIndex);
+    }
+
+    private ReclaimResult findReclaim(TrendDirection direction, ProtectedLevel level,
+            List<TrendContextCandle> candles, int breakIndex, int window) {
+        int bars = 0;
         TrendContextCandle reclaimCandle = null;
-        for (int i = breakIndex + 1, inspected = 0; i < candles.size() && inspected < input.profile().reclaimWindowBars(); i++, inspected++) {
-            boolean reclaim = direction == TrendDirection.UP ? candles.get(i).close().compareTo(level.price()) >= 0 : candles.get(i).close().compareTo(level.price()) <= 0;
-            if (reclaim) { reclaimCandle = candles.get(i); break; }
+        for (int i = breakIndex + 1; i < candles.size() && bars < window; i++, bars++) {
+            if (reclaimed(direction, candles.get(i), level)) {
+                reclaimCandle = candles.get(i);
+                break;
+            }
         }
-        StructuralBreak result = new StructuralBreak(confirmed.status(), confirmed.level(), confirmed.candle(), confirmed.protectedLevel(), bars, reclaimCandle, confirmed.evidence());
-        return new BreakWork(result, unconfirmed, result, reclaimed);
+        return new ReclaimResult(reclaimCandle != null, bars, reclaimCandle);
+    }
+
+    private boolean crossedByWick(TrendDirection direction, TrendContextCandle candle, ProtectedLevel level) {
+        return direction == TrendDirection.UP
+                ? candle.low().compareTo(level.price()) < 0
+                : candle.high().compareTo(level.price()) > 0;
+    }
+
+    private boolean crossedByClose(TrendDirection direction, TrendContextCandle candle, ProtectedLevel level) {
+        return direction == TrendDirection.UP
+                ? candle.close().compareTo(level.price()) < 0
+                : candle.close().compareTo(level.price()) > 0;
+    }
+
+    private boolean reclaimed(TrendDirection direction, TrendContextCandle candle, ProtectedLevel level) {
+        return direction == TrendDirection.UP
+                ? candle.close().compareTo(level.price()) >= 0
+                : candle.close().compareTo(level.price()) <= 0;
+    }
+
+    private StructuralBreak structuralBreak(TrendContextAssessmentInput input, TrendContextRole role,
+            TrendDirection direction, ProtectedLevel level, TrendContextCandle candle,
+            String key, boolean confirmed) {
+        BreakStatus status;
+        if (direction == TrendDirection.UP) {
+            status = confirmed ? BreakStatus.CONFIRMED_BEARISH_BREAK
+                    : BreakStatus.UNCONFIRMED_BEARISH_BREAK;
+        } else {
+            status = confirmed ? BreakStatus.CONFIRMED_BULLISH_BREAK
+                    : BreakStatus.UNCONFIRMED_BULLISH_BREAK;
+        }
+        TrendContextEvidenceReference evidence = evidence(input, role, BREAK_CONFIRM_RULE,
+                List.of(candle.sourceId(), level.source().pivotSourceId()),
+                level.source().confirmationTime(), candle.closeTime(), key);
+        return new StructuralBreak(status, level.price(), candle, level, 0, null, evidence);
+    }
+
+    private StructuralAnalysis analyzeStructure(TrendContextAssessmentInput input, TrendContextRole role,
+            MarketStructureResult structure, List<TrendContextCandle> candles,
+            TrendContextProfile profile, List<TrendContextFinding> findings) {
+        SwingWork swing = structure(input, role, structure);
+        List<ConfirmedSwing> retained = swing.retained();
+        List<ConfirmedSwing> highs = retained.stream().filter(value -> value.type() == SwingType.HIGH).toList();
+        List<ConfirmedSwing> lows = retained.stream().filter(value -> value.type() == SwingType.LOW).toList();
+        SwingRelation highRelation = relation(structure, MarketStructureSwingType.HIGH, input.cutOffAt());
+        SwingRelation lowRelation = relation(structure, MarketStructureSwingType.LOW, input.cutOffAt());
+        if (highs.size() < profile.minimumConfirmedSwings()
+                || lows.size() < profile.minimumConfirmedSwings()) {
+            findings.add(finding(input, role, "INSUFFICIENT_SWINGS", "RELATIONS_V1",
+                    "Fewer than the required confirmed swings",
+                    swingEvidence(input, role, "RELATIONS_V1", retained, "insufficient-swings")));
+        }
+        TrendDirection direction = direction(highRelation, lowRelation);
+        ProtectedLevel level = protectedLevel(direction, highs, lows);
+        BreakWork breakWork = breaks(input, role, direction, level, candles);
+        if (breakWork.result().status() == BreakStatus.NONE
+                && (direction == TrendDirection.UNKNOWN || direction == TrendDirection.NEUTRAL)) {
+            StructureReplay replay = replayBeforeBreak(input, role, retained, candles, structure);
+            if (replay != null) {
+                direction = replay.direction();
+                highRelation = replay.highRelation();
+                lowRelation = replay.lowRelation();
+                breakWork = replay.breakWork();
+            }
+        }
+        BreakAnalysis analysis = analyzeBreak(input, role, direction, retained, structure, breakWork);
+        direction = analysis.direction();
+        findings.addAll(analysis.findings());
+        return new StructuralAnalysis(retained, swing.all(), direction, analysis.regime(), analysis.phase(),
+                protectedLevel(direction, highs, lows),
+                breakWork, highRelation, lowRelation);
+    }
+
+    private BreakAnalysis analyzeBreak(TrendContextAssessmentInput input, TrendContextRole role,
+            TrendDirection direction, List<ConfirmedSwing> retained, MarketStructureResult structure,
+            BreakWork breakWork) {
+        TrendRegime regime = regime(direction);
+        TrendPhase phase = direction == TrendDirection.UNKNOWN || direction == TrendDirection.NEUTRAL
+                ? TrendPhase.UNDETERMINED : TrendPhase.DIRECTIONAL;
+        List<TrendContextFinding> findings = new ArrayList<>();
+        if (breakWork.confirmed() != null) {
+            findings.add(finding(input, role, "TRANSITION_ACTIVE", "TRANSITION_V1",
+                    "Confirmed adverse break is active", breakWork.result().evidence()));
+            if (breakWork.reclaimed()) {
+                findings.add(finding(input, role, "FAILED_BREAK_RECLAIM", "TRANSITION_V1",
+                        "Broken level was reclaimed inside the reclaim window", breakWork.result().evidence()));
+                regime = TrendRegime.TRENDING;
+                phase = TrendPhase.TRANSITION;
+            } else {
+                TrendDirection opposite = oppositeStructureAfterBreak(breakWork.confirmed().candle(), retained,
+                        breakWork.confirmed().status(), structure);
+                if (opposite != TrendDirection.UNKNOWN) {
+                    direction = opposite;
+                    regime = TrendRegime.TRENDING;
+                    phase = TrendPhase.DIRECTIONAL;
+                } else {
+                    regime = TrendRegime.TRANSITIONING;
+                    phase = TrendPhase.TRANSITION;
+                }
+            }
+        } else if (breakWork.unconfirmed() != null) {
+            findings.add(finding(input, role, breakWork.unconfirmed().status().name(), BREAK_CONFIRM_RULE,
+                    "Wick crossed the protected level without a confirming close",
+                    breakWork.unconfirmed().evidence()));
+        }
+        return new BreakAnalysis(direction, regime, phase, findings);
     }
 
     private TrendDirection oppositeStructureAfterBreak(TrendContextCandle breakCandle, List<ConfirmedSwing> swings,
@@ -258,8 +378,13 @@ public final class TrendContextEngine {
         if (afterHigh.size() < 2 || afterLow.size() < 2) return TrendDirection.UNKNOWN;
         SwingRelation high = relationAfter(structure, MarketStructureSwingType.HIGH, breakCandle.closeTime());
         SwingRelation low = relationAfter(structure, MarketStructureSwingType.LOW, breakCandle.closeTime());
-        return target == TrendDirection.DOWN && high == SwingRelation.LH && low == SwingRelation.LL ? target
-                : target == TrendDirection.UP && high == SwingRelation.HH && low == SwingRelation.HL ? target : TrendDirection.UNKNOWN;
+        if (target == TrendDirection.DOWN && high == SwingRelation.LH && low == SwingRelation.LL) {
+            return target;
+        }
+        if (target == TrendDirection.UP && high == SwingRelation.HH && low == SwingRelation.HL) {
+            return target;
+        }
+        return TrendDirection.UNKNOWN;
     }
 
     private SwingRelation relationAfter(MarketStructureResult structure, MarketStructureSwingType type,
@@ -278,23 +403,54 @@ public final class TrendContextEngine {
     private TrendEmaEvidence ema(TrendContextAssessmentInput input, TrendContextRole role, TrendContextProfile p, List<TrendContextCandle> candles, TrendAtrEvidence atr) {
         int period = p.emaPeriod(); if (candles.size() < period + p.emaWarmupBars()) return TrendEmaEvidence.unavailable(period);
         BigDecimal value = mean(candles.subList(0, period).stream().map(TrendContextCandle::close).toList());
-        List<BigDecimal> values = new ArrayList<>(); values.add(value); BigDecimal alpha = divide(BigDecimal.valueOf(2), BigDecimal.valueOf(period + 1));
-        for (int i = period; i < candles.size(); i++) { value = candles.get(i).close().multiply(alpha, MC).add(value.multiply(BigDecimal.ONE.subtract(alpha, MC), MC), MC); values.add(value); }
+        List<BigDecimal> values = new ArrayList<>();
+        values.add(value);
+        BigDecimal alpha = divide(BigDecimal.valueOf(2), BigDecimal.valueOf((long) period + 1));
+        for (int i = period; i < candles.size(); i++) {
+            value = candles.get(i).close().multiply(alpha, MC)
+                    .add(value.multiply(BigDecimal.ONE.subtract(alpha, MC), MC), MC);
+            values.add(value);
+        }
         TrendContextEvidenceReference evidence = roleEvidenceCandles(input, role, "EMA_V1", candles, "ema");
         if (!atr.available() || values.size() <= p.emaSlopeLookback()) return new TrendEmaEvidence(period, value, null, TrendEmaSlope.UNKNOWN, false, evidence);
         BigDecimal slope = divide(value.subtract(values.get(values.size() - 1 - p.emaSlopeLookback()), MC), atr.current());
-        BigDecimal threshold = decimal(p.emaSlopeThreshold()); TrendEmaSlope classification = slope.compareTo(threshold) > 0 ? TrendEmaSlope.RISING : slope.compareTo(threshold.negate()) < 0 ? TrendEmaSlope.FALLING : TrendEmaSlope.FLAT;
+        BigDecimal threshold = decimal(p.emaSlopeThreshold());
+        TrendEmaSlope classification;
+        if (slope.compareTo(threshold) > 0) {
+            classification = TrendEmaSlope.RISING;
+        } else if (slope.compareTo(threshold.negate()) < 0) {
+            classification = TrendEmaSlope.FALLING;
+        } else {
+            classification = TrendEmaSlope.FLAT;
+        }
         return new TrendEmaEvidence(period, value, slope, classification, true, evidence);
     }
 
     private TrendAtrEvidence atr(TrendContextAssessmentInput input, TrendContextRole role, TrendContextProfile p, List<TrendContextCandle> candles) {
         int period = p.atrPeriod(); if (candles.size() < period + p.atrBaselineLength() - 1) return TrendAtrEvidence.unavailable(period);
         List<BigDecimal> tr = new ArrayList<>();
-        for (int i = 0; i < candles.size(); i++) { TrendContextCandle c = candles.get(i); BigDecimal range = c.high().subtract(c.low()); if (i > 0) range = range.max(c.high().subtract(candles.get(i-1).close()).abs()).max(c.low().subtract(candles.get(i-1).close()).abs()); tr.add(range); }
-        List<BigDecimal> atrs = new ArrayList<>(); BigDecimal current = mean(tr.subList(0, period)); atrs.add(current);
-        for (int i = period; i < tr.size(); i++) { current = current.multiply(BigDecimal.valueOf(period - 1), MC).add(tr.get(i), MC).divide(BigDecimal.valueOf(period), MC); atrs.add(current); }
+        for (int i = 0; i < candles.size(); i++) {
+            TrendContextCandle candle = candles.get(i);
+            BigDecimal range = candle.high().subtract(candle.low());
+            if (i > 0) {
+                BigDecimal previousClose = candles.get(i - 1).close();
+                range = range.max(candle.high().subtract(previousClose).abs())
+                        .max(candle.low().subtract(previousClose).abs());
+            }
+            tr.add(range);
+        }
+        List<BigDecimal> atrs = new ArrayList<>();
+        BigDecimal current = mean(tr.subList(0, period));
+        atrs.add(current);
+        for (int i = period; i < tr.size(); i++) {
+            current = current.multiply(BigDecimal.valueOf((long) period - 1), MC)
+                    .add(tr.get(i), MC)
+                    .divide(BigDecimal.valueOf(period), MC);
+            atrs.add(current);
+        }
         if (atrs.size() < p.atrBaselineLength()) return TrendAtrEvidence.unavailable(period);
-        BigDecimal baseline = mean(atrs.subList(atrs.size() - p.atrBaselineLength(), atrs.size())); BigDecimal ratio = divide(current, baseline);
+        BigDecimal baseline = mean(atrs.subList(atrs.size() - p.atrBaselineLength(), atrs.size()));
+        BigDecimal ratio = divide(current, baseline);
         return new TrendAtrEvidence(period, current, baseline, ratio, ratio.compareTo(decimal(p.abnormalAtrRatioThreshold())) >= 0, true, roleEvidenceCandles(input, role, "ATR_V1", candles, "atr"));
     }
 
@@ -306,14 +462,18 @@ public final class TrendContextEngine {
         List<TrendContextCandle> after = candles.stream().filter(c -> c.closeTime().isAfter(pivot.pivotTime())).toList();
         TrendContextEvidenceReference evidence = evidence(input, role, direction == TrendDirection.UP ? "PULLBACK_UP_V1" : "PULLBACK_DOWN_V1", List.of(pivot.pivotSourceId(), pivot.confirmationSourceId()), pivot.pivotTime(), after.isEmpty() ? pivot.confirmationTime() : after.getLast().closeTime(), "pullback");
         if (after.size() < p.pullbackMinimumBars() || after.size() < 2) return new TrendPullbackAssessment(direction, pivot, after, false, evidence);
-        BigDecimal latest = after.getLast().close(), previous = after.get(after.size()-2).close(), start = after.getFirst().close();
+        BigDecimal latest = after.getLast().close();
+        BigDecimal previous = after.get(after.size() - 2).close();
+        BigDecimal start = after.getFirst().close();
         boolean qualified = direction == TrendDirection.UP ? latest.compareTo(previous) < 0 && latest.compareTo(start) < 0 : latest.compareTo(previous) > 0 && latest.compareTo(start) > 0;
         return new TrendPullbackAssessment(direction, pivot, after, qualified, evidence);
     }
 
     private TrendExtensionAssessment extension(TrendContextAssessmentInput input, TrendContextRole role, TrendContextProfile p, TrendDirection direction, List<TrendContextCandle> candles, TrendEmaEvidence ema, TrendAtrEvidence atr) {
         if (!ema.available() || !atr.available() || candles.isEmpty() || (direction != TrendDirection.UP && direction != TrendDirection.DOWN)) return TrendExtensionAssessment.unavailable();
-        BigDecimal close = candles.getLast().close(), distance = close.subtract(ema.current()).abs(); BigDecimal multiple = divide(distance, atr.current());
+        BigDecimal close = candles.getLast().close();
+        BigDecimal distance = close.subtract(ema.current()).abs();
+        BigDecimal multiple = divide(distance, atr.current());
         boolean sameSide = direction == TrendDirection.UP ? close.compareTo(ema.current()) > 0 : close.compareTo(ema.current()) < 0;
         return new TrendExtensionAssessment(true, direction, distance, multiple, sameSide && multiple.compareTo(decimal(p.extensionAtrMultiple())) >= 0, roleEvidenceCandles(input, role, "EXTENSION_V1", candles, "extension"));
     }
@@ -321,48 +481,176 @@ public final class TrendContextEngine {
     private TrendInvalidation invalidation(TrendContextAssessmentInput input, TrendContextRole role, TrendDirection direction, ProtectedLevel level, List<TrendContextCandle> candles) {
         if (role != TrendContextRole.SETUP || level == null || (direction != TrendDirection.UP && direction != TrendDirection.DOWN)) return null;
         for (TrendContextCandle candle : candles) {
-            if (!candle.closeTime().isAfter(level.source().confirmationTime())) continue;
-            boolean invalid = direction == TrendDirection.UP ? candle.close().compareTo(level.price()) < 0 : candle.close().compareTo(level.price()) > 0;
-            if (invalid) return new TrendInvalidation(direction == TrendDirection.UP ? "INVALIDATION_UP_V1" : "INVALIDATION_DOWN_V1", direction, level, candle, level.price(), evidence(input, role, direction == TrendDirection.UP ? "INVALIDATION_UP_V1" : "INVALIDATION_DOWN_V1", List.of(level.source().pivotSourceId(), candle.sourceId()), level.source().confirmationTime(), candle.closeTime(), "invalidation"));
+            if (isInvalidationCandle(direction, level, candle)) {
+                String rule = direction == TrendDirection.UP ? "INVALIDATION_UP_V1" : "INVALIDATION_DOWN_V1";
+                return new TrendInvalidation(rule, direction, level, candle, level.price(),
+                        evidence(input, role, rule,
+                                List.of(level.source().pivotSourceId(), candle.sourceId()),
+                                level.source().confirmationTime(), candle.closeTime(), "invalidation"));
+            }
         }
         return null;
+    }
+
+    private boolean isInvalidationCandle(TrendDirection direction, ProtectedLevel level,
+            TrendContextCandle candle) {
+        if (!candle.closeTime().isAfter(level.source().confirmationTime())) {
+            return false;
+        }
+        return direction == TrendDirection.UP
+                ? candle.close().compareTo(level.price()) < 0
+                : candle.close().compareTo(level.price()) > 0;
     }
 
     private TrendTimeframeAlignment alignment(TrendContextAssessmentInput input, TrendContextTimeframeAssessment bias, TrendContextTimeframeAssessment setup, TrendContextTimeframeAssessment trigger, List<TrendContextContradiction> contradictions) {
         if (bias == null || bias.direction() == TrendDirection.UNKNOWN) return TrendTimeframeAlignment.INSUFFICIENT_BIAS;
         if (setup == null || setup.direction() == TrendDirection.UNKNOWN || setup.direction() == TrendDirection.NEUTRAL) return TrendTimeframeAlignment.INSUFFICIENT_DIRECTION;
         if (setup.regime() == TrendRegime.TRANSITIONING) return TrendTimeframeAlignment.BIAS_TRANSITION;
-        if (bias.direction() != setup.direction()) { contradictions.add(new TrendContextContradiction("TIMEFRAME_CONTRADICTION", "BIAS and SETUP directions conflict", List.of(roleEvidence(input, TrendContextRole.BIAS, "MTF_ALIGNMENT_V1", bias.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "bias-structure"), roleEvidence(input, TrendContextRole.SETUP, "MTF_ALIGNMENT_V1", setup.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "setup-structure")))); return TrendTimeframeAlignment.CONFLICTING; }
-        TrendTimeframeAlignment result = setup.phase() == TrendPhase.PULLBACK ? (bias.direction() == TrendDirection.UP ? TrendTimeframeAlignment.PULLBACK_WITHIN_UP_BIAS : TrendTimeframeAlignment.PULLBACK_WITHIN_DOWN_BIAS) : (bias.direction() == TrendDirection.UP ? TrendTimeframeAlignment.ALIGNED_UP : TrendTimeframeAlignment.ALIGNED_DOWN);
+        if (bias.direction() != setup.direction()) {
+            contradictions.add(timeframeContradiction(input, bias, setup));
+            return TrendTimeframeAlignment.CONFLICTING;
+        }
+        TrendTimeframeAlignment result = alignedDirection(bias, setup);
         if (trigger == null || !trigger.fresh()) return TrendTimeframeAlignment.TRIGGER_UNAVAILABLE;
-        if (trigger.regime() == TrendRegime.TRANSITIONING || (trigger.direction() != TrendDirection.UNKNOWN && trigger.direction() != TrendDirection.NEUTRAL && trigger.direction() != bias.direction())) {
-            contradictions.add(new TrendContextContradiction("TRIGGER_CONTRADICTION", "TRIGGER conflicts with BIAS", List.of(roleEvidence(input, TrendContextRole.BIAS, "MTF_ALIGNMENT_V1", bias.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "bias-structure"), roleEvidence(input, TrendContextRole.TRIGGER, "MTF_ALIGNMENT_V1", trigger.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "trigger-structure")))); return TrendTimeframeAlignment.TRIGGER_CONTRADICTION;
+        if (triggerContradictsBias(bias, trigger)) {
+            contradictions.add(triggerContradiction(input, bias, trigger));
+            return TrendTimeframeAlignment.TRIGGER_CONTRADICTION;
         }
         return result;
     }
 
-    private TrendAttention outcome(TrendContextAssessmentInput input, Map<TrendContextRole, TrendContextTimeframeAssessment> roles, TrendContextTimeframeAssessment bias, TrendContextTimeframeAssessment setup, TrendContextTimeframeAssessment trigger, TrendTimeframeAlignment alignment, List<TrendContextContradiction> contradictions, List<TrendContextExclusion> exclusions) {
+    private TrendTimeframeAlignment alignedDirection(TrendContextTimeframeAssessment bias,
+            TrendContextTimeframeAssessment setup) {
+        if (setup.phase() == TrendPhase.PULLBACK) {
+            return bias.direction() == TrendDirection.UP
+                    ? TrendTimeframeAlignment.PULLBACK_WITHIN_UP_BIAS
+                    : TrendTimeframeAlignment.PULLBACK_WITHIN_DOWN_BIAS;
+        }
+        return bias.direction() == TrendDirection.UP
+                ? TrendTimeframeAlignment.ALIGNED_UP
+                : TrendTimeframeAlignment.ALIGNED_DOWN;
+    }
+
+    private boolean triggerContradictsBias(TrendContextTimeframeAssessment bias,
+            TrendContextTimeframeAssessment trigger) {
+        return trigger.regime() == TrendRegime.TRANSITIONING
+                || (trigger.direction() != TrendDirection.UNKNOWN
+                && trigger.direction() != TrendDirection.NEUTRAL
+                && trigger.direction() != bias.direction());
+    }
+
+    private TrendContextContradiction timeframeContradiction(TrendContextAssessmentInput input,
+            TrendContextTimeframeAssessment bias, TrendContextTimeframeAssessment setup) {
+        return new TrendContextContradiction("TIMEFRAME_CONTRADICTION",
+                "BIAS and SETUP directions conflict", List.of(
+                roleEvidence(input, TrendContextRole.BIAS, MTF_ALIGNMENT_RULE,
+                        bias.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "bias-structure"),
+                roleEvidence(input, TrendContextRole.SETUP, MTF_ALIGNMENT_RULE,
+                        setup.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "setup-structure")));
+    }
+
+    private TrendContextContradiction triggerContradiction(TrendContextAssessmentInput input,
+            TrendContextTimeframeAssessment bias, TrendContextTimeframeAssessment trigger) {
+        return new TrendContextContradiction("TRIGGER_CONTRADICTION", "TRIGGER conflicts with BIAS",
+                List.of(roleEvidence(input, TrendContextRole.BIAS, MTF_ALIGNMENT_RULE,
+                                bias.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "bias-structure"),
+                        roleEvidence(input, TrendContextRole.TRIGGER, MTF_ALIGNMENT_RULE,
+                                trigger.swings().stream().map(ConfirmedSwing::pivotSourceId).toList(), "trigger-structure")));
+    }
+
+    private TrendAttention outcome(OutcomeValues values) {
+        TrendContextAssessmentInput input = values.input();
+        Map<TrendContextRole, TrendContextTimeframeAssessment> roles = values.roles();
+        TrendContextTimeframeAssessment bias = values.bias();
+        TrendContextTimeframeAssessment setup = values.setup();
+        TrendContextTimeframeAssessment trigger = values.trigger();
+        TrendTimeframeAlignment alignment = values.alignment();
+        List<TrendContextContradiction> contradictions = values.contradictions();
+        List<TrendContextExclusion> exclusions = values.exclusions();
         if (bias == null || setup == null) return TrendAttention.UNKNOWN;
-        if (roles.entrySet().stream().anyMatch(e -> required(input, e.getKey()) && !e.getValue().fresh()) || setup.direction() == TrendDirection.UNKNOWN || setup.direction() == TrendDirection.NEUTRAL || bias.direction() == TrendDirection.UNKNOWN || bias.direction() == TrendDirection.NEUTRAL) return TrendAttention.NO_SETUP;
-        if (exclusions.stream().anyMatch(e -> required(input, e.role()) && (e.code().equals("INVALID_OHLC") || e.code().equals("INVALID_TIMESTAMP") || e.code().equals("DUPLICATE_CONFLICT")))) return TrendAttention.UNKNOWN;
-        if (exclusions.stream().anyMatch(e -> required(input, e.role()) && (e.role() == TrendContextRole.BIAS || e.role() == TrendContextRole.SETUP)
-                && (e.code().equals("SYNTHETIC_DATA_EXCLUDED") || e.code().equals("GAP_IN_HISTORY")))) return TrendAttention.NO_SETUP;
+        if (hasNoSetup(input, roles, bias, setup)) return TrendAttention.NO_SETUP;
+        if (hasInvalidRequiredData(input, exclusions)) return TrendAttention.UNKNOWN;
+        if (hasRequiredHistoryGap(input, exclusions)) return TrendAttention.NO_SETUP;
         if (alignment == TrendTimeframeAlignment.CONFLICTING) return TrendAttention.NO_SETUP;
-        boolean dangerous = alignment == TrendTimeframeAlignment.BIAS_TRANSITION || contradictions.size() > 0 || roles.values().stream().anyMatch(r -> r.regime() == TrendRegime.TRANSITIONING || r.extension().extended() || r.atr().abnormal() || r.findings().stream().anyMatch(f -> f.code().equals("FAILED_BREAK_RECLAIM")));
-        if (dangerous) return TrendAttention.CONTEXTUALLY_DANGEROUS;
+        if (isDangerous(alignment, contradictions, roles)) return TrendAttention.CONTEXTUALLY_DANGEROUS;
         if (!input.profile().roles().containsKey(TrendContextRole.TRIGGER) || trigger == null || alignment == TrendTimeframeAlignment.TRIGGER_UNAVAILABLE) return TrendAttention.WATCH;
-        if (roles.entrySet().stream().anyMatch(e -> required(input, e.getKey()) && (!e.getValue().ema().available() || !e.getValue().atr().available()))) return TrendAttention.WATCH;
-        if (roles.entrySet().stream().anyMatch(e -> required(input, e.getKey()) && ((e.getValue().direction() == TrendDirection.UP && e.getValue().ema().slopeClassification() == TrendEmaSlope.FALLING) || (e.getValue().direction() == TrendDirection.DOWN && e.getValue().ema().slopeClassification() == TrendEmaSlope.RISING)))) return TrendAttention.WATCH;
+        if (hasIncompleteIndicators(input, roles) || hasCounterTrendEma(input, roles)) return TrendAttention.WATCH;
         return TrendAttention.CONTEXTUALLY_ATTRACTIVE;
     }
+
+    private boolean hasNoSetup(TrendContextAssessmentInput input,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles,
+            TrendContextTimeframeAssessment bias, TrendContextTimeframeAssessment setup) {
+        return roles.entrySet().stream().anyMatch(e -> required(input, e.getKey()) && !e.getValue().fresh())
+                || setup.direction() == TrendDirection.UNKNOWN || setup.direction() == TrendDirection.NEUTRAL
+                || bias.direction() == TrendDirection.UNKNOWN || bias.direction() == TrendDirection.NEUTRAL;
+    }
+
+    private boolean hasInvalidRequiredData(TrendContextAssessmentInput input,
+            List<TrendContextExclusion> exclusions) {
+        return exclusions.stream().anyMatch(e -> required(input, e.role())
+                && (e.code().equals("INVALID_OHLC") || e.code().equals("INVALID_TIMESTAMP")
+                || e.code().equals("DUPLICATE_CONFLICT")));
+    }
+
+    private boolean hasRequiredHistoryGap(TrendContextAssessmentInput input,
+            List<TrendContextExclusion> exclusions) {
+        return exclusions.stream().anyMatch(e -> required(input, e.role())
+                && (e.role() == TrendContextRole.BIAS || e.role() == TrendContextRole.SETUP)
+                && (e.code().equals("SYNTHETIC_DATA_EXCLUDED") || e.code().equals("GAP_IN_HISTORY")));
+    }
+
+    private boolean isDangerous(TrendTimeframeAlignment alignment,
+            List<TrendContextContradiction> contradictions,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles) {
+        return alignment == TrendTimeframeAlignment.BIAS_TRANSITION || !contradictions.isEmpty()
+                || roles.values().stream().anyMatch(r -> r.regime() == TrendRegime.TRANSITIONING
+                || r.extension().extended() || r.atr().abnormal()
+                || r.findings().stream().anyMatch(f -> f.code().equals("FAILED_BREAK_RECLAIM")));
+    }
+
+    private boolean hasIncompleteIndicators(TrendContextAssessmentInput input,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles) {
+        return roles.entrySet().stream().anyMatch(e -> required(input, e.getKey())
+                && (!e.getValue().ema().available() || !e.getValue().atr().available()));
+    }
+
+    private boolean hasCounterTrendEma(TrendContextAssessmentInput input,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles) {
+        return roles.entrySet().stream().anyMatch(e -> required(input, e.getKey())
+                && ((e.getValue().direction() == TrendDirection.UP
+                && e.getValue().ema().slopeClassification() == TrendEmaSlope.FALLING)
+                || (e.getValue().direction() == TrendDirection.DOWN
+                && e.getValue().ema().slopeClassification() == TrendEmaSlope.RISING)));
+    }
+
+    private record OutcomeValues(TrendContextAssessmentInput input,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles,
+            TrendContextTimeframeAssessment bias, TrendContextTimeframeAssessment setup,
+            TrendContextTimeframeAssessment trigger, TrendTimeframeAlignment alignment,
+            List<TrendContextContradiction> contradictions,
+            List<TrendContextExclusion> exclusions) { }
 
     private boolean required(TrendContextAssessmentInput input, TrendContextRole role) {
         TrendContextRoleDefinition definition = input.profile().roles().get(role);
         return definition != null && definition.required();
     }
 
-    private boolean fresh(Instant assessmentAt, TrendContextRoleDefinition definition, int multiplier, List<TrendContextCandle> candles) { if (definition == null || candles.isEmpty()) return false; Instant latest = candles.getLast().closeTime(); return !latest.isAfter(assessmentAt) && Duration.between(latest, assessmentAt).compareTo(definition.intervalDuration().multipliedBy(multiplier)) <= 0; }
-    private TrendContextFinding finding(TrendContextAssessmentInput input, TrendContextRole role, String code, String rule, String message, TrendContextEvidenceReference evidence) { return new TrendContextFinding(code, rule, role, message, evidence == null ? List.of() : List.of(evidence)); }
+    private boolean fresh(Instant assessmentAt, TrendContextRoleDefinition definition, int multiplier,
+            List<TrendContextCandle> candles) {
+        if (definition == null || candles.isEmpty()) {
+            return false;
+        }
+        Instant latest = candles.getLast().closeTime();
+        return !latest.isAfter(assessmentAt)
+                && Duration.between(latest, assessmentAt)
+                .compareTo(definition.intervalDuration().multipliedBy(multiplier)) <= 0;
+    }
+    private TrendContextFinding finding(TrendContextAssessmentInput input, TrendContextRole role, String code, String rule, String message, TrendContextEvidenceReference evidence) {
+        Objects.requireNonNull(input, "input is required");
+        return new TrendContextFinding(code, rule, role, message,
+                evidence == null ? List.of() : List.of(evidence));
+    }
     private String code(String value) { int colon = value.indexOf(':'); return colon < 0 ? value : value.substring(colon + 1); }
     private TrendContextEvidenceReference evidence(TrendContextAssessmentInput input, TrendContextRole role, String rule, List<String> ids, Instant from, Instant to, String key) { return new TrendContextEvidenceReference(role, input.profile().roles().get(role).interval(), rule, input.ruleVersion(), input.profile().profileVersion(), input.fingerprint(), input.cutOffAt(), ids, from, to, key); }
     private TrendContextEvidenceReference roleEvidenceCandles(TrendContextAssessmentInput input, TrendContextRole role, String rule, List<TrendContextCandle> candles, String key) {
@@ -386,13 +674,24 @@ public final class TrendContextEngine {
         return evidence(input, role, rule, ids, swings.isEmpty() ? input.cutOffAt() : swings.getFirst().pivotTime(), swings.isEmpty() ? input.cutOffAt() : swings.getLast().confirmationTime(), key);
     }
     private TrendContextExclusion exclusion(TrendContextAssessmentInput input, TrendContextRole role, String code, String detail) {
-        return new TrendContextExclusion(code, role, detail, roleEvidence(input, role, "CANDLE_VALIDATION_V1", List.of(), "exclusion-" + code));
+        return new TrendContextExclusion(code, role, detail, roleEvidence(input, role, CANDLE_VALIDATION_RULE, List.of(), "exclusion-" + code));
     }
     private BigDecimal mean(List<BigDecimal> values) { return values.stream().reduce(ZERO, (a,b) -> a.add(b, MC)).divide(BigDecimal.valueOf(values.size()), MC); }
     private BigDecimal divide(BigDecimal a, BigDecimal b) { return a.divide(b, MC); }
     private BigDecimal decimal(String value) { return new BigDecimal(value); }
 
-    private String fingerprint(TrendContextAssessmentInput input, Map<TrendContextRole, TrendContextTimeframeAssessment> roles, TrendTimeframeAlignment alignment, TrendDirection direction, TrendRegime regime, TrendPhase phase, TrendAttention attention, List<TrendContextFinding> findings, List<TrendContextContradiction> contradictions, List<TrendContextExclusion> exclusions, List<TrendInvalidation> invalidations) {
+    private String fingerprint(FingerprintValues values) {
+        TrendContextAssessmentInput input = values.input();
+        Map<TrendContextRole, TrendContextTimeframeAssessment> roles = values.roles();
+        TrendTimeframeAlignment alignment = values.alignment();
+        TrendDirection direction = values.direction();
+        TrendRegime regime = values.regime();
+        TrendPhase phase = values.phase();
+        TrendAttention attention = values.attention();
+        List<TrendContextFinding> findings = values.findings();
+        List<TrendContextContradiction> contradictions = values.contradictions();
+        List<TrendContextExclusion> exclusions = values.exclusions();
+        List<TrendInvalidation> invalidations = values.invalidations();
         StringBuilder b = new StringBuilder("TREND_CONTEXT_ASSESSMENT_V2|")
                 .append("input=").append(input.fingerprint()).append('|')
                 .append("market=").append(input.marketId()).append('|')
@@ -456,18 +755,112 @@ public final class TrendContextEngine {
         });
         return sha256(b.toString());
     }
-    private void appendSwing(StringBuilder b, String label, ConfirmedSwing swing) { b.append('|').append(label).append('=').append(swing.type().name()).append('|').append(swing.index()).append('|').append(swing.pivotTime()).append('|').append(decimal(swing.price())).append('|').append(swing.confirmationTime()).append('|').append(swing.pivotSourceId()).append('|').append(swing.confirmationSourceId()).append('|').append(swing.suppressed()).append('|').append(swing.suppressionReason()); appendEvidence(b, swing.evidence()); }
-    private void appendBreak(StringBuilder b, StructuralBreak value) { b.append("|break=").append(value.status().name()).append('|').append(decimal(value.level())).append('|').append(value.barsAfterBreak()); if (value.candle() != null) b.append('|').append(value.candle().sourceId()); if (value.reclaimCandle() != null) b.append("|reclaim=").append(value.reclaimCandle().sourceId()); if (value.evidence() != null) appendEvidence(b, value.evidence()); }
-    private void appendPullback(StringBuilder b, TrendPullbackAssessment value) { b.append("|pullback=").append(value.direction().name()).append('|').append(value.qualified()); if (value.qualifyingSwing() != null) b.append('|').append(value.qualifyingSwing().pivotSourceId()); value.postPivotCandles().forEach(c -> b.append('|').append(c.sourceId()).append(':').append(decimal(c.close()))); if (value.evidence() != null) appendEvidence(b, value.evidence()); }
-    private void appendExtension(StringBuilder b, TrendExtensionAssessment value) { b.append("|extension=").append(value.available()).append('|').append(value.direction().name()).append('|').append(decimal(value.distance())).append('|').append(decimal(value.atrMultiple())).append('|').append(value.extended()); if (value.evidence() != null) appendEvidence(b, value.evidence()); }
-    private void appendEma(StringBuilder b, TrendEmaEvidence value) { b.append("|ema=").append(value.period()).append('|').append(decimal(value.current())).append('|').append(decimal(value.slope())).append('|').append(value.slopeClassification().name()).append('|').append(value.available()); if (value.evidence() != null) appendEvidence(b, value.evidence()); }
-    private void appendAtr(StringBuilder b, TrendAtrEvidence value) { b.append("|atr=").append(value.period()).append('|').append(decimal(value.current())).append('|').append(decimal(value.baseline())).append('|').append(decimal(value.ratio())).append('|').append(value.abnormal()).append('|').append(value.available()); if (value.evidence() != null) appendEvidence(b, value.evidence()); }
-    private void appendFinding(StringBuilder b, TrendContextFinding value) { b.append("|finding=").append(value.code()).append('|').append(value.ruleId()).append('|').append(value.role().name()).append('|').append(value.message()); value.evidence().forEach(e -> appendEvidence(b, e)); }
-    private void appendEvidence(StringBuilder b, TrendContextEvidenceReference value) { b.append("|evidence=").append(value.role().name()).append('|').append(value.interval()).append('|').append(value.ruleId()).append('|').append(value.ruleVersion()).append('|').append(value.profileVersion()).append('|').append(value.inputFingerprint()).append('|').append(value.cutOffAt()).append('|').append(value.sourceIds()).append('|').append(value.from()).append('|').append(value.to()).append('|').append(value.key()); }
-    private String decimal(BigDecimal value) { return value == null ? "<null>" : value.stripTrailingZeros().toPlainString(); }
-    private String sha256(String value) { try { return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); } catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); } }
+
+    private record FingerprintValues(TrendContextAssessmentInput input,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles,
+            TrendTimeframeAlignment alignment, TrendDirection direction, TrendRegime regime,
+            TrendPhase phase, TrendAttention attention, List<TrendContextFinding> findings,
+            List<TrendContextContradiction> contradictions, List<TrendContextExclusion> exclusions,
+            List<TrendInvalidation> invalidations) { }
+    private void appendSwing(StringBuilder b, String label, ConfirmedSwing swing) {
+        b.append('|').append(label).append('=').append(swing.type().name()).append('|')
+                .append(swing.index()).append('|').append(swing.pivotTime()).append('|')
+                .append(decimal(swing.price())).append('|').append(swing.confirmationTime()).append('|')
+                .append(swing.pivotSourceId()).append('|').append(swing.confirmationSourceId()).append('|')
+                .append(swing.suppressed()).append('|').append(swing.suppressionReason());
+        appendEvidence(b, swing.evidence());
+    }
+
+    private void appendBreak(StringBuilder b, StructuralBreak value) {
+        b.append("|break=").append(value.status().name()).append('|')
+                .append(decimal(value.level())).append('|').append(value.barsAfterBreak());
+        if (value.candle() != null) {
+            b.append('|').append(value.candle().sourceId());
+        }
+        if (value.reclaimCandle() != null) {
+            b.append("|reclaim=").append(value.reclaimCandle().sourceId());
+        }
+        if (value.evidence() != null) {
+            appendEvidence(b, value.evidence());
+        }
+    }
+
+    private void appendPullback(StringBuilder b, TrendPullbackAssessment value) {
+        b.append("|pullback=").append(value.direction().name()).append('|')
+                .append(value.qualified());
+        if (value.qualifyingSwing() != null) {
+            b.append('|').append(value.qualifyingSwing().pivotSourceId());
+        }
+        value.postPivotCandles().forEach(c -> b.append('|').append(c.sourceId())
+                .append(':').append(decimal(c.close())));
+        if (value.evidence() != null) {
+            appendEvidence(b, value.evidence());
+        }
+    }
+
+    private void appendExtension(StringBuilder b, TrendExtensionAssessment value) {
+        b.append("|extension=").append(value.available()).append('|')
+                .append(value.direction().name()).append('|').append(decimal(value.distance()))
+                .append('|').append(decimal(value.atrMultiple())).append('|').append(value.extended());
+        if (value.evidence() != null) {
+            appendEvidence(b, value.evidence());
+        }
+    }
+
+    private void appendEma(StringBuilder b, TrendEmaEvidence value) {
+        b.append("|ema=").append(value.period()).append('|').append(decimal(value.current()))
+                .append('|').append(decimal(value.slope())).append('|')
+                .append(value.slopeClassification().name()).append('|').append(value.available());
+        if (value.evidence() != null) {
+            appendEvidence(b, value.evidence());
+        }
+    }
+
+    private void appendAtr(StringBuilder b, TrendAtrEvidence value) {
+        b.append("|atr=").append(value.period()).append('|').append(decimal(value.current()))
+                .append('|').append(decimal(value.baseline())).append('|').append(decimal(value.ratio()))
+                .append('|').append(value.abnormal()).append('|').append(value.available());
+        if (value.evidence() != null) {
+            appendEvidence(b, value.evidence());
+        }
+    }
+
+    private void appendFinding(StringBuilder b, TrendContextFinding value) {
+        b.append("|finding=").append(value.code()).append('|').append(value.ruleId()).append('|')
+                .append(value.role().name()).append('|').append(value.message());
+        value.evidence().forEach(e -> appendEvidence(b, e));
+    }
+
+    private void appendEvidence(StringBuilder b, TrendContextEvidenceReference value) {
+        b.append("|evidence=").append(value.role().name()).append('|').append(value.interval())
+                .append('|').append(value.ruleId()).append('|').append(value.ruleVersion()).append('|')
+                .append(value.profileVersion()).append('|').append(value.inputFingerprint()).append('|')
+                .append(value.cutOffAt()).append('|').append(value.sourceIds()).append('|')
+                .append(value.from()).append('|').append(value.to()).append('|').append(value.key());
+    }
+
+    private String decimal(BigDecimal value) {
+        return value == null ? "<null>" : value.stripTrailingZeros().toPlainString();
+    }
+
+    private String sha256(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
     private record SwingWork(List<ConfirmedSwing> retained, List<ConfirmedSwing> all) { }
     private record BreakWork(StructuralBreak confirmed, StructuralBreak unconfirmed, StructuralBreak result, boolean reclaimed) { }
+    private record BreakDiscovery(StructuralBreak unconfirmed, StructuralBreak confirmed, int breakIndex) { }
+    private record ReclaimResult(boolean found, int bars, TrendContextCandle candle) { }
     private record StructureReplay(TrendDirection direction, SwingRelation highRelation, SwingRelation lowRelation,
                                    ProtectedLevel protectedLevel, BreakWork breakWork) { }
+    private record StructuralAnalysis(List<ConfirmedSwing> retained, List<ConfirmedSwing> all,
+                                      TrendDirection direction, TrendRegime regime, TrendPhase phase,
+                                      ProtectedLevel protectedLevel, BreakWork breakWork,
+                                      SwingRelation highRelation, SwingRelation lowRelation) { }
+    private record BreakAnalysis(TrendDirection direction, TrendRegime regime, TrendPhase phase,
+                                 List<TrendContextFinding> findings) { }
 }

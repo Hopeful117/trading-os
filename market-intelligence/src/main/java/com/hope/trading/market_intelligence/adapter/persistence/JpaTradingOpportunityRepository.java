@@ -39,16 +39,20 @@ public class JpaTradingOpportunityRepository implements TradingOpportunityReposi
     public Optional<TradingOpportunity> findLatest(OpportunityId id) {
         return repository.findFirstByOpportunityIdOrderByVersionDesc(id.value()).map(this::domain);
     }
-    @Override public List<TradingOpportunity> findActive() {
+    @Override @Transactional(readOnly = true)
+    public List<TradingOpportunity> findActive() {
+        // findAllLatest is called inside this already-active read-only transaction.
         return findAllLatest().stream().filter(v -> v.status() == OpportunityStatus.ACTIVE).toList();
     }
     @Override @Transactional(readOnly = true)
     public List<TradingOpportunity> findHistory(OpportunityId id) {
         return repository.findByOpportunityIdOrderByVersionAsc(id.value()).stream().map(this::domain).toList();
     }
-    @Override public List<TradingOpportunity> findEquivalentCandidates(
+    @Override @Transactional(readOnly = true)
+    public List<TradingOpportunity> findEquivalentCandidates(
             String instrument, OpportunityDirection direction, String scenario,
             String timeframe, Instant evaluatedAfter) {
+        // The enclosing public operation already owns the read-only transaction.
         return findAllLatest().stream().filter(v -> v.instrument().equalsIgnoreCase(instrument))
                 .filter(v -> v.direction() == direction)
                 .filter(v -> v.scenario().equalsIgnoreCase(scenario))

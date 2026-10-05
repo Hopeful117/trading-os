@@ -73,34 +73,18 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
                     CapabilityCompleteness.DEGRADED);
         }
 
-        EnumMap<TrendContextRole, MarketStructureResult> structures = new EnumMap<>(TrendContextRole.class);
         List<MarketStructureResult> structuralResults = context.resolvedArtifacts().values().stream()
                 .flatMap(Collection::stream)
                 .map(StoredArtifact::content)
                 .filter(MarketStructureArtifactContent.class::isInstance)
                 .map(MarketStructureArtifactContent.class::cast)
                 .map(MarketStructureArtifactContent::result).toList();
-        for (TrendContextRole role : TrendContextRole.values()) {
-            TrendContextRoleSeries series = assessmentInput.roleSeries().get(role);
-            if (series == null) continue;
-            Optional<MarketStructureResult> structuralResult = structuralResults.stream()
-                    .filter(value -> value.interval().equals(series.interval())).findFirst();
-            if (structuralResult.isEmpty()) {
-                if (!profile.roles().get(role).required()) continue;
-                return new CapabilityResult(List.of(), List.of(), Map.of(),
-                        List.of("Market Structure artifact is unavailable for " + series.interval()),
-                        CapabilityCompleteness.DEGRADED);
-            }
-            if (structuralResult.get().availability() != MarketStructureAvailability.AVAILABLE) {
-                if (!profile.roles().get(role).required()) continue;
-                return new CapabilityResult(List.of(), List.of(), Map.of(),
-                        List.of("Market Structure evidence is "
-                                + structuralResult.get().availability().name().toLowerCase()
-                                + " for " + series.interval()), CapabilityCompleteness.DEGRADED);
-            }
-            structures.put(role, structuralResult.get());
+        StructureResolution resolution = resolveStructures(assessmentInput, structuralResults);
+        if (resolution.error() != null) {
+            return new CapabilityResult(List.of(), List.of(), Map.of(),
+                    List.of(resolution.error()), CapabilityCompleteness.DEGRADED);
         }
-        TrendContextAssessment assessment = engine.assess(assessmentInput, structures);
+        TrendContextAssessment assessment = engine.assess(assessmentInput, resolution.structures());
         TrendContextCapabilityContent content = content(assessmentInput, assessment);
         Instant observedAt = assessment.assessmentAt();
         StoredArtifact output = new StoredArtifact(
@@ -171,5 +155,49 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
         return exception.getMessage() == null
                 ? exception.getClass().getSimpleName() : exception.getMessage();
     }
+
+    private StructureResolution resolveStructures(TrendContextAssessmentInput input,
+            List<MarketStructureResult> structuralResults) {
+        EnumMap<TrendContextRole, MarketStructureResult> structures = new EnumMap<>(TrendContextRole.class);
+        for (TrendContextRole role : TrendContextRole.values()) {
+            TrendContextRoleSeries series = input.roleSeries().get(role);
+            if (series != null) {
+                RoleStructureResolution resolution = resolveRole(role, series, structuralResults);
+                if (resolution.error() != null) {
+                    return new StructureResolution(structures, resolution.error());
+                }
+                if (resolution.result() != null) {
+                    structures.put(role, resolution.result());
+                }
+            }
+        }
+        return new StructureResolution(structures, null);
+    }
+
+    private RoleStructureResolution resolveRole(TrendContextRole role,
+            TrendContextRoleSeries series, List<MarketStructureResult> structuralResults) {
+        Optional<MarketStructureResult> result = structuralResults.stream()
+                .filter(value -> value.interval().equals(series.interval())).findFirst();
+        if (result.isEmpty()) {
+            return profile.roles().get(role).required()
+                    ? new RoleStructureResolution(null,
+                    "Market Structure artifact is unavailable for " + series.interval())
+                    : new RoleStructureResolution(null, null);
+        }
+        if (result.get().availability() != MarketStructureAvailability.AVAILABLE) {
+            return profile.roles().get(role).required()
+                    ? new RoleStructureResolution(null,
+                    "Market Structure evidence is "
+                            + result.get().availability().name().toLowerCase()
+                            + " for " + series.interval())
+                    : new RoleStructureResolution(null, null);
+        }
+        return new RoleStructureResolution(result.get(), null);
+    }
+
+    private record StructureResolution(
+            EnumMap<TrendContextRole, MarketStructureResult> structures, String error) { }
+
+    private record RoleStructureResolution(MarketStructureResult result, String error) { }
 
 }

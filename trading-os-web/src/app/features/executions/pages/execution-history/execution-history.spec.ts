@@ -133,4 +133,36 @@ describe('ExecutionHistory', () => {
     expect(text()).toContain('Execution executio');
     expect(text()).toContain('owned record remains visible');
   });
+
+  it('keeps execution details without loading a plan when the execution has no plan reference', async () => {
+    executionService.getExecution.mockReturnValue(of({ ...execution, tradePlanId: null }));
+    await create();
+    fixture.nativeElement.querySelector('[data-testid="load-details-button"]').click();
+    fixture.detectChanges();
+
+    expect(executionService.getExecution).toHaveBeenCalledWith('execution-1');
+    expect(tradePlanService.getPlan).not.toHaveBeenCalled();
+    expect(text()).toContain('Trade Plan continuity is unavailable');
+  });
+
+  it('keeps execution details when the referenced trade plan cannot be loaded', async () => {
+    tradePlanService.getPlan.mockReturnValue(throwError(() => new Error('down')));
+    await create();
+    fixture.nativeElement.querySelector('[data-testid="load-details-button"]').click();
+    fixture.detectChanges();
+
+    expect(text()).toContain('Trade Plan continuity is unavailable');
+    expect(fixture.nativeElement.querySelector('[data-testid="trade-plan-link"]')).toBeNull();
+  });
+
+  it.each([
+    ['FAILED', 'failed'],
+    ['RISK_REVALIDATION_REJECTED', 'failed'],
+    ['CANCELLED', 'closed'],
+    ['EXPIRED', 'closed'],
+    ['VALIDATED', 'pending'],
+  ] as const)('maps %s to the %s status class', (status, expectedClass) => {
+    const component = fixture.componentInstance;
+    expect(component.statusClass(status)).toBe(expectedClass);
+  });
 });

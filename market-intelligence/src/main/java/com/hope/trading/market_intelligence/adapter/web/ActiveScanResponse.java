@@ -116,7 +116,8 @@ public record ActiveScanResponse(
             if (opportunities.size() != 1 || opportunities.getFirst().strategyMatchId().isEmpty()) {
                 return null; // historical pre-0012 rows carry no fabricated attribution
             }
-            return matches.findById(opportunities.getFirst().strategyMatchId().get())
+            return opportunities.getFirst().strategyMatchId()
+                    .flatMap(matches::findById)
                     .map(StrategyProvenance::from).orElse(null);
         }
     }

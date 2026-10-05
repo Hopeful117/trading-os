@@ -157,11 +157,12 @@ public final class StrategyEvaluationContext {
 
     /** Typed semantic value readable by evaluators without source knowledge. */
     public record SemanticValue(Type type, Object raw) {
+        private static final String VALUE_REQUIRED = "value is required";
 
         public enum Type { DECIMAL, INTEGER, STRING, INSTANT, DURATION }
 
         public static SemanticValue decimal(BigDecimal value) {
-            Objects.requireNonNull(value, "value is required");
+            Objects.requireNonNull(value, VALUE_REQUIRED);
             return new SemanticValue(Type.DECIMAL, value);
         }
 
@@ -170,17 +171,17 @@ public final class StrategyEvaluationContext {
         }
 
         public static SemanticValue string(String value) {
-            Objects.requireNonNull(value, "value is required");
+            Objects.requireNonNull(value, VALUE_REQUIRED);
             return new SemanticValue(Type.STRING, value);
         }
 
         public static SemanticValue instant(Instant value) {
-            Objects.requireNonNull(value, "value is required");
+            Objects.requireNonNull(value, VALUE_REQUIRED);
             return new SemanticValue(Type.INSTANT, value);
         }
 
         public static SemanticValue duration(Duration value) {
-            Objects.requireNonNull(value, "value is required");
+            Objects.requireNonNull(value, VALUE_REQUIRED);
             return new SemanticValue(Type.DURATION, value);
         }
 

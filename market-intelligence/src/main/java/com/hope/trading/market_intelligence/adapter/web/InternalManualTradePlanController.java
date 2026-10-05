@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Objects;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,11 +48,12 @@ public final class InternalManualTradePlanController {
     }
 
     @PostMapping("/manual")
-    public ResponseEntity<?> create(
+    public ResponseEntity<Object> create(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody Request request,
             Authentication authentication) {
-        UUID actorId = ((MiServicePrincipal) authentication.getPrincipal())
+        UUID actorId = ((MiServicePrincipal) Objects.requireNonNull(
+                authentication.getPrincipal(), "principal is required"))
                 .requireMatchingActor(request.actorId());
         if (!actorId.equals(request.context().ownerId())
                 || !request.accountId().equals(request.context().tradingAccountId())) {

@@ -31,8 +31,8 @@ public record MarketEligibilityDecision(
 
     public MarketEligibilityDecision {
         reasons = List.copyOf(reasons);
-        status = status == null
-                ? (eligible ? MarketEligibilityStatus.ELIGIBLE : MarketEligibilityStatus.EXCLUDED)
-                : status;
+        if (status == null) {
+            status = eligible ? MarketEligibilityStatus.ELIGIBLE : MarketEligibilityStatus.EXCLUDED;
+        }
     }
 }

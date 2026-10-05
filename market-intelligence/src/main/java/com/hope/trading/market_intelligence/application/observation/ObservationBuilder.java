@@ -65,13 +65,13 @@ public final class ObservationBuilder {
                 .filter(item -> item.status() == ObservationStatus.ACTIVE)
                 .max(Comparator.comparingLong(Observation::version))
                 .orElse(null);
-        Observation next = factory.create(
+        Observation next = factory.create(new ObservationFactory.CreateValues(
                 current == null ? UUID.randomUUID() : current.lineageId(),
                 current == null ? 1 : current.version() + 1,
                 instrument, result.type(), result.title(), result.explanation(),
                 result.categories(), result.horizon(), clock.instant(), result.validFrom(),
                 result.validUntil(), current == null ? null : current.id(), rule.version(), evidence,
-                result.payload());
+                result.payload()));
 
         if (current == null) {
             return observations.save(next);

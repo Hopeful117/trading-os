@@ -12,6 +12,29 @@ public final class MarketStructureEngine {
         if (input.evidenceStatus() != MarketStructureEvidenceStatus.COMPLETE) {
             return result(input, availability(input.evidenceStatus()), List.of(), List.of(), List.of(), input.findings());
         }
+        CandleSelection candleSelection = uniqueCandles(input);
+        if (candleSelection.conflict() != null) {
+            return result(input, MarketStructureAvailability.INVALID, List.of(), List.of(), List.of(),
+                    List.of(candleSelection.conflict()));
+        }
+        List<MarketStructureCandle> candles = candleSelection.candles();
+        long eligibleCount = candles.stream().filter(c -> c.closed() && !c.synthetic()
+                && !c.closeTime().isAfter(input.cutOffAt())).count();
+        if (eligibleCount < input.pivotRadius() * 2L + 1) {
+            return result(input, MarketStructureAvailability.INSUFFICIENT, List.of(), List.of(), List.of(),
+                    List.of("INSUFFICIENT_HISTORY"));
+        }
+        List<MarketStructureSwing> candidates = candidates(input, candles);
+        SwingSelection selection = retain(input, candidates);
+        List<MarketStructureSwing> retained = selection.retained();
+        List<MarketStructureSwing> all = selection.all();
+        retained.sort(Comparator.comparing(MarketStructureSwing::pivotTime)
+                .thenComparing(MarketStructureSwing::type));
+        return result(input, MarketStructureAvailability.AVAILABLE, retained, all,
+                relations(retained), input.findings());
+    }
+
+    private CandleSelection uniqueCandles(MarketStructureInput input) {
         List<MarketStructureCandle> sorted = input.candles().stream()
                 .sorted(Comparator.comparing(MarketStructureCandle::closeTime)
                         .thenComparing(MarketStructureCandle::sourceId)).toList();
@@ -19,62 +42,95 @@ public final class MarketStructureEngine {
         for (MarketStructureCandle candle : sorted) {
             MarketStructureCandle previous = candles.stream()
                     .filter(value -> value.openTime().equals(candle.openTime())).findFirst().orElse(null);
-            if (previous == null) candles.add(candle);
-            else if (!sameEvidence(previous, candle)) {
-                return result(input, MarketStructureAvailability.INVALID, List.of(), List.of(), List.of(),
-                        List.of("DUPLICATE_CONFLICT:" + candle.openTime()));
+            if (previous == null) {
+                candles.add(candle);
+            } else if (!sameEvidence(previous, candle)) {
+                return new CandleSelection(List.of(), "DUPLICATE_CONFLICT:" + candle.openTime());
             }
         }
-        long eligibleCount = candles.stream().filter(c -> c.closed() && !c.synthetic()
-                && !c.closeTime().isAfter(input.cutOffAt())).count();
-        if (eligibleCount < input.pivotRadius() * 2L + 1) {
-            return result(input, MarketStructureAvailability.INSUFFICIENT, List.of(), List.of(), List.of(),
-                    List.of("INSUFFICIENT_HISTORY"));
-        }
+        return new CandleSelection(candles, null);
+    }
+
+    private List<MarketStructureSwing> candidates(MarketStructureInput input,
+            List<MarketStructureCandle> candles) {
         List<MarketStructureSwing> candidates = new ArrayList<>();
         int radius = input.pivotRadius();
         for (int i = radius; i < candles.size() - radius; i++) {
             MarketStructureCandle pivot = candles.get(i);
-            boolean high = true, low = true;
-            for (int j = i - radius; j <= i + radius; j++) if (j != i) {
-                high &= pivot.high().compareTo(candles.get(j).high()) > 0;
-                low &= pivot.low().compareTo(candles.get(j).low()) < 0;
-            }
+            boolean high = isHighPivot(candles, i, radius);
+            boolean low = isLowPivot(candles, i, radius);
             var confirmation = candles.get(i + radius).closeTime();
             if (confirmation.isAfter(input.cutOffAt()) || !eligibleWindow(candles, i, radius, input.cutOffAt())
-                    || intersectsGap(input, candles, i, radius)) continue;
-            if (high) candidates.add(swing(input, candles, i, MarketStructureSwingType.HIGH, pivot.high(), confirmation));
-            if (low) candidates.add(swing(input, candles, i, MarketStructureSwingType.LOW, pivot.low(), confirmation));
+                    || intersectsGap(input, candles, i, radius)) {
+                continue;
+            }
+            if (high) {
+                candidates.add(swing(input, candles, i, MarketStructureSwingType.HIGH,
+                        pivot.high(), confirmation));
+            }
+            if (low) {
+                candidates.add(swing(input, candles, i, MarketStructureSwingType.LOW,
+                        pivot.low(), confirmation));
+            }
         }
-        candidates.sort(Comparator.comparing(MarketStructureSwing::pivotTime)
-                .thenComparing(MarketStructureSwing::type));
-        List<MarketStructureSwing> retained = new ArrayList<>(), all = new ArrayList<>();
+        return candidates.stream().sorted(Comparator.comparing(MarketStructureSwing::pivotTime)
+                .thenComparing(MarketStructureSwing::type)).toList();
+    }
+
+    private boolean isHighPivot(List<MarketStructureCandle> candles, int index, int radius) {
+        MarketStructureCandle pivot = candles.get(index);
+        for (int i = index - radius; i <= index + radius; i++) {
+            if (i != index && pivot.high().compareTo(candles.get(i).high()) <= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isLowPivot(List<MarketStructureCandle> candles, int index, int radius) {
+        MarketStructureCandle pivot = candles.get(index);
+        for (int i = index - radius; i <= index + radius; i++) {
+            if (i != index && pivot.low().compareTo(candles.get(i).low()) >= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private SwingSelection retain(MarketStructureInput input, List<MarketStructureSwing> candidates) {
+        List<MarketStructureSwing> retained = new ArrayList<>();
+        List<MarketStructureSwing> all = new ArrayList<>();
         for (MarketStructureSwing candidate : candidates) {
             MarketStructureSwing prior = retained.stream()
                     .filter(s -> s.type() == candidate.type()).reduce((a, b) -> b).orElse(null);
-            if (prior != null && candidate.index() - prior.index() < input.minimumSeparationBars()) {
-                boolean stronger = candidate.type() == MarketStructureSwingType.HIGH
-                        ? candidate.price().compareTo(prior.price()) > 0
-                        : candidate.price().compareTo(prior.price()) < 0;
-                if (stronger) {
-                    retained.remove(prior);
-                    all.replaceAll(s -> s == prior ? suppressed(prior, "REPLACED_BY_STRONGER_SAME_TYPE") : s);
-                    retained.add(candidate); all.add(candidate);
-                } else {
-                    all.add(suppressed(candidate, candidate.price().compareTo(prior.price()) == 0
-                            ? "EQUAL_RETAINED_EARLIER" : "WITHIN_MINIMUM_SEPARATION"));
-                }
-            } else { retained.add(candidate); all.add(candidate); }
+            if (prior == null || candidate.index() - prior.index() >= input.minimumSeparationBars()) {
+                retained.add(candidate);
+                all.add(candidate);
+                continue;
+            }
+            if (stronger(candidate, prior)) {
+                retained.remove(prior);
+                all.replaceAll(s -> s == prior ? suppressed(prior, "REPLACED_BY_STRONGER_SAME_TYPE") : s);
+                retained.add(candidate);
+                all.add(candidate);
+            } else {
+                String reason = candidate.price().compareTo(prior.price()) == 0
+                        ? "EQUAL_RETAINED_EARLIER" : "WITHIN_MINIMUM_SEPARATION";
+                all.add(suppressed(candidate, reason));
+            }
         }
-        retained.sort(Comparator.comparing(MarketStructureSwing::pivotTime)
-                .thenComparing(MarketStructureSwing::type));
-        return result(input, MarketStructureAvailability.AVAILABLE, retained, all,
-                relations(retained), input.findings());
+        return new SwingSelection(retained, all);
+    }
+
+    private boolean stronger(MarketStructureSwing candidate, MarketStructureSwing prior) {
+        int comparison = candidate.price().compareTo(prior.price());
+        return candidate.type() == MarketStructureSwingType.HIGH ? comparison > 0 : comparison < 0;
     }
 
     private MarketStructureSwing swing(MarketStructureInput input, List<MarketStructureCandle> candles,
             int index, MarketStructureSwingType type, java.math.BigDecimal price, java.time.Instant confirmation) {
-        int from = index - input.pivotRadius(), to = index + input.pivotRadius();
+        int from = index - input.pivotRadius();
+        int to = index + input.pivotRadius();
         return new MarketStructureSwing(type, index, candles.get(index).closeTime(), price,
                 confirmation, candles.get(index).sourceId(), candles.get(to).sourceId(),
                 candles.get(from).openTime(), candles.get(to).closeTime(),
@@ -156,16 +212,28 @@ public final class MarketStructureEngine {
                 MarketStructureSwing previous = sameType.get(i - 1);
                 MarketStructureSwing latest = sameType.get(i);
                 int comparison = latest.price().compareTo(previous.price());
-                MarketStructureRelation relation = switch (type) {
-                    case HIGH -> comparison > 0 ? MarketStructureRelation.HH
-                            : comparison < 0 ? MarketStructureRelation.LH : MarketStructureRelation.EQ_HIGH;
-                    case LOW -> comparison > 0 ? MarketStructureRelation.HL
-                            : comparison < 0 ? MarketStructureRelation.LL : MarketStructureRelation.EQ_LOW;
-                };
+                MarketStructureRelation relation;
+                if (type == MarketStructureSwingType.HIGH) {
+                    relation = highRelation(comparison);
+                } else {
+                    relation = lowRelation(comparison);
+                }
                 result.add(new MarketStructureRelationEvidence(type, relation, previous, latest));
             }
         }
         return result.stream().sorted(Comparator.comparing(value -> value.latest().pivotTime())).toList();
+    }
+
+    private MarketStructureRelation highRelation(int comparison) {
+        if (comparison > 0) return MarketStructureRelation.HH;
+        if (comparison < 0) return MarketStructureRelation.LH;
+        return MarketStructureRelation.EQ_HIGH;
+    }
+
+    private MarketStructureRelation lowRelation(int comparison) {
+        if (comparison > 0) return MarketStructureRelation.HL;
+        if (comparison < 0) return MarketStructureRelation.LL;
+        return MarketStructureRelation.EQ_LOW;
     }
 
     private String sha256(String value) {
@@ -176,4 +244,8 @@ public final class MarketStructureEngine {
             throw new IllegalStateException("SHA-256 unavailable", exception);
         }
     }
+
+    private record SwingSelection(List<MarketStructureSwing> retained, List<MarketStructureSwing> all) { }
+
+    private record CandleSelection(List<MarketStructureCandle> candles, String conflict) { }
 }

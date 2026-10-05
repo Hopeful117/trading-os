@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OhlcHistoryNormalizerTest {
 
@@ -71,10 +72,50 @@ class OhlcHistoryNormalizerTest {
         assertThat(normalized.getLast()).isSameAs(last);
     }
 
+    @Test
+    void rejectsAnEventWithAnotherInterval() {
+        OhlcEvent fifteenMinuteEvent = event(
+                "2026-07-28T10:00:00Z", "100.00", true, OhlcInterval.FIFTEEN_MINUTES);
+        List<OhlcEvent> events = List.of(fifteenMinuteEvent);
+
+        assertThatThrownBy(() -> normalizer.fillMissingIntervals(events, OhlcInterval.ONE_MINUTE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("OHLC event interval does not match requested interval");
+    }
+
+    @Test
+    void removesIdenticalDuplicateCandles() {
+        OhlcEvent first = event("2026-07-28T10:00:00Z", "100.00", true);
+
+        assertThat(normalizer.fillMissingIntervals(
+                List.of(first, first), OhlcInterval.ONE_MINUTE))
+                .containsExactly(first);
+    }
+
+    @Test
+    void rejectsConflictingDuplicateCandles() {
+        OhlcEvent first = event("2026-07-28T10:00:00Z", "100.00", true);
+        OhlcEvent conflicting = event("2026-07-28T10:00:00Z", "101.00", true);
+        List<OhlcEvent> events = List.of(first, conflicting);
+
+        assertThatThrownBy(() -> normalizer.fillMissingIntervals(events, OhlcInterval.ONE_MINUTE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Conflicting OHLC duplicate at");
+    }
+
     private OhlcEvent event(
             String openTimeValue,
             String closeValue,
             boolean closed
+    ) {
+        return event(openTimeValue, closeValue, closed, OhlcInterval.ONE_MINUTE);
+    }
+
+    private OhlcEvent event(
+            String openTimeValue,
+            String closeValue,
+            boolean closed,
+            OhlcInterval interval
     ) {
         Instant openTime = Instant.parse(openTimeValue);
         BigDecimal close = new BigDecimal(closeValue);
@@ -83,9 +124,9 @@ class OhlcHistoryNormalizerTest {
                 MARKET_ID,
                 MarketProvider.KRAKEN,
                 "XBT/EUR",
-                OhlcInterval.ONE_MINUTE,
+                interval,
                 openTime,
-                openTime.plusSeconds(60),
+                openTime.plus(interval.getDuration()),
                 close,
                 close,
                 close,

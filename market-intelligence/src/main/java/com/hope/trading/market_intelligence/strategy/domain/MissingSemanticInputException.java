@@ -2,7 +2,7 @@ package com.hope.trading.market_intelligence.strategy.domain;
 
 public class MissingSemanticInputException extends RuntimeException {
 
-    private final RequiredSemanticInput input;
+    private final transient RequiredSemanticInput input;
 
     public MissingSemanticInputException(RequiredSemanticInput input) {
         super("Required semantic input is missing: " + input);

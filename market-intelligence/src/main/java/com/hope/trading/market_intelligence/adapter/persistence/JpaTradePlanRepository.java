@@ -98,7 +98,7 @@ public class JpaTradePlanRepository implements TradePlanRepository {
     }
 
     private TradePlan toDomain(JpaTradePlanEntity entity) {
-        return factory.create(
+        return factory.create(new TradePlanFactory.Values(
                 new TradePlanId(entity.tradePlanId), new TradePlanVersion(entity.version),
                 entity.previousVersion == null ? null : new TradePlanVersion(entity.previousVersion),
                 TradePlanStatus.valueOf(entity.status),
@@ -107,7 +107,7 @@ public class JpaTradePlanRepository implements TradePlanRepository {
                         entity.tradingContextSnapshotAt),
                 read(entity.executionPayload, ExecutionParameters.class),
                 read(entity.rationalePayload, TradingRationale.class), entity.createdAt,
-                new TradePlanOriginValue(entity.origin).origin(), entity.authorId);
+                 new TradePlanOriginValue(entity.origin).origin(), entity.authorId));
     }
 
     private record TradePlanOriginValue(String value) {

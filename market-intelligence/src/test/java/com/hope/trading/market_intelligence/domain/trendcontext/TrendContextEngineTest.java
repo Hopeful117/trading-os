@@ -74,6 +74,13 @@ class TrendContextEngineTest {
     }
 
     @Test
+    void freshTriggerProducesDirectionalAlignment() {
+        TrendContextAssessment assessment = assessWithTrigger();
+
+        assertThat(assessment.alignment()).isEqualTo(TrendTimeframeAlignment.ALIGNED_UP);
+    }
+
+    @Test
     void syntheticAndOpenCandlesAreNeverUsedAsMarketEvidence() {
         TrendContextAssessment assessment = assess(false, false, false, 80, true);
         TrendContextTimeframeAssessment setup = assessment.roleAssessments().get(TrendContextRole.SETUP);
@@ -123,8 +130,9 @@ class TrendContextEngineTest {
         Map<TrendContextRole, TrendContextRoleSeries> roles = new EnumMap<>(TrendContextRole.class);
         roles.put(TrendContextRole.BIAS, series(TrendContextRole.BIAS, "4H", candles("BIAS", "4H", count, equalHigh, false, false, false, false)));
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP, "1H", candles));
-        TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(MARKET, "KRAKEN", "BTC/EUR",
-                ASSESSMENT, START.plus(Duration.ofHours(79)), profile, "rules-1", roles);
+        TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(
+                new TrendContextAssessmentInput.Values(MARKET, "KRAKEN", "BTC/EUR",
+                        ASSESSMENT, START.plus(Duration.ofHours(79)), profile, "rules-1", roles));
         return TrendContextStructureFixtures.assess(input);
     }
 
@@ -132,6 +140,29 @@ class TrendContextEngineTest {
         EnumMap<TrendContextRole, TrendContextRoleDefinition> roles = new EnumMap<>(TrendContextRole.class);
         roles.put(TrendContextRole.BIAS, new TrendContextRoleDefinition(TrendContextRole.BIAS, "4H", Duration.ofHours(4), true, 1, 1));
         roles.put(TrendContextRole.SETUP, new TrendContextRoleDefinition(TrendContextRole.SETUP, "1H", Duration.ofHours(1), true, 1, 1));
+        return TrendContextProfile.conservativeSwingV1(roles);
+    }
+
+    private TrendContextAssessment assessWithTrigger() {
+        TrendContextProfile profile = profileWithTrigger();
+        List<TrendContextCandle> candles = candles("SETUP", "1H", 80, false, false, false, false, false);
+        Map<TrendContextRole, TrendContextRoleSeries> roles = new EnumMap<>(TrendContextRole.class);
+        roles.put(TrendContextRole.BIAS, series(TrendContextRole.BIAS, "4H",
+                candles("BIAS", "4H", 80, false, false, false, false, false)));
+        roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP, "1H", candles));
+        roles.put(TrendContextRole.TRIGGER, series(TrendContextRole.TRIGGER, "15M",
+                candles("TRIGGER", "15M", 80, false, false, false, false, false)));
+        TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(
+                new TrendContextAssessmentInput.Values(MARKET, "KRAKEN", "BTC/EUR", ASSESSMENT,
+                        START.plus(Duration.ofHours(79)), profile, "rules-1", roles));
+        return TrendContextStructureFixtures.assess(input);
+    }
+
+    private TrendContextProfile profileWithTrigger() {
+        EnumMap<TrendContextRole, TrendContextRoleDefinition> roles = new EnumMap<>(TrendContextRole.class);
+        roles.put(TrendContextRole.BIAS, new TrendContextRoleDefinition(TrendContextRole.BIAS, "4H", Duration.ofHours(4), true, 1, 1));
+        roles.put(TrendContextRole.SETUP, new TrendContextRoleDefinition(TrendContextRole.SETUP, "1H", Duration.ofHours(1), true, 1, 1));
+        roles.put(TrendContextRole.TRIGGER, new TrendContextRoleDefinition(TrendContextRole.TRIGGER, "15M", Duration.ofMinutes(15), true, 1, 1));
         return TrendContextProfile.conservativeSwingV1(roles);
     }
 
@@ -157,12 +188,14 @@ class TrendContextEngineTest {
     }
 
     private TrendContextRoleSeries series(TrendContextRole role, String interval, List<TrendContextCandle> candles) {
-        TrendContextCandle first = candles.getFirst(), last = candles.getLast();
-        return TrendContextRoleSeries.of(role, interval, candles, List.of(), List.of(),
+        TrendContextCandle first = candles.getFirst();
+        TrendContextCandle last = candles.getLast();
+        return TrendContextRoleSeries.of(new TrendContextRoleSeries.Values(
+                role, interval, candles, List.of(), List.of(),
                 new TrendContextSourceReference("market-data", "KRAKEN", MARKET, "BTC/EUR", role, interval,
                         first.openTime(), last.closeTime(), first.sourceOccurredAt(), first.fetchedAt(), "snapshot", "digest"),
                 new TrendContextFreshness(Duration.ofHours(1), last.closeTime(), last.sourceOccurredAt(), last.fetchedAt(), ASSESSMENT, true, true),
-                ASSESSMENT);
+                ASSESSMENT));
     }
 
     private TrendContextCandle candle(String id, String interval, Instant open, Instant close,

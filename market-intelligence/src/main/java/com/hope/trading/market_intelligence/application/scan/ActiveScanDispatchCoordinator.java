@@ -71,7 +71,7 @@ public class ActiveScanDispatchCoordinator {
                 .forEach(market -> {
                     ActiveScanDispatchClaimService.ClaimResult claim =
                             claims.claimForDispatch(scanId, market.scanMarketId());
-                    if (claim.shouldDispatch()) {
+                    if (claim != null && claim.shouldDispatch()) {
                         executions.dispatchRegistered(claim.analysisExecutionId());
                     }
                 });

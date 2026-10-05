@@ -80,7 +80,6 @@ class BrokerApiSecurityIntegrationTest {
             java.util.Base64.getDecoder().decode("QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=")));}
     @Test void rejectsUnauthorizedValidCaller() throws Exception {assertForbidden(serviceTokenWithIssuer("other-service", "broker-service", Instant.now().plusSeconds(60),
             java.util.Base64.getDecoder().decode("QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=")));}
-    private String token(){byte[] key=java.util.Base64.getDecoder().decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");return Jwts.builder().subject("11111111-1111-1111-1111-111111111111").issuer("trading-os-test").claim("username","test").claim("role","ROLE_USER").issuedAt(Date.from(Instant.now())).expiration(Date.from(Instant.now().plusSeconds(60))).signWith(Keys.hmacShaKeyFor(key)).compact();}
     private String serviceToken(){return serviceToken(UUID.fromString("11111111-1111-1111-1111-111111111111"));}
     private String serviceToken(UUID actor){return serviceTokenWithKey("broker-service",Instant.now().plusSeconds(60),java.util.Base64.getDecoder().decode("QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="),actor);}
     private String serviceTokenWithoutActor(){return serviceTokenWithKey("broker-service",Instant.now().plusSeconds(60),java.util.Base64.getDecoder().decode("QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="));}

@@ -52,6 +52,7 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
         TrendContextAssessmentInput mapped = null;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             responses = acquire(request, limits);
+            boolean retry = false;
             try {
                 mapped = inputMapper.map(
                         responses, profile, boundary, boundary, RULE_VERSION);
@@ -59,10 +60,14 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 log.warn("Trend Context input mapping failed analysis={} market={} attempt={} errorType={} message={}",
                         request.analysisId(), request.marketId(), attempt + 1,
                         exception.getClass().getSimpleName(), exception.getMessage());
-                if (!increaseMissingRequiredRole(responses, limits)) throw exception;
-                continue;
+                retry = increaseMissingRequiredRole(responses, limits);
+                if (!retry) {
+                    throw exception;
+                }
             }
-            if (!increaseForInsufficientHistory(mapped, responses, limits)) break;
+            if (!retry && !increaseForInsufficientHistory(mapped, limits)) {
+                break;
+            }
         }
 
         if (responses.values().stream().allMatch(List::isEmpty)) {
@@ -105,7 +110,8 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 log.warn("Trend Context OHLC acquisition failed analysis={} market={} role={} interval={} limit={} errorType={} message={}",
                         request.analysisId(), request.marketId(), role, definition.interval(),
                         limits.get(role), exception.getClass().getSimpleName(), exception.getMessage());
-                throw exception;
+                throw new IllegalStateException(
+                        "Trend Context OHLC acquisition failed for " + role, exception);
             }
             if (!values.isEmpty() || definition.required()) responses.put(role, List.copyOf(values));
         }
@@ -128,7 +134,6 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
 
     private boolean increaseForInsufficientHistory(
             TrendContextAssessmentInput input,
-            Map<TrendContextRole, List<OhlcResponse>> responses,
             Map<TrendContextRole, Integer> limits) {
         boolean increased = false;
         for (Map.Entry<TrendContextRole, TrendContextRoleDefinition> entry : profile.roles().entrySet()) {
@@ -144,7 +149,7 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
     private boolean increase(TrendContextRole role, Map<TrendContextRole, Integer> limits) {
         int current = limits.get(role);
         if (current >= MAX_OHLC_LIMIT) return false;
-        int next = Math.min(MAX_OHLC_LIMIT, Math.max(current + 1, current * 2));
+        int next = Math.clamp(Math.multiplyExact(current, 2), current + 1, MAX_OHLC_LIMIT);
         limits.put(role, next);
         return true;
     }

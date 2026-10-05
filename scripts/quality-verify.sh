@@ -11,6 +11,7 @@ java_modules=(
   market-data
   market-intelligence
   trading-core
+  news-service
 )
 
 run_maven() {

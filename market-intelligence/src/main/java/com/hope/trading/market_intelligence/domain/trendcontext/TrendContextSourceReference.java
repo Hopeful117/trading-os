@@ -25,7 +25,7 @@ public record TrendContextSourceReference(
         symbol = required(symbol, "symbol");
         Objects.requireNonNull(role, "role is required");
         interval = required(interval, "interval");
-        fetchedAt = Objects.requireNonNull(fetchedAt, "fetchedAt is required");
+        Objects.requireNonNull(fetchedAt, "fetchedAt is required");
         sourceSnapshot = sourceSnapshot == null ? "" : sourceSnapshot;
         contentDigest = contentDigest == null ? "" : contentDigest;
     }

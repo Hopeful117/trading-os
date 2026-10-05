@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
+@SuppressWarnings("java:S2143") // JJWT 0.x requires java.util.Date at this adapter boundary.
 public class MarketDataFeignConfiguration {
     private static final String CORE_ISSUER = "trading-core";
     private static final String INTELLIGENCE_ISSUER = "market-intelligence";

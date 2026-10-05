@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TradePlanService } from '../../../core/services/trade-plan.service';
@@ -83,5 +83,72 @@ describe('ManualTradeTicket', () => {
       expect.any(String),
     );
     expect(createManual.mock.calls[0][0]).not.toHaveProperty('planningContextId');
+  });
+
+  it('rejects incomplete required fields before calling the service', () => {
+    fixture.componentInstance.submit();
+
+    expect(createManual).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.state()).toBe('error');
+    expect(fixture.componentInstance.errorMessage()).toContain('Complete the required');
+  });
+
+  it('requires an entry price for limit orders', () => {
+    fixture.componentInstance.form.patchValue({
+      entryType: 'LIMIT',
+      referencePrice: 100,
+      stopLoss: 90,
+      stopRationale: 'Invalidation below support',
+      quantity: 2,
+      monetaryRisk: 20,
+      takeProfit: 120,
+      thesis: 'Manual setup',
+      confirmationConditions: 'Price confirms',
+      invalidationConditions: 'Support breaks',
+    });
+
+    fixture.componentInstance.submit();
+
+    expect(createManual).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.errorMessage()).toContain('Complete the required');
+  });
+
+  it('rejects empty confirmation or invalidation conditions', () => {
+    fixture.componentInstance.form.patchValue({
+      referencePrice: 100,
+      stopLoss: 90,
+      stopRationale: 'Invalidation below support',
+      quantity: 2,
+      monetaryRisk: 20,
+      takeProfit: 120,
+      thesis: 'Manual setup',
+      confirmationConditions: '  \n',
+      invalidationConditions: 'Support breaks',
+    });
+
+    fixture.componentInstance.submit();
+
+    expect(createManual).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.errorMessage()).toContain('confirmation and invalidation');
+  });
+
+  it('exposes the service error when manual plan creation fails', () => {
+    createManual.mockReturnValue(throwError(() => new Error('unavailable')));
+    fixture.componentInstance.form.patchValue({
+      referencePrice: 100,
+      stopLoss: 90,
+      stopRationale: 'Invalidation below support',
+      quantity: 2,
+      monetaryRisk: 20,
+      takeProfit: 120,
+      thesis: 'Manual setup',
+      confirmationConditions: 'Price confirms',
+      invalidationConditions: 'Support breaks',
+    });
+
+    fixture.componentInstance.submit();
+
+    expect(fixture.componentInstance.state()).toBe('error');
+    expect(fixture.componentInstance.errorMessage()).toContain('manual Trade Plan');
   });
 });

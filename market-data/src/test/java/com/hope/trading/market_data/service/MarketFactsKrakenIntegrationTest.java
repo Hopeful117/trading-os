@@ -15,10 +15,6 @@ import com.hope.trading.market_data.model.MarketFactStatus;
 import com.hope.trading.market_data.model.MarketFactsResponse;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.repository.MarketRepository;
-import com.hope.trading.market_data.service.MarketFactsService;
-import com.hope.trading.market_data.service.MarketHistoryService;
-import com.hope.trading.market_data.service.OhlcHistoryNormalizer;
-import com.hope.trading.market_data.service.MarketService;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -41,7 +37,7 @@ class MarketFactsKrakenIntegrationTest {
     private static final Instant BOUNDARY = Instant.parse("2026-10-03T12:00:17Z");
 
     @Test
-    void providerShapedKrakenHistoryWithCurrentOpenCandleIsAvailable() throws Exception {
+    void providerShapedKrakenHistoryWithCurrentOpenCandleIsAvailable() {
         KrakenHttpClient client = mock(KrakenHttpClient.class);
         MarketRepository repository = mock(MarketRepository.class);
         MarketService marketService = mock(MarketService.class);
@@ -81,7 +77,7 @@ class MarketFactsKrakenIntegrationTest {
         assertThat(response.readiness().status()).isEqualTo(MarketFactStatus.AVAILABLE);
     }
 
-    private KrakenOhlcResponse responseWithCompletedAndOpenCandle() throws Exception {
+    private KrakenOhlcResponse responseWithCompletedAndOpenCandle() {
         ObjectMapper json = new ObjectMapper();
         ObjectNode result = json.createObjectNode();
         result.put("last", BOUNDARY.getEpochSecond());

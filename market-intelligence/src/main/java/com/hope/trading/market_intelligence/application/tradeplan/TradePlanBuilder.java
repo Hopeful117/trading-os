@@ -53,9 +53,9 @@ final class TradePlanBuilder {
                 .collect(Collectors.toUnmodifiableSet());
         TradingRationale rationale = new TradingRationale(
                 opportunities, observations, ai, thesis, confirmation, invalidation);
-        return factory.create(
+        return factory.create(new TradePlanFactory.Values(
                 id, version, previous, TradePlanStatus.PROPOSED, input.context().reference(),
-                execution, rationale, createdAt, TradePlanOrigin.OPPORTUNITY, authorId);
+                execution, rationale, createdAt, TradePlanOrigin.OPPORTUNITY, authorId));
     }
 
     TradePlan buildManual(
@@ -75,16 +75,16 @@ final class TradePlanBuilder {
         TradingRationale rationale = new TradingRationale(
                 Set.of(), Set.of(), Set.of(), request.thesis(),
                 request.confirmationConditions(), request.invalidationConditions());
-        return factory.create(
+        return factory.create(new TradePlanFactory.Values(
                 id, version, null, TradePlanStatus.PROPOSED, context.reference(), execution,
-                rationale, createdAt, TradePlanOrigin.MANUAL, request.actorId());
+                rationale, createdAt, TradePlanOrigin.MANUAL, request.actorId()));
     }
 
     TradePlan transition(TradePlan previous, TradePlanStatus target, Instant createdAt) {
-        return factory.create(
+        return factory.create(new TradePlanFactory.Values(
                 previous.id(), previous.version().next(), previous.version(), target,
                 previous.planningContext(), previous.execution(), previous.rationale(), createdAt,
-                previous.origin(), previous.authorId().orElse(null));
+                previous.origin(), previous.authorId().orElse(null)));
     }
     private <T> T required(TradePlanDraft draft, ContributionType type, Class<T> expected) {
         Object value = requiredRaw(draft, type);

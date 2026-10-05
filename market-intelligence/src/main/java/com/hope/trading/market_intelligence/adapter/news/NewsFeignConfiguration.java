@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
+@SuppressWarnings("java:S2143") // JJWT 0.x requires java.util.Date at this adapter boundary.
 public class NewsFeignConfiguration {
     private final String secret;
 

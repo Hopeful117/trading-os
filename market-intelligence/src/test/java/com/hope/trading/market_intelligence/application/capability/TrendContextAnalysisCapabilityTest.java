@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
+import com.hope.trading.market_intelligence.domain.marketstructure.*;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 import com.hope.trading.market_intelligence.application.planning.CapabilityRegistry;
 import com.hope.trading.market_intelligence.application.planning.ArtifactAdapterRegistry;
@@ -112,6 +113,162 @@ class TrendContextAnalysisCapabilityTest {
         assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.DEGRADED);
         assertThat(result.artifacts()).isEmpty();
         assertThat(result.diagnostics()).noneMatch(finding -> finding.contains("UNKNOWN"));
+    }
+
+    @Test
+    void mapperRejectionIsReportedAsDegradedWithoutFabricatingAnAssessment() {
+        TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
+        when(mapper.map(any(), any(), any(), any(), any()))
+                .thenThrow(new IllegalArgumentException("invalid history"));
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        TrendContextAnalysisCapability capability = new TrendContextAnalysisCapability(
+                mapper, mock(TrendContextEngine.class), profile);
+        com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement requirement =
+                capability.metadata().requirements().getFirst();
+
+        CapabilityResult result = capability.execute(new CapabilityContext(
+                ANALYSIS_ID, EXECUTION_ID,
+                Map.of(requirement, List.of(historyArtifact(profile))), Set.of(), Map.of(), List.of(),
+                mock(CancellationToken.class)));
+
+        assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.DEGRADED);
+        assertThat(result.diagnostics()).containsExactly("Trend Context input rejected: invalid history");
+        assertThat(result.artifacts()).isEmpty();
+    }
+
+    @Test
+    void missingRequiredMarketStructureIsReportedAsDegraded() {
+        TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
+        TrendContextAssessmentInput input = mock(TrendContextAssessmentInput.class);
+        TrendContextRoleSeries biasSeries = mock(TrendContextRoleSeries.class);
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        when(mapper.map(any(), same(profile), any(), any(), any())).thenReturn(input);
+        when(input.roleSeries()).thenReturn(Map.of(TrendContextRole.BIAS, biasSeries));
+        when(biasSeries.interval()).thenReturn("FOUR_HOURS");
+
+        TrendContextAnalysisCapability capability = new TrendContextAnalysisCapability(
+                mapper, mock(TrendContextEngine.class), profile);
+        com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement requirement =
+                capability.metadata().requirements().getFirst();
+
+        CapabilityResult result = capability.execute(new CapabilityContext(
+                ANALYSIS_ID, EXECUTION_ID,
+                Map.of(requirement, List.of(historyArtifact(profile))), Set.of(), Map.of(), List.of(),
+                mock(CancellationToken.class)));
+
+        assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.DEGRADED);
+        assertThat(result.diagnostics())
+                .containsExactly("Market Structure artifact is unavailable for FOUR_HOURS");
+        assertThat(result.artifacts()).isEmpty();
+    }
+
+    @Test
+    void unavailableRequiredMarketStructureIsReportedAsDegraded() {
+        TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
+        TrendContextAssessmentInput input = mock(TrendContextAssessmentInput.class);
+        TrendContextRoleSeries biasSeries = mock(TrendContextRoleSeries.class);
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        when(mapper.map(any(), same(profile), any(), any(), any())).thenReturn(input);
+        when(input.roleSeries()).thenReturn(Map.of(TrendContextRole.BIAS, biasSeries));
+        when(biasSeries.interval()).thenReturn("FOUR_HOURS");
+
+        MarketStructureResult structureResult = mock(MarketStructureResult.class);
+        when(structureResult.interval()).thenReturn("FOUR_HOURS");
+        when(structureResult.availability()).thenReturn(MarketStructureAvailability.STALE);
+        MarketStructureArtifactContent structureContent = new MarketStructureArtifactContent(
+                structureResult, Instant.parse("2026-10-05T10:00:00Z"), "structure-input");
+        StoredArtifact structureArtifact = mock(StoredArtifact.class);
+        when(structureArtifact.content()).thenReturn(structureContent);
+
+        TrendContextAnalysisCapability capability = new TrendContextAnalysisCapability(
+                mapper, mock(TrendContextEngine.class), profile);
+        List<com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement> requirements =
+                capability.metadata().requirements();
+
+        CapabilityResult result = capability.execute(new CapabilityContext(
+                ANALYSIS_ID, EXECUTION_ID,
+                Map.of(requirements.getFirst(), List.of(historyArtifact(profile)),
+                        requirements.get(1), List.of(structureArtifact)),
+                Set.of(), Map.of(), List.of(), mock(CancellationToken.class)));
+
+        assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.DEGRADED);
+        assertThat(result.diagnostics())
+                .containsExactly("Market Structure evidence is stale for FOUR_HOURS");
+        assertThat(result.artifacts()).isEmpty();
+    }
+
+    @Test
+    void mapperRejectionUsesExceptionTypeWhenMessageIsMissing() {
+        TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        when(mapper.map(any(), any(), any(), any(), any()))
+                .thenThrow(new IllegalArgumentException());
+        TrendContextAnalysisCapability capability = new TrendContextAnalysisCapability(
+                mapper, mock(TrendContextEngine.class), profile);
+        com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement requirement =
+                capability.metadata().requirements().getFirst();
+
+        CapabilityResult result = capability.execute(new CapabilityContext(
+                ANALYSIS_ID, EXECUTION_ID,
+                Map.of(requirement, List.of(historyArtifact(profile))), Set.of(), Map.of(), List.of(),
+                mock(CancellationToken.class)));
+
+        assertThat(result.diagnostics()).containsExactly(
+                "Trend Context input rejected: IllegalArgumentException");
+    }
+
+    @Test
+    void unavailableOptionalMarketStructureDoesNotDegradeAssessment() {
+        TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
+        TrendContextEngine engine = mock(TrendContextEngine.class);
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        TrendContextAssessmentInput input = mock(TrendContextAssessmentInput.class);
+        TrendContextRoleSeries triggerSeries = mock(TrendContextRoleSeries.class);
+        TrendContextAssessment assessment = TrendContextTestFixtures.assessment();
+        when(mapper.map(any(), same(profile), any(), any(), any())).thenReturn(input);
+        when(input.roleSeries()).thenReturn(Map.of(TrendContextRole.TRIGGER, triggerSeries));
+        when(input.assessmentAt()).thenReturn(assessment.assessmentAt());
+        when(input.cutOffAt()).thenReturn(assessment.cutOffAt());
+        when(input.fingerprint()).thenReturn(assessment.inputFingerprint());
+        when(triggerSeries.interval()).thenReturn("FIFTEEN_MINUTES");
+        when(triggerSeries.sourceReference()).thenReturn(mock(TrendContextSourceReference.class));
+        when(engine.assess(eq(input), anyMap())).thenReturn(assessment);
+
+        MarketStructureResult structureResult = mock(MarketStructureResult.class);
+        when(structureResult.interval()).thenReturn("FIFTEEN_MINUTES");
+        when(structureResult.availability()).thenReturn(MarketStructureAvailability.AVAILABLE);
+        MarketStructureArtifactContent structureContent = new MarketStructureArtifactContent(
+                structureResult, assessment.cutOffAt(), "structure-input");
+        StoredArtifact structureArtifact = mock(StoredArtifact.class);
+        when(structureArtifact.content()).thenReturn(structureContent);
+
+        TrendContextAnalysisCapability capability = new TrendContextAnalysisCapability(mapper, engine, profile);
+        List<com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement> requirements =
+                capability.metadata().requirements();
+        CapabilityResult result = capability.execute(new CapabilityContext(
+                ANALYSIS_ID, EXECUTION_ID,
+                Map.of(requirements.getFirst(), List.of(historyArtifact(profile)),
+                        requirements.get(1), List.of(structureArtifact)),
+                Set.of(), Map.of(), List.of(), mock(CancellationToken.class)));
+
+        assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.COMPLETE);
+        assertThat(result.artifacts()).hasSize(1);
+        verify(engine).assess(eq(input), argThat(structures -> structures.size() == 1));
+    }
+
+    private StoredArtifact historyArtifact(TrendContextProfile profile) {
+        Instant assessmentAt = Instant.parse("2026-10-05T10:00:00Z");
+        return new StoredArtifact(
+                new ArtifactCacheKey(
+                        new ArtifactIdentity("trend-context-history", "test", "1.0.0"),
+                        ArtifactScope.publicMarket(TrendContextTestFixtures.MARKET_ID,
+                                "TREND_CONTEXT", AnalysisExecutionMode.ACTIVE),
+                        ArtifactFingerprint.empty(), ArtifactFingerprint.empty()),
+                new TrendContextRoleHistory(Map.of(), assessmentAt, assessmentAt,
+                        profile.profileId(), profile.profileVersion(), TrendContextTestFixtures.RULE_VERSION, Map.of()),
+                ArtifactFreshness.validUntil(assessmentAt, assessmentAt.plusSeconds(60), "source"),
+                new ArtifactProvenance("test", "1.0.0", EXECUTION_ID,
+                        assessmentAt, Set.of(), Set.of()), AnalysisResultQuality.COMPLETE);
     }
 
     @Test

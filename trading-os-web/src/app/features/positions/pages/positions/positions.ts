@@ -23,7 +23,6 @@ import {
   PositionSource,
 } from '../../../../core/models/dashboard-summary.model';
 import {
-  PositionCloseResponse,
   PositionCloseStatus,
   ReconciliationResult,
 } from '../../../../core/models/position-close.model';

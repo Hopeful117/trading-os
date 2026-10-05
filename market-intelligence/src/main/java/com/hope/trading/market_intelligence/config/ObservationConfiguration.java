@@ -16,12 +16,12 @@ public class ObservationConfiguration {
     }
 
     @Bean ObservationRehydrator observationRehydrator(ObservationFactory factory) {
-        return snapshot -> factory.restore(
+        return snapshot -> factory.restore(new ObservationFactory.RestoreValues(
                 snapshot.id(), snapshot.lineageId(), snapshot.version(), snapshot.instrument(),
                 snapshot.type(), snapshot.status(), snapshot.title(), snapshot.explanation(),
                 snapshot.categories(), snapshot.horizon(), snapshot.createdAt(),
                 snapshot.validFrom(), snapshot.validUntil(), snapshot.supersedes(),
-                snapshot.supersededBy(), snapshot.ruleVersion(), snapshot.evidence(), snapshot.payload());
+                snapshot.supersededBy(), snapshot.ruleVersion(), snapshot.evidence(), snapshot.payload()));
     }
 
     @Bean ObservationBuilder observationBuilder(

@@ -109,6 +109,7 @@ class AnalysisExecutionServiceTest {
 
         @Override
         public void cancel(UUID executionId) {
+            // Cancellation is outside the scope of these service tests.
         }
     }
 }

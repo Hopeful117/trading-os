@@ -29,7 +29,7 @@ public final class TradePlanController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@Valid @RequestBody CreateTradePlanRequest request) {
+    public ResponseEntity<Object> create(@Valid @RequestBody CreateTradePlanRequest request) {
         return response(service.create(new TradePlanningRequest(
                 request.opportunityIds().stream().map(OpportunityId::new)
                         .collect(Collectors.toUnmodifiableSet()),
@@ -50,13 +50,13 @@ public final class TradePlanController {
                 : ResponseEntity.ok(history);
     }
     @PostMapping("/{id}/replan")
-    public ResponseEntity<?> replan(
+    public ResponseEntity<Object> replan(
             @PathVariable UUID id, @Valid @RequestBody ReplanTradePlanRequest request) {
         return response(replanning.replan(
                 new TradePlanId(id), request.actorId(), request.marketPrice(),
                 request.reason()), HttpStatus.CREATED);
     }
-    private ResponseEntity<?> response(TradePlanningResult result, HttpStatus successStatus) {
+    private ResponseEntity<Object> response(TradePlanningResult result, HttpStatus successStatus) {
         if (result instanceof TradePlanningResult.Success success) {
             return ResponseEntity.status(successStatus).body(view(success.plan()));
         }

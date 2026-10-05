@@ -11,8 +11,8 @@ import { TokenService } from './token';
   providedIn: 'root',
 })
 export class AuthService {
-  private http = inject(HttpClient);
-  private tokenService = inject(TokenService);
+  private readonly http = inject(HttpClient);
+  private readonly tokenService = inject(TokenService);
 
   login(request: LoginRequest): Observable<AuthenticationResponse> {
     return this.http

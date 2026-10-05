@@ -12,7 +12,7 @@ import {
   providedIn: 'root',
 })
 export class ExecutionService {
-  private http = inject(HttpClient);
+  private readonly http = inject(HttpClient);
 
   validate(request: ValidateExecutionRequest, idempotencyKey: string): Observable<ExecutionDto> {
     return this.http.post<ExecutionDto>(

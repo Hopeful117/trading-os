@@ -13,33 +13,34 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class MarketIntelligenceExceptionHandler {
+    private static final String ERROR = "error";
     @ExceptionHandler(TradePlanRiskHandoffException.class)
     ResponseEntity<Map<String, String>> tradePlanRiskHandoff(
             TradePlanRiskHandoffException exception) {
         return ResponseEntity.status(exception.status()).body(Map.of(
-                "code", exception.code(), "error", exception.getMessage()));
+                 "code", exception.code(), ERROR, exception.getMessage()));
     }
 
     @ExceptionHandler(AnalysisExecutionNotFoundException.class)
     ResponseEntity<Map<String, String>> notFound(AnalysisExecutionNotFoundException exception) {
-        return ResponseEntity.status(404).body(Map.of("error", exception.getMessage()));
+        return ResponseEntity.status(404).body(Map.of(ERROR, exception.getMessage()));
     }
 
     @ExceptionHandler(ActiveScanScopeResolutionException.class)
     ResponseEntity<Map<String, String>> activeScanScopeResolution(
             ActiveScanScopeResolutionException exception) {
         return ResponseEntity.status(exception.status()).body(Map.of(
-                "code", exception.code(), "error", exception.getMessage()));
+                 "code", exception.code(), ERROR, exception.getMessage()));
     }
 
     @ExceptionHandler(ActiveScanException.class)
     ResponseEntity<Map<String, String>> activeScan(ActiveScanException exception) {
         return ResponseEntity.status(exception.status()).body(Map.of(
-                "code", exception.code(), "error", exception.getMessage()));
+                 "code", exception.code(), ERROR, exception.getMessage()));
     }
 
     @ExceptionHandler({IllegalExecutionTransitionException.class, IllegalArgumentException.class})
     ResponseEntity<Map<String, String>> conflict(RuntimeException exception) {
-        return ResponseEntity.status(409).body(Map.of("error", exception.getMessage()));
+        return ResponseEntity.status(409).body(Map.of(ERROR, exception.getMessage()));
     }
 }

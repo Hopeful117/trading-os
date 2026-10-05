@@ -16,22 +16,25 @@ class TradePlanDomainTest {
         assertThatThrownBy(() -> new PositionSizing(
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, "EUR"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new TakeProfit(
-                BigDecimal.TEN, BigDecimal.valueOf(101)))
+        BigDecimal takeProfitPrice = BigDecimal.valueOf(101);
+        assertThatThrownBy(() -> new TakeProfit(BigDecimal.TEN, takeProfitPrice))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void executionRejectsContradictoryLongPrices() {
+        EntryStrategy entry = new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of());
+        StopLoss stop = new StopLoss(BigDecimal.valueOf(101), "wrong");
+        List<TakeProfit> takeProfits = List.of(
+                new TakeProfit(BigDecimal.valueOf(110), BigDecimal.valueOf(100)));
+        PositionSizing sizing = new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100),
+                BigDecimal.ONE, "EUR");
+        PlanExpiration expiration = new PlanExpiration(TradePlanTestFixtures.NOW.plusSeconds(60), "fixed");
         assertThatThrownBy(() -> new ExecutionParameters(
                 "BTC/EUR", TradeDirection.LONG,
-                new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
-                new StopLoss(BigDecimal.valueOf(101), "wrong"),
-                List.of(new TakeProfit(BigDecimal.valueOf(110), BigDecimal.valueOf(100))),
-                new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100),
-                        BigDecimal.ONE, "EUR"),
+                entry, stop, takeProfits, sizing,
                 new RiskReward(BigDecimal.TEN),
-                new PlanExpiration(TradePlanTestFixtures.NOW.plusSeconds(60), "fixed"),
+                expiration,
                 Set.of())).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -64,10 +67,11 @@ class TradePlanDomainTest {
                 Set.of(), Set.of(), Set.of(), "manual", Set.of("confirm"), Set.of("invalidate"));
         TradePlanFactory factory = new TradePlanFactory();
 
-        assertThatThrownBy(() -> factory.create(
+        TradePlanFactory.Values opportunityValues = new TradePlanFactory.Values(
                 new TradePlanId(UUID.randomUUID()), new TradePlanVersion(1), null,
                 TradePlanStatus.PROPOSED, context, execution, rationale,
-                TradePlanTestFixtures.NOW, TradePlanOrigin.OPPORTUNITY, null))
+                TradePlanTestFixtures.NOW, TradePlanOrigin.OPPORTUNITY, null);
+        assertThatThrownBy(() -> factory.create(opportunityValues))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Opportunity");
         assertThat(factory.create(

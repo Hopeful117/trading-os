@@ -1,8 +1,15 @@
 package com.hope.trading.market_intelligence.domain.capability;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
-@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, property = "@class")
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@class")
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = ProducedContribution.ArtifactContribution.class, name = "artifact-contribution"),
+        @JsonSubTypes.Type(value = ProducedContribution.ObservationContribution.class, name = "observation-contribution"),
+        @JsonSubTypes.Type(value = ProducedContribution.MetricContribution.class, name = "metric-contribution"),
+        @JsonSubTypes.Type(value = ProducedContribution.RecommendationContribution.class, name = "recommendation-contribution")
+})
 public sealed interface ProducedContribution permits
         ProducedContribution.ArtifactContribution,
         ProducedContribution.ObservationContribution,

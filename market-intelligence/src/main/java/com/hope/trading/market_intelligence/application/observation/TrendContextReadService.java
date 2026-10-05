@@ -89,7 +89,10 @@ public class TrendContextReadService {
             }
             return "IN_PROGRESS";
         }
-        return observation == null ? "MISSING" : (valid ? "AVAILABLE" : "STALE");
+        if (observation == null) {
+            return "MISSING";
+        }
+        return valid ? "AVAILABLE" : "STALE";
     }
 
     private String validity(Observation observation, Instant now, boolean current) {

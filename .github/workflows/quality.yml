@@ -27,6 +27,7 @@ jobs:
           - market-data
           - trading-core
           - market-intelligence
+          - news-service
           - risk-domain
     steps:
       - name: Checkout
@@ -153,7 +154,7 @@ jobs:
 
             modules = ['eureka-server', 'gateway', 'broker-service',
                        'market-data', 'trading-core', 'market-intelligence',
-                       'risk-domain']
+                       'news-service', 'risk-domain']
             for module in modules:
                 print(f'== {module} ==')
                 matches = glob.glob(f'coverage-backend/jacoco-{module}/**/jacoco.xml', recursive=True)
@@ -224,6 +225,10 @@ jobs:
           - project: market-intelligence
             module: market-intelligence
             secret: SONAR_TOKEN_MARKET_INTELLIGENCE
+            type: backend
+          - project: news-service
+            module: news-service
+            secret: SONAR_TOKEN_NEWS_SERVICE
             type: backend
           - project: trading-os-web
             module: trading-os-web

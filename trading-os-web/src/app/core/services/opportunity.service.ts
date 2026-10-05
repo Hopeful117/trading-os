@@ -8,7 +8,7 @@ import { OpportunityResponse } from '../models/opportunity.model';
   providedIn: 'root',
 })
 export class OpportunityService {
-  private http = inject(HttpClient);
+  private readonly http = inject(HttpClient);
 
   findActive(): Observable<OpportunityResponse[]> {
     return this.http.get<OpportunityResponse[]>(`${environment.gatewayUrl}v1/opportunities/active`);

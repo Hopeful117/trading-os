@@ -7,29 +7,16 @@ describe('app routes', () => {
     return routes.find((route) => route.path === path);
   }
 
-  it('exposes the opportunities list route behind authentication', () => {
-    const route = findRoute('opportunities');
+  it.each([['opportunities'], ['opportunities/:opportunityId'], ['analytics']])(
+    'exposes the %s route behind authentication',
+    (path) => {
+      const route = findRoute(path);
 
-    expect(route).toBeDefined();
-    expect(route?.canActivate).toContain(authGuard);
-    expect(route?.component).toBeDefined();
-  });
-
-  it('exposes the opportunity detail route behind authentication', () => {
-    const route = findRoute('opportunities/:opportunityId');
-
-    expect(route).toBeDefined();
-    expect(route?.canActivate).toContain(authGuard);
-    expect(route?.component).toBeDefined();
-  });
-
-  it('exposes the trade history route behind authentication', () => {
-    const route = findRoute('analytics');
-
-    expect(route).toBeDefined();
-    expect(route?.canActivate).toContain(authGuard);
-    expect(route?.component).toBeDefined();
-  });
+      expect(route).toBeDefined();
+      expect(route?.canActivate).toContain(authGuard);
+      expect(route?.component).toBeDefined();
+    },
+  );
 
   it('keeps every trader-facing feature route authenticated', () => {
     const traderPaths: Routes = routes.filter(

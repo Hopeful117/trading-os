@@ -25,28 +25,29 @@ public final class TrendContextInputValidation {
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleSeries series = roleSeries.get(role);
             TrendContextRoleDefinition definition = profile.roles().get(role);
-            if (series == null) {
-                if (definition != null && definition.required()) {
-                    findings.add(new Finding("REQUIRED_ROLE_MISSING", role,
-                            "Required role is missing"));
-                }
-                continue;
-            }
-            if (definition == null || !definition.interval().equals(series.interval())) {
-                findings.add(new Finding("ROLE_INTERVAL_MISMATCH", role,
-                        "Role series interval does not match the profile"));
-            }
-            validateCandles(role, series.candles(), cutOffAt, findings);
-            if (definition == null) {
-                continue;
-            }
-            if (series.calculationReadyCandles().size()
-                    < definition.minimumEligibleCandles()) {
-                findings.add(new Finding("INSUFFICIENT_HISTORY", role,
-                        "Calculation-ready history is below the profile minimum"));
-            }
+            validateRole(role, series, definition, cutOffAt, findings);
         }
         return List.copyOf(findings);
+    }
+
+    private static void validateRole(TrendContextRole role, TrendContextRoleSeries series,
+            TrendContextRoleDefinition definition, Instant cutOffAt, List<Finding> findings) {
+        if (series == null) {
+            if (definition != null && definition.required()) {
+                findings.add(new Finding("REQUIRED_ROLE_MISSING", role, "Required role is missing"));
+            }
+            return;
+        }
+        if (definition == null || !definition.interval().equals(series.interval())) {
+            findings.add(new Finding("ROLE_INTERVAL_MISMATCH", role,
+                    "Role series interval does not match the profile"));
+        }
+        validateCandles(role, series.candles(), cutOffAt, findings);
+        if (definition != null && series.calculationReadyCandles().size()
+                < definition.minimumEligibleCandles()) {
+            findings.add(new Finding("INSUFFICIENT_HISTORY", role,
+                    "Calculation-ready history is below the profile minimum"));
+        }
     }
 
     public static void requireAccepted(List<Finding> findings) {

@@ -26,7 +26,7 @@ public final class ManualTradePlanController {
     }
 
     @PostMapping("/manual")
-    public ResponseEntity<?> create(
+    public ResponseEntity<Object> create(
             @Valid @RequestBody Request request, Authentication authentication) {
         UUID actorId = authenticatedActor(authentication);
         TradePlanningResult result = service.createManual(request.toApplicationRequest(actorId));

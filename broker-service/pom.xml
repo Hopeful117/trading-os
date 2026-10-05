@@ -31,6 +31,10 @@
 		<sonar.projectKey>trading-os:broker-service</sonar.projectKey>
 		<sonar.projectName>Trading OS - Broker Service</sonar.projectName>
 		<sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+		<!-- JJWT 0.13 exposes java.util.Date as its only timestamp API. -->
+		<sonar.issue.ignore.multicriteria>jjwtDateApi</sonar.issue.ignore.multicriteria>
+		<sonar.issue.ignore.multicriteria.jjwtDateApi.ruleKey>java:S2143</sonar.issue.ignore.multicriteria.jjwtDateApi.ruleKey>
+		<sonar.issue.ignore.multicriteria.jjwtDateApi.resourceKey>**/ServiceJwtService.java</sonar.issue.ignore.multicriteria.jjwtDateApi.resourceKey>
 	</properties>
 	<dependencies>
 		<dependency>

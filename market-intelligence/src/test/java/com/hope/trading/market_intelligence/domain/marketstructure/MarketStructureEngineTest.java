@@ -155,7 +155,7 @@ class MarketStructureEngineTest {
     }
 
     @Test
-    void doesNotExposeARelationBeforeItsLatestSwingConfirmation() throws Exception {
+    void doesNotExposeARelationBeforeItsLatestSwingConfirmation() {
         MarketStructureResult result = engine.extract(new MarketStructureInput(
                 candles(new int[]{2, 5, 3, 6, 4}, new int[]{9, 1, 8, 2, 7}),
                 List.of(), at(5), 1, 1));
