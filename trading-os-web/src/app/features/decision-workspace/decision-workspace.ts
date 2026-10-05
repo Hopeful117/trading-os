@@ -19,6 +19,7 @@ import {
 
 import { Account } from '../../core/models/account.model';
 import { DecisionContextResponse } from '../../core/models/decision-context.model';
+import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { MarketResponse } from '../../core/models/market-response';
 import { MarketStreamRequest } from '../../core/models/market-stream-request';
 import { MarketStreamType } from '../../core/models/market-stream-type';
@@ -38,6 +39,8 @@ import { DecisionContextService } from '../../core/services/decision-context.ser
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
 import { MarketService } from '../../core/services/market.service';
+import { OpportunityService } from '../../core/services/opportunity.service';
+import { TradePlanService } from '../../core/services/trade-plan.service';
 import { TrendContextService } from '../../core/services/trend-context.service';
 import { MarketChartComponent } from '../markets/market-chart-component/market-chart-component';
 import { OrderBookComponent } from '../markets/order-book-component/order-book-component';
@@ -95,6 +98,8 @@ export class DecisionWorkspace {
   private readonly marketService = inject(MarketService);
   private readonly marketDataStreamService = inject(MarketDataStreamService);
   private readonly marketDiscovery = inject(MarketDiscoveryService);
+  private readonly opportunityService = inject(OpportunityService);
+  private readonly tradePlanService = inject(TradePlanService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -119,6 +124,9 @@ export class DecisionWorkspace {
   manualTradeOpen = false;
   marketSearch = '';
   showUnavailableMarkets = false;
+  opportunity: OpportunityResponse | null = null;
+  opportunityPreparing = false;
+  opportunityError = false;
 
   readonly accounts$ = this.accountsRefreshSubject.pipe(
     startWith(undefined),
@@ -284,6 +292,18 @@ export class DecisionWorkspace {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const accountId = params.get('accountId');
       const marketId = params.get('marketId');
+      const opportunityId = params.get('opportunityId');
+
+      if (opportunityId !== this.opportunity?.id) {
+        this.opportunity = null;
+        this.opportunityError = false;
+        if (opportunityId !== null) {
+          this.opportunityService.findById(opportunityId).subscribe({
+            next: (opportunity) => (this.opportunity = opportunity),
+            error: () => (this.opportunityError = true),
+          });
+        }
+      }
 
       if (accountId !== this.selectedAccountId) {
         this.selectedAccountId = accountId;
@@ -386,6 +406,28 @@ export class DecisionWorkspace {
     }
 
     this.manualTradeOpen = true;
+  }
+
+  prepareFromOpportunity(): void {
+    if (this.opportunity === null || this.selectedAccountId === null) {
+      return;
+    }
+
+    this.opportunityPreparing = true;
+    this.tradePlanService
+      .createFromOpportunity(this.opportunity.id, this.selectedAccountId, crypto.randomUUID())
+      .subscribe({
+        next: (created) => {
+          void this.router.navigate([
+            '/trade-planning',
+            'plans',
+            created.tradePlanId,
+            'versions',
+            created.tradePlanVersion,
+          ]);
+        },
+        error: () => (this.opportunityPreparing = false),
+      });
   }
 
   closeManualTrade(): void {

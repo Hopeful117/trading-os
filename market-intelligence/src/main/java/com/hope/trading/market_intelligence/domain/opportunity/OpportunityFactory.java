@@ -15,9 +15,23 @@ public final class OpportunityFactory {
             Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
             UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot
     ) {
+        return create(id, version, status, instrument, direction, scenario, timeframe, type, origin,
+                score, explanation, observations, aiAnalyses, evaluatedAt, validFrom, validUntil,
+                createdAt, strategyMatchId, setupSnapshot, null);
+    }
+
+    public TradingOpportunity create(
+            OpportunityId id, OpportunityVersion version, OpportunityStatus status,
+            String instrument, OpportunityDirection direction, String scenario,
+            String timeframe, OpportunityType type, OpportunityOrigin origin,
+            OpportunityScore score, String explanation,
+            Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
+            Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
+             UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId
+    ) {
         return new TradingOpportunity(
                 id, version, status, instrument, direction, scenario, timeframe, type,
                 origin, score, explanation, observations, aiAnalyses, evaluatedAt,
-                validFrom, validUntil, createdAt, strategyMatchId, setupSnapshot);
+                validFrom, validUntil, createdAt, strategyMatchId, setupSnapshot, marketId);
     }
 }

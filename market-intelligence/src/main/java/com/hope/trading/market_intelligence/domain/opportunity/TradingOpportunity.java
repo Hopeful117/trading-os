@@ -28,6 +28,7 @@ public final class TradingOpportunity {
      * Null only for pre-0029 rows; immutable across version transitions.
      */
     private final OpportunitySetupSnapshot setupSnapshot;
+    private final UUID marketId;
 
     TradingOpportunity(
             OpportunityId id, OpportunityVersion version, OpportunityStatus status,
@@ -36,7 +37,7 @@ public final class TradingOpportunity {
             OpportunityScore score, String explanation,
             Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
             Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-            UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot
+             UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId
     ) {
         this.id = Objects.requireNonNull(id);
         this.version = Objects.requireNonNull(version);
@@ -63,6 +64,7 @@ public final class TradingOpportunity {
         this.createdAt = Objects.requireNonNull(createdAt);
         this.strategyMatchId = strategyMatchId;
         this.setupSnapshot = setupSnapshot;
+        this.marketId = marketId;
     }
 
     private static String required(String value, String name) {
@@ -93,5 +95,9 @@ public final class TradingOpportunity {
 
     public Optional<OpportunitySetupSnapshot> setup() {
         return Optional.ofNullable(setupSnapshot);
+    }
+
+    public Optional<UUID> marketId() {
+        return Optional.ofNullable(marketId);
     }
 }

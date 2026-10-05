@@ -19,10 +19,33 @@ public record EconomicEvent(
         String previousValue,
         String consensusValue,
         String actualValue,
+        String unit,
         Instant sourceUpdatedAt,
         Instant fetchedAt,
         String normalizationVersion
-) {
+    ) {
+    public EconomicEvent(UUID id,
+                         String sourceName,
+                         String sourceEventId,
+                         String title,
+                         String category,
+                         Instant scheduledAt,
+                         Instant actualAt,
+                         List<String> currencies,
+                         List<UUID> marketIds,
+                         ImpactLevel impact,
+                         EconomicEventStatus status,
+                         String previousValue,
+                         String consensusValue,
+                         String actualValue,
+                         Instant sourceUpdatedAt,
+                         Instant fetchedAt,
+                         String normalizationVersion) {
+        this(id, sourceName, sourceEventId, title, category, scheduledAt, actualAt, currencies, marketIds,
+                impact, status, previousValue, consensusValue, actualValue, null, sourceUpdatedAt,
+                fetchedAt, normalizationVersion);
+    }
+
     public EconomicEvent {
         currencies = currencies == null ? List.of() : List.copyOf(currencies);
         marketIds = marketIds == null ? List.of() : List.copyOf(marketIds);

@@ -520,7 +520,7 @@
                     }
                   }
 
-                  @if (manualTradeOpen) {
+                   @if (manualTradeOpen) {
                     <app-manual-trade-ticket
                       [account]="view.context.account"
                       [market]="marketView.market"
@@ -534,23 +534,43 @@
                     >
                       Close manual ticket
                     </button>
-                  } @else {
-                    <section class="trading-actions" aria-labelledby="trading-actions-title">
+                   } @else {
+                     <section class="trading-actions" aria-labelledby="trading-actions-title">
                       <div>
                         <span class="eyebrow">Trading actions</span>
                         <h3 id="trading-actions-title">Prepare a discretionary proposal</h3>
                         <p>Keep the market context visible while describing a MANUAL Trade Plan.</p>
                       </div>
-                      <button
+                       <button
                         type="button"
                         class="primary-button"
                         (click)="openManualTrade()"
                         data-testid="open-manual-trade"
-                      >
-                        Prepare manual trade
-                      </button>
-                    </section>
-                  }
+                       >
+                         Prepare manual trade
+                       </button>
+                       @if (opportunity; as activeOpportunity) {
+                         <div class="opportunity-action" data-testid="opportunity-context">
+                           <span class="eyebrow">Opportunity context</span>
+                           <strong>{{ activeOpportunity.direction }} · {{ activeOpportunity.scenario }}</strong>
+                           <span>{{ activeOpportunity.explanation }}</span>
+                           <button
+                             type="button"
+                             class="secondary-button"
+                             [disabled]="opportunityPreparing"
+                             (click)="prepareFromOpportunity()"
+                             data-testid="prepare-from-opportunity"
+                           >
+                             {{ opportunityPreparing ? 'Preparing...' : 'Prepare from opportunity' }}
+                           </button>
+                         </div>
+                       } @else if (opportunityError) {
+                         <p class="state-message error" data-testid="opportunity-error">
+                           Opportunity context is unavailable. You can still prepare a manual proposal.
+                         </p>
+                       }
+                     </section>
+                   }
 
                   <section class="market-section" aria-labelledby="workspace-ticker-title">
                     <div class="section-heading">

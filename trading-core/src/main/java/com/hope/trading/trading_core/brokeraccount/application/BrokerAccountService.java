@@ -15,6 +15,7 @@ import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
+import com.hope.trading.trading_core.risk.application.RiskDay;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidationException;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileService;
@@ -115,6 +116,13 @@ public class BrokerAccountService {
         Account savedAccount = accountRepository.save(account);
         riskPersistence.configuration(savedAccount.getAccountId(), brokerAccount.id(), "UTC",
                 savedAccount.getBaseCurrency(), savedAccount.getAccountId());
+        RiskDay riskDay = RiskDay.containing(clock.instant(), "UTC");
+        riskPersistence.baseline(savedAccount.getAccountId(), riskDay.date(), riskDay.startsAt(), riskDay.endsAt(),
+                savedAccount.getBaseCurrency(), initialCapital,
+                riskPersistence.write(java.util.Map.of(
+                        "source", "PAPER_ACCOUNT_PROVISIONING",
+                        "initialCapital", initialCapital,
+                        "accountVersion", savedAccount.getVersion())));
         riskPersistence.assignProfile(savedAccount.getAccountId(), profileReference.profileId(),
                 profileReference.semanticVersion(), clock.instant(), "paper-account-provisioning");
         TradePlanningProfile profile = tradePlanningProfiles.create(ownerId,

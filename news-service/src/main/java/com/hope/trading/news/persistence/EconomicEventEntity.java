@@ -47,6 +47,8 @@ public class EconomicEventEntity {
     String consensusValue;
     @Column(name = "actual_value", length = 100)
     String actualValue;
+    @Column(length = 100)
+    String unit;
     @Column(name = "source_updated_at")
     Instant sourceUpdatedAt;
     @Column(name = "fetched_at", nullable = false)
@@ -71,6 +73,7 @@ public class EconomicEventEntity {
         entity.previousValue = event.previousValue();
         entity.consensusValue = event.consensusValue();
         entity.actualValue = event.actualValue();
+        entity.unit = event.unit();
         entity.sourceUpdatedAt = event.sourceUpdatedAt();
         entity.fetchedAt = event.fetchedAt() == null ? Instant.now() : event.fetchedAt();
         entity.normalizationVersion = event.normalizationVersion();
@@ -80,7 +83,7 @@ public class EconomicEventEntity {
     public EconomicEvent toDomain() {
         return new EconomicEvent(id, sourceName, sourceEventId, title, category, scheduledAt,
                 actualAt, split(currencies), splitUuid(marketIds), impact, status, previousValue,
-                consensusValue, actualValue, sourceUpdatedAt, fetchedAt, normalizationVersion);
+                consensusValue, actualValue, unit, sourceUpdatedAt, fetchedAt, normalizationVersion);
     }
 
     public boolean matches(UUID marketId, String currency, ImpactLevel requestedImpact) {

@@ -24,20 +24,23 @@ public class NewsCatalogService {
     private final FinancialNewsItemRepository news;
     private final NewsProviderProperties providerProperties;
     private final ObjectProvider<NewsSourcePort> source;
+    private final ObjectProvider<EconomicCalendarSourcePort> economicCalendarSource;
 
     public NewsCatalogService(EconomicEventRepository events,
                               FinancialNewsItemRepository news,
                               NewsProviderProperties providerProperties,
-                              ObjectProvider<NewsSourcePort> source) {
+                              ObjectProvider<NewsSourcePort> source,
+                              ObjectProvider<EconomicCalendarSourcePort> economicCalendarSource) {
         this.events = events;
         this.news = news;
         this.providerProperties = providerProperties;
         this.source = source;
+        this.economicCalendarSource = economicCalendarSource;
     }
 
     @Transactional(readOnly = true)
     public NewsReadResult<EconomicEvent> findEvents(NewsQuery query) {
-        if (!isProviderAvailable()) {
+        if (!isEconomicCalendarAvailable()) {
             return unavailable();
         }
         Instant from = query.from() == null ? Instant.now().minusSeconds(86400) : query.from();
@@ -75,8 +78,13 @@ public class NewsCatalogService {
         source.financialNews().forEach(item -> news.save(FinancialNewsItemEntity.from(item)));
     }
 
+    @Transactional
+    public void synchronizeEconomicEvents(EconomicCalendarSourcePort source, Instant from, Instant to) {
+        source.economicEvents(from, to).forEach(event -> events.save(EconomicEventEntity.from(event)));
+    }
+
     public NewsContextSnapshot context(UUID marketId, Instant now) {
-        if (!isProviderAvailable()) {
+        if (!isEconomicCalendarAvailable() && !isProviderAvailable()) {
             return new NewsContextSnapshot(NewsAvailability.UNAVAILABLE, List.of(), List.of(), null, now,
                     "No production news provider is configured");
         }
@@ -86,9 +94,7 @@ public class NewsCatalogService {
                 null, null, 100);
         NewsReadResult<EconomicEvent> eventsResult = findEvents(eventQuery);
         NewsReadResult<FinancialNewsItem> newsResult = findNews(newsQuery);
-        NewsAvailability status = eventsResult.status() == NewsAvailability.STALE
-                || newsResult.status() == NewsAvailability.STALE
-                ? NewsAvailability.STALE : NewsAvailability.AVAILABLE;
+        NewsAvailability status = contextAvailability(eventsResult.status(), newsResult.status());
         return new NewsContextSnapshot(status, eventsResult.items(),
                 newsResult.items(), sourceOccurredAt(eventsResult.items(), newsResult.items()), now,
                 freshnessMessage(status));
@@ -96,6 +102,21 @@ public class NewsCatalogService {
 
     private boolean isProviderAvailable() {
         return providerProperties.enabled() && source.getIfAvailable() != null;
+    }
+
+    private boolean isEconomicCalendarAvailable() {
+        return economicCalendarSource.getIfAvailable() != null;
+    }
+
+    private NewsAvailability contextAvailability(NewsAvailability eventsStatus,
+                                                  NewsAvailability newsStatus) {
+        if (eventsStatus == NewsAvailability.STALE || newsStatus == NewsAvailability.STALE) {
+            return NewsAvailability.STALE;
+        }
+        if (eventsStatus == NewsAvailability.AVAILABLE || newsStatus == NewsAvailability.AVAILABLE) {
+            return NewsAvailability.AVAILABLE;
+        }
+        return NewsAvailability.UNAVAILABLE;
     }
 
     private <T> NewsReadResult<T> unavailable() {

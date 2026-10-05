@@ -41,6 +41,7 @@ describe('OpportunityDetail', () => {
     validUntil: '2026-08-24T10:30:00Z',
     createdAt: '2026-08-24T09:55:00Z',
     strategyMatchId: 'match-1',
+    marketId: 'market-1',
     setup,
   };
 
@@ -111,6 +112,18 @@ describe('OpportunityDetail', () => {
       expect(element.textContent).toContain('match-1');
       expect(element.textContent).toContain('obs-1');
       expect(element.textContent).toContain('obs-2');
+    });
+
+    it('links active opportunities to the account-scoped decision workspace', async () => {
+      await createComponent('o1');
+
+      const link = fixture.nativeElement.querySelector(
+        '[data-testid="create-trade-plan-button"]',
+      ) as HTMLAnchorElement;
+
+      expect(link.getAttribute('href')).toContain('/decision-workspace');
+      expect(link.getAttribute('href')).toContain('opportunityId=o1');
+      expect(link.getAttribute('href')).toContain('marketId=market-1');
     });
 
     it('does not fabricate provenance when no match exists', async () => {

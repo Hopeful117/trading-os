@@ -72,9 +72,10 @@ public class StrategyMatchOpportunityFactory {
                 Set.of(),
                 evaluatedAt,
                 validUntil,
-                match.matchId(),
-                deriveOpportunityLineageId(match.matchId()),
-                setupSnapshot(match, evaluation, referencePrice, referencePriceAt));
+                 match.matchId(),
+                 deriveOpportunityLineageId(match.matchId()),
+                 setupSnapshot(match, evaluation, referencePrice, referencePriceAt),
+                 match.marketId());
     }
 
     /**

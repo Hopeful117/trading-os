@@ -39,6 +39,7 @@ export interface OpportunityResponse {
   validUntil: string | null;
   createdAt: string;
   strategyMatchId: string | null;
+  marketId?: string | null;
   setup?: OpportunitySetup | null;
 }
 

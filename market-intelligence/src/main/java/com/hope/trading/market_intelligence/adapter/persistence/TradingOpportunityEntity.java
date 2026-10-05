@@ -12,7 +12,7 @@ record TradingOpportunityEntity(
         String scenario, String timeframe, String type, String origin, BigDecimal score,
         String explanation, Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-        UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot
+        UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId
 ) {
     TradingOpportunityEntity {
         observationIds = Set.copyOf(observationIds);
