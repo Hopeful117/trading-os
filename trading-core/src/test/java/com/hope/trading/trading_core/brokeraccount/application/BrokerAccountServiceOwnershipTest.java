@@ -138,6 +138,8 @@ class BrokerAccountServiceOwnershipTest {
         assertThat(accountCaptor.getValue().getUser()).isSameAs(user);
         assertThat(accountCaptor.getValue().getEquity()).isEqualByComparingTo("10000");
         assertThat(accountCaptor.getValue().getBrokerAccountId()).isNotNull();
+        verify(riskPersistence).baseline(any(), any(), any(), any(), eq("USD"),
+                eq(new BigDecimal("10000")), any());
         var planningValues = org.mockito.ArgumentCaptor.forClass(TradePlanningProfileService.Values.class);
         verify(tradePlanningProfiles).create(eq(paperOwner), planningValues.capture());
         assertThat(planningValues.getValue().riskBudgetAmount()).isEqualByComparingTo("3");

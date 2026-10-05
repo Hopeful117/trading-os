@@ -58,4 +58,18 @@ class NewsPersistenceTest {
 
         assertThat(reloaded).hasSize(1);
     }
+
+    @Test
+    void repeatedPersistenceOfTheSameSourceEventRemainsIdempotent() {
+        Instant scheduledAt = Instant.parse("2026-01-01T12:00:00Z");
+        EconomicEvent event = new EconomicEvent(
+                null, "xoomar", "event-idempotent", "CPI", "inflation", scheduledAt, null,
+                List.of("USD"), List.of(), ImpactLevel.HIGH, EconomicEventStatus.SCHEDULED,
+                null, null, null, "%", scheduledAt, scheduledAt, "xoomar-v1");
+
+        events.save(EconomicEventEntity.from(event));
+        events.save(EconomicEventEntity.from(event));
+
+        assertThat(events.count()).isEqualTo(1);
+    }
 }

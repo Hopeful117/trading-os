@@ -21,6 +21,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/news")
 public class NewsController {
+    private static final String XOOMAR_ATTRIBUTION = "Data: XOOMAR (https://xoomar.com/markets/api/calendar)";
     private final NewsCatalogService catalog;
 
     public NewsController(NewsCatalogService catalog) {
@@ -37,7 +38,7 @@ public class NewsController {
             @RequestParam(defaultValue = "100") @Max(500) int limit) {
         NewsReadResult<EconomicEvent> result = catalog.findEvents(
                 new NewsQuery(from, to, marketId, currency, impact, limit));
-        return ResponseEntity.ok(NewsReadResponse.from(result));
+        return ResponseEntity.ok(NewsReadResponse.from(result, XOOMAR_ATTRIBUTION));
     }
 
     @GetMapping("/items")
@@ -53,10 +54,15 @@ public class NewsController {
         return ResponseEntity.ok(NewsReadResponse.from(result));
     }
 
-    public record NewsReadResponse<T>(String status, List<T> items, Instant fetchedAt, String message) {
+    public record NewsReadResponse<T>(String status, List<T> items, Instant fetchedAt, String message,
+                                      String attribution) {
         static <T> NewsReadResponse<T> from(NewsReadResult<T> result) {
+            return from(result, null);
+        }
+
+        static <T> NewsReadResponse<T> from(NewsReadResult<T> result, String attribution) {
             return new NewsReadResponse<>(result.status().name(), result.items(),
-                    result.fetchedAt(), result.message());
+                    result.fetchedAt(), result.message(), attribution);
         }
     }
 }

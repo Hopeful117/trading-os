@@ -29,5 +29,19 @@ class NewsControllerContractTest {
         assertThat(response.status()).isEqualTo("UNAVAILABLE");
         assertThat(response.items()).isEmpty();
         assertThat(response.message()).contains("provider");
+        assertThat(response.attribution()).contains("XOOMAR");
+    }
+
+    @Test
+    void exposesFinancialNewsWithoutEconomicCalendarAttribution() {
+        NewsCatalogService catalog = mock(NewsCatalogService.class);
+        when(catalog.findNews(org.mockito.ArgumentMatchers.any())).thenReturn(
+                new NewsReadResult<>(NewsAvailability.AVAILABLE, List.of(), Instant.now(), null));
+        NewsController controller = new NewsController(catalog);
+
+        NewsController.NewsReadResponse<?> response = controller.items(
+                null, null, null, null, null, 10).getBody();
+
+        assertThat(response.attribution()).isNull();
     }
 }

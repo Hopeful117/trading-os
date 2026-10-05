@@ -5,12 +5,14 @@ import { BehaviorSubject, NEVER, of, throwError } from 'rxjs';
 
 import { Account } from '../../core/models/account.model';
 import { DecisionContextResponse } from '../../core/models/decision-context.model';
+import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { AccountService } from '../../core/services/account.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { TrendAttention, TrendContextReadModel } from '../../core/models/trend-context.model';
 import { TrendContextService } from '../../core/services/trend-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketService } from '../../core/services/market.service';
+import { OpportunityService } from '../../core/services/opportunity.service';
 import { TradePlanService } from '../../core/services/trade-plan.service';
 import { OhlcInterval } from '../../core/models/ohlc-interval';
 import { DecisionWorkspace } from './decision-workspace';
@@ -34,6 +36,10 @@ describe('DecisionWorkspace', () => {
     streamRecentTrades: ReturnType<typeof vi.fn>;
   };
   let routerMock: { navigate: ReturnType<typeof vi.fn> };
+  let tradePlanServiceMock: {
+    createManual: ReturnType<typeof vi.fn>;
+    createFromOpportunity: ReturnType<typeof vi.fn>;
+  };
   let routeQueryParamMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
   const account: Account = {
@@ -137,6 +143,12 @@ describe('DecisionWorkspace', () => {
       streamRecentTrades: vi.fn().mockReturnValue(NEVER),
     };
     routerMock = { navigate: vi.fn().mockResolvedValue(true) };
+    tradePlanServiceMock = {
+      createManual: vi.fn(),
+      createFromOpportunity: vi
+        .fn()
+        .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
+    };
     routeQueryParamMap = new BehaviorSubject(convertToParamMap({}));
     vi.stubGlobal(
       'ResizeObserver',
@@ -168,7 +180,8 @@ describe('DecisionWorkspace', () => {
         { provide: TrendContextService, useValue: trendContextServiceMock },
         { provide: MarketService, useValue: marketServiceMock },
         { provide: MarketDataStreamService, useValue: marketDataStreamServiceMock },
-        { provide: TradePlanService, useValue: { createManual: vi.fn() } },
+        { provide: OpportunityService, useValue: { findById: vi.fn() } },
+        { provide: TradePlanService, useValue: tradePlanServiceMock },
         { provide: Router, useValue: routerMock },
         {
           provide: ActivatedRoute,
@@ -240,6 +253,26 @@ describe('DecisionWorkspace', () => {
     component.selectMarket('market-2', context);
 
     expect(component.selectedMarketId).toBeNull();
+  });
+
+  it('creates an opportunity Trade Plan from the selected account', () => {
+    component.selectedAccountId = account.accountId;
+    component.opportunity = { id: 'opportunity-1' } as OpportunityResponse;
+
+    component.prepareFromOpportunity();
+
+    expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith(
+      'opportunity-1',
+      account.accountId,
+      expect.any(String),
+    );
+    expect(routerMock.navigate).toHaveBeenCalledWith([
+      '/trade-planning',
+      'plans',
+      'plan-1',
+      'versions',
+      1,
+    ]);
   });
 
   it('loads only the selected eligible market', () => {

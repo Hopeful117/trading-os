@@ -19,8 +19,27 @@ public record CreateOpportunityCommand(
         Instant validUntil,
         UUID strategyMatchId,
         UUID opportunityId,
-        OpportunitySetupSnapshot setupSnapshot
+        OpportunitySetupSnapshot setupSnapshot,
+        UUID marketId
 ) {
+    public CreateOpportunityCommand(
+            String instrument,
+            OpportunityDirection direction,
+            String scenario,
+            String timeframe,
+            OpportunityOrigin origin,
+            Set<ObservationReference> observations,
+            Set<AiAnalysisReference> aiAnalyses,
+            Instant evaluatedAt,
+            Instant validUntil,
+            UUID strategyMatchId,
+            UUID opportunityId,
+            OpportunitySetupSnapshot setupSnapshot
+    ) {
+        this(instrument, direction, scenario, timeframe, origin, observations, aiAnalyses,
+                evaluatedAt, validUntil, strategyMatchId, opportunityId, setupSnapshot, null);
+    }
+
     public CreateOpportunityCommand {
         instrument = required(instrument, "instrument");
         Objects.requireNonNull(direction, "direction");

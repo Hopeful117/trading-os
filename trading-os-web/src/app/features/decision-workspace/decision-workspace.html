@@ -549,6 +549,30 @@
                       >
                         Prepare manual trade
                       </button>
+                      @if (opportunity; as activeOpportunity) {
+                        <div class="opportunity-action" data-testid="opportunity-context">
+                          <span class="eyebrow">Opportunity context</span>
+                          <strong
+                            >{{ activeOpportunity.direction }} ·
+                            {{ activeOpportunity.scenario }}</strong
+                          >
+                          <span>{{ activeOpportunity.explanation }}</span>
+                          <button
+                            type="button"
+                            class="secondary-button"
+                            [disabled]="opportunityPreparing"
+                            (click)="prepareFromOpportunity()"
+                            data-testid="prepare-from-opportunity"
+                          >
+                            {{ opportunityPreparing ? 'Preparing...' : 'Prepare from opportunity' }}
+                          </button>
+                        </div>
+                      } @else if (opportunityError) {
+                        <p class="state-message error" data-testid="opportunity-error">
+                          Opportunity context is unavailable. You can still prepare a manual
+                          proposal.
+                        </p>
+                      }
                     </section>
                   }
 

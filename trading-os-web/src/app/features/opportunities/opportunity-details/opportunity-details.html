@@ -170,6 +170,17 @@
               </div>
 
               <div class="provenance-row">
+                <dt>Market id</dt>
+                <dd>
+                  @if (view.opportunity.marketId; as marketId) {
+                    <code>{{ marketId }}</code>
+                  } @else {
+                    Not recorded
+                  }
+                </dd>
+              </div>
+
+              <div class="provenance-row">
                 <dt>Created at</dt>
                 <dd>{{ view.opportunity.createdAt | date: 'MMM d, HH:mm:ss' }}</dd>
               </div>
@@ -180,10 +191,14 @@
             <footer class="cta-section">
               <a
                 class="btn-create-plan"
-                [routerLink]="['/trade-planning', 'prepare', view.opportunity.id]"
+                [routerLink]="['/decision-workspace']"
+                [queryParams]="{
+                  opportunityId: view.opportunity.id,
+                  marketId: view.opportunity.marketId,
+                }"
                 data-testid="create-trade-plan-button"
               >
-                Create Trade Plan
+                Open Decision Workspace
               </a>
             </footer>
           }
