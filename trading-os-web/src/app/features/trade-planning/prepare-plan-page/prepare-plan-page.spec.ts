@@ -168,7 +168,10 @@ describe('PreparePlanPage', () => {
       providers: [
         provideRouter([]),
         { provide: ActivatedRoute, useValue: mockActivatedRoute({ opportunityId: 'opp-1' }) },
-        { provide: OpportunityService, useValue: { findById: () => of(fakeOpportunity('ACTIVE')) } },
+        {
+          provide: OpportunityService,
+          useValue: { findById: () => of(fakeOpportunity('ACTIVE')) },
+        },
         { provide: AccountService, useValue: { getAccounts: () => of(fakeAccounts) } },
         { provide: TradePlanService, useValue: { createFromOpportunity } },
       ],

@@ -285,7 +285,13 @@ describe('PlanPage', () => {
   });
 
   it('shows an error when the plan reference is invalid', () => {
-    configureMocks(of(fakePlan('PROPOSED')), of(fakePlan('ACCEPTED')), of(fakeRiskDecision('APPROVED')), of({}), {});
+    configureMocks(
+      of(fakePlan('PROPOSED')),
+      of(fakePlan('ACCEPTED')),
+      of(fakeRiskDecision('APPROVED')),
+      of({}),
+      {},
+    );
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
     fixture.detectChanges();
@@ -295,7 +301,10 @@ describe('PlanPage', () => {
   });
 
   it('renders an error when accepting or rejecting a plan fails', () => {
-    configureMocks(of(fakePlan('PROPOSED')), throwError(() => new Error('down')));
+    configureMocks(
+      of(fakePlan('PROPOSED')),
+      throwError(() => new Error('down')),
+    );
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
     fixture.detectChanges();
@@ -319,7 +328,11 @@ describe('PlanPage', () => {
   });
 
   it('renders an error when risk evaluation fails', () => {
-    configureMocks(of(fakePlan('ACCEPTED')), of(fakePlan('ACCEPTED')), throwError(() => new Error('down')));
+    configureMocks(
+      of(fakePlan('ACCEPTED')),
+      of(fakePlan('ACCEPTED')),
+      throwError(() => new Error('down')),
+    );
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
     fixture.detectChanges();

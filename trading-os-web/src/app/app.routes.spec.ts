@@ -7,17 +7,16 @@ describe('app routes', () => {
     return routes.find((route) => route.path === path);
   }
 
-  it.each([
-    ['opportunities'],
-    ['opportunities/:opportunityId'],
-    ['analytics'],
-  ])('exposes the %s route behind authentication', (path) => {
-    const route = findRoute(path);
+  it.each([['opportunities'], ['opportunities/:opportunityId'], ['analytics']])(
+    'exposes the %s route behind authentication',
+    (path) => {
+      const route = findRoute(path);
 
-    expect(route).toBeDefined();
-    expect(route?.canActivate).toContain(authGuard);
-    expect(route?.component).toBeDefined();
-  });
+      expect(route).toBeDefined();
+      expect(route?.canActivate).toContain(authGuard);
+      expect(route?.component).toBeDefined();
+    },
+  );
 
   it('keeps every trader-facing feature route authenticated', () => {
     const traderPaths: Routes = routes.filter(
