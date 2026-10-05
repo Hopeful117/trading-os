@@ -38,6 +38,19 @@ class RiskDayAndReconstructionTest {
     }
 
     @Test
+    void ignoresZeroBalancesWhenReconstructingStartValuationInputs() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        RiskDay day = new RiskDay(java.time.LocalDate.parse("2026-08-01"), from, from.plus(Duration.ofDays(1)));
+        var snapshot = new BrokerRiskFactsPort.Snapshot(UUID.randomUUID(), 7, from.plusSeconds(100), true,
+                List.of(), Map.of("USD", new BigDecimal("1000"), "ETH", new BigDecimal("10")), null, List.of(), List.of(),
+                List.of(new BrokerRiskFactsPort.LedgerEntry("eth-ledger", "ETH", "trade",
+                        new BigDecimal("10"), BigDecimal.ZERO, new BigDecimal("10"), from.plusSeconds(1))), "{}");
+
+        assertThat(TradePlanRiskEvaluationService.reconstructStartBalances(snapshot, day))
+                .containsOnlyKeys("USD");
+    }
+
+    @Test
     void rejectsAuthoritativeRunningAndTerminalBalanceMismatch() {
         Instant from = Instant.parse("2026-08-01T00:00:00Z");
         RiskDay day = day(from);

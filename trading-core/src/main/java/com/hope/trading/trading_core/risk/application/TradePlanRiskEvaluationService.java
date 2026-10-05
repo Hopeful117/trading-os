@@ -388,6 +388,7 @@ public class TradePlanRiskEvaluationService {
             var first = entries.get(0);
             balances.put(balanceAsset, first.balance().subtract(first.amount()).add(first.fee()));
         }
+        balances.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().signum() == 0);
         return Map.copyOf(balances);
     }
 

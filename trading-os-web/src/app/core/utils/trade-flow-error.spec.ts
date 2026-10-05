@@ -19,4 +19,12 @@ describe('tradeFlowErrorMessage', () => {
 
     expect(tradeFlowErrorMessage(error, 'Safe fallback')).toBe('Safe fallback');
   });
+
+  it.each([500, 503, 0])('maps service failure status %s to an actionable message', (status) => {
+    const error = new HttpErrorResponse({ status });
+
+    expect(tradeFlowErrorMessage(error, 'fallback')).toBe(
+      'Trading services are temporarily unavailable. Try again later.',
+    );
+  });
 });
