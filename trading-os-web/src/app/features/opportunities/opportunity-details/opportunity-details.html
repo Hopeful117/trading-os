@@ -192,7 +192,10 @@
               <a
                 class="btn-create-plan"
                 [routerLink]="['/decision-workspace']"
-                [queryParams]="{ opportunityId: view.opportunity.id, marketId: view.opportunity.marketId }"
+                [queryParams]="{
+                  opportunityId: view.opportunity.id,
+                  marketId: view.opportunity.marketId,
+                }"
                 data-testid="create-trade-plan-button"
               >
                 Open Decision Workspace
