@@ -129,7 +129,7 @@ class TrendContextReadServiceTest {
                 UUID.randomUUID(), 1, "BTC/EUR", new ObservationType("TREND_CONTEXT"),
                 "Trend Context", "test", Set.of("trend-context"), "TREND_CONTEXT",
                 createdAt, createdAt, createdAt.plusSeconds(3600), null,
-                TrendContextObservationRule.VERSION,
+                TrendContextObservationRule.RULE_VERSION,
                 List.of(ObservationTestFixtures.evidence(BigDecimal.ONE)),
                 new TrendContextObservationPayload(content));
         observations.save(observation);

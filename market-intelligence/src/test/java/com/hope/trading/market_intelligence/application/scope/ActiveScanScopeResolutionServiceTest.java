@@ -87,9 +87,11 @@ class ActiveScanScopeResolutionServiceTest {
         TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
         MarketDataClient marketData = mock(MarketDataClient.class);
         when(accounts.findOwnedAccount(accountId)).thenThrow(notFoundException());
+        ActiveScanScopeResolutionService target = service(accounts, marketData);
+        ActiveScanScopeResolutionRequest request = new ActiveScanScopeResolutionRequest(
+                accountId, "scan", List.of());
 
-        assertThatThrownBy(() -> service(accounts, marketData).resolve(
-                new ActiveScanScopeResolutionRequest(accountId, "scan", List.of())))
+        assertThatThrownBy(() -> target.resolve(request))
                 .isInstanceOf(ActiveScanScopeResolutionException.class)
                 .hasMessageContaining("Account is not available");
         verifyNoInteractions(marketData);
@@ -101,9 +103,11 @@ class ActiveScanScopeResolutionServiceTest {
         TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
         MarketDataClient marketData = mock(MarketDataClient.class);
         when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        ActiveScanScopeResolutionService target = service(accounts, marketData);
+        ActiveScanScopeResolutionRequest request = new ActiveScanScopeResolutionRequest(
+                accountId, "scan", null);
 
-        assertThatThrownBy(() -> service(accounts, marketData).resolve(
-                new ActiveScanScopeResolutionRequest(accountId, "scan", null)))
+        assertThatThrownBy(() -> target.resolve(request))
                 .isInstanceOf(ActiveScanScopeResolutionException.class)
                 .hasMessageContaining("explicit SELECTED or ALL_ELIGIBLE");
         verifyNoInteractions(marketData);

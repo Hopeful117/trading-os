@@ -1,7 +1,6 @@
 package com.hope.trading.market_intelligence.application.tradeplan;
 
 import com.hope.trading.market_intelligence.adapter.ai.DisabledAiTradePlanningAdapter;
-import com.hope.trading.market_intelligence.adapter.persistence.*;
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;

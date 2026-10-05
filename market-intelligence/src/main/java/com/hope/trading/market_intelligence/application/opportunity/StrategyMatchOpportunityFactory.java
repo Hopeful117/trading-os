@@ -108,6 +108,8 @@ public class StrategyMatchOpportunityFactory {
         try {
             byte[] name = ("trading-opportunity-lineage:" + matchId)
                     .getBytes(StandardCharsets.UTF_8);
+            // SHA-1 is used only as a stable UUID name derivation here, not for
+            // authentication, secrecy, integrity, or any security decision.
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             byte[] hash = digest.digest(concat(OPPORTUNITY_LINEAGE_NAMESPACE, name));
             hash[6] = (byte) ((hash[6] & 0x0F) | 0x30);

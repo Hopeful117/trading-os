@@ -8,6 +8,7 @@ import java.util.List;
 
 @Component
 public class NewsContextContextContributor implements ContextContributor {
+    private static final String NEWS_UNAVAILABLE = "News context is unavailable";
     private final NewsClient newsClient;
 
     public NewsContextContextContributor(NewsClient newsClient) {
@@ -25,7 +26,7 @@ public class NewsContextContextContributor implements ContextContributor {
         try {
             NewsClient.NewsContextResponse response = newsClient.findContext(request.marketId());
             if (response == null || response.status() == null) {
-                return ContextSection.unavailable(requirement, "News context is unavailable");
+                return ContextSection.unavailable(requirement, NEWS_UNAVAILABLE);
             }
             ContextSectionStatus status = switch (response.status()) {
                 case "AVAILABLE" -> ContextSectionStatus.AVAILABLE;
@@ -34,7 +35,7 @@ public class NewsContextContextContributor implements ContextContributor {
             };
             if (status == ContextSectionStatus.UNAVAILABLE) {
                 return ContextSection.unavailable(requirement,
-                        response.message() == null ? "News context is unavailable" : response.message());
+                        response.message() == null ? NEWS_UNAVAILABLE : response.message());
             }
             List<NewsEventContext> events = response.events() == null ? List.of()
                     : response.events().stream().map(event -> new NewsEventContext(
@@ -54,7 +55,7 @@ public class NewsContextContextContributor implements ContextContributor {
                     new ContextProvenance("news-service", response.sourceOccurredAt(), response.fetchedAt()),
                     status == ContextSectionStatus.STALE ? "News context is stale" : null);
         } catch (RuntimeException unavailable) {
-            return ContextSection.unavailable(requirement, "News context is unavailable");
+            return ContextSection.unavailable(requirement, NEWS_UNAVAILABLE);
         }
     }
 }

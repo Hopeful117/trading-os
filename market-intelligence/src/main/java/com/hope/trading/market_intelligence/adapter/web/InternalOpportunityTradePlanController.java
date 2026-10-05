@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/internal/v1/intelligence/opportunities")
@@ -24,7 +25,8 @@ public class InternalOpportunityTradePlanController {
             @Valid @RequestBody InternalOpportunityTradePlanRequest request,
             Authentication authentication) {
         UUID actorId = ((com.hope.trading.market_intelligence.security.MiServicePrincipal)
-                authentication.getPrincipal()).requireMatchingActor(request.actorId());
+                Objects.requireNonNull(authentication.getPrincipal(), "principal is required"))
+                .requireMatchingActor(request.actorId());
         return ResponseEntity.ok(service.generate(
                 opportunityId, actorId, request.accountId(),
                 context(request)));

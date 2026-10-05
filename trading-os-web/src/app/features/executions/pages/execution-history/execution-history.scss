@@ -6,7 +6,7 @@
   min-height: calc(100vh - 64px);
   padding: 2rem;
   color: #e2e8f0;
-  background: radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent 42%);
+  background: #0f172a;
 }
 
 .history-header {
@@ -87,28 +87,28 @@
 
 .status-badge.completed {
   color: #86efac;
-  background: rgba(34, 197, 94, 0.14);
+  background: #14532d;
 }
 
 .status-badge.failed {
   color: #fca5a5;
-  background: rgba(239, 68, 68, 0.14);
+  background: #7f1d1d;
 }
 
 .status-badge.uncertain,
 .notice.uncertain {
   color: #fcd34d;
-  background: rgba(245, 158, 11, 0.12);
+  background: #78350f;
 }
 
 .status-badge.closed {
   color: #cbd5e1;
-  background: rgba(100, 116, 139, 0.18);
+  background: #334155;
 }
 
 .status-badge.pending {
   color: #93c5fd;
-  background: rgba(59, 130, 246, 0.14);
+  background: #1e3a8a;
 }
 
 .notice {

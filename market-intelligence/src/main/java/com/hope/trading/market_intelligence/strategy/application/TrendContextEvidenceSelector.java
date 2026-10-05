@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.application.capability.TrendContextA
 import com.hope.trading.market_intelligence.application.port.CapabilityExecutionRepository;
 import com.hope.trading.market_intelligence.application.port.ObservationRepository;
 import com.hope.trading.market_intelligence.domain.capability.CapabilityExecutionState;
+import com.hope.trading.market_intelligence.domain.capability.CapabilityExecution;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.ObservationStatus;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
@@ -46,7 +47,7 @@ public class TrendContextEvidenceSelector {
                 .filter(execution -> execution.state() == CapabilityExecutionState.COMPLETED)
                 .filter(execution -> execution.capabilityId().value()
                         .equals(TrendContextAnalysisCapability.CAPABILITY_ID))
-                .map(execution -> execution.id())
+                .map(CapabilityExecution::id)
                 .collect(java.util.stream.Collectors.toSet());
         if (trendContextExecutionIds.isEmpty()) return Optional.empty();
         return observations.findByType(new com.hope.trading.market_intelligence.domain.observation.ObservationType("TREND_CONTEXT"))

@@ -16,45 +16,30 @@ public final class TrendContextRoleSeries {
     private final TrendContextSourceReference sourceReference;
     private final TrendContextFreshness freshness;
 
-    private TrendContextRoleSeries(
-            TrendContextRole role,
-            String interval,
-            List<TrendContextCandle> candles,
-            List<String> exclusionFindings,
-            List<TrendContextGapFinding> gapFindings,
-            TrendContextSourceReference sourceReference,
-            TrendContextFreshness freshness,
-            Instant cutOffAt
-    ) {
-        this.role = Objects.requireNonNull(role, "role is required");
-        this.interval = Objects.requireNonNull(interval, "interval is required");
-        this.candles = sorted(candles);
-        this.exclusionFindings = List.copyOf(exclusionFindings);
-        this.gapFindings = List.copyOf(gapFindings);
-        this.sourceReference = Objects.requireNonNull(sourceReference, "sourceReference is required");
-        this.freshness = Objects.requireNonNull(freshness, "freshness is required");
+    private TrendContextRoleSeries(Values values) {
+        this.role = Objects.requireNonNull(values.role(), "role is required");
+        this.interval = Objects.requireNonNull(values.interval(), "interval is required");
+        this.candles = sorted(values.candles());
+        this.exclusionFindings = List.copyOf(values.exclusionFindings());
+        this.gapFindings = List.copyOf(values.gapFindings());
+        this.sourceReference = Objects.requireNonNull(values.sourceReference(), "sourceReference is required");
+        this.freshness = Objects.requireNonNull(values.freshness(), "freshness is required");
         this.calculationReadyCandles = this.candles.stream()
                 .filter(candle -> candle.closed()
                         && !candle.synthetic()
-                        && !candle.closeTime().isAfter(cutOffAt))
+                        && !candle.closeTime().isAfter(values.cutOffAt()))
                 .toList();
     }
 
-    public static TrendContextRoleSeries of(
-            TrendContextRole role,
-            String interval,
-            List<TrendContextCandle> candles,
-            List<String> exclusionFindings,
-            List<TrendContextGapFinding> gapFindings,
-            TrendContextSourceReference sourceReference,
-            TrendContextFreshness freshness,
-            Instant cutOffAt
-    ) {
-        Objects.requireNonNull(cutOffAt, "cutOffAt is required");
-        return new TrendContextRoleSeries(
-                role, interval, candles, exclusionFindings, gapFindings,
-                sourceReference, freshness, cutOffAt);
+    public static TrendContextRoleSeries of(Values values) {
+        Objects.requireNonNull(values.cutOffAt(), "cutOffAt is required");
+        return new TrendContextRoleSeries(values);
     }
+
+    public record Values(TrendContextRole role, String interval, List<TrendContextCandle> candles,
+            List<String> exclusionFindings, List<TrendContextGapFinding> gapFindings,
+            TrendContextSourceReference sourceReference, TrendContextFreshness freshness,
+            Instant cutOffAt) { }
 
     public TrendContextRole role() { return role; }
     public String interval() { return interval; }

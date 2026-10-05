@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -24,29 +23,20 @@ public final class TrendContextAssessmentInput {
     private final List<TrendContextInputValidation.Finding> validationFindings;
     private final String fingerprint;
 
-    private TrendContextAssessmentInput(
-            UUID marketId,
-            String provider,
-            String symbol,
-            Instant assessmentAt,
-            Instant cutOffAt,
-            TrendContextProfile profile,
-            String ruleVersion,
-            Map<TrendContextRole, TrendContextRoleSeries> roleSeries
-    ) {
-        this.marketId = Objects.requireNonNull(marketId, "marketId is required");
-        this.provider = required(provider, "provider");
-        this.symbol = required(symbol, "symbol");
-        this.assessmentAt = Objects.requireNonNull(assessmentAt, "assessmentAt is required");
-        this.cutOffAt = Objects.requireNonNull(cutOffAt, "cutOffAt is required");
+    private TrendContextAssessmentInput(Values values) {
+        this.marketId = Objects.requireNonNull(values.marketId(), "marketId is required");
+        this.provider = required(values.provider(), "provider");
+        this.symbol = required(values.symbol(), "symbol");
+        this.assessmentAt = Objects.requireNonNull(values.assessmentAt(), "assessmentAt is required");
+        this.cutOffAt = Objects.requireNonNull(values.cutOffAt(), "cutOffAt is required");
         if (cutOffAt.isAfter(assessmentAt)) {
             throw new IllegalArgumentException("cutOffAt cannot be after assessmentAt");
         }
-        this.profile = Objects.requireNonNull(profile, "profile is required");
-        this.ruleVersion = required(ruleVersion, "ruleVersion");
+        this.profile = Objects.requireNonNull(values.profile(), "profile is required");
+        this.ruleVersion = required(values.ruleVersion(), "ruleVersion");
         EnumMap<TrendContextRole, TrendContextRoleSeries> copy =
                 new EnumMap<>(TrendContextRole.class);
-        copy.putAll(Objects.requireNonNull(roleSeries, "roleSeries is required"));
+        copy.putAll(Objects.requireNonNull(values.roleSeries(), "roleSeries is required"));
         this.roleSeries = Map.copyOf(copy);
         this.validationFindings = TrendContextInputValidation.validate(
                 profile, this.roleSeries, cutOffAt);
@@ -54,20 +44,13 @@ public final class TrendContextAssessmentInput {
         this.fingerprint = computeFingerprint();
     }
 
-    public static TrendContextAssessmentInput accept(
-            UUID marketId,
-            String provider,
-            String symbol,
-            Instant assessmentAt,
-            Instant cutOffAt,
-            TrendContextProfile profile,
-            String ruleVersion,
-            Map<TrendContextRole, TrendContextRoleSeries> roleSeries
-    ) {
-        return new TrendContextAssessmentInput(
-                marketId, provider, symbol, assessmentAt, cutOffAt,
-                profile, ruleVersion, roleSeries);
+    public static TrendContextAssessmentInput accept(Values values) {
+        return new TrendContextAssessmentInput(values);
     }
+
+    public record Values(UUID marketId, String provider, String symbol, Instant assessmentAt,
+                         Instant cutOffAt, TrendContextProfile profile, String ruleVersion,
+                         Map<TrendContextRole, TrendContextRoleSeries> roleSeries) { }
 
     public UUID marketId() { return marketId; }
     public String provider() { return provider; }

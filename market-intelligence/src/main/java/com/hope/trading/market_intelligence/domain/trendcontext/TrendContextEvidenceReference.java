@@ -13,6 +13,6 @@ public record TrendContextEvidenceReference(
         Objects.requireNonNull(ruleId); Objects.requireNonNull(ruleVersion);
         Objects.requireNonNull(profileVersion); Objects.requireNonNull(inputFingerprint);
         Objects.requireNonNull(cutOffAt); sourceIds = List.copyOf(sourceIds == null ? List.of() : sourceIds);
-        key = Objects.requireNonNull(key);
+        Objects.requireNonNull(key);
     }
 }

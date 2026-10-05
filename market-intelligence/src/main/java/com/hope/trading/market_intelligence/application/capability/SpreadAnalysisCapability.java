@@ -16,6 +16,8 @@ import java.util.Set;
 public class SpreadAnalysisCapability implements DeterministicAnalysisCapability, Capability {
     public static final String CAPABILITY_ID = "spread-analysis";
     public static final String CAPABILITY_VERSION = "1.0.0";
+    private static final String SPREAD = "spread";
+    private static final String SPREAD_PERCENTAGE = "spreadPercentage";
 
     @Override
     public CapabilityMetadata metadata() {
@@ -29,8 +31,8 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
                         new ProducedContribution.ArtifactContribution(
                                 ProductionArtifactTypes.SPREAD_ANALYSIS,
                                 ProductionArtifactTypes.V1, Set.of()),
-                        new ProducedContribution.MetricContribution("spread"),
-                        new ProducedContribution.MetricContribution("spreadPercentage")),
+                        new ProducedContribution.MetricContribution(SPREAD),
+                        new ProducedContribution.MetricContribution(SPREAD_PERCENTAGE)),
                 java.time.Duration.ofSeconds(1), null);
     }
 
@@ -103,8 +105,8 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
                 "Market spread",
                 "Objective bid/ask spread calculated from the normalized market snapshot.",
                 Map.of(
-                        "spread", measurements.get("spread"),
-                        "spreadPercentage", measurements.get("spreadPercentage")
+                         SPREAD, measurements.get(SPREAD),
+                         SPREAD_PERCENTAGE, measurements.get(SPREAD_PERCENTAGE)
                 ),
                 BigDecimal.ONE,
                 Set.of(ContextSectionType.MARKET_SNAPSHOT),
@@ -120,7 +122,7 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
         BigDecimal percentage = midpoint.signum() == 0 ? BigDecimal.ZERO
                 : spread.multiply(BigDecimal.valueOf(100))
                 .divide(midpoint, 8, RoundingMode.HALF_UP);
-        return Map.of("spread", spread, "spreadPercentage", percentage);
+        return Map.of(SPREAD, spread, SPREAD_PERCENTAGE, percentage);
     }
 
     private StoredArtifact outputArtifact(

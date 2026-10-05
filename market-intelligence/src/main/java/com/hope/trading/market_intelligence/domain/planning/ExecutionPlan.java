@@ -39,25 +39,35 @@ public final class ExecutionPlan {
 
     private void validate() {
         edges.forEach(edge -> {
-            if (!nodes.containsKey(edge.from()) || !nodes.containsKey(edge.to()))
+            if (!nodes.containsKey(edge.from()) || !nodes.containsKey(edge.to())) {
                 throw new IllegalArgumentException("Plan edge references unknown node");
+            }
         });
         Map<UUID, Integer> degrees = nodes.keySet().stream()
                 .collect(Collectors.toMap(Function.identity(), ignored -> 0));
         edges.forEach(edge -> degrees.compute(edge.to(), (key, value) -> value + 1));
         Deque<UUID> ready = new ArrayDeque<>();
-        degrees.forEach((node, degree) -> { if (degree == 0) ready.add(node); });
+        degrees.forEach((node, degree) -> {
+            if (degree == 0) {
+                ready.add(node);
+            }
+        });
         int visited = 0;
         while (!ready.isEmpty()) {
             UUID node = ready.remove();
             visited++;
-            for (PlanEdge edge : edges) if (edge.from().equals(node)
-                    && degrees.compute(edge.to(), (key, value) -> value - 1) == 0)
-                ready.add(edge.to());
+            for (PlanEdge edge : edges) {
+                if (edge.from().equals(node)
+                        && degrees.compute(edge.to(), (key, value) -> value - 1) == 0) {
+                    ready.add(edge.to());
+                }
+            }
         }
-        if (visited != nodes.size()) throw new ExecutionPlanningException(
-                new PlanningFailure(PlanningFailureType.CYCLIC_DEPENDENCY,
-                        "Execution plan contains a cycle", null, null));
+        if (visited != nodes.size()) {
+            throw new ExecutionPlanningException(new PlanningFailure(
+                    PlanningFailureType.CYCLIC_DEPENDENCY,
+                    "Execution plan contains a cycle", null, null));
+        }
     }
 
     public UUID id() { return id; }

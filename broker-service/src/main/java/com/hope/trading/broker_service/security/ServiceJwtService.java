@@ -45,7 +45,9 @@ public class ServiceJwtService {
                 String actor = claims.get("actor_id", String.class);
                 return new ServicePrincipal(trusted.getKey(), audience,
                         actor == null ? null : UUID.fromString(actor));
-            } catch (RuntimeException ignored) { }
+            } catch (RuntimeException ignored) {
+                // A failed trusted-key candidate is expected; try the remaining trusted keys.
+            }
         }
         throw new IllegalArgumentException("Invalid service credential");
     }

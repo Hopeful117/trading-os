@@ -12,6 +12,7 @@ import java.util.*;
 
 final class OhlcTrendObservationRule implements ObservationConsolidationRule {
     static final String VERSION = "ohlc-trend/v1";
+    private static final String PRICE_CHANGE = "priceChange";
 
     @Override
     public String version() {
@@ -29,7 +30,7 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                 .findFirst().orElseThrow(() -> new NoSuchElementException(
                         "No complete OHLC range result is available"));
         CapabilityResult result = execution.result().orElseThrow();
-        BigDecimal change = result.metrics().get("priceChange");
+        BigDecimal change = result.metrics().get(PRICE_CHANGE);
         if (change == null) {
             throw new NoSuchElementException("OHLC series contains no price change data");
         }
@@ -46,7 +47,7 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                     details.observedAt(), details.observedAt().plus(Duration.ofMinutes(30)),
                     List.of(new ObservationEvidenceCandidate(
                             execution.id(), details.title(), details.explanation(),
-                            result.metrics(), Map.of("priceChange", BigDecimal.ZERO),
+                             result.metrics(), Map.of(PRICE_CHANGE, BigDecimal.ZERO),
                             details.observedAt(), BigDecimal.ONE)));
         }
         String direction = change.signum() > 0 ? "LONG" : "SHORT";
@@ -58,7 +59,7 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                 details.observedAt(), details.observedAt().plus(Duration.ofMinutes(30)),
                 List.of(new ObservationEvidenceCandidate(
                         execution.id(), details.title(), details.explanation(),
-                        result.metrics(), Map.of("priceChange", change),
+                         result.metrics(), Map.of(PRICE_CHANGE, change),
                         details.observedAt(), BigDecimal.ONE)));
     }
 }

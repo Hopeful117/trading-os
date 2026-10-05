@@ -17,6 +17,7 @@ MODULES = [
     ("broker-service", "BUSINESS_MODULE"),
     ("market-data", "BUSINESS_MODULE"),
     ("market-intelligence", "BUSINESS_MODULE"),
+    ("news-service", "BUSINESS_MODULE"),
     ("gateway", "INFRASTRUCTURE_MODULE_WITH_COVERAGE_GATE"),
     ("eureka-server", "BOOTSTRAP"),
 ]

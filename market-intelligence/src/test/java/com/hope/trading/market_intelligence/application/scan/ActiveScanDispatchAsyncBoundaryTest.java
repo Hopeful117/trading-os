@@ -135,8 +135,12 @@ class ActiveScanDispatchAsyncBoundaryTest {
                 new com.hope.trading.market_intelligence.application.port.AnalysisExecutionDispatcher() {
                     @Override public void dispatch(
                             java.util.UUID executionId,
-                            com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest request) { }
-                    @Override public void cancel(java.util.UUID executionId) { }
+                             com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest request) {
+                        // The boundary test only verifies scheduling, not execution delivery.
+                    }
+                    @Override public void cancel(java.util.UUID executionId) {
+                        // The boundary test never cancels a scheduled execution.
+                    }
                 },
                 new AnalysisStrategyRegistry(List.of(activeStrategy())),
                 new com.hope.trading.market_intelligence.application.execution

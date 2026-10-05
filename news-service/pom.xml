@@ -17,6 +17,7 @@
         <spring-cloud.version>2025.1.2</spring-cloud.version>
         <sonar.projectKey>trading-os:news-service</sonar.projectKey>
         <sonar.projectName>Trading OS - News Service</sonar.projectName>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
     <dependencies>
         <dependency>

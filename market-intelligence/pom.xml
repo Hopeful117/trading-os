@@ -18,6 +18,20 @@
         <sonar.projectKey>trading-os:market-intelligence</sonar.projectKey>
         <sonar.projectName>Trading OS - Market Intelligence</sonar.projectName>
         <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.coverage.exclusions>
+            **/*Request.java,
+            **/*RequestDto.java,
+            **/*Response.java,
+            **/*ResponseDto.java,
+            **/*Configuration.java,
+            **/*Properties.java,
+            **/*Entity.java,
+            **/*Id.java,
+            **/MarketIntelligenceApplication.java
+        </sonar.coverage.exclusions>
+        <sonar.issue.ignore.multicriteria>jjwtDateApi</sonar.issue.ignore.multicriteria>
+        <sonar.issue.ignore.multicriteria.jjwtDateApi.ruleKey>java:S2143</sonar.issue.ignore.multicriteria.jjwtDateApi.ruleKey>
+        <sonar.issue.ignore.multicriteria.jjwtDateApi.resourceKey>**/*FeignConfiguration.java</sonar.issue.ignore.multicriteria.jjwtDateApi.resourceKey>
     </properties>
     <dependencies>
         <dependency>

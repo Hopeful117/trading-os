@@ -8,7 +8,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -310,7 +309,8 @@ class TrendContextCanonicalScenarioTest {
             int triggerCount = mode == Mode.TRIGGER_STALE ? 75 : 80;
             roles.put(TrendContextRole.TRIGGER, series(TrendContextRole.TRIGGER, "15M", candles("trigger", trigger, mode == Mode.TRIGGER_STALE ? Mode.STALE : Mode.NORMAL, triggerCount), List.of()));
         }
-        return TrendContextAssessmentInput.accept(MARKET, "KRAKEN", "BTC/EUR", ASSESSMENT, CUTOFF, profile, "rules-1", roles);
+        return TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+                MARKET, "KRAKEN", "BTC/EUR", ASSESSMENT, CUTOFF, profile, "rules-1", roles));
     }
 
     private TrendContextRoleDefinition definition(TrendContextRole role, String interval, Duration duration, boolean required) {
@@ -321,10 +321,11 @@ class TrendContextCanonicalScenarioTest {
         TrendContextCandle first = values.getFirst();
         TrendContextCandle last = values.getLast();
         List<String> exclusions = values.stream().filter(c -> c.synthetic()).map(c -> c.sourceId() + ":SYNTHETIC_DATA_EXCLUDED").toList();
-        return TrendContextRoleSeries.of(role, interval, values, exclusions, gaps,
+        return TrendContextRoleSeries.of(new TrendContextRoleSeries.Values(
+                role, interval, values, exclusions, gaps,
                 new TrendContextSourceReference("market-data", "KRAKEN", MARKET, "BTC/EUR", role, interval,
                         first.openTime(), last.closeTime(), first.sourceOccurredAt(), first.fetchedAt(), "snapshot", "digest"),
-                new TrendContextFreshness(Duration.ofHours(1), last.closeTime(), last.sourceOccurredAt(), last.fetchedAt(), ASSESSMENT, true, true), CUTOFF);
+                new TrendContextFreshness(Duration.ofHours(1), last.closeTime(), last.sourceOccurredAt(), last.fetchedAt(), ASSESSMENT, true, true), CUTOFF));
     }
 
     private List<TrendContextCandle> candles(String prefix, Shape shape, Mode mode, int count) {

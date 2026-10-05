@@ -1,6 +1,5 @@
 package com.hope.trading.market_intelligence.domain.trendcontext;
 
-import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
@@ -27,31 +26,12 @@ public final class TrendContextProfile {
     private final int reclaimWindowBars;
     private final int freshnessMultiplier;
 
-    private TrendContextProfile(
-            String profileId,
-            String profileVersion,
-            Map<TrendContextRole, TrendContextRoleDefinition> roles,
-            boolean triggerRequired,
-            int pivotRadius,
-            int minimumSeparationBars,
-            int minimumConfirmedSwings,
-            int emaPeriod,
-            int emaWarmupBars,
-            int emaSlopeLookback,
-            String emaSlopeThreshold,
-            int atrPeriod,
-            int atrBaselineLength,
-            String abnormalAtrRatioThreshold,
-            String extensionAtrMultiple,
-            int pullbackMinimumBars,
-            int reclaimWindowBars,
-            int freshnessMultiplier
-    ) {
-        this.profileId = requireText(profileId, "profileId");
-        this.profileVersion = requireText(profileVersion, "profileVersion");
+    private TrendContextProfile(Values values) {
+        this.profileId = requireText(values.profileId(), "profileId");
+        this.profileVersion = requireText(values.profileVersion(), "profileVersion");
         EnumMap<TrendContextRole, TrendContextRoleDefinition> copy =
                 new EnumMap<>(TrendContextRole.class);
-        copy.putAll(Objects.requireNonNull(roles, "roles is required"));
+        copy.putAll(Objects.requireNonNull(values.roles(), "roles is required"));
         if (!copy.containsKey(TrendContextRole.BIAS)
                 || !copy.containsKey(TrendContextRole.SETUP)) {
             throw new IllegalArgumentException("BIAS and SETUP roles are required");
@@ -59,28 +39,28 @@ public final class TrendContextProfile {
         if (copy.size() > 3) {
             throw new IllegalArgumentException("Unsupported Trend Context role");
         }
-        if (copy.containsKey(TrendContextRole.TRIGGER) && triggerRequired
+        if (copy.containsKey(TrendContextRole.TRIGGER) && values.triggerRequired()
                 && !copy.get(TrendContextRole.TRIGGER).required()) {
             throw new IllegalArgumentException("Required TRIGGER must be required in its definition");
         }
         validateRoleOrdering(copy);
         this.roles = Map.copyOf(copy);
-        this.triggerRequired = triggerRequired;
-        this.pivotRadius = positive(pivotRadius, "pivotRadius");
-        this.minimumSeparationBars = positive(minimumSeparationBars, "minimumSeparationBars");
-        this.minimumConfirmedSwings = positive(minimumConfirmedSwings, "minimumConfirmedSwings");
-        this.emaPeriod = positive(emaPeriod, "emaPeriod");
-        this.emaWarmupBars = nonNegative(emaWarmupBars, "emaWarmupBars");
-        this.emaSlopeLookback = positive(emaSlopeLookback, "emaSlopeLookback");
-        this.emaSlopeThreshold = requireText(emaSlopeThreshold, "emaSlopeThreshold");
-        this.atrPeriod = positive(atrPeriod, "atrPeriod");
-        this.atrBaselineLength = positive(atrBaselineLength, "atrBaselineLength");
+        this.triggerRequired = values.triggerRequired();
+        this.pivotRadius = positive(values.pivotRadius(), "pivotRadius");
+        this.minimumSeparationBars = positive(values.minimumSeparationBars(), "minimumSeparationBars");
+        this.minimumConfirmedSwings = positive(values.minimumConfirmedSwings(), "minimumConfirmedSwings");
+        this.emaPeriod = positive(values.emaPeriod(), "emaPeriod");
+        this.emaWarmupBars = nonNegative(values.emaWarmupBars(), "emaWarmupBars");
+        this.emaSlopeLookback = positive(values.emaSlopeLookback(), "emaSlopeLookback");
+        this.emaSlopeThreshold = requireText(values.emaSlopeThreshold(), "emaSlopeThreshold");
+        this.atrPeriod = positive(values.atrPeriod(), "atrPeriod");
+        this.atrBaselineLength = positive(values.atrBaselineLength(), "atrBaselineLength");
         this.abnormalAtrRatioThreshold = requireText(
-                abnormalAtrRatioThreshold, "abnormalAtrRatioThreshold");
-        this.extensionAtrMultiple = requireText(extensionAtrMultiple, "extensionAtrMultiple");
-        this.pullbackMinimumBars = positive(pullbackMinimumBars, "pullbackMinimumBars");
-        this.reclaimWindowBars = positive(reclaimWindowBars, "reclaimWindowBars");
-        this.freshnessMultiplier = positive(freshnessMultiplier, "freshnessMultiplier");
+                values.abnormalAtrRatioThreshold(), "abnormalAtrRatioThreshold");
+        this.extensionAtrMultiple = requireText(values.extensionAtrMultiple(), "extensionAtrMultiple");
+        this.pullbackMinimumBars = positive(values.pullbackMinimumBars(), "pullbackMinimumBars");
+        this.reclaimWindowBars = positive(values.reclaimWindowBars(), "reclaimWindowBars");
+        this.freshnessMultiplier = positive(values.freshnessMultiplier(), "freshnessMultiplier");
     }
 
     public static TrendContextProfile conservativeSwingV1(
@@ -93,7 +73,7 @@ public final class TrendContextProfile {
             String profileVersion,
             Map<TrendContextRole, TrendContextRoleDefinition> roles
     ) {
-        return new TrendContextProfile(
+        return new TrendContextProfile(new Values(
                 CONSERVATIVE_SWING_V1,
                 profileVersion,
                 roles,
@@ -112,8 +92,16 @@ public final class TrendContextProfile {
                 2,
                 2,
                 2
-        );
+        ));
     }
+
+    private record Values(String profileId, String profileVersion,
+            Map<TrendContextRole, TrendContextRoleDefinition> roles, boolean triggerRequired,
+            int pivotRadius, int minimumSeparationBars, int minimumConfirmedSwings,
+            int emaPeriod, int emaWarmupBars, int emaSlopeLookback, String emaSlopeThreshold,
+            int atrPeriod, int atrBaselineLength, String abnormalAtrRatioThreshold,
+            String extensionAtrMultiple, int pullbackMinimumBars, int reclaimWindowBars,
+            int freshnessMultiplier) { }
 
     public String profileId() { return profileId; }
     public String profileVersion() { return profileVersion; }

@@ -24,10 +24,11 @@ public class MiSecurityConfiguration {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(
+        SecurityFilterChain securityFilterChain(
             HttpSecurity http, MiJwtAuthenticationFilter jwtAuthenticationFilter,
             MiServiceJwtAuthenticationFilter serviceJwtAuthenticationFilter)
-            throws Exception {
+            {
+        // All authenticated requests use Authorization: Bearer JWT; no browser session cookie is accepted.
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -49,6 +50,10 @@ public class MiSecurityConfiguration {
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(serviceJwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class);
-        return http.build();
+        try {
+            return http.build();
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to build Market Intelligence security filter chain", exception);
+        }
     }
 }

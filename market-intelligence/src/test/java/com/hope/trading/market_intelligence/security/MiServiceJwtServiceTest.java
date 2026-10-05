@@ -36,25 +36,28 @@ class MiServiceJwtServiceTest {
 
     @Test
     void rejectsWrongAudience() {
-        assertThatThrownBy(() -> receiver().validate(
-                token(CORE_SECRET, "trading-core", "broker-service", null,
-                        Instant.now().plusSeconds(60))))
+        MiServiceJwtService receiver = receiver();
+        String token = token(CORE_SECRET, "trading-core", "broker-service", null,
+                Instant.now().plusSeconds(60));
+        assertThatThrownBy(() -> receiver.validate(token))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsInvalidSignature() {
-        assertThatThrownBy(() -> receiver().validate(
-                token(OTHER_SECRET, "trading-core", "market-intelligence", null,
-                        Instant.now().plusSeconds(60))))
+        MiServiceJwtService receiver = receiver();
+        String token = token(OTHER_SECRET, "trading-core", "market-intelligence", null,
+                Instant.now().plusSeconds(60));
+        assertThatThrownBy(() -> receiver.validate(token))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsExpiredToken() {
-        assertThatThrownBy(() -> receiver().validate(
-                token(CORE_SECRET, "trading-core", "market-intelligence", null,
-                        Instant.now().minusSeconds(1))))
+        MiServiceJwtService receiver = receiver();
+        String token = token(CORE_SECRET, "trading-core", "market-intelligence", null,
+                Instant.now().minusSeconds(1));
+        assertThatThrownBy(() -> receiver.validate(token))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -63,7 +66,8 @@ class MiServiceJwtServiceTest {
         String token = token(CORE_SECRET, "other-service", "market-intelligence", null,
                 Instant.now().plusSeconds(60));
 
-        assertThatThrownBy(() -> receiver().validate(token))
+        MiServiceJwtService receiver = receiver();
+        assertThatThrownBy(() -> receiver.validate(token))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

@@ -43,29 +43,24 @@ public class ActiveScanScopeResolutionService {
     }
 
     public ActiveScanScopeResolutionResult resolve(ActiveScanScopeResolutionRequest request) {
-        TradingCoreAccountClient.TradingCoreAccountResponse account =
-                requireOwnedAccount(request.accountId());
-        return resolveMarkets(request, account);
+        requireOwnedAccount(request.accountId());
+        return resolveMarkets(request);
     }
 
     public DecisionContextResolution resolveDecisionContext(UUID accountId) {
         TradingCoreAccountClient.TradingCoreAccountResponse account = requireOwnedAccount(accountId);
         ActiveScanScopeResolutionResult scope = resolveMarkets(
-                new ActiveScanScopeResolutionRequest(accountId, "", null, MarketScopeMode.ALL_ELIGIBLE), account,
+                new ActiveScanScopeResolutionRequest(accountId, "", null, MarketScopeMode.ALL_ELIGIBLE),
                 false);
         return new DecisionContextResolution(account, scope);
     }
 
-    private ActiveScanScopeResolutionResult resolveMarkets(
-            ActiveScanScopeResolutionRequest request,
-            TradingCoreAccountClient.TradingCoreAccountResponse account
-    ) {
-        return resolveMarkets(request, account, true);
+    private ActiveScanScopeResolutionResult resolveMarkets(ActiveScanScopeResolutionRequest request) {
+        return resolveMarkets(request, true);
     }
 
     private ActiveScanScopeResolutionResult resolveMarkets(
             ActiveScanScopeResolutionRequest request,
-            TradingCoreAccountClient.TradingCoreAccountResponse account,
             boolean applyEligibilityPolicy
     ) {
         MarketScopeMode mode = resolveScopeMode(request);

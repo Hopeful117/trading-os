@@ -10,28 +10,40 @@ import java.util.UUID;
  * make {@link ObservationBuilder} the only production caller.
  */
 public final class ObservationFactory {
-    public Observation create(
-            UUID lineageId, long version, String instrument, ObservationType type,
-            String title, String explanation, Set<String> categories, String horizon,
-            Instant createdAt, Instant validFrom, Instant validUntil, UUID supersedes,
-            String ruleVersion, List<ObservationEvidence> evidence
-    ) {
-        return create(lineageId, version, instrument, type, title, explanation, categories,
-                horizon, createdAt, validFrom, validUntil, supersedes, ruleVersion, evidence, null);
+    public Observation create(CreateValues values) {
+        return new Observation(
+                UUID.randomUUID(), values.lineageId(), values.version(), values.instrument(),
+                values.type(), ObservationStatus.ACTIVE, values.title(), values.explanation(),
+                values.categories(), values.horizon(), values.createdAt(), values.validFrom(),
+                values.validUntil(), values.supersedes(), null, values.ruleVersion(),
+                List.copyOf(values.evidence()), ObservationConfidence.from(values.evidence()),
+                values.payload());
     }
 
-    public Observation create(
-            UUID lineageId, long version, String instrument, ObservationType type,
+    @SuppressWarnings("java:S107")
+    public Observation create(UUID lineageId, long version, String instrument, ObservationType type,
             String title, String explanation, Set<String> categories, String horizon,
             Instant createdAt, Instant validFrom, Instant validUntil, UUID supersedes,
-            String ruleVersion, List<ObservationEvidence> evidence, ObservationPayload payload
-    ) {
-        List<ObservationEvidence> copy = List.copyOf(evidence);
-        return new Observation(
-                UUID.randomUUID(), lineageId, version, instrument, type, ObservationStatus.ACTIVE,
-                title, explanation, categories, horizon, createdAt, validFrom, validUntil,
-                supersedes, null, ruleVersion, copy, ObservationConfidence.from(copy), payload);
+            String ruleVersion, List<ObservationEvidence> evidence) {
+        return create(new CreateValues(lineageId, version, instrument, type, title, explanation,
+                categories, horizon, createdAt, validFrom, validUntil, supersedes, ruleVersion,
+                evidence, null));
     }
+
+    @SuppressWarnings("java:S107")
+    public Observation create(UUID lineageId, long version, String instrument, ObservationType type,
+            String title, String explanation, Set<String> categories, String horizon,
+            Instant createdAt, Instant validFrom, Instant validUntil, UUID supersedes,
+            String ruleVersion, List<ObservationEvidence> evidence, ObservationPayload payload) {
+        return create(new CreateValues(lineageId, version, instrument, type, title, explanation,
+                categories, horizon, createdAt, validFrom, validUntil, supersedes, ruleVersion,
+                evidence, payload));
+    }
+
+    public record CreateValues(UUID lineageId, long version, String instrument, ObservationType type,
+            String title, String explanation, Set<String> categories, String horizon,
+            Instant createdAt, Instant validFrom, Instant validUntil, UUID supersedes,
+            String ruleVersion, List<ObservationEvidence> evidence, ObservationPayload payload) { }
 
     public Observation superseded(Observation current, UUID supersededBy) {
         return new Observation(
@@ -55,27 +67,19 @@ public final class ObservationFactory {
                 current.payload().orElse(null));
     }
 
-    public Observation restore(
-            UUID id, UUID lineageId, long version, String instrument, ObservationType type,
-            ObservationStatus status, String title, String explanation, Set<String> categories,
-            String horizon, Instant createdAt, Instant validFrom, Instant validUntil,
-            UUID supersedes, UUID supersededBy, String ruleVersion,
-            List<ObservationEvidence> evidence) {
-        return restore(id, lineageId, version, instrument, type, status, title, explanation,
-                categories, horizon, createdAt, validFrom, validUntil, supersedes,
-                supersededBy, ruleVersion, evidence, null);
+    public Observation restore(RestoreValues values) {
+        List<ObservationEvidence> copy = List.copyOf(values.evidence());
+        return new Observation(
+                values.id(), values.lineageId(), values.version(), values.instrument(), values.type(),
+                values.status(), values.title(), values.explanation(), values.categories(), values.horizon(),
+                values.createdAt(), values.validFrom(), values.validUntil(), values.supersedes(),
+                values.supersededBy(), values.ruleVersion(), copy, ObservationConfidence.from(copy),
+                values.payload());
     }
 
-    public Observation restore(
-            UUID id, UUID lineageId, long version, String instrument, ObservationType type,
-            ObservationStatus status, String title, String explanation, Set<String> categories,
-            String horizon, Instant createdAt, Instant validFrom, Instant validUntil,
-            UUID supersedes, UUID supersededBy, String ruleVersion,
-            List<ObservationEvidence> evidence, ObservationPayload payload) {
-        List<ObservationEvidence> copy = List.copyOf(evidence);
-        return new Observation(
-                id, lineageId, version, instrument, type, status, title, explanation,
-                categories, horizon, createdAt, validFrom, validUntil, supersedes,
-                supersededBy, ruleVersion, copy, ObservationConfidence.from(copy), payload);
-    }
+    public record RestoreValues(UUID id, UUID lineageId, long version, String instrument,
+            ObservationType type, ObservationStatus status, String title, String explanation,
+            Set<String> categories, String horizon, Instant createdAt, Instant validFrom,
+            Instant validUntil, UUID supersedes, UUID supersededBy, String ruleVersion,
+            List<ObservationEvidence> evidence, ObservationPayload payload) { }
 }

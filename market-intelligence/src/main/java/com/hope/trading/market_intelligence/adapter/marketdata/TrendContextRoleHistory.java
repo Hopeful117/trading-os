@@ -1,6 +1,5 @@
 package com.hope.trading.market_intelligence.adapter.marketdata;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.hope.trading.market_intelligence.domain.ContextPayload;
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextRole;
 
@@ -11,7 +10,6 @@ import java.util.Map;
 import java.util.Objects;
 
 /** Immutable role-scoped source context assembled for one analysis boundary. */
-@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, property = "@class")
 public record TrendContextRoleHistory(
         Map<TrendContextRole, List<OhlcResponse>> responsesByRole,
         Instant assessmentAt,

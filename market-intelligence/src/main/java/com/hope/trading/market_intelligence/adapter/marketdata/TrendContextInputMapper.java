@@ -3,13 +3,10 @@ package com.hope.trading.market_intelligence.adapter.marketdata;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,41 +34,72 @@ public class TrendContextInputMapper {
                 new EnumMap<>(TrendContextRole.class);
 
         for (TrendContextRole role : TrendContextRole.values()) {
-            List<OhlcResponse> responses = responsesByRole.get(role);
-            TrendContextRoleDefinition definition = profile.roles().get(role);
-            if (responses == null || responses.isEmpty()) {
-                if (definition != null && definition.required()) {
-                    throw new IllegalArgumentException("Missing required role: " + role);
-                }
+            MappingState state = new MappingState(marketId, provider, symbol);
+            RoleMappingResult mapping = mapRoleIfPresent(
+                    role, responsesByRole.get(role), profile.roles().get(role),
+                    state, assessmentAt, cutOffAt);
+            if (mapping == null) {
                 continue;
             }
-            if (definition == null) {
-                throw new IllegalArgumentException("Role is not configured: " + role);
-            }
-            for (OhlcResponse response : responses) {
-                if (!definition.interval().equals(normalize(response.interval()))) {
-                    throw new IllegalArgumentException("Role interval mismatch: " + role);
-                }
-                if (marketId == null) marketId = response.marketId();
-                if (provider == null) provider = response.provider();
-                if (symbol == null) symbol = response.symbol();
-                if (!Objects.equals(marketId, response.marketId())
-                        || !Objects.equals(provider, response.provider())
-                        || !Objects.equals(symbol, response.symbol())) {
-                    throw new IllegalArgumentException("Market source identity mismatch");
-                }
-            }
-            RoleMapping mapping = mapRole(
-                    role, responses, definition, responseMarketId(responses), assessmentAt, cutOffAt);
+            marketId = mapping.marketId();
+            provider = mapping.provider();
+            symbol = mapping.symbol();
             roleSeries.put(role, mapping.series());
         }
 
         if (marketId == null || provider == null || symbol == null) {
             throw new IllegalArgumentException("No Trend Context market evidence supplied");
         }
-        return TrendContextAssessmentInput.accept(
+        return TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
                 marketId, provider, symbol, assessmentAt, cutOffAt,
-                profile, ruleVersion, roleSeries);
+                profile, ruleVersion, roleSeries));
+    }
+
+    private RoleMappingResult mapRoleIfPresent(TrendContextRole role,
+            List<OhlcResponse> responses, TrendContextRoleDefinition definition,
+            MappingState state, Instant assessmentAt,
+            Instant cutOffAt) {
+        if (responses == null || responses.isEmpty()) {
+            if (definition != null && definition.required()) {
+                throw new IllegalArgumentException("Missing required role: " + role);
+            }
+            return null;
+        }
+        if (definition == null) {
+            throw new IllegalArgumentException("Role is not configured: " + role);
+        }
+        SourceIdentity identity = validateResponses(role, responses, definition,
+                state.marketId(), state.provider(), state.symbol());
+        RoleMapping mapping = mapRole(
+                role, responses, definition, responseMarketId(responses), assessmentAt, cutOffAt);
+        return new RoleMappingResult(mapping.series(), identity.marketId(), identity.provider(), identity.symbol());
+    }
+
+    private SourceIdentity validateResponses(TrendContextRole role, List<OhlcResponse> responses,
+            TrendContextRoleDefinition definition, UUID marketId, String provider, String symbol) {
+        UUID resolvedMarketId = marketId;
+        String resolvedProvider = provider;
+        String resolvedSymbol = symbol;
+        for (OhlcResponse response : responses) {
+            if (!definition.interval().equals(normalize(response.interval()))) {
+                throw new IllegalArgumentException("Role interval mismatch: " + role);
+            }
+            if (resolvedMarketId == null) {
+                resolvedMarketId = response.marketId();
+            }
+            if (resolvedProvider == null) {
+                resolvedProvider = response.provider();
+            }
+            if (resolvedSymbol == null) {
+                resolvedSymbol = response.symbol();
+            }
+            if (!Objects.equals(resolvedMarketId, response.marketId())
+                    || !Objects.equals(resolvedProvider, response.provider())
+                    || !Objects.equals(resolvedSymbol, response.symbol())) {
+                throw new IllegalArgumentException("Market source identity mismatch");
+            }
+        }
+        return new SourceIdentity(resolvedMarketId, resolvedProvider, resolvedSymbol);
     }
 
     private RoleMapping mapRole(
@@ -135,9 +163,9 @@ public class TrendContextInputMapper {
                 assessmentAt,
                 true,
                 !eligible.isEmpty());
-        return new RoleMapping(TrendContextRoleSeries.of(
+        return new RoleMapping(TrendContextRoleSeries.of(new TrendContextRoleSeries.Values(
                 role, definition.interval(), candles, exclusions, gaps,
-                source, freshness, cutOffAt));
+                source, freshness, cutOffAt)));
     }
 
     private TrendContextCandle toCandle(OhlcResponse response) {
@@ -206,5 +234,15 @@ public class TrendContextInputMapper {
     }
 
     private record RoleMapping(TrendContextRoleSeries series) {
+    }
+
+    private record RoleMappingResult(TrendContextRoleSeries series, UUID marketId,
+                                     String provider, String symbol) {
+    }
+
+    private record SourceIdentity(UUID marketId, String provider, String symbol) {
+    }
+
+    private record MappingState(UUID marketId, String provider, String symbol) {
     }
 }

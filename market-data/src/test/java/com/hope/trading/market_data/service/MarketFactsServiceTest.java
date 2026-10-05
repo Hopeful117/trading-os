@@ -2,7 +2,6 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
-import com.hope.trading.market_data.model.MarketDataReadiness;
 import com.hope.trading.market_data.model.MarketFactStatus;
 import com.hope.trading.market_data.model.MarketFactsRequest;
 import com.hope.trading.market_data.model.MarketFactsResponse;
@@ -23,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -222,6 +222,73 @@ class MarketFactsServiceTest {
         assertThat(response.activity().status()).isEqualTo(MarketFactStatus.UNAVAILABLE);
         assertThat(response.readiness().status()).isEqualTo(MarketFactStatus.UNAVAILABLE);
         verify(historyService).findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4);
+    }
+
+    @Test
+    void unsupportedProviderIsReportedExplicitly() {
+        when(historyService.findOhlcHistorySnapshot(any(), eq(OhlcInterval.ONE_MINUTE), eq(4)))
+                .thenThrow(new UnsupportedOperationException("not supported"));
+
+        MarketFactsResponse response = service.find(request(3));
+
+        assertThat(response.activity().status()).isEqualTo(MarketFactStatus.UNSUPPORTED);
+        assertThat(response.readiness().status()).isEqualTo(MarketFactStatus.UNSUPPORTED);
+    }
+
+    @Test
+    void missingMarketIsRejectedBeforeProviderAccess() {
+        when(marketService.findById(MARKET_ID)).thenReturn(Optional.empty());
+        MarketFactsRequest request = request(3);
+
+        assertThatThrownBy(() -> service.find(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Market not found");
+    }
+
+    @Test
+    void activityEvidenceCanBeStaleWhileStillMatchingTheRequestedWindow() {
+        Instant staleBoundary = Instant.parse("2026-10-03T12:00:10Z");
+        service = new MarketFactsService(marketService, historyService,
+                Clock.fixed(staleBoundary, ZoneOffset.UTC));
+        List<OhlcEvent> events = List.of(
+                event("2026-10-03T11:58:00Z", true, "3", "100"),
+                event("2026-10-03T11:59:00Z", true, "4", "100"));
+        when(historyService.findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 3))
+                .thenReturn(new MarketHistorySnapshot(events, events));
+
+        MarketFactsResponse response = service.find(new MarketFactsRequest(
+                MARKET_ID, OhlcInterval.ONE_MINUTE, Duration.ofMinutes(2),
+                2, 2, Duration.ofSeconds(1)));
+
+        assertThat(response.activity().status()).isEqualTo(MarketFactStatus.STALE);
+    }
+
+    @Test
+    void incompleteResponseIsNotCached() {
+        when(historyService.findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4))
+                .thenReturn(new MarketHistorySnapshot(List.of(), List.of()));
+
+        service.find(request(3));
+        service.find(request(3));
+
+        verify(historyService, times(2))
+                .findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4);
+    }
+
+    @Test
+    void extremelyLargeFreshnessWindowDoesNotOverflowExpiryCheck() {
+        List<OhlcEvent> events = List.of(
+                event("2026-10-03T11:57:00Z", true, "2", "100"),
+                event("2026-10-03T11:58:00Z", true, "3", "100"),
+                event("2026-10-03T11:59:00Z", true, "4", "100"));
+        when(historyService.findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4))
+                .thenReturn(new MarketHistorySnapshot(events, events));
+
+        MarketFactsResponse response = service.find(new MarketFactsRequest(
+                MARKET_ID, OhlcInterval.ONE_MINUTE, Duration.ofMinutes(3),
+                3, 3, Duration.ofSeconds(Long.MAX_VALUE)));
+
+        assertThat(response.activity().status()).isEqualTo(MarketFactStatus.AVAILABLE);
     }
 
     @Test

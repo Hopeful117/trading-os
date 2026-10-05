@@ -136,9 +136,10 @@ class TrendContextObservationIntegrationTest {
                 Clock.fixed(TrendContextTestFixtures.ASSESSMENT_AT, ZoneOffset.UTC));
         UUID analysisId = UUID.randomUUID();
         executions.save(completed(analysisId, assessment(fingerprint('e'), fingerprint('f'))));
+        TrendContextObservationRule rule = new TrendContextObservationRule();
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                builder.build(analysisId, INSTRUMENT, new TrendContextObservationRule()))
+                builder.build(analysisId, INSTRUMENT, rule))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("persistence unavailable");
         verify(observations).save(any());

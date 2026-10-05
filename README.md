@@ -259,8 +259,8 @@ Exécuter toute la validation :
 ./scripts/test-all.sh
 ```
 
-Le script couvre les six applications Maven et le frontend. Le module
-autonome `risk-domain` se valide séparément :
+Le script couvre les sept applications Maven et le frontend, ainsi que le
+module autonome `risk-domain` qui réutilise le wrapper de `trading-core` :
 
 ```bash
 cd risk-domain && mvn test

@@ -12,11 +12,11 @@ import java.time.Instant;
 import java.util.*;
 
 public final class TrendContextObservationRule implements ObservationConsolidationRule {
-    public static final String VERSION = "trend-context-observation-v1";
+    public static final String RULE_VERSION = "trend-context-observation-v1";
 
     @Override
     public String version() {
-        return VERSION;
+        return RULE_VERSION;
     }
 
     @Override

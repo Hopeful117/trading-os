@@ -1,7 +1,8 @@
 export type TrendContextOperationalStatus =
-  'AVAILABLE' | 'STALE' | 'UNAVAILABLE' | 'FAILED' | 'IN_PROGRESS' | 'MISSING' | string;
+  'AVAILABLE' | 'STALE' | 'UNAVAILABLE' | 'FAILED' | 'IN_PROGRESS' | 'MISSING' | (string & {});
 
-export type TrendContextAssessmentValidity = 'VALID' | 'HISTORICAL' | 'EXPIRED' | 'NONE' | string;
+export type TrendContextAssessmentValidity =
+  'VALID' | 'HISTORICAL' | 'EXPIRED' | 'NONE' | (string & {});
 export type TrendContextRole = 'BIAS' | 'SETUP' | 'TRIGGER';
 export type TrendDirection = 'UP' | 'DOWN' | 'NEUTRAL' | 'UNKNOWN';
 export type TrendRegime = 'TRENDING' | 'TRANSITIONING' | 'NON_DIRECTIONAL' | 'UNKNOWN';

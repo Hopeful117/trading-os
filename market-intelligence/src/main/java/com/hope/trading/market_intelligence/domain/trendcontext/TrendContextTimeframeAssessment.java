@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.domain.trendcontext;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonCreator;
 
 import java.util.List;
 import java.util.Objects;
@@ -28,25 +29,37 @@ public final class TrendContextTimeframeAssessment {
     private final List<TrendContextFinding> findings;
     private final List<TrendContextEvidenceReference> evidence;
 
-    public TrendContextTimeframeAssessment(TrendContextRole role, String interval,
-            TrendDirection direction, TrendRegime regime, TrendPhase phase,
-            List<ConfirmedSwing> swings, List<ConfirmedSwing> suppressedSwings,
-            SwingRelation highRelation, SwingRelation lowRelation, ProtectedLevel protectedLevel,
-            StructuralBreak structuralBreak, TrendPullbackAssessment pullback,
-            TrendExtensionAssessment extension, TrendEmaEvidence ema, TrendAtrEvidence atr,
-            List<StructuralLevel> levels, TrendInvalidation invalidation, boolean fresh,
-            List<TrendContextFinding> findings, List<TrendContextEvidenceReference> evidence) {
-        this.role = Objects.requireNonNull(role); this.interval = Objects.requireNonNull(interval);
-        this.direction = Objects.requireNonNull(direction); this.regime = Objects.requireNonNull(regime);
-        this.phase = Objects.requireNonNull(phase); this.swings = List.copyOf(swings);
-        this.suppressedSwings = List.copyOf(suppressedSwings); this.highRelation = highRelation;
-        this.lowRelation = lowRelation; this.protectedLevel = protectedLevel;
-        this.structuralBreak = Objects.requireNonNull(structuralBreak); this.pullback = Objects.requireNonNull(pullback);
-        this.extension = Objects.requireNonNull(extension); this.ema = Objects.requireNonNull(ema);
-        this.atr = Objects.requireNonNull(atr); this.levels = List.copyOf(levels);
-        this.invalidation = invalidation; this.fresh = fresh; this.findings = List.copyOf(findings);
-        this.evidence = List.copyOf(evidence);
+    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+    public TrendContextTimeframeAssessment(Values values) {
+        this.role = Objects.requireNonNull(values.role());
+        this.interval = Objects.requireNonNull(values.interval());
+        this.direction = Objects.requireNonNull(values.direction());
+        this.regime = Objects.requireNonNull(values.regime());
+        this.phase = Objects.requireNonNull(values.phase());
+        this.swings = List.copyOf(values.swings());
+        this.suppressedSwings = List.copyOf(values.suppressedSwings());
+        this.highRelation = values.highRelation();
+        this.lowRelation = values.lowRelation();
+        this.protectedLevel = values.protectedLevel();
+        this.structuralBreak = Objects.requireNonNull(values.structuralBreak());
+        this.pullback = Objects.requireNonNull(values.pullback());
+        this.extension = Objects.requireNonNull(values.extension());
+        this.ema = Objects.requireNonNull(values.ema());
+        this.atr = Objects.requireNonNull(values.atr());
+        this.levels = List.copyOf(values.levels());
+        this.invalidation = values.invalidation();
+        this.fresh = values.fresh();
+        this.findings = List.copyOf(values.findings());
+        this.evidence = List.copyOf(values.evidence());
     }
+    public record Values(TrendContextRole role, String interval, TrendDirection direction,
+            TrendRegime regime, TrendPhase phase, List<ConfirmedSwing> swings,
+            List<ConfirmedSwing> suppressedSwings, SwingRelation highRelation,
+            SwingRelation lowRelation, ProtectedLevel protectedLevel, StructuralBreak structuralBreak,
+            TrendPullbackAssessment pullback, TrendExtensionAssessment extension,
+            TrendEmaEvidence ema, TrendAtrEvidence atr, List<StructuralLevel> levels,
+            TrendInvalidation invalidation, boolean fresh, List<TrendContextFinding> findings,
+            List<TrendContextEvidenceReference> evidence) { }
     public TrendContextRole role() { return role; }
     public String interval() { return interval; }
     public TrendDirection direction() { return direction; }

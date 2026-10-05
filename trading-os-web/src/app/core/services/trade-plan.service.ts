@@ -13,7 +13,7 @@ import {
   providedIn: 'root',
 })
 export class TradePlanService {
-  private http = inject(HttpClient);
+  private readonly http = inject(HttpClient);
 
   createFromOpportunity(
     opportunityId: string,

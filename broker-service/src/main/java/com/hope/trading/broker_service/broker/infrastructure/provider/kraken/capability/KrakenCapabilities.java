@@ -21,8 +21,11 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
         PositionCapability,OrderCapability,ExecutionCapability,ReconciliationCapability,
         TechnicalCapability,MarginCapability {
     private static final String PROVIDER = "KRAKEN";
-    private final ProviderCredentialSession sessions; private final KrakenProviderClient client;
-    private final KrakenOrderMapper mapper; private final Clock clock; private final KrakenProperties properties;
+    private final ProviderCredentialSession sessions;
+    private final KrakenProviderClient client;
+    private final KrakenOrderMapper mapper;
+    private final Clock clock;
+    private final KrakenProperties properties;
     public KrakenCapabilities(ProviderCredentialSession sessions,KrakenProviderClient client,KrakenOrderMapper mapper,Clock clock){this(sessions,client,mapper,clock,new KrakenProperties());}
     @Autowired
     public KrakenCapabilities(ProviderCredentialSession sessions,KrakenProviderClient client,KrakenOrderMapper mapper,Clock clock,KrakenProperties properties){this.sessions=sessions;this.client=client;this.mapper=mapper;this.clock=clock;this.properties=properties;}

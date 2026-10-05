@@ -11,6 +11,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/internal/v1/trade-plans/{planId}/versions/{version}")
@@ -36,7 +37,8 @@ public class InternalTradePlanDecisionController {
             @PathVariable UUID planId, @PathVariable long version,
             @Valid @RequestBody DecisionRequest request, Authentication authentication) {
         UUID actorId = ((com.hope.trading.market_intelligence.security.MiServicePrincipal)
-                authentication.getPrincipal()).requireMatchingActor(request.actorId());
+                Objects.requireNonNull(authentication.getPrincipal(), "principal is required"))
+                .requireMatchingActor(request.actorId());
         var decided = service.decide(planId, version, actorId,
                 TradePlanDecisionService.Decision.valueOf(request.decision()));
         return ResponseEntity.ok(view(decided));
@@ -47,7 +49,8 @@ public class InternalTradePlanDecisionController {
             @PathVariable UUID planId, @PathVariable long version,
             Authentication authentication) {
         UUID actorId = ((com.hope.trading.market_intelligence.security.MiServicePrincipal)
-                authentication.getPrincipal()).requireDelegatedActor();
+                Objects.requireNonNull(authentication.getPrincipal(), "principal is required"))
+                .requireDelegatedActor();
         return ResponseEntity.ok(view(service.loadForActor(planId, version, actorId)));
     }
 

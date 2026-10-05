@@ -14,7 +14,7 @@ import {
   providedIn: 'root',
 })
 export class ActiveScanService {
-  private http = inject(HttpClient);
+  private readonly http = inject(HttpClient);
 
   createScan(
     request: CreateActiveScanRequest,

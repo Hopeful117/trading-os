@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
 
 public class TradePlanRiskHandoffService {
+    private static final String CONTEXT_NOT_FOUND = "Referenced Trading Context snapshot not found";
     private final TradePlanRepository plans;
     private final TradePlanningContextRepository contexts;
     private final TradePlanRiskValidationBoundary lifecycle;
@@ -61,7 +62,7 @@ public class TradePlanRiskHandoffService {
         TradePlanningContext context = contexts.find(
                         requested.planningContext().id(), requested.planningContext().version())
                 .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
-                        "Referenced Trading Context snapshot not found"));
+                        CONTEXT_NOT_FOUND));
         if (!context.capturedAt().equals(requested.planningContext().capturedAt())) {
             throw TradePlanRiskHandoffException.conflict(
                     "TRADING_CONTEXT_MISMATCH", "Referenced Trading Context identity is inconsistent");
@@ -90,7 +91,7 @@ public class TradePlanRiskHandoffService {
         TradePlanningContext context = contexts.find(
                         ready.planningContext().id(), ready.planningContext().version())
                 .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
-                        "Referenced Trading Context snapshot not found"));
+                        CONTEXT_NOT_FOUND));
         return snapshot(ready, context);
     }
 
@@ -104,7 +105,7 @@ public class TradePlanRiskHandoffService {
         TradePlanningContext context = contexts.find(
                         ready.planningContext().id(), ready.planningContext().version())
                 .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
-                        "Referenced Trading Context snapshot not found"));
+                        CONTEXT_NOT_FOUND));
         return snapshot(ready, context);
     }
 

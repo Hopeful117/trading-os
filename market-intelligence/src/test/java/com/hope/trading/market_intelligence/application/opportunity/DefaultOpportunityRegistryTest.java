@@ -6,6 +6,7 @@ import com.hope.trading.market_intelligence.domain.opportunity.*;
 import org.junit.jupiter.api.Test;
 
 import java.time.*;
+import java.util.Collection;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,7 +20,7 @@ class DefaultOpportunityRegistryTest {
         InMemoryTradingOpportunityRepository repository =
                 new InMemoryTradingOpportunityRepository();
         OpportunityEngine engine = new OpportunityEngine(
-                observationStore, references -> references.isEmpty(), repository,
+                observationStore, Collection::isEmpty, repository,
                 new DeterministicOpportunityFusionPolicy(),
                 new OpportunityDeduplicationPolicy(Duration.ofMinutes(15)),
                 new OpportunityLifecyclePolicy(), new OpportunityFactory(),

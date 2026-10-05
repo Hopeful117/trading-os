@@ -369,6 +369,7 @@ class ActiveScanApplicationServiceTest {
 
         @Override
         public void cancel(UUID executionId) {
+            // The application service tests exercise dispatch registration only.
         }
     }
 

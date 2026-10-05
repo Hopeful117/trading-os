@@ -7,9 +7,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumMap;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,28 +41,33 @@ class TrendContextAssessmentInputTest {
 
     @Test
     void rejectsMissingRequiredBiasAndSetup() {
-        assertThatThrownBy(() -> input(profile(), (TrendContextCandle) null, realCandle("setup", "1H")))
+        TrendContextProfile profile = profile();
+        TrendContextCandle setup = realCandle("setup", "1H");
+        TrendContextCandle bias = realCandle("bias", "4H");
+        assertThatThrownBy(() -> input(profile, (TrendContextCandle) null, setup))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("REQUIRED_ROLE_MISSING");
-        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"), (TrendContextCandle) null))
+        assertThatThrownBy(() -> input(profile, bias, (TrendContextCandle) null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("REQUIRED_ROLE_MISSING");
     }
 
     @Test
     void rejectsRoleIntervalMismatchAndInvalidOrdering() {
-        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"),
-                realCandle("setup", "15M")))
+        TrendContextProfile profile = profile();
+        TrendContextCandle bias = realCandle("bias", "4H");
+        TrendContextCandle setup = realCandle("setup", "15M");
+        assertThatThrownBy(() -> input(profile, bias, setup))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("ROLE_INTERVAL_MISMATCH");
 
-        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(
-                roles("1H", "4H")))
+        EnumMap<TrendContextRole, TrendContextRoleDefinition> invalidOrder = roles("1H", "4H");
+        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(invalidOrder))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SETUP interval must be finer");
 
-        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(
-                roles("1H", "1H")))
+        EnumMap<TrendContextRole, TrendContextRoleDefinition> equalOrder = roles("1H", "1H");
+        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(equalOrder))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SETUP interval must be finer");
     }
@@ -73,26 +77,29 @@ class TrendContextAssessmentInputTest {
         assertThatThrownBy(() -> new TrendContextRoleDefinition(
                 TrendContextRole.BIAS, "4H", Duration.ZERO, true, 1, 1))
                 .isInstanceOf(IllegalArgumentException.class);
+        Duration invalidMinimumDuration = Duration.ofHours(4);
         assertThatThrownBy(() -> new TrendContextRoleDefinition(
-                TrendContextRole.BIAS, "4H", Duration.ofHours(4), true, 2, 1))
+                TrendContextRole.BIAS, "4H", invalidMinimumDuration, true, 2, 1))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(
-                "", roles("4H", "1H")))
+        EnumMap<TrendContextRole, TrendContextRoleDefinition> validOrder = roles("4H", "1H");
+        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1("", validOrder))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsMalformedOhlcAndImpossibleTimestamps() {
-        TrendContextCandle malformed = candle("bad", "1H", "100", "99", "95", "98",
+        TrendContextCandle malformed = candle("1H", "100", "99", "95", "98",
                 true, false, "bad-ohlc", CUTOFF_AT.minus(Duration.ofHours(1)),
                 CUTOFF_AT, CUTOFF_AT);
-        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"), malformed))
+        TrendContextProfile profile = profile();
+        TrendContextCandle bias = realCandle("bias", "4H");
+        assertThatThrownBy(() -> input(profile, bias, malformed))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("INVALID_OHLC");
 
-        TrendContextCandle impossible = candle("bad-time", "1H", "100", "105", "95", "102",
+        TrendContextCandle impossible = candle("1H", "100", "105", "95", "102",
                 true, false, "bad-time", CUTOFF_AT, CUTOFF_AT.minusSeconds(1), CUTOFF_AT);
-        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"), impossible))
+        assertThatThrownBy(() -> input(profile, bias, impossible))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("INVALID_TIMESTAMP");
     }
@@ -100,13 +107,13 @@ class TrendContextAssessmentInputTest {
     @Test
     void excludesOpenSyntheticAndCutoffCrossingEvidenceWithoutRejectingInput() {
         TrendContextCandle eligible = realCandle("eligible", "1H");
-        TrendContextCandle open = candle("open", "1H", "100", "105", "95", "102",
+        TrendContextCandle open = candle("1H", "100", "105", "95", "102",
                 false, false, "open", CUTOFF_AT.minus(Duration.ofHours(2)),
                 CUTOFF_AT.minus(Duration.ofHours(1)), FETCHED_AT);
-        TrendContextCandle synthetic = candle("synthetic", "1H", "100", "100", "100", "100",
+        TrendContextCandle synthetic = candle("1H", "100", "100", "100", "100",
                 true, true, "synthetic", CUTOFF_AT.minus(Duration.ofHours(3)),
                 CUTOFF_AT.minus(Duration.ofHours(2)), FETCHED_AT);
-        TrendContextCandle crossing = candle("crossing", "1H", "100", "105", "95", "102",
+        TrendContextCandle crossing = candle("1H", "100", "105", "95", "102",
                 true, false, "crossing", CUTOFF_AT, CUTOFF_AT.plus(Duration.ofHours(1)), FETCHED_AT);
 
         TrendContextAssessmentInput input = input(profile(), realCandle("bias", "4H"),
@@ -149,23 +156,23 @@ class TrendContextAssessmentInputTest {
         String base = input(profile(), realCandle("bias", "4H"), realCandle("setup", "1H"))
                 .fingerprint();
         assertThat(input(profile(), realCandle("bias", "4H"),
-                candle("setup", "1H", "101", "106", "96", "103", true, false,
+                candle("1H", "101", "106", "96", "103", true, false,
                         "setup", CUTOFF_AT.minus(Duration.ofHours(1)), CUTOFF_AT, FETCHED_AT)).fingerprint())
                 .isNotEqualTo(base);
         assertThat(input(profile(), realCandle("bias", "4H"),
-                candle("setup", "1H", "100", "105", "95", "102", false, false,
+                candle("1H", "100", "105", "95", "102", false, false,
                         "setup", CUTOFF_AT.minus(Duration.ofHours(1)), CUTOFF_AT, FETCHED_AT)).fingerprint())
                 .isNotEqualTo(base);
         assertThat(input(profile(), realCandle("bias", "4H"),
-                candle("setup", "1H", "100", "105", "95", "102", true, true,
+                candle("1H", "100", "105", "95", "102", true, true,
                         "setup-synthetic", CUTOFF_AT.minus(Duration.ofHours(1)), CUTOFF_AT, FETCHED_AT)).fingerprint())
                 .isNotEqualTo(base);
         assertThat(input(profile(), realCandle("bias", "4H"),
-                candle("setup", "1H", "100", "105", "95", "102", true, false,
+                candle("1H", "100", "105", "95", "102", true, false,
                         "setup-other", CUTOFF_AT.minus(Duration.ofHours(1)), CUTOFF_AT, FETCHED_AT)).fingerprint())
                 .isNotEqualTo(base);
         assertThat(input(profile(), realCandle("bias", "4H"),
-                candle("setup", "1H", "100", "105", "95", "102", true, false,
+                candle("1H", "100", "105", "95", "102", true, false,
                         "setup", CUTOFF_AT.minus(Duration.ofHours(1)), CUTOFF_AT, FETCHED_AT.plusSeconds(1))).fingerprint())
                 .isNotEqualTo(base);
         assertThat(input(profile(), realCandle("bias", "4H"), realCandle("setup", "1H"),
@@ -173,6 +180,19 @@ class TrendContextAssessmentInputTest {
                 .isNotEqualTo(base);
         assertThat(input(profile(), realCandle("bias", "4H"), realCandle("setup", "1H"),
                 CUTOFF_AT, "rules-2", profile(1, "1.0.0")).fingerprint()).isNotEqualTo(base);
+    }
+
+    private TrendContextAssessmentInput input(
+            TrendContextProfile expectedProfile,
+            TrendContextCandle bias,
+            TrendContextCandle setup,
+            Instant cutoff,
+            String ruleVersion,
+            TrendContextProfile actualProfile
+    ) {
+        Objects.requireNonNull(expectedProfile, "expectedProfile is required");
+        return inputWithRoleOrder(actualProfile, List.of(setup), false,
+                new TrendContextCandle[]{bias}, cutoff, ruleVersion);
     }
 
     private TrendContextAssessmentInput input(
@@ -191,18 +211,6 @@ class TrendContextAssessmentInputTest {
         return inputWithRoleOrder(profile, setup, false, new TrendContextCandle[]{bias});
     }
 
-    private TrendContextAssessmentInput input(
-            TrendContextProfile ignored,
-            TrendContextCandle bias,
-            TrendContextCandle setup,
-            Instant cutoff,
-            String ruleVersion,
-            TrendContextProfile actualProfile
-    ) {
-        return inputWithRoleOrder(actualProfile, List.of(setup), false,
-                new TrendContextCandle[]{bias}, cutoff, ruleVersion);
-    }
-
     private TrendContextAssessmentInput inputWithTrigger(
             TrendContextProfile profile,
             TrendContextCandle bias,
@@ -214,8 +222,9 @@ class TrendContextAssessmentInputTest {
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP, List.of(setup), CUTOFF_AT));
         roles.put(TrendContextRole.TRIGGER, series(TrendContextRole.TRIGGER,
                 List.of(trigger), CUTOFF_AT));
-        return TrendContextAssessmentInput.accept(MARKET_ID, "KRAKEN", "BTC/EUR",
-                ASSESSMENT_AT, CUTOFF_AT, profile, "rules-1", roles);
+        return TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+                MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, CUTOFF_AT,
+                profile, "rules-1", roles));
     }
 
     private TrendContextAssessmentInput inputWithRoleOrder(
@@ -249,8 +258,9 @@ class TrendContextAssessmentInputTest {
                 roles.put(TrendContextRole.SETUP, setupSeries);
             }
         }
-        return TrendContextAssessmentInput.accept(MARKET_ID, "KRAKEN", "BTC/EUR",
-                ASSESSMENT_AT, cutoff, profile, ruleVersion, roles);
+        return TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+                MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, cutoff,
+                profile, ruleVersion, roles));
     }
 
     private TrendContextRoleSeries series(
@@ -272,12 +282,13 @@ class TrendContextAssessmentInputTest {
                 exclusions.add(candle.sourceId() + ":CUTOFF_EXCLUDED");
             }
         }
-        return TrendContextRoleSeries.of(role, first.interval(), candles, exclusions, gaps,
+        return TrendContextRoleSeries.of(new TrendContextRoleSeries.Values(
+                role, first.interval(), candles, exclusions, gaps,
                 new TrendContextSourceReference("market-data", first.provider(), MARKET_ID,
                         first.symbol(), role, first.interval(), first.openTime(), first.openTime(),
                         first.sourceOccurredAt(), first.fetchedAt(), "snapshot", "digest"),
                 new TrendContextFreshness(Duration.ofHours(1), first.closeTime(),
-                        first.sourceOccurredAt(), first.fetchedAt(), ASSESSMENT_AT, true, true), cutoff);
+                        first.sourceOccurredAt(), first.fetchedAt(), ASSESSMENT_AT, true, true), cutoff));
     }
 
     private TrendContextProfile profile() { return profile(1, "1.0.0"); }
@@ -319,12 +330,11 @@ class TrendContextAssessmentInputTest {
     }
 
     private TrendContextCandle realCandle(String sourceId, String interval) {
-        return candle(sourceId, interval, "100", "105", "95", "102", true, false,
+        return candle(interval, "100", "105", "95", "102", true, false,
                 sourceId, CUTOFF_AT.minus(Duration.ofHours(1)), CUTOFF_AT, FETCHED_AT);
     }
 
     private TrendContextCandle candle(
-            String label,
             String interval,
             String open,
             String high,

@@ -3,7 +3,6 @@ package com.hope.trading.market_intelligence.domain.trendcontext;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumMap;
-import java.util.Map;
 import java.util.UUID;
 
 public final class TrendContextTestFixtures {
@@ -18,8 +17,8 @@ public final class TrendContextTestFixtures {
         series.put(TrendContextRole.BIAS, emptySeries(profile, TrendContextRole.BIAS));
         series.put(TrendContextRole.SETUP, emptySeries(profile, TrendContextRole.SETUP));
         return TrendContextStructureFixtures.assess(TrendContextAssessmentInput.accept(
-                MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, ASSESSMENT_AT,
-                profile, RULE_VERSION, series));
+                new TrendContextAssessmentInput.Values(MARKET_ID, "KRAKEN", "BTC/EUR",
+                        ASSESSMENT_AT, ASSESSMENT_AT, profile, RULE_VERSION, series)));
     }
 
     public static TrendContextProfile profile() {
@@ -52,9 +51,9 @@ public final class TrendContextTestFixtures {
         TrendContextFreshness freshness = new TrendContextFreshness(
                 definition.intervalDuration(), null, null, ASSESSMENT_AT,
                 ASSESSMENT_AT, true, false);
-        return TrendContextRoleSeries.of(
+        return TrendContextRoleSeries.of(new TrendContextRoleSeries.Values(
                 role, definition.interval(), java.util.List.of(), java.util.List.of(),
-                java.util.List.of(), source, freshness, ASSESSMENT_AT);
+                java.util.List.of(), source, freshness, ASSESSMENT_AT));
     }
 
     private TrendContextTestFixtures() {}

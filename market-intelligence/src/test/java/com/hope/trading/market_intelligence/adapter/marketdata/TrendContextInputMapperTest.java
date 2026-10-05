@@ -76,10 +76,12 @@ class TrendContextInputMapperTest {
                 setup.closeTime(), setup.open(), new BigDecimal("106"), setup.low(),
                 new BigDecimal("103"), setup.volume(), setup.vwap(), setup.trades(), setup.closed(),
                 setup.occurredAt(), setup.synthetic(), setup.sourceId(), setup.fetchedAt());
-        assertThatThrownBy(() -> mapper.map(
-                Map.of(TrendContextRole.BIAS, List.of(bias),
-                        TrendContextRole.SETUP, List.of(setup, conflicting)),
-                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1"))
+        Map<TrendContextRole, List<OhlcResponse>> conflictingInput = Map.of(
+                TrendContextRole.BIAS, List.of(bias),
+                TrendContextRole.SETUP, List.of(setup, conflicting));
+        TrendContextProfile profile = profile();
+        assertThatThrownBy(() -> mapper.map(conflictingInput, profile, ASSESSMENT_AT,
+                CUTOFF_AT, "trend-context-rules-1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Conflicting OHLC duplicate");
     }
@@ -96,10 +98,12 @@ class TrendContextInputMapperTest {
                 setup.volume(), setup.vwap(), setup.trades(), setup.closed(), setup.occurredAt(),
                 setup.synthetic(), setup.sourceId(), setup.fetchedAt());
 
-        assertThatThrownBy(() -> mapper.map(
-                Map.of(TrendContextRole.BIAS, List.of(bias),
-                        TrendContextRole.SETUP, List.of(differentProvider)),
-                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1"))
+        Map<TrendContextRole, List<OhlcResponse>> identityConflict = Map.of(
+                TrendContextRole.BIAS, List.of(bias),
+                TrendContextRole.SETUP, List.of(differentProvider));
+        TrendContextProfile profile = profile();
+        assertThatThrownBy(() -> mapper.map(identityConflict, profile, ASSESSMENT_AT,
+                CUTOFF_AT, "trend-context-rules-1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Market source identity mismatch");
     }

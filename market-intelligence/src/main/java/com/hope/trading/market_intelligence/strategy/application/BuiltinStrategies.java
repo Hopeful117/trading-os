@@ -32,8 +32,12 @@ import java.util.UUID;
  */
 @Component
 public final class BuiltinStrategies {
+    private static final String CRYPTO_MARKET = "CRYPTO";
+    static final String VALIDITY_DURATION = "validityDuration";
+    static final String HORIZON = "horizon";
 
     public BuiltinStrategies() {
+        // Spring instantiates this component; all strategy definitions are stateless.
     }
 
     /** Fixed logical identity of the bootstrap OHLC trend strategy. */
@@ -103,7 +107,7 @@ public final class BuiltinStrategies {
                 OHLC_RANGE_EXPANSION_SCENARIO,
                 StrategyDirection.DYNAMIC,
                 new StrategyApplicability(
-                        Set.of("CRYPTO"),
+                         Set.of(CRYPTO_MARKET),
                         Set.of(StrategyApplicability.Timeframe.M15),
                         Set.of("KRAKEN")),
                 Set.of(PRICE_CHANGE, RANGE_PERCENTAGE, OBSERVED_AT),
@@ -112,9 +116,9 @@ public final class BuiltinStrategies {
                                 StrategyParameter.ParameterType.DECIMAL, new BigDecimal("1")),
                         new StrategyParameter("minimumRangePercentage",
                                 StrategyParameter.ParameterType.DECIMAL, new BigDecimal("1")),
-                        new StrategyParameter("validityDuration",
+                         new StrategyParameter(VALIDITY_DURATION,
                                 StrategyParameter.ParameterType.DURATION, Duration.ofMinutes(30)),
-                        new StrategyParameter("horizon",
+                         new StrategyParameter(HORIZON,
                                 StrategyParameter.ParameterType.STRING, "15m"))),
                 null,
                 Instant.EPOCH);
@@ -137,14 +141,14 @@ public final class BuiltinStrategies {
                 LEGACY_OHLC_TREND_SCENARIO,
                 StrategyDirection.DYNAMIC,
                 new StrategyApplicability(
-                        Set.of("CRYPTO", "FOREX", "STOCK", "INDEX", "COMMODITY"),
+                         Set.of(CRYPTO_MARKET, "FOREX", "STOCK", "INDEX", "COMMODITY"),
                         Set.of(StrategyApplicability.Timeframe.M15),
                         Set.of()),
                 Set.of(PRICE_CHANGE, OBSERVED_AT),
                 new StrategyParameters(List.of(
-                        new StrategyParameter("validityDuration",
+                         new StrategyParameter(VALIDITY_DURATION,
                                 StrategyParameter.ParameterType.DURATION, Duration.ofMinutes(30)),
-                        new StrategyParameter("horizon",
+                         new StrategyParameter(HORIZON,
                                 StrategyParameter.ParameterType.STRING, "15m"))),
                 null,
                 Instant.EPOCH)
@@ -159,7 +163,7 @@ public final class BuiltinStrategies {
                 "Conservative setup criteria over persisted Trend Context evidence. Disabled and unvalidated.",
                 CONSERVATIVE_TREND_FOLLOWING_SCENARIO,
                 StrategyDirection.DYNAMIC,
-                new StrategyApplicability(Set.of("CRYPTO"),
+                new StrategyApplicability(Set.of(CRYPTO_MARKET),
                         Set.of(StrategyApplicability.Timeframe.M15), Set.of("KRAKEN")),
                 Set.of(TREND_ATTENTION, TREND_DIRECTION, TREND_REGIME, TREND_PHASE,
                         TREND_ALIGNMENT, TREND_HARD_EXCLUSION, TREND_CONTRADICTION,
@@ -235,13 +239,13 @@ class LegacyOhlcTrendEvaluator implements StrategyEvaluator {
     }
 
     private Duration validityDuration(StrategyDefinition definition) {
-        return definition.parameters().find("validityDuration")
+        return definition.parameters().find(BuiltinStrategies.VALIDITY_DURATION)
                 .map(StrategyParameter::durationValue)
                 .orElse(Duration.ofMinutes(30));
     }
 
     private String horizon(StrategyDefinition definition) {
-        return definition.parameters().find("horizon")
+        return definition.parameters().find(BuiltinStrategies.HORIZON)
                 .map(StrategyParameter::stringValue)
                 .orElse("15m");
     }

@@ -74,6 +74,8 @@ describe('PlanPage', () => {
     plan$: Observable<TradePlanResponse> = of(fakePlan('PROPOSED')),
     decide$: Observable<TradePlanResponse> = of(fakePlan('ACCEPTED')),
     risk$: Observable<RiskDecisionResponse> = of(fakeRiskDecision('APPROVED')),
+    validate$: Observable<unknown> = of({ id: 'exec-1', status: 'VALIDATED' }),
+    params: Record<string, string> = { planId: 'tp-1', version: '1' },
   ) {
     const tradePlanService = {
       getPlan: () => plan$,
@@ -81,7 +83,7 @@ describe('PlanPage', () => {
       evaluateRisk: () => risk$,
     };
     const executionService = {
-      validate: () => of({ id: 'exec-1', status: 'VALIDATED' } as any),
+      validate: () => validate$,
       execute: () => of({ id: 'exec-1', status: 'COMPLETED' } as any),
       list: () => of([]),
       getExecution: () => of({ id: 'exec-1', status: 'CREATED' } as any),
@@ -89,7 +91,7 @@ describe('PlanPage', () => {
     return TestBed.configureTestingModule({
       imports: [PlanPage],
       providers: [
-        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        { provide: ActivatedRoute, useValue: mockActivatedRoute(params) },
         { provide: TradePlanService, useValue: tradePlanService },
         { provide: ExecutionService, useValue: executionService },
       ],
@@ -280,5 +282,79 @@ describe('PlanPage', () => {
 
     expect(decide).toHaveBeenCalledTimes(1);
     expect(fixture.nativeElement.querySelector('[data-testid="deciding-state"]')).toBeTruthy();
+  });
+
+  it('shows an error when the plan reference is invalid', () => {
+    configureMocks(of(fakePlan('PROPOSED')), of(fakePlan('ACCEPTED')), of(fakeRiskDecision('APPROVED')), of({}), {});
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="error-state"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('reference is invalid');
+  });
+
+  it('renders an error when accepting or rejecting a plan fails', () => {
+    configureMocks(of(fakePlan('PROPOSED')), throwError(() => new Error('down')));
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="accept-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="error-state"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('decision could not be recorded');
+  });
+
+  it('renders an error when risk evaluation fails or the plan has no account', () => {
+    const planWithoutAccount = { ...fakePlan('ACCEPTED'), tradingAccountId: '' };
+    configureMocks(of(planWithoutAccount));
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('no trading account');
+  });
+
+  it('renders an error when risk evaluation fails', () => {
+    configureMocks(of(fakePlan('ACCEPTED')), of(fakePlan('ACCEPTED')), throwError(() => new Error('down')));
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Risk evaluation could not be completed');
+  });
+
+  it('renders an error when execution validation fails', () => {
+    configureMocks(
+      of(fakePlan('ACCEPTED')),
+      of(fakePlan('ACCEPTED')),
+      of(fakeRiskDecision('APPROVED')),
+      throwError(() => new Error('down')),
+    );
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="execute-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('trade could not be submitted');
+  });
+
+  it('formats known and unknown execution statuses', () => {
+    configureMocks();
+    fixture = TestBed.createComponent(PlanPage);
+
+    expect(fixture.componentInstance.statusLabel('COMPLETED')).toBe('Accepted by broker');
+    expect(fixture.componentInstance.statusLabel('FAILED')).toBe('Execution failed');
+    expect(fixture.componentInstance.brokerOrderLabel('FILLED')).toBe('Filled');
+    expect(fixture.componentInstance.brokerOrderLabel('CUSTOM')).toBe('CUSTOM');
+    expect(fixture.componentInstance.brokerOrderLabel(null)).toBe('');
   });
 });

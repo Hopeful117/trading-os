@@ -9,9 +9,9 @@
 
   @if (viewModel$ | async; as vm) {
     @if (vm.loading) {
-      <section class="state-panel" data-testid="history-loading" role="status">
+      <output class="state-panel" data-testid="history-loading">
         Loading executions…
-      </section>
+      </output>
     } @else if (vm.error) {
       <section class="state-panel error" data-testid="history-error" role="alert">
         Executions are temporarily unavailable. Please try again later.

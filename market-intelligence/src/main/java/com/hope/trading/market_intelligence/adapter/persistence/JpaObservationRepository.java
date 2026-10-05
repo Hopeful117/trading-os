@@ -57,24 +57,30 @@ public class JpaObservationRepository implements ObservationRepository {
     public List<Observation> findByInstrument(String instrument) {
         return repository.findByInstrumentIgnoreCase(instrument).stream().map(this::domain).toList();
     }
-    @Override public List<Observation> findActive() { return matching(v -> v.status() == ObservationStatus.ACTIVE); }
-    @Override public List<Observation> findByType(ObservationType type) { return matching(v -> v.type().equals(type)); }
-    @Override public List<Observation> findByStatus(ObservationStatus status) { return matching(v -> v.status() == status); }
-    @Override public List<Observation> findByHorizon(String horizon) { return matching(v -> v.horizon().equalsIgnoreCase(horizon)); }
-    @Override public List<Observation> findByCategory(String category) {
+    @Override @Transactional(readOnly = true)
+    public List<Observation> findActive() { return matching(v -> v.status() == ObservationStatus.ACTIVE); }
+    @Override @Transactional(readOnly = true)
+    public List<Observation> findByType(ObservationType type) { return matching(v -> v.type().equals(type)); }
+    @Override @Transactional(readOnly = true)
+    public List<Observation> findByStatus(ObservationStatus status) { return matching(v -> v.status() == status); }
+    @Override @Transactional(readOnly = true)
+    public List<Observation> findByHorizon(String horizon) { return matching(v -> v.horizon().equalsIgnoreCase(horizon)); }
+    @Override @Transactional(readOnly = true)
+    public List<Observation> findByCategory(String category) {
         return matching(v -> v.categories().stream().anyMatch(category::equalsIgnoreCase));
     }
-    @Override public List<Observation> findByConfidence(BigDecimal minimum, BigDecimal maximum) {
+    @Override @Transactional(readOnly = true)
+    public List<Observation> findByConfidence(BigDecimal minimum, BigDecimal maximum) {
         if (minimum.compareTo(maximum) > 0) throw new IllegalArgumentException("Invalid confidence range");
         return matching(v -> v.confidence().score().compareTo(minimum) >= 0
                 && v.confidence().score().compareTo(maximum) <= 0);
     }
-    @Override public List<Observation> findByTimeRange(Instant from, Instant to) {
+    @Override @Transactional(readOnly = true)
+    public List<Observation> findByTimeRange(Instant from, Instant to) {
         if (!from.isBefore(to)) throw new IllegalArgumentException("Invalid time range");
         return matching(v -> !v.createdAt().isBefore(from) && v.createdAt().isBefore(to));
     }
 
-    @Transactional(readOnly = true)
     protected List<Observation> matching(Predicate<Observation> predicate) {
         return repository.findAll().stream().map(this::domain).filter(predicate)
                 .sorted(Comparator.comparing(Observation::createdAt).thenComparing(Observation::id))

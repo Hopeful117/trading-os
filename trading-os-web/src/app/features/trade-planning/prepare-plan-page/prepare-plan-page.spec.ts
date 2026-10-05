@@ -136,4 +136,47 @@ describe('PreparePlanPage', () => {
     expect(fixture.nativeElement.textContent).toContain('trade plan could not be created');
     expect(createFromOpportunity).toHaveBeenCalledTimes(1);
   });
+
+  it('shows a non-retryable error when the opportunity id is missing', () => {
+    configureMocks({}, of(fakeOpportunity('ACTIVE')));
+    fixture = TestBed.createComponent(PreparePlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="error-state"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('could not be identified');
+  });
+
+  it('keeps the opportunity ready when account loading fails', () => {
+    configureMocks(
+      { opportunityId: 'opp-1' },
+      of(fakeOpportunity('ACTIVE')),
+      throwError(() => new Error('accounts unavailable')),
+    );
+    fixture = TestBed.createComponent(PreparePlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="prepare-form"]')).toBeTruthy();
+  });
+
+  it('ignores plan creation until an account is selected', () => {
+    const createFromOpportunity = vi.fn(() => of({ tradePlanId: 'tp-1', tradePlanVersion: 1 }));
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [PreparePlanPage],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ opportunityId: 'opp-1' }) },
+        { provide: OpportunityService, useValue: { findById: () => of(fakeOpportunity('ACTIVE')) } },
+        { provide: AccountService, useValue: { getAccounts: () => of(fakeAccounts) } },
+        { provide: TradePlanService, useValue: { createFromOpportunity } },
+      ],
+    });
+    fixture = TestBed.createComponent(PreparePlanPage);
+
+    fixture.componentInstance.createPlan('opp-1');
+
+    expect(createFromOpportunity).not.toHaveBeenCalled();
+  });
 });

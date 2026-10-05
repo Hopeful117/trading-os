@@ -14,7 +14,7 @@ final class TradePlanMapper {
                 plan.execution(), plan.rationale(), plan.createdAt());
     }
     TradePlan toDomain(TradePlanEntity entity) {
-        return factory.create(
+        return factory.create(new TradePlanFactory.Values(
                 new TradePlanId(entity.id()), new TradePlanVersion(entity.version()),
                 entity.previousVersion() == null ? null
                         : new TradePlanVersion(entity.previousVersion()),
@@ -22,7 +22,7 @@ final class TradePlanMapper {
                 new TradePlanningContextReference(
                         entity.contextId(), entity.contextVersion(), entity.contextSnapshotAt()),
                 entity.execution(), entity.rationale(), entity.createdAt(),
-                new TradePlanOriginValue(entity.origin()).origin(), entity.authorId());
+                 new TradePlanOriginValue(entity.origin()).origin(), entity.authorId()));
     }
 
     private record TradePlanOriginValue(String value) {

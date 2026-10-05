@@ -6,7 +6,7 @@ The Angular application is also verified and analyzed as its own project.
 
 ## Local verification and coverage
 
-Run all seven Maven `verify` lifecycles, generate JaCoCo XML reports, run the
+Run all eight Maven `verify` lifecycles, generate JaCoCo XML reports, run the
 Angular tests with LCOV, and build the production frontend:
 
 ```bash
@@ -99,7 +99,7 @@ on push to `main`:
 
 ### Push/dispatch runs (self-hosted, Sonar analysis)
 
-5. **SonarQube Quality** (matrix): Self-hosted runner scans 8 projects in
+5. **SonarQube Quality** (matrix): Self-hosted runner scans 9 projects in
    parallel. Downloads artifacts from GitHub-hosted jobs. Each scanner waits
    for its Quality Gate (`-Dsonar.qualitygate.wait=true`). All failure modes
    are fail-closed.

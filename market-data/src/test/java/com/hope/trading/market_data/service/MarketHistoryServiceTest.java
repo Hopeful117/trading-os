@@ -49,9 +49,9 @@ class MarketHistoryServiceTest {
         MarketRepository repository = mock(MarketRepository.class);
         when(repository.findById(marketId)).thenReturn(Optional.of(market));
 
+        MarketHistoryService service = new MarketHistoryService(repository, List.of());
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                        new MarketHistoryService(repository, List.of())
-                                .findOhlcHistorySnapshot(marketId, OhlcInterval.ONE_MINUTE, 3))
+                        service.findOhlcHistorySnapshot(marketId, OhlcInterval.ONE_MINUTE, 3))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 }

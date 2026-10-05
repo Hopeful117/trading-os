@@ -11,7 +11,7 @@ import { OhlcInterval } from '../models/ohlc-interval';
   providedIn: 'root',
 })
 export class MarketService {
-  private http = inject(HttpClient);
+  private readonly http = inject(HttpClient);
 
   findAll(): Observable<MarketResponse[]> {
     return this.http.get<MarketResponse[]>(`${environment.gatewayUrl}v1/markets`);

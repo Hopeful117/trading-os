@@ -10,6 +10,8 @@ import java.util.UUID;
 public final class BrokerModels {
     private BrokerModels() {}
 
+    private static final String INSTRUMENT = "instrument";
+
     public enum Side { BUY, SELL }
     public enum OrderType { MARKET, LIMIT }
     public enum OrderStatus { ACKNOWLEDGED, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED, UNKNOWN }
@@ -21,13 +23,15 @@ public final class BrokerModels {
             public TechnicalCapabilities {
             Objects.requireNonNull(brokerAccountId);
             provider = required(provider, "provider");
-            instrument = required(instrument, "instrument");
+            instrument = required(instrument, INSTRUMENT);
             if (sourceVersion < 1) throw new IllegalArgumentException("sourceVersion must be positive");
             Objects.requireNonNull(observedAt);
             supportedOrderTypes = List.copyOf(supportedOrderTypes);
             supportedLeverageLevels = supportedLeverageLevels.stream()
-                    .map(Objects::requireNonNull).peek(level -> {
+                    .map(level -> {
+                        level = Objects.requireNonNull(level);
                         if (level.signum() <= 0) throw new IllegalArgumentException("leverage must be positive");
+                        return level;
                     }).sorted().toList();
         }
     }
@@ -36,7 +40,7 @@ public final class BrokerModels {
             BigDecimal quantity, BigDecimal price, BigDecimal leverage) {
         public MarginPreviewRequest {
             Objects.requireNonNull(brokerAccountId);
-            instrument = required(instrument, "instrument");
+            instrument = required(instrument, INSTRUMENT);
             Objects.requireNonNull(side);
             if (Objects.requireNonNull(quantity).signum() <= 0) throw new IllegalArgumentException("quantity must be positive");
             if (Objects.requireNonNull(price).signum() <= 0) throw new IllegalArgumentException("price must be positive");
@@ -48,7 +52,7 @@ public final class BrokerModels {
             String currency, String sourceId, long sourceVersion, Instant observedAt) {
         public MarginPreview {
             Objects.requireNonNull(brokerAccountId);
-            instrument = required(instrument, "instrument");
+            instrument = required(instrument, INSTRUMENT);
             if (Objects.requireNonNull(amount).signum() <= 0) throw new IllegalArgumentException("amount must be positive");
             currency = required(currency, "currency");
             sourceId = required(sourceId, "sourceId");
@@ -63,7 +67,7 @@ public final class BrokerModels {
         public ExecutionRequest {
             Objects.requireNonNull(executionIntentId); Objects.requireNonNull(executionAttemptId);
             idempotencyKey = required(idempotencyKey, "idempotencyKey");
-            Objects.requireNonNull(brokerAccountId); instrument = required(instrument, "instrument");
+            Objects.requireNonNull(brokerAccountId); instrument = required(instrument, INSTRUMENT);
             Objects.requireNonNull(side); Objects.requireNonNull(orderType);
             if (Objects.requireNonNull(quantity).signum() <= 0) throw new IllegalArgumentException("quantity must be positive");
             if (orderType == OrderType.LIMIT && (limitPrice == null || limitPrice.signum() <= 0))
