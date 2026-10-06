@@ -17,12 +17,13 @@ final class OpportunityBuilder {
             OpportunityFusionResult result, Instant createdAt
     ) {
         return factory.create(
-                id, new OpportunityVersion(1), OpportunityStatus.DETECTED,
-                command.instrument(), command.direction(), command.scenario(),
-                command.timeframe(), result.type(), command.origin(), result.score(),
-                result.explanation(), result.observations(), result.aiAnalyses(),
-                command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
-                command.strategyMatchId(), command.setupSnapshot(), command.marketId());
+                new OpportunityFactory.Values(
+                        id, new OpportunityVersion(1), OpportunityStatus.DETECTED,
+                        command.instrument(), command.direction(), command.scenario(),
+                        command.timeframe(), result.type(), command.origin(), result.score(),
+                        result.explanation(), result.observations(), result.aiAnalyses(),
+                        command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
+                        command.strategyMatchId(), command.setupSnapshot(), command.marketId()));
     }
 
     TradingOpportunity nextVersion(
@@ -30,26 +31,28 @@ final class OpportunityBuilder {
             OpportunityFusionResult result, Instant createdAt
     ) {
         return factory.create(
-                previous.id(), previous.version().next(), OpportunityStatus.DETECTED,
-                command.instrument(), command.direction(), command.scenario(),
-                command.timeframe(), result.type(), command.origin(), result.score(),
-                result.explanation(), result.observations(), result.aiAnalyses(),
-                command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
-                previous.strategyMatchId().orElse(command.strategyMatchId()),
-                command.setupSnapshot(), command.marketId());
+                new OpportunityFactory.Values(
+                        previous.id(), previous.version().next(), OpportunityStatus.DETECTED,
+                        command.instrument(), command.direction(), command.scenario(),
+                        command.timeframe(), result.type(), command.origin(), result.score(),
+                        result.explanation(), result.observations(), result.aiAnalyses(),
+                        command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
+                        previous.strategyMatchId().orElse(command.strategyMatchId()),
+                        command.setupSnapshot(), command.marketId()));
     }
 
     TradingOpportunity transition(
             TradingOpportunity previous, OpportunityStatus target, Instant createdAt
     ) {
         return factory.create(
-                previous.id(), previous.version().next(), target, previous.instrument(),
-                previous.direction(), previous.scenario(), previous.timeframe(), previous.type(),
-                previous.origin(), previous.score(), previous.explanation(),
-                previous.observations(), previous.aiAnalyses(), previous.evaluatedAt(),
-                previous.validFrom(), previous.validUntil().orElse(null), createdAt,
-                previous.strategyMatchId().orElse(null),
-                // Historical setup truth is immutable across status transitions.
-                 previous.setup().orElse(null), previous.marketId().orElse(null));
+                new OpportunityFactory.Values(
+                        previous.id(), previous.version().next(), target, previous.instrument(),
+                        previous.direction(), previous.scenario(), previous.timeframe(), previous.type(),
+                        previous.origin(), previous.score(), previous.explanation(),
+                        previous.observations(), previous.aiAnalyses(), previous.evaluatedAt(),
+                        previous.validFrom(), previous.validUntil().orElse(null), createdAt,
+                        previous.strategyMatchId().orElse(null),
+                        // Historical setup truth is immutable across status transitions.
+                        previous.setup().orElse(null), previous.marketId().orElse(null)));
     }
 }

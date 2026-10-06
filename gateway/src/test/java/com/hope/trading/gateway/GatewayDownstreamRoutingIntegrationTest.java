@@ -164,7 +164,7 @@ class GatewayDownstreamRoutingIntegrationTest {
         assertThat(tradingCoreRequests).containsExactly("POST /api/v1/executions/validate");
         assertThat(tradingCoreIdempotencyHeaders).containsExactly(idempotencyKey);
         assertThat(tradingCoreAuthorizationHeaders).hasSize(1);
-        assertThat(tradingCoreAuthorizationHeaders.get(0).startsWith("Bearer ")).isTrue();
+        assertThat(tradingCoreAuthorizationHeaders.get(0)).startsWith("Bearer ");
         assertThat(tradingCoreBodies).containsExactly(body);
     }
 

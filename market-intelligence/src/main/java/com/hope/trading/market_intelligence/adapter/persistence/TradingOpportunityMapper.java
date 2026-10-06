@@ -25,17 +25,18 @@ final class TradingOpportunityMapper {
 
     TradingOpportunity toDomain(TradingOpportunityEntity value) {
         return factory.create(
-                new OpportunityId(value.id()), new OpportunityVersion(value.version()),
-                OpportunityStatus.valueOf(value.status()), value.instrument(),
-                OpportunityDirection.valueOf(value.direction()), value.scenario(),
-                value.timeframe(), OpportunityType.valueOf(value.type()),
-                OpportunityOrigin.valueOf(value.origin()), new OpportunityScore(value.score()),
-                value.explanation(),
-                value.observationIds().stream().map(ObservationReference::new)
-                        .collect(Collectors.toUnmodifiableSet()),
-                value.aiAnalysisIds().stream().map(AiAnalysisReference::new)
-                        .collect(Collectors.toUnmodifiableSet()),
-                value.evaluatedAt(), value.validFrom(), value.validUntil(), value.createdAt(),
-                 value.strategyMatchId(), value.setupSnapshot(), value.marketId());
+                new OpportunityFactory.Values(
+                        new OpportunityId(value.id()), new OpportunityVersion(value.version()),
+                        OpportunityStatus.valueOf(value.status()), value.instrument(),
+                        OpportunityDirection.valueOf(value.direction()), value.scenario(),
+                        value.timeframe(), OpportunityType.valueOf(value.type()),
+                        OpportunityOrigin.valueOf(value.origin()), new OpportunityScore(value.score()),
+                        value.explanation(),
+                        value.observationIds().stream().map(ObservationReference::new)
+                                .collect(Collectors.toUnmodifiableSet()),
+                        value.aiAnalysisIds().stream().map(AiAnalysisReference::new)
+                                .collect(Collectors.toUnmodifiableSet()),
+                        value.evaluatedAt(), value.validFrom(), value.validUntil(), value.createdAt(),
+                        value.strategyMatchId(), value.setupSnapshot(), value.marketId()));
     }
 }

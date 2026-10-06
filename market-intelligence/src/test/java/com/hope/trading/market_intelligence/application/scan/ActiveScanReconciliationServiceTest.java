@@ -363,27 +363,28 @@ class ActiveScanReconciliationServiceTest {
 
     private TradingOpportunity opportunity(UUID strategyMatchId, String score) {
         return new OpportunityFactory().create(
-                new OpportunityId(UUID.randomUUID()),
-                new OpportunityVersion(1),
-                OpportunityStatus.ACTIVE,
-                "BTC/EUR",
-                com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection.LONG,
-                "Bullish breakout",
-                "5m",
-                com.hope.trading.market_intelligence.domain.opportunity.OpportunityType.SCALPING,
-                com.hope.trading.market_intelligence.domain.opportunity.OpportunityOrigin.PASSIVE_SCAN,
-                new OpportunityScore(new BigDecimal(score)),
-                "Confirmed",
-                Set.of(new com.hope.trading.market_intelligence.domain.opportunity.ObservationReference(
-                        UUID.randomUUID())),
-                Set.of(),
-                now,
-                now,
-                now.plusSeconds(300),
-                now,
-                strategyMatchId,
-                null
-        );
+                new OpportunityFactory.Values(
+                        new OpportunityId(UUID.randomUUID()),
+                        new OpportunityVersion(1),
+                        OpportunityStatus.ACTIVE,
+                        "BTC/EUR",
+                        com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection.LONG,
+                        "Bullish breakout",
+                        "5m",
+                        com.hope.trading.market_intelligence.domain.opportunity.OpportunityType.SCALPING,
+                        com.hope.trading.market_intelligence.domain.opportunity.OpportunityOrigin.PASSIVE_SCAN,
+                        new OpportunityScore(new BigDecimal(score)),
+                        "Confirmed",
+                        Set.of(new com.hope.trading.market_intelligence.domain.opportunity.ObservationReference(
+                                UUID.randomUUID())),
+                        Set.of(),
+                        now,
+                        now,
+                        now.plusSeconds(300),
+                        now,
+                        strategyMatchId,
+                        null,
+                        null));
     }
 
     private AnalysisExecution requestedExecution() {

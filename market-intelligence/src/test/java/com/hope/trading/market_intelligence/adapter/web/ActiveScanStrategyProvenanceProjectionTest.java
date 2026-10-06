@@ -37,13 +37,14 @@ class ActiveScanStrategyProvenanceProjectionTest {
 
     private TradingOpportunity opportunity(UUID matchId) {
         return factory.create(
-                new OpportunityId(UUID.randomUUID()), new OpportunityVersion(1),
-                OpportunityStatus.ACTIVE, "ETH/USD", OpportunityDirection.LONG,
-                "OHLC_TREND", "15m", OpportunityType.INTRADAY,
-                OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
-                "OHLC_TREND",
-                Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
-                NOW, NOW, NOW.plusSeconds(1800), NOW, matchId, null);
+                new OpportunityFactory.Values(
+                        new OpportunityId(UUID.randomUUID()), new OpportunityVersion(1),
+                        OpportunityStatus.ACTIVE, "ETH/USD", OpportunityDirection.LONG,
+                        "OHLC_TREND", "15m", OpportunityType.INTRADAY,
+                        OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
+                        "OHLC_TREND",
+                        Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
+                        NOW, NOW, NOW.plusSeconds(1800), NOW, matchId, null, null));
     }
 
     private StrategyMatch match() {

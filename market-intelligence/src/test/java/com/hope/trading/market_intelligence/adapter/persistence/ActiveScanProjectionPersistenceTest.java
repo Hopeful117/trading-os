@@ -164,26 +164,27 @@ class ActiveScanProjectionPersistenceTest {
     ) {
         Instant now = OpportunityTestFixtures.NOW;
         return new OpportunityFactory().create(
-                id,
-                new OpportunityVersion(version),
-                status,
-                "BTC/EUR",
-                OpportunityDirection.LONG,
-                "Bullish breakout",
-                "5m",
-                OpportunityType.SCALPING,
-                OpportunityOrigin.PASSIVE_SCAN,
-                new OpportunityScore(new BigDecimal(score)),
-                "Confirmed",
-                Set.of(new ObservationReference(UUID.randomUUID())),
-                Set.of(),
-                now,
-                now,
-                now.plusSeconds(300),
-                now,
-                strategyMatchId,
-                null
-        );
+                new OpportunityFactory.Values(
+                        id,
+                        new OpportunityVersion(version),
+                        status,
+                        "BTC/EUR",
+                        OpportunityDirection.LONG,
+                        "Bullish breakout",
+                        "5m",
+                        OpportunityType.SCALPING,
+                        OpportunityOrigin.PASSIVE_SCAN,
+                        new OpportunityScore(new BigDecimal(score)),
+                        "Confirmed",
+                        Set.of(new ObservationReference(UUID.randomUUID())),
+                        Set.of(),
+                        now,
+                        now,
+                        now.plusSeconds(300),
+                        now,
+                        strategyMatchId,
+                        null,
+                        null));
     }
 
     private AnalysisExecution requestedExecution(
