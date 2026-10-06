@@ -26,7 +26,8 @@ class RiskEvaluationContextBuilderTest {
                     TradeDirection.LONG, BigDecimal.ONE, usd("10"), usd("1"), usd("1")),
                 NOW);
         var account = new AccountSnapshot(ACCOUNT_ID, 1, NOW, usd("100"),
-                usd("100"), usd("0"), usd("100"), usd("0"));
+                usd("100"), usd("0"), java.util.Optional.of(usd("100")),
+                new DailyRiskBaseline(usd("100"), NOW, "TEST", Map.of()), usd("0"));
         assertThrows(IllegalArgumentException.class, () ->
                 new RiskEvaluationContextBuilder().build(request,
                     new TradingContext(UUID.randomUUID(), ACCOUNT_ID, NOW, "OPEN", Map.of()),

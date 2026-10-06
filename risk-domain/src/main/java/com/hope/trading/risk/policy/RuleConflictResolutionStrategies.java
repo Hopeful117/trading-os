@@ -23,6 +23,7 @@ public final class RuleConflictResolutionStrategies {
         return new RuleConflictResolutionStrategies(Map.of(
                 RiskRuleIds.MAX_POSITION_RISK, upperBound,
                 RiskRuleIds.MAX_EXPOSURE, upperBound,
-                RiskRuleIds.DAILY_DRAWDOWN, upperBound));
+                RiskRuleIds.DAILY_DRAWDOWN, upperBound,
+                RiskRuleIds.MAX_TOTAL_DRAWDOWN, upperBound));
     }
 }

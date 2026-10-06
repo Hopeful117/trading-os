@@ -33,7 +33,7 @@ class BrokerApiSecurityIntegrationTest {
         UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
         Instant from=Instant.parse("2026-08-01T00:00:00Z"),to=Instant.parse("2026-08-02T00:00:00Z");
         when(riskSnapshots.get(owner,account,from,to)).thenReturn(new RiskSnapshot(account,1,to,
-                SnapshotCompleteness.COMPLETE,List.of(),Map.of(),new AccountRiskFacts("USD",null,null,null),
+                SnapshotCompleteness.COMPLETE,List.of(),Map.of(),new AccountRiskFacts("USD",null,null,null,null),
                 List.of(),List.of(),List.of()));
         mvc.perform(get("/internal/v1/broker-accounts/{id}/risk-snapshot",account)
                 .queryParam("from",from.toString()).queryParam("to",to.toString())

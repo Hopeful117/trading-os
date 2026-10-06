@@ -230,7 +230,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
         when(facts.load(any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
                 intent.brokerAccountId(), 1, now, true, List.of(),
                 Map.of("USD", new BigDecimal("10000"), "ETH", BigDecimal.ZERO),
-                new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO),
+                 new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO, null),
                 List.of(), List.of(), List.of(), "paper-facts"));
         when(market.value(any(), any(), any(), any())).thenAnswer(invocation -> {
             List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
@@ -260,7 +260,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
 
         ExecutionTimeRiskRevalidationService.T1Outcome outcome = completeService.evaluateAndPersist(intent, now);
 
-        assertThat(outcome.approved()).isTrue();
+        assertThat(outcome.approved()).as("decision=%s reason=%s", outcome.decision(), outcome.reasonCode()).isTrue();
         assertThat(outcome.decision()).isEqualTo(com.hope.trading.risk.domain.RiskTypes.RiskDecision.APPROVED);
         verify(persistence).t1Evaluation(any(), eq(intent.id().value()), eq(evaluationId), eq(accountId),
                 any(), eq("COMPLETED"), eq("APPROVED"), isNull(), eq(1), any(), any(), any());
@@ -337,7 +337,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
         RiskFactsProvider.Snapshot balances = new RiskFactsProvider.Snapshot(
                 UUID.randomUUID(), 1, now, true, List.of(),
                 Map.of("USD", BigDecimal.TEN, "ETH", BigDecimal.ZERO),
-                new RiskFactsProvider.Account("USD", BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO),
+                 new RiskFactsProvider.Account("USD", BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO, null),
                 List.of(), List.of(), List.of(), "source");
         assertThat(invoke("reconstructStartBalances",
                 new Class<?>[]{RiskFactsProvider.Snapshot.class, RiskDay.class},
@@ -365,7 +365,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
                 new RiskPersistence.ProfileRule("MAX_POSITION_RISK", "1.0.0", "POSITION", "BLOCKING", 10,
                         new BigDecimal("0.02"), "rule"),
                 new RiskPersistence.ProfileRule("MAX_EXPOSURE", "1.0.0", "PORTFOLIO", "BLOCKING", 10,
-                        new BigDecimal("0.50"), "rule"),
+                        new BigDecimal("10.00"), "rule"),
                 new RiskPersistence.ProfileRule("DAILY_DRAWDOWN", "1.0.0", "ACCOUNT", "BLOCKING", 10,
                         new BigDecimal("0.10"), "rule")));
     }

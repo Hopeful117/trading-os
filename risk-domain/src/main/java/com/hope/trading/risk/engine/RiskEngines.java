@@ -9,6 +9,6 @@ public final class RiskEngines {
     public static RiskEngine standard(String version, Clock clock) {
         return new DeterministicRiskEngine(version, new RiskRuleRegistry(List.of(
                 new MaximumPositionRiskRule(), new MaximumExposureRule(),
-                new DailyDrawdownRule())), clock);
+                new DailyDrawdownRule(), new MaximumTotalDrawdownRule())), clock);
     }
 }

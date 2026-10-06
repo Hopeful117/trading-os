@@ -13,7 +13,8 @@ public interface BrokerRiskFactsPort {
                     List<String> unavailabilityReasons, Map<String, BigDecimal> assetBalances,
                     Account account, List<Position> positions, List<ClosedTrade> closedTrades,
                     List<LedgerEntry> ledgerEntries, String sourcePayload) { }
-    record Account(String valuationAsset, BigDecimal balance, BigDecimal equity, BigDecimal margin) { }
+    record Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                   BigDecimal margin, BigDecimal startingBalance) { }
     record Position(UUID positionId, String providerPositionReference, String providerReferenceProvenance,
                     String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
                     BigDecimal marketValue, BigDecimal margin, BigDecimal protectedQuantity,

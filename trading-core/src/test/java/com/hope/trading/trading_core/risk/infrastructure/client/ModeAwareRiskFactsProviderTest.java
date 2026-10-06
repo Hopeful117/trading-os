@@ -35,7 +35,7 @@ class ModeAwareRiskFactsProviderTest {
         Account account = mock(Account.class);
         BrokerRiskFactsPort.Snapshot brokerSnapshot = new BrokerRiskFactsPort.Snapshot(
                 brokerId, 1, from.plusSeconds(1), true, List.of(), Map.of(),
-                new BrokerRiskFactsPort.Account("USD", BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO),
+                new BrokerRiskFactsPort.Account("USD", BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE),
                 List.of(), List.of(), List.of(), "{}");
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(liveFacts.load(brokerId, from, to)).thenReturn(brokerSnapshot);

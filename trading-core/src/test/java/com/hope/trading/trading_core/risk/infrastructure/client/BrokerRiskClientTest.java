@@ -34,7 +34,7 @@ class BrokerRiskClientTest {
                 brokerAccountId, 1L, now, "COMPLETE", List.of(),
                 Map.of("USD", new BigDecimal("10000")),
                 new BrokerRiskTransport.Account("USD",
-                        new BigDecimal("10000"), new BigDecimal("11000"), new BigDecimal("2000")),
+                        new BigDecimal("10000"), new BigDecimal("11000"), new BigDecimal("2000"), null),
                 List.of(new BrokerRiskTransport.Position(
                         UUID.randomUUID(), "pos-ref", "provider",
                         "BTC/USD", new BigDecimal("0.5"),

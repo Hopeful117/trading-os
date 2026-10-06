@@ -17,6 +17,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -51,7 +52,8 @@ public class RiskPersistence {
             return Optional.empty();
         }
         return Optional.of(new AccountConfiguration(value.accountId,
-                value.brokerAccountId, value.riskTimeZone, value.reportingCurrency, value.portfolioId));
+                value.brokerAccountId, value.riskTimeZone, value.reportingCurrency, value.portfolioId,
+                value.riskDayResetTime));
     }
 
     public Optional<Profile> assignedProfile(UUID accountId) {
@@ -80,12 +82,19 @@ public class RiskPersistence {
     @Transactional
     public void configuration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
                               String reportingCurrency, UUID portfolioId) {
+        configuration(accountId, brokerAccountId, riskTimeZone, reportingCurrency, portfolioId, "00:00");
+    }
+
+    @Transactional
+    public void configuration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
+                              String reportingCurrency, UUID portfolioId, String riskDayResetTime) {
         AccountRiskConfigurationEntity value = new AccountRiskConfigurationEntity();
         value.accountId = accountId;
         value.brokerAccountId = brokerAccountId;
         value.riskTimeZone = riskTimeZone;
         value.reportingCurrency = reportingCurrency;
         value.portfolioId = portfolioId;
+        value.riskDayResetTime = LocalTime.parse(riskDayResetTime).toString();
         entityManager.persist(value);
         entityManager.flush();
     }
@@ -293,7 +302,13 @@ public class RiskPersistence {
     public record AcknowledgmentDelivery(UUID evaluationId, UUID tradePlanId, long tradePlanVersion,
                                          String decision, Instant evaluatedAt, UUID claimToken) { }
     public record AccountConfiguration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
-                                       String reportingCurrency, UUID portfolioId) { }
+                                       String reportingCurrency, UUID portfolioId,
+                                       String riskDayResetTime) {
+        public AccountConfiguration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
+                                    String reportingCurrency, UUID portfolioId) {
+            this(accountId, brokerAccountId, riskTimeZone, reportingCurrency, portfolioId, "00:00");
+        }
+    }
     public record Baseline(long version, BigDecimal amount, String reportingCurrency,
                            Instant startsAt, Instant endsAt, int payloadSchemaVersion, String payload) { }
     public record Profile(UUID id, String semanticVersion, String policyId, String policyVersion,
@@ -344,6 +359,7 @@ class AccountRiskConfigurationEntity {
     @Id @Column(name="account_id") UUID accountId;
     @Column(name="broker_account_id", nullable=false, unique=true) UUID brokerAccountId;
     @Column(name="risk_time_zone", nullable=false, length=80) String riskTimeZone;
+    @Column(name="risk_day_reset_time", nullable=false, length=5) String riskDayResetTime;
     @Column(name="reporting_currency", nullable=false, length=16) String reportingCurrency;
     @Column(name="portfolio_id", nullable=false, unique=true) UUID portfolioId;
 }

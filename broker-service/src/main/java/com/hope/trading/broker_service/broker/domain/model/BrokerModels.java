@@ -158,7 +158,7 @@ public final class BrokerModels {
         }
     }
     public record AccountRiskFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
-            BigDecimal margin) {}
+            BigDecimal margin, BigDecimal startingBalance) {}
     public record RiskPosition(UUID positionId, String providerPositionReference,
             String providerReferenceProvenance, String instrument, BigDecimal signedQuantity,
             BigDecimal entryPrice, BigDecimal cost, BigDecimal marketValue,

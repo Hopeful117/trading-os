@@ -57,6 +57,9 @@ public class Account {
     @Column(nullable = false)
     private BigDecimal equity = BigDecimal.ZERO;
 
+    @Column(name = "starting_balance")
+    private BigDecimal startingBalance;
+
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "rules_id")

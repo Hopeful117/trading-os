@@ -7,6 +7,7 @@ import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +23,17 @@ class RiskDayAndReconstructionTest {
         assertThat(Duration.between(autumn.startsAt(), autumn.endsAt())).isEqualTo(Duration.ofHours(25));
         assertThat(spring.contains(spring.startsAt())).isTrue();
         assertThat(spring.contains(spring.endsAt())).isFalse();
+    }
+
+    @Test
+    void supportsResetBoundaryAfterMidnightWithoutPuttingItInTheRiskEngine() {
+        RiskDay beforeReset = RiskDay.containing(Instant.parse("2026-08-02T00:20:00Z"),
+                "UTC", LocalTime.of(0, 30));
+        RiskDay afterReset = RiskDay.containing(Instant.parse("2026-08-02T00:30:00Z"),
+                "UTC", LocalTime.of(0, 30));
+
+        assertThat(beforeReset.startsAt()).isEqualTo(Instant.parse("2026-08-01T00:30:00Z"));
+        assertThat(afterReset.startsAt()).isEqualTo(Instant.parse("2026-08-02T00:30:00Z"));
     }
 
     @Test

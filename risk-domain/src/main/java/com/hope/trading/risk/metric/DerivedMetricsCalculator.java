@@ -3,6 +3,7 @@ package com.hope.trading.risk.metric;
 import com.hope.trading.risk.domain.*;
 import com.hope.trading.risk.snapshot.AccountSnapshot;
 import java.math.*;
+import java.util.Optional;
 
 /** Centralizes every ratio and derived financial value consumed by rules. */
 public final class DerivedMetricsCalculator {
@@ -20,14 +21,18 @@ public final class DerivedMetricsCalculator {
                 projectedPositionLoss, observed.balance().amount());
         Ratio exposure = divide(projected.exposure().amount(), observed.equity().amount());
         Ratio dailyDrawdown = divide(projected.drawdown().amount(),
-                account.dailyStartBalance().amount());
+                account.dailyRiskBaseline().referenceBalance().amount());
+        Optional<Ratio> totalDrawdown = projected.totalDrawdown()
+                .map(value -> divide(value.amount(), account.accountStartingBalance()
+                        .orElseThrow(() -> new IllegalStateException("Account starting balance unavailable"))
+                        .amount()));
         Money maximumRisk = new Money(observed.balance().amount()
                 .multiply(maximumPositionRisk.value()), currency);
         Money remaining = new Money(maximumRisk.amount()
                 .subtract(projected.portfolioHeat().amount()).max(BigDecimal.ZERO), currency);
         Ratio utilization = divide(projected.portfolioHeat().amount(), maximumRisk.amount());
         return new DerivedMetrics(remaining, projected.portfolioHeat(), utilization,
-                positionRisk, exposure, dailyDrawdown);
+                positionRisk, exposure, dailyDrawdown, totalDrawdown);
     }
 
     private Ratio divide(BigDecimal numerator, BigDecimal denominator) {
