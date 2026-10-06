@@ -54,7 +54,7 @@ public final class KrakenRiskSnapshotCapability implements RiskSnapshotCapabilit
                 Map<String,BigDecimal> before=read("ASSET_BALANCES_UNAVAILABLE",draft,
                         ()->balances(credentials),Map.of());
                 draft.account=read("ACCOUNT_RISK_FACTS_UNAVAILABLE",draft,
-                        ()->accountFacts(credentials),new AccountRiskFacts("USD",null,null,null));
+                        ()->accountFacts(credentials),new AccountRiskFacts("USD",null,null,null,null));
                 PositionFacts positions=read("POSITIONS_UNAVAILABLE",draft,
                         ()->positions(credentials),new PositionFacts(List.of(),Map.of()));
                 Map<String,JsonNode> stops=read("PROTECTIVE_STOPS_UNAVAILABLE",draft,
@@ -92,7 +92,7 @@ public final class KrakenRiskSnapshotCapability implements RiskSnapshotCapabilit
     private AccountRiskFacts accountFacts(CredentialMaterial credentials) {
         JsonNode result=client.privatePost("/0/private/TradeBalance",Map.of("asset","ZUSD"),credentials);
         return new AccountRiskFacts(KrakenAssetNormalizer.asset("ZUSD"),decimal(result,"eb"),
-                decimal(result,"e"),decimal(result,"m"));
+                decimal(result,"e"),decimal(result,"m"),null);
     }
 
     private PositionFacts positions(CredentialMaterial credentials) {
@@ -262,7 +262,7 @@ public final class KrakenRiskSnapshotCapability implements RiskSnapshotCapabilit
 
     private static final class Draft {
         final List<String> reasons=new ArrayList<>();Map<String,BigDecimal> balances=Map.of();
-        AccountRiskFacts account=new AccountRiskFacts("USD",null,null,null);List<RiskPosition> positions=List.of();
+        AccountRiskFacts account=new AccountRiskFacts("USD",null,null,null,null);List<RiskPosition> positions=List.of();
         List<ClosedTrade> closedTrades=List.of();List<LedgerEntry> ledgerEntries=List.of();
     }
     private record RawPosition(String providerReference,String instrument,BigDecimal quantity,

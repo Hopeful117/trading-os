@@ -23,22 +23,28 @@ final class RiskFixture {
         return new EffectiveRiskRuleSet(List.of(configurations), Map.of("platform", "1"));
     }
     static RiskEvaluationContext context(EffectiveRiskRuleSet rules) {
-        var request = new RiskEvaluationRequest(
-                UUID.fromString("00000000-0000-0000-0000-000000000010"),
-                UUID.fromString("00000000-0000-0000-0000-000000000011"),
-                ValidationMode.PRE_TRADE,
+        return context(rules, new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"),
+                usd("9800"), usd("500"), java.util.Optional.of(usd("10000")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("-100")),
                 new ProposedTrade(
                         UUID.fromString("00000000-0000-0000-0000-000000000012"), 1,
                         "EURUSD", TradeDirection.LONG, new BigDecimal("1000"),
-                        usd("2000"), usd("100"), usd("200")), NOW);
-        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"),
-                usd("9800"), usd("500"), usd("10000"), usd("-100"));
+                        usd("2000"), usd("100"), usd("200")));
+    }
+
+    static RiskEvaluationContext context(EffectiveRiskRuleSet rules, AccountSnapshot account,
+                                         ProposedTrade proposedTrade) {
+        var request = new RiskEvaluationRequest(
+                UUID.fromString("00000000-0000-0000-0000-000000000010"),
+                UUID.fromString("00000000-0000-0000-0000-000000000011"),
+                proposedTrade == null ? ValidationMode.ACCOUNT_MONITORING : ValidationMode.PRE_TRADE,
+                proposedTrade, NOW);
         var position = new PositionSnapshot(
                 UUID.fromString("00000000-0000-0000-0000-000000000013"),
                 "AAPL", BigDecimal.TEN, usd("1000"), usd("50"), usd("100"));
         var portfolio = new PortfolioSnapshot(
                 UUID.fromString("00000000-0000-0000-0000-000000000014"),
-                2, NOW, List.of(position));
+                2, NOW, proposedTrade == null ? List.of() : List.of(position));
         return new RiskEvaluationContextBuilder().build(request,
                 new TradingContext(
                         UUID.fromString("00000000-0000-0000-0000-000000000015"),

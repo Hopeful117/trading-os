@@ -25,7 +25,7 @@ class RiskSnapshotServiceContractTest {
         UUID account=UUID.randomUUID();Instant from=Instant.parse("2026-08-01T00:00:00Z");
         Instant to=Instant.parse("2026-08-02T00:00:00Z");List<Object> received=new ArrayList<>();
         RiskSnapshot expected=new RiskSnapshot(account,1,to,SnapshotCompleteness.COMPLETE,List.of(),
-                Map.of(),new AccountRiskFacts("USD",null,null,null),List.of(),List.of(),List.of());
+                Map.of(),new AccountRiskFacts("USD",null,null,null,null),List.of(),List.of(),List.of());
         RiskSnapshotCapability capability=(id,start,end)->{received.add(id);received.add(start);received.add(end);return expected;};
         BrokerProvider provider=new BrokerProvider(){public com.hope.trading.broker_service.connection.domain.BrokerProviderId id(){return com.hope.trading.broker_service.connection.domain.BrokerProviderId.KRAKEN;}public <T>Optional<T> capability(Class<T> type){return type.isInstance(capability)?Optional.of(type.cast(capability)):Optional.empty();}};
         UUID owner=UUID.randomUUID();BrokerConnection connection=BrokerConnection.create(account,owner,BrokerProviderId.KRAKEN,to);

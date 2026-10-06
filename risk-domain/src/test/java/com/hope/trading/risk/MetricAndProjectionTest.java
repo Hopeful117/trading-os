@@ -13,8 +13,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MetricAndProjectionTest {
     private final AccountSnapshot account = new AccountSnapshot(
-            ACCOUNT_ID, 1, NOW, usd("10000"), usd("9800"), usd("500"),
-            usd("10000"), usd("-100"));
+        ACCOUNT_ID, 1, NOW, usd("10000"), usd("9800"), usd("500"),
+            java.util.Optional.of(usd("10000")),
+            new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("-100"));
     private final ProjectionEngine engine = new ProjectionEngine();
 
     @Test void computesEveryObservedMetric() {
@@ -82,6 +83,19 @@ class MetricAndProjectionTest {
                 "0.2040816326530612244897959183673469");
         assertRatio(derived.dailyDrawdownRatio(), "0.03");
         assertMoney(derived.remainingRisk(), "100");
+    }
+
+    @Test void projectedLossUsesProfitCushionAboveTheReferenceBalance() {
+        AccountSnapshot profitable = new AccountSnapshot(
+                ACCOUNT_ID, 1, NOW, usd("10000"), usd("10010"), usd("500"),
+                Optional.of(usd("10000")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("0"));
+
+        ProjectedMetrics projected = engine.project(profitable, emptyPortfolio(),
+                trade(TradeDirection.LONG, "1", "100", "15", "1"));
+
+        assertMoney(projected.drawdown(), "5");
+        assertMoney(projected.totalDrawdown().orElseThrow(), "5");
     }
 
     private PortfolioSnapshot emptyPortfolio() {

@@ -13,6 +13,7 @@ import com.hope.trading.risk.engine.RiskEngine;
 import com.hope.trading.risk.engine.RiskEngines;
 import com.hope.trading.risk.policy.EffectiveRiskRuleSet;
 import com.hope.trading.risk.snapshot.AccountSnapshot;
+import com.hope.trading.risk.snapshot.DailyRiskBaseline;
 import com.hope.trading.risk.snapshot.MarketSnapshot;
 import com.hope.trading.risk.snapshot.PortfolioSnapshot;
 import com.hope.trading.risk.snapshot.PositionSnapshot;
@@ -33,6 +34,7 @@ import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersist
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,6 +42,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -171,7 +174,8 @@ public class TradePlanRiskEvaluationService {
 
         TradePlanRiskPort.Snapshot plan = tradePlans.load(command.tradePlanId(), command.tradePlanVersion());
         validatePlan(command, plan, configuration.reportingCurrency());
-        RiskDay riskDay = RiskDay.containing(command.requestedAt(), configuration.riskTimeZone());
+        RiskDay riskDay = RiskDay.containing(command.requestedAt(), configuration.riskTimeZone(),
+                LocalTime.parse(configuration.riskDayResetTime()));
         RiskFactsProvider.Snapshot brokerSnapshot = facts.load(account, brokerAccount,
                  brokerAccount.id(),
                  riskDay.startsAt(), riskDay.endsAt());
@@ -209,6 +213,16 @@ public class TradePlanRiskEvaluationService {
         BigDecimal accountRate = assetRate(current, brokerSnapshot.account().valuationAsset());
         BigDecimal equity = positiveOrZero(brokerSnapshot.account().equity(), "BROKER_EQUITY_MISSING").multiply(accountRate);
         BigDecimal margin = positiveOrZero(brokerSnapshot.account().margin(), "BROKER_MARGIN_MISSING").multiply(accountRate);
+        BigDecimal startingBalance = brokerSnapshot.account().startingBalance();
+        if (startingBalance == null) {
+            startingBalance = account.getStartingBalance();
+        }
+        if (startingBalance == null || !currency.equalsIgnoreCase(account.getBaseCurrency())) {
+            startingBalance = balance;
+        }
+        Optional<Money> accountStartingBalance = Optional.ofNullable(startingBalance)
+                .map(value -> new Money(positiveOrZero(value, "BROKER_STARTING_BALANCE_INVALID")
+                        .multiply(accountRate), currency));
         ClosedPnl dailyClosed = closedPnl(brokerSnapshot, currency, riskDay);
         BigDecimal dailyClosedPnl = dailyClosed.amount();
 
@@ -242,10 +256,16 @@ public class TradePlanRiskEvaluationService {
         provenance.put("requiredMargin", marginFact);
         provenance.put("profile", profile);
 
+        Map<String, Object> accountPayload = new LinkedHashMap<>();
+        accountPayload.put("balance", balance);
+        accountPayload.put("equity", equity);
+        accountPayload.put("margin", margin);
+        accountPayload.put("accountStartingBalance", accountStartingBalance.orElse(null));
+        accountPayload.put("dailyReferenceBalance", dailyStart);
+        accountPayload.put("dailyClosedPnl", dailyClosedPnl);
+        accountPayload.put("provenance", provenance);
         long accountVersion = persistence.component(evaluationId, "ACCOUNT",
-                "broker:" + brokerSnapshot.sourceVersion(), brokerSnapshot.observedAt(), persistence.write(Map.of(
-                        "balance", balance, "equity", equity, "margin", margin, "dailyStartBalance", dailyStart,
-                        "dailyClosedPnl", dailyClosedPnl, "provenance", provenance)));
+                "broker:" + brokerSnapshot.sourceVersion(), brokerSnapshot.observedAt(), persistence.write(accountPayload));
         long portfolioVersion = persistence.component(evaluationId, "PORTFOLIO",
                 "broker:" + brokerSnapshot.sourceVersion(), brokerSnapshot.observedAt(), persistence.write(Map.of(
                         "portfolioId", configuration.portfolioId(), "positions", positions,
@@ -264,7 +284,11 @@ public class TradePlanRiskEvaluationService {
                 "tradePlanContextVersion", Long.toString(plan.contextVersion())));
         var accountSnapshot = new AccountSnapshot(command.accountId(), accountVersion, brokerSnapshot.observedAt(),
                 new Money(balance, currency), new Money(equity, currency), new Money(margin, currency),
-                new Money(dailyStart, currency), new Money(dailyClosedPnl, currency));
+                accountStartingBalance,
+                new DailyRiskBaseline(new Money(dailyStart, currency), baseline.startsAt(),
+                        "RISK_DAY_BASELINE", Map.of("baselineVersion", Long.toString(baseline.version()),
+                        "riskDay", riskDay.date().toString())),
+                new Money(dailyClosedPnl, currency));
         var portfolioSnapshot = new PortfolioSnapshot(configuration.portfolioId(), portfolioVersion,
                 brokerSnapshot.observedAt(), positions);
         Map<String, BigDecimal> prices = new HashMap<>();
@@ -503,10 +527,12 @@ public class TradePlanRiskEvaluationService {
                               Map<String, Long> versions) {
         List<Reason> violations = result.violations().stream().map(this::reason).toList();
         List<Reason> warnings = result.warnings().stream().map(this::reason).toList();
-        Map<String, BigDecimal> metrics = Map.of(
-                "positionRiskRatio", result.globalMetrics().positionRiskRatio().value(),
-                "exposureRatio", result.globalMetrics().exposureRatio().value(),
-                "dailyDrawdownRatio", result.globalMetrics().dailyDrawdownRatio().value());
+        Map<String, BigDecimal> metrics = new LinkedHashMap<>();
+        metrics.put("positionRiskRatio", result.globalMetrics().positionRiskRatio().value());
+        metrics.put("exposureRatio", result.globalMetrics().exposureRatio().value());
+        metrics.put("dailyDrawdownRatio", result.globalMetrics().dailyDrawdownRatio().value());
+        result.globalMetrics().totalDrawdownRatio()
+                .ifPresent(value -> metrics.put("totalDrawdownRatio", value.value()));
         var trace = result.trace();
         return new Response(trace.evaluationId(), plan.tradePlanId(), plan.tradePlanVersion(), accountId,
                 result.evaluationStatus().name(), result.decision().map(Enum::name).orElse(null),

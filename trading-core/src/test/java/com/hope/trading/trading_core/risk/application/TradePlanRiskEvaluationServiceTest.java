@@ -170,6 +170,17 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
+    void missingProviderStartingBalanceFallsBackToCurrentAccountBalance() {
+        availableContext(List.of());
+        when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(List.of(), List.of(), null));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.metrics()).containsKey("totalDrawdownRatio");
+    }
+
+    @Test
     void missingAuthoritativeRequiredMarginFailsClosedWithoutLeverageInference() {
         availableContext(List.of());
         when(requiredMargins.resolve(any())).thenReturn(Optional.empty());
@@ -415,11 +426,17 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     private BrokerRiskFactsPort.Snapshot brokerSnapshot(List<BrokerRiskFactsPort.Position> positions,
-                                                        List<BrokerRiskFactsPort.ClosedTrade> closedTrades) {
+                                                         List<BrokerRiskFactsPort.ClosedTrade> closedTrades) {
+        return brokerSnapshot(positions, closedTrades, new BigDecimal("10000"));
+    }
+
+    private BrokerRiskFactsPort.Snapshot brokerSnapshot(List<BrokerRiskFactsPort.Position> positions,
+                                                        List<BrokerRiskFactsPort.ClosedTrade> closedTrades,
+                                                        BigDecimal startingBalance) {
         return new BrokerRiskFactsPort.Snapshot(brokerAccountId,
                 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
                 new BrokerRiskFactsPort.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"),
-                        new BigDecimal("100")), positions, closedTrades, List.of(), "{\"version\":11}");
+                        new BigDecimal("100"), startingBalance), positions, closedTrades, List.of(), "{\"version\":11}");
     }
 
     private Object valuation(org.mockito.invocation.InvocationOnMock invocation) {

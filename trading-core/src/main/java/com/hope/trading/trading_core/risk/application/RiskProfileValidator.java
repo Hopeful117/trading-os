@@ -31,7 +31,8 @@ public class RiskProfileValidator {
         }
         Set<String> ruleIds = profile.rules().stream()
                 .map(RiskPersistence.ProfileRule::ruleId).collect(java.util.stream.Collectors.toSet());
-        if (profile.rules().size() != REQUIRED_RULES.size() || !ruleIds.equals(REQUIRED_RULES)) {
+        if (profile.rules().size() < REQUIRED_RULES.size() || !ruleIds.containsAll(REQUIRED_RULES)
+                || ruleIds.size() != profile.rules().size()) {
             throw new RiskProfileValidationException("EFFECTIVE_RISK_PROFILE_INCOMPLETE");
         }
         List<RuleConfiguration> rules = profile.rules().stream().map(rule -> {
@@ -55,6 +56,7 @@ public class RiskProfileValidator {
                 case RiskRuleIds.MAX_POSITION_RISK -> RuleCategory.POSITION;
                 case RiskRuleIds.MAX_EXPOSURE -> RuleCategory.PORTFOLIO;
                 case RiskRuleIds.DAILY_DRAWDOWN -> RuleCategory.ACCOUNT;
+                case RiskRuleIds.MAX_TOTAL_DRAWDOWN -> RuleCategory.ACCOUNT;
                 default -> null;
             };
         } catch (RuntimeException invalid) {

@@ -110,6 +110,7 @@ public class BrokerAccountService {
         balance.setAsset("USD");
         balance.setAmount(initialCapital);
         account.addBalance(balance);
+        account.setStartingBalance(initialCapital);
 
         // Link the account to the user and broker account
         // Note: The user relationship is set via the owner in the service layer

@@ -26,7 +26,8 @@ record BrokerRiskTransport(UUID brokerAccountId, long snapshotVersion, Instant o
                            Map<String, BigDecimal> assetBalances, Account account,
                            List<Position> positions, List<ClosedTrade> closedTrades,
                            List<LedgerEntry> ledgerEntries) {
-    record Account(String valuationAsset, BigDecimal balance, BigDecimal equity, BigDecimal margin) { }
+    record Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                   BigDecimal margin, BigDecimal startingBalance) { }
     record Position(UUID positionId, String providerPositionReference, String providerReferenceProvenance,
                     String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, BigDecimal cost,
                     BigDecimal marketValue, BigDecimal unrealizedPnl, BigDecimal margin,
@@ -55,7 +56,8 @@ public final class BrokerRiskClient implements BrokerRiskFactsPort {
         BrokerRiskTransport value = client.get(brokerAccountId, from, to);
         try {
             var account = value.account() == null ? null : new Account(value.account().valuationAsset(),
-                    value.account().balance(), value.account().equity(), value.account().margin());
+                    value.account().balance(), value.account().equity(), value.account().margin(),
+                    value.account().startingBalance());
             var positions = value.positions().stream().map(p -> new Position(p.positionId(),
                     p.providerPositionReference(), p.providerReferenceProvenance(), p.instrument(),
                     p.signedQuantity(), p.entryPrice(), p.marketValue(), p.margin(), p.protectedQuantity(),

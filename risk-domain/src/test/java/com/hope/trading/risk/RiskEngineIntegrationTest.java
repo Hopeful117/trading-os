@@ -4,8 +4,10 @@ import com.hope.trading.risk.audit.*;
 import com.hope.trading.risk.engine.*;
 import com.hope.trading.risk.explain.DecisionExplainer;
 import com.hope.trading.risk.rule.*;
+import com.hope.trading.risk.snapshot.*;
 import org.junit.jupiter.api.Test;
 import java.time.*;
+import java.math.BigDecimal;
 import java.util.List;
 
 import static com.hope.trading.risk.RiskFixture.*;
@@ -16,7 +18,7 @@ class RiskEngineIntegrationTest {
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final RiskRuleRegistry registry = new RiskRuleRegistry(List.of(
             new MaximumPositionRiskRule(), new MaximumExposureRule(),
-            new DailyDrawdownRule()));
+            new DailyDrawdownRule(), new MaximumTotalDrawdownRule()));
 
     @Test void evaluatesEveryRuleAndRejectsAnyBlockingFailure() {
         var context = context(rules(
@@ -34,6 +36,35 @@ class RiskEngineIntegrationTest {
         assertEquals("28.1", result.trace().engineVersion());
         assertEquals(context.account().version(), result.trace().context().accountVersion());
         assertEquals(2, new DecisionExplainer().explain(result).reasons().size());
+    }
+
+    @Test void staticTotalDrawdownUsesStartingBalanceAndBreachIsInclusive() {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500"),
+                usd("0"), java.util.Optional.of(usd("50000")),
+                new DailyRiskBaseline(usd("50000"), NOW, "TEST", java.util.Map.of()), usd("0"));
+        var context = context(rules(rule(MaximumTotalDrawdownRule.ID, RuleCategory.ACCOUNT,
+                RuleSeverity.BLOCKING, "0.03")), account, null);
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
+
+        assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
+        assertEquals(RuleStatus.FAILURE, result.ruleResults().getFirst().status());
+        assertEquals(new BigDecimal("0.03"),
+                result.globalMetrics().totalDrawdownRatio().orElseThrow().value());
+    }
+
+    @Test void staticTotalDrawdownDoesNotMoveAfterProfit() {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("55000"), usd("52000"),
+                usd("0"), java.util.Optional.of(usd("50000")),
+                new DailyRiskBaseline(usd("55000"), NOW, "TEST", java.util.Map.of()), usd("0"));
+        var context = context(rules(rule(MaximumTotalDrawdownRule.ID, RuleCategory.ACCOUNT,
+                RuleSeverity.BLOCKING, "0.06")), account, null);
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
+
+        assertEquals(RiskDecision.APPROVED, result.decision().orElseThrow());
+        assertEquals(new BigDecimal("0"),
+                result.globalMetrics().totalDrawdownRatio().orElseThrow().value());
     }
 
     @Test void approvesWithWarningsWithoutHidingThem() {

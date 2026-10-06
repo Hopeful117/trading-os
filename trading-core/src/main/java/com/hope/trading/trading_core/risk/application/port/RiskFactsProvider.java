@@ -16,7 +16,8 @@ public interface RiskFactsProvider {
                     List<String> unavailabilityReasons, Map<String, BigDecimal> assetBalances,
                     Account account, List<Position> positions, List<ClosedTrade> closedTrades,
                     List<LedgerEntry> ledgerEntries, String sourcePayload) { }
-    record Account(String valuationAsset, BigDecimal balance, BigDecimal equity, BigDecimal margin) { }
+    record Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                   BigDecimal margin, BigDecimal startingBalance) { }
     record Position(UUID positionId, String sourcePositionReference, String sourceReferenceProvenance,
                     String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
                     BigDecimal marketValue, BigDecimal margin, BigDecimal protectedQuantity,
@@ -30,7 +31,8 @@ public interface RiskFactsProvider {
 
     static Snapshot fromBroker(BrokerRiskFactsPort.Snapshot value) {
         var account = value.account() == null ? null : new Account(value.account().valuationAsset(),
-                value.account().balance(), value.account().equity(), value.account().margin());
+                value.account().balance(), value.account().equity(), value.account().margin(),
+                value.account().startingBalance());
         var positions = value.positions().stream().map(p -> new Position(p.positionId(),
                 p.providerPositionReference(), p.providerReferenceProvenance(), p.instrument(),
                 p.signedQuantity(), p.entryPrice(), p.marketValue(), p.margin(), p.protectedQuantity(),

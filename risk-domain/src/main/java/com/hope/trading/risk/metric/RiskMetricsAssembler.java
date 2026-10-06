@@ -9,6 +9,6 @@ public final class RiskMetricsAssembler {
                 projected.exposure(), projected.drawdown(), projected.margin(),
                 derived.remainingRisk(), derived.portfolioHeat(), derived.riskUtilization(),
                 derived.positionRiskRatio(), derived.exposureRatio(),
-                derived.dailyDrawdownRatio());
+                derived.dailyDrawdownRatio(), derived.totalDrawdownRatio());
     }
 }

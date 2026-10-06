@@ -23,9 +23,12 @@ public final class ProjectionEngine {
                 .toList();
         Money exposure = sum(projectedPositions, currency, ProjectedPosition::exposure);
         Money heat = sum(projectedPositions, currency, ProjectedPosition::lossAtStop);
-        Money observedDailyLoss = new Money(account.dailyStartBalance().amount()
-                .subtract(account.equity().amount()).max(BigDecimal.ZERO), currency);
-        Money projectedDrawdown = observedDailyLoss.add(heat);
+        BigDecimal projectedEquity = account.equity().amount().subtract(heat.amount());
+        Money projectedDrawdown = new Money(account.dailyRiskBaseline().referenceBalance().amount()
+                .subtract(projectedEquity).max(BigDecimal.ZERO), currency);
+        Optional<Money> projectedTotalDrawdown = account.accountStartingBalance()
+                .map(starting -> new Money(starting.amount().subtract(projectedEquity)
+                        .max(BigDecimal.ZERO), currency));
         Money currentPositionMargin = portfolio.positions().stream()
                 .map(PositionSnapshot::marginUsed)
                 .reduce(Money.zero(currency), Money::add);
@@ -33,7 +36,7 @@ public final class ProjectionEngine {
                 sum(projectedPositions, currency, ProjectedPosition::margin);
         Money margin = account.usedMargin()
                 .subtract(currentPositionMargin).add(projectedPositionMargin);
-        return new ProjectedMetrics(exposure, projectedDrawdown, margin, heat,
+        return new ProjectedMetrics(exposure, projectedDrawdown, projectedTotalDrawdown, margin, heat,
                 new ProjectedPortfolioState(projectedPositions));
     }
 
