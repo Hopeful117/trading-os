@@ -168,6 +168,52 @@ describe('PlanPage', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="positions-link"]')).toBeTruthy();
   });
 
+  it('retries T1 on the existing execution without validating a new intent', () => {
+    const validate = vi.fn(() => of({ id: 'exec-1', status: 'VALIDATED' }));
+    const execute = vi.fn(() => of({ id: 'exec-1', status: 'RISK_REVALIDATION_UNAVAILABLE' }));
+    const retryT1 = vi.fn(() => of({ id: 'exec-1', status: 'COMPLETED' }));
+    const plan = fakePlan('ACCEPTED');
+
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        {
+          provide: TradePlanService,
+          useValue: {
+            getPlan: () => of(plan),
+            decide: () => of(plan),
+            evaluateRisk: () => of(fakeRiskDecision('APPROVED')),
+          },
+        },
+        {
+          provide: ExecutionService,
+          useValue: {
+            validate,
+            execute,
+            retryT1,
+            list: () => of([]),
+            getExecution: () => of({ id: 'exec-1', status: 'CREATED' }),
+          },
+        },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="execute-button"]')?.click();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="retry-t1-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(validate).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(retryT1).toHaveBeenCalledWith('exec-1');
+  });
+
   it('does not show execute button for REJECTED risk decision', () => {
     configureMocks(
       of(fakePlan('ACCEPTED')),

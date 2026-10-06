@@ -321,7 +321,9 @@ public class ExecutionTimeRiskRevalidationService {
         persistence.t1Evaluation(t1EvaluationId, intent.id().value(), intent.riskApproval().evaluationId(),
                 persistedAccountId, now, "CONTEXT_UNAVAILABLE", null, code,
                 1, response, persistence.write(response), now);
-        lifecycle.riskUnavailable(intent, t1EvaluationId, code, now);
+        if (intent.status() != ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE) {
+            lifecycle.riskUnavailable(intent, t1EvaluationId, code, now);
+        }
         return new T1Outcome(t1EvaluationId, null, code, false);
     }
 
@@ -410,6 +412,7 @@ public class ExecutionTimeRiskRevalidationService {
             var first = entries.get(0);
             balances.put(balanceAsset, first.balance().subtract(first.amount()).add(first.fee()));
         }
+        balances.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().signum() == 0);
         return Map.copyOf(balances);
     }
 
@@ -491,9 +494,18 @@ public class ExecutionTimeRiskRevalidationService {
     }
 
     private static void requireComplete(MarketValuationPort.Snapshot snapshot, String code) {
-        if (snapshot == null || !snapshot.complete() || snapshot.sourceVersion() < 1
-                || snapshot.facts().stream().anyMatch(f -> !"AVAILABLE".equals(f.status()) || f.value() == null))
-            throw unavailable(code);
+        if (snapshot == null) throw unavailable(code, "Market valuation snapshot is null");
+        if (snapshot.facts() == null) throw unavailable(code, "Market valuation facts are null");
+        if (!snapshot.complete() || snapshot.sourceVersion() < 1
+                || snapshot.facts().stream().anyMatch(f -> f == null
+                || !"AVAILABLE".equals(f.status()) || f.value() == null)) {
+            String facts = snapshot.facts().stream()
+                    .map(f -> f == null ? "null" : f.type() + ":" + f.id() + " status=" + f.status()
+                            + " valuePresent=" + (f.value() != null))
+                    .toList().toString();
+            throw unavailable(code, "Market valuation incomplete: complete=" + snapshot.complete()
+                    + ", sourceVersion=" + snapshot.sourceVersion() + ", facts=" + facts);
+        }
     }
 
     private static void validateBaseline(RiskPersistence.Baseline baseline, RiskDay riskDay, String currency) {
@@ -565,10 +577,14 @@ public class ExecutionTimeRiskRevalidationService {
 
     private static final class ContextUnavailable extends RuntimeException {
         private final String code;
-        private ContextUnavailable(String code) { super(code); this.code = code; }
+        private ContextUnavailable(String code) { this(code, code); }
+        private ContextUnavailable(String code, String message) { super(message); this.code = code; }
     }
 
     private static ContextUnavailable unavailable(String code) { return new ContextUnavailable(code); }
+    private static ContextUnavailable unavailable(String code, String message) {
+        return new ContextUnavailable(code, message);
+    }
 
     private record ClosedPnl(BigDecimal amount, List<String> marketPayloads) { }
 }

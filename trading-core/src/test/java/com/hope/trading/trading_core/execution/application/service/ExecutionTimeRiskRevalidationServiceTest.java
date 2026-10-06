@@ -11,10 +11,12 @@ import com.hope.trading.trading_core.risk.application.RiskDay;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
+import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.model.Account;
 import org.junit.jupiter.api.BeforeEach;
@@ -123,6 +125,28 @@ class ExecutionTimeRiskRevalidationServiceTest {
     }
 
     @Test
+    void repeatedUnavailableT1DoesNotRepeatTheSameLifecycleTransition() {
+        UUID ownerId = intent.initiatorId();
+        when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
+                tradePlanId, 1, "READY_TO_EXECUTE", now, UUID.randomUUID(), 1, now, ownerId,
+                accountId, "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1,
+                "BTC/USD", "LONG", new com.hope.trading.trading_core.shared.domain.model.EntryIntent(
+                        com.hope.trading.trading_core.shared.domain.model.EntryIntent.OrderType.MARKET,
+                        BigDecimal.ONE), BigDecimal.ONE, BigDecimal.TWO, BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE, "USD", "{}"));
+        when(accounts.findById(accountId)).thenReturn(Optional.empty());
+
+        intent.transition(ExecutionStatus.VALIDATED, now);
+        intent.transition(ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE, now);
+
+        ExecutionTimeRiskRevalidationService.T1Outcome outcome = service.evaluateAndPersist(intent, now);
+
+        assertThat(outcome.approved()).isFalse();
+        assertThat(outcome.reasonCode()).isEqualTo("ACCOUNT_NOT_FOUND");
+        verify(lifecycle, never()).riskUnavailable(any(), any(), any(), any());
+    }
+
+    @Test
     void t1RejectsCanonicalBrokerRelationMismatch() {
         UUID relationBrokerId = UUID.randomUUID();
         UUID ownerId = intent.initiatorId();
@@ -186,6 +210,63 @@ class ExecutionTimeRiskRevalidationServiceTest {
     }
 
     @Test
+    void completePaperT1RevalidationApprovesWithZeroBalancesIgnored() {
+        RiskFactsProvider facts = mock(RiskFactsProvider.class);
+        Account account = Account.builder().accountId(accountId).brokerAccountId(intent.brokerAccountId())
+                .user(com.hope.trading.trading_core.model.User.builder().userId(intent.initiatorId()).build())
+                .name("paper").baseCurrency("USD").build();
+        BrokerAccount paperBroker = mock(BrokerAccount.class);
+        when(paperBroker.id()).thenReturn(intent.brokerAccountId());
+        when(paperBroker.ownerId()).thenReturn(intent.initiatorId());
+        when(paperBroker.executionMode()).thenReturn(com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER);
+        when(paperBroker.provider()).thenReturn(com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider.KRAKEN);
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        when(brokerAccounts.findByIdAndOwnerId(intent.brokerAccountId(), intent.initiatorId()))
+                .thenReturn(Optional.of(paperBroker));
+        when(persistence.configuration(accountId)).thenReturn(Optional.of(
+                new RiskPersistence.AccountConfiguration(accountId, intent.brokerAccountId(), "UTC", "USD", UUID.randomUUID())));
+        when(persistence.assignedProfile(accountId)).thenReturn(Optional.of(validProfile()));
+        when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(readyPlan());
+        when(facts.load(any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
+                intent.brokerAccountId(), 1, now, true, List.of(),
+                Map.of("USD", new BigDecimal("10000"), "ETH", BigDecimal.ZERO),
+                new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO),
+                List.of(), List.of(), List.of(), "paper-facts"));
+        when(market.value(any(), any(), any(), any())).thenAnswer(invocation -> {
+            List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
+            List<MarketValuationPort.Asset> assets = invocation.getArgument(3);
+            List<MarketValuationPort.Fact> valuationFacts = new ArrayList<>();
+            assets.forEach(asset -> valuationFacts.add(new MarketValuationPort.Fact(
+                    "ASSET", asset.id(), null, asset.currency(), null, BigDecimal.ONE, null, BigDecimal.ONE,
+                    "AVAILABLE", "identity")));
+            instruments.forEach(instrument -> valuationFacts.add(new MarketValuationPort.Fact(
+                    "INSTRUMENT", instrument.id(), UUID.randomUUID(), null, instrument.priceUse(),
+                    new BigDecimal("50000"), new BigDecimal("50000"), BigDecimal.ONE,
+                    "AVAILABLE", "paper-market")));
+            return new MarketValuationPort.Snapshot(UUID.randomUUID(), 1, "USD", invocation.getArgument(1), now,
+                    "policy", "PT5M", true, valuationFacts, "valuation");
+        });
+        when(requiredMargins.resolve(any())).thenReturn(Optional.of(
+                new RequiredMarginPort.Fact(BigDecimal.ONE, "USD", "paper-margin", 1, now)));
+        when(persistence.baseline(any(), any(), any(), any(), any(), any(), any())).thenReturn(
+                new RiskPersistence.Baseline(1, new BigDecimal("10000"), "USD",
+                        Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), 1, "baseline"));
+        when(persistence.component(any(), any(), any(), any(), any())).thenReturn(1L);
+        when(persistence.context(any(), any(), any())).thenReturn(1L);
+
+        ExecutionTimeRiskRevalidationService completeService = new ExecutionTimeRiskRevalidationService(
+                accounts, brokerAccounts, tradePlans, facts, market, requiredMargins, persistence, clock,
+                transactionManager, lifecycle, new RiskProfileValidator());
+
+        ExecutionTimeRiskRevalidationService.T1Outcome outcome = completeService.evaluateAndPersist(intent, now);
+
+        assertThat(outcome.approved()).isTrue();
+        assertThat(outcome.decision()).isEqualTo(com.hope.trading.risk.domain.RiskTypes.RiskDecision.APPROVED);
+        verify(persistence).t1Evaluation(any(), eq(intent.id().value()), eq(evaluationId), eq(accountId),
+                any(), eq("COMPLETED"), eq("APPROVED"), isNull(), eq(1), any(), any(), any());
+    }
+
+    @Test
     void validatesRiskRevalidationHelpers() throws Exception {
         assertThat(invoke("direction", new Class<?>[]{String.class}, "LONG"))
                 .isEqualTo(com.hope.trading.risk.domain.RiskTypes.TradeDirection.LONG);
@@ -233,6 +314,35 @@ class ExecutionTimeRiskRevalidationServiceTest {
         assertThat(invoke("requireComplete",
                 new Class<?>[]{MarketValuationPort.Snapshot.class, String.class}, valuation, "INVALID"))
                 .isNull();
+
+        MarketValuationPort.Fact unavailable = new MarketValuationPort.Fact(
+                "ASSET", "eth", null, "ETH", null, null, null, null, "OBSERVATION_UNAVAILABLE", null);
+        MarketValuationPort.Snapshot incomplete = new MarketValuationPort.Snapshot(
+                UUID.randomUUID(), 7, "USD", now, now, "policy", "5m", false,
+                List.of(unavailable), "payload");
+        assertThatThrownBy(() -> invoke("requireComplete",
+                new Class<?>[]{MarketValuationPort.Snapshot.class, String.class}, incomplete,
+                "RISK_DAY_START_VALUATION_UNAVAILABLE"))
+                .hasMessageContaining("complete=false")
+                .hasMessageContaining("sourceVersion=7")
+                .hasMessageContaining("ASSET:eth status=OBSERVATION_UNAVAILABLE valuePresent=false");
+
+        MarketValuationPort.Snapshot nullFacts = new MarketValuationPort.Snapshot(
+                UUID.randomUUID(), 8, "USD", now, now, "policy", "5m", false, null, "payload");
+        assertThatThrownBy(() -> invoke("requireComplete",
+                new Class<?>[]{MarketValuationPort.Snapshot.class, String.class}, nullFacts,
+                "RISK_DAY_START_VALUATION_UNAVAILABLE"))
+                .hasMessage("Market valuation facts are null");
+
+        RiskFactsProvider.Snapshot balances = new RiskFactsProvider.Snapshot(
+                UUID.randomUUID(), 1, now, true, List.of(),
+                Map.of("USD", BigDecimal.TEN, "ETH", BigDecimal.ZERO),
+                new RiskFactsProvider.Account("USD", BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO),
+                List.of(), List.of(), List.of(), "source");
+        assertThat(invoke("reconstructStartBalances",
+                new Class<?>[]{RiskFactsProvider.Snapshot.class, RiskDay.class},
+                balances, RiskDay.containing(now, "UTC")))
+                .isEqualTo(Map.of("USD", BigDecimal.TEN));
     }
 
     private static Object invoke(String name, Class<?>[] parameterTypes, Object... arguments) throws Exception {
@@ -247,5 +357,25 @@ class ExecutionTimeRiskRevalidationServiceTest {
             }
             throw exception;
         }
+    }
+
+    private RiskPersistence.Profile validProfile() {
+        return new RiskPersistence.Profile(UUID.randomUUID(), "1.0.0", "policy", "1.0.0", "PLATFORM",
+                now, "source", now, "assignment", List.of(
+                new RiskPersistence.ProfileRule("MAX_POSITION_RISK", "1.0.0", "POSITION", "BLOCKING", 10,
+                        new BigDecimal("0.02"), "rule"),
+                new RiskPersistence.ProfileRule("MAX_EXPOSURE", "1.0.0", "PORTFOLIO", "BLOCKING", 10,
+                        new BigDecimal("0.50"), "rule"),
+                new RiskPersistence.ProfileRule("DAILY_DRAWDOWN", "1.0.0", "ACCOUNT", "BLOCKING", 10,
+                        new BigDecimal("0.10"), "rule")));
+    }
+
+    private TradePlanRiskPort.Snapshot readyPlan() {
+        return new TradePlanRiskPort.Snapshot(tradePlanId, 1, "READY_TO_EXECUTE", now, UUID.randomUUID(), 1,
+                now, intent.initiatorId(), accountId, "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1,
+                "BTC/USD", "LONG", new com.hope.trading.trading_core.shared.domain.model.EntryIntent(
+                com.hope.trading.trading_core.shared.domain.model.EntryIntent.OrderType.MARKET, null),
+                BigDecimal.ONE, new BigDecimal("50000"), new BigDecimal("0.1"), BigDecimal.ONE,
+                new BigDecimal("0.00001"), "USD", "plan");
     }
 }

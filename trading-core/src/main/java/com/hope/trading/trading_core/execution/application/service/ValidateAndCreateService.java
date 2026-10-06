@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.execution.application.service;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.execution.application.command.ValidateAndCreateCommand;
+import com.hope.trading.trading_core.execution.application.port.ExecutionEventPublisher;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import com.hope.trading.trading_core.execution.domain.model.ExecutionParameters;
@@ -9,6 +10,7 @@ import com.hope.trading.trading_core.execution.domain.model.RiskApprovalReferenc
 import com.hope.trading.trading_core.execution.domain.model.TradePlanReference;
 import com.hope.trading.trading_core.execution.domain.service.ExecutionLifecycleService;
 import com.hope.trading.trading_core.execution.domain.exception.ExecutionValidationException;
+import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntentRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
@@ -33,20 +35,26 @@ public final class ValidateAndCreateService {
     private final TradePlanRiskPort tradePlans;
     private final BrokerAccountRepository brokerAccounts;
     private final CreateExecutionIntentService intentCreation;
+    private final ExecutionIntentRepositoryPort intents;
     private final ExecutionLifecycleService lifecycle;
+    private final ExecutionEventPublisher events;
     private final Clock clock;
 
     public ValidateAndCreateService(RiskPersistence riskPersistence,
                                      TradePlanRiskPort tradePlans,
-                                     BrokerAccountRepository brokerAccounts,
-                                     CreateExecutionIntentService intentCreation,
-                                     ExecutionLifecycleService lifecycle,
-                                     Clock clock) {
+                                      BrokerAccountRepository brokerAccounts,
+                                       CreateExecutionIntentService intentCreation,
+                                       ExecutionIntentRepositoryPort intents,
+                                       ExecutionLifecycleService lifecycle,
+                                       ExecutionEventPublisher events,
+                                       Clock clock) {
         this.riskPersistence = Objects.requireNonNull(riskPersistence);
         this.tradePlans = Objects.requireNonNull(tradePlans);
         this.brokerAccounts = Objects.requireNonNull(brokerAccounts);
         this.intentCreation = Objects.requireNonNull(intentCreation);
+        this.intents = Objects.requireNonNull(intents);
         this.lifecycle = Objects.requireNonNull(lifecycle);
+        this.events = Objects.requireNonNull(events);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -161,6 +169,8 @@ public final class ValidateAndCreateService {
 
         // 15. Transition to VALIDATED
         lifecycle.validate(intent, clock.instant());
+        intents.save(intent);
+        events.publish(intent.pullEvents());
 
         return intent;
     }
