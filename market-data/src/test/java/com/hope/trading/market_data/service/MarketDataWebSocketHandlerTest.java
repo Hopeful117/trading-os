@@ -15,14 +15,19 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.util.ReflectionTestUtils.getField;
 
 /**
  * STORY-0020A-3B: protects the frontend-facing WebSocket contract of Market
@@ -146,5 +151,96 @@ class MarketDataWebSocketHandlerTest {
 
         assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void unsupportedOrderBookDepthIsRejectedBeforeSubscription() throws Exception {
+        givenSession();
+        UUID marketId = UUID.randomUUID();
+        connect("/ws/market-data?symbol=BTC%2FEUR&marketId=" + marketId
+                + "&depth=100&type=ORDER_BOOK");
+
+        assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
+                .hasMessage("Unsupported order-book depth: 100");
+        verify(orderBookPublisher, never()).streamByMarketAndDepth(any(), anyInt());
+    }
+
+    @Test
+    void unsupportedOhlcIntervalIsRejectedBeforeSubscription() throws Exception {
+        givenSession();
+        UUID marketId = UUID.randomUUID();
+        connect("/ws/market-data?symbol=BTC%2FEUR&marketId=" + marketId
+                + "&interval=2&type=OHLC");
+
+        assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
+                .hasMessage("Unsupported OHLC interval: 2");
+        verify(ohlcPublisher, never()).streamByMarketAndInterval(any(), any());
+    }
+
+    @Test
+    void duplicateRequiredParameterIsRejected() throws Exception {
+        givenSession();
+        connect("/ws/market-data?symbol=BTC%2FEUR&symbol=ETH%2FEUR&type=TICKER");
+
+        assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
+                .hasMessage("WebSocket parameter must appear exactly once: symbol");
+        verify(tickerPublisher, never()).streamBySymbol(any());
+    }
+
+    @Test
+    void oversizedSymbolIsRejectedBeforeSubscription() throws Exception {
+        givenSession();
+        connect("/ws/market-data?symbol=" + "A".repeat(65) + "&type=TICKER");
+
+        assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
+                .hasMessage("Invalid WebSocket symbol");
+        verify(tickerPublisher, never()).streamBySymbol(any());
+    }
+
+    @Test
+    void malformedIntegerIsRejectedBeforeSubscription() throws Exception {
+        givenSession();
+        UUID marketId = UUID.randomUUID();
+        connect("/ws/market-data?symbol=BTC%2FEUR&marketId=" + marketId
+                + "&depth=invalid&type=ORDER_BOOK");
+
+        assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
+                .hasMessage("Invalid WebSocket integer parameter: depth");
+        verify(orderBookPublisher, never()).streamByMarketAndDepth(any(), anyInt());
+    }
+
+    @Test
+    void invalidMarketIdIsRejectedBeforeSubscription() throws Exception {
+        givenSession();
+        connect("/ws/market-data?symbol=BTC%2FEUR&marketId=invalid"
+                + "&depth=10&type=ORDER_BOOK");
+
+        assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(orderBookPublisher, never()).streamByMarketAndDepth(any(), anyInt());
+    }
+
+    @Test
+    void controlCharacterSymbolIsRejectedBeforeSubscription() throws Exception {
+        givenSession();
+        connect("/ws/market-data?symbol=BTC%01EUR&type=TICKER");
+
+        assertThatThrownBy(() -> handler.afterConnectionEstablished(session))
+                .hasMessage("Invalid WebSocket symbol");
+        verify(tickerPublisher, never()).streamBySymbol(any());
+    }
+
+    @Test
+    void publisherErrorClosesSessionAndRemovesFailedSubscription() throws Exception {
+        givenSession();
+        connect("/ws/market-data?symbol=BTC%2FEUR&type=TICKER");
+        when(tickerPublisher.streamBySymbol("BTC/EUR"))
+                .thenReturn(Flux.error(new IllegalStateException("publisher failed")));
+
+        handler.afterConnectionEstablished(session);
+
+        verify(session).close(CloseStatus.SERVER_ERROR);
+        assertThat((Map<String, ?>) getField(handler, "subscriptions"))
+                .doesNotContainKey(session.getId());
     }
 }

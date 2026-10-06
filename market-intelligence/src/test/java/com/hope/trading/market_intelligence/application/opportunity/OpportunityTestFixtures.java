@@ -37,12 +37,13 @@ public final class OpportunityTestFixtures {
             OpportunityId id, long version, OpportunityStatus status,
             OpportunityScore score, Instant evaluatedAt) {
         return new OpportunityFactory().create(
-                id, new OpportunityVersion(version), status, "BTC/EUR",
-                OpportunityDirection.LONG, "Bullish breakout", "5m",
-                OpportunityType.SCALPING, OpportunityOrigin.PASSIVE_SCAN, score,
-                "Confirmed", Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
-                evaluatedAt, evaluatedAt, evaluatedAt.plusSeconds(300), evaluatedAt,
-                null, null);
+                new OpportunityFactory.Values(
+                        id, new OpportunityVersion(version), status, "BTC/EUR",
+                        OpportunityDirection.LONG, "Bullish breakout", "5m",
+                        OpportunityType.SCALPING, OpportunityOrigin.PASSIVE_SCAN, score,
+                        "Confirmed", Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
+                        evaluatedAt, evaluatedAt, evaluatedAt.plusSeconds(300), evaluatedAt,
+                        null, null, null));
     }
 
     private OpportunityTestFixtures() {}

@@ -26,22 +26,26 @@ class TradingOpportunityTest {
         var observation = new ObservationReference(java.util.UUID.randomUUID());
         Set<ObservationReference> references = new java.util.HashSet<>(Set.of(observation));
         TradingOpportunity value = new OpportunityFactory().create(
-                new OpportunityId(java.util.UUID.randomUUID()), new OpportunityVersion(1),
-                OpportunityStatus.DETECTED, "BTC/EUR", OpportunityDirection.LONG,
-                "Scenario", "5m", OpportunityType.SCALPING,
-                OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
-                "Explanation", references, Set.of(), OpportunityTestFixtures.NOW,
-                OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null, null);
+                new OpportunityFactory.Values(
+                        new OpportunityId(java.util.UUID.randomUUID()), new OpportunityVersion(1),
+                        OpportunityStatus.DETECTED, "BTC/EUR", OpportunityDirection.LONG,
+                        "Scenario", "5m", OpportunityType.SCALPING,
+                        OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
+                        "Explanation", references, Set.of(), OpportunityTestFixtures.NOW,
+                        OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null, null,
+                        null));
         references.clear();
 
         assertThat(value.observations()).containsExactly(observation);
         assertThatThrownBy(() -> new OpportunityFactory().create(
-                new OpportunityId(java.util.UUID.randomUUID()), new OpportunityVersion(1),
-                OpportunityStatus.DETECTED, "BTC/EUR", OpportunityDirection.LONG,
-                "Scenario", "5m", OpportunityType.SCALPING,
-                OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
-                "Explanation", Set.of(), Set.of(), OpportunityTestFixtures.NOW,
-                OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null, null))
+                new OpportunityFactory.Values(
+                        new OpportunityId(java.util.UUID.randomUUID()), new OpportunityVersion(1),
+                        OpportunityStatus.DETECTED, "BTC/EUR", OpportunityDirection.LONG,
+                        "Scenario", "5m", OpportunityType.SCALPING,
+                        OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
+                        "Explanation", Set.of(), Set.of(), OpportunityTestFixtures.NOW,
+                        OpportunityTestFixtures.NOW, null, OpportunityTestFixtures.NOW, null, null,
+                        null)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

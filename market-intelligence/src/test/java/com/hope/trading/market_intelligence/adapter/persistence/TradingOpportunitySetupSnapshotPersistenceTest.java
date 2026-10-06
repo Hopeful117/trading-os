@@ -26,13 +26,14 @@ class TradingOpportunitySetupSnapshotPersistenceTest {
     private static TradingOpportunity opportunityWithSnapshot(
             OpportunitySetupSnapshot snapshot) {
         return new OpportunityFactory().create(
-                new OpportunityId(UUID.randomUUID()), new OpportunityVersion(1),
-                OpportunityStatus.ACTIVE, "BTC/EUR", OpportunityDirection.LONG,
-                "Bullish breakout", "5m", OpportunityType.SCALPING,
-                OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
-                "Confirmed", Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
-                NOW, NOW, NOW.plusSeconds(300), NOW,
-                UUID.randomUUID(), snapshot);
+                new OpportunityFactory.Values(
+                        new OpportunityId(UUID.randomUUID()), new OpportunityVersion(1),
+                        OpportunityStatus.ACTIVE, "BTC/EUR", OpportunityDirection.LONG,
+                        "Bullish breakout", "5m", OpportunityType.SCALPING,
+                        OpportunityOrigin.PASSIVE_SCAN, new OpportunityScore(BigDecimal.TEN),
+                        "Confirmed", Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
+                        NOW, NOW, NOW.plusSeconds(300), NOW,
+                        UUID.randomUUID(), snapshot, null));
     }
 
     @Test
