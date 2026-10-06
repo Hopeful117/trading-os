@@ -9,10 +9,12 @@ import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepo
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.execution.application.command.CreateExecutionIntentCommand;
 import com.hope.trading.trading_core.execution.application.command.ValidateAndCreateCommand;
+import com.hope.trading.trading_core.execution.application.port.ExecutionEventPublisher;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.model.*;
 import com.hope.trading.trading_core.execution.domain.service.ExecutionLifecycleService;
 import com.hope.trading.trading_core.execution.domain.exception.ExecutionValidationException;
+import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntentRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
@@ -35,7 +37,9 @@ class ValidateAndCreateServiceTest {
     private TradePlanRiskPort tradePlans;
     private BrokerAccountRepository brokerAccounts;
     private CreateExecutionIntentService intentCreation;
+    private ExecutionIntentRepositoryPort intents;
     private ExecutionLifecycleService lifecycle;
+    private ExecutionEventPublisher events;
     private ValidateAndCreateService service;
 
     private final UUID initiatorId = UUID.randomUUID();
@@ -52,9 +56,11 @@ class ValidateAndCreateServiceTest {
         tradePlans = mock(TradePlanRiskPort.class);
         brokerAccounts = mock(BrokerAccountRepository.class);
         intentCreation = mock(CreateExecutionIntentService.class);
+        intents = mock(ExecutionIntentRepositoryPort.class);
         lifecycle = mock(ExecutionLifecycleService.class);
+        events = mock(ExecutionEventPublisher.class);
         service = new ValidateAndCreateService(riskPersistence, tradePlans, brokerAccounts,
-                intentCreation, lifecycle, Clock.fixed(now, ZoneOffset.UTC));
+                intentCreation, intents, lifecycle, events, Clock.fixed(now, ZoneOffset.UTC));
     }
 
     @Test
@@ -81,6 +87,8 @@ class ValidateAndCreateServiceTest {
 
         assertThat(result).isNotNull();
         verify(lifecycle).validate(intent, now);
+        verify(intents).save(intent);
+        verify(events).publish(any());
     }
 
     @Test

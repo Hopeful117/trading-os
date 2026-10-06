@@ -89,3 +89,52 @@ git diff --check
 * local PAPER settlement is atomic or recoverable;
 * tests and frontend validation pass;
 * human approval is obtained before implementation.
+
+## Focused Runtime Blocker Remediation
+
+The current local PAPER validation reached an approved risk decision and created
+an `ExecutionIntent`, but execution stopped before submission with
+`RISK_REVALIDATION_UNAVAILABLE`. This remediation narrows the next
+implementation slice to execution-time T1 revalidation.
+
+### Phase 6 - Reproduce and classify the T1 failure
+
+1. Add a deterministic service-level test for a complete PAPER T1 approval
+   path, including account facts, Market Data valuation, required margin,
+   ready Trade Plan, and persisted T1 outcome.
+2. Add assertions for each unavailable dependency so the resulting reason code
+   identifies the failing boundary rather than only exposing the aggregate
+   `RISK_REVALIDATION_UNAVAILABLE` state.
+3. Preserve fail-closed behavior: an unavailable dependency must not submit an
+   order.
+
+### Phase 7 - Correct the minimal dependency boundary
+
+1. Fix only the dependency proven unavailable by the regression test among
+   PAPER risk facts, Market Data valuation, required margin, and execution-ready
+   Trade Plan loading.
+2. Preserve the existing `RequiredMarginPort` PAPER behavior, local PAPER
+   settlement authority, risk version binding, and explicit human execution
+   action.
+3. Do not weaken risk rules, replace unavailable facts with fabricated values,
+   or route PAPER execution through Broker Service.
+
+### Phase 8 - Protect the browser retry path
+
+1. Add a frontend regression test for a T1-unavailable execution response.
+2. Ensure the UI does not call `/executions/validate` a second time for the
+   same approved plan and idempotency boundary when the user is retrying T1.
+3. Keep T1 retry on `/executions/{id}/retry-t1` and preserve idempotency errors
+   as visible actionable failures.
+
+### Phase 9 - Validate the controlled PAPER journey
+
+1. Run the focused Trading Core tests and affected Angular tests.
+2. Run the Trading Core, Broker Service, and frontend quality checks required
+   by the repository.
+3. Repeat the authenticated local PAPER journey through the Gateway with a
+   low-exposure plan.
+4. Verify `APPROVED` T1, PAPER execution completion, persisted position after
+   reload, and the existing human-authorized close path where applicable.
+5. Record the exact environment, execution identifiers, observed states, and
+   any remaining blocker without using LIVE credentials or Kraken private APIs.

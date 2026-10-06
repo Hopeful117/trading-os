@@ -33,10 +33,11 @@ public class ExecutionConfiguration {
     }
     @Bean ValidateAndCreateService validateAndCreateService(
             RiskPersistence riskPersistence, TradePlanRiskPort tradePlans,
-            BrokerAccountRepository brokerAccounts, CreateExecutionIntentService intentCreation,
-            ExecutionLifecycleService lifecycle, Clock clock){
+             BrokerAccountRepository brokerAccounts, CreateExecutionIntentService intentCreation,
+             ExecutionIntentRepositoryPort intents,
+             ExecutionLifecycleService lifecycle, ExecutionEventPublisher events, Clock clock){
         return new ValidateAndCreateService(riskPersistence, tradePlans, brokerAccounts,
-                intentCreation, lifecycle, clock);
+                intentCreation, intents, lifecycle, events, clock);
     }
     @Bean BrokerExecutionAdapter brokerExecutionAdapter(BrokerExecutionClient client){
         return new BrokerExecutionAdapter(client);
