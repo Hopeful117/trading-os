@@ -34,4 +34,5 @@ Risk Domain remains unchanged and fact-source agnostic.
 
 ## Review State
 
-This report does not approve code review, human review, commit, or merge.
+The implementation passed code review and was human-accepted. Commit and merge
+remain pending.

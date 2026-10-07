@@ -54,6 +54,6 @@ required Story 0040 fail-closed behavior and is not expanded here.
 
 ## Review State
 
-`STORY_0040_IMPLEMENTED_READY_FOR_CODE_REVIEW`
+`STORY_0040_CLOSED_HUMAN_ACCEPTED_COMMIT_PENDING`
 
-Human review, commit, and merge remain pending.
+Human commit and merge remain pending.

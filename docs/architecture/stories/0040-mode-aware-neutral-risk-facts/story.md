@@ -4,7 +4,7 @@
 
 **ID:** `0040`
 
-**Status:** Implemented - Ready for Code Review
+**Status:** CLOSED - HUMAN ACCEPTED
 
 **Baseline:** `main` at `2f2dbdc` (Story 0039 merged)
 
@@ -90,25 +90,25 @@ post-settlement T1 validation path in the repository.
 
 ## Acceptance Criteria
 
-- [ ] T0 resolves `Command.accountId` as `Account.accountId`.
-- [ ] T0 resolves the canonical linked BrokerAccount without owner/provider identity inference.
-- [ ] T1 resolves the financial Account through `TradePlan.tradingAccountId`.
-- [ ] T1 fails closed when the TradePlan Account does not resolve to the intent BrokerAccount.
-- [ ] T0 and T1 work with independently generated Account and BrokerAccount IDs.
-- [ ] T0 and T1 persist and use the same financial Account identity.
-- [ ] T0 and T1 obtain ExecutionMode from the linked BrokerAccount.
-- [ ] T0 and T1 use the exact assigned RiskProfile ID and semantic version.
-- [ ] LIVE balances and provider-owned positions come from Broker Service/provider facts.
-- [ ] LIVE local PAPER state is never used as authoritative risk state.
-- [ ] PAPER balances and positions come from Trading Core local financial and execution state.
-- [ ] PAPER risk evaluation makes no Broker Service financial or position-facts call.
-- [ ] Market Data supplies current prices and conversion/valuation inputs only.
-- [ ] Missing or incomplete Market Data fails closed without authorization.
-- [ ] Missing required margin fails closed without substituting zero or defaults.
-- [ ] Incomplete or inconsistent PAPER state fails closed.
-- [ ] The Risk Domain receives only neutral facts, policy, and proposed-trade data.
-- [ ] T1 persists the financial Account ID and never substitutes BrokerAccount.id.
-- [ ] Existing LIVE authority, idempotency, provenance, and execution lifecycle behavior remain preserved.
+ - [x] T0 resolves `Command.accountId` as `Account.accountId`.
+ - [x] T0 resolves the canonical linked BrokerAccount without owner/provider identity inference.
+ - [x] T1 resolves the financial Account through `TradePlan.tradingAccountId`.
+ - [x] T1 fails closed when the TradePlan Account does not resolve to the intent BrokerAccount.
+ - [x] T0 and T1 work with independently generated Account and BrokerAccount IDs.
+ - [x] T0 and T1 persist and use the same financial Account identity.
+ - [x] T0 and T1 obtain ExecutionMode from the linked BrokerAccount.
+ - [x] T0 and T1 use the exact assigned RiskProfile ID and semantic version.
+ - [x] LIVE balances and provider-owned positions come from Broker Service/provider facts.
+ - [x] LIVE local PAPER state is never used as authoritative risk state.
+ - [x] PAPER balances and positions come from Trading Core local financial and execution state.
+ - [x] PAPER risk evaluation makes no Broker Service financial or position-facts call.
+ - [x] Market Data supplies current prices and conversion/valuation inputs only.
+ - [x] Missing or incomplete Market Data fails closed without authorization.
+ - [x] Missing required margin fails closed without substituting zero or defaults.
+ - [x] Incomplete or inconsistent PAPER state fails closed.
+ - [x] The Risk Domain receives only neutral facts, policy, and proposed-trade data.
+ - [x] T1 persists the financial Account ID and never substitutes BrokerAccount.id.
+ - [x] Existing LIVE authority, idempotency, provenance, and execution lifecycle behavior remain preserved.
 
 ## Failure Semantics
 
@@ -178,13 +178,13 @@ mode-aware application boundary above the Risk Domain and existing adapters.
 
 ## Definition of Done
 
-- [ ] Repository Analysis approved.
-- [ ] Implementation Plan approved if required.
+- [x] Repository Analysis approved.
+- [x] Implementation Plan approved if required.
 - [x] Mode-aware neutral Risk Facts boundary implemented.
 - [x] T0/T1 canonical identity correction implemented.
 - [x] LIVE and PAPER source authority tests pass.
 - [x] Complete Trading Core validation passes.
-- [ ] Human diff review completed.
-- [ ] Code Review approved.
-- [ ] Engineering Report completed.
+- [x] Human diff review completed.
+- [x] Code Review approved.
+- [x] Engineering Report completed.
 - [ ] Human commit created.
