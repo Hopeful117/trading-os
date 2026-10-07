@@ -57,6 +57,7 @@ public final class AnalysisExecution {
     private final Instant updatedAt;
     private final Instant expiresAt;
     private final Instant completedAt;
+    private final String failureCode;
     private final List<String> capabilities;
     private final RetryMetadata retryMetadata;
     private final AnalysisExecutionProvenance provenance;
@@ -73,6 +74,7 @@ public final class AnalysisExecution {
             Instant updatedAt,
             Instant expiresAt,
             Instant completedAt,
+            String failureCode,
             List<String> capabilities,
             RetryMetadata retryMetadata,
             AnalysisExecutionProvenance provenance,
@@ -88,6 +90,7 @@ public final class AnalysisExecution {
         this.updatedAt = Objects.requireNonNull(updatedAt);
         this.expiresAt = Objects.requireNonNull(expiresAt);
         this.completedAt = completedAt;
+        this.failureCode = failureCode;
         this.capabilities = List.copyOf(capabilities);
         this.retryMetadata = Objects.requireNonNull(retryMetadata);
         this.provenance = Objects.requireNonNull(provenance);
@@ -114,6 +117,7 @@ public final class AnalysisExecution {
                 requestedAt,
                 requestedAt.plus(policy.maximumDuration()),
                 null,
+                null,
                 capabilities,
                 RetryMetadata.none(policy.retryPolicy().maximumAttempts()),
                 provenance,
@@ -129,10 +133,10 @@ public final class AnalysisExecution {
             Instant updatedAt, Instant expiresAt, Instant completedAt,
             List<String> capabilities, RetryMetadata retryMetadata,
             AnalysisExecutionProvenance provenance, AnalysisTraceMetadata traceMetadata,
-            ConsolidatedIntelligence result) {
+            ConsolidatedIntelligence result, String failureCode) {
         return new AnalysisExecution(
                 executionId, idempotencyKey, status, resultQuality, executionPolicy,
-                requestedAt, updatedAt, expiresAt, completedAt, capabilities,
+                requestedAt, updatedAt, expiresAt, completedAt, failureCode, capabilities,
                 retryMetadata, provenance, traceMetadata, result);
     }
 
@@ -148,7 +152,21 @@ public final class AnalysisExecution {
                 at,
                 target.isTerminal() ? at : null,
                 retryMetadata,
-                result
+                result,
+                failureCode
+        );
+    }
+
+    public AnalysisExecution fail(String code, Instant at) {
+        AnalysisExecution transitioned = transitionTo(AnalysisExecutionStatus.FAILED, at);
+        return transitioned.copy(
+                transitioned.status,
+                transitioned.resultQuality,
+                at,
+                at,
+                transitioned.retryMetadata,
+                transitioned.result,
+                code
         );
     }
 
@@ -168,7 +186,8 @@ public final class AnalysisExecution {
                 at,
                 null,
                 retryMetadata,
-                Objects.requireNonNull(acceptedResult)
+                Objects.requireNonNull(acceptedResult),
+                null
         );
     }
 
@@ -184,7 +203,8 @@ public final class AnalysisExecution {
                 at,
                 at,
                 retryMetadata,
-                Objects.requireNonNull(acceptedResult)
+                Objects.requireNonNull(acceptedResult),
+                null
         );
     }
 
@@ -198,11 +218,12 @@ public final class AnalysisExecution {
             Instant nextUpdatedAt,
             Instant nextCompletedAt,
             RetryMetadata nextRetry,
-            ConsolidatedIntelligence nextResult
+            ConsolidatedIntelligence nextResult,
+            String nextFailureCode
     ) {
         return new AnalysisExecution(
                 executionId, idempotencyKey, nextStatus, nextQuality, executionPolicy,
-                requestedAt, nextUpdatedAt, expiresAt, nextCompletedAt, capabilities,
+                requestedAt, nextUpdatedAt, expiresAt, nextCompletedAt, nextFailureCode, capabilities,
                 nextRetry, provenance, traceMetadata, nextResult
         );
     }
@@ -223,6 +244,7 @@ public final class AnalysisExecution {
     public AnalysisExecutionProvenance provenance() { return provenance; }
     public AnalysisTraceMetadata traceMetadata() { return traceMetadata; }
     public Optional<ConsolidatedIntelligence> result() { return Optional.ofNullable(result); }
+    public Optional<String> failureCode() { return Optional.ofNullable(failureCode); }
 
     @Override
     public boolean equals(Object candidate) {

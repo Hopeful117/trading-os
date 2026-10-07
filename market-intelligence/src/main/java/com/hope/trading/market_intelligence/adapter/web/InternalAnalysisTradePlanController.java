@@ -2,14 +2,18 @@ package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.pipeline.AnalysisTradePlanGenerationService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 import java.util.Objects;
 
 @RestController
+@Validated
 @RequestMapping("/internal/v1/intelligence/analyses")
 public class InternalAnalysisTradePlanController {
     private final AnalysisTradePlanGenerationService service;
@@ -21,7 +25,7 @@ public class InternalAnalysisTradePlanController {
     @PostMapping("/{analysisExecutionId}/trade-plans")
     public ResponseEntity<AnalysisTradePlanGenerationService.GenerationResponse> generate(
             @PathVariable UUID analysisExecutionId,
-            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 200) String idempotencyKey,
             @Valid @RequestBody InternalAnalysisTradePlanRequest request,
             Authentication authentication) {
         UUID actorId = ((com.hope.trading.market_intelligence.security.MiServicePrincipal)

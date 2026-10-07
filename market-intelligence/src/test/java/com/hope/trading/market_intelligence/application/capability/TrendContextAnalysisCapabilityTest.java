@@ -301,6 +301,49 @@ class TrendContextAnalysisCapabilityTest {
     }
 
     @Test
+    void marketStructureExecutionProducesPersistableArtifactFingerprints() {
+        TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
+        TrendContextProfile profile = TrendContextTestFixtures.profile();
+        TrendContextAssessmentInput input = mock(TrendContextAssessmentInput.class);
+        TrendContextRoleSeries biasSeries = mock(TrendContextRoleSeries.class);
+        TrendContextRoleSeries setupSeries = mock(TrendContextRoleSeries.class);
+        when(input.marketId()).thenReturn(TrendContextTestFixtures.MARKET_ID);
+        when(input.provider()).thenReturn("KRAKEN");
+        when(input.symbol()).thenReturn("BTC/EUR");
+        when(input.cutOffAt()).thenReturn(TrendContextTestFixtures.ASSESSMENT_AT);
+        when(input.ruleVersion()).thenReturn(TrendContextTestFixtures.RULE_VERSION);
+        when(input.profile()).thenReturn(profile);
+        when(input.fingerprint()).thenReturn("a".repeat(64));
+        when(input.roleSeries()).thenReturn(Map.of(
+                TrendContextRole.BIAS, biasSeries, TrendContextRole.SETUP, setupSeries));
+        when(biasSeries.interval()).thenReturn("FOUR_HOURS");
+        when(biasSeries.candles()).thenReturn(List.of());
+        when(biasSeries.gapFindings()).thenReturn(List.of());
+        when(biasSeries.exclusionFindings()).thenReturn(List.of());
+        when(setupSeries.interval()).thenReturn("ONE_HOUR");
+        when(setupSeries.candles()).thenReturn(List.of());
+        when(setupSeries.gapFindings()).thenReturn(List.of());
+        when(setupSeries.exclusionFindings()).thenReturn(List.of());
+        when(mapper.map(any(), same(profile), any(), any(), any())).thenReturn(input);
+
+        MarketStructureAnalysisCapability capability = new MarketStructureAnalysisCapability(mapper, profile);
+        com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement requirement =
+                capability.metadata().requirements().getFirst();
+        CapabilityResult result = capability.execute(new CapabilityContext(
+                ANALYSIS_ID, EXECUTION_ID, Map.of(requirement, List.of(historyArtifact(profile))),
+                Set.of(), Map.of(), List.of(), mock(CancellationToken.class)));
+
+        assertThat(result.artifacts()).hasSize(2);
+        assertThat(result.artifacts())
+                .extracting(value -> value.artifact().key().parametersFingerprint().value())
+                .allMatch(value -> value.matches("[0-9a-f]{64}"))
+                .doesNotHaveDuplicates();
+        assertThat(result.artifacts())
+                .extracting(value -> value.artifact().key().inputFingerprint().value())
+                .allMatch(value -> value.matches("[0-9a-f]{64}"));
+    }
+
+    @Test
     void resultCanBeSerializedForDurableCapabilityExecution() throws Exception {
         TrendContextInputMapper mapper = mock(TrendContextInputMapper.class);
         TrendContextEngine engine = mock(TrendContextEngine.class);

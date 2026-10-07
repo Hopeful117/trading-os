@@ -4,5 +4,11 @@ public enum ContextSectionStatus {
     AVAILABLE,
     STALE,
     MISSING,
-    UNAVAILABLE
+    UNAVAILABLE,
+    UNSUPPORTED,
+    INCOMPLETE;
+
+    public boolean blocksAnalysis() {
+        return this == MISSING || this == UNAVAILABLE || this == UNSUPPORTED || this == INCOMPLETE;
+    }
 }

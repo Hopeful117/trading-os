@@ -12,10 +12,13 @@ import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanId;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanVersion;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContext;
+import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
+import com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,18 +31,32 @@ public class TradePlanRiskHandoffService {
     private final RiskValidationAcknowledgmentRepository acknowledgments;
     private final Clock clock;
     private final Supplier<UUID> acknowledgmentIds;
+    private final TradingOpportunityRepository opportunities;
+    private final StrategyMatchRepository strategyMatches;
 
     public TradePlanRiskHandoffService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,
             TradePlanRiskValidationBoundary lifecycle,
             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
-            Supplier<UUID> acknowledgmentIds) {
+            Supplier<UUID> acknowledgmentIds,
+            TradingOpportunityRepository opportunities,
+            StrategyMatchRepository strategyMatches) {
         this.plans = plans;
         this.contexts = contexts;
         this.lifecycle = lifecycle;
         this.acknowledgments = acknowledgments;
         this.clock = clock;
         this.acknowledgmentIds = acknowledgmentIds;
+        this.opportunities = opportunities;
+        this.strategyMatches = strategyMatches;
+    }
+
+    public TradePlanRiskHandoffService(
+            TradePlanRepository plans, TradePlanningContextRepository contexts,
+            TradePlanRiskValidationBoundary lifecycle,
+            RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
+            Supplier<UUID> acknowledgmentIds) {
+        this(plans, contexts, lifecycle, acknowledgments, clock, acknowledgmentIds, null, null);
     }
 
     public TradePlanRiskSnapshot loadAcceptedSnapshot(TradePlanId id, TradePlanVersion version) {
@@ -170,8 +187,8 @@ public class TradePlanRiskHandoffService {
                         new TradePlanRiskSnapshot.Entry(
                                 execution.entry().type().name(), execution.entry().price(),
                                 execution.entry().conditions()),
-                        new TradePlanRiskSnapshot.StopLoss(
-                                execution.stopLoss().price(), execution.stopLoss().rationale()),
+                        execution.stopLoss() == null ? null : new TradePlanRiskSnapshot.StopLoss(
+                                 execution.stopLoss().price(), execution.stopLoss().rationale()),
                         execution.takeProfits().stream().map(target ->
                                 new TradePlanRiskSnapshot.TakeProfit(
                                         target.price(), target.allocationPercent())).toList(),
@@ -180,15 +197,14 @@ public class TradePlanRiskHandoffService {
                                 execution.positionSizing().notional(),
                                 execution.positionSizing().expectedMonetaryRisk(),
                                 execution.positionSizing().currency()),
-                        execution.riskReward().ratio(),
+                         execution.riskReward() == null ? null : execution.riskReward().ratio(),
                         new TradePlanRiskSnapshot.Expiration(
                                 execution.expiration().expiresAt(),
                                 execution.expiration().policy()),
                         execution.managementRules()),
                 new TradePlanRiskSnapshot.Rationale(
                         plan.rationale().opportunities().stream()
-                                .map(reference -> new TradePlanRiskSnapshot.Opportunity(
-                                        reference.id().value(), reference.version().value()))
+                        .map(reference -> opportunity(reference.id().value(), reference.version().value()))
                                 .collect(Collectors.toUnmodifiableSet()),
                         plan.rationale().observations().stream()
                                 .map(ObservationReference::observationId)
@@ -198,5 +214,20 @@ public class TradePlanRiskHandoffService {
                                 .collect(Collectors.toUnmodifiableSet()),
                         plan.rationale().thesis(), plan.rationale().confirmationConditions(),
                         plan.rationale().invalidationConditions()));
+    }
+
+    private TradePlanRiskSnapshot.Opportunity opportunity(UUID id, long version) {
+        if (opportunities == null) return new TradePlanRiskSnapshot.Opportunity(id, version, null, null, null);
+        return opportunities.find(new com.hope.trading.market_intelligence.domain.opportunity.OpportunityId(id),
+                        new com.hope.trading.market_intelligence.domain.opportunity.OpportunityVersion(version))
+                .map(value -> {
+                    UUID matchId = value.strategyMatchId().orElse(null);
+                    var match = matchId == null || strategyMatches == null
+                            ? null : strategyMatches.findById(matchId).orElse(null);
+                    return new TradePlanRiskSnapshot.Opportunity(id, version, matchId,
+                            match == null ? null : match.strategyId().value(),
+                            match == null ? null : match.strategyVersion());
+                })
+                .orElseGet(() -> new TradePlanRiskSnapshot.Opportunity(id, version, null, null, null));
     }
 }

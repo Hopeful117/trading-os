@@ -28,11 +28,11 @@ public record TradePlanResponse(
                 plan.planningContext().version(), plan.planningContext().capturedAt(),
                 execution.instrument(), execution.direction().name(),
                 execution.entry().type().name(), execution.entry().price(),
-                execution.stopLoss().price(),
+                execution.stopLoss() == null ? null : execution.stopLoss().price(),
                 execution.takeProfits().stream().map(TakeProfit::price).toList(),
                 execution.positionSizing().quantity(), execution.positionSizing().notional(),
                 execution.positionSizing().expectedMonetaryRisk(),
-                execution.riskReward().ratio(), execution.expiration().expiresAt(),
+                execution.riskReward() == null ? null : execution.riskReward().ratio(), execution.expiration().expiresAt(),
                 rationale.thesis(),
                 rationale.opportunities().stream().map(item -> item.id().value())
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),

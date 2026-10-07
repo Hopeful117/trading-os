@@ -29,4 +29,14 @@ public record ContextSection(
                 message
         );
     }
+
+    public static ContextSection unsupported(ContextRequirement requirement, String message) {
+        return new ContextSection(requirement.sectionType(), ContextSectionStatus.UNSUPPORTED,
+                requirement.sensitivity(), null, null, message);
+    }
+
+    public static ContextSection incomplete(ContextRequirement requirement, String message) {
+        return new ContextSection(requirement.sectionType(), ContextSectionStatus.INCOMPLETE,
+                requirement.sensitivity(), null, null, message);
+    }
 }

@@ -68,7 +68,7 @@ public class CapabilityAnalysisCoordinator {
             UUID analysisExecutionId, IntelligenceAnalysisRequest request) {
         Instant startedAt = clock.instant();
         AnalysisExecutionPlan strategy = strategies.strategy(request.mode()).plan(request);
-        List<ContextRequirement> requirements = requirements(strategy.capabilityIds());
+        List<ContextRequirement> requirements = strategy.baselineContext();
         IntelligenceContext context = contexts.assemble(request, requirements);
         validateRequiredContext(context, requirements);
         Set<ArtifactDescriptor> descriptors = materializeInitialArtifacts(
@@ -103,8 +103,7 @@ public class CapabilityAnalysisCoordinator {
                     ContextSection section = context.section(requirement.sectionType())
                             .orElse(ContextSection.missing(requirement,
                                     "Required context is missing"));
-                    if (section.status() == ContextSectionStatus.MISSING
-                            || section.status() == ContextSectionStatus.UNAVAILABLE) {
+                    if (section.status().blocksAnalysis()) {
                         throw new AnalysisContextUnavailableException(
                                 failureCode(requirement.sectionType(), false),
                                 section.message() == null
@@ -131,20 +130,6 @@ public class CapabilityAnalysisCoordinator {
                     clock.instant(), "analysis-execution", "Public analysis cancelled",
                     CancellationSource.USER, analysisExecutionId.toString()));
         }
-    }
-
-    private List<ContextRequirement> requirements(List<String> capabilities) {
-        List<ContextRequirement> result = new ArrayList<>();
-        if (capabilities.contains("spread-analysis")) {
-            result.add(ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT));
-        }
-        if (capabilities.contains("ohlc-range-analysis")) {
-            result.add(ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC));
-        }
-        if (capabilities.contains(TrendContextAnalysisCapability.CAPABILITY_ID)) {
-            result.add(ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT));
-        }
-        return result;
     }
 
     private Set<ArtifactDescriptor> materializeInitialArtifacts(

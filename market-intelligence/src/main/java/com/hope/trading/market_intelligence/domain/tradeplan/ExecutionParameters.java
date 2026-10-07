@@ -11,10 +11,8 @@ public record ExecutionParameters(
         instrument = Objects.requireNonNull(instrument).trim();
         if (instrument.isEmpty()) throw new IllegalArgumentException("instrument is required");
         Objects.requireNonNull(direction); Objects.requireNonNull(entry);
-        Objects.requireNonNull(stopLoss); Objects.requireNonNull(positionSizing);
-        Objects.requireNonNull(riskReward); Objects.requireNonNull(expiration);
-        takeProfits = List.copyOf(takeProfits);
-        if (takeProfits.isEmpty()) throw new IllegalArgumentException("A target is required");
+        Objects.requireNonNull(positionSizing); Objects.requireNonNull(expiration);
+        takeProfits = List.copyOf(takeProfits == null ? List.of() : takeProfits);
         managementRules = Set.copyOf(managementRules);
         validateCoherence(direction, entry, stopLoss, takeProfits);
     }
@@ -22,6 +20,7 @@ public record ExecutionParameters(
     private static void validateCoherence(
             TradeDirection direction, EntryStrategy entry, StopLoss stopLoss,
             List<TakeProfit> takeProfits) {
+        if (stopLoss == null) return;
         var entryPrice = entry.price();
         if (entryPrice == null) return;
         for (TakeProfit target : takeProfits) {

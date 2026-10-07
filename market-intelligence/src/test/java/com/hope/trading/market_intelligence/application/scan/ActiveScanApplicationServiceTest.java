@@ -52,15 +52,14 @@ class ActiveScanApplicationServiceTest {
     private final ActiveScanScopeResolutionService scopeResolution = mock(ActiveScanScopeResolutionService.class);
     private final ActiveScanDispatchCoordinator coordinator = mock(ActiveScanDispatchCoordinator.class);
     private final ActiveScanReconciliationService reconciliation = mock(ActiveScanReconciliationService.class);
+    private final ActiveScanCreationTransaction creation = new ActiveScanCreationTransaction(
+            scans, scopeResolution, executions, childKeys, coordinator, clock
+    );
     private final ActiveScanApplicationService service = new ActiveScanApplicationService(
             scans,
-            scopeResolution,
-            executions,
             fingerprints,
-            childKeys,
-            coordinator,
-            reconciliation,
-            clock
+            creation,
+            reconciliation
     );
 
     @AfterEach
@@ -125,7 +124,7 @@ class ActiveScanApplicationServiceTest {
     }
 
     @Test
-    void createRejectsIneligibleSelectedScopeBeforePersistence() {
+    void createPersistsIneligibleSelectedScopeWithDiagnostics() {
         UUID actorId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         UUID excluded = UUID.randomUUID();
@@ -140,16 +139,20 @@ class ActiveScanApplicationServiceTest {
                 now
         ));
 
-        assertThatThrownBy(() -> service.create(new CreateActiveScanCommand(
+        ActiveScanApplicationService.ActiveScanView created = service.findOwned(actorId, service.create(new CreateActiveScanCommand(
                 actorId,
                 "scan-key",
                 accountId,
                 "scan",
                 List.of(excluded),
                 MarketScopeMode.SELECTED
-        ))).isInstanceOfSatisfying(ActiveScanException.class, exception -> {
-            assertThat(exception.code()).isEqualTo("INELIGIBLE_MARKET_SCOPE");
-            assertThat(exception.status()).isEqualTo(422);
+        )).scanId());
+
+        assertThat(created.scan().status()).isEqualTo(ActiveScanStatus.COMPLETED_NO_WORK);
+        assertThat(created.markets()).singleElement().satisfies(market -> {
+            assertThat(market.eligible()).isFalse();
+            assertThat(market.analysisExecutionId()).isNull();
+            assertThat(market.exclusionReasons()).contains(MarketEligibilityReason.STALE_DATA);
         });
     }
 
@@ -208,6 +211,34 @@ class ActiveScanApplicationServiceTest {
                 actorId, "scan-key", accountId, "other", List.of(marketId)
         ))).isInstanceOf(ActiveScanException.class)
                 .hasMessageContaining("Idempotency-Key");
+    }
+
+    @Test
+    void concurrentPersistenceRaceReplaysWinningScan() {
+        UUID actorId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+        ActiveScan winner = ActiveScan.completedNoWork(
+                UUID.randomUUID(), actorId, accountId, "scan", "scan-key",
+                fingerprints.fingerprint(actorId, accountId, "scan", List.of(marketId), MarketScopeMode.ALL_ELIGIBLE),
+                snapshot(accountId, List.of()), now
+        );
+        scans.save(winner);
+
+        ActiveScanCreationTransaction racingCreation = mock(ActiveScanCreationTransaction.class);
+        when(racingCreation.create(any(), anyString())).thenThrow(
+                new org.springframework.dao.DataIntegrityViolationException("unique key race")
+        );
+        when(racingCreation.replay(winner)).thenReturn(winner);
+        ActiveScanApplicationService racingService = new ActiveScanApplicationService(
+                scans, fingerprints, racingCreation, reconciliation
+        );
+
+        ActiveScan replayed = racingService.create(new CreateActiveScanCommand(
+                actorId, "scan-key", accountId, "scan", List.of(marketId), MarketScopeMode.ALL_ELIGIBLE
+        ));
+
+        assertThat(replayed.scanId()).isEqualTo(winner.scanId());
     }
 
     @Test

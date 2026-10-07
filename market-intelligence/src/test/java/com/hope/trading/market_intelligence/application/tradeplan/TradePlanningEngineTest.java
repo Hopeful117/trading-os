@@ -1,6 +1,8 @@
 package com.hope.trading.market_intelligence.application.tradeplan;
 
 import com.hope.trading.market_intelligence.adapter.ai.DisabledAiTradePlanningAdapter;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityStatus;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityVersion;
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
@@ -32,6 +34,23 @@ class TradePlanningEngineTest {
     }
 
     @Test
+    void exactOpportunityVersionRemainsUsableWhenLatestVersionIsExpired() {
+        var environment = TradePlanTestFixtures.environment();
+        environment.opportunities().append(
+                com.hope.trading.market_intelligence.application.opportunity.OpportunityTestFixtures.opportunity(
+                        environment.opportunity().id(), 2, OpportunityStatus.EXPIRED,
+                        environment.opportunity().score(), TradePlanTestFixtures.NOW.plusSeconds(60)));
+
+        TradePlanningRequest exact = new TradePlanningRequest(
+                Set.of(environment.opportunity().id()), environment.context().id(),
+                environment.context().version(), environment.owner(), BigDecimal.valueOf(100),
+                null, null, "", Map.of(environment.opportunity().id(), new OpportunityVersion(1)));
+
+        assertThat(environment.engine().plan(exact))
+                .isInstanceOf(TradePlanningResult.Success.class);
+    }
+
+    @Test
     void manualFlowBuildsPlanWithoutOpportunityAndPreservesAuthor() {
         var environment = TradePlanTestFixtures.environment();
         ManualTradePlanningRequest request = new ManualTradePlanningRequest(
@@ -59,6 +78,28 @@ class TradePlanningEngineTest {
                     .extracting(TradePlan::origin, TradePlan::authorId)
                     .containsExactly(TradePlanOrigin.MANUAL, plan.authorId());
         });
+    }
+
+    @Test
+    void manualFlowMayStartWithoutProtection() {
+        var environment = TradePlanTestFixtures.environment();
+        ManualTradePlanningRequest request = new ManualTradePlanningRequest(
+                environment.context().id(), environment.context().version(), environment.owner(),
+                "BTC/EUR", TradeDirection.LONG,
+                new EntryStrategy(EntryType.MARKET, null, Set.of()),
+                null, List.of(),
+                new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
+                BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
+                "Human discretionary entry without initial protection", Set.of("Human confirms entry"),
+                Set.of("Trader adds protection later"), Set.of());
+
+        assertThat(environment.service().createManual(request))
+                .isInstanceOfSatisfying(TradePlanningResult.Success.class, success -> {
+                    assertThat(success.plan().origin()).isEqualTo(TradePlanOrigin.MANUAL);
+                    assertThat(success.plan().execution().stopLoss()).isNull();
+                    assertThat(success.plan().execution().takeProfits()).isEmpty();
+                    assertThat(success.plan().execution().riskReward()).isNull();
+                });
     }
 
     @Test

@@ -81,13 +81,13 @@ public class ActiveScanReconciliationService {
 
         Map<UUID, List<UUID>> strategyMatchIdsByExecutionId = new HashMap<>();
         Set<UUID> strategyMatchIds = new LinkedHashSet<>();
-        for (UUID analysisExecutionId : analysisExecutionIds) {
-            List<UUID> matchIds = strategyMatches.findByAnalysisExecutionId(analysisExecutionId).stream()
-                    .map(StrategyMatch::matchId)
-                    .toList();
-            strategyMatchIdsByExecutionId.put(analysisExecutionId, matchIds);
-            strategyMatchIds.addAll(matchIds);
-        }
+        strategyMatches.findByAnalysisExecutionIds(analysisExecutionIds).stream()
+                .collect(java.util.stream.Collectors.groupingBy(StrategyMatch::analysisExecutionId))
+                .forEach((executionId, matches) -> {
+                    List<UUID> matchIds = matches.stream().map(StrategyMatch::matchId).toList();
+                    strategyMatchIdsByExecutionId.put(executionId, matchIds);
+                    strategyMatchIds.addAll(matchIds);
+                });
         Map<UUID, List<TradingOpportunity>> opportunitiesByStrategyMatchId =
                 opportunities.findByStrategyMatchIds(strategyMatchIds).stream()
                         .filter(opportunity -> opportunity.strategyMatchId().isPresent())
@@ -351,7 +351,18 @@ public class ActiveScanReconciliationService {
                     )
             );
         }
-        if (pipelineRun == null || "RUNNING".equals(pipelineRun.state())) {
+        if (pipelineRun == null) {
+            return failureClassification(
+                    market,
+                    execution,
+                    ActiveScanMarketOutcome.FAILED,
+                    new ActiveScanResultProjection.Diagnostic(
+                            "OPPORTUNITY_LINEAGE_MISSING",
+                            "Expected pipeline lineage is missing"
+                    )
+            );
+        }
+        if ("RUNNING".equals(pipelineRun.state())) {
             return runningClassification(
                     market,
                     execution,
@@ -424,16 +435,16 @@ public class ActiveScanReconciliationService {
             List<TradingOpportunity> executionOpportunities,
             Map<TradingOpportunityVersionRef, TradingOpportunity> opportunitiesByRef
     ) {
-        List<TradingOpportunity> reconstructed = executionOpportunities;
-        if (reconstructed.isEmpty()
-                && pipelineRun.opportunityId() != null
-                && pipelineRun.opportunityVersion() != null) {
+        List<TradingOpportunity> reconstructed;
+        if (pipelineRun.opportunityId() != null && pipelineRun.opportunityVersion() != null) {
             TradingOpportunityVersionRef ref = new TradingOpportunityVersionRef(
                     new OpportunityId(pipelineRun.opportunityId()),
                     new OpportunityVersion(pipelineRun.opportunityVersion())
             );
             TradingOpportunity historical = opportunitiesByRef.get(ref);
             reconstructed = historical == null ? List.of() : List.of(historical);
+        } else {
+            reconstructed = executionOpportunities;
         }
         if (reconstructed.isEmpty()) {
             return failureClassification(

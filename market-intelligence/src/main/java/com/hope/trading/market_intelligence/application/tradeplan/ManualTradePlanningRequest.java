@@ -31,9 +31,7 @@ public record ManualTradePlanningRequest(
         if (instrument.isEmpty()) throw new IllegalArgumentException("instrument is required");
         Objects.requireNonNull(direction);
         Objects.requireNonNull(entry);
-        Objects.requireNonNull(stopLoss);
-        takeProfits = List.copyOf(takeProfits);
-        if (takeProfits.isEmpty()) throw new IllegalArgumentException("A target is required");
+        takeProfits = List.copyOf(takeProfits == null ? List.of() : takeProfits);
         Objects.requireNonNull(positionSizing);
         if (Objects.requireNonNull(referencePrice).signum() <= 0) {
             throw new IllegalArgumentException("referencePrice must be positive");
@@ -43,7 +41,7 @@ public record ManualTradePlanningRequest(
         thesis = required(thesis, "thesis");
         confirmationConditions = Set.copyOf(confirmationConditions);
         invalidationConditions = Set.copyOf(invalidationConditions);
-        managementRules = Set.copyOf(managementRules);
+        managementRules = Set.copyOf(managementRules == null ? Set.of() : managementRules);
         if (confirmationConditions.isEmpty() || invalidationConditions.isEmpty()) {
             throw new IllegalArgumentException("Confirmation and invalidation rules are required");
         }

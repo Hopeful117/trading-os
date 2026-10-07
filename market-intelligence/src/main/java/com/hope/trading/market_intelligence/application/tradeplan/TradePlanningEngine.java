@@ -34,8 +34,11 @@ public final class TradePlanningEngine {
     public TradePlanningResult plan(TradePlanningRequest request) {
         try {
             List<TradingOpportunity> loaded = request.opportunityIds().stream()
-                    .map(id -> opportunities.findLatest(id).orElseThrow(
-                            () -> new IllegalArgumentException("Unknown Opportunity: " + id.value())))
+                    .map(id -> request.exactOpportunityVersions().isEmpty()
+                            ? opportunities.findLatest(id)
+                            : opportunities.find(id, request.exactOpportunityVersions().get(id)))
+                    .map(value -> value.orElseThrow(
+                            () -> new IllegalArgumentException("Unknown Opportunity")))
                     .toList();
             if (!compatible(loaded)) {
                 return failure(PlanningFailureReason.INCOMPATIBLE_OPPORTUNITIES,

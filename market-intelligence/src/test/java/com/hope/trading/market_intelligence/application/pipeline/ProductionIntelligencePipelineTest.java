@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.pipeline;
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
 import com.hope.trading.market_intelligence.adapter.persistence.JpaIntelligencePipelineRunEntity;
 import com.hope.trading.market_intelligence.adapter.persistence.JpaIntelligencePipelineRunRepository;
+import com.hope.trading.market_intelligence.adapter.persistence.JpaPipelineRunClaimService;
 import com.hope.trading.market_intelligence.application.observation.ObservationBuilder;
 import com.hope.trading.market_intelligence.application.opportunity.CreateOpportunityCommand;
 import com.hope.trading.market_intelligence.application.opportunity.OpportunityCreationResult;
@@ -74,6 +75,7 @@ class ProductionIntelligencePipelineTest {
     private final MarketDataClient marketData = mock(MarketDataClient.class);
     private final JpaIntelligencePipelineRunRepository runs =
             mock(JpaIntelligencePipelineRunRepository.class);
+    private final JpaPipelineRunClaimService runClaims = mock(JpaPipelineRunClaimService.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-08-23T10:00:00Z"),
             ZoneOffset.UTC);
     private final LiveStrategyEvaluationRunner evaluationRunner =
@@ -95,11 +97,14 @@ class ProductionIntelligencePipelineTest {
     @BeforeEach
     void setUp() {
         pipeline = new ProductionIntelligencePipeline(observations, opportunities,
-                marketData, runs, clock, evaluationRunner, parity, matchPersister,
+                marketData, runs, runClaims, clock, evaluationRunner, parity, matchPersister,
                 matchOpportunities, definitions, trendContextEvidence);
         when(runs.findByAnalysisExecutionIdAndPipelineVersion(
                 any(UUID.class), anyString())).thenReturn(Optional.empty());
         when(runs.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(runClaims.create(any(UUID.class), anyString(), any(Instant.class)))
+                .thenAnswer(invocation -> JpaIntelligencePipelineRunEntity.running(
+                        invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
         var marketResponse = new com.hope.trading.market_intelligence.adapter.marketdata
                 .MarketResponse(marketId, "KRAKEN", "BTC/EUR", "BTC", "EUR", null);
         when(marketData.findMarket(marketId)).thenReturn(marketResponse);
@@ -254,5 +259,21 @@ class ProductionIntelligencePipelineTest {
 
         assertThat(run).isSameAs(existing);
         verify(marketData, never()).findMarket(any());
+    }
+
+    @Test
+    void concurrentPipelineClaimReturnsTheCommittedRun() {
+        JpaIntelligencePipelineRunEntity existing = JpaIntelligencePipelineRunEntity.running(
+                analysisExecutionId, ProductionIntelligencePipeline.VERSION, clock.instant());
+        existing.complete(UUID.randomUUID(), 1L, UUID.randomUUID(), 1L, clock.instant());
+        when(runClaims.create(any(UUID.class), anyString(), any(Instant.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("race"));
+        when(runs.findByAnalysisExecutionIdAndPipelineVersion(
+                analysisExecutionId, ProductionIntelligencePipeline.VERSION))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+
+        assertThat(pipeline.process(analysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE))
+                .isSameAs(existing);
+        verify(observations, never()).build(any(), anyString(), any());
     }
 }

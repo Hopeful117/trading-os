@@ -79,9 +79,7 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
         } catch (AnalysisContextUnavailableException exception) {
             repository.findById(executionId)
                     .filter(execution -> !execution.status().isTerminal())
-                    .map(execution -> execution.transitionTo(
-                            AnalysisExecutionStatus.FAILED, Instant.now()
-                    ))
+                    .map(execution -> execution.fail(exception.code(), Instant.now()))
                     .ifPresent(repository::save);
         } catch (RuntimeException exception) {
             repository.findById(executionId)

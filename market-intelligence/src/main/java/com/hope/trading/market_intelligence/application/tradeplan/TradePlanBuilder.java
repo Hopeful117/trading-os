@@ -62,14 +62,16 @@ final class TradePlanBuilder {
             TradePlanId id, TradePlanVersion version, ManualTradePlanningRequest request,
             TradePlanningContext context, Instant createdAt) {
         BigDecimal referencePrice = request.referencePrice();
-        BigDecimal risk = referencePrice.subtract(request.stopLoss().price()).abs();
-        if (risk.signum() == 0) throw new IllegalArgumentException("Reference and stop prices must differ");
-        BigDecimal reward = request.takeProfits().getFirst().price()
-                .subtract(referencePrice).abs();
+        BigDecimal risk = request.stopLoss() == null ? null
+                : referencePrice.subtract(request.stopLoss().price()).abs();
+        if (risk != null && risk.signum() == 0) throw new IllegalArgumentException("Reference and stop prices must differ");
+        BigDecimal reward = request.takeProfits().isEmpty() ? null
+                : request.takeProfits().getFirst().price().subtract(referencePrice).abs();
         ExecutionParameters execution = new ExecutionParameters(
                 request.instrument(), request.direction(), request.entry(), request.stopLoss(),
                 request.takeProfits(), request.positionSizing(),
-                new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
+                risk == null || reward == null ? null
+                        : new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
                 new PlanExpiration(request.expiresAt(), request.expirationPolicy()),
                 request.managementRules());
         TradingRationale rationale = new TradingRationale(

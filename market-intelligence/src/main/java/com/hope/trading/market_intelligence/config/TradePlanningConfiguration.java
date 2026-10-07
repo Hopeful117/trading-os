@@ -74,9 +74,12 @@ public class TradePlanningConfiguration {
     }
     @Bean TradePlanRiskHandoffService tradePlanRiskHandoffService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,
-            TradePlanRiskValidationBoundary lifecycle,
-            RiskValidationAcknowledgmentRepository acknowledgments, Clock clock) {
+             TradePlanRiskValidationBoundary lifecycle,
+             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
+             com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository opportunities,
+             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository strategyMatches) {
         return new TradePlanRiskHandoffService(
-                plans, contexts, lifecycle, acknowledgments, clock, UUID::randomUUID);
+                plans, contexts, lifecycle, acknowledgments, clock, UUID::randomUUID,
+                opportunities, strategyMatches);
     }
 }

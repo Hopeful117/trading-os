@@ -57,6 +57,11 @@ class ActiveScanReconciliationServiceTest {
     @BeforeEach
     void defaultToNoStrategyMatches() {
         when(strategyMatches.findByAnalysisExecutionId(any())).thenReturn(List.of());
+        when(strategyMatches.findByAnalysisExecutionIds(any())).thenAnswer(invocation ->
+                ((Collection<UUID>) invocation.getArgument(0)).stream()
+                        .flatMap(id -> strategyMatches.findByAnalysisExecutionId(id).stream())
+                        .toList()
+        );
     }
 
     @Test
@@ -162,6 +167,23 @@ class ActiveScanReconciliationServiceTest {
     }
 
     @Test
+    void completedExecutionWithoutPipelineLineageBecomesTerminalFailure() {
+        AnalysisExecution execution = completedExecution(
+                IntelligenceExecutionStatus.COMPLETE,
+                AnalysisResultQuality.COMPLETE
+        );
+        ScanFixture fixture = persistSingleEligibleScan(ActiveScanStatus.RUNNING, execution);
+
+        ActiveScanResultProjection projection = service.reconcileOwned(fixture.actorId, fixture.scanId);
+
+        assertThat(projection.status()).isEqualTo(ActiveScanStatus.FAILED);
+        assertThat(projection.markets()).singleElement().satisfies(result -> {
+            assertThat(result.outcome()).isEqualTo(ActiveScanMarketOutcome.FAILED);
+            assertThat(result.diagnostic().code()).isEqualTo("OPPORTUNITY_LINEAGE_MISSING");
+        });
+    }
+
+    @Test
     void completedOpportunityIsProjected() {
         AnalysisExecution execution = completedExecution(
                 IntelligenceExecutionStatus.COMPLETE,
@@ -235,6 +257,45 @@ class ActiveScanReconciliationServiceTest {
             assertThat(result.outcome()).isEqualTo(ActiveScanMarketOutcome.OPPORTUNITY_FOUND);
             assertThat(result.opportunities()).extracting(value -> value.id().value())
                     .containsExactlyInAnyOrder(first.id().value(), second.id().value());
+        });
+    }
+
+    @Test
+    void pipelineRunProjectsItsExactOpportunityVersionWhenNewerVersionExists() {
+        AnalysisExecution execution = completedExecution(
+                IntelligenceExecutionStatus.COMPLETE,
+                AnalysisResultQuality.COMPLETE
+        );
+        ScanFixture fixture = persistSingleEligibleScan(ActiveScanStatus.RUNNING, execution);
+        StrategyMatch match = strategyMatch(UUID.randomUUID(), execution);
+        when(strategyMatches.findByAnalysisExecutionId(execution.executionId())).thenReturn(List.of(match));
+        OpportunityId opportunityId = new OpportunityId(UUID.randomUUID());
+        opportunities.append(OpportunityTestFixtures.opportunity(
+                opportunityId, 1, OpportunityStatus.ACTIVE,
+                new OpportunityScore(new BigDecimal("71.00")), now
+        ));
+        opportunities.append(OpportunityTestFixtures.opportunity(
+                opportunityId, 2, OpportunityStatus.ACTIVE,
+                new OpportunityScore(new BigDecimal("99.00")), now.plusSeconds(1)
+        ));
+        pipelineRuns.put(new AnalysisPipelineRunView(
+                execution.executionId(),
+                ProductionIntelligencePipeline.VERSION,
+                "COMPLETED",
+                opportunityId.value(),
+                1L,
+                null,
+                null,
+                now
+        ));
+
+        ActiveScanResultProjection projection = service.reconcileOwned(fixture.actorId, fixture.scanId);
+
+        assertThat(projection.markets()).singleElement().satisfies(result -> {
+            assertThat(result.outcome()).isEqualTo(ActiveScanMarketOutcome.OPPORTUNITY_FOUND);
+            assertThat(result.opportunities()).singleElement()
+                    .extracting(value -> value.version().value())
+                    .isEqualTo(1L);
         });
     }
 
