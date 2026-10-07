@@ -4,7 +4,7 @@
 
 **ID:** `0005`
 **Title:** Account-Aware Active Scan Scope Resolution
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 
