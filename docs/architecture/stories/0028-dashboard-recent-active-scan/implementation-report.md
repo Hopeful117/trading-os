@@ -38,13 +38,13 @@ Integrated recent Active Scan activity into the Dashboard MI panel. The MI panel
 
 ## Tests
 
-- 236 tests passing (9 new)
+- 391 tests passing across 47 test files (9 new for this Story)
 - New tests cover: scan loaded, no scans, scan error, scan error + opportunities, scan loading, terminal status, FAILED status, scanStatusLabel, scanStatusClass
 
 ## Quality Gates
 
-- [x] `ng test` — 236/236 passed
-- [x] `ng build` — success
+- [x] `npm run test:ci` — 391/391 passed across 47 test files
+- [x] `npm run build` — success; existing bundle and stylesheet budget warnings remain
 - [x] `git diff --check` — clean
 - [x] Prettier — clean
 

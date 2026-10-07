@@ -45,7 +45,7 @@ Integrated recent Active Scan activity into the Dashboard MI panel, completing t
 
 ## Runtime validation
 
-- Login: `scanprobe`/`Str0ngPass!123`
+- Authenticated runtime validation was previously completed through the Gateway.
 - Scan API: `GET /api/v1/intelligence/scans?limit=3` returns 3 RUNNING scans
 - All required fields present: `scanId`, `accountId`, `status`, `objective`, `createdAt`, `updatedAt`
 - No `GET /scans/{id}` called by Dashboard
