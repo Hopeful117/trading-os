@@ -1,31 +1,38 @@
-# Code Review Checklist - Story 0047
+# Code Review - Story 0047
 
-## Reviewed Scope
+## Review Status
 
-* `PlanPage` execution context and positions navigation.
-* `Positions` account selection, refresh, close-result retention, and
-  reconciliation rendering.
-* Focused Angular tests.
+`CLOSED - NO BLOCKING, MAJOR, OR MINOR FINDINGS`
 
-## Findings
+## Scope
 
-No confirmed defect was found in the implemented scope.
+The independent review covered the Story 0047 frontend implementation, its
+execution and position tests, and the account-ownership and uncertain-outcome
+constraints in the Story.
 
-## Review Notes
+## Corrective Pass
 
-* The frontend uses Trade Plan data already returned by Trading Core rather than
-  deriving instrument, quantity, or account data from broker payloads.
-* Execution state distinctions remain unchanged: failed executions expose retry,
-  uncertain outcomes expose reconciliation, and no blind retry is introduced
-  for uncertain outcomes.
-* The positions route remains Gateway-backed and no Broker Service endpoint is
-  called directly.
-* Backend contract completeness remains a runtime validation concern because a
-  real PAPER execution result was not produced during this implementation.
+- Close results are scoped by originating account and position.
+- Reconciliation uses the originating account rather than the currently
+  selected account.
+- Reconciliation emits a refreshed reactive view model.
+- Invalid route account IDs produce an explicit unavailable-account state rather
+  than silently selecting another account.
+- Reconciliation copies the complete authoritative response state.
 
-## Human Review Required
+## Validation
 
-* Confirm the wording and placement of the execution-to-positions action.
-* Confirm the desired retention period for close-result banners.
-* Review authenticated PAPER runtime evidence before marking the Story
-  completed.
+- `npm run test:ci`: 395 tests passed.
+- Prettier check: passed.
+- `git diff --check`: passed.
+
+## Residual Validation Gap
+
+Authenticated PAPER execution, close, reconciliation, and degraded position
+responses remain unverified because no active opportunity is available in the
+runtime environment. No backend contract or execution semantics were changed
+to compensate for this limitation.
+
+## Decision
+
+`NO FINDINGS; HUMAN CLOSURE ACCEPTED`
