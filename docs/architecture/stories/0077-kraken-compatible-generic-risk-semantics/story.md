@@ -4,7 +4,13 @@
 
 **ID:** `0077`
 **Title:** Kraken-Compatible Generic Risk Semantics
-**Status:** Implementation
+**Status:** CLOSED - HUMAN ACCEPTED
+
+The provider-neutral Risk implementation and automated validation were reviewed
+and accepted by the human engineer. Broker or Kraken sandbox validation remains
+out of scope for this Story. The final human Git commit remains pending under
+the repository workflow; this status does not authorize another implementation,
+commit, push, or merge operation.
 **Related ADRs:** `ADR-009`, `ADR-028`
 
 ---
@@ -113,3 +119,11 @@ drawdown rule.
 - [ ] Complete diff reviewed.
 - [ ] Engineering report completed.
 - [ ] Human commit created.
+
+## Documentation Reconciliation
+
+The implementation is present in the merged commit `33217c3` and includes the
+Risk Domain, Trading Core, persistence, and focused test changes listed in the
+commit. Automated validation passed and human closure was accepted on
+2026-10-06. The final human Git commit remains pending under the repository
+workflow.
