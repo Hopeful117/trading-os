@@ -4,7 +4,7 @@
 
 **ID:** `0043`
 **Title:** Explicit PAPER Risk-Profile Onboarding
-**Status:** IMPLEMENTED - HUMAN REVIEWED; PRODUCT ACCEPTANCE PARTIAL
+**Status:** CLOSED - HUMAN ACCEPTED
 **Baseline:** `main` at `18f9d99` (Story 0042 merged)
 **Related ADRs:** ADR-042, ADR-043
 
@@ -120,7 +120,7 @@ risk boundary.
       profile assignment intact.
 - [x] Given existing LIVE onboarding, its credential and provider behavior is
       unchanged.
-- [ ] Given the normal PAPER journey, a user can proceed from account creation
+- [x] Given the normal PAPER journey, a user can proceed from account creation
       to opportunity, plan, risk decision, human execution, position query, and
       full local exit without manually constructing an API request.
 
