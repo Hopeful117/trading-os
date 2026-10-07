@@ -31,24 +31,33 @@ public class NewsContextContextContributor implements ContextContributor {
             ContextSectionStatus status = switch (response.status()) {
                 case "AVAILABLE" -> ContextSectionStatus.AVAILABLE;
                 case "STALE" -> ContextSectionStatus.STALE;
+                case "UNSUPPORTED" -> ContextSectionStatus.UNSUPPORTED;
+                case "INCOMPLETE" -> ContextSectionStatus.INCOMPLETE;
                 default -> ContextSectionStatus.UNAVAILABLE;
             };
+            if (status == ContextSectionStatus.UNSUPPORTED) {
+                return ContextSection.unsupported(requirement, response.message());
+            }
+            if (status == ContextSectionStatus.INCOMPLETE) {
+                return ContextSection.incomplete(requirement, response.message());
+            }
             if (status == ContextSectionStatus.UNAVAILABLE) {
                 return ContextSection.unavailable(requirement,
                         response.message() == null ? NEWS_UNAVAILABLE : response.message());
             }
             List<NewsEventContext> events = response.events() == null ? List.of()
                     : response.events().stream().map(event -> new NewsEventContext(
-                            event.id(), event.title(), event.category(), event.scheduledAt(),
-                            event.actualAt(), event.currencies(), event.impact(), event.status(),
-                            event.sourceName(), event.sourceUpdatedAt(), event.fetchedAt(),
-                            event.normalizationVersion())).toList();
+                            event.id(), event.sourceName(), event.source(), event.sourceEventId(),
+                            event.title(), event.category(), event.scheduledAt(), event.actualAt(),
+                            event.currencies(), event.impact(), event.status(), event.previousValue(),
+                            event.consensusValue(), event.actualValue(), event.unit(), event.sourceUpdatedAt(),
+                            event.fetchedAt(), event.normalizationVersion())).toList();
             List<NewsItemContext> items = response.news() == null ? List.of()
                     : response.news().stream().map(item -> new NewsItemContext(
-                            item.id(), item.title(), item.summary(), item.canonicalUrl(),
-                            item.publishedAt(), item.publisher(), item.categories(),
-                            item.currencies(), item.impact(), item.sourceName(),
-                            item.sourceUpdatedAt(), item.fetchedAt(), item.normalizationVersion())).toList();
+                            item.id(), item.sourceName(), item.sourceItemId(), item.title(), item.summary(),
+                            item.canonicalUrl(), item.publishedAt(), item.publisher(), item.categories(),
+                            item.currencies(), item.impact(), item.sourceUpdatedAt(), item.fetchedAt(),
+                            item.normalizationVersion())).toList();
             return new ContextSection(sectionType(), status, ContextSensitivity.PUBLIC,
                     new NewsContext(request.marketId(), events, items, response.sourceOccurredAt(),
                             response.fetchedAt()),

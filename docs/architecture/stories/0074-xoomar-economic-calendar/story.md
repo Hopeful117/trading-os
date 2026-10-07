@@ -6,7 +6,14 @@
 
 **Title:** Integrate XOOMAR economic calendar data
 
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
+
+The XOOMAR adapter, event-source preservation, bounded synchronization,
+attribution documentation and automated validation were independently reviewed
+and accepted by the human engineer. No live XOOMAR request was executed. The
+final human Git commit remains pending under the repository workflow; this
+status does not authorize another implementation, commit, push, or merge
+operation.
 
 ---
 
@@ -82,21 +89,21 @@ The integration must also avoid treating provider data as strategic advice. It s
 
 ## Acceptance Criteria
 
-* [ ] A dedicated provider-neutral economic-calendar port exists and can be tested without XOOMAR network access.
-* [ ] XOOMAR-specific request and response types remain inside the infrastructure adapter.
-* [ ] The adapter calls the documented XOOMAR calendar endpoint with a bounded `from`/`to` window.
-* [ ] XOOMAR `scheduledAt` values are parsed as UTC instants.
-* [ ] XOOMAR's authoritative event identifier (`id`, falling back to `eventId` only when required by the documented response) is preserved as `sourceEventId` and remains stable across repeated synchronization.
-* [ ] XOOMAR `eventName`, `source`, `importance`, `previous`, `forecast`, `actual` and `unit` are normalized without provider-specific fields leaking into the domain API.
-* [ ] Null actual, forecast and previous values remain absent rather than being converted to zero or an invented value.
-* [ ] Unknown importance values map to `UNKNOWN` and do not fail the complete synchronization.
-* [ ] Repeating synchronization for the same provider response does not create duplicate persisted events.
-* [ ] HTTP failures, timeouts and HTTP 429 responses are classified as unavailable provider results and do not delete existing catalog data.
-* [ ] Synchronization is disabled by default or requires an explicit provider-enabled configuration.
-* [ ] The implementation respects the documented free request limit and does not perform unsafe automatic retries.
-* [ ] XOOMAR attribution and the personal-use limitation are documented in the runtime configuration or operational documentation.
-* [ ] Targeted unit and integration tests pass without requiring a live XOOMAR credential.
-* [ ] Existing news-service API contracts and financial-news behavior remain unchanged.
+* [x] A dedicated provider-neutral economic-calendar port exists and can be tested without XOOMAR network access.
+* [x] XOOMAR-specific request and response types remain inside the infrastructure adapter.
+* [x] The adapter calls the documented XOOMAR calendar endpoint with a bounded `from`/`to` window.
+* [x] XOOMAR `scheduledAt` values are parsed as UTC instants.
+* [x] XOOMAR's authoritative event identifier (`id`, falling back to `eventId` only when required by the documented response) is preserved as `sourceEventId` and remains stable across repeated synchronization.
+* [x] XOOMAR `eventName`, `source`, `importance`, `previous`, `forecast`, `actual` and `unit` are normalized without provider-specific fields leaking into the domain API.
+* [x] Null actual, forecast and previous values remain absent rather than being converted to zero or an invented value.
+* [x] Unknown importance values map to `UNKNOWN` and do not fail the complete synchronization.
+* [x] Repeating synchronization for the same provider response does not create duplicate persisted events.
+* [x] HTTP failures, timeouts and HTTP 429 responses are classified as unavailable provider results and do not delete existing catalog data.
+* [x] Synchronization is disabled by default or requires an explicit provider-enabled configuration.
+* [x] The implementation respects the documented free request limit and does not perform unsafe automatic retries.
+* [x] XOOMAR attribution and the personal-use limitation are documented in the runtime configuration or operational documentation.
+* [x] Targeted unit and integration tests pass without requiring a live XOOMAR credential.
+* [x] Existing news-service API contracts and financial-news behavior remain unchanged.
 
 ---
 
@@ -153,3 +160,10 @@ The integration must also avoid treating provider data as strategic advice. It s
 * [ ] Code Review approved
 * [ ] Engineering Report completed
 * [ ] Human commit created
+
+## Documentation Reconciliation
+
+The XOOMAR adapter and synchronization path were introduced by commit `9de805b`
+and subsequently corrected to preserve event-level `source` through the domain
+and persistence layers. The implementation report, independent review and
+validation record are now present. Human Git commit remains pending.

@@ -18,15 +18,18 @@ public interface NewsClient {
                                Instant fetchedAt, String message) {
     }
 
-    record NewsEventResponse(UUID id, String title, String category, Instant scheduledAt,
-                             Instant actualAt, List<String> currencies, String impact,
-                             String status, String sourceName, Instant sourceUpdatedAt,
-                             Instant fetchedAt, String normalizationVersion) {
+    record NewsEventResponse(UUID id, String sourceName, String source, String sourceEventId,
+                              String title, String category, Instant scheduledAt, Instant actualAt,
+                              List<String> currencies, String impact, String status,
+                              String previousValue, String consensusValue, String actualValue,
+                              String unit, Instant sourceUpdatedAt, Instant fetchedAt,
+                              String normalizationVersion) {
     }
 
-    record NewsItemResponse(UUID id, String title, String summary, String canonicalUrl,
+    record NewsItemResponse(UUID id, String sourceName, String sourceItemId, String title,
+                            String summary, String canonicalUrl,
                             Instant publishedAt, String publisher, List<String> categories,
-                            List<String> currencies, String impact, String sourceName,
+                            List<String> currencies, String impact,
                             Instant sourceUpdatedAt, Instant fetchedAt, String normalizationVersion) {
     }
 }

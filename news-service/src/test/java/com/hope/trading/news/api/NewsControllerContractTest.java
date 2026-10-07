@@ -29,7 +29,7 @@ class NewsControllerContractTest {
         assertThat(response.status()).isEqualTo("UNAVAILABLE");
         assertThat(response.items()).isEmpty();
         assertThat(response.message()).contains("provider");
-        assertThat(response.attribution()).contains("XOOMAR");
+        assertThat(response.attribution()).isNull();
     }
 
     @Test
@@ -43,5 +43,25 @@ class NewsControllerContractTest {
                 null, null, null, null, null, 10).getBody();
 
         assertThat(response.attribution()).isNull();
+    }
+
+    @Test
+    void resolvesEconomicAttributionFromNormalizedProviderSource() {
+        NewsCatalogService catalog = mock(NewsCatalogService.class);
+        EconomicEvent event = new EconomicEvent(UUID.randomUUID(), "xoomar", "BLS", "event-1",
+                "CPI", "inflation", Instant.now(), null, List.of("USD"), List.of(),
+                com.hope.trading.news.domain.ImpactLevel.HIGH,
+                com.hope.trading.news.domain.EconomicEventStatus.SCHEDULED,
+                null, null, null, "%", Instant.now(), Instant.now(), "xoomar-v1");
+        when(catalog.findEvents(org.mockito.ArgumentMatchers.any())).thenReturn(
+                new NewsReadResult<>(NewsAvailability.AVAILABLE, List.of(event), Instant.now(), null));
+        com.hope.trading.news.config.NewsProviderProperties properties =
+                new com.hope.trading.news.config.NewsProviderProperties();
+        properties.setAttributions(java.util.Map.of("xoomar", "Data: XOOMAR"));
+
+        NewsController.NewsReadResponse<EconomicEvent> response = new NewsController(catalog, properties)
+                .events(null, null, UUID.randomUUID(), null, null, 10).getBody();
+
+        assertThat(response.attribution()).isEqualTo("Data: XOOMAR");
     }
 }

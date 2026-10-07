@@ -8,6 +8,7 @@ import com.hope.trading.news.domain.FinancialNewsItem;
 import com.hope.trading.news.domain.ImpactLevel;
 import jakarta.validation.constraints.Max;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,15 +18,23 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/news")
 public class NewsController {
-    private static final String XOOMAR_ATTRIBUTION = "Data: XOOMAR (https://xoomar.com/markets/api/calendar)";
     private final NewsCatalogService catalog;
+    private final com.hope.trading.news.config.NewsProviderProperties providerProperties;
 
     public NewsController(NewsCatalogService catalog) {
+        this(catalog, new com.hope.trading.news.config.NewsProviderProperties());
+    }
+
+    @Autowired
+    public NewsController(NewsCatalogService catalog,
+                          com.hope.trading.news.config.NewsProviderProperties providerProperties) {
         this.catalog = catalog;
+        this.providerProperties = providerProperties;
     }
 
     @GetMapping("/events")
@@ -38,7 +47,18 @@ public class NewsController {
             @RequestParam(defaultValue = "100") @Max(500) int limit) {
         NewsReadResult<EconomicEvent> result = catalog.findEvents(
                 new NewsQuery(from, to, marketId, currency, impact, limit));
-        return ResponseEntity.ok(NewsReadResponse.from(result, XOOMAR_ATTRIBUTION));
+        return ResponseEntity.ok(NewsReadResponse.from(result, attribution(result.items())));
+    }
+
+    private String attribution(List<?> items) {
+        return items.stream()
+                .map(item -> item instanceof EconomicEvent event ? event.sourceName() : null)
+                .filter(java.util.Objects::nonNull)
+                .map(providerProperties.attributions()::get)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.joining("; "))
+                .transform(value -> value.isBlank() ? null : value);
     }
 
     @GetMapping("/items")

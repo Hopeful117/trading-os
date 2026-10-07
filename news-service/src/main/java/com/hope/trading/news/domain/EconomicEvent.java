@@ -7,6 +7,7 @@ import java.util.UUID;
 public record EconomicEvent(
         UUID id,
         String sourceName,
+        String source,
         String sourceEventId,
         String title,
         String category,
@@ -41,8 +42,31 @@ public record EconomicEvent(
                          Instant sourceUpdatedAt,
                          Instant fetchedAt,
                          String normalizationVersion) {
-        this(id, sourceName, sourceEventId, title, category, scheduledAt, actualAt, currencies, marketIds,
+        this(id, sourceName, null, sourceEventId, title, category, scheduledAt, actualAt, currencies, marketIds,
                 impact, status, previousValue, consensusValue, actualValue, null, sourceUpdatedAt,
+                fetchedAt, normalizationVersion);
+    }
+
+    public EconomicEvent(UUID id,
+                         String sourceName,
+                         String sourceEventId,
+                         String title,
+                         String category,
+                         Instant scheduledAt,
+                         Instant actualAt,
+                         List<String> currencies,
+                         List<UUID> marketIds,
+                         ImpactLevel impact,
+                         EconomicEventStatus status,
+                         String previousValue,
+                         String consensusValue,
+                         String actualValue,
+                         String unit,
+                         Instant sourceUpdatedAt,
+                         Instant fetchedAt,
+                         String normalizationVersion) {
+        this(id, sourceName, null, sourceEventId, title, category, scheduledAt, actualAt, currencies, marketIds,
+                impact, status, previousValue, consensusValue, actualValue, unit, sourceUpdatedAt,
                 fetchedAt, normalizationVersion);
     }
 

@@ -72,4 +72,18 @@ class NewsPersistenceTest {
 
         assertThat(events.count()).isEqualTo(1);
     }
+
+    @Test
+    void reloadsTheNormalizedEventSource() {
+        Instant scheduledAt = Instant.parse("2026-01-01T12:00:00Z");
+        EconomicEvent event = new EconomicEvent(
+                null, "xoomar", "BLS", "event-source", "CPI", "inflation", scheduledAt, null,
+                List.of("USD"), List.of(), ImpactLevel.HIGH, EconomicEventStatus.SCHEDULED,
+                null, null, null, "%", scheduledAt, scheduledAt, "xoomar-v1");
+
+        EconomicEventEntity saved = events.save(EconomicEventEntity.from(event));
+
+        assertThat(events.findById(saved.toDomain().id()).orElseThrow().toDomain().source())
+                .isEqualTo("BLS");
+    }
 }

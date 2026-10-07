@@ -6,6 +6,8 @@ import java.util.UUID;
 
 public record NewsItemContext(
         UUID id,
+        String sourceName,
+        String sourceItemId,
         String title,
         String summary,
         String canonicalUrl,
@@ -14,7 +16,6 @@ public record NewsItemContext(
         List<String> categories,
         List<String> currencies,
         String impact,
-        String sourceName,
         Instant sourceUpdatedAt,
         Instant fetchedAt,
         String normalizationVersion

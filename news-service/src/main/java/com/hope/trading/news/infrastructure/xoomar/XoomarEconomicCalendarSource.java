@@ -90,6 +90,7 @@ public class XoomarEconomicCalendarSource implements EconomicCalendarSourcePort 
         return new EconomicEvent(
                 null,
                 SOURCE_NAME,
+                event.source(),
                 event.sourceEventId(),
                 event.eventName(),
                 firstText(event.sector(), event.type()),
@@ -176,6 +177,7 @@ public class XoomarEconomicCalendarSource implements EconomicCalendarSourcePort 
             String id,
             String eventId,
             String eventName,
+            String source,
             String countryCode,
             String currency,
             String importance,
