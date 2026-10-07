@@ -6,7 +6,7 @@
 
 **Title:** Market Structure Foundation
 
-**Status:** READY_FOR_IMPLEMENTATION
+**Status:** CLOSED - HUMAN ACCEPTED
 
 **Size:** Large
 
@@ -25,8 +25,10 @@
 and
 `docs/architecture/stories/0067-paper-validate-trend-context/runtime-reconciliation.md`
 
-This Story is an implementation design artifact. It does not authorize
-implementation, commit, push, or creation of additional Story 0071 artifacts.
+The implementation and runtime evidence were reviewed and accepted by the human
+engineer. The final human Git commit remains pending under the repository
+workflow; this status does not authorize a new implementation, commit, push, or
+merge operation.
 
 ## Goal
 
@@ -1102,10 +1104,10 @@ those approved decisions.
 
 ## Final Verdict
 
-**READY_FOR_IMPLEMENTATION**
+**IMPLEMENTED - HUMAN REVIEW REQUIRED**
 
 ADR-049 resolves the prior ownership blocker. The current repository provides a
 clear extraction seam, a tested semantic baseline, existing capability/artifact
-orchestration, and explicit profile configuration. No additional semantic
-decision is required for the narrow confirmed SwingPoint extraction defined by
-this Story.
+orchestration, and explicit profile configuration. Focused implementation
+validation is documented as passed. Human review, acceptance, and runtime/replay
+validation remain outstanding before closure.
