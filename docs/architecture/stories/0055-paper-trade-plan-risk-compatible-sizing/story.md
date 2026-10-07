@@ -4,7 +4,7 @@
 
 **ID:** `0055`
 **Title:** Make PAPER Trade Plan sizing compatible with effective risk
-**Status:** Draft
+**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
 
 ---
 
