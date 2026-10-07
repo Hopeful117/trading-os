@@ -6,7 +6,7 @@
 
 **Title:** Persisted Account Identity and Explicit PAPER Provisioning
 
-**Status:** Implemented - Ready for Review
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
@@ -129,24 +129,24 @@ guessed.
 
 ## Acceptance Criteria
 
-- [ ] Given a financial `Account` and its `BrokerAccount`, when the account is provisioned, then an explicit persisted canonical reference links the `Account` to that `BrokerAccount`.
-- [ ] Given any two account identifiers, then `Account.accountId` and `BrokerAccount.id` are treated as independent domain identities; neither UUID equality nor UUID inequality establishes a relationship.
-- [ ] Given a `BrokerAccount` already linked canonically, when another `Account` attempts to use it, then persistence or domain validation rejects the second canonical link.
-- [ ] Given an `Account` and `BrokerAccount` owned by different users, when a canonical link is attempted, then the operation is rejected.
-- [ ] Given provider metadata on an `Account`, when it contradicts the canonical `BrokerAccount.provider`, then the link or provisioning operation is rejected or the state is reported invalid according to the repository error conventions.
-- [ ] Given one user and one provider, when multiple distinct accounts are provisioned, then all valid accounts can coexist without `(user_id, broker)` uniqueness being used as their identity.
-- [ ] Given a PAPER provisioning request without an explicit profile reference, when provisioning runs, then it fails closed.
-- [ ] Given an unknown exact profile/version, malformed reference, structurally invalid profile, incomplete required normalized rule set, or unsupported existing rule vocabulary/version, when PAPER provisioning runs, then it fails closed.
-- [ ] Given an explicit valid versioned `RiskProfile` reference, when PAPER provisioning succeeds, then the required `AccountRiskConfiguration` and profile assignment are persisted for the financial `Account`.
-- [ ] Given successful PAPER provisioning, then the canonical account relation, initial financial state, risk configuration, and profile assignment are present after database reload.
-- [ ] Given a provisioning failure at any required local step, then no partial operational PAPER account graph is committed.
-- [ ] Given retained `AccountRiskConfiguration.brokerAccountId` data, then it matches the canonical `Account` relation and cannot be independently changed to another `BrokerAccount`.
-- [ ] Given a legacy mapping that is provable from persisted ownership, provider, and configuration evidence, when backfill runs, then the canonical relation is populated.
-- [ ] Given an ambiguous or unprovable legacy mapping, when backfill runs, then no relation is guessed and the row remains visible for manual repair.
-- [ ] Given legacy `Rules` without the current explicit configuration and profile assignment, then the account is not treated as risk-eligible solely because those rules exist.
-- [ ] Given existing LIVE account behavior, when this Story is deployed, then external provider authority and existing Broker Service interactions remain unchanged.
-- [ ] Given an `Account` after persistence-context reload, then canonical lookup resolves the same `BrokerAccount` without owner/provider identity inference.
-- [ ] Given existing authorization flows, when account relations are created or resolved, then ownership and authentication guarantees remain preserved.
+- [x] Given a financial `Account` and its `BrokerAccount`, when the account is provisioned, then an explicit persisted canonical reference links the `Account` to that `BrokerAccount`.
+- [x] Given any two account identifiers, then `Account.accountId` and `BrokerAccount.id` are treated as independent domain identities; neither UUID equality nor UUID inequality establishes a relationship.
+- [x] Given a `BrokerAccount` already linked canonically, when another `Account` attempts to use it, then persistence or domain validation rejects the second canonical link.
+- [x] Given an `Account` and `BrokerAccount` owned by different users, when a canonical link is attempted, then the operation is rejected.
+- [x] Given provider metadata on an `Account`, when it contradicts the canonical `BrokerAccount.provider`, then the link or provisioning operation is rejected or the state is reported invalid according to the repository error conventions.
+- [x] Given one user and one provider, when multiple distinct accounts are provisioned, then all valid accounts can coexist without `(user_id, broker)` uniqueness being used as their identity.
+- [x] Given a PAPER provisioning request without an explicit profile reference, when provisioning runs, then it fails closed.
+- [x] Given an unknown exact profile/version, malformed reference, structurally invalid profile, incomplete required normalized rule set, or unsupported existing rule vocabulary/version, when PAPER provisioning runs, then it fails closed.
+- [x] Given an explicit valid versioned `RiskProfile` reference, when PAPER provisioning succeeds, then the required `AccountRiskConfiguration` and profile assignment are persisted for the financial `Account`.
+- [x] Given successful PAPER provisioning, then the canonical account relation, initial financial state, risk configuration, and profile assignment are present after database reload.
+- [x] Given a provisioning failure at any required local step, then no partial operational PAPER account graph is committed.
+- [x] Given retained `AccountRiskConfiguration.brokerAccountId` data, then it matches the canonical `Account` relation and cannot be independently changed to another `BrokerAccount`.
+- [x] Given a legacy mapping that is provable from persisted ownership, provider, and configuration evidence, when backfill runs, then the canonical relation is populated.
+- [x] Given an ambiguous or unprovable legacy mapping, when backfill runs, then no relation is guessed and the row remains visible for manual repair.
+- [x] Given legacy `Rules` without the current explicit configuration and profile assignment, then the account is not treated as risk-eligible solely because those rules exist.
+- [x] Given existing LIVE account behavior, when this Story is deployed, then external provider authority and existing Broker Service interactions remain unchanged.
+- [x] Given an `Account` after persistence-context reload, then canonical lookup resolves the same `BrokerAccount` without owner/provider identity inference.
+- [x] Given existing authorization flows, when account relations are created or resolved, then ownership and authentication guarantees remain preserved.
 
 ---
 
@@ -286,11 +286,11 @@ No Broker Service, Angular, or frontend validation is required for this Story.
 
 ## Definition of Done
 
-- [ ] Repository Analysis approved.
-- [ ] Implementation Plan approved if required by repository analysis.
+- [x] Repository Analysis approved.
+- [x] Implementation Plan approved if required by repository analysis.
 - [x] Implementation completed within the Story scope.
 - [x] Relevant Trading Core and migration validation executed.
-- [ ] Diff reviewed in IntelliJ by the human engineer.
-- [ ] Code Review approved.
+- [x] Diff reviewed in IntelliJ by the human engineer.
+- [x] Code Review approved.
 - [x] Engineering Report completed.
 - [ ] Human commit created.

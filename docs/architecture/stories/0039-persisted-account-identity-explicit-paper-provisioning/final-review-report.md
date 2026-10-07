@@ -127,7 +127,7 @@ The tests execute V12 on a clean H2 test schema. No live PostgreSQL migration ru
 - Human review of the complete diff and migration data assumptions remains required.
 
 ```text
-STORY_0039 = READY_FOR_HUMAN_COMMIT
+STORY_0039 = CLOSED - HUMAN_ACCEPTED - READY_FOR_HUMAN_COMMIT
 COMMIT_PERFORMED = NO
-FINAL_REVIEW_RECOMMENDATION = READY_FOR_HUMAN_COMMIT
+FINAL_REVIEW_RECOMMENDATION = CLOSED - HUMAN_ACCEPTED
 ```
