@@ -6,7 +6,7 @@
 
 **Title:** Decide a proposed Trade Plan from an Opportunity (accept → deterministic risk decision)
 
-**Status:** Approved
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 

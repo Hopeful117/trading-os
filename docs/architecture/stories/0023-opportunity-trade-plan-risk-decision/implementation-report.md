@@ -62,6 +62,27 @@ Fixed Docker build context: changed docker-compose.yml `build: ./trading-core` t
 | Frontend build | Success (611 kB initial) |
 | Prettier | All files clean |
 
+## Closure Validation
+
+Re-executed from the current repository state before closure:
+
+* `cd market-intelligence && mvn -q test` — passed.
+* `cd trading-core && mvn -q test` — passed.
+* `cd trading-os-web && npm run test:ci` — **47 files, 391 tests, all
+  passing**.
+* `cd trading-os-web && npm run build` — passed.
+* `cd trading-os-web && npx prettier --check .` — passed.
+* `git diff --check` — passed.
+
+The frontend build continues to emit existing bundle and stylesheet budget
+warnings. The Maven suites emit expected test-path warnings for uniqueness,
+security and unavailable-service scenarios; the commands completed
+successfully. No additional implementation change was required for closure.
+
+The authenticated end-to-end journey remains a runtime limitation rather than
+an unverified claim: this validation run did not establish a complete
+Gateway-to-Market-Intelligence-to-Trading-Core browser flow.
+
 ## Untracked User File
 
 `docs/architecture/reports/trading-os-resumption-investigation.md` — preserved across all branch operations.
