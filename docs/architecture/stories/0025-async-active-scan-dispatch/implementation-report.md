@@ -88,6 +88,23 @@ documentation clarification is suggested (not implemented here).
 | `git diff --check` | clean |
 | Docker build market-intelligence | OK, stack restarted, app started 7.3 s |
 
+## Closure Validation
+
+Re-executed from the current repository state before closure:
+
+* `cd market-intelligence && mvn -q test` — passed.
+* `cd trading-os-web && npm run test:ci` — **47 files, 391 tests, all
+  passing**.
+* `cd trading-os-web && npm run build` — passed.
+* `git diff --check` — passed.
+* No Angular, nginx or Docker configuration change was introduced by this
+  closure validation.
+
+The frontend build emits the existing bundle and stylesheet budget warnings.
+They do not fail the build and are outside Story 0025 scope. The documented
+runtime proof remains the real Kraken-scope run above; no new runtime claim is
+added by this validation pass.
+
 ## Idempotency & claiming
 
 Unchanged paths exercised at runtime (fresh key per run; duplicate-key branch
