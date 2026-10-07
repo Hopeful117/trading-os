@@ -86,3 +86,18 @@
 - **MI panel outside account conditional**: Ensures MI data is visible even when accounts fail to load
 - **No new Angular services**: Reused existing `OpportunityService`, `AccountService`, `DashboardService`
 - **No backend changes**: All work in `trading-os-web`
+
+## Closure Validation
+
+Re-executed from the current repository state before closure:
+
+* `npm run test:ci` — **47 files, 391 tests, all passing**.
+* `npm run build` — passed.
+* `npx prettier --check .` — all files formatted.
+* `git diff --check` — passed.
+* No backend changes were introduced by Story 0026.
+
+The current dashboard also includes the later compatible scan-summary and
+polling behavior visible in the repository implementation; this does not alter
+the Story's client-composition boundary. The build emits existing bundle and
+stylesheet budget warnings, which remain outside scope.
