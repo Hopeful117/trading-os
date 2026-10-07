@@ -2,21 +2,22 @@
 
 ## Status
 
-Not implemented.
+Implemented for the revised entry-outcome slice.
 
-This report closes the documentation gap by recording the actual repository
-state. Story 0036 defines the `TradeOutcome` feedback loop, while the merged
-PR #34 delivered the separate PAPER Account / Simulated Execution milestone.
+This report records the implementation of the revised Story 0036 entry-outcome
+slice. The merged PR #34 PAPER Account / Simulated Execution milestone remains
+separate and is not counted as Story 0036 work.
 
 ## Acceptance Status
 
 | Area | Status |
 |---|---|
-| `TradeOutcome` entity and persistence | Not implemented |
-| Execution finalization creation | Not implemented |
-| Strategy provenance capture | Not implemented |
-| Position-close update | Not implemented |
-| TradeOutcome read API | Not implemented |
+| `TradeOutcome` entity and persistence | Implemented |
+| Execution finalization creation | Implemented, idempotent by execution intent |
+| Strategy provenance capture | Implemented as an immutable validation-time snapshot |
+| Position-close update | Deferred by revised scope |
+| TradeOutcome read API | Implemented with account ownership checks |
+| Stop-loss/take-profit/risk fields | Implemented as an immutable execution snapshot |
 | Legacy Trade compatibility | Preserved by current code |
 | Existing execution pipeline | Preserved and tested |
 
@@ -28,4 +29,4 @@ completion of the Story 0036 acceptance criteria.
 
 ## Verdict
 
-`STORY_NOT_IMPLEMENTED_DOCUMENTED`
+`STORY_IMPLEMENTED_HUMAN_REVIEW_REQUIRED`

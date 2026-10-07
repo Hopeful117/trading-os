@@ -14,10 +14,11 @@
 
 ## Scope Reconciliation
 
-The Story 0036 file defines the durable `TradeOutcome` feedback loop:
+The revised Story 0036 file defines the first implementable slice of the durable
+`TradeOutcome` feedback loop:
 
 ```text
-ExecutionIntent -> TradeOutcome -> strategy provenance -> closed outcome
+ExecutionIntent -> entry TradeOutcome -> immutable strategy provenance
 ```
 
 The implementation merged in PR #34 is the PAPER Account / Simulated Execution
@@ -37,7 +38,8 @@ implicitly mark Story 0036 as complete.
 - PAPER settlement creates or updates the legacy `Trade` projection.
 - No persisted `TradeOutcome` aggregate or table exists.
 - No execution-to-strategy provenance read model exists.
-- `PositionCloseCommand` does not update a `TradeOutcome`.
+- `PositionCloseCommand` does not update a `TradeOutcome`; this is intentionally
+  deferred because the current identities do not establish a safe association.
 - No `/api/v1/accounts/{accountId}/trade-outcomes` endpoint exists.
 
 ## Decision
@@ -49,5 +51,7 @@ criteria have been met.
 ## Consequence
 
 Future implementation of Story 0036 requires its own approved implementation
-slice. It must preserve the already merged PAPER execution behavior and must
-not modify the legacy `Trade` contract as a substitute for `TradeOutcome`.
+slice. It must preserve the already merged PAPER execution behavior, must not
+modify the legacy `Trade` contract as a substitute for `TradeOutcome`, and must
+implement the explicit provenance handoff rather than reconstructing provenance
+from opaque rationale data.

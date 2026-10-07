@@ -2,16 +2,17 @@
 
 ## Review Scope
 
-Documentation reconciliation only. No Story 0036 implementation diff was
-reviewed because the `TradeOutcome` scope is not implemented.
+The revised entry-outcome implementation was reviewed after the final
+validation pass. Human acceptance was explicitly provided for this Story.
 
 ## Findings
 
-- No implementation can be approved against the Story 0036 acceptance
-  criteria at the current repository checkpoint.
+- The revised entry-outcome implementation is present and targeted/full
+  Trading Core validation has been executed.
 - The merged PAPER milestone is valid work but belongs to a different scope.
-- The Story remains `Draft` and requires a future implementation review.
+- Position-close association and realized-PnL allocation remain intentionally
+  deferred by the revised Story.
 
 ## Verdict
 
-`NOT_REVIEWABLE_IMPLEMENTATION_NOT_PRESENT`
+`APPROVED - HUMAN_ACCEPTED`
