@@ -196,6 +196,9 @@ class StrategyDefinitionTest {
         assertThatThrownBy(() -> new StrategyParameter(" ",
                 StrategyParameter.ParameterType.STRING, "v"))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new StrategyParameter("p",
+                StrategyParameter.ParameterType.INTEGER, 1.5d))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

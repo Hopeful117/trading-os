@@ -203,9 +203,11 @@ class LegacyOhlcTrendEvaluator implements StrategyEvaluator {
     @Override
     public StrategyEvaluation evaluate(
             StrategyDefinition definition, StrategyEvaluationContext context) {
-        if (!context.has(BuiltinStrategies.PRICE_CHANGE)) {
-            return StrategyEvaluation.notEvaluable(
-                    definition, context, "Required semantic input missing: " + PRICE_CHANGE);
+        for (RequiredSemanticInput required : definition.requiredInputs()) {
+            if (!context.has(required)) {
+                return StrategyEvaluation.notEvaluable(
+                        definition, context, "Required semantic input missing: " + required);
+            }
         }
         BigDecimal priceChange = context.get(BuiltinStrategies.PRICE_CHANGE).decimalValue();
         int signum = priceChange.signum();
@@ -251,11 +253,7 @@ class LegacyOhlcTrendEvaluator implements StrategyEvaluator {
     }
 
     private static Instant observedAt(StrategyEvaluationContext context) {
-        // Validity derives from supplied timestamps only; absent observedAt
-        // falls back to the context evaluation time, never wall-clock time.
-        return context.has(BuiltinStrategies.OBSERVED_AT)
-                ? context.get(BuiltinStrategies.OBSERVED_AT).instantValue()
-                : context.evaluatedAt();
+        return context.get(BuiltinStrategies.OBSERVED_AT).instantValue();
     }
 
     private static final RequiredSemanticInput PRICE_CHANGE = BuiltinStrategies.PRICE_CHANGE;

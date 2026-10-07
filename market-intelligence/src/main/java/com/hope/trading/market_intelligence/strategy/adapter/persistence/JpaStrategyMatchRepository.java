@@ -11,6 +11,7 @@ import com.hope.trading.market_intelligence.strategy.domain.StrategyMatchIdentit
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -51,6 +52,26 @@ public class JpaStrategyMatchRepository implements StrategyMatchRepository {
     public List<StrategyMatch> findByAnalysisExecutionId(UUID analysisExecutionId) {
         return jpa.findByAnalysisExecutionId(analysisExecutionId).stream()
                 .map(this::toDomain).toList();
+    }
+
+    @Override
+    public List<StrategyMatch> findByAnalysisExecutionIds(Collection<UUID> analysisExecutionIds) {
+        if (analysisExecutionIds.isEmpty()) {
+            return List.of();
+        }
+        return jpa.findByAnalysisExecutionIdIn(analysisExecutionIds).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<StrategyMatch> findByIds(Collection<UUID> matchIds) {
+        if (matchIds.isEmpty()) {
+            return List.of();
+        }
+        return jpa.findAllById(matchIds).stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

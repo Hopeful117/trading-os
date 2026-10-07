@@ -130,15 +130,15 @@ public final class StrategyDefinition {
 
     /**
      * Rehydrates a persisted strategy version. Used by persistence adapters
-     * only; applies identical invariants as creation. The scenario field
-     * defaults to the strategy name when not persisted.
+     * only; applies identical invariants as creation.
      */
     public static StrategyDefinition rehydrate(
             StrategyId strategyId,
-            int version,
-            String name,
-            String description,
-            StrategyOperationalStatus operationalStatus,
+             int version,
+             String name,
+             String description,
+             String scenario,
+             StrategyOperationalStatus operationalStatus,
             ValidationStatus validationStatus,
             String validationEvidenceRef,
             StrategyDirection direction,
@@ -149,7 +149,7 @@ public final class StrategyDefinition {
             Instant createdAt,
             Instant updatedAt
     ) {
-        return new StrategyDefinition(strategyId, version, name, description, null,
+        return new StrategyDefinition(strategyId, version, name, description, scenario,
                 operationalStatus,
                 validationStatus, validationEvidenceRef, direction, applicability,
                 requiredInputs, parameters, researchRef, createdAt, updatedAt);

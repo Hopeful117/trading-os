@@ -77,6 +77,19 @@ class LegacyOhlcTrendEvaluatorTest {
     }
 
     @Test
+    void missingObservedAtIsNotEvaluable() {
+        StrategyEvaluation evaluation = registry.evaluate(builtins.legacyOhlcTrend(),
+                StrategyEvaluationContext.builder()
+                        .marketId(MARKET).instrument("ETH/USD")
+                        .timeframe(StrategyApplicability.Timeframe.M15)
+                        .evaluatedAt(NOW)
+                        .input(BuiltinStrategies.PRICE_CHANGE,
+                                StrategyEvaluationContext.SemanticValue.decimal(new BigDecimal("1")))
+                        .build());
+        assertThat(evaluation.status()).isEqualTo(StrategyEvaluationStatus.NOT_EVALUABLE);
+    }
+
+    @Test
     void repeatedEvaluationIsDeterministic() {
         StrategyDefinition definition = builtins.legacyOhlcTrend();
         StrategyEvaluationContext context = context("7");
