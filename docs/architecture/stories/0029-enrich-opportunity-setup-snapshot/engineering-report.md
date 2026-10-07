@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-25
 **Branch**: `feature/story-0029-enrich-opportunity-setup-snapshot`
-**Status**: DONE — Ready for human review
+**Status**: CLOSED — HUMAN ACCEPTED
 
 ---
 

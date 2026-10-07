@@ -1,5 +1,7 @@
 # Story 0029 — Enrich TradingOpportunity with a Deterministic Setup Snapshot
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 Make `TradingOpportunity` a deterministic, historically understandable snapshot of the market setup that triggered the system's attention — without turning it into a `TradePlan`.
