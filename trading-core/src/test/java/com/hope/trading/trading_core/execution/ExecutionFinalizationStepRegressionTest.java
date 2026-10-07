@@ -5,6 +5,9 @@ import com.hope.trading.trading_core.execution.application.pipeline.ExecutionPip
 import com.hope.trading.trading_core.execution.application.port.BrokerExecutionPort;
 import com.hope.trading.trading_core.execution.application.port.ExecutionIdGenerator;
 import com.hope.trading.trading_core.execution.application.port.ExecutionMetrics;
+import com.hope.trading.trading_core.execution.application.service.TradeOutcomeService;
+import com.hope.trading.trading_core.execution.application.service.PaperSettlementService;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.execution.domain.aggregate.BrokerOrder;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionAttempt;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
@@ -44,6 +47,15 @@ class ExecutionFinalizationStepRegressionTest {
     @Mock
     private ExecutionMetrics metrics;
 
+    @Mock
+    private TradeOutcomeService tradeOutcomeService;
+
+    @Mock
+    private PaperSettlementService paperSettlementService;
+
+    @Mock
+    private BrokerAccountRepository brokerAccountRepository;
+
     private ExecutionFinalizationStep step;
 
     @Test
@@ -67,6 +79,26 @@ class ExecutionFinalizationStepRegressionTest {
         verify(metrics).executionSucceeded();
         verify(attempts).save(attempt);
         verify(intents).save(intent);
+    }
+
+    @Test
+    void executeWithAcknowledgedCreatesEntryOutcome() {
+        ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
+        ExecutionAttempt attempt = ExecutionAttempt.create(
+                new ExecutionAttemptId(uuid(206)), intent.id(), 1, NOW, UUID.randomUUID());
+        BrokerOrder brokerOrder = BrokerOrder.acknowledged(
+                new BrokerOrderId(uuid(207)), intent.id(), attempt.id(), "ext-order-2", NOW);
+        var ctx = new ExecutionPipelineContext(intent, NOW);
+        ctx.attempt(attempt);
+        ctx.brokerOrder(brokerOrder);
+        ctx.submissionResult(new BrokerExecutionPort.Acknowledged("ext-order-2", "corr-2"));
+
+        step = new ExecutionFinalizationStep(intents, attempts, orders, lifecycle, metrics,
+                paperSettlementService, brokerAccountRepository, tradeOutcomeService);
+
+        step.execute(ctx);
+
+        verify(tradeOutcomeService).acknowledge(intent, brokerOrder, NOW);
     }
 
     @Test

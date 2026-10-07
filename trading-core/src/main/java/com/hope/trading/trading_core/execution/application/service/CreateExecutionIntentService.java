@@ -34,7 +34,8 @@ public final class CreateExecutionIntentService {
         }
         ExecutionIntent intent = ExecutionIntent.create(ids.nextIntentId(),
                 command.tradePlan(), command.riskApproval(), command.idempotencyKey(),
-                command.initiatorId(), command.brokerAccountId(), command.parameters(),
+                command.initiatorId(), command.brokerAccountId(), command.accountId(), command.parameters(),
+                command.provenance(),
                 clock.instant(), command.expiresAt());
         intents.save(intent); events.publish(intent.pullEvents()); metrics.executionCreated();
         return intent;

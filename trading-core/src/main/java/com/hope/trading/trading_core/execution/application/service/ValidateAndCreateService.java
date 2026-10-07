@@ -162,10 +162,12 @@ public final class ValidateAndCreateService {
                         new TradePlanReference(readyPlan.tradePlanId(), readyPlan.tradePlanVersion()),
                         approval,
                         command.idempotencyKey(),
-                        command.initiatorId(),
-                        resolvedBrokerAccountId,
-                        parameters,
-                        command.expiresAt()));
+                         command.initiatorId(),
+                         resolvedBrokerAccountId,
+                         readyPlan.tradingAccountId(),
+                         parameters,
+                         readyPlan.provenance(),
+                         command.expiresAt()));
 
         // 15. Transition to VALIDATED
         lifecycle.validate(intent, clock.instant());
@@ -216,7 +218,9 @@ public final class ValidateAndCreateService {
         }
 
         // 5. Build ExecutionParameters from authoritative data only
-        return new ExecutionParameters(instrument, side, orderType, quantity, entryIntent.price());
+        return new ExecutionParameters(instrument, side, orderType, quantity, entryIntent.price(),
+                plan.stopPrice(), plan.takeProfit() == null ? java.util.List.of() : java.util.List.of(plan.takeProfit()),
+                plan.expectedMonetaryRisk(), plan.riskRewardRatio());
     }
 
     private ExecutionParameters.Side deriveSide(String direction) {

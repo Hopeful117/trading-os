@@ -61,11 +61,16 @@ public class ExecutionConfiguration {
     }
     @Bean ExecutionFinalizationStep executionFinalizationStep(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts, BrokerOrderRepositoryPort orders,
-            ExecutionLifecycleService lifecycle, ExecutionMetrics metrics,
-            PaperSettlementService paperSettlementService,
-            BrokerAccountRepository brokerAccountRepository){
+             ExecutionLifecycleService lifecycle, ExecutionMetrics metrics,
+             PaperSettlementService paperSettlementService,
+             BrokerAccountRepository brokerAccountRepository,
+             TradeOutcomeService tradeOutcomeService){
         return new ExecutionFinalizationStep(intents, attempts, orders, lifecycle, metrics,
-                paperSettlementService, brokerAccountRepository);
+                paperSettlementService, brokerAccountRepository, tradeOutcomeService);
+    }
+    @Bean TradeOutcomeService tradeOutcomeService(TradeOutcomeRepositoryPort outcomes,
+                                                   AccountRepository accounts) {
+        return new TradeOutcomeService(outcomes, java.util.UUID::randomUUID, accounts);
     }
     @Bean ExecuteTradeService executeTradeService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
