@@ -65,4 +65,44 @@ class AuthenticatedActorHeaderFilterTest {
         assertThat(forwarded.get().getHeaders().getFirst(AuthenticatedActorHeaderFilter.ACTOR_HEADER))
                 .isNull();
     }
+
+    @Test
+    void stripsClientActorHeaderWhenIntelligenceRequestIsUnauthenticated() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/intelligence/scans")
+                        .header(AuthenticatedActorHeaderFilter.ACTOR_HEADER, "attacker")
+                        .build()
+        );
+        AtomicReference<ServerHttpRequest> forwarded = new AtomicReference<>();
+        GatewayFilterChain chain = value -> {
+            forwarded.set(value.getRequest());
+            value.getResponse().setStatusCode(HttpStatus.OK);
+            return value.getResponse().setComplete();
+        };
+
+        new AuthenticatedActorHeaderFilter().filter(exchange, chain).block();
+
+        assertThat(forwarded.get().getHeaders().getFirst(AuthenticatedActorHeaderFilter.ACTOR_HEADER))
+                .isNull();
+    }
+
+    @Test
+    void stripsClientActorHeaderOnNonIntelligenceRoutes() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/accounts")
+                        .header(AuthenticatedActorHeaderFilter.ACTOR_HEADER, "attacker")
+                        .build()
+        );
+        AtomicReference<ServerHttpRequest> forwarded = new AtomicReference<>();
+        GatewayFilterChain chain = value -> {
+            forwarded.set(value.getRequest());
+            value.getResponse().setStatusCode(HttpStatus.OK);
+            return value.getResponse().setComplete();
+        };
+
+        new AuthenticatedActorHeaderFilter().filter(exchange, chain).block();
+
+        assertThat(forwarded.get().getHeaders().getFirst(AuthenticatedActorHeaderFilter.ACTOR_HEADER))
+                .isNull();
+    }
 }

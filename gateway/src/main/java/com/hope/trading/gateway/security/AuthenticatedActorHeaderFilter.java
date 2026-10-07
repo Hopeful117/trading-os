@@ -17,19 +17,21 @@ public class AuthenticatedActorHeaderFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        if (!exchange.getRequest().getPath().value().startsWith(INTELLIGENCE_PATH_PREFIX)) {
-            return chain.filter(exchange);
-        }
+        boolean intelligenceRoute = exchange.getRequest().getPath().value().startsWith(INTELLIGENCE_PATH_PREFIX);
         return ReactiveSecurityContextHolder.getContext()
                 .map(org.springframework.security.core.context.SecurityContext::getAuthentication)
                 .filter(Authentication.class::isInstance)
                 .map(Authentication::getPrincipal)
                 .filter(UserAuthenticationDto.class::isInstance)
                 .cast(UserAuthenticationDto.class)
-                .map(principal -> exchange.mutate().request(request -> request.headers(headers ->
-                        headers.set(ACTOR_HEADER, principal.getUserId().toString()))).build())
-                .switchIfEmpty(Mono.just(exchange))
-                .flatMap(chain::filter);
+                 .filter(principal -> intelligenceRoute)
+                 .map(principal -> exchange.mutate().request(request -> request.headers(headers -> {
+                     headers.remove(ACTOR_HEADER);
+                     headers.set(ACTOR_HEADER, principal.getUserId().toString());
+                 })).build())
+                 .switchIfEmpty(Mono.fromSupplier(() -> exchange.mutate().request(request ->
+                         request.headers(headers -> headers.remove(ACTOR_HEADER))).build()))
+                 .flatMap(chain::filter);
     }
 
     @Override
