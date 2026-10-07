@@ -6,7 +6,7 @@
 
 **Title:** API Surface Hardening and Ownership Enforcement
 
-**Status:** IMPLEMENTED - RUNTIME VALIDATED; HUMAN CLOSURE REVIEWED
+**Status:** CLOSED - HUMAN ACCEPTED
 
 **Baseline:** `main` at `8eb75431749c3ca5c8b6dd9384b3fe1d9f61b3be`
 
@@ -14,7 +14,7 @@
 
 **Related Investigation:** `docs/investigations/api-security-surface-audit.md`
 
-**Implementation status:** Runtime-validated security boundary implemented for the Core, Broker Service, and Market Intelligence slice. Explicit deferred debt remains recorded below.
+**Implementation status:** Runtime-validated security boundary implemented for the Core, Broker Service, and Market Intelligence slice. Explicit deferred debt remains recorded below and is not represented as implemented by this Story.
 
 **Final Market Intelligence refinement:** [visibility decision](market-intelligence-visibility-decision.md), [endpoint authorization matrix](market-intelligence-endpoint-authorization-matrix.md), and [identity migration matrix](market-intelligence-identity-migration-matrix.md). The selected policy is `AUTHENTICATED_SHARED`; implementation remains subject to explicit human authorization.
 

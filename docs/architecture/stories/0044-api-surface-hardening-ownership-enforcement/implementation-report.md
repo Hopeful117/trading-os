@@ -19,6 +19,12 @@
 - Added Story 0044 ADR, investigation, and authorization/identity matrices.
 - Fixed the MI error-dispatch path with
   `dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()`.
+- Removed the global user-facing execution recovery endpoint.
+- Restricted Market Data synchronization and subscription mutations to service
+  credentials while retaining bounded public GET reads.
+- Disabled Gateway discovery-based route generation and sanitized client actor
+  headers at ingress.
+- Added persisted two-user Trade ownership integration coverage.
 
 ## Runtime Acceptance
 
