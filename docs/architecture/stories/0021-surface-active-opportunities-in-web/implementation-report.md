@@ -69,6 +69,22 @@ Back link to the list. No AI wording anywhere.
 * Coverage of new sources (vitest lcov): service 100%, list ts 100%, detail ts
   90%, templates ≥93% LINE — above the LINE ≥80% gate.
 
+## Closure Validation
+
+Re-executed from the current repository state before closure:
+
+* `npm run test:ci` — **47 files, 391 tests, all passing**.
+* `npm run build` — success.
+* `git diff --check` — passed.
+* No backend files are modified by the Story.
+
+The build continues to emit the repository's existing bundle and stylesheet
+budget warnings. They do not fail the build and are outside this Story's
+scope. The authenticated browser journey remains unexecuted because browser
+automation is unavailable in this environment; unit tests and the unauthenticated
+Gateway probe provide the available evidence without fabricating a live trader
+journey.
+
 ## Deviations from plan
 
 None material.
