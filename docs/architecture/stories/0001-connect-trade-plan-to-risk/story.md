@@ -6,7 +6,13 @@
 
 **Title:** Connect Trade Plan to Risk Evaluation
 
-**Status:** Approved
+**Status:** CLOSED - HUMAN ACCEPTED
+
+The implementation, corrective implementation, validation, and independent
+corrective code review were reviewed and accepted by the human engineer. The
+final human Git commit remains pending under the repository workflow; this
+status does not authorize another implementation, commit, push, or merge
+operation.
 
 ---
 
