@@ -2,7 +2,10 @@
 
 ## Review Scope
 
-Review of the PAPER account creation and mode-visibility wiring only.
+Review of the PAPER account creation and mode-visibility wiring only. The
+review covers the Trading Core response and ownership propagation, Angular
+mode selection and validation, credential separation, risk-profile selection,
+and the associated regression tests.
 
 ## Findings
 
@@ -14,6 +17,7 @@ Review of the PAPER account creation and mode-visibility wiring only.
   Account.
 - The frontend does not invent execution, risk, price, or settlement values.
 - No direct Account-to-BrokerAccount relation was introduced.
+- No finding was identified against the Story acceptance criteria.
 
 ## Residual Limitation
 
@@ -25,9 +29,11 @@ separate domain decision and is outside this Story.
 ## Verification
 
 - Trading Core: 516 tests passed.
-- Angular: 293 tests passed and production build passed.
+- Angular: 391 tests passed and production build passed.
 - Formatting and `git diff --check` passed.
+- The Angular build retains existing bundle-budget warnings; no new Story 0037
+  failure was introduced.
 
 ## Verdict
 
-`APPROVED_PENDING_HUMAN_REVIEW`
+`APPROVED - HUMAN_ACCEPTED`
