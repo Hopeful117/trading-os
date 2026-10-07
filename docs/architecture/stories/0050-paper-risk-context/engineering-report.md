@@ -2,33 +2,43 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION EVIDENCE PARTIAL`
+`IMPLEMENTED - LOCAL VALIDATION COMPLETE; RUNTIME VALIDATION PENDING`
 
 ## Outcome
 
-The PAPER risk context implementation was delivered in commit `fdcb6ac`.
 Trading Core remains authoritative for PAPER local financial facts, while LIVE
-facts remain broker-backed. The change stays on the infrastructure/application
-side of the risk boundary and does not alter deterministic Risk Domain rules.
+facts remain broker-backed. Protection state is explicit across the risk
+snapshot boundary. Automated plans remain protected-only; manual plans may
+preserve an explicitly unprotected state for later stop/take-profit management.
+Unavailable stop-loss risk is represented as absent, not as a synthetic zero.
 
 ## Validation
 
-The repository contains the implementation plan and focused provider test from
-the implementation commit. This documentation remediation did not rerun the
-Maven suites, so the historical implementation result must be complemented by
-fresh command output before final Story completion.
+The affected module suites pass locally: Risk Domain `26`, Market Intelligence
+`489`, and Trading Core `577` tests. Focused regressions also pass for the new
+manual/automated protection boundary. `git diff --check` passes.
+
+Runtime validation was rerun with the Docker Compose stack. The official HTTP
+surface returned successful registration/login, eligible risk-profile lookup,
+PAPER account creation, account listing, and account-scoped empty-position
+retrieval after authentication. No credentials or tokens are recorded here.
+The complete PAPER decision path was then exercised through a selected-market
+scan, opportunity Trade Plan creation, human acceptance, and risk evaluation.
+The evaluation failed closed with `PAPER_MARGIN_UNAVAILABLE`; no execution or
+position was created.
 
 ## Known Limitations
 
-* No new authenticated runtime evidence is attached to this Story.
 * The completeness of every local fact mapping still requires human review
   against persisted PAPER account and trade data.
 * Story 0051 remains the owner of broker capability and margin facts.
+* Kraken provider-backed required-margin preview is still unavailable, so the
+  complete PAPER risk authorization path remains blocked by design.
 
 ## Git State
 
 ```text
-IMPLEMENTATION_COMMIT = fdcb6ac
+IMPLEMENTATION_COMMIT = pending
 DOCUMENTATION_COMMIT = pending
 PUSH = NO
 MERGE = NO

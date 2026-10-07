@@ -4,7 +4,7 @@
 
 **ID:** `0050`
 **Title:** Establish deterministic PAPER risk facts
-**Status:** Draft
+**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
 
 ---
 
@@ -49,6 +49,8 @@ by Story 0051 and are consumed through a broker-neutral input boundary.
 * Keep the Risk Domain independent from repositories and external services.
 * Consume broker-neutral margin/capability facts without owning their provider
   retrieval. Provider capability work belongs to Story 0051.
+* Keep automated Trade Plans protected while allowing explicitly manual plans to
+  start without a stop-loss or take-profit.
 
 ---
 
@@ -82,8 +84,11 @@ Trade.entryPrice    -> entryPrice
 Trade.quantity      -> absolute quantity
 ```
 
-An absent stop is represented as zero protected quantity and an empty stop
-collection. The Risk Domain decides the consequence using the effective rules.
+An absent stop is represented as `UNPROTECTED`, with zero protected quantity and
+an empty stop collection. It must not be interpreted as zero risk. Automated
+Trade Plans cannot authorize against an unprotected position; a manually
+confirmed Trade Plan may preserve and manage that state until protection is
+added.
 
 ### Fail closed
 
@@ -103,6 +108,10 @@ missing required market/capability facts must not produce an approval.
       basis.
 * [ ] Closed PAPER trades contribute to daily closed-PnL facts.
 * [ ] Missing protection is represented explicitly and deterministically.
+* [ ] Automated Trade Plans require protection before authorization.
+* [ ] Manual Trade Plans may omit protection and preserve explicit unprotected
+      state without bypassing deterministic account, exposure, margin, or
+      ownership controls.
 * [ ] LIVE facts still use Broker Service and remain covered by regression tests.
 * [ ] The resulting local snapshot can be assembled into the immutable
       `RiskEvaluationContext`.
