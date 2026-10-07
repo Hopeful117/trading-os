@@ -19,7 +19,8 @@ public final class BrokerModels {
 
     public record TechnicalCapabilities(UUID brokerAccountId, String provider, String instrument, long sourceVersion,
             Instant observedAt, List<OrderType> supportedOrderTypes,
-            List<BigDecimal> supportedLeverageLevels) {
+            List<BigDecimal> supportedBuyLeverageLevels,
+            List<BigDecimal> supportedSellLeverageLevels) {
             public TechnicalCapabilities {
             Objects.requireNonNull(brokerAccountId);
             provider = required(provider, "provider");
@@ -27,7 +28,12 @@ public final class BrokerModels {
             if (sourceVersion < 1) throw new IllegalArgumentException("sourceVersion must be positive");
             Objects.requireNonNull(observedAt);
             supportedOrderTypes = List.copyOf(supportedOrderTypes);
-            supportedLeverageLevels = supportedLeverageLevels.stream()
+            supportedBuyLeverageLevels = validateLeverageLevels(supportedBuyLeverageLevels);
+            supportedSellLeverageLevels = validateLeverageLevels(supportedSellLeverageLevels);
+        }
+
+        private static List<BigDecimal> validateLeverageLevels(List<BigDecimal> levels) {
+            return levels.stream()
                     .map(level -> {
                         level = Objects.requireNonNull(level);
                         if (level.signum() <= 0) throw new IllegalArgumentException("leverage must be positive");

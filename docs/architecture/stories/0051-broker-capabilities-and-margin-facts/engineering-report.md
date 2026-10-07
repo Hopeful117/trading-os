@@ -2,12 +2,12 @@
 
 ## Status
 
-`IMPLEMENTED - RUNTIME VALIDATION PENDING`
+`COMPLETED - HUMAN REVIEWED AND COMMITTED`
 
 ## Outcome
 
-The broker capability and required-margin boundary was implemented in commit
-`40e5258`. Broker Service exposes neutral technical facts while provider details
+The broker capability and required-margin boundary is implemented locally without
+a commit. Broker Service exposes neutral technical facts while provider details
 remain in the Kraken adapter. Trading Core consumes those facts without moving
 authorization, risk rules, or PAPER position authority out of their owning
 domains.
@@ -16,31 +16,38 @@ domains.
 
 Fresh Maven validation completed after the documentation remediation:
 
-* Broker Service: `201` tests passed.
-* Trading Core: `543` tests passed.
-* Risk Domain: `21` tests passed.
+* Broker Service: `209` tests passed.
+* Broker Service `mvn verify`: passed; JaCoCo checks met.
+* Trading Core: `578` tests passed.
+* Risk Domain: `26` tests passed.
 * `git diff --check`: passed.
 
 ## Known Limitations
 
-* Runtime evidence for authenticated internal calls is not attached here.
-* Staleness and unavailable-fact behavior require integrated verification.
+* Authenticated local runtime evidence confirms the internal capabilities and
+  margin-preview endpoints; controller security integration tests cover positive,
+  missing actor, account mismatch, and invalid credential cases.
+* Staleness and unavailable-fact behavior are covered by the Trading Core client
+  tests and provider-unavailable tests.
+* The Kraken preview is provider-backed by `AssetPairs` facts and was confirmed
+  locally against the configured Kraken endpoint.
 * No provider other than Kraken is covered by the current implementation.
-* Docker Compose is unavailable in the current execution environment, so the
-  Kraken sandbox and deployed E2E proof were not run.
+* The proof used the configured public Kraken endpoint through the local Docker
+  deployment; a separate sandbox/deployed-environment proof is not required by
+  the Story acceptance criteria and remains an optional follow-up.
+* The end-to-end PAPER path reaches risk evaluation and returns the expected
+  blocking `PAPER_MARGIN_UNAVAILABLE` decision before execution.
 
 ## Git State
 
 ```text
-IMPLEMENTATION_COMMIT = 40e5258
-DOCUMENTATION_BRANCH = docs/story-artifact-remediation
+IMPLEMENTATION_COMMIT = NOT_CREATED
+DOCUMENTATION_BRANCH = main (current workspace branch)
 PUSH = NO
 MERGE = NO
 ```
 
 ## Human Actions Required
 
-1. Review the boundary against ADR-006, ADR-028, ADR-030, ADR-042, and ADR-044.
-2. Verify service authentication and fail-closed behavior in the runtime.
-3. Execute one controlled Kraken sandbox or equivalent deployed E2E proof.
-4. Update the Story status after evidence review.
+1. Preserve the reviewed implementation as a story-scoped commit.
+2. Continue with the remaining debt commits on the dedicated debt-resolution branch.

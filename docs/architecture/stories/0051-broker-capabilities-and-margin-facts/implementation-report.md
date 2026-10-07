@@ -2,12 +2,12 @@
 
 ## Status
 
-`IMPLEMENTED - DOCUMENTATION REMEDIATION`
+`COMPLETED - HUMAN REVIEWED AND COMMITTED`
 
 ## Scope Delivered
 
-Commit `40e5258` added the first broker-neutral capability and required-margin
-query path.
+The implementation now adds a provider-backed Kraken capability and required-margin
+query path without creating a commit.
 
 * Broker Service exposes capability facts through its query controller and
   operation service.
@@ -15,33 +15,44 @@ query path.
 * Kraken capability mapping remains inside the Kraken adapter.
 * Trading Core consumes capability and required-margin facts through dedicated
   clients.
-* Unavailable required-margin behavior remains explicit rather than silently
-  authorizing a trade.
+* Kraken `AssetPairs?info=info&assetVersion=1` supplies the instrument quote
+  currency and side-specific leverage levels used by the margin preview.
+* Required margin is calculated from the requested notional and a provider-supported
+  leverage level; missing or invalid provider facts still fail closed.
+* Trading Core rejects capability and margin responses with mismatched account
+  or instrument identity, missing provenance, invalid versions, invalid lists,
+  or stale timestamps.
 * Configuration and focused tests were added for the provider and margin
   client paths.
+* BUY and SELL leverage levels are exposed separately in the neutral contract;
+  invalid trade directions are rejected before broker calls.
+* Positive authenticated endpoint tests, contract serialization tests, and
+  provider-unavailable fail-closed tests were added.
 
 The implementation does not move risk authorization or PAPER position
 authority into Broker Service.
 
 ## Validation Evidence
 
-The implementation commit includes `KrakenCapabilitiesTest` and
-`BrokerRequiredMarginClientTest`. Fresh Maven validation covered the planned
-Broker Service, Trading Core, and Risk Domain boundary.
+The implementation includes `KrakenCapabilitiesTest` and
+`KrakenRestProviderClientTest`. Fresh Maven validation covered the planned
+Broker Service, Trading Core, and Risk Domain boundary after the client
+hardening.
 
 ```text
-implementation commit: 40e5258
-Broker Service: 201 tests passed
-Trading Core: 543 tests passed
-Risk Domain: 21 tests passed
+implementation commit: not created; human review pending
+Broker Service: 209 tests passed
+Trading Core: 578 tests passed
+Risk Domain: 26 tests passed
+mvn verify: passed; JaCoCo checks met
 git diff --check: passed
-runtime/sandbox E2E: pending; Docker Compose unavailable in this environment
+runtime E2E: authenticated provider-backed Kraken proof passed; PAPER fail-closed proof remains expected
 ```
 
 ## Remaining Evidence
 
-* verify service-JWT enforcement for every internal capability and margin route;
-* verify stale and unavailable facts fail closed in the integrated path;
-* verify provider-specific payloads do not cross the Broker Service boundary;
-* execute and record a controlled runtime or Kraken sandbox E2E proof before
-  final Story completion.
+* the authenticated local runtime proof exercised `AssetPairs` and returned
+  side-specific leverage levels plus a `1000.00 USD` margin preview;
+* provider-specific payload isolation is covered by the neutral contracts and
+  adapter tests;
+* Story 0051 is closed after independent review, human approval, and commit creation.

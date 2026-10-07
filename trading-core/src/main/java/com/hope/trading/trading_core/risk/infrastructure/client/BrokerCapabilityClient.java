@@ -19,4 +19,5 @@ interface BrokerTechnicalCapabilitiesFeignClient {
 
 record BrokerTechnicalCapabilities(UUID brokerAccountId, String provider, String instrument, long sourceVersion,
                                    Instant observedAt, List<String> supportedOrderTypes,
-                                   List<BigDecimal> supportedLeverageLevels) { }
+                                   List<BigDecimal> supportedBuyLeverageLevels,
+                                   List<BigDecimal> supportedSellLeverageLevels) { }

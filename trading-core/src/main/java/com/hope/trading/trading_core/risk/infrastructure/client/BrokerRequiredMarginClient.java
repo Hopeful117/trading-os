@@ -50,26 +50,32 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
 
     @Override
     public Optional<Fact> resolve(Request request) {
-        if (request.price() == null) return Optional.empty();
+        if (request == null || request.brokerAccountId() == null || blank(request.instrument())
+                 || (!"LONG".equalsIgnoreCase(request.direction()) && !"SHORT".equalsIgnoreCase(request.direction()))
+                 || request.quantity() == null || request.quantity().signum() <= 0
+                || request.price() == null || request.price().signum() <= 0) return Optional.empty();
         try {
             var brokerAccount = brokerAccounts.findById(request.brokerAccountId()).orElse(null);
             if (brokerAccount == null) return Optional.empty();
             if (brokerAccount.executionMode() == ExecutionMode.PAPER) {
-                var account = accounts.findByBrokerAccountId(request.brokerAccountId()).orElse(null);
-                if (account == null || account.getBaseCurrency() == null) return Optional.empty();
-                return Optional.of(new Fact(request.quantity().multiply(request.price()),
-                        account.getBaseCurrency(), "TRADING_CORE:PAPER_MARGIN", Math.max(1, account.getVersion()),
-                        request.requestedAt()));
+                return Optional.empty();
             }
             BrokerTechnicalCapabilities technical = capabilities.get(request.brokerAccountId(), request.instrument());
-            if (technical == null || technical.sourceVersion() < 1 || technical.observedAt() == null
+            if (technical == null || !request.brokerAccountId().equals(technical.brokerAccountId())
+                    || blank(technical.provider()) || technical.sourceVersion() < 1 || technical.observedAt() == null
                     || !request.instrument().equalsIgnoreCase(technical.instrument())
-                    || stale(technical.observedAt())) return Optional.empty();
+                    || technical.supportedOrderTypes() == null || technical.supportedOrderTypes().isEmpty()
+                 || invalidLeverageLevels(technical.supportedBuyLeverageLevels())
+                     || invalidLeverageLevels(technical.supportedSellLeverageLevels())
+                     || stale(technical.observedAt())) return Optional.empty();
             BrokerMarginPreview preview = client.preview(request.brokerAccountId(),
                     new BrokerMarginPreviewRequest(request.brokerAccountId(), request.instrument(),
                             "LONG".equalsIgnoreCase(request.direction()) ? "BUY" : "SELL",
                             request.quantity(), request.price(), null));
-            if (preview == null || preview.amount() == null || preview.amount().signum() <= 0
+            if (preview == null || !request.brokerAccountId().equals(preview.brokerAccountId())
+                    || !request.instrument().equalsIgnoreCase(preview.instrument())
+                    || preview.amount() == null || preview.amount().signum() <= 0
+                    || blank(preview.currency()) || blank(preview.sourceId())
                     || preview.observedAt() == null || preview.sourceVersion() < 1
                     || stale(preview.observedAt())) return Optional.empty();
             return Optional.of(new Fact(preview.amount(), preview.currency(), preview.sourceId(),
@@ -82,5 +88,14 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
     private boolean stale(Instant observedAt) {
         Instant now = clock.instant();
         return observedAt.isAfter(now) || observedAt.plus(maxAge).isBefore(now);
+    }
+
+    private boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private boolean invalidLeverageLevels(java.util.List<BigDecimal> levels) {
+        return levels == null || levels.isEmpty() || levels.stream()
+                .anyMatch(level -> level == null || level.signum() <= 0);
     }
 }

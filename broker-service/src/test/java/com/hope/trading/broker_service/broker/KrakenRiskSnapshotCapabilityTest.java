@@ -202,6 +202,7 @@ class KrakenRiskSnapshotCapabilityTest {
         boolean unsupportedTradePair;boolean changeEveryBalance;boolean futureTrade;int balanceReads;
         String balanceUsd="100";String ledgerJson;final Deque<String> balanceSequence=new ArrayDeque<>();
         StubClient(ObjectMapper json){this.json=json;}
+        public JsonNode publicGet(String path,Map<String,String> parameters){throw new AssertionError(path);}
         public JsonNode privatePost(String path,Map<String,String> parameters,CredentialMaterial ignored) {
             if(path.endsWith("TradeBalance"))return malformedTradeBalance
                     ?node("{\"eb\":\"100\",\"m\":\"20\"}"):node("{\"eb\":\"100\",\"e\":\"110\",\"m\":\"20\"}");
