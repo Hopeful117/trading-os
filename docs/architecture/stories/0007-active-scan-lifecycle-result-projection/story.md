@@ -4,7 +4,7 @@
 
 **ID:** `0007`  
 **Title:** Persistent Active Scan Lifecycle Reconciliation & Result Projection  
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 

@@ -258,6 +258,18 @@ Preserved:
 - existing `AnalysisExecution` ownership;
 - existing `PipelineRun` ownership;
 - existing `TradingOpportunity` ownership;
+
+## Review Corrections
+
+- completed analyses without expected `PipelineRun` lineage now become terminal
+  failure projections with `OPPORTUNITY_LINEAGE_MISSING`;
+- exact `(opportunityId, opportunityVersion)` references from a `PipelineRun`
+  now take precedence over newer opportunity versions discovered through
+  Strategy Match lineage;
+- Strategy Match loading is batch-scoped for reconciliation and HTTP strategy
+  provenance projection, removing the per-child/per-opportunity lookup paths;
+- regression tests cover missing lineage and exact opportunity-version
+  projection.
 - ADR-033 Active vs Passive boundary;
 - Gateway trust-boundary model from Story 0006 security hardening.
 
