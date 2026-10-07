@@ -4,7 +4,7 @@
 
 **ID:** `0006`
 **Title:** Persistent Active Scan Orchestration Foundation
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 

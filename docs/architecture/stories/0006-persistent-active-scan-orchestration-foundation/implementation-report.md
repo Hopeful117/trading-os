@@ -203,3 +203,21 @@ Implementation detail worth noting:
 - the original Story 0006 implementation was correct for authenticated Gateway
   traffic but unsafe as long as `market-intelligence` remained directly
   published on the host network.
+
+## Review Corrections
+
+- selected but ineligible markets are now persisted with exclusion diagnostics
+  instead of being rejected before scan persistence;
+- scan creation runs in a dedicated transaction boundary and reloads the
+  winning scan after an actor/idempotency unique-key race;
+- concurrent same-request and different-fingerprint races are covered with
+  real Spring persistence integration tests;
+- concurrent dispatch claims are covered through the real
+  `ActiveScanDispatchClaimService` and persistence adapters.
+
+Additional validation:
+
+- `mvn -q -Dtest=ActiveScanConcurrencyIntegrationTest test`
+- `mvn -q -Dtest='ActiveScanApplicationServiceTest,ActiveScanDispatchClaimServiceTest,ActiveScanPersistenceTest,ActiveScanDispatchAsyncBoundaryTest' test`
+- `mvn -q -Dserver.port=0 test`
+- `git diff --check`
