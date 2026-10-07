@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class PaperSettlementExitTest {
@@ -53,6 +54,34 @@ class PaperSettlementExitTest {
         assertThat(s.account.getEquity()).isEqualByComparingTo("10020");
         assertThat(s.trade.getPnl()).isEqualByComparingTo("20");
         assertThat(s.trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+    }
+
+    @Test
+    void longExitRejectsInsufficientBaseWithoutMutatingSettlement() {
+        Scenario s = scenario(TradeType.BUY, "0", "0");
+        s.account.getBalances().stream().filter(balance -> balance.getAsset().equals("BTC"))
+                .findFirst().orElseThrow().setAmount(new BigDecimal("1"));
+
+        assertThatThrownBy(() -> s.settle("110", "0"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER balance insufficient: BTC");
+        assertThat(s.trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(amount(s.account, "BTC")).isEqualByComparingTo("1");
+        assertThat(amount(s.account, "USD")).isEqualByComparingTo("9800");
+        assertThat(s.account.getEquity()).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void shortExitRejectsMissingQuoteBalanceWithoutMutatingSettlement() {
+        Scenario s = scenario(TradeType.SELL, "0", "0");
+        s.account.getBalances().removeIf(balance -> balance.getAsset().equals("USD"));
+
+        assertThatThrownBy(() -> s.settle("90", "0"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER balance unavailable: USD");
+        assertThat(s.trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(amount(s.account, "BTC")).isEqualByComparingTo("2");
+        assertThat(s.account.getEquity()).isEqualByComparingTo("10000");
     }
 
     @Test

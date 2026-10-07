@@ -120,13 +120,14 @@ public class PaperSettlementService {
 
     private void updateExitBalances(Account account, Trade trade, BrokerOrder.Fill fill) {
         String base = extractBaseAsset(trade.getSymbol());
+        String quote = extractQuoteAsset(trade.getSymbol(), account);
         BigDecimal notional = fill.price().multiply(fill.quantity());
         if (trade.getType() == TradeType.BUY) {
             deductBalance(account, base, fill.quantity());
-            addBalance(account, "USD", notional.subtract(fill.fee()));
+            addBalance(account, quote, notional.subtract(fill.fee()));
         } else {
             addBalance(account, base, fill.quantity());
-            deductBalance(account, "USD", notional.add(fill.fee()));
+            deductBalance(account, quote, notional.add(fill.fee()));
         }
     }
 
@@ -139,15 +140,16 @@ public class PaperSettlementService {
     }
 
     private void updateBalances(Account account, ExecutionParameters.Side side, BigDecimal quantity,
-                                BigDecimal fillPrice, BigDecimal fee, ExecutionParameters params) {
+                                 BigDecimal fillPrice, BigDecimal fee, ExecutionParameters params) {
         BigDecimal notional = fillPrice.multiply(quantity);
+        String quote = extractQuoteAsset(params.instrument(), account);
 
         if (side == ExecutionParameters.Side.BUY) {
-            deductBalance(account, "USD", notional.add(fee));
+            deductBalance(account, quote, notional.add(fee));
             addBalance(account, extractBaseAsset(params.instrument()), quantity);
         } else {
             deductBalance(account, extractBaseAsset(params.instrument()), quantity);
-            addBalance(account, "USD", notional.subtract(fee));
+            addBalance(account, quote, notional.subtract(fee));
         }
     }
 
@@ -157,6 +159,17 @@ public class PaperSettlementService {
             return instrument.substring(0, slashIndex);
         }
         return instrument;
+    }
+
+    private String extractQuoteAsset(String instrument, Account account) {
+        int slashIndex = instrument.indexOf('/');
+        if (slashIndex >= 0 && slashIndex < instrument.length() - 1) {
+            String quote = instrument.substring(slashIndex + 1);
+            boolean hasQuoteBalance = account.getBalances().stream()
+                    .anyMatch(balance -> quote.equals(balance.getAsset()));
+            if (hasQuoteBalance) return quote;
+        }
+        return account.getBaseCurrency();
     }
 
     private void updatePosition(Account account, ExecutionIntent intent, ExecutionParameters.Side side, BigDecimal quantity,
@@ -226,8 +239,12 @@ public class PaperSettlementService {
         Optional<AccountBalance> existing = account.getBalances().stream()
                 .filter(b -> asset.equals(b.getAsset()))
                 .findFirst();
-        if (existing.isPresent()) {
-            existing.get().setAmount(existing.get().getAmount().subtract(amount));
+        if (existing.isEmpty()) {
+            throw new IllegalStateException("PAPER balance unavailable: " + asset);
         }
+        if (existing.get().getAmount().compareTo(amount) < 0) {
+            throw new IllegalStateException("PAPER balance insufficient: " + asset);
+        }
+        existing.get().setAmount(existing.get().getAmount().subtract(amount));
     }
 }

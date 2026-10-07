@@ -25,6 +25,7 @@ import com.hope.trading.trading_core.execution.domain.service.ExecutionLifecycle
 import com.hope.trading.trading_core.execution.domain.service.ExecutionValidationService;
 import com.hope.trading.trading_core.execution.domain.service.IdempotencyService;
 import com.hope.trading.trading_core.execution.domain.valueobject.BrokerOrderStatus;
+import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionAttemptId;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionIntentId;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionStatus;
 import com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey;
@@ -85,6 +86,35 @@ class PaperExecutionVerticalRegressionTest {
         verifyScenario(ExecutionParameters.Side.SELL, "PEPE/EUR", "75000000",
                 "0.000003829", "0.000003829", "10000", "75000000",
                 "0.000003829", "10287.175", "0", "10000");
+    }
+
+    @Test
+    void paperExecutionRejectsStaleSnapshotBeforeCreatingASettlement() {
+        UUID ownerId = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
+                ExecutionMode.PAPER, "Paper Account", NOW);
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+
+        UUID marketId = UUID.randomUUID();
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(marketData.findAll()).thenReturn(List.of(MarketResponse.builder()
+                .marketId(marketId).symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD").build()));
+        when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class)))
+                .thenReturn(List.of(new MarketPriceSnapshotDto(marketId, "BTC/USD",
+                        decimal("100"), decimal("99"), decimal("101"), true, NOW,
+                        MarketPriceSnapshotStatus.STALE)));
+
+        SimulatedExecutionAdapter adapter = new SimulatedExecutionAdapter(brokers, marketData);
+        var request = new BrokerExecutionPort.ExecutionRequest(
+                ExecutionIntentId.newId(), ExecutionAttemptId.newId(),
+                new IdempotencyKey("stale-paper-exit"), broker.id(),
+                new ExecutionParameters("BTC/USD", ExecutionParameters.Side.SELL,
+                        ExecutionParameters.OrderType.MARKET, decimal("1"), null));
+
+        BrokerExecutionPort.SubmissionResult result = adapter.submit(request);
+
+        assertThat(result).isEqualTo(new BrokerExecutionPort.Rejected(null, "MARKET_DATA_UNAVAILABLE"));
     }
 
     private void verifyScenario(ExecutionParameters.Side side, String instrument, String quantity,
