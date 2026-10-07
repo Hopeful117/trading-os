@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.security;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -30,7 +31,11 @@ public class MarketDataSecurityConfiguration {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/internal/**").hasAuthority("ROLE_SERVICE")
-                        .anyRequest().permitAll())
+                        .requestMatchers(HttpMethod.POST, "/api/v1/markets/synchronize").hasAuthority("ROLE_SERVICE")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/markets/*/subscriptions").hasAuthority("ROLE_SERVICE")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/markets/*/subscriptions").hasAuthority("ROLE_SERVICE")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/markets/**").permitAll()
+                        .anyRequest().denyAll())
                 .addFilterBefore(serviceJwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

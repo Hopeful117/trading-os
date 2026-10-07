@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,7 +26,7 @@ public final class ServiceJwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        if (!request.getRequestURI().startsWith("/internal/")) {
+        if (!requiresServiceAuthentication(request)) {
             chain.doFilter(request, response);
             return;
         }
@@ -49,5 +50,15 @@ public final class ServiceJwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.clearContext();
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid service credential");
         }
+    }
+
+    private boolean requiresServiceAuthentication(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/internal/")
+                || (HttpMethod.POST.matches(request.getMethod())
+                && (path.equals("/api/v1/markets/synchronize")
+                || path.matches("/api/v1/markets/[^/]+/subscriptions")))
+                || (HttpMethod.DELETE.matches(request.getMethod())
+                && path.matches("/api/v1/markets/[^/]+/subscriptions"));
     }
 }

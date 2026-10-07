@@ -106,7 +106,14 @@ public class TickerEventPublisher {
 
         String symbol = normalize(event.symbol());
 
-        persistObservation(event);
+        try {
+            persistObservation(event);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Unable to persist ticker observation symbol={} message={}",
+                    event.symbol(), exception.getMessage()
+            );
+        }
 
         latestEvents.put(symbol, event);
         if (event.marketId() != null) {

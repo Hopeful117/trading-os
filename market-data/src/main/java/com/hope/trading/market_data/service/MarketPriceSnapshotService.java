@@ -10,7 +10,6 @@ import com.hope.trading.market_data.repository.MarketRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
@@ -53,7 +52,6 @@ public class MarketPriceSnapshotService {
         this.staleAfter = staleAfter;
     }
 
-    @Transactional
     public List<MarketPriceSnapshot> findSnapshots(List<UUID> marketIds) {
         List<UUID> requestedIds = marketIds.stream().distinct().toList();
         Map<UUID, Market> markets = marketRepository.findAllById(requestedIds)
@@ -139,7 +137,7 @@ public class MarketPriceSnapshotService {
                 status,
                 "ticker:" + sourceIdentity,
                 sourceVersion == 0 ? 1 : sourceVersion,
-                ticker.occurredAt() == null ? clock.instant() : ticker.occurredAt()
+                clock.instant()
         );
     }
 
@@ -196,9 +194,11 @@ public class MarketPriceSnapshotService {
     }
 
     private boolean isFresh(TickerEvent ticker) {
+        java.time.Instant now = clock.instant();
         return ticker != null
                 && ticker.occurredAt() != null
-                && !ticker.occurredAt().isBefore(clock.instant().minus(staleAfter))
+                && !ticker.occurredAt().isAfter(now)
+                && !ticker.occurredAt().isBefore(now.minus(staleAfter))
                 && hasUsablePrice(ticker);
     }
 

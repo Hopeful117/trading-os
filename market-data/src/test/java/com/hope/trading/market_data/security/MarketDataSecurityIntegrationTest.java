@@ -2,6 +2,7 @@ package com.hope.trading.market_data.security;
 
 import com.hope.trading.market_data.service.MarketPriceSnapshotService;
 import com.hope.trading.market_data.service.MarketFactsService;
+import com.hope.trading.market_data.service.MarketSynchronization;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,9 @@ class MarketDataSecurityIntegrationTest {
 
     @MockitoBean
     private MarketFactsService marketFactsService;
+
+    @MockitoBean
+    private MarketSynchronization marketSynchronization;
 
     @Test
     void internalSnapshotRequiresServiceCredential() throws Exception {
@@ -97,6 +101,27 @@ class MarketDataSecurityIntegrationTest {
     @Test
     void publicCatalogueRemainsAvailableWithoutServiceCredential() throws Exception {
         mockMvc.perform(get("/api/v1/markets"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void marketSynchronizationRequiresServiceCredential() throws Exception {
+        mockMvc.perform(post("/api/v1/markets/synchronize"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void subscriptionMutationRequiresServiceCredential() throws Exception {
+        mockMvc.perform(post("/api/v1/markets/00000000-0000-0000-0000-000000000001/subscriptions")
+                        .contentType("application/json")
+                        .content("{\"type\":\"TICKER\",\"parameters\":{}}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void serviceCredentialCanUseMarketSynchronization() throws Exception {
+        mockMvc.perform(post("/api/v1/markets/synchronize")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken()))
                 .andExpect(status().isOk());
     }
 
