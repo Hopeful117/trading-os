@@ -8,6 +8,8 @@
 **Branch**: `main` (working tree changes, not yet committed)
 **HEAD**: `c970aff` → working tree changes
 
+**Status**: CLOSED — HUMAN ACCEPTED
+
 ## Executive Summary
 
 Story 0033 implements the ability for a trader to explicitly close their full exposure on an open broker position. After monitoring positions through the dedicated `/positions` page (Story 0032), the trader can now select a position and request a **Full Exposure Close**.
