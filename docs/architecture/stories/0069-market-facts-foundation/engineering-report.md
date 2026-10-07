@@ -26,7 +26,8 @@ selection or make trading decisions.
 - Full `market-data` test suite: passed.
 - `mvn verify`: passed, including JaCoCo coverage checks.
 - `git diff --check`: passed.
-- No live provider, sandbox, or deployed end-to-end runtime validation was run.
+- Authenticated live Kraken facts-only validation was subsequently completed;
+  the latest result is recorded in `runtime-validation.md`.
 
 ## Known Limitations
 
@@ -41,12 +42,14 @@ selection or make trading decisions.
 
 ## Final Status
 
-Audit remediation complete locally. Human code review, acceptance of the
-documented risks, deployment configuration approval, and human Git commit remain
-pending.
+`CLOSED - HUMAN ACCEPTED`. The open-candle readiness defect was fixed and the
+latest authenticated runtime validation completed successfully for the defined
+facts-only scope. The PEPE cross-read difference remains explicitly
+`STILL_INCONCLUSIVE`, not a confirmed production defect. Human code review,
+acceptance, deployment configuration approval, and the human Git commit remain
+pending only for the human Git commit.
 
 ## Human Actions Required
 
-1. Review the implementation and code-review findings.
-2. Confirm the process-local cache and explicit request-parameter decisions.
-3. Approve the diff and create the Git commit manually.
+1. Create the Git commit manually when the complete documentation diff is
+   accepted into the current worktree.
