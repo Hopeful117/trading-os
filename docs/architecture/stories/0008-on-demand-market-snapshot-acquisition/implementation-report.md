@@ -69,6 +69,9 @@ Implemented behavior:
 - `market-data/src/test/java/com/hope/trading/market_data/service/MarketPriceSnapshotServiceTest.java`
 - `market-intelligence/src/test/java/com/hope/trading/market_intelligence/adapter/marketdata/MarketDataSectionFactoryTest.java`
 - `trading-core/src/test/java/com/hope/trading/trading_core/dashboard/service/DashboardQueryServiceTest.java`
+- `market-intelligence/src/test/java/com/hope/trading/market_intelligence/application/execution/LocalAnalysisExecutionDispatcherTest.java`
+- `market-intelligence/src/test/java/com/hope/trading/market_intelligence/adapter/persistence/ActiveScanPersistenceTest.java`
+- `market-intelligence/src/test/java/com/hope/trading/market_intelligence/adapter/web/AnalysisExecutionResponseTest.java`
 
 ## Final Snapshot Contract
 
@@ -190,6 +193,18 @@ Result:
 
 - pass
 
+Additional regression coverage added after review:
+
+- bounded `MARKET_SNAPSHOT_STALE` and `MARKET_SNAPSHOT_UNAVAILABLE` failures
+  are tested through asynchronous dispatch;
+- bounded failure codes are tested through JPA persistence and rehydration;
+- `AnalysisExecutionResponse` failure-code projection is tested;
+- successful snapshot acquisition remains cached when ticker observation
+  persistence reaches `findById` and `save` fails.
+- snapshot acquisition is not enclosed in an outer transaction, preventing an
+  absorbed observation-persistence failure from marking snapshot retrieval
+  rollback-only.
+
 ### Full Affected-Module Suites
 
 Executed:
@@ -206,6 +221,12 @@ Result:
 - `market-intelligence`: `Tests run: 167, Failures: 0, Errors: 0, Skipped: 0`
 - `trading-core`: one unrelated pre-existing failure in
   `RiskAcknowledgmentOutboxPersistenceTest.claimLeasePreservesExactIdentityAndSupportsDurableExplicitRetry`
+
+The focused and full `market-data` and `market-intelligence` suites were rerun
+after the additional regression coverage and completed successfully.
+
+An independent review scoped strictly to Story 0008 returned `PASS` after the
+transaction-boundary correction. No in-scope material findings remain.
 
 ## Runtime Evidence
 
