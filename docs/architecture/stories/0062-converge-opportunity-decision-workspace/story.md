@@ -4,7 +4,7 @@
 
 **ID:** `0062`
 **Title:** Converge Opportunity Decisions into the Decision Workspace
-**Status:** In Progress
+**Status:** IMPLEMENTATION COMPLETE - DOCUMENTATION REVIEW REQUIRED
 
 ## Goal
 
