@@ -3,6 +3,8 @@ import { Component, inject, OnDestroy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   catchError,
+  EMPTY,
+  expand,
   finalize,
   map,
   merge,
@@ -35,7 +37,16 @@ export type PlanView =
       message: string;
       retryable: boolean;
       plan?: TradePlanResponse;
-      retryAction?: 'ACCEPT' | 'REJECT' | 'RISK' | 'EXECUTE';
+      retryAction?:
+        | 'ACCEPT'
+        | 'REJECT'
+        | 'RISK'
+        | 'EXECUTE'
+        | 'AUTHORIZED_EXECUTE'
+        | 'RETRY'
+        | 'RETRY_T1'
+        | 'RECONCILE';
+      execution?: ExecutionDto;
       decision?: RiskDecisionResponse;
     }
   | { status: 'proposal'; plan: TradePlanResponse }
@@ -274,24 +285,31 @@ export class PlanPage implements OnDestroy {
               message: tradeFlowErrorMessage(error, 'The authorized trade could not be submitted.'),
               retryable: true,
               plan,
+              retryAction: 'AUTHORIZED_EXECUTE',
+              execution,
             }),
           ),
+          finalize(() => (this.commandInFlight = false)),
         ),
       ),
-      finalize(() => (this.commandInFlight = false)),
     );
 
     const retry$ = this.retrySubject.pipe(
       switchMap(({ executionId, plan }) =>
         this.executionService.retry(executionId).pipe(
           switchMap((execution) => this.pollOrResult(plan, execution)),
-          catchError(() =>
+          catchError((error: unknown) =>
             of<PlanView>({
               status: 'error',
-              message: 'The execution retry could not be completed.',
+              message: tradeFlowErrorMessage(error, 'The execution retry could not be completed.'),
               retryable: true,
+              plan,
+              retryAction: 'RETRY',
+              execution: { id: executionId } as ExecutionDto,
             }),
           ),
+          startWith<PlanView>({ status: 'executionSubmitting' }),
+          finalize(() => (this.commandInFlight = false)),
         ),
       ),
     );
@@ -300,13 +318,18 @@ export class PlanPage implements OnDestroy {
       switchMap(({ executionId, plan }) =>
         this.executionService.reconcile(executionId).pipe(
           switchMap((execution) => this.pollOrResult(plan, execution)),
-          catchError(() =>
+          catchError((error: unknown) =>
             of<PlanView>({
               status: 'error',
-              message: 'The broker status could not be reconciled.',
+              message: tradeFlowErrorMessage(error, 'The broker status could not be reconciled.'),
               retryable: true,
+              plan,
+              retryAction: 'RECONCILE',
+              execution: { id: executionId } as ExecutionDto,
             }),
           ),
+          startWith<PlanView>({ status: 'executionSubmitting' }),
+          finalize(() => (this.commandInFlight = false)),
         ),
       ),
     );
@@ -315,13 +338,21 @@ export class PlanPage implements OnDestroy {
       switchMap(({ executionId, plan }) =>
         this.executionService.retryT1(executionId).pipe(
           switchMap((execution) => this.pollOrResult(plan, execution)),
-          catchError(() =>
+          catchError((error: unknown) =>
             of<PlanView>({
               status: 'error',
-              message: 'The execution risk revalidation could not be retried.',
+              message: tradeFlowErrorMessage(
+                error,
+                'The execution risk revalidation could not be retried.',
+              ),
               retryable: true,
+              plan,
+              retryAction: 'RETRY_T1',
+              execution: { id: executionId } as ExecutionDto,
             }),
           ),
+          startWith<PlanView>({ status: 'executionSubmitting' }),
+          finalize(() => (this.commandInFlight = false)),
         ),
       ),
     );
@@ -384,10 +415,14 @@ export class PlanPage implements OnDestroy {
   }
 
   retry(executionId: string, plan: TradePlanResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
     this.retrySubject.next({ executionId, plan });
   }
 
   retryT1(executionId: string, plan: TradePlanResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
     this.retryT1Subject.next({ executionId, plan });
   }
 
@@ -410,10 +445,24 @@ export class PlanPage implements OnDestroy {
       case 'EXECUTE':
         if (view.decision) this.execute(view.plan, view.decision);
         break;
+      case 'AUTHORIZED_EXECUTE':
+        if (view.execution) this.executeAuthorized(view.plan, view.execution);
+        break;
+      case 'RETRY':
+        if (view.execution) this.retry(view.execution.id, view.plan);
+        break;
+      case 'RETRY_T1':
+        if (view.execution) this.retryT1(view.execution.id, view.plan);
+        break;
+      case 'RECONCILE':
+        if (view.execution) this.reconcile(view.execution.id, view.plan);
+        break;
     }
   }
 
   reconcile(executionId: string, plan: TradePlanResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
     this.reconcileSubject.next({ executionId, plan });
   }
 
@@ -426,35 +475,68 @@ export class PlanPage implements OnDestroy {
   }
 
   private pollOrResult(plan: TradePlanResponse, execution: ExecutionDto): Observable<PlanView> {
-    if (!shouldPoll(execution.status)) {
+    if (
+      !shouldPoll(execution.status) ||
+      execution.status === 'SUBMISSION_OUTCOME_UNKNOWN' ||
+      execution.status === 'RECOVERY_BLOCKED'
+    ) {
       return of<PlanView>({ status: 'executionResult', plan, execution });
     }
     const startTime = Date.now();
     const maxDuration = 5 * 60 * 1000;
-    return timer(0, 2000).pipe(
-      switchMap(() => {
-        const elapsed = Date.now() - startTime;
-        if (elapsed > 30_000) {
-          return timer(0, 5000);
+    return of(execution).pipe(
+      expand((current) => {
+        if (
+          this.destroyed ||
+          isTerminal(current.status) ||
+          current.status === 'FAILED' ||
+          current.status === 'SUBMISSION_OUTCOME_UNKNOWN' ||
+          current.status === 'RECOVERY_BLOCKED' ||
+          Date.now() - startTime >= maxDuration
+        ) {
+          return EMPTY;
         }
-        return of(null);
+        const delay = Date.now() - startTime > 30_000 ? 5000 : 2000;
+        return timer(delay).pipe(
+          switchMap(() =>
+            this.executionService.getExecution(execution.id).pipe(catchError(() => of(current))),
+          ),
+        );
       }),
-      switchMap(() =>
-        this.executionService.getExecution(execution.id).pipe(catchError(() => of(execution))),
-      ),
       takeWhile(
         (exec) =>
           !this.destroyed &&
           !isTerminal(exec.status) &&
           exec.status !== 'FAILED' &&
+          exec.status !== 'SUBMISSION_OUTCOME_UNKNOWN' &&
+          exec.status !== 'RECOVERY_BLOCKED' &&
           Date.now() - startTime < maxDuration,
         true,
       ),
-      map((exec) =>
-        shouldPoll(exec.status) && !isTerminal(exec.status) && exec.status !== 'FAILED'
+      map((exec) => {
+        const timedOut =
+          Date.now() - startTime >= maxDuration &&
+          shouldPoll(exec.status) &&
+          exec.status !== 'SUBMISSION_OUTCOME_UNKNOWN' &&
+          exec.status !== 'RECOVERY_BLOCKED';
+        return shouldPoll(exec.status) &&
+          !isTerminal(exec.status) &&
+          exec.status !== 'FAILED' &&
+          !timedOut
           ? { status: 'executionPolling' as const, plan, execution: exec }
-          : { status: 'executionResult' as const, plan, execution: exec },
-      ),
+          : {
+              status: 'executionResult' as const,
+              plan,
+              execution: timedOut
+                ? {
+                    ...exec,
+                    status: 'RECOVERY_BLOCKED' as const,
+                    failureReason:
+                      'The broker outcome could not be confirmed within the polling window.',
+                  }
+                : exec,
+            };
+      }),
     );
   }
 
@@ -487,6 +569,7 @@ export class PlanPage implements OnDestroy {
   }
 
   private loadPlanView(plan: TradePlanResponse): Observable<PlanView> {
+    if (plan.status === 'EXECUTED') return this.loadExecutedPlanView(plan);
     if (plan.status !== 'READY_TO_EXECUTE') return of(this.toViewForPlan(plan));
 
     return this.executionService.list().pipe(
@@ -502,11 +585,30 @@ export class PlanPage implements OnDestroy {
               .getExecution(existing.id)
               .pipe(
                 map((execution) =>
-                  isTerminal(execution.status)
+                  !shouldPoll(execution.status) ||
+                  execution.status === 'SUBMISSION_OUTCOME_UNKNOWN' ||
+                  execution.status === 'RECOVERY_BLOCKED'
                     ? { status: 'executionResult' as const, plan, execution }
                     : { status: 'authorizedExecution' as const, plan, execution },
                 ),
               )
+          : of<PlanView>(this.toViewForPlan(plan));
+      }),
+      catchError(() => of<PlanView>(this.toViewForPlan(plan))),
+    );
+  }
+
+  private loadExecutedPlanView(plan: TradePlanResponse): Observable<PlanView> {
+    return this.executionService.list().pipe(
+      switchMap((executions) => {
+        const matching = executions.find(
+          (execution) =>
+            execution.tradePlanId === plan.id && execution.tradePlanVersion === plan.version,
+        );
+        return matching
+          ? this.executionService
+              .getExecution(matching.id)
+              .pipe(map((execution) => ({ status: 'executionResult' as const, plan, execution })))
           : of<PlanView>(this.toViewForPlan(plan));
       }),
       catchError(() => of<PlanView>(this.toViewForPlan(plan))),

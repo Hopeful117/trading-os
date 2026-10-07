@@ -280,6 +280,101 @@ describe('PlanPage', () => {
     expect(execute).toHaveBeenCalledWith('exec-1');
   });
 
+  it('exposes unknown broker outcomes with reconciliation instead of polling forever', () => {
+    const plan = fakePlan('READY_TO_EXECUTE');
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        { provide: TradePlanService, useValue: { getPlan: () => of(plan) } },
+        {
+          provide: ExecutionService,
+          useValue: {
+            list: () =>
+              of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 1, status: 'FAILED' }]),
+            getExecution: () => of({ id: 'exec-1', status: 'SUBMISSION_OUTCOME_UNKNOWN' }),
+            reconcile: () => of({ id: 'exec-1', status: 'COMPLETED' }),
+          },
+        },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-result-state"]'),
+    ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="reconcile-button"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-polling-state"]'),
+    ).toBeFalsy();
+  });
+
+  it('reloads an executed plan with its authoritative execution result', () => {
+    const plan = fakePlan('EXECUTED');
+    const execution = {
+      id: 'exec-1',
+      tradePlanId: 'tp-1',
+      tradePlanVersion: 1,
+      status: 'COMPLETED',
+      createdAt: '2026-10-07T10:00:00Z',
+      updatedAt: '2026-10-07T10:01:00Z',
+    };
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        { provide: TradePlanService, useValue: { getPlan: () => of(plan) } },
+        {
+          provide: ExecutionService,
+          useValue: {
+            list: () => of([execution]),
+            getExecution: () => of(execution),
+          },
+        },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="execution-result-state"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="positions-link"]')).toBeTruthy();
+  });
+
+  it('guards retry commands while the request is in flight', () => {
+    const retry = vi.fn(() => new Observable<unknown>(() => {}));
+    const plan = fakePlan('READY_TO_EXECUTE');
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        { provide: TradePlanService, useValue: { getPlan: () => of(plan) } },
+        {
+          provide: ExecutionService,
+          useValue: {
+            list: () =>
+              of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 1, status: 'FAILED' }]),
+            getExecution: () => of({ id: 'exec-1', status: 'FAILED' }),
+            retry,
+          },
+        },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="retry-button"]')?.click();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="retry-button"]')?.click();
+
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-submitting-state"]'),
+    ).toBeTruthy();
+  });
+
   it('renders a retryable message when loading fails with a conflict', () => {
     configureMocks(
       throwError(

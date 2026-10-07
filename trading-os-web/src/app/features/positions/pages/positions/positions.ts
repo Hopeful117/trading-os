@@ -5,6 +5,7 @@ import {
   BehaviorSubject,
   catchError,
   combineLatest,
+  finalize,
   map,
   merge,
   Observable,
@@ -36,6 +37,7 @@ interface AccountsState {
 }
 
 interface PositionCloseState {
+  accountId: string | null;
   positionId: string;
   symbol: string | null;
   source: PositionSource | null;
@@ -46,11 +48,13 @@ interface PositionCloseState {
   reconciliationResult: ReconciliationResult | null;
   commandId: string | null;
   showConfirmation: boolean;
+  inFlight: boolean;
 }
 
 interface PositionsViewModel {
   accountsState: AccountsState;
   selectedAccountId: string | null;
+  accountSelectionError: string | null;
   positions: OpenPositionDashboardView[];
   positionsLoading: boolean;
   positionsError: string | null;
@@ -90,22 +94,33 @@ export class Positions {
   ]).pipe(
     map(([accountsState, selectedAccountId]) => {
       const accounts = accountsState.accounts;
+      const requestedAccountIsInvalid =
+        selectedAccountId !== null && !accounts.some((a) => a.accountId === selectedAccountId);
       const effectiveId =
-        selectedAccountId && accounts.some((a) => a.accountId === selectedAccountId)
+        selectedAccountId && !requestedAccountIsInvalid
           ? selectedAccountId
-          : (accounts[0]?.accountId ?? null);
-      return { accountsState, selectedAccountId: effectiveId };
+          : selectedAccountId === null
+            ? (accounts[0]?.accountId ?? null)
+            : null;
+      return {
+        accountsState,
+        selectedAccountId: effectiveId,
+        accountSelectionError: requestedAccountIsInvalid
+          ? 'Le compte demandé n’est pas disponible pour cet utilisateur.'
+          : null,
+      };
     }),
-    switchMap(({ accountsState, selectedAccountId }) => {
+    switchMap(({ accountsState, selectedAccountId, accountSelectionError }) => {
       if (!selectedAccountId) {
         return of({
           accountsState,
           selectedAccountId,
+          accountSelectionError,
           positions: [] as OpenPositionDashboardView[],
           positionsLoading: false,
           positionsError: null,
           closeStates: new Map(),
-          closeResults: this.closeResultStates(),
+          closeResults: this.closeResultStates(selectedAccountId),
         });
       }
 
@@ -117,22 +132,24 @@ export class Positions {
               return {
                 accountsState,
                 selectedAccountId,
+                accountSelectionError,
                 positions,
                 positionsLoading: false,
                 positionsError: null,
                 closeStates: this.closeStates,
-                closeResults: this.closeResultStates(),
+                closeResults: this.closeResultStates(selectedAccountId),
               };
             }),
             catchError(() =>
               of({
                 accountsState,
                 selectedAccountId,
+                accountSelectionError,
                 positions: this.lastPositionsByAccount.get(selectedAccountId) ?? [],
                 positionsLoading: false,
                 positionsError: 'Les données des positions sont temporairement indisponibles.',
                 closeStates: this.closeStates,
-                closeResults: this.closeResultStates(),
+                closeResults: this.closeResultStates(selectedAccountId),
               }),
             ),
           ),
@@ -140,11 +157,12 @@ export class Positions {
         startWith({
           accountsState,
           selectedAccountId,
+          accountSelectionError,
           positions: [] as OpenPositionDashboardView[],
           positionsLoading: true,
           positionsError: null,
           closeStates: new Map(),
-          closeResults: this.closeResultStates(),
+          closeResults: this.closeResultStates(selectedAccountId),
         }),
       );
     }),
@@ -155,10 +173,15 @@ export class Positions {
     this.selectedAccountId.next(accountId);
   }
 
-  getCloseState(positionId: string): PositionCloseState {
-    let state = this.closeStates.get(positionId);
+  getCloseState(
+    positionId: string,
+    accountId: string | null = this.selectedAccountId.value,
+  ): PositionCloseState {
+    const key = this.closeStateKey(accountId, positionId);
+    let state = this.closeStates.get(key);
     if (!state) {
       state = {
+        accountId,
         positionId,
         symbol: null,
         source: null,
@@ -169,42 +192,45 @@ export class Positions {
         reconciliationResult: null,
         commandId: null,
         showConfirmation: false,
+        inFlight: false,
       };
-      this.closeStates.set(positionId, state);
+      this.closeStates.set(key, state);
     }
     return state;
   }
 
   showCloseConfirmation(position: OpenPositionDashboardView): void {
-    const state = this.getCloseState(position.positionId);
+    const state = this.getCloseState(position.positionId, position.accountId);
     state.symbol = position.symbol;
     state.source = position.source;
     state.showConfirmation = true;
   }
 
-  cancelCloseConfirmation(positionId: string): void {
-    const state = this.getCloseState(positionId);
+  cancelCloseConfirmation(positionId: string, accountId: string | null = this.selectedAccountId.value): void {
+    const state = this.getCloseState(positionId, accountId);
     state.showConfirmation = false;
   }
 
   confirmFullExposureClose(accountId: string, position: OpenPositionDashboardView): void {
-    const state = this.getCloseState(position.positionId);
+    const state = this.getCloseState(position.positionId, accountId);
+    if (state.inFlight) return;
     state.symbol = position.symbol;
     state.source = position.source;
+    state.inFlight = true;
     const idempotencyKey = uuidv4();
 
     const closeRequest =
       position.source === 'TRADING_CORE'
         ? this.positionService.closePaperPosition(accountId, position.positionId, idempotencyKey)
         : this.positionService.closePosition(accountId, position.positionId, idempotencyKey);
-    closeRequest.subscribe({
+    closeRequest.pipe(finalize(() => (state.inFlight = false))).subscribe({
       next: (response) => {
+        state.commandId = response.commandId;
         state.status = response.status as PositionCloseStatus;
         state.externalOrderId = response.externalOrderId;
         state.failureReason = response.failureReason;
         state.resolvedMutationScope = response.resolvedMutationScope;
         state.reconciliationResult = response.reconciliationResult;
-        state.commandId = response.commandId;
         state.showConfirmation = false;
         this.refreshPositions.next();
       },
@@ -218,13 +244,19 @@ export class Positions {
   }
 
   reconcile(accountId: string, positionId: string): void {
-    const state = this.getCloseState(positionId);
+    const state = this.getCloseState(positionId, accountId);
     if (!state.commandId) return;
 
-    this.positionService.reconcileClose(accountId, state.commandId).subscribe({
+    const resolvedAccountId = state.accountId ?? accountId;
+    this.positionService.reconcileClose(resolvedAccountId, state.commandId).subscribe({
       next: (response) => {
+        state.commandId = response.commandId;
         state.status = response.status as PositionCloseStatus;
+        state.externalOrderId = response.externalOrderId;
+        state.failureReason = response.failureReason;
+        state.resolvedMutationScope = response.resolvedMutationScope;
         state.reconciliationResult = response.reconciliationResult;
+        this.refreshPositions.next();
       },
       error: () => {
         // Keep current state on error
@@ -325,7 +357,13 @@ export class Positions {
     }
   }
 
-  private closeResultStates(): PositionCloseState[] {
-    return Array.from(this.closeStates.values()).filter((state) => state.status !== null);
+  private closeResultStates(accountId: string | null): PositionCloseState[] {
+    return Array.from(this.closeStates.values()).filter(
+      (state) => state.accountId === accountId && state.status !== null,
+    );
+  }
+
+  private closeStateKey(accountId: string | null, positionId: string): string {
+    return `${accountId ?? 'unknown'}:${positionId}`;
   }
 }

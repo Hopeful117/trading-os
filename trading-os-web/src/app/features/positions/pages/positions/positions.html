@@ -23,7 +23,7 @@
 
     @if (vm.closeResults.length > 0) {
       <section class="state-panel" data-testid="close-results">
-        @for (result of vm.closeResults; track result.positionId) {
+        @for (result of vm.closeResults; track result.accountId + ':' + result.positionId) {
           <div class="close-result" [class]="closeStatusClass(result.status)">
             <strong>{{ result.symbol ?? result.positionId }}</strong>
             <span>{{ closeStatusLabel(result.status) }}</span>
@@ -34,7 +34,7 @@
               <button
                 type="button"
                 class="btn-reconcile"
-                (click)="reconcile(vm.selectedAccountId!, result.positionId)"
+                (click)="reconcile(result.accountId!, result.positionId)"
                 data-testid="close-result-reconcile-button"
               >
                 Réconcilier
@@ -56,6 +56,8 @@
       </section>
     } @else if (vm.accountsState.accounts.length === 0) {
       <section class="state-panel">Aucun compte n'est disponible.</section>
+    } @else if (vm.accountSelectionError) {
+      <section class="state-panel error">{{ vm.accountSelectionError }}</section>
     } @else if (vm.positionsLoading && vm.positions.length === 0) {
       <section class="state-panel">Chargement des positions…</section>
     } @else if (!vm.selectedAccountId) {
@@ -191,13 +193,13 @@
 
             <div class="position-actions">
               @if (position.source === 'BROKER' || position.source === 'TRADING_CORE') {
-                @if (!getCloseState(position.positionId).showConfirmation) {
+                @if (!getCloseState(position.positionId, position.accountId).showConfirmation) {
                   <button
                     class="btn-close-exposure"
                     (click)="showCloseConfirmation(position)"
                     [disabled]="
-                      getCloseState(position.positionId).status !== null &&
-                      isActiveStatus(getCloseState(position.positionId).status)
+                      getCloseState(position.positionId, position.accountId).status !== null &&
+                      isActiveStatus(getCloseState(position.positionId, position.accountId).status)
                     "
                   >
                     Fermer l'exposition
@@ -219,13 +221,14 @@
                       <div class="confirmation-buttons">
                         <button
                           class="btn-cancel"
-                          (click)="cancelCloseConfirmation(position.positionId)"
+                          (click)="cancelCloseConfirmation(position.positionId, position.accountId)"
                         >
                           Annuler
                         </button>
                         <button
                           class="btn-confirm"
                           (click)="confirmFullExposureClose(vm.selectedAccountId!, position)"
+                          [disabled]="getCloseState(position.positionId, position.accountId).inFlight"
                         >
                           Confirmer la fermeture complète
                         </button>
@@ -234,22 +237,22 @@
                   </div>
                 }
 
-                @if (getCloseState(position.positionId).status) {
+                @if (getCloseState(position.positionId, position.accountId).status) {
                   <div
                     class="close-status"
-                    [class]="closeStatusClass(getCloseState(position.positionId).status!)"
+                    [class]="closeStatusClass(getCloseState(position.positionId, position.accountId).status!)"
                   >
                     <span class="status-badge">{{
-                      closeStatusLabel(getCloseState(position.positionId).status!)
+                       closeStatusLabel(getCloseState(position.positionId, position.accountId).status!)
                     }}</span>
-                    @if (getCloseState(position.positionId).failureReason) {
+                    @if (getCloseState(position.positionId, position.accountId).failureReason) {
                       <span class="failure-reason">{{
-                        getCloseState(position.positionId).failureReason
+                        getCloseState(position.positionId, position.accountId).failureReason
                       }}</span>
                     }
                     @if (
                       position.source === 'BROKER' &&
-                      isReconcilable(getCloseState(position.positionId).status!)
+                      isReconcilable(getCloseState(position.positionId, position.accountId).status!)
                     ) {
                       <button
                         class="btn-reconcile"
@@ -258,10 +261,10 @@
                         Réconcilier
                       </button>
                     }
-                    @if (getCloseState(position.positionId).reconciliationResult) {
+                    @if (getCloseState(position.positionId, position.accountId).reconciliationResult) {
                       <span class="reconciliation-result">{{
                         reconciliationLabel(
-                          getCloseState(position.positionId).reconciliationResult!
+                           getCloseState(position.positionId, position.accountId).reconciliationResult!
                         )
                       }}</span>
                     }

@@ -141,6 +141,50 @@ describe('Positions', () => {
     expect(positionService.getPositions).toHaveBeenCalledWith('account-2');
   });
 
+  it('does not carry a close result into another selected account', async () => {
+    positionService.closePosition = vi.fn(() =>
+      of({
+        commandId: 'cmd-1',
+        status: 'UNKNOWN',
+        externalOrderId: null,
+        failureReason: null,
+        resolvedMutationScope: 'scope',
+        reconciliationResult: null,
+      }),
+    );
+    await create();
+    fixture.componentInstance.confirmFullExposureClose('account-1', positions[0]);
+    await nextTask();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="close-results"]')).not.toBeNull();
+
+    fixture.componentInstance.selectAccount('account-2');
+    await nextTask();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="close-results"]')).toBeNull();
+  });
+
+  it('guards a close command while the first request is in flight', async () => {
+    positionService.closePosition = vi.fn(() => new Observable(() => {}));
+    await create();
+
+    fixture.componentInstance.showCloseConfirmation(positions[0]);
+    fixture.componentInstance.confirmFullExposureClose('account-1', positions[0]);
+    fixture.componentInstance.confirmFullExposureClose('account-1', positions[0]);
+
+    expect(positionService.closePosition).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.getCloseState('p1', 'account-1').inFlight).toBe(true);
+  });
+
+  it('does not silently fall back when the route requests an unavailable account', async () => {
+    await configureTestingModule({ getAccounts: () => of(accounts) }, positionService, 'missing');
+    await create();
+
+    expect(text()).toContain('compte demandé n’est pas disponible');
+    expect(positionService.getPositions).not.toHaveBeenCalled();
+  });
+
   it('pnlClass returns correct classes', () => {
     const comp = TestBed.createComponent(Positions).componentInstance;
     expect(comp.pnlClass(null)).toBe('');
@@ -229,7 +273,7 @@ describe('Positions', () => {
     const comp = TestBed.createComponent(Positions).componentInstance;
     comp.confirmFullExposureClose('account-1', { positionId: 'p1' } as any);
 
-    const state = comp.getCloseState('p1');
+    const state = comp.getCloseState('p1', 'account-1');
     expect(state.status).toBe('CREATED');
     expect(state.commandId).toBe('cmd-1');
     expect(state.showConfirmation).toBe(false);
@@ -244,7 +288,7 @@ describe('Positions', () => {
     const comp = TestBed.createComponent(Positions).componentInstance;
     comp.confirmFullExposureClose('account-1', { positionId: 'p1' } as any);
 
-    const state = comp.getCloseState('p1');
+    const state = comp.getCloseState('p1', 'account-1');
     expect(state.status).toBe('REJECTED');
     expect(state.failureReason).toBe('Broker error');
   });
@@ -279,17 +323,37 @@ describe('Positions', () => {
   });
 
   it('reconcile calls service when commandId exists', async () => {
-    const mockResponse = { status: 'CLOSED', reconciliationResult: 'EXPOSURE_CONFIRMED_ABSENT' };
+    const mockResponse = {
+      commandId: 'cmd-2',
+      status: 'CLOSED',
+      externalOrderId: 'order-2',
+      failureReason: null,
+      resolvedMutationScope: 'scope-2',
+      reconciliationResult: 'EXPOSURE_CONFIRMED_ABSENT',
+    };
     positionService.reconcileClose = vi.fn(() => of(mockResponse));
     await configureTestingModule({ getAccounts: () => of(accounts) }, positionService);
-    const comp = TestBed.createComponent(Positions).componentInstance;
-    const state = comp.getCloseState('p1');
+    fixture = TestBed.createComponent(Positions);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    const state = comp.getCloseState('p1', 'account-1');
     state.commandId = 'cmd-1';
+    state.status = 'ACKNOWLEDGED';
+    comp.selectAccount('account-2');
+    const requestsBeforeReconciliation = positionService.getPositions.mock.calls.length;
     comp.reconcile('account-1', 'p1');
+    await nextTask();
+    fixture.detectChanges();
 
     expect(state.status).toBe('CLOSED');
+    expect(state.commandId).toBe('cmd-2');
+    expect(state.externalOrderId).toBe('order-2');
+    expect(state.resolvedMutationScope).toBe('scope-2');
     expect(state.reconciliationResult).toBe('EXPOSURE_CONFIRMED_ABSENT');
     expect(positionService.reconcileClose).toHaveBeenCalledWith('account-1', 'cmd-1');
+    expect(positionService.getPositions.mock.calls.length).toBeGreaterThan(
+      requestsBeforeReconciliation,
+    );
   });
 
   it('reconcile does nothing when no commandId', async () => {
