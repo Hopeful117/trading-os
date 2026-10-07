@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - AWAITING CODE REVIEW`
+`CLOSED - HUMAN ACCEPTED`
 
 ## Implemented
 
@@ -86,4 +86,5 @@ README, architecture, or API documentation update was required.
 The configured origins must be set to the actual deployed frontend origins in
 production-like environments. Docker Compose now requires
 `MARKET_DATA_WEBSOCKET_ALLOWED_ORIGINS`; the local values in `.env.example` are
-development defaults only.
+development defaults only. Human closure was accepted on 2026-10-06. No new
+implementation, commit, push, or merge was performed by the coding agent.

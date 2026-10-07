@@ -4,7 +4,12 @@
 
 **ID:** `0075`
 **Title:** Validate the Decision Pipeline through the Gateway
-**Status:** In Progress
+**Status:** CLOSED - HUMAN ACCEPTED
+
+The implementation and authenticated PAPER Gateway runtime evidence were
+reviewed and accepted by the human engineer. The final human Git commit remains
+pending under the repository workflow; this status does not authorize another
+implementation, commit, push, or merge operation.
 
 ---
 
@@ -187,3 +192,10 @@ new provider integration.
 * [ ] Code Review approved.
 * [ ] Engineering Report completed.
 * [ ] Human commit created.
+
+## Documentation Reconciliation
+
+The implementation and runtime acceptance evidence are present in the merged
+commit `d74a79f`, and all Story acceptance criteria are checked above. Human
+closure was accepted on 2026-10-06. The final human Git commit remains pending
+under the repository workflow.
