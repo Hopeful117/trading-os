@@ -4,7 +4,7 @@
 
 **ID:** `0041`
 
-**Status:** Approved
+**Status:** CLOSED - HUMAN ACCEPTED
 
 **Baseline:** `main` at `3e89646` (Story 0040 merged)
 
