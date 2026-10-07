@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.infrastructure.*;
 import feign.FeignException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,20 +17,23 @@ public class AnalysisTradePlanGenerationService {
     private final AccountRepository accounts;
     private final TradePlanningProfileService profiles;
     private final AnalysisTradePlanContinuationRepository continuations;
+    private final AnalysisTradePlanContinuationClaimService continuationClaims;
     private final MarketIntelligenceTradePlanningClient marketIntelligence;
     private final Clock clock;
 
     public AnalysisTradePlanGenerationService(
             AccountRepository accounts, TradePlanningProfileService profiles,
             AnalysisTradePlanContinuationRepository continuations,
+            AnalysisTradePlanContinuationClaimService continuationClaims,
             MarketIntelligenceTradePlanningClient marketIntelligence, Clock clock) {
         this.accounts = accounts; this.profiles = profiles;
-        this.continuations = continuations; this.marketIntelligence = marketIntelligence;
+        this.continuations = continuations; this.continuationClaims = continuationClaims;
+        this.marketIntelligence = marketIntelligence;
         this.clock = clock;
     }
 
     @Transactional
-    public synchronized Response generate(
+    public Response generate(
             UUID actorId, UUID analysisExecutionId, UUID accountId, String key) {
         if (key == null || key.isBlank() || key.length() > 200) {
             throw failure("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key is required", 400);
@@ -57,17 +61,34 @@ public class AnalysisTradePlanGenerationService {
             if ("COMPLETED".equals(value.state())) {
                 return new Response(value.tradePlanId(), value.tradePlanVersion());
             }
-            return call(value, actorId, analysisExecutionId, accountId, account.getBaseCurrency(), profile, key);
+            throw failure("CONTINUATION_IN_PROGRESS",
+                    "Trade Plan generation is already in progress", 409);
         }
         UUID contextId = UUID.nameUUIDFromBytes((
                 actorId + ":" + accountId + ":" + analysisExecutionId + ":" + key
                         + ":" + profile.id() + ":" + profile.version())
                 .getBytes(StandardCharsets.UTF_8));
-        AnalysisTradePlanContinuationEntity continuation = continuations.saveAndFlush(
-                AnalysisTradePlanContinuationEntity.pending(
-                        analysisExecutionId, actorId, accountId, key, contextId,
-                        1, clock.instant(), profile.id(), profile.version(),
-                        clock.instant()));
+        AnalysisTradePlanContinuationEntity continuation;
+        try {
+            continuation = continuationClaims.create(
+                    analysisExecutionId, actorId, accountId, key, contextId,
+                    1, clock.instant(), profile.id(), profile.version(), clock.instant());
+        } catch (DataIntegrityViolationException race) {
+            AnalysisTradePlanContinuationEntity concurrent = continuations
+                    .findByAnalysisExecutionIdAndActorIdAndAccountIdAndIdempotencyKey(
+                            analysisExecutionId, actorId, accountId, key)
+                    .orElseThrow(() -> race);
+            if (!concurrent.profileId().equals(profile.id())
+                    || concurrent.profileVersion() != profile.version()) {
+                throw failure("IDEMPOTENCY_CONFLICT",
+                        "Idempotency key was used with another effective profile", 409);
+            }
+            if ("COMPLETED".equals(concurrent.state())) {
+                return new Response(concurrent.tradePlanId(), concurrent.tradePlanVersion());
+            }
+            throw failure("CONTINUATION_IN_PROGRESS",
+                    "Trade Plan generation is already in progress", 409);
+        }
         return call(continuation, actorId, analysisExecutionId, accountId,
                 account.getBaseCurrency(), profile, key);
     }

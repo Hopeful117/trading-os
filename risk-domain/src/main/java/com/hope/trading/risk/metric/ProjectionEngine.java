@@ -2,6 +2,7 @@ package com.hope.trading.risk.metric;
 
 import com.hope.trading.risk.domain.Money;
 import com.hope.trading.risk.domain.ProposedTrade;
+import com.hope.trading.risk.domain.RiskTypes.ProtectionStatus;
 import com.hope.trading.risk.domain.RiskTypes.TradeDirection;
 import com.hope.trading.risk.snapshot.AccountSnapshot;
 import com.hope.trading.risk.snapshot.PortfolioSnapshot;
@@ -22,7 +23,7 @@ public final class ProjectionEngine {
                 .map(e -> e.getValue().toProjectedPosition(e.getKey(), currency))
                 .toList();
         Money exposure = sum(projectedPositions, currency, ProjectedPosition::exposure);
-        Money heat = sum(projectedPositions, currency, ProjectedPosition::lossAtStop);
+        Money heat = sumKnownLoss(projectedPositions, currency);
         BigDecimal projectedEquity = account.equity().amount().subtract(heat.amount());
         Money projectedDrawdown = new Money(account.dailyRiskBaseline().referenceBalance().amount()
                 .subtract(projectedEquity).max(BigDecimal.ZERO), currency);
@@ -44,12 +45,12 @@ public final class ProjectionEngine {
         Map<String, PositionValues> result = new HashMap<>();
         for (PositionSnapshot position : portfolio.positions()) {
             requireCurrency(currency, position.marketValue());
-            requireCurrency(currency, position.lossAtStop());
+            position.lossAtStop().ifPresent(loss -> requireCurrency(currency, loss));
             requireCurrency(currency, position.marginUsed());
             result.merge(position.instrument(),
                     new PositionValues(position.signedQuantity(),
-                            position.marketValue().amount(), position.lossAtStop().amount(),
-                            position.marginUsed().amount()), PositionValues::add);
+                            position.marketValue().amount(), position.lossAtStop().map(Money::amount),
+                            position.marginUsed().amount(), position.protectionStatus()), PositionValues::add);
         }
         return result;
     }
@@ -63,8 +64,8 @@ public final class ProjectionEngine {
                 ? trade.quantity() : trade.quantity().negate();
         PositionValues current = positions.get(trade.instrument());
         PositionValues proposed = new PositionValues(signedDelta,
-                trade.notional().amount(), trade.expectedLossAtStop().amount(),
-                trade.marginRequired().amount());
+                trade.notional().amount(), Optional.of(trade.expectedLossAtStop().amount()),
+                trade.marginRequired().amount(), ProtectionStatus.PROTECTED);
         if (current == null || current.quantity.signum() == signedDelta.signum()) {
             positions.merge(trade.instrument(), proposed, PositionValues::add);
             return;
@@ -90,6 +91,11 @@ public final class ProjectionEngine {
                 .reduce(Money.zero(currency), Money::add);
     }
 
+    private Money sumKnownLoss(List<ProjectedPosition> positions, String currency) {
+        return positions.stream().map(ProjectedPosition::lossAtStop).flatMap(Optional::stream)
+                .reduce(Money.zero(currency), Money::add);
+    }
+
     private void requireCurrency(String expected, Money money) {
         if (!expected.equals(money.currency())) {
             throw new IllegalArgumentException("Currency mismatch");
@@ -97,11 +103,12 @@ public final class ProjectionEngine {
     }
 
     private record PositionValues(BigDecimal quantity, BigDecimal exposure,
-                                  BigDecimal loss, BigDecimal margin) {
+                                  Optional<BigDecimal> loss, BigDecimal margin,
+                                  ProtectionStatus protectionStatus) {
         PositionValues add(PositionValues other) {
             return new PositionValues(quantity.add(other.quantity),
-                    exposure.add(other.exposure), loss.add(other.loss),
-                    margin.add(other.margin));
+                    exposure.add(other.exposure), addKnownLoss(loss, other.loss),
+                    margin.add(other.margin), mergeProtection(protectionStatus, other.protectionStatus));
         }
         PositionValues scaleToQuantity(BigDecimal newQuantity,
                                        BigDecimal originalAbsoluteQuantity) {
@@ -109,15 +116,30 @@ public final class ProjectionEngine {
             return new PositionValues(newQuantity,
                     exposure.divide(originalAbsoluteQuantity, MathContext.DECIMAL128)
                             .multiply(newAbsolute, MathContext.DECIMAL128),
-                    loss.divide(originalAbsoluteQuantity, MathContext.DECIMAL128)
-                            .multiply(newAbsolute, MathContext.DECIMAL128),
+                    loss.map(value -> value.divide(originalAbsoluteQuantity, MathContext.DECIMAL128)
+                            .multiply(newAbsolute, MathContext.DECIMAL128)),
                     margin.divide(originalAbsoluteQuantity, MathContext.DECIMAL128)
-                            .multiply(newAbsolute, MathContext.DECIMAL128));
+                            .multiply(newAbsolute, MathContext.DECIMAL128), protectionStatus);
         }
         ProjectedPosition toProjectedPosition(String instrument, String currency) {
             return new ProjectedPosition(instrument, quantity,
-                    new Money(exposure, currency), new Money(loss, currency),
-                    new Money(margin, currency));
+                    new Money(exposure, currency), loss.map(value -> new Money(value, currency)),
+                    new Money(margin, currency), protectionStatus);
+        }
+
+        private static Optional<BigDecimal> addKnownLoss(Optional<BigDecimal> left,
+                                                         Optional<BigDecimal> right) {
+            if (left.isEmpty()) return right;
+            if (right.isEmpty()) return left;
+            return Optional.of(left.get().add(right.get()));
+        }
+
+        private static ProtectionStatus mergeProtection(ProtectionStatus left, ProtectionStatus right) {
+            if (left == right) return left;
+            if (left == ProtectionStatus.UNKNOWN || right == ProtectionStatus.UNKNOWN) {
+                return ProtectionStatus.UNKNOWN;
+            }
+            return ProtectionStatus.PARTIALLY_PROTECTED;
         }
     }
 }

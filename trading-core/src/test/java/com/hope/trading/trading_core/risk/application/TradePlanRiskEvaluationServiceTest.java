@@ -193,6 +193,18 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
+    void automatedPlanWithoutProtectionFailsBeforeRiskEvaluation() {
+        availableContext(List.of());
+        when(plans.load(any(), anyLong())).thenReturn(plan("USD", "USD", "OPPORTUNITY", null));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("AUTOMATED_PROTECTION_REQUIRED");
+    }
+
+    @Test
     void missingPositionStopFailsClosedAndNeverAcknowledges() {
         var position = new BrokerRiskFactsPort.Position(UUID.randomUUID(), "p1", "provider", "BTCUSD",
                 BigDecimal.ONE, new BigDecimal("100"), new BigDecimal("100"), BigDecimal.TEN,
@@ -459,12 +471,17 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency) {
+        return plan(accountCurrency, sizingCurrency, "AUTOMATED", new BigDecimal("90"));
+    }
+
+    private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency,
+                                            String origin, BigDecimal stopPrice) {
         EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.MARKET, null);
-        return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", now,
+        return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", origin, now,
                 UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
                 UUID.randomUUID(), 2, UUID.randomUUID(), 4,
-                 "ETHUSD", "LONG", entryIntent, new BigDecimal("90"), new BigDecimal("120"), BigDecimal.ONE,
-                new BigDecimal("1000"), new BigDecimal("100"), sizingCurrency, "{\"accepted\":true}");
+                 "ETHUSD", "LONG", entryIntent, stopPrice, new BigDecimal("120"), BigDecimal.ONE,
+                 new BigDecimal("1000"), new BigDecimal("100"), null, sizingCurrency, "{\"accepted\":true}", List.of());
     }
 
     private RiskPersistence.Profile profile() {

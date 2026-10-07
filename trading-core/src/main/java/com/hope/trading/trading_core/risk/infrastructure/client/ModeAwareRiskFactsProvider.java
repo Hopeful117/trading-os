@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
@@ -49,39 +50,54 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     }
 
     private RiskFactsProvider.Snapshot paperSnapshot(com.hope.trading.trading_core.model.Account account,
-                                                      BrokerAccount brokerAccount,
-                                                        Instant from, Instant to) {
-        Map<String, BigDecimal> balances = account.getBalances().stream()
-                .collect(Collectors.toMap(value -> value.getAsset().toUpperCase(),
+                                                       BrokerAccount brokerAccount,
+                                                         Instant from, Instant to) {
+        List<String> reasons = new java.util.ArrayList<>();
+        if (account == null || account.getAccountId() == null || blank(account.getBaseCurrency())) {
+            reasons.add("PAPER_ACCOUNT_FACTS_INVALID");
+        }
+        String valuationAsset = account == null || blank(account.getBaseCurrency())
+                ? null : account.getBaseCurrency().toUpperCase(Locale.ROOT);
+        List<com.hope.trading.trading_core.model.AccountBalance> accountBalances = account == null
+                || account.getBalances() == null ? List.of() : account.getBalances();
+        Map<String, BigDecimal> balances = accountBalances.stream()
+                .filter(value -> value != null && !blank(value.getAsset()) && value.getAmount() != null)
+                .collect(Collectors.toMap(value -> value.getAsset().toUpperCase(Locale.ROOT),
                         value -> value.getAmount(), BigDecimal::add));
-        List<RiskFactsProvider.Position> positions = account.getTrades().stream()
-                .filter(trade -> trade.getTradeStatus() == TradeStatus.OPEN)
+        if (accountBalances.stream().anyMatch(value -> value == null || blank(value.getAsset())
+                || value.getAmount() == null)) {
+            reasons.add("PAPER_BALANCE_FACTS_INVALID");
+        }
+        List<Trade> trades = account == null || account.getTrades() == null ? List.of() : account.getTrades();
+        List<RiskFactsProvider.Position> positions = trades.stream()
+                .filter(trade -> trade != null && trade.getTradeStatus() == TradeStatus.OPEN)
                 .map(this::paperPosition)
                 .toList();
-        List<RiskFactsProvider.ClosedTrade> closedTrades = account.getTrades().stream()
-                .filter(trade -> trade.getTradeStatus() == TradeStatus.CLOSED
+        List<RiskFactsProvider.ClosedTrade> closedTrades = trades.stream()
+                .filter(trade -> trade != null && trade.getTradeStatus() == TradeStatus.CLOSED
                         && trade.getClosedAt() != null
                         && !trade.getClosedAt().isBefore(from)
                         && trade.getClosedAt().isBefore(to))
-                .map(this::paperClosedTrade)
+                .map(trade -> paperClosedTrade(trade, valuationAsset))
                 .toList();
-        BigDecimal balance = balances.get(account.getBaseCurrency().toUpperCase());
-        String payload = writePayload(account, balances, positions, closedTrades);
-        List<String> reasons = new java.util.ArrayList<>();
-        if (positions.stream().anyMatch(position -> position.protectedQuantity() == null
-                || position.protectedQuantity().compareTo(position.signedQuantity().abs()) != 0
-                || position.protectiveStops().isEmpty())) {
-            reasons.add("PAPER_POSITION_PROTECTION_UNAVAILABLE");
+        if (trades.stream().anyMatch(this::invalidTradeFacts)) {
+            reasons.add("PAPER_TRADE_FACTS_INVALID");
         }
+        BigDecimal balance = valuationAsset == null ? null : balances.get(valuationAsset);
+        if (balance == null || account == null || account.getEquity() == null) {
+            reasons.add("PAPER_ACCOUNT_VALUATION_INCOMPLETE");
+        }
+        String payload = writePayload(account, balances, positions, closedTrades);
+        reasons.add("PAPER_MARGIN_UNAVAILABLE");
         return new RiskFactsProvider.Snapshot(
                 brokerAccount.id(),
-                Math.max(1, account.getVersion()),
+                sourceVersion(account, trades),
                 clock.instant(),
                 reasons.isEmpty(),
                 reasons,
                 balances,
-                new RiskFactsProvider.Account(account.getBaseCurrency(), balance, account.getEquity(),
-                        account.getEquity(), account.getStartingBalance()),
+                new RiskFactsProvider.Account(valuationAsset, balance, account == null ? null : account.getEquity(),
+                        null, account == null ? null : account.getStartingBalance()),
                 positions,
                 closedTrades,
                 List.of(),
@@ -90,29 +106,25 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
 
     private RiskFactsProvider.Position paperPosition(Trade trade) {
         BigDecimal quantity = signedQuantity(trade);
-        BigDecimal absoluteQuantity = quantity.abs();
+        BigDecimal absoluteQuantity = quantity == null ? null : quantity.abs();
         BigDecimal currentPrice = trade.getCurrentPrice() == null ? trade.getEntryPrice() : trade.getCurrentPrice();
-        List<RiskFactsProvider.Stop> stops = trade.getStopLoss() == null ? List.of()
+        List<RiskFactsProvider.Stop> stops = trade.getStopLoss() == null || absoluteQuantity == null ? List.of()
                 : List.of(new RiskFactsProvider.Stop("paper-trade-stop:" + trade.getTradeId(),
                         "TRADING_CORE", absoluteQuantity, trade.getStopLoss()));
         return new RiskFactsProvider.Position(trade.getTradeId(), "paper-trade:" + trade.getTradeId(),
                 "TRADING_CORE", trade.getSymbol(), quantity, trade.getEntryPrice(),
-                currentPrice.multiply(absoluteQuantity), trade.getEntryPrice().multiply(absoluteQuantity),
+                currentPrice == null || absoluteQuantity == null ? null : currentPrice.multiply(absoluteQuantity), null,
                 trade.getStopLoss() == null ? BigDecimal.ZERO : absoluteQuantity, stops);
     }
 
-    private RiskFactsProvider.ClosedTrade paperClosedTrade(Trade trade) {
+    private RiskFactsProvider.ClosedTrade paperClosedTrade(Trade trade, String settlementAsset) {
         return new RiskFactsProvider.ClosedTrade("paper-trade:" + trade.getTradeId(), trade.getSymbol(),
-                accountCurrency(trade), BigDecimal.ZERO, trade.getPnl() == null ? BigDecimal.ZERO : trade.getPnl(),
+                settlementAsset, BigDecimal.ZERO, trade.getPnl() == null ? BigDecimal.ZERO : trade.getPnl(),
                 trade.getClosedAt());
     }
 
-    private String accountCurrency(Trade trade) {
-        return trade.getAccount() == null || trade.getAccount().getBaseCurrency() == null
-                ? "USD" : trade.getAccount().getBaseCurrency();
-    }
-
     private BigDecimal signedQuantity(Trade trade) {
+        if (trade == null || trade.getType() == null || trade.getQuantity() == null) return null;
         return trade.getType().name().equals("BUY") ? trade.getQuantity() : trade.getQuantity().negate();
     }
 
@@ -121,10 +133,40 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                                 List<RiskFactsProvider.Position> positions,
                                 List<RiskFactsProvider.ClosedTrade> closedTrades) {
         try {
-            return mapper.writeValueAsString(Map.of("accountId", account.getAccountId(),
-                    "balances", balances, "positions", positions, "closedTrades", closedTrades));
+            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("accountId", account == null ? null : account.getAccountId());
+            payload.put("accountVersion", account == null ? null : account.getVersion());
+            payload.put("tradeVersions", account == null || account.getTrades() == null ? Map.of()
+                    : account.getTrades().stream().filter(trade -> trade != null && trade.getTradeId() != null)
+                            .collect(Collectors.toMap(Trade::getTradeId, Trade::getVersion)));
+            payload.put("balances", balances);
+            payload.put("positions", positions);
+            payload.put("closedTrades", closedTrades);
+            return mapper.writeValueAsString(payload);
         } catch (JsonProcessingException failure) {
             throw new IllegalStateException("Paper risk snapshot cannot be preserved", failure);
         }
+    }
+
+    private long sourceVersion(com.hope.trading.trading_core.model.Account account, List<Trade> trades) {
+        long accountVersion = account == null ? 0 : account.getVersion();
+        long tradeVersion = trades.stream().filter(java.util.Objects::nonNull)
+                .mapToLong(Trade::getVersion).max().orElse(0);
+        return Math.max(accountVersion, tradeVersion);
+    }
+
+    private boolean invalidTradeFacts(Trade trade) {
+        return trade == null || trade.getTradeId() == null || blank(trade.getSymbol())
+                || trade.getType() == null || trade.getQuantity() == null
+                || trade.getQuantity().signum() <= 0 || trade.getEntryPrice() == null
+                || trade.getEntryPrice().signum() <= 0 || trade.getTradeStatus() == null
+                || (trade.getCurrentPrice() != null && trade.getCurrentPrice().signum() <= 0)
+                || (trade.getStopLoss() != null && trade.getStopLoss().signum() <= 0)
+                || (trade.getTradeStatus() == TradeStatus.CLOSED
+                    && (trade.getClosedAt() == null || trade.getPnl() == null));
+    }
+
+    private boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 }

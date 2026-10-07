@@ -38,7 +38,7 @@ interface MarketIntelligenceRiskFeignClient {
 record Acknowledgment(UUID evaluationId, String decision, Instant evaluatedAt) { }
 record ExecutionReadinessRequest(UUID evaluationId) { }
 record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status, String origin, Instant createdAt,
-                           Context context, Execution execution, Object rationale) {
+                           Context context, Execution execution, Rationale rationale) {
     record Context(UUID id, long version, Instant capturedAt, UUID ownerId, UUID tradingAccountId,
                    String accountCurrency, UUID riskBudgetSourceId, long riskBudgetSourceVersion,
                    UUID planningPreferencesId, long planningPreferencesVersion) { }
@@ -50,6 +50,8 @@ record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status
     record TakeProfit(BigDecimal price, BigDecimal allocationPercent) { }
     record PositionSizing(BigDecimal quantity, BigDecimal notional,
                           BigDecimal expectedMonetaryRisk, String currency) { }
+    record Rationale(List<Opportunity> opportunities) { }
+    record Opportunity(UUID id, long version, UUID strategyMatchId, UUID strategyId, Integer strategyVersion) { }
 }
 
 @Component
@@ -76,17 +78,18 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
         }
         try {
             EntryIntent entryIntent = toEntryIntent(value.execution().entry());
-            return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.createdAt(),
+            return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.origin(), value.createdAt(),
                      value.context().id(), value.context().version(), value.context().capturedAt(),
                      value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
                      value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
                      value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
                     value.execution().instrument(), value.execution().direction(), entryIntent,
-                     value.execution().stopLoss().price(), firstTakeProfit(value),
+                     value.execution().stopLoss() == null ? null : value.execution().stopLoss().price(), firstTakeProfit(value),
                      value.execution().positionSizing().quantity(),
                     value.execution().positionSizing().notional(),
                     value.execution().positionSizing().expectedMonetaryRisk(),
-                    value.execution().positionSizing().currency(), mapper.writeValueAsString(value));
+                    value.execution().riskRewardRatio(), value.execution().positionSizing().currency(), mapper.writeValueAsString(value),
+                    provenance(value));
         } catch (Exception failure) {
             throw new IllegalStateException("Trade Plan snapshot cannot be preserved", failure);
         }
@@ -112,16 +115,17 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
     private Snapshot loadTransport(TradePlanTransport value) {
         try {
             EntryIntent entryIntent = toEntryIntent(value.execution().entry());
-            return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.createdAt(),
+            return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.origin(), value.createdAt(),
                     value.context().id(), value.context().version(), value.context().capturedAt(),
                     value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
                     value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
                     value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
                     value.execution().instrument(), value.execution().direction(), entryIntent,
-                     value.execution().stopLoss().price(), firstTakeProfit(value),
-                     value.execution().positionSizing().quantity(),
+                     value.execution().stopLoss() == null ? null : value.execution().stopLoss().price(), firstTakeProfit(value),
+                    value.execution().positionSizing().quantity(),
                     value.execution().positionSizing().notional(), value.execution().positionSizing().expectedMonetaryRisk(),
-                    value.execution().positionSizing().currency(), mapper.writeValueAsString(value));
+                    value.execution().riskRewardRatio(), value.execution().positionSizing().currency(), mapper.writeValueAsString(value),
+                    provenance(value));
         } catch (Exception failure) {
             throw new IllegalStateException("Trade Plan snapshot cannot be preserved", failure);
         }
@@ -142,5 +146,14 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
             return null;
         }
         return value.execution().takeProfits().get(0).price();
+    }
+
+    private static List<com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance> provenance(
+            TradePlanTransport value) {
+        if (value.rationale() == null || value.rationale().opportunities() == null) return List.of();
+        return value.rationale().opportunities().stream()
+                .map(item -> new com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance(
+                        item.id(), item.version(), item.strategyMatchId(), item.strategyId(), item.strategyVersion()))
+                .toList();
     }
 }

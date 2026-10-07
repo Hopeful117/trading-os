@@ -18,9 +18,9 @@ public record ManualTradePlanRequest(
         @NotBlank String entryType,
         BigDecimal entryPrice,
         @NotNull @Positive BigDecimal referencePrice,
-        @NotNull @Positive BigDecimal stopLoss,
-        @NotBlank String stopRationale,
-        @NotEmpty List<@Valid TakeProfit> takeProfits,
+        @Positive BigDecimal stopLoss,
+        String stopRationale,
+        List<@Valid TakeProfit> takeProfits,
         @NotNull @Positive BigDecimal quantity,
         @NotNull @Positive BigDecimal monetaryRisk,
         @NotBlank String thesis,
@@ -28,6 +28,10 @@ public record ManualTradePlanRequest(
         @NotEmpty Set<String> invalidationConditions,
         Set<String> managementRules
 ) {
+    public ManualTradePlanRequest {
+        takeProfits = takeProfits == null ? List.of() : List.copyOf(takeProfits);
+        managementRules = managementRules == null ? Set.of() : Set.copyOf(managementRules);
+    }
     public record TakeProfit(
             @NotNull @Positive BigDecimal price,
             @NotNull @Positive BigDecimal allocationPercent

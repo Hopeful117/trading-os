@@ -72,6 +72,10 @@ public final class ManualTradePlanOrchestrationService {
             throw failure(HttpStatus.UNPROCESSABLE_ENTITY,
                     "MARKET_ENTRY_PRICE_FORBIDDEN", "MARKET entries must not provide a limit price");
         }
+        if (request.stopLoss() != null && (request.stopRationale() == null || request.stopRationale().isBlank())) {
+            throw failure(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "STOP_RATIONALE_REQUIRED", "A stop rationale is required when a stop-loss is provided");
+        }
         var context = context(actorId, request.accountId(), account.getBaseCurrency(), profile);
         BigDecimal notional = request.quantity().multiply(
                 entryType.equals("LIMIT") ? request.entryPrice() : request.referencePrice());

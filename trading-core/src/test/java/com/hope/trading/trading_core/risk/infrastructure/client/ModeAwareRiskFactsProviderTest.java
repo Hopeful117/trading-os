@@ -67,7 +67,11 @@ class ModeAwareRiskFactsProviderTest {
         assertThat(snapshot.positions()).singleElement().extracting(RiskFactsProvider.Position::positionId)
                 .isEqualTo(tradeId);
         assertThat(snapshot.complete()).isFalse();
-        assertThat(snapshot.unavailabilityReasons()).contains("PAPER_POSITION_PROTECTION_UNAVAILABLE");
+        assertThat(snapshot.unavailabilityReasons()).containsExactly("PAPER_MARGIN_UNAVAILABLE");
+        assertThat(snapshot.positions().get(0).protectedQuantity()).isZero();
+        assertThat(snapshot.positions().get(0).protectiveStops()).isEmpty();
+        assertThat(snapshot.positions().get(0).protectionStatus().name()).isEqualTo("UNPROTECTED");
+        assertThat(snapshot.positions().get(0).margin()).isNull();
         verifyNoInteractions(liveFacts);
     }
 
@@ -83,7 +87,7 @@ class ModeAwareRiskFactsProviderTest {
     }
 
     @Test
-    void paperWithoutOpenPositionsProvidesLocalAccountMarginFacts() {
+    void paperWithoutAuthoritativeMarginIsIncomplete() {
         UUID brokerId = UUID.randomUUID();
         Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency("USD")
                 .equity(new BigDecimal("1000")).balances(List.of(
@@ -95,9 +99,65 @@ class ModeAwareRiskFactsProviderTest {
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper())
                 .load(account, brokerAccount, brokerId, from, to);
 
-        assertThat(snapshot.complete()).isTrue();
-        assertThat(snapshot.account().margin()).isEqualByComparingTo("1000");
-        assertThat(snapshot.unavailabilityReasons()).isEmpty();
+        assertThat(snapshot.complete()).isFalse();
+        assertThat(snapshot.account().margin()).isNull();
+        assertThat(snapshot.unavailabilityReasons()).containsExactly("PAPER_MARGIN_UNAVAILABLE");
         verifyNoInteractions(liveFacts);
+    }
+
+    @Test
+    void paperSourceVersionAndPayloadCoverAccountAndTradeVersions() {
+        UUID brokerId = UUID.randomUUID();
+        UUID tradeId = UUID.randomUUID();
+        Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency("usd")
+                .version(4).equity(new BigDecimal("1000")).balances(List.of(
+                        AccountBalance.builder().asset("USD").amount(new BigDecimal("1000")).build()))
+                .trades(List.of(Trade.builder().tradeId(tradeId).version(7).symbol("BTC/USD").type(TradeType.BUY)
+                        .entryPrice(new BigDecimal("100")).quantity(BigDecimal.ONE)
+                        .tradeStatus(TradeStatus.OPEN).build()))
+                .build();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccount.id()).thenReturn(brokerId);
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper())
+                .load(account, brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.sourceVersion()).isEqualTo(7);
+        assertThat(snapshot.account().valuationAsset()).isEqualTo("USD");
+        assertThat(snapshot.sourcePayload()).contains("accountVersion", "tradeVersions", tradeId.toString());
+    }
+
+    @Test
+    void paperInvalidCurrencyFailsClosedWithoutInventingUsd() {
+        UUID brokerId = UUID.randomUUID();
+        Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency(" ")
+                .equity(new BigDecimal("1000")).balances(List.of(
+                        AccountBalance.builder().asset("EUR").amount(new BigDecimal("1000")).build()))
+                .trades(List.of()).build();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccount.id()).thenReturn(brokerId);
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper())
+                .load(account, brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isFalse();
+        assertThat(snapshot.account().valuationAsset()).isNull();
+        assertThat(snapshot.account().balance()).isNull();
+        assertThat(snapshot.unavailabilityReasons()).contains("PAPER_ACCOUNT_FACTS_INVALID");
+        assertThat(snapshot.unavailabilityReasons()).contains("PAPER_ACCOUNT_VALUATION_INCOMPLETE");
+    }
+
+    @Test
+    void paperNullAccountReturnsIncompleteFactsInsteadOfThrowing() {
+        UUID brokerId = UUID.randomUUID();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccount.id()).thenReturn(brokerId);
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper())
+                .load(null, brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isFalse();
+        assertThat(snapshot.sourceVersion()).isZero();
+        assertThat(snapshot.unavailabilityReasons()).contains("PAPER_ACCOUNT_FACTS_INVALID");
     }
 }
