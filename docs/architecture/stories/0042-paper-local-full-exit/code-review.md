@@ -2,6 +2,18 @@
 
 ## Findings
 
+### Resolved P1 - Stale or unavailable market data could be settled
+
+`SimulatedExecutionAdapter` now rejects PAPER execution unless the snapshot is
+tradable, `FRESH`, and timestamped. A stale positive bid/ask can no longer
+create an exit fill.
+
+### Resolved P1 - Insufficient PAPER balances were silently ignored
+
+`PaperSettlementService` now rejects missing or insufficient asset balances
+before completing settlement. The target Trade and Account remain unchanged
+when the required balance is unavailable.
+
 ### Resolved - Acceptance-proof integration tests
 
 Resolved by `PaperExitAcceptanceIntegrationTest`, which now covers the
@@ -23,6 +35,8 @@ semantics.
 - Settlement uses the existing PnL calculator.
 - No last-price fallback or short borrowing model was introduced.
 - Existing Trading Core and frontend regression suites passed.
+- Independent review regression tests cover stale snapshot rejection and
+  insufficient/missing exit balances without financial mutation.
 
 ## Verdict
 

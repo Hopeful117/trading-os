@@ -25,6 +25,8 @@ ADR_043_PRESENT = yes
 - Added local exit settlement and realized PnL using the existing calculator.
 - Added Account/Trade optimistic locking and a migration for durable races.
 - Added focused LONG/SHORT settlement and fee tests.
+- Added rejection tests for stale PAPER market snapshots and insufficient or
+  missing settlement balances.
 - Updated the minimum positions UI to send `tradeId` for local PAPER close and
   retain broker-only FIFO/reconciliation messaging.
 
