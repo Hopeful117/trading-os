@@ -6,7 +6,7 @@
 
 **Title:** Strategy Domain Foundation
 
-**Status:** In Progress
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
@@ -65,8 +65,10 @@ Domain capabilities:
   identifies exact deterministic semantics forever;
 - semantic immutability per version; semantic evolution via `deriveVersion`
   creating a fresh DRAFT/UNVALIDATED definition;
-- lifecycle `DRAFT → CANDIDATE → VALIDATED → ENABLED → RETIRED` with explicit
-  legal transitions and terminal RETIRED;
+- operational governance follows ADR-036: `DISABLED | ENABLED |
+  BOOTSTRAP_CONTROLLED_RUN | RETIRED`, with explicit legal transitions and
+  terminal RETIRED; validation truth remains a separate `ValidationStatus`
+  dimension;
 - `ValidationStatus` (`UNVALIDATED | VALIDATED`) as metadata separate from
   lifecycle; VALIDATED lifecycle/ENABLED require recorded validation evidence;
 - direction semantics `LONG | SHORT | DYNAMIC`;
@@ -76,8 +78,8 @@ Domain capabilities:
 - typed deterministic parameters (DECIMAL, INTEGER, STRING, DURATION) with
   validated values;
 - research/validation provenance reference placeholders;
-- additive persistence (`V4__strategy_definition_foundation.sql`, table
-  `strategy_definitions`, PK `(strategy_id, version)`);
+- additive persistence (`V4__strategy_definition_foundation.sql` plus the
+  scenario migration, table `strategy_definitions`, PK `(strategy_id, version)`);
 - repository port `StrategyDefinitionRepository` with JPA adapter.
 
 ---
@@ -121,8 +123,9 @@ Per ADR-034 non-negotiable invariants:
    identifiable; exact-version retrieval works.
 3. Deterministic semantics cannot silently change for an existing version;
    semantic evolution is expressed as a new version.
-4. Lifecycle transitions follow ADR-034; illegal transitions are rejected;
-   RETIRED is terminal.
+4. Operational transitions follow ADR-036; illegal transitions are rejected;
+   RETIRED is terminal. Validation truth remains independent from operational
+   authorization.
 5. Validation truthfulness is explicit and queryable
    (`validationStatus`, evidence reference).
 6. Applicability, required semantic inputs and typed parameters can be
@@ -142,7 +145,7 @@ Per ADR-034 non-negotiable invariants:
 - Domain unit tests: identity/version invariants, immutability, lifecycle
   legality, validation semantics, direction/applicability/input/parameter
   rules.
-- Persistence integration tests (H2 PostgreSQL mode, Flyway V1–V4): round-trip
+- Persistence integration tests (H2 PostgreSQL mode, current Flyway schema): round-trip
   without semantic loss, multi-version history, governance evolution survival.
 - Full module regression suite green.
 
