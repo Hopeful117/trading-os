@@ -58,3 +58,17 @@ closed H1-H7; the evidence and changes are recorded in
   downstream consumer is implemented.
 - Review the future-provider snapshot contract requirement.
 - Approve the implementation before commit.
+
+## Runtime Follow-up
+
+The authenticated runtime revalidation recorded in
+`runtime-validation.md` confirms that the open-candle cadence defect was fixed
+and that normal readiness, freshness, cache reuse/refresh, quote separation, and
+no-side-effect behavior are operationally consistent for the tested facts-only
+scope. The PEPE adjacent-read difference remains inconclusive because the
+contract does not expose the exact mapped provider snapshot used by the fact
+calculation. It is a follow-up observation, not a confirmed implementation
+defect.
+
+Human acceptance of the reviewed Story is now recorded. Git commit creation
+remains outside the coding agent boundary.
