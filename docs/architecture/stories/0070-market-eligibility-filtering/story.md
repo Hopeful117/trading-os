@@ -4,14 +4,16 @@
 
 **ID:** `0070`
 **Title:** Market Eligibility Filtering
-**Status:** READY_FOR_IMPLEMENTATION
+**Status:** CLOSED - HUMAN ACCEPTED
 **Size:** Large
 **Risk:** High
 **Predecessor:** Story 0069 - Market Facts Foundation
 **Investigation:** `docs/architecture/reports/market-eligibility-filtering-investigation.md`
 
-This Story is a design artifact only. It does not authorize implementation,
-commit, push, or creation of additional Story 0070 artifacts.
+The implementation is present in the repository and has been reviewed and
+accepted by the human engineer. The human Git commit remains pending under the
+repository workflow; this status does not authorize another implementation,
+commit, push, or merge operation.
 
 ## Goal
 
