@@ -6,7 +6,7 @@
 
 **Title:** Add a persisted, Spring-context-backed PAPER execution regression
 
-**Status:** Review
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 
