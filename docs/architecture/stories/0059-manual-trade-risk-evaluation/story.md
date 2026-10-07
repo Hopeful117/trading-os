@@ -4,7 +4,7 @@
 
 **ID:** `0059`
 **Title:** Evaluate Manual Trade Plans through Deterministic Risk
-**Status:** Draft
+**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
 
 ---
 
