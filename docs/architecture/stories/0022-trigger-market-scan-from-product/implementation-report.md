@@ -87,6 +87,22 @@ idle → submitting → running{scan} → terminal{scan}
   poll-interval token covered via default-factory test.
 * Backend diff: none → backend suites not re-run (per quality pipeline rules).
 
+## Closure Validation
+
+Re-executed from the current repository state before closure:
+
+* `npm run test:ci` — **47 files, 391 tests, all passing**.
+* `npm run build` — success.
+* `npx prettier --check .` — all files formatted.
+* `git diff --check` — passed.
+* No backend files are modified by the Story.
+
+The build continues to emit existing bundle and stylesheet budget warnings.
+They do not fail the build and remain outside this Story's scope. The
+authenticated browser journey remains unexecuted because `trading-core` and
+browser automation are unavailable in this environment. The Gateway probes
+continue to confirm that the scan endpoints are present and JWT-protected.
+
 ## Manual validation attempted
 
 Local stack state unchanged since Story 0021: gateway/broker/market-data/
