@@ -174,3 +174,15 @@ PUSH_PERFORMED = NO
 ```
 STORY_0035_IMPLEMENTED_READY_FOR_REVIEW
 ```
+
+## Closure Validation
+
+Current repository validation confirms the backend projection remains green:
+
+* `cd market-intelligence && mvn -q test` — passed.
+* Angular `npm run check` — 47 test files and 391 tests passed; production build succeeded with existing budget warnings.
+* `git diff --check` — passed.
+
+The `opportunity` to `opportunities[]` contract change remains an intentional
+atomic backend/REST/Angular migration defined by this Story. No live scan or
+broker execution was required for closure.

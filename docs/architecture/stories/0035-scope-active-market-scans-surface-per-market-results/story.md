@@ -6,7 +6,7 @@
 
 **Title:** Scope Active Market Scans and Surface Per-Market Results
 
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
