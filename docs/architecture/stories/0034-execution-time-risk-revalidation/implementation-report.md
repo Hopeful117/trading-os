@@ -170,3 +170,16 @@ PUSH_PERFORMED = NO
 ```
 STORY_0034_IMPLEMENTED_READY_FOR_REVIEW
 ```
+
+## Closure Validation
+
+Current repository validation confirms the implementation remains green:
+
+* Trading Core `mvn -q test` — passed.
+* Angular `npm run check` — 47 test files and 391 tests passed; production build succeeded with existing budget warnings.
+* `git diff --check` — passed.
+
+ADR-041 is accepted. The documented gaps remain explicit: the T1 service is
+excluded from JaCoCo enforcement, there are no dedicated Angular tests for the
+new T1 states, and no integration test currently runs the real RiskEngine
+through the full execution path.
