@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - HUMAN CODE REVIEW PENDING`
+`CLOSED - HUMAN ACCEPTED`
 
 ## Scope Delivered
 
@@ -42,7 +42,7 @@ changed.
 ## Validation
 
 ```text
-npm run test:ci = 305 tests passed, 0 failed
+npm run test:ci = 393 tests passed, 0 failed
 npm run build   = successful
 npx prettier --check (touched frontend files) = passed
 git diff --check = passed
@@ -60,7 +60,9 @@ implementation.
 
 * Authenticated manual verification of the opportunity-to-plan flow is still
   required.
-* Human code review is still required.
+* Independent code review found no blocking or major findings. A minor residual
+  gap remains: no deterministic fake-timer tests cover an in-poll transition to
+  unknown/recovery status or the timeout boundary.
 * No commit was created.
 
 ## Worktree Safety
