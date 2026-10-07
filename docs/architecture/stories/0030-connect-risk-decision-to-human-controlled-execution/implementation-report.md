@@ -93,3 +93,16 @@ Controlled execution proof (Correction B) — already satisfied by pre-existing 
 Deferred 2 out-of-scope items as agreed:
 - Configurable risk profiles per trading account
 - New `TriggerType` and `RiskLimitType` enum values
+
+## Closure Validation
+
+Revalidated from the current repository state:
+
+* `cd trading-core && mvn -q test` — passed.
+* `cd broker-service && mvn -q test` — passed.
+* `cd gateway && mvn -q test` — passed.
+* `cd trading-os-web && npm run check` — 47 test files and 391 tests passed; production build succeeded with existing bundle and stylesheet budget warnings.
+* `git diff --check` — passed.
+
+The controlled execution proof remains test-based through the fake broker
+adapter. No Kraken or write-capable broker credential was used.

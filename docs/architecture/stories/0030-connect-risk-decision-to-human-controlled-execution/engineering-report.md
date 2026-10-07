@@ -28,6 +28,14 @@ The final implementation establishes:
 
 **This Story does NOT enable unrestricted real-money execution.** Pre-submission risk freshness is not yet guaranteed.
 
+## Closure Validation
+
+The current repository state was revalidated with the Trading Core, Broker
+Service, Gateway, and Angular test suites. All passed. The Angular production
+build also passed with the documented pre-existing budget warnings. The
+execution proof remains controlled and mock-backed; no live Kraken execution
+was performed.
+
 ---
 
 ## Original Problem
