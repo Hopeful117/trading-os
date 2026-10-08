@@ -4,7 +4,7 @@
 
 **ID:** `0055`
 **Title:** Make PAPER Trade Plan sizing compatible with effective risk
-**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
@@ -72,23 +72,23 @@ before risk evaluation.
 
 ## Acceptance Criteria
 
-* [ ] A valid PAPER opportunity produces a Trade Plan whose requested exposure
+* [x] A valid PAPER opportunity produces a Trade Plan whose requested exposure
       is compatible with the account's effective risk profile, or the user
       receives an explicit actionable sizing rejection before execution.
-* [ ] With a recent compatible valuation, the corrected PAPER Trade Plan reaches
+* [x] With a recent compatible valuation, the corrected PAPER Trade Plan reaches
       deterministic risk evaluation without `MAX_EXPOSURE` caused by the
       default planning inputs.
-* [ ] The risk evaluation remains authoritative and unchanged thresholds still
+* [x] The risk evaluation remains authoritative and unchanged thresholds still
       reject genuinely excessive exposure.
-* [ ] Trade Plan quantity, notional, and displayed sizing remain internally
+* [x] Trade Plan quantity, notional, and displayed sizing remain internally
       consistent after correction.
-* [ ] Account currency and instrument currency compatibility remain enforced.
-* [ ] LIVE account behavior is unchanged.
-* [ ] The authenticated web journey exposes the resulting sizing or rejection
+* [x] Account currency and instrument currency compatibility remain enforced.
+* [x] LIVE account behavior is unchanged.
+* [x] The authenticated web journey exposes the resulting sizing or rejection
       state without manually constructing an API request.
-* [ ] Focused Trading Core, Risk Domain, and frontend tests pass.
-* [ ] The Angular production build passes.
-* [ ] Runtime evidence records the account balance, effective risk limits,
+* [x] Focused Trading Core, Risk Domain, and frontend tests pass.
+* [x] The Angular production build passes.
+* [x] Runtime evidence records the account balance, effective risk limits,
       generated notional, valuation timestamp, and observed risk result.
 
 ---
@@ -148,8 +148,14 @@ before risk evaluation.
 
 * [ ] Repository Analysis approved.
 * [ ] Implementation Plan approved when required.
-* [ ] Story scope and sizing behavior approved.
-* [ ] Implementation completed within this Story's scope.
-* [ ] Acceptance criteria validated with evidence.
-* [ ] Human code review completed.
+* [x] Story scope and sizing behavior approved.
+* [x] Implementation completed within this Story's scope.
+* [x] Acceptance criteria validated with evidence.
+* [x] Human code review completed.
 * [ ] Human commit created.
+
+## Closure Record
+
+The independent review completed without findings, and the human engineer
+accepted the Story on 2026-10-08. The implementation commit remains pending;
+no commit or push was performed by the agent.

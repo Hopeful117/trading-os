@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - RUNTIME EVIDENCE COMPLETE`
+`CLOSED - HUMAN ACCEPTED`
 
 ## Outcome
 
@@ -18,21 +18,27 @@ local validation reached an approved risk result. Current automated validation
 also passes:
 
 * Risk Domain: 26 tests;
-* Trading Core: 579 tests;
-* Trading OS Web: 397 tests;
+* Trading Core: 580 tests;
+* Trading OS Web: 402 tests;
 * Trading OS Web production build: successful, with existing budget warnings;
 * `git diff --check`: successful.
 
 The final authenticated proof is recorded in
-`artifacts/paper-runtime-proof.json`: Risk is `APPROVED`, the execution intent
-is completed, and the persisted attempt is `SUCCEEDED` with result code
-`ACKNOWLEDGED`.
+`artifacts/paper-runtime-proof.json`. It records the PAPER balance and
+effective rules, the market valuation timestamp, generated quantity and
+notional, Risk `APPROVED`, and a deliberately excessive manual plan rejected
+by `MAX_POSITION_RISK`, `DAILY_DRAWDOWN`, and `MAX_EXPOSURE`.
+
+The targeted `BrokerAccountServiceTest` verifies that LIVE account creation
+does not derive or assign the PAPER planning budget.
 
 ## Known Limitations
 
-* The proof uses the selected LONG `/USD` opportunity to match the initial PAPER
-  cash balance; broader instrument and short-side scenarios remain separate
-  validation concerns.
+* The proof uses the selected active `/USD` opportunity to match the initial
+  PAPER cash balance; broader instrument and short-side scenarios remain
+  separate validation concerns.
+* Execution is outside Story 0055's sizing acceptance criteria and is not
+  exercised by this proof.
 
 ## Git State
 
@@ -43,9 +49,8 @@ PUSH = NO
 MERGE = NO
 ```
 
-## Human Actions Required
+## Closure
 
-1. Review the sizing formula against the effective risk-rule contract.
-2. Review the exact identifiers and sizing values in the runtime proof.
-3. Verify LIVE account behavior remains unchanged.
-4. Update the Story acceptance checkboxes after review.
+The human engineer accepted the Story after the independent review completed
+without findings. The final Git commit remains pending and was not created by
+the agent.

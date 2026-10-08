@@ -1,6 +1,8 @@
 package com.hope.trading.trading_core.brokeraccount.application;
 
 import com.hope.trading.trading_core.helper.AccountMapper;
+import com.hope.trading.trading_core.brokeraccount.api.CreateBrokerAccountRequest;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.model.Rules;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
@@ -23,9 +25,44 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class BrokerAccountServiceTest {
+    @Test
+    void liveAccountCreationDoesNotDerivePaperPlanningBudget() {
+        BrokerAccountRepository repository = mock(BrokerAccountRepository.class);
+        AccountRepository accountRepository = mock(AccountRepository.class);
+        RulesRepository rulesRepository = mock(RulesRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        RiskPersistence riskPersistence = mock(RiskPersistence.class);
+        RiskProfileValidator riskProfileValidator = mock(RiskProfileValidator.class);
+        TradePlanningProfileService tradePlanningProfiles = mock(TradePlanningProfileService.class);
+        UUID ownerId = UUID.randomUUID();
+        BrokerAccount saved = com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount.create(
+                ownerId, com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider.KRAKEN,
+                com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.LIVE,
+                "LIVE account", Instant.parse("2026-10-08T10:00:00Z"));
+        when(repository.save(org.mockito.ArgumentMatchers.any())).thenReturn(saved);
+
+        BrokerAccountService service = new BrokerAccountService(
+                repository, accountRepository, rulesRepository, userRepository,
+                mock(AccountMapper.class), Clock.fixed(Instant.parse("2026-10-08T10:00:00Z"), ZoneOffset.UTC),
+                riskPersistence, riskProfileValidator, tradePlanningProfiles);
+
+        service.create(ownerId, new CreateBrokerAccountRequest(
+                com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider.KRAKEN,
+                "LIVE account",
+                com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.LIVE,
+                null, null));
+
+        verify(riskPersistence, never()).profile(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(riskProfileValidator, never()).validate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
+        verify(tradePlanningProfiles, never()).create(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(accountRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
     @Test
     void derivesPaperRiskBudgetFromPositionRiskAndExposureLimits() {
         EffectiveRiskRuleSet riskProfile = new EffectiveRiskRuleSet(java.util.List.of(

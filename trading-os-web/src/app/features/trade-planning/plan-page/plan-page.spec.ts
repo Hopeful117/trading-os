@@ -106,6 +106,8 @@ describe('PlanPage', () => {
     const card = fixture.nativeElement.querySelector('[data-testid="proposal-state"]');
     expect(card).toBeTruthy();
     expect(card.textContent).toContain('BTC/EUR');
+    expect(card.textContent).toContain('1.0000');
+    expect(card.textContent).toContain('100.00');
     expect(fixture.nativeElement.querySelector('[data-testid="accept-button"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="reject-button"]')).toBeTruthy();
   });
