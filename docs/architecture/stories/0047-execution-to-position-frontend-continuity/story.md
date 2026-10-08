@@ -84,22 +84,22 @@ state says otherwise.
 
 ## Acceptance Criteria
 
-* [ ] A completed execution result clearly identifies the trade context using
+* [x] A completed execution result clearly identifies the trade context using
       backend-authoritative data and does not equate broker acceptance with a
       full fill.
-* [ ] The execution result provides a direct path to the relevant account
+* [x] The execution result provides a direct path to the relevant account
       positions when position monitoring is applicable.
-* [ ] `FAILED`, `SUBMISSION_OUTCOME_UNKNOWN`, `RECOVERY_BLOCKED`, and risk
+* [x] `FAILED`, `SUBMISSION_OUTCOME_UNKNOWN`, `RECOVERY_BLOCKED`, and risk
       revalidation outcomes retain their distinct safe actions and messages.
-* [ ] An uncertain result never displays a blind retry action.
-* [ ] A successful PAPER close updates the visible position state promptly and
+* [x] An uncertain result never displays a blind retry action.
+* [x] A successful PAPER close updates the visible position state promptly and
       keeps the close result available to the trader.
-* [ ] Position retrieval errors are not rendered as a successful empty state
+* [x] Position retrieval errors are not rendered as a successful empty state
       when the API provides an unavailable or degraded result.
-* [ ] Angular tests cover terminal outcomes, navigation, close refresh, and
+* [x] Angular tests cover terminal outcomes, navigation, close refresh, and
       safety restrictions.
-* [ ] `npm run test:ci`, `npm run build`, and `git diff --check` pass.
-* [ ] No unrelated behavior is changed.
+* [x] `npm run test:ci`, `npm run build`, and `git diff --check` pass.
+* [x] No unrelated behavior is changed.
 
 ---
 
@@ -146,11 +146,11 @@ state says otherwise.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved
-* [ ] Implementation Plan approved when required
-* [ ] Implementation completed
-* [ ] Relevant validation executed
-* [ ] Diff reviewed in IntelliJ
-* [ ] Code Review approved
-* [ ] Engineering Report completed
+* [x] Repository Analysis approved
+* [x] Implementation Plan approved when required
+* [x] Implementation completed
+* [x] Relevant validation executed
+* [x] Diff reviewed in IntelliJ
+* [x] Code Review approved
+* [x] Engineering Report completed
 * [ ] Human commit created

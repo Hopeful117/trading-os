@@ -2,7 +2,7 @@
 
 ## Status
 
-`CLOSED - HUMAN ACCEPTED; RUNTIME VALIDATION PENDING`
+`COMPLETED - HUMAN ACCEPTED; PAPER RUNTIME VALIDATED`
 
 ## Branch
 
@@ -29,21 +29,15 @@ git diff --check: PASS
 
 ## Runtime Validation
 
-The authenticated PAPER journey was not executed for this Story. The available
-runtime currently produces no active opportunity and the earlier scan attempt
-failed, so no real execution result or persisted PAPER position transition was
-available for validation.
+The authenticated PAPER journey was completed through the web application.
+The execution result displayed backend-authoritative broker and fill details,
+navigation opened the correct account-scoped positions page, the persisted
+`0G/USD` SHORT position was visible, and an explicit full close produced an
+empty-position state that remained after reload.
 
-The following remain unverified against live services:
-
-* terminal execution result loaded from the Gateway;
-* navigation to the correct account positions after a real execution;
-* successful PAPER close followed by persisted empty-position state;
-* uncertain broker close outcome followed by reconciliation;
-* degraded positions response after an authenticated runtime failure.
-
-No backend contract change was introduced to compensate for the missing
-runtime evidence.
+The first `AAVE/EUR` attempt was rejected with `REQUIRED_MARGIN_INVALID`; this
+was retained as negative evidence. A compatible `/USD` opportunity then passed
+risk and completed through the simulated broker without bypassing controls.
 
 ## Independent Code Review
 
@@ -51,7 +45,7 @@ The independent review found and the corrective pass addressed account-scoped
 close-result state, originating-account reconciliation, reactive reconciliation
 refresh, invalid route-account fallback, and complete reconciliation response
 state copying. No blocking or major finding remains. Authenticated PAPER runtime
-validation remains outstanding because no active opportunity is available.
+validation is complete; no LIVE transaction is required by this Story.
 
 ## Worktree and Git
 
@@ -67,11 +61,7 @@ not included in this Story's implementation scope.
 
 ## Human Actions Required
 
-1. Review the frontend diff and review checklist.
-2. Run the authenticated PAPER execution-to-position scenario.
-3. Verify close success and uncertain-outcome behavior in the supported runtime.
-4. Record review findings before changing the Story to `Completed`.
+1. Create the human-controlled commit for the reviewed Story 0047 diff.
 
 The independent review passed with no blocking, major, or minor findings. The
-Story is closed by explicit human request with authenticated PAPER runtime
-validation retained as a documented follow-up gap.
+Story is complete with authenticated PAPER runtime validation recorded.

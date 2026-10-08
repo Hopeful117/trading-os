@@ -26,12 +26,20 @@ constraints in the Story.
 - Prettier check: passed.
 - `git diff --check`: passed.
 
-## Residual Validation Gap
+## Runtime Validation
 
-Authenticated PAPER execution, close, reconciliation, and degraded position
-responses remain unverified because no active opportunity is available in the
-runtime environment. No backend contract or execution semantics were changed
-to compensate for this limitation.
+Authenticated PAPER validation completed through the web application:
+
+- execution result displayed `Accepted by broker`, broker order `Filled`, fill
+  quantity, average price, and account context;
+- direct navigation opened the account-scoped positions page;
+- the persisted `0G/USD` SHORT position was visible with protection and risk;
+- explicit full close returned `0G/USD Fermee` and no open positions;
+- a page reload preserved the empty-position state.
+
+An initial `AAVE/EUR` scenario was rejected with `REQUIRED_MARGIN_INVALID`,
+which was preserved as negative evidence. A compatible `/USD` opportunity was
+then used without bypassing risk controls.
 
 ## Decision
 
