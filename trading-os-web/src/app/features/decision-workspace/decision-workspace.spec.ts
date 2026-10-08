@@ -122,6 +122,10 @@ describe('DecisionWorkspace', () => {
     validUntil: null,
     assessment: null,
     lastSuccessfulAssessment: null,
+    analysisExecutionId: null,
+    capabilityExecutionIds: [],
+    diagnostics: [],
+    sourceReferences: {},
   };
 
   beforeEach(async () => {

@@ -1,4 +1,4 @@
-import { AsyncPipe, DatePipe } from '@angular/common';
+import { AsyncPipe, DatePipe, KeyValuePipe } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -83,6 +83,7 @@ export type HistoryView<T> =
   imports: [
     AsyncPipe,
     DatePipe,
+    KeyValuePipe,
     MarketChartComponent,
     OrderBookComponent,
     RecentTradesComponent,

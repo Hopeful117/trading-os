@@ -226,4 +226,23 @@ export interface TrendContextReadModel {
   validUntil: string | null;
   assessment: TrendContextAssessment | null;
   lastSuccessfulAssessment: TrendContextAssessment | null;
+  analysisExecutionId: string | null;
+  capabilityExecutionIds: string[];
+  diagnostics: string[];
+  sourceReferences: Record<string, TrendContextSourceReference>;
+}
+
+export interface TrendContextSourceReference {
+  source: string;
+  provider: string;
+  marketId: string;
+  symbol: string;
+  role: TrendContextRole;
+  interval: string;
+  firstCandleTime: string | null;
+  lastCandleTime: string | null;
+  sourceOccurredAt: string | null;
+  fetchedAt: string;
+  sourceSnapshot: string;
+  contentDigest: string;
 }
