@@ -152,6 +152,11 @@ class ModeAwareRiskFactsProviderTest {
 
         assertThat(snapshot.complete()).isTrue();
         assertThat(snapshot.unavailabilityReasons()).isEmpty();
+        assertThat(snapshot.closedTrades()).singleElement()
+                .satisfies(closedTrade -> {
+                    assertThat(closedTrade.realizedPnl()).isEqualByComparingTo(new BigDecimal("-12.75"));
+                    assertThat(closedTrade.settlementAsset()).isEqualTo("USD");
+                });
     }
 
     @Test

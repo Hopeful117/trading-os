@@ -19,11 +19,17 @@ and does not move repository access into the Risk Domain.
 * LIVE facts continue to use the broker-backed path.
 * Missing or inconsistent facts must not become an approval.
 * The implementation does not implement broker capability or margin retrieval;
-  those responsibilities belong to Story 0051.
+those responsibilities belong to Story 0051.
+
+## Independent Review Result
+
+`PASS - CLOSED`
+
+No code defect was found. The closed-trade PnL assertion was strengthened in
+`ModeAwareRiskFactsProviderTest`, and the acceptance record now distinguishes
+automated criterion evidence from the representative runtime proof.
 
 ## Human Review Required
 
-* Verify the complete local fact mapping against the current persistence model.
-* Run and inspect the affected Trading Core and Risk Domain tests.
-* Confirm runtime evidence for reloadable PAPER facts before marking acceptance
-  criteria complete.
+* The runtime proof is representative; future persistence-model changes require
+  rerunning the focused mapping and fail-closed tests.

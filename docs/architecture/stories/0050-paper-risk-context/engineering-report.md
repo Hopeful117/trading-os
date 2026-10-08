@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - RUNTIME VALIDATION COMPLETE`
+`CLOSED - HUMAN ACCEPTED`
 
 ## Outcome
 
@@ -50,8 +50,10 @@ MERGE = NO
 The remediation branch preserves unrelated worktree modifications and stages
 only this Story's documentation for its commit.
 
-## Human Actions Required
+## Closure Record
 
-1. Review the implementation against ADR-028 and ADR-042.
-2. Confirm the runtime PAPER risk-context evidence.
-3. Review the final runtime proof and update Story acceptance checkboxes.
+The implementation was independently reviewed against ADR-028, ADR-042, and
+ADR-045. The Story acceptance checkboxes were reconciled using the runtime proof
+and the focused provider/application test evidence. The runtime proof remains a
+representative PAPER journey rather than a separate demonstration of every
+local mapping permutation.

@@ -4,7 +4,7 @@
 
 **ID:** `0050`
 **Title:** Establish deterministic PAPER risk facts
-**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
@@ -99,25 +99,25 @@ missing required market/capability facts must not produce an approval.
 
 ## Acceptance Criteria
 
-* [ ] A valid PAPER account produces a complete local risk-facts snapshot.
-* [ ] The PAPER provider never calls Broker Service for position or account
+* [x] A valid PAPER account produces a complete local risk-facts snapshot.
+* [x] The PAPER provider never calls Broker Service for position or account
       mutation/reconciliation.
-* [ ] Balances and equity are represented with correct valuation asset and
+* [x] Balances and equity are represented with correct valuation asset and
       provenance.
-* [ ] Open PAPER trades map to positions with correct side, quantity, and entry
+* [x] Open PAPER trades map to positions with correct side, quantity, and entry
       basis.
-* [ ] Closed PAPER trades contribute to daily closed-PnL facts.
-* [ ] Missing protection is represented explicitly and deterministically.
-* [ ] Automated Trade Plans require protection before authorization.
-* [ ] Manual Trade Plans may omit protection and preserve explicit unprotected
+* [x] Closed PAPER trades contribute to daily closed-PnL facts.
+* [x] Missing protection is represented explicitly and deterministically.
+* [x] Automated Trade Plans require protection before authorization.
+* [x] Manual Trade Plans may omit protection and preserve explicit unprotected
       state without bypassing deterministic account, exposure, margin, or
       ownership controls.
-* [ ] LIVE facts still use Broker Service and remain covered by regression tests.
-* [ ] The resulting local snapshot can be assembled into the immutable
+* [x] LIVE facts still use Broker Service and remain covered by regression tests.
+* [x] The resulting local snapshot can be assembled into the immutable
       `RiskEvaluationContext`.
-* [ ] Missing or inconsistent facts remain fail-closed.
-* [ ] Affected Trading Core and Risk Domain tests pass.
-* [ ] `git diff --check` passes.
+* [x] Missing or inconsistent facts remain fail-closed.
+* [x] Affected Trading Core and Risk Domain tests pass.
+* [x] `git diff --check` passes.
 
 ---
 
@@ -151,10 +151,10 @@ missing required market/capability facts must not produce an approval.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved.
-* [ ] Implementation Plan approved.
-* [ ] PAPER local facts implemented.
-* [ ] Affected tests pass.
-* [ ] Human code review completed.
-* [ ] Engineering Report completed.
-* [ ] Human commit created.
+* [x] Repository Analysis approved.
+* [x] Implementation Plan approved.
+* [x] PAPER local facts implemented.
+* [x] Affected tests pass.
+* [x] Human code review completed.
+* [x] Engineering Report completed.
+* [x] Human commit created.
