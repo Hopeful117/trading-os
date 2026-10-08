@@ -9,6 +9,9 @@ import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.ObservationStatus;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
 import com.hope.trading.market_intelligence.strategy.domain.RequiredSemanticInput;
+import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapabilityContent;
+import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextRole;
+import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextTimeframeAssessment;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -60,7 +63,8 @@ public class TrendContextEvidenceSelector {
                         .filter(TrendContextObservationPayload.class::isInstance)
                         .map(TrendContextObservationPayload.class::cast)
                         .map(payload -> payload.content().assessment() != null
-                                && payload.content().assessment().marketId().equals(marketId))
+                                && payload.content().assessment().marketId().equals(marketId)
+                                && eligible(payload.content()))
                         .orElse(false))
                 .filter(observation -> observation.validUntil()
                         .map(evaluatedAt::isBefore).orElse(true))
@@ -70,5 +74,22 @@ public class TrendContextEvidenceSelector {
                         .map(payload -> !payload.content().cutOffAt().isAfter(evaluatedAt))
                         .orElse(false))
                 .max(Comparator.comparing(Observation::createdAt));
+    }
+
+    private boolean eligible(TrendContextCapabilityContent content) {
+        if (!"AVAILABLE".equalsIgnoreCase(content.operationalStatus())
+                || content.assessment() == null) {
+            return false;
+        }
+        return requiredRoleIsFresh(content, TrendContextRole.BIAS)
+                && requiredRoleIsFresh(content, TrendContextRole.SETUP);
+    }
+
+    private boolean requiredRoleIsFresh(
+            TrendContextCapabilityContent content, TrendContextRole role) {
+        TrendContextTimeframeAssessment timeframe = content.assessment().roleAssessments().get(role);
+        return timeframe != null
+                && timeframe.fresh()
+                && content.sourceReferences().containsKey(role);
     }
 }

@@ -2,7 +2,10 @@ package com.hope.trading.market_intelligence.application.observation;
 
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
+import com.hope.trading.market_intelligence.application.port.CapabilityExecutionRepository;
 import com.hope.trading.market_intelligence.application.port.ObservationRepository;
+import com.hope.trading.market_intelligence.domain.capability.CapabilityExecution;
+import com.hope.trading.market_intelligence.domain.capability.CapabilityExecutionState;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
 import com.hope.trading.market_intelligence.domain.observation.*;
@@ -19,14 +22,17 @@ import java.util.UUID;
 public class TrendContextReadService {
     private final ObservationRepository observations;
     private final AnalysisExecutionRepository executions;
+    private final CapabilityExecutionRepository capabilityExecutions;
     private final Clock clock;
 
     public TrendContextReadService(
             ObservationRepository observations,
             AnalysisExecutionRepository executions,
+            CapabilityExecutionRepository capabilityExecutions,
             Clock clock) {
         this.observations = observations;
         this.executions = executions;
+        this.capabilityExecutions = capabilityExecutions;
         this.clock = clock;
     }
 
@@ -46,10 +52,10 @@ public class TrendContextReadService {
         boolean valid = latestObservation != null
                 && latestObservation.status() == ObservationStatus.ACTIVE
                 && latestObservation.validUntil().map(now::isBefore).orElse(true);
-        boolean current = valid && execution.map(this::isCompleted).orElse(true)
-                && execution.map(value -> !value.requestedAt().isAfter(latestObservation.createdAt()))
-                .orElse(execution.isEmpty());
-        String operationalStatus = operationalStatus(execution, valid, latestObservation);
+        boolean current = valid && execution.filter(this::isCompleted)
+                .map(value -> producedBy(latestObservation, value))
+                .orElse(false);
+        String operationalStatus = operationalStatus(execution, valid, latestObservation, current);
         return new TrendContextReadModel(
                 marketId,
                 operationalStatus,
@@ -75,12 +81,29 @@ public class TrendContextReadService {
         return execution.status() == AnalysisExecutionStatus.COMPLETED;
     }
 
+    private boolean producedBy(Observation observation, AnalysisExecution execution) {
+        var capabilityExecutionIds = capabilityExecutions
+                .findByAnalysisExecutionId(execution.executionId())
+                .stream()
+                .filter(value -> value.state() == CapabilityExecutionState.COMPLETED)
+                .filter(value -> value.capabilityId().value()
+                        .equals(TrendContextAnalysisCapability.CAPABILITY_ID))
+                .map(CapabilityExecution::id)
+                .collect(java.util.stream.Collectors.toSet());
+        return observation.evidence().stream()
+                .anyMatch(value -> capabilityExecutionIds.contains(
+                        value.capabilityResult().capabilityExecutionId()));
+    }
+
     private String operationalStatus(
-            Optional<AnalysisExecution> execution, boolean valid, Observation observation) {
+            Optional<AnalysisExecution> execution, boolean valid, Observation observation,
+            boolean current) {
         if (execution.isPresent()) {
             AnalysisExecutionStatus status = execution.get().status();
             if (status == AnalysisExecutionStatus.COMPLETED) {
-                return valid ? "AVAILABLE" : "STALE";
+                if (!current) return valid ? "STALE" : "UNAVAILABLE";
+                return payload(observation).map(value -> value.content().operationalStatus())
+                        .orElse("UNAVAILABLE");
             }
             if (status == AnalysisExecutionStatus.FAILED
                     || status == AnalysisExecutionStatus.EXPIRED
@@ -92,7 +115,8 @@ public class TrendContextReadService {
         if (observation == null) {
             return "MISSING";
         }
-        return valid ? "AVAILABLE" : "STALE";
+        return valid ? payload(observation)
+                .map(value -> value.content().operationalStatus()).orElse("UNAVAILABLE") : "STALE";
     }
 
     private String validity(Observation observation, Instant now, boolean current) {

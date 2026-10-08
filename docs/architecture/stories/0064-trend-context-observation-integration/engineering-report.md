@@ -16,6 +16,7 @@ boundaries.
 | Observation supersession | YES | Same test proves replay, new lineage version, prior preservation, and supersession. |
 | JPA typed payload reload | YES | `TrendContextJpaObservationPersistenceTest` uses Spring/JPA/H2 and the real rehydrator. |
 | Read current success | YES | `TrendContextReadServiceTest` and authenticated controller test. |
+| Execution lineage currentness | YES | The read service requires active observation evidence to reference a completed Trend Context capability execution belonging to the latest analysis execution. |
 | Read current failure with history | YES | Historical assessment remains in `lastSuccessfulAssessment`; current assessment is absent and status is unavailable. |
 | Read failure without history | YES | No current or historical assessment is fabricated. |
 | Persistence failure | YES | Observation save failure propagates from the consolidation boundary. |
@@ -57,6 +58,10 @@ Objectively evidenced: **12/12 acceptance criteria**.
 * Enforced authentication on the Trend Context read endpoint.
 * Enabled field-visible serialization within the existing JPA observation JSON
   envelope so immutable Trend Context payloads round-trip.
+* Corrected read currentness to use explicit analysis/capability execution
+  lineage instead of timestamp ordering.
+* Propagated the persisted capability operational status to the read model,
+  including degraded assessments.
 
 No architecture, algorithm, threshold, schema, Story 0062/0063, Story 0065,
 or Story 0066 changes were made.
@@ -71,6 +76,8 @@ or Story 0066 changes were made.
 * `mvn -q test`: passed.
 * `mvn -q clean verify`: passed.
 * `git diff --check`: passed.
+* Regression tests for late unrelated observations and degraded read state:
+  passed.
 
 ## Human Actions Required
 

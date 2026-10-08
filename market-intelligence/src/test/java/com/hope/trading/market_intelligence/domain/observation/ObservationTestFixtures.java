@@ -44,6 +44,10 @@ public final class ObservationTestFixtures {
     }
 
     public static ObservationEvidence evidence(BigDecimal contribution) {
+        return evidence(UUID.randomUUID(), contribution);
+    }
+
+    public static ObservationEvidence evidence(UUID capabilityExecutionId, BigDecimal contribution) {
         RawMarketDataReference raw = new RawMarketDataReference(
                 "kraken", "BTC/EUR", "5m", "abc", NOW);
         ArtifactTrace artifact = new ArtifactTrace(
@@ -51,10 +55,10 @@ public final class ObservationTestFixtures {
         return new ObservationEvidence(
                 UUID.randomUUID(), "spread", "Spread", "Spread below threshold",
                 Map.of("spread", new BigDecimal("0.002")),
-                Map.of("maximum", new BigDecimal("0.005")),
-                NOW, contribution,
-                new CapabilityResultTrace(
-                        UUID.randomUUID(), "spread", "v1", List.of(artifact)));
+                 Map.of("maximum", new BigDecimal("0.005")),
+                 NOW, contribution,
+                 new CapabilityResultTrace(
+                         capabilityExecutionId, "spread", "v1", List.of(artifact)));
     }
 
     private record Content() implements ArtifactContent {}

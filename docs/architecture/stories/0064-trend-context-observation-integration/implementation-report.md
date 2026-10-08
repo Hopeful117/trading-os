@@ -89,6 +89,8 @@ successfully and no Story 0064 test failure is hidden.
 
 * External Market Data, deployed, and broker/sandbox validation are outside this
   module acceptance pass.
+* Read currentness now requires explicit analysis/capability execution lineage,
+  and degraded operational status is preserved by the read contract.
 * Human code review, Story approval, and the final human commit remain pending.
 
 ## Out Of Scope Confirmed

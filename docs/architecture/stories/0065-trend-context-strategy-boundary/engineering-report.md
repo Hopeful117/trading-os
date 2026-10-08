@@ -13,12 +13,17 @@ unvalidated initial state. Therefore the production governance gate prevents it
 from producing a live match until a separate validation and activation decision
 is made.
 
+The evidence selector now requires `AVAILABLE` operational status, fresh BIAS
+and SETUP role assessments, and source references for both required roles.
+Degraded, unavailable, stale, or incomplete typed evidence is rejected before
+strategy evaluation.
+
 ## Verification
 
 Focused strategy and pipeline tests pass, including legacy strategy behavior,
 builtin bootstrap behavior, typed strategy outcomes, missing evidence handling,
-and context provenance. The complete Market Intelligence Maven test suite also
-passes. `git diff --check` passes.
+degraded/incomplete Trend Context evidence, and context provenance. The complete
+Market Intelligence Maven test suite also passes. `git diff --check` passes.
 
 ## Human Review
 
