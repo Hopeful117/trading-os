@@ -13,11 +13,12 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TrendContextEngineTest {
     private static final UUID MARKET = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final Instant START = Instant.parse("2026-09-20T00:00:00Z");
-    private static final Instant ASSESSMENT = START.plus(Duration.ofHours(79));
+    private static final Instant ASSESSMENT = START.plus(Duration.ofHours(80));
 
     @Test
     void strictStructureIsIndependentOfIndicatorsAndUsesProtectedLevel() {
@@ -93,18 +94,12 @@ class TrendContextEngineTest {
     void cutOffReplayAndFingerprintAreDeterministic() {
         TrendContextAssessment first = assess(false, false, false, 80);
         TrendContextAssessment replay = assess(false, false, false, 80);
-        TrendContextAssessment withFuture = assess(false, false, false, 80, false, true);
+        assertThatThrownBy(() -> assess(false, false, false, 80, false, true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("FUTURE_CANDLE");
 
         assertThat(first.fingerprint()).isEqualTo(replay.fingerprint());
         assertThat(first.fingerprint()).isEqualTo(first.assessmentFingerprint());
-        assertThat(withFuture.roleAssessments().get(TrendContextRole.SETUP).direction())
-                .isEqualTo(first.roleAssessments().get(TrendContextRole.SETUP).direction());
-        assertThat(withFuture.roleAssessments().get(TrendContextRole.SETUP).swings().stream()
-                .map(ConfirmedSwing::pivotSourceId).toList())
-                .isEqualTo(first.roleAssessments().get(TrendContextRole.SETUP).swings().stream()
-                        .map(ConfirmedSwing::pivotSourceId).toList());
-        assertThat(withFuture.attention()).isEqualTo(first.attention());
-        assertThat(withFuture.fingerprint()).isNotEqualTo(first.fingerprint());
     }
 
     @ParameterizedTest
@@ -132,7 +127,7 @@ class TrendContextEngineTest {
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP, "1H", candles));
         TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(
                 new TrendContextAssessmentInput.Values(MARKET, "KRAKEN", "BTC/EUR",
-                        ASSESSMENT, START.plus(Duration.ofHours(79)), profile, "rules-1", roles));
+                         ASSESSMENT, ASSESSMENT.minusNanos(1), profile, "rules-1", roles));
         return TrendContextStructureFixtures.assess(input);
     }
 
@@ -154,7 +149,7 @@ class TrendContextEngineTest {
                 candles("TRIGGER", "15M", 80, false, false, false, false, false)));
         TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(
                 new TrendContextAssessmentInput.Values(MARKET, "KRAKEN", "BTC/EUR", ASSESSMENT,
-                        START.plus(Duration.ofHours(79)), profile, "rules-1", roles));
+                        ASSESSMENT.minusNanos(1), profile, "rules-1", roles));
         return TrendContextStructureFixtures.assess(input);
     }
 
@@ -179,8 +174,10 @@ class TrendContextEngineTest {
             if (i == count - 2 && wick) low = bd("89");
             boolean synthetic = excluded && i == 10;
             boolean closed = !(excluded && i == 12);
-            Instant open = START.plus(Duration.ofHours(i));
-            Instant closeTime = open.plus(Duration.ofHours(1));
+            Duration intervalDuration = interval.equals("15M") ? Duration.ofMinutes(15)
+                    : interval.equals("4H") ? Duration.ofHours(4) : Duration.ofHours(1);
+            Instant open = ASSESSMENT.minus(intervalDuration.multipliedBy(count - i));
+            Instant closeTime = open.plus(intervalDuration);
             if (future && i == count - 1) closeTime = ASSESSMENT.plus(Duration.ofHours(2));
             result.add(candle(prefix + '-' + i, interval, open, closeTime, high, low, close, closed, synthetic));
         }

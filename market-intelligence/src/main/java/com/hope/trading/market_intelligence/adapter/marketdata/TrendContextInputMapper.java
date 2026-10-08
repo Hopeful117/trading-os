@@ -220,7 +220,11 @@ public class TrendContextInputMapper {
                 && Objects.equals(first.trades(), second.trades())
                 && first.closed() == second.closed()
                 && first.synthetic() == second.synthetic()
-                && Objects.equals(first.occurredAt(), second.occurredAt());
+                && Objects.equals(first.occurredAt(), second.occurredAt())
+                && Objects.equals(required(first.sourceId(), "sourceId"),
+                        required(second.sourceId(), "sourceId"))
+                && Objects.equals(first.fetchedAt(), second.fetchedAt())
+                && Objects.equals(normalize(first.interval()), normalize(second.interval()));
     }
 
     private static String normalize(String value) {

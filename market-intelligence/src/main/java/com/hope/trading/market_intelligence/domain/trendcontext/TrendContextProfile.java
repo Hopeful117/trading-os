@@ -32,16 +32,24 @@ public final class TrendContextProfile {
         EnumMap<TrendContextRole, TrendContextRoleDefinition> copy =
                 new EnumMap<>(TrendContextRole.class);
         copy.putAll(Objects.requireNonNull(values.roles(), "roles is required"));
+        copy.forEach((role, definition) -> {
+            if (definition == null || definition.role() != role) {
+                throw new IllegalArgumentException("Role definition does not match profile key: " + role);
+            }
+        });
         if (!copy.containsKey(TrendContextRole.BIAS)
-                || !copy.containsKey(TrendContextRole.SETUP)) {
+                || !copy.containsKey(TrendContextRole.SETUP)
+                || !copy.get(TrendContextRole.BIAS).required()
+                || !copy.get(TrendContextRole.SETUP).required()) {
             throw new IllegalArgumentException("BIAS and SETUP roles are required");
         }
         if (copy.size() > 3) {
             throw new IllegalArgumentException("Unsupported Trend Context role");
         }
-        if (copy.containsKey(TrendContextRole.TRIGGER) && values.triggerRequired()
-                && !copy.get(TrendContextRole.TRIGGER).required()) {
-            throw new IllegalArgumentException("Required TRIGGER must be required in its definition");
+        if (values.triggerRequired()
+                && (!copy.containsKey(TrendContextRole.TRIGGER)
+                || !copy.get(TrendContextRole.TRIGGER).required())) {
+            throw new IllegalArgumentException("Required TRIGGER must be defined and required");
         }
         validateRoleOrdering(copy);
         this.roles = Map.copyOf(copy);
@@ -73,11 +81,19 @@ public final class TrendContextProfile {
             String profileVersion,
             Map<TrendContextRole, TrendContextRoleDefinition> roles
     ) {
+        return conservativeSwingV1(profileVersion, roles, false);
+    }
+
+    public static TrendContextProfile conservativeSwingV1(
+            String profileVersion,
+            Map<TrendContextRole, TrendContextRoleDefinition> roles,
+            boolean triggerRequired
+    ) {
         return new TrendContextProfile(new Values(
                 CONSERVATIVE_SWING_V1,
                 profileVersion,
                 roles,
-                false,
+                triggerRequired,
                 2,
                 2,
                 2,
