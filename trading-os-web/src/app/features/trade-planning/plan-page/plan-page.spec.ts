@@ -9,10 +9,10 @@ import { TradePlanService } from '../../../core/services/trade-plan.service';
 import { ExecutionService } from '../../../core/services/execution.service';
 import { PlanPage } from './plan-page';
 
-function fakePlan(status: string): TradePlanResponse {
+function fakePlan(status: string, version = 1): TradePlanResponse {
   return {
     id: 'tp-1',
-    version: 1,
+    version,
     previousVersion: null,
     status,
     planningContextId: 'ctx-1',
@@ -244,7 +244,7 @@ describe('PlanPage', () => {
   });
 
   it('resumes an existing authorized execution intent without evaluating risk again', () => {
-    const plan = fakePlan('READY_TO_EXECUTE');
+    const plan = fakePlan('READY_TO_EXECUTE', 4);
     const evaluateRisk = vi.fn(() => of(fakeRiskDecision('APPROVED')));
     const execute = vi.fn(() => of({ id: 'exec-1', status: 'COMPLETED' } as any));
     const tradePlanService = {
@@ -261,7 +261,7 @@ describe('PlanPage', () => {
           provide: ExecutionService,
           useValue: {
             list: () =>
-              of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 1, status: 'CREATED' }]),
+              of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 4, status: 'CREATED' }]),
             getExecution: () => of({ id: 'exec-1', status: 'CREATED' }),
             execute,
           },
@@ -278,6 +278,33 @@ describe('PlanPage', () => {
 
     expect(evaluateRisk).not.toHaveBeenCalled();
     expect(execute).toHaveBeenCalledWith('exec-1');
+  });
+
+  it('does not recover an authorized execution from another plan version', () => {
+    const plan = fakePlan('READY_TO_EXECUTE', 4);
+    const execute = vi.fn(() => of({ id: 'exec-1', status: 'COMPLETED' } as any));
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '4' }) },
+        { provide: TradePlanService, useValue: { getPlan: () => of(plan) } },
+        {
+          provide: ExecutionService,
+          useValue: {
+            list: () =>
+              of([{ id: 'exec-1', tradePlanId: 'tp-1', tradePlanVersion: 3, status: 'CREATED' }]),
+            execute,
+          },
+        },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="resume-authorized-execution-button"]'))
+      .toBeFalsy();
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('exposes unknown broker outcomes with reconciliation instead of polling forever', () => {

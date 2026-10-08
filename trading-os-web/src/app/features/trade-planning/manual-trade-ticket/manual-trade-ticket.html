@@ -131,6 +131,11 @@
     @if (state() === 'error' && errorMessage()) {
       <p class="form-error" data-testid="manual-submit-error">{{ errorMessage() }}</p>
     }
+    @if (!market.marketState.tradable) {
+      <p class="form-error" data-testid="manual-market-not-tradable">
+        This market is not tradable right now. Refresh the market context before creating a plan.
+      </p>
+    }
     <footer class="form-actions">
       <span class="proposal-note"
         >Creation produces a PROPOSED MANUAL Trade Plan. It does not execute an order.</span
@@ -138,7 +143,7 @@
       <button
         type="submit"
         class="button primary"
-        [disabled]="state() === 'submitting'"
+        [disabled]="state() === 'submitting' || !market.marketState.tradable"
         data-testid="create-manual-plan"
       >
         {{ state() === 'submitting' ? 'Creating plan…' : 'Create manual Trade Plan' }}

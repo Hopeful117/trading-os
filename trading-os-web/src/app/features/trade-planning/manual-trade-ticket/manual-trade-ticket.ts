@@ -77,11 +77,7 @@ export class ManualTradeTicket implements OnChanges {
       });
     }
 
-    if (
-      changes['referencePrice'] &&
-      this.referencePrice !== null &&
-      !this.form.controls.referencePrice.dirty
-    ) {
+    if (changes['referencePrice'] && !this.form.controls.referencePrice.dirty) {
       this.form.controls.referencePrice.setValue(this.referencePrice);
     }
   }
@@ -107,6 +103,12 @@ export class ManualTradeTicket implements OnChanges {
     ) {
       this.state.set('error');
       this.errorMessage.set('The trade parameters are incomplete.');
+      return;
+    }
+
+    if (!this.market.marketState.tradable) {
+      this.state.set('error');
+      this.errorMessage.set('The selected market is not tradable right now.');
       return;
     }
 
@@ -140,13 +142,20 @@ export class ManualTradeTicket implements OnChanges {
     this.state.set('submitting');
     this.tradePlanService.createManual(request, crypto.randomUUID()).subscribe({
       next: (created) => {
-        void this.router.navigate([
-          '/trade-planning',
-          'plans',
-          created.tradePlanId,
-          'versions',
-          created.tradePlanVersion,
-        ]);
+        void this.router
+          .navigate([
+            '/trade-planning',
+            'plans',
+            created.tradePlanId,
+            'versions',
+            created.tradePlanVersion,
+          ])
+          .then((navigated) => {
+            if (!navigated) {
+              this.navigationFailed();
+            }
+          })
+          .catch(() => this.navigationFailed());
       },
       error: (error: unknown) => {
         this.state.set('error');
@@ -162,5 +171,12 @@ export class ManualTradeTicket implements OnChanges {
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean);
+  }
+
+  private navigationFailed(): void {
+    this.state.set('error');
+    this.errorMessage.set(
+      'The manual Trade Plan was created, but its details page could not be opened.',
+    );
   }
 }

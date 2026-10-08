@@ -435,7 +435,13 @@ export class DecisionWorkspace {
   }
 
   manualReferencePrice(view: StreamView<TickerEvent> | null): number | null {
-    if (view?.status !== 'live' || !Number.isFinite(view.data.last)) {
+    const freshness =
+      view?.status === 'live' ? this.marketFreshness(view, view.data.occurredAt) : 'UNAVAILABLE';
+    if (
+      view?.status !== 'live' ||
+      (freshness !== 'LIVE' && freshness !== 'RECENT') ||
+      !Number.isFinite(view.data.last)
+    ) {
       return null;
     }
 

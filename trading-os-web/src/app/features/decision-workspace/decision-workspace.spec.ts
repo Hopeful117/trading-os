@@ -463,6 +463,25 @@ describe('DecisionWorkspace', () => {
     ).toBe('STALE');
   });
 
+  it('does not expose a stale ticker as the manual reference price', () => {
+    expect(
+      component.manualReferencePrice({
+        status: 'live',
+        data: {
+          marketId: 'market-1',
+          provider: 'KRAKEN',
+          symbol: 'BTC/USD',
+          streamType: 'TICKER',
+          bid: 100,
+          ask: 101,
+          last: 100.5,
+          volume: 10,
+          occurredAt: new Date(Date.now() - 120_000).toISOString(),
+        },
+      }),
+    ).toBeNull();
+  });
+
   it('renders a context error without fabricating markets', async () => {
     contextServiceMock.resolve.mockReturnValueOnce(throwError(() => new Error('unavailable')));
 
