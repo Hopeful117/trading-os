@@ -19,6 +19,7 @@ public class ExecutionIntentEntity {
     @Column(name="risk_evaluation_id", updatable=false) public UUID riskEvaluationId;
     @Column(name="risk_decision", updatable=false) public String riskDecision;
     @Column(name="risk_approved_at", updatable=false) public Instant riskApprovedAt;
+    @Column(name="risk_trade_plan_version", updatable=false) public Long riskTradePlanVersion;
     @Column(name="purpose", nullable=false, updatable=false) public String purpose;
     @Column(name="target_trade_id", updatable=false) public UUID targetTradeId;
     @Column(name="idempotency_key", nullable=false, updatable=false, length=160) public String idempotencyKey;

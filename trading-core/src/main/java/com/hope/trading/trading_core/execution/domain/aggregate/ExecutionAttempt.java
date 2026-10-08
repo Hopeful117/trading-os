@@ -71,6 +71,11 @@ public final class ExecutionAttempt {
         brokerCorrelationId = correlation; resultCode = required(code);
         completedAt = Objects.requireNonNull(now); version++;
     }
+    public void observeNonTerminal(String correlation, String code, Instant now) {
+        require(AttemptStatus.OUTCOME_UNKNOWN);
+        brokerCorrelationId = correlation; resultCode = required(code);
+        completedAt = Objects.requireNonNull(now); version++;
+    }
     private void require(AttemptStatus expected) {
         if (status != expected) throw new InvalidExecutionStateException(
                 "Attempt must be " + expected + " but is " + status);

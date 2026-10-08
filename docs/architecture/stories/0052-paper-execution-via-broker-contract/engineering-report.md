@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - RUNTIME EVIDENCE PARTIAL`
+`COMPLETED - PAPER VALIDATED; LIVE CONTRACT VALIDATED WITHOUT REAL TRANSACTION`
 
 ## Outcome
 
@@ -21,13 +21,21 @@ The affected automated suites have now been rerun successfully:
 * Trading OS Web: `npm run test:ci` (397 tests);
 * Trading OS Web: `npm run build` (successful, existing budget warnings only);
 * repository diff validation: `git diff --check` (successful).
+* PAPER runtime proof: `ALLOW_PAPER_SHORT=true EXECUTE_PAPER=true bash artifacts/run-paper-runtime-proof.sh artifacts/story-0052-runtime-proof.json` (successful).
 
 ## Known Limitations
 
-* Runtime evidence for a complete PAPER execution and reloadable settlement is
-  still required; automated tests do not replace this validation.
-* LIVE unknown/reconciliation behavior still requires explicit integrated
-  verification.
+* Runtime proof is available in `artifacts/story-0052-runtime-proof.json`.
+  The authenticated flow selects a compatible SHORT `/USD` opportunity, creates
+  and reloads a persisted PAPER `ExecutionIntent`, passes T1 risk approval,
+  completes local PAPER settlement, and reads back one persisted protected
+  position. The proof records `submitStatus=200` and `status=COMPLETED`.
+* The PAPER runtime script now refreshes the valuation from the latest OHLC
+  observation when it is newer than the opportunity reference and supports an
+  explicit short/margin proof mode without weakening the freshness guard.
+* No real LIVE transaction was executed by decision. LIVE unknown/reconciliation
+  behavior is covered by the broker-neutral contract and automated recovery
+  tests; a provider-backed transaction remains outside this validation scope.
 * No new WebSocket or SSE transport was introduced.
 
 ## Git State
@@ -42,7 +50,5 @@ MERGE = NO
 
 ## Human Actions Required
 
-1. Review the implementation against ADR-029 and ADR-042.
-2. Verify PAPER settlement persistence and LIVE unknown-outcome handling in a
-   running environment.
-3. Update Story completion status after review.
+1. Create the human-controlled commit for the reviewed Story 0052 diff.
+2. Continue with the next debt Story after commit review.

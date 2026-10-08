@@ -29,16 +29,43 @@ public final class RecoveryFinalizationStep {
         normalizeAttempt(context);
         switch (context.reconciliation()) {
             case BrokerExecutionPort.ReconciledOrder result -> {
-                context.attempt().reconcile(result.correlationId(), "ORDER_FOUND", context.now());
+                String resultCode = "ORDER_" + result.status().name();
+                if (result.status().terminal()) {
+                    context.attempt().reconcile(result.correlationId(), resultCode, context.now());
+                } else {
+                    context.attempt().observeNonTerminal(result.correlationId(), resultCode, context.now());
+                }
                 clearActive(intent, context);
-                BrokerOrder order = BrokerOrder.rehydrate(ids.nextBrokerOrderId(),
+                BrokerOrder existing = orders.findByIntentId(intent.id()).orElse(null);
+                BrokerOrder order = BrokerOrder.rehydrate(existing == null ? ids.nextBrokerOrderId() : existing.id(),
                         intent.id(), context.attempt().id(), result.externalOrderId(),
-                        result.status(), java.util.List.of(), context.now(), context.now(), 0);
-                orders.save(order); intent.transition(ExecutionStatus.COMPLETED, context.now());
+                        result.status(), existing == null ? java.util.List.of() : existing.fills(),
+                        existing == null ? context.now() : existing.createdAt(), context.now(),
+                        existing == null ? 0 : existing.version());
+                orders.save(order);
                 intent.addEvent(new ExecutionEvent.BrokerOrderLinked(
                         intent.id(), order.id(), context.now()));
-                intent.addEvent(new ExecutionEvent.ExecutionRecoveryCompleted(
-                        intent.id(), context.now()));
+                switch (result.status()) {
+                    case FILLED -> {
+                        intent.transition(ExecutionStatus.COMPLETED, context.now());
+                        intent.addEvent(new ExecutionEvent.BrokerOrderFilled(intent.id(), order.id(), context.now()));
+                        intent.addEvent(new ExecutionEvent.ExecutionRecoveryCompleted(intent.id(), context.now()));
+                    }
+                    case REJECTED -> {
+                        intent.transition(ExecutionStatus.FAILED, context.now());
+                        intent.addEvent(new ExecutionEvent.BrokerOrderRejected(intent.id(), order.id(), resultCode, context.now()));
+                        intent.addEvent(new ExecutionEvent.ExecutionRecoveryCompleted(intent.id(), context.now()));
+                    }
+                    case CANCELLED -> {
+                        intent.transition(ExecutionStatus.FAILED, context.now());
+                        intent.addEvent(new ExecutionEvent.BrokerOrderCancelled(intent.id(), order.id(), context.now()));
+                        intent.addEvent(new ExecutionEvent.ExecutionRecoveryCompleted(intent.id(), context.now()));
+                    }
+                    case ACKNOWLEDGED, PARTIALLY_FILLED, UNKNOWN -> {
+                        intent.transition(ExecutionStatus.RECOVERY_BLOCKED, context.now());
+                        intent.addEvent(new ExecutionEvent.ExecutionRecoveryBlocked(intent.id(), resultCode, context.now()));
+                    }
+                }
             }
             case BrokerExecutionPort.ConfirmedAbsent ignored -> {
                 context.attempt().reconcile(null, "ORDER_CONFIRMED_ABSENT", context.now());

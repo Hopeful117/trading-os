@@ -12,6 +12,7 @@ import java.util.*;
 
 public final class RecoverExecutionService {
     private static final Set<ExecutionStatus> RECOVERABLE = Set.of(
+            ExecutionStatus.SUBMISSION_IN_PROGRESS,
             ExecutionStatus.SUBMISSION_OUTCOME_UNKNOWN,
             ExecutionStatus.RECONCILIATION_IN_PROGRESS,
             ExecutionStatus.RECOVERY_BLOCKED);
@@ -59,7 +60,9 @@ public final class RecoverExecutionService {
             RecoveryPipelineContext context = new RecoveryPipelineContext(intent, clock.instant());
             inspection.execute(context); strategy.execute(context);
             reconciliation.execute(context); finalization.execute(context);
-            events.publish(intent.pullEvents()); recovered.add(intent);
+            events.publish(intent.pullEvents());
+            intents.save(intent);
+            recovered.add(intent);
         }
         return List.copyOf(recovered);
     }

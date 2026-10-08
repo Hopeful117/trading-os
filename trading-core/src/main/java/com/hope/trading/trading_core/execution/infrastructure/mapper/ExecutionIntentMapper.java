@@ -17,6 +17,7 @@ public final class ExecutionIntentMapper {
         target.riskEvaluationId=value.riskApproval() == null ? null : value.riskApproval().evaluationId();
         target.riskDecision=value.riskApproval() == null ? null : value.riskApproval().decision().name();
         target.riskApprovedAt=value.riskApproval() == null ? null : value.riskApproval().approvedAt();
+        target.riskTradePlanVersion=value.riskApproval() == null ? null : value.riskApproval().evaluatedTradePlanVersion();
         target.purpose=value.purpose().name(); target.targetTradeId=value.targetTradeId().orElse(null);
         target.idempotencyKey=value.idempotencyKey().value();
         target.initiatorId=value.initiatorId(); target.brokerAccountId=value.brokerAccountId();
@@ -61,7 +62,8 @@ public final class ExecutionIntentMapper {
         return ExecutionIntent.rehydrate(new ExecutionIntentId(value.id),
                 new TradePlanReference(value.tradePlanId, value.tradePlanVersion),
                 new RiskApprovalReference(value.riskEvaluationId,
-                    RiskApprovalReference.Decision.valueOf(value.riskDecision),value.riskApprovedAt),
+                    RiskApprovalReference.Decision.valueOf(value.riskDecision),value.riskApprovedAt,
+                    value.riskTradePlanVersion == null ? 0 : value.riskTradePlanVersion),
                 new IdempotencyKey(value.idempotencyKey),value.initiatorId,value.brokerAccountId,value.accountId,
                 parameters, value.provenance == null ? List.of() : value.provenance.stream().map(item ->
                         new TradePlanProvenance(item.opportunityId, item.opportunityVersion,

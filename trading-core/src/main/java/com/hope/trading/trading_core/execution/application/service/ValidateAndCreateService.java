@@ -155,7 +155,8 @@ public final class ValidateAndCreateService {
         RiskApprovalReference approval = new RiskApprovalReference(
                 evaluation.id(),
                 RiskApprovalReference.Decision.valueOf(decision),
-                evaluation.response().evaluatedAt());
+                evaluation.response().evaluatedAt(),
+                command.tradePlanVersion());
 
         ExecutionIntent intent = intentCreation.create(
                 new com.hope.trading.trading_core.execution.application.command.CreateExecutionIntentCommand(

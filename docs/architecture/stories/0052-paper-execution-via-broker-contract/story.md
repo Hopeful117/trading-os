@@ -4,7 +4,7 @@
 
 **ID:** `0052`
 **Title:** Align execution contracts while preserving local PAPER settlement
-**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
+**Status:** COMPLETED - PAPER VALIDATED; LIVE CONTRACT VALIDATED WITHOUT REAL TRANSACTION
 
 ---
 
@@ -53,19 +53,19 @@ position authority to Broker Service.
 
 ## Acceptance Criteria
 
-* [ ] PAPER execution remains local and reloadable.
-* [ ] LIVE execution remains Broker Service-backed.
-* [ ] Both modes use compatible neutral lifecycle concepts.
-* [ ] Execution references exact plan, risk, account, and capability versions.
-* [ ] Full risk revalidation occurs before execution.
-* [ ] Capability changes block execution and require revalidation.
-* [ ] Duplicate requests cannot create duplicate logical executions.
-* [ ] Ambiguous LIVE outcomes become `UNKNOWN` and require reconciliation.
-* [ ] PAPER local transaction failure cannot report false success.
-* [ ] Full PAPER exit remains human-authorized and local.
-* [ ] Fills and reconciliation outcomes are auditable.
-* [ ] Affected backend and frontend tests pass.
-* [ ] `git diff --check` passes.
+* [x] PAPER execution remains local and reloadable.
+* [x] LIVE execution remains Broker Service-backed.
+* [x] Both modes use compatible neutral lifecycle concepts.
+* [x] Execution references exact plan, risk, account, and capability versions.
+* [x] Full risk revalidation occurs before execution.
+* [x] Capability changes block execution and require revalidation.
+* [x] Duplicate requests cannot create duplicate logical executions.
+* [x] Ambiguous LIVE outcomes become `UNKNOWN` and require reconciliation.
+* [x] PAPER local transaction failure cannot report false success.
+* [x] Full PAPER exit remains human-authorized and local.
+* [x] Fills and reconciliation outcomes are auditable.
+* [x] Affected backend and frontend tests pass.
+* [x] `git diff --check` passes.
 
 ## Related ADRs
 
@@ -86,10 +86,10 @@ position authority to Broker Service.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved.
-* [ ] Implementation Plan approved.
-* [ ] Mode-specific execution behavior implemented.
-* [ ] Affected tests pass.
-* [ ] Human code review completed.
-* [ ] Engineering Report completed.
+* [x] Repository Analysis approved.
+* [x] Implementation Plan approved.
+* [x] Mode-specific execution behavior implemented.
+* [x] Affected tests pass.
+* [x] Human code review completed.
+* [x] Engineering Report completed.
 * [ ] Human commit created.

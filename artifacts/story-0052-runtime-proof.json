@@ -1,0 +1,262 @@
+{
+  "generatedAt": "2026-10-08T20:11:49Z",
+  "baseUrl": "http://localhost:17080",
+  "username": "runtime_paper_1791490304_30891",
+  "registration": {
+    "status": 200
+  },
+  "profile": {
+    "id": "0a10c7e2-9d1e-4f5a-b6c8-123456789043",
+    "version": "1.0.0",
+    "rules": [
+      {
+        "ruleId": "DAILY_DRAWDOWN",
+        "ruleVersion": "1.0.0",
+        "category": "ACCOUNT",
+        "severity": "BLOCKING",
+        "priority": 30,
+        "maximumRatio": 0.030000000000
+      },
+      {
+        "ruleId": "MAX_EXPOSURE",
+        "ruleVersion": "1.0.0",
+        "category": "PORTFOLIO",
+        "severity": "BLOCKING",
+        "priority": 20,
+        "maximumRatio": 0.030000000000
+      },
+      {
+        "ruleId": "MAX_POSITION_RISK",
+        "ruleVersion": "1.0.0",
+        "category": "POSITION",
+        "severity": "BLOCKING",
+        "priority": 10,
+        "maximumRatio": 0.010000000000
+      }
+    ]
+  },
+  "paper": {
+    "brokerAccountId": "ac05b922-37db-40cc-889a-9c24b71e06ca",
+    "accountId": "d211aa1e-0a53-4217-855e-93d7a58d30e5",
+    "balance": 10000.00,
+    "currency": "USD"
+  },
+  "scan": {
+    "status": 202,
+    "id": "32c0a8a5-91fa-447b-bbb2-39b36fdce937",
+    "state": "COMPLETED",
+    "scopeStatus": 200
+  },
+  "opportunityId": "d887f35a-279d-3d81-b011-18477c4c1a62",
+  "valuation": {
+    "marketId": "8d90a581-ab33-4bbb-925a-a9f5ce726374",
+    "referencePrice": 0.281,
+    "opportunityReferencePriceAt": "2026-10-08T20:10:00Z",
+    "observedAt": "2026-10-08T20:10:00Z"
+  },
+  "tradePlan": {
+    "status": 200,
+    "id": "306fe45b-9c40-4d4d-9bc5-2d45614c1375",
+    "version": 2,
+    "decisionStatus": 200,
+    "entryPrice": 0.2840000,
+    "quantity": 1056.33802816,
+    "notional": 299.999999997440000,
+    "expectedNotional": 299.99999999744,
+    "notionalDelta": 0,
+    "sizingConsistent": true,
+    "monetaryRisk": 3.000000000000
+  },
+  "risk": {
+    "status": 200,
+    "evaluationId": "2236562e-4c8a-46bf-9688-c1ee7694cb8e",
+    "approved": true,
+    "response": {
+      "evaluationId": "2236562e-4c8a-46bf-9688-c1ee7694cb8e",
+      "tradePlanId": "306fe45b-9c40-4d4d-9bc5-2d45614c1375",
+      "tradePlanVersion": 2,
+      "accountId": "d211aa1e-0a53-4217-855e-93d7a58d30e5",
+      "status": "COMPLETED",
+      "decision": "APPROVED",
+      "approved": true,
+      "reasons": [],
+      "warnings": [],
+      "metrics": {
+        "totalDrawdownRatio": 0.0003000000,
+        "dailyDrawdownRatio": 0.0003,
+        "exposureRatio": 0.029999999999744,
+        "positionRiskRatio": 0.0003000000
+      },
+      "evaluatedAt": "2026-10-08T20:11:49.667018174Z",
+      "trace": {
+        "correlationId": "f46c2b35-0866-44e0-b4db-3968d5ae7ba0",
+        "engineVersion": "adr-028-standard-1",
+        "policyVersions": {
+          "TRADING_OS_STANDARD_RISK": "1.0.0"
+        },
+        "ruleVersions": {
+          "MAX_EXPOSURE": "1.0.0",
+          "DAILY_DRAWDOWN": "1.0.0",
+          "MAX_POSITION_RISK": "1.0.0"
+        },
+        "snapshotVersions": {
+          "market": 399,
+          "context": 100,
+          "ruleSet": 400,
+          "portfolio": 398,
+          "account": 397
+        }
+      }
+    }
+  },
+  "execution": {
+    "id": "036ffb1e-9f2c-4811-ac86-4e43ddfdd511",
+    "submitStatus": 200,
+    "submitResponse": {
+      "id": "036ffb1e-9f2c-4811-ac86-4e43ddfdd511",
+      "tradePlanId": "306fe45b-9c40-4d4d-9bc5-2d45614c1375",
+      "tradePlanVersion": 4,
+      "riskEvaluationId": "2236562e-4c8a-46bf-9688-c1ee7694cb8e",
+      "idempotencyKey": "runtime-execution-runtime_paper_1791490304_30891",
+      "brokerAccountId": "ac05b922-37db-40cc-889a-9c24b71e06ca",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-08T20:11:50.054187Z",
+      "updatedAt": "2026-10-08T20:11:50.102662346Z",
+      "expiresAt": "2026-10-08T21:11:50Z",
+      "version": 6,
+      "brokerExternalOrderId": "SIM-cd641e88-e3f9-4355-b234-83dcb1ad227a",
+      "brokerOrderStatus": "FILLED",
+      "filledQuantity": 1056.338028160000,
+      "averageFillPrice": 0.284000000000,
+      "totalFees": 0,
+      "failureReason": null
+    },
+    "status": "COMPLETED",
+    "response": {
+      "id": "036ffb1e-9f2c-4811-ac86-4e43ddfdd511",
+      "tradePlanId": "306fe45b-9c40-4d4d-9bc5-2d45614c1375",
+      "tradePlanVersion": 4,
+      "riskEvaluationId": "2236562e-4c8a-46bf-9688-c1ee7694cb8e",
+      "idempotencyKey": "runtime-execution-runtime_paper_1791490304_30891",
+      "brokerAccountId": "ac05b922-37db-40cc-889a-9c24b71e06ca",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-08T20:11:50.054187Z",
+      "updatedAt": "2026-10-08T20:11:50.102662Z",
+      "expiresAt": "2026-10-08T21:11:50Z",
+      "version": 4,
+      "brokerExternalOrderId": "SIM-cd641e88-e3f9-4355-b234-83dcb1ad227a",
+      "brokerOrderStatus": "FILLED",
+      "filledQuantity": 1056.338028160000,
+      "averageFillPrice": 0.284000000000,
+      "totalFees": 0E-12,
+      "failureReason": null
+    }
+  },
+  "positions": {
+    "status": 200,
+    "response": [
+      {
+        "positionId": "1781f8cb-380e-44d3-8edd-31b7ef69cca2",
+        "accountId": "d211aa1e-0a53-4217-855e-93d7a58d30e5",
+        "marketId": "8d90a581-ab33-4bbb-925a-a9f5ce726374",
+        "symbol": "0G/USD",
+        "side": "SELL",
+        "quantity": 1056.338028160000,
+        "entryPrice": 0.284000000000,
+        "currentPrice": 0.2850000,
+        "stopLoss": 0.286840000000,
+        "takeProfit": 0.278320000000,
+        "unrealizedPnl": -1.056338028160000000000000,
+        "unrealizedPnlPercentage": -0.3521,
+        "brokerUnrealizedPnl": null,
+        "riskAmount": 2.999999999974400000000000,
+        "riskPercentage": 0.0300,
+        "exposure": 301.0563380256000000000,
+        "protectionStatus": "PROTECTED",
+        "marketTradable": true,
+        "openedAt": "2026-10-08T20:11:50.102662Z",
+        "priceOccurredAt": "2026-10-08T20:11:39.196374733Z",
+        "calculatedAt": "2026-10-08T20:11:50.376828638Z",
+        "source": "TRADING_CORE",
+        "valuationStatus": "FRESH",
+        "quoteAsset": "USD"
+      }
+    ]
+  },
+  "negativeValidation": {
+    "planStatus": 201,
+    "planId": "3d632ffa-bc5c-4b40-aeea-ca5c57fcb2c5",
+    "planVersion": 2,
+    "risk": {
+      "evaluationId": "2d21cc1c-c940-4fa8-8013-936ee1453f28",
+      "tradePlanId": "3d632ffa-bc5c-4b40-aeea-ca5c57fcb2c5",
+      "tradePlanVersion": 2,
+      "accountId": "d211aa1e-0a53-4217-855e-93d7a58d30e5",
+      "status": "COMPLETED",
+      "decision": "REJECTED",
+      "approved": false,
+      "reasons": [
+        {
+          "code": "MAX_POSITION_RISK",
+          "ruleVersion": "1.0.0",
+          "severity": "BLOCKING",
+          "message": "maximum-position-risk",
+          "metrics": {
+            "current": 0.1,
+            "maximum": 0.010000000000,
+            "exceeded": 0.090000000000
+          }
+        },
+        {
+          "code": "DAILY_DRAWDOWN",
+          "ruleVersion": "1.0.0",
+          "severity": "BLOCKING",
+          "message": "daily-drawdown",
+          "metrics": {
+            "current": 0.1,
+            "maximum": 0.030000000000,
+            "exceeded": 0.070000000000
+          }
+        },
+        {
+          "code": "MAX_EXPOSURE",
+          "ruleVersion": "1.0.0",
+          "severity": "BLOCKING",
+          "message": "maximum-exposure",
+          "metrics": {
+            "current": 2.81,
+            "maximum": 0.030000000000,
+            "exceeded": 2.780000000000
+          }
+        }
+      ],
+      "warnings": [],
+      "metrics": {
+        "totalDrawdownRatio": 0.1,
+        "dailyDrawdownRatio": 0.1,
+        "exposureRatio": 2.81,
+        "positionRiskRatio": 0.1
+      },
+      "evaluatedAt": "2026-10-08T20:11:49.993466475Z",
+      "trace": {
+        "correlationId": "f8efc914-bac6-41c5-89dd-cc1c91d59286",
+        "engineVersion": "adr-028-standard-1",
+        "policyVersions": {
+          "TRADING_OS_STANDARD_RISK": "1.0.0"
+        },
+        "ruleVersions": {
+          "MAX_EXPOSURE": "1.0.0",
+          "DAILY_DRAWDOWN": "1.0.0",
+          "MAX_POSITION_RISK": "1.0.0"
+        },
+        "snapshotVersions": {
+          "market": 403,
+          "context": 101,
+          "ruleSet": 404,
+          "portfolio": 402,
+          "account": 401
+        }
+      }
+    }
+  }
+}

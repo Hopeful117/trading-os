@@ -1,8 +1,8 @@
 package com.hope.trading.trading_core.execution.infrastructure.configuration;
 
-import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.execution.application.pipeline.*;
 import com.hope.trading.trading_core.execution.application.pipeline.recovery.*;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.execution.application.port.*;
 import com.hope.trading.trading_core.execution.application.service.*;
 import com.hope.trading.trading_core.execution.domain.repository.*;
@@ -105,11 +105,11 @@ public class ExecutionConfiguration {
     }
     @Bean RecoverExecutionService recoverExecutionService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
-            BrokerExecutionPort broker,ExecutionIdGenerator ids,RecoveryStrategyService strategies,
+            BrokerExecutionPort broker, BrokerAccountRepository brokerAccounts, ExecutionIdGenerator ids,RecoveryStrategyService strategies,
             ExecutionEventPublisher events,ExecutionMetrics metrics,Clock clock){
         return new RecoverExecutionService(new RecoverableExecutionDiscoveryStep(intents),
                 new ExecutionInspectionStep(attempts),new RecoveryStrategyStep(strategies),
-                new BrokerReconciliationStep(broker),
+                new BrokerReconciliationStep(broker, brokerAccounts),
                 new RecoveryFinalizationStep(intents,attempts,orders,ids),events,metrics,clock,intents);
     }
 }
