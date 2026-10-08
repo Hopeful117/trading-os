@@ -14,8 +14,9 @@
 * `TrendContextJpaObservationPersistenceTest`: real Spring/JPA database save,
   reload, and `ObservationRehydrator` round trip for the typed payload.
 * `TrendContextReadServiceTest`: current success, current failure with
-  historical success, failure without history, and `NO_SETUP`/`WATCH`/`UNKNOWN`
-  analytical outcome mapping.
+  historical success, history without a relevant execution, failure without
+  history, lineage IDs, provenance, and `NO_SETUP`/`WATCH`/`UNKNOWN` analytical
+  outcome mapping.
 * `TrendContextControllerTest`: authenticated read contract and unauthenticated
   rejection.
 * `TrendContextTestFixtures`: local deterministic assessment fixture for focused
@@ -39,6 +40,12 @@ Existing focused acquisition and payload tests remain in place:
 3. `JpaObservationRepository` could not serialize immutable Trend Context model
    fields. Its persistence-local mapper now enables field visibility for the
    existing JSON envelope; no persistence technology or schema was changed.
+4. A valid historical observation without a relevant analysis execution was
+   incorrectly reported as operationally `AVAILABLE`; it now reports `MISSING`
+   while preserving the historical assessment separately.
+5. The authenticated read model now exposes analysis/capability execution IDs,
+   diagnostics, and role source references without exposing persistence internals
+   or credentials.
 
 ## Evidence Covered
 
@@ -61,6 +68,8 @@ Existing focused acquisition and payload tests remain in place:
 * Input and assessment fingerprints remain separate from observation identity
   and evidence input fingerprint through artifact, Observation, JPA reload, and
   read-model boundaries.
+* The read model preserves current lineage and non-sensitive role provenance for
+  clients that need to explain the displayed assessment.
 
 ## Active Scan Investigation
 
@@ -73,7 +82,7 @@ pre-existing unrelated test-harness/Active Scan issue and was not modified.
 ## Validation Evidence
 
 ```text
-mvn -q -Dtest=TrendContextAnalysisCapabilityTest,TrendContextObservationIntegrationTest,TrendContextReadServiceTest,TrendContextControllerTest,TrendContextJpaObservationPersistenceTest,TrendContextRoleHistoryContextContributorTest,TrendContextObservationPayloadTest test: passed
+mvn -q -Dtest=TrendContextAnalysisCapabilityTest,TrendContextObservationIntegrationTest,TrendContextReadServiceTest,TrendContextControllerTest,TrendContextJpaObservationPersistenceTest,TrendContextRoleHistoryContextContributorTest,TrendContextObservationPayloadTest test: passed after review corrections
 mvn -q -Dtest=ActiveScanDispatchAsyncBoundaryTest,ActiveScanDispatchClaimServiceTest,ActiveScanApplicationServiceTest test: passed; existing null-claim NPE logged
 mvn -q -Dtest=ProductionIntelligencePipelineTest,GenericPipelineProofTest,ObservationBuilderTest,ObservationPersistenceIntegrationTest,CapabilityRegistryTest,ExecutionPlannerTest,ExecutionEngineTest,AnalysisExecutionServiceTest test: passed
 mvn -q test: passed

@@ -45,6 +45,8 @@ class TrendContextReadServiceTest {
         assertThat(model.lastSuccessfulAssessment()).isSameAs(assessment);
         assertThat(model.observationId()).isEqualTo(observation.id());
         assertThat(model.observationVersion()).isEqualTo(1L);
+        assertThat(model.analysisExecutionId()).isEqualTo(execution.executionId());
+        assertThat(model.capabilityExecutionIds()).containsExactly(observationCapabilityId(observation));
     }
 
     @Test
@@ -64,6 +66,26 @@ class TrendContextReadServiceTest {
         assertThat(model.assessment()).isNull();
         assertThat(model.lastSuccessfulAssessment()).isSameAs(assessment);
         assertThat(model.assessmentValidity()).isEqualTo("EXPIRED");
+    }
+
+    @Test
+    void validHistoryWithoutRelevantExecutionIsNotReportedAsAvailable() {
+        InMemoryObservationRepository observations = new InMemoryObservationRepository();
+        TrendContextAssessment assessment = assessment(TrendAttention.WATCH);
+        Observation observation = saveObservation(observations, assessment, NOW.minusSeconds(900));
+        AnalysisExecutionRepository executions = mock(AnalysisExecutionRepository.class);
+        when(executions.findLatestByMarketId(TrendContextTestFixtures.MARKET_ID))
+                .thenReturn(Optional.empty());
+
+        TrendContextReadModel model = service(observations, executions,
+                mock(CapabilityExecutionRepository.class)).find(
+                TrendContextTestFixtures.MARKET_ID);
+
+        assertThat(model.operationalStatus()).isEqualTo("MISSING");
+        assertThat(model.assessmentPresent()).isFalse();
+        assertThat(model.lastSuccessfulAssessment()).isSameAs(assessment);
+        assertThat(model.capabilityExecutionIds())
+                .containsExactly(observationCapabilityId(observation));
     }
 
     @Test

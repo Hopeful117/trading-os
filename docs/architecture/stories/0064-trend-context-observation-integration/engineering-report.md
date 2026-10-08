@@ -18,10 +18,12 @@ boundaries.
 | Read current success | YES | `TrendContextReadServiceTest` and authenticated controller test. |
 | Execution lineage currentness | YES | The read service requires active observation evidence to reference a completed Trend Context capability execution belonging to the latest analysis execution. |
 | Read current failure with history | YES | Historical assessment remains in `lastSuccessfulAssessment`; current assessment is absent and status is unavailable. |
+| Read history without current execution | YES | A valid historical observation is reported as `MISSING`, never as current `AVAILABLE`, and its capability lineage remains exposed. |
 | Read failure without history | YES | No current or historical assessment is fabricated. |
 | Persistence failure | YES | Observation save failure propagates from the consolidation boundary. |
 | No-opportunity side effect | YES | Trend Context capability/observation path has no downstream strategy/opportunity dependencies; legacy pipeline and generic pipeline regressions pass. |
 | Fingerprint lineage | YES | Capability artifact, observation payload/evidence, JPA reload, and read-model tests preserve both fingerprints separately. |
+| Read provenance | YES | The authenticated read model exposes analysis/capability IDs, diagnostics, and non-sensitive role source references. |
 | Active Scan regression | PARTIAL | Existing Active Scan tests pass, but an isolated existing async test logs a null-claim NPE in unchanged Active Scan code. No Story 0064 relationship was found. |
 
 ## Acceptance Criteria Review
@@ -62,6 +64,10 @@ Objectively evidenced: **12/12 acceptance criteria**.
   lineage instead of timestamp ordering.
 * Propagated the persisted capability operational status to the read model,
   including degraded assessments.
+* Prevented valid history without a relevant execution from being reported as
+  current `AVAILABLE`.
+* Exposed non-sensitive execution lineage, diagnostics, and role source
+  references in the authenticated read model.
 
 No architecture, algorithm, threshold, schema, Story 0062/0063, Story 0065,
 or Story 0066 changes were made.
@@ -76,8 +82,8 @@ or Story 0066 changes were made.
 * `mvn -q test`: passed.
 * `mvn -q clean verify`: passed.
 * `git diff --check`: passed.
-* Regression tests for late unrelated observations and degraded read state:
-  passed.
+* Regression tests for late unrelated observations, degraded read state, history
+  without current execution, and read-boundary provenance: passed.
 
 ## Human Actions Required
 

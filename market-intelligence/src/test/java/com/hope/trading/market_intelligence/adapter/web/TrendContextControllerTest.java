@@ -15,6 +15,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -40,7 +42,8 @@ class TrendContextControllerTest {
                 marketId, "AVAILABLE", true, "VALID", UUID.randomUUID(),
                 UUID.randomUUID(), 1L, ObservationStatus.ACTIVE,
                 TrendContextTestFixtures.ASSESSMENT_AT,
-                TrendContextTestFixtures.ASSESSMENT_AT.plusSeconds(3600), assessment, assessment));
+                TrendContextTestFixtures.ASSESSMENT_AT.plusSeconds(3600), assessment, assessment,
+                UUID.randomUUID(), List.of(UUID.randomUUID()), List.of(), Map.of()));
         MockMvc mvc = mvc(reads);
 
         mvc.perform(get("/api/v1/intelligence/trend-context/{marketId}", marketId)
@@ -50,7 +53,11 @@ class TrendContextControllerTest {
                 .andExpect(jsonPath("$.assessmentPresent").value(true))
                 .andExpect(jsonPath("$.assessmentValidity").value("VALID"))
                 .andExpect(jsonPath("$.assessment.direction").value(assessment.direction().name()))
-                .andExpect(jsonPath("$.assessment.timeframes").exists());
+                .andExpect(jsonPath("$.assessment.timeframes").exists())
+                .andExpect(jsonPath("$.analysisExecutionId").exists())
+                .andExpect(jsonPath("$.capabilityExecutionIds").isArray())
+                .andExpect(jsonPath("$.diagnostics").isArray())
+                .andExpect(jsonPath("$.sourceReferences").isMap());
         verify(reads).find(marketId);
     }
 

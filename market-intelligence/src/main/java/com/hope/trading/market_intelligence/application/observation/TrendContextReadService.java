@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -56,6 +58,11 @@ public class TrendContextReadService {
                 .map(value -> producedBy(latestObservation, value))
                 .orElse(false);
         String operationalStatus = operationalStatus(execution, valid, latestObservation, current);
+        var content = lastPayload == null ? null : lastPayload.content();
+        List<UUID> capabilityExecutionIds = latestObservation == null ? List.of()
+                : latestObservation.evidence().stream()
+                .map(value -> value.capabilityResult().capabilityExecutionId())
+                .distinct().toList();
         return new TrendContextReadModel(
                 marketId,
                 operationalStatus,
@@ -68,7 +75,11 @@ public class TrendContextReadService {
                 latestObservation == null ? null : latestObservation.validFrom(),
                 latestObservation == null ? null : latestObservation.validUntil().orElse(null),
                 current && lastPayload != null ? lastPayload.content().assessment() : null,
-                lastPayload == null ? null : lastPayload.content().assessment());
+                lastPayload == null ? null : lastPayload.content().assessment(),
+                current ? execution.map(AnalysisExecution::executionId).orElse(null) : null,
+                capabilityExecutionIds,
+                content == null ? List.of() : content.diagnostics(),
+                content == null ? Map.of() : content.sourceReferences());
     }
 
     private Optional<TrendContextObservationPayload> payload(Observation observation) {
@@ -115,8 +126,7 @@ public class TrendContextReadService {
         if (observation == null) {
             return "MISSING";
         }
-        return valid ? payload(observation)
-                .map(value -> value.content().operationalStatus()).orElse("UNAVAILABLE") : "STALE";
+        return valid ? "MISSING" : "STALE";
     }
 
     private String validity(Observation observation, Instant now, boolean current) {
