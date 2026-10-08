@@ -360,6 +360,38 @@ describe('ScanPanel', () => {
       ).toEqual(['m1', 'm2']);
     });
 
+    it('sorts the specific-market catalogue without changing selected scan ids', async () => {
+      marketServiceMock.findAll.mockReturnValue(of([markets[1], markets[0], markets[2]]));
+      activeScanServiceMock.resolveScope.mockReturnValue(
+        of({ decisions: [{ marketId: 'm2', eligible: true, reasons: [] }] }),
+      );
+      await createComponent();
+
+      fixture.nativeElement.querySelector('[data-testid="specific-scope"]').click();
+      await fixture.whenStable();
+
+      const options = Array.from(
+        fixture.nativeElement.querySelectorAll('[data-testid="market-select"] option'),
+      ) as HTMLOptionElement[];
+      expect(options.map((option) => option.textContent?.trim())).toEqual([
+        'BTC/EUR · KRAKEN',
+        'ETH/EUR · KRAKEN',
+      ]);
+
+      fixture.componentInstance.accountId = 'a1';
+      fixture.componentInstance.scopeMode = 'SPECIFIC';
+      fixture.componentInstance.selectedMarketIds = ['m2'];
+      fixture.componentInstance.runScan();
+      await fixture.whenStable();
+
+      expect(activeScanServiceMock.createScan).toHaveBeenCalledWith({
+        accountId: 'a1',
+        objective: undefined,
+        requestedMarketIds: ['m2'],
+        scopeMode: 'SELECTED',
+      }, expect.any(String));
+    });
+
     it('purges a selected market when a refresh marks it non-tradable', async () => {
       await createComponent();
       fixture.componentInstance.selectedMarketIds = ['m1', 'm3'];
