@@ -25,9 +25,10 @@ The implementation preserves the responsibility split:
 
 ## Validation Evidence
 
-* Focused Decision Workspace tests: `15` passed.
-* Angular full suite: `331` tests passed across `43` test files.
-* Angular coverage suite: `331` tests passed with `82.45%` line coverage.
+* Focused Decision Workspace tests after review fixes: `36` passed.
+* Angular full suite: `409` tests passed across `47` test files.
+* Angular coverage suite: previously `331` tests passed with `82.45%` line
+  coverage; coverage was not rerun after the review fixes.
 * Angular production build: succeeded with existing budget warnings.
 * Affected frontend Prettier check: passed.
 * `git diff --check`: passed.
@@ -38,11 +39,11 @@ The implementation preserves the responsibility split:
   backend/provider freshness authority.
 * Complete broker/instrument capability filtering remains dependent on Story
   `0051`.
-* No authenticated multi-account runtime walkthrough was available.
+* Authenticated multi-account runtime walkthrough completed with two disposable
+  PAPER accounts. Market Data streams returned explicit `UNAVAILABLE` states in
+  the local environment, while container logs confirmed subscription requests
+  and Kraken provider connection.
 
 ## Human Actions Required
 
-1. Review the account-scoped market contract and stream lifecycle.
-2. Validate the Workspace with at least two owned account contexts when
-   available.
-3. Confirm the existing bundle and stylesheet budget warnings are acceptable.
+1. Confirm the existing bundle and stylesheet budget warnings are acceptable.

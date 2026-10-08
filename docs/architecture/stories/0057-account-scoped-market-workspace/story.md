@@ -4,7 +4,7 @@
 
 **ID:** `0057`
 **Title:** Account-Scoped Market Workspace
-**Status:** IMPLEMENTATION_COMPLETE - HUMAN REVIEW PENDING
+**Status:** COMPLETED
 
 ---
 

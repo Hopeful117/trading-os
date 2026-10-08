@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION COMPLETE; AUTHENTICATED RUNTIME WALKTHROUGH PENDING`
+`COMPLETED - AUTOMATED AND AUTHENTICATED RUNTIME VALIDATION COMPLETE`
 
 ## Scope Delivered
 
@@ -19,11 +19,16 @@
 * Added focused account, URL, market, freshness, and stream-lifecycle tests.
 * Independent review corrected cleanup for URL-driven account changes and for
   removing `marketId`; both paths now unsubscribe active backend streams.
+* Follow-up review fixes now reject a market that is no longer tradable,
+  serialize replacement-stream cleanup across all four stream types, refresh
+  freshness while streams are silent, and prevent URL-driven account changes
+  from retaining the previous market.
 
 ## Validation
 
 * Focused Decision Workspace tests: `15` tests passed.
-* Angular full test suite: `331` tests passed across `43` test files.
+* Focused Decision Workspace tests after review fixes: `36` tests passed.
+* Angular full test suite: `409` tests passed across `47` test files.
 * Angular coverage suite: `331` tests passed with `82.45%` line coverage.
 * Angular production build succeeded.
 * Affected frontend Prettier check passed.
@@ -42,8 +47,22 @@ over its existing `4 kB` component budget.
   `0051` and is not invented by this Story.
 * No authenticated multi-account runtime walkthrough was available during this
   implementation.
-* Story closure remains blocked until the required multi-account runtime and
-  cross-account capability evidence is recorded.
+* Live payload delivery remains environment-dependent and was not observed in
+  this local walkthrough.
+
+## Runtime Validation
+
+* Registered and authenticated a disposable local E2E user through the product
+  journey.
+* Provisioned two PAPER accounts with the standard risk profile.
+* Resolved the account-scoped Decision Workspace for the first account.
+* Selected an eligible `AAVE/USD` market and confirmed the account/market URL
+  state and market facts rendering.
+* Changed to the second account and confirmed the URL retained `accountId` but
+  removed `marketId`; the previous market was not reselected.
+* Market Data exposed explicit `UNAVAILABLE` states for the four streams in the
+  local environment; container logs confirmed all four subscription requests
+  and the Kraken provider connection.
 
 ## Out Of Scope Confirmed
 

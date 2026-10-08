@@ -209,6 +209,14 @@
                   <p>The account context changed or the market is no longer available.</p>
                 </section>
               }
+              @case ('unavailable') {
+                <section class="state-card error" data-testid="market-unavailable">
+                  <h2>Market is not tradable</h2>
+                  <p>
+                    Market Data reports that this market is unavailable. No live stream was opened.
+                  </p>
+                </section>
+              }
               @case ('error') {
                 <section class="state-card error" data-testid="market-error">
                   <h2>Unable to load selected market</h2>
@@ -217,6 +225,7 @@
               }
               @case ('loaded') {
                 <section class="market-context" data-testid="market-context">
+                  <span hidden>{{ freshnessTick$ | async }}</span>
                   <header class="market-header">
                     <div>
                       <span class="eyebrow">Step 3 · Account-scoped market</span>
@@ -261,7 +270,9 @@
                               <span class="eyebrow">Analytical evidence</span>
                               <h3>Trend Context unavailable</h3>
                             </div>
-                             <span class="trend-context-authority">Not Risk approval / Not execution authorization</span>
+                            <span class="trend-context-authority"
+                              >Not Risk approval / Not execution authorization</span
+                            >
                           </div>
                           <p class="section-placeholder error">{{ trendContext.message }}</p>
                         </section>
@@ -273,10 +284,12 @@
                               <span class="eyebrow">Analytical evidence only</span>
                               <h3>Trend Context</h3>
                             </div>
-                           <span class="trend-context-authority">Not Risk approval / Not execution authorization</span>
+                            <span class="trend-context-authority"
+                              >Not Risk approval / Not execution authorization</span
+                            >
                           </div>
 
-                            <div class="trend-context-meta" data-testid="trend-context-status">
+                          <div class="trend-context-meta" data-testid="trend-context-status">
                             <span>Status: {{ trendContext.readModel.operationalStatus }}</span>
                             <span>Validity: {{ trendContext.readModel.assessmentValidity }}</span>
                             @if (trendContext.readModel.assessment) {
@@ -328,13 +341,21 @@
                                 <span>Lineage {{ trendContext.readModel.lineageId }}</span>
                               }
                               @if (trendContext.readModel.analysisExecutionId) {
-                                <span>Analysis {{ trendContext.readModel.analysisExecutionId }}</span>
+                                <span
+                                  >Analysis {{ trendContext.readModel.analysisExecutionId }}</span
+                                >
                               }
                               @if (trendContext.readModel.validFrom) {
-                                <span>Valid from {{ trendContext.readModel.validFrom | date: 'medium' }}</span>
+                                <span
+                                  >Valid from
+                                  {{ trendContext.readModel.validFrom | date: 'medium' }}</span
+                                >
                               }
                               @if (trendContext.readModel.validUntil) {
-                                <span>Valid until {{ trendContext.readModel.validUntil | date: 'medium' }}</span>
+                                <span
+                                  >Valid until
+                                  {{ trendContext.readModel.validUntil | date: 'medium' }}</span
+                                >
                               }
                             </div>
 
@@ -394,33 +415,44 @@
                                         }}</strong></span
                                       >
                                     </div>
-                                     <p class="trend-context-role-detail">
-                                       Structural break:
-                                       <strong>{{
-                                         roleAssessmentValue.structuralBreak.status
-                                       }}</strong>
-                                       · Confirmed swings: {{ roleAssessmentValue.swings.length }}
-                                     </p>
-                                     @if (roleAssessmentValue.protectedLevel; as protectedLevel) {
-                                       <p class="trend-context-role-detail">
-                                         Protected level:
-                                         <strong>{{ protectedLevel.type }} {{ protectedLevel.price }}</strong>
-                                       </p>
-                                     }
-                                     @if (roleAssessmentValue.levels.length > 0) {
-                                       <p class="trend-context-role-detail">
-                                         Structural levels:
-                                         @for (level of roleAssessmentValue.levels; track level.pivotTime) {
-                                           <span>{{ level.type }} {{ level.price }}</span>{{ $last ? '' : ', ' }}
-                                         }
-                                       </p>
-                                     }
-                                     @if (roleAssessmentValue.structuralBreak.evidence; as breakEvidence) {
-                                       <p class="trend-context-role-detail">
-                                         Break evidence: <strong>{{ breakEvidence.sourceIds.join(', ') }}</strong>
-                                       </p>
-                                     }
-                                   </article>
+                                    <p class="trend-context-role-detail">
+                                      Structural break:
+                                      <strong>{{
+                                        roleAssessmentValue.structuralBreak.status
+                                      }}</strong>
+                                      · Confirmed swings: {{ roleAssessmentValue.swings.length }}
+                                    </p>
+                                    @if (roleAssessmentValue.protectedLevel; as protectedLevel) {
+                                      <p class="trend-context-role-detail">
+                                        Protected level:
+                                        <strong
+                                          >{{ protectedLevel.type }}
+                                          {{ protectedLevel.price }}</strong
+                                        >
+                                      </p>
+                                    }
+                                    @if (roleAssessmentValue.levels.length > 0) {
+                                      <p class="trend-context-role-detail">
+                                        Structural levels:
+                                        @for (
+                                          level of roleAssessmentValue.levels;
+                                          track level.pivotTime
+                                        ) {
+                                          <span>{{ level.type }} {{ level.price }}</span
+                                          >{{ $last ? '' : ', ' }}
+                                        }
+                                      </p>
+                                    }
+                                    @if (
+                                      roleAssessmentValue.structuralBreak.evidence;
+                                      as breakEvidence
+                                    ) {
+                                      <p class="trend-context-role-detail">
+                                        Break evidence:
+                                        <strong>{{ breakEvidence.sourceIds.join(', ') }}</strong>
+                                      </p>
+                                    }
+                                  </article>
                                 } @else if (role === 'TRIGGER') {
                                   <article
                                     class="trend-context-role trend-context-role--unavailable"
@@ -510,7 +542,8 @@
                                       {{ valueOrUnavailable(invalidation.level) }} · thesis
                                       {{ invalidation.thesisDirection }}
                                       @if (invalidation.protectedLevel; as protectedLevel) {
-                                        · protected {{ protectedLevel.type }} {{ protectedLevel.price }}
+                                        · protected {{ protectedLevel.type }}
+                                        {{ protectedLevel.price }}
                                       }
                                       @if (invalidation.evidence; as invalidationEvidence) {
                                         · evidence {{ invalidationEvidence.sourceIds.join(', ') }}
@@ -522,26 +555,40 @@
                             }
 
                             @if (trendContext.readModel.diagnostics.length > 0) {
-                              <div class="trend-context-list" data-testid="trend-context-diagnostics">
+                              <div
+                                class="trend-context-list"
+                                data-testid="trend-context-diagnostics"
+                              >
                                 <h4>Diagnostics</h4>
                                 <ul>
-                                  @for (diagnostic of trendContext.readModel.diagnostics; track diagnostic) {
+                                  @for (
+                                    diagnostic of trendContext.readModel.diagnostics;
+                                    track diagnostic
+                                  ) {
                                     <li>{{ diagnostic }}</li>
                                   }
                                 </ul>
                               </div>
                             }
 
-                            @if (trendContext.readModel.sourceReferences | keyvalue; as references) {
+                            @if (
+                              trendContext.readModel.sourceReferences | keyvalue;
+                              as references
+                            ) {
                               @if (references.length > 0) {
-                                <div class="trend-context-list" data-testid="trend-context-source-references">
+                                <div
+                                  class="trend-context-list"
+                                  data-testid="trend-context-source-references"
+                                >
                                   <h4>Source references</h4>
                                   <ul>
                                     @for (reference of references; track reference.key) {
                                       <li>
                                         <strong>{{ reference.key }}</strong>
-                                        {{ reference.value.source }} · {{ reference.value.symbol }} ·
-                                        {{ reference.value.interval }} · {{ reference.value.contentDigest }}
+                                        {{ reference.value.source }} ·
+                                        {{ reference.value.symbol }} ·
+                                        {{ reference.value.interval }} ·
+                                        {{ reference.value.contentDigest }}
                                       </li>
                                     }
                                   </ul>
@@ -579,8 +626,15 @@
                                 {{ historical.attention }} ·
                                 {{ historical.assessmentAt | date: 'medium' }}
                               </p>
-                              <div class="trend-context-meta" data-testid="trend-context-historical-provenance">
-                                <span>Profile {{ historical.profileId }} v{{ historical.profileVersion }}</span>
+                              <div
+                                class="trend-context-meta"
+                                data-testid="trend-context-historical-provenance"
+                              >
+                                <span
+                                  >Profile {{ historical.profileId }} v{{
+                                    historical.profileVersion
+                                  }}</span
+                                >
                                 <span>Rules {{ historical.ruleVersion }}</span>
                                 <span>Cut-off {{ historical.cutOffAt | date: 'medium' }}</span>
                                 <span>Assessment {{ historical.fingerprint }}</span>
@@ -721,8 +775,8 @@
                           @for (timeframe of ohlcIntervals; track timeframe.minutes) {
                             <button
                               type="button"
-                               [class.active]="selectedTimeframe.minutes === timeframe.minutes"
-                               [attr.aria-pressed]="selectedTimeframe.minutes === timeframe.minutes"
+                              [class.active]="selectedTimeframe.minutes === timeframe.minutes"
+                              [attr.aria-pressed]="selectedTimeframe.minutes === timeframe.minutes"
                               (click)="selectOhlcInterval(timeframe)"
                             >
                               {{ timeframe.label }}
@@ -768,8 +822,8 @@
                             @for (depth of orderBookDepths; track depth) {
                               <button
                                 type="button"
-                                 [class.active]="selectedDepth === depth"
-                                 [attr.aria-pressed]="selectedDepth === depth"
+                                [class.active]="selectedDepth === depth"
+                                [attr.aria-pressed]="selectedDepth === depth"
                                 (click)="selectOrderBookDepth(depth)"
                               >
                                 {{ depth }} levels

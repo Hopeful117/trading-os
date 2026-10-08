@@ -28,8 +28,9 @@ The implementation preserves the existing responsibility split:
 * Explicit account, context, empty, and error states: implemented and tested.
 * Existing Active Scan behavior: preserved and covered by the full Market
   Intelligence suite.
-* Complete broker/instrument account-specific market differentiation: consumed
-  from Story `0051`; unavailable or stale facts fail closed.
+* Broker/instrument account-specific market differentiation: implemented through
+  Story `0051`; unavailable or stale facts fail closed. Authenticated runtime
+  walkthrough across multiple accounts remains pending.
 
 ## Validation Evidence
 
@@ -38,16 +39,16 @@ The implementation preserves the existing responsibility split:
 * `npm run build` in `trading-os-web`: succeeded with existing budget warnings.
 * Targeted backend account-context tests: `6` passed.
 * Targeted frontend account-context tests: `6` passed.
-* Trading Core capability query tests: `2` passed.
-* Market Intelligence capability eligibility tests: `2` passed.
+* Trading Core capability query tests: `3` passed.
+* Market Intelligence capability eligibility tests: `3` passed.
 * Prettier check passed for Story 0056 frontend files.
 * `git diff --check` passed.
 
 ## Git State
 
 ```text
-BRANCH = story/0056-account-first-market-decision-context
-IMPLEMENTATION_COMMIT = 58c95e2
+BRANCH = chore/debt-resolution
+IMPLEMENTATION_COMMIT = 1d6ef55
 PUSH = NO
 MERGE = NO
 ```

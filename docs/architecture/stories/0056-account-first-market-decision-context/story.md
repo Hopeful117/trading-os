@@ -148,8 +148,9 @@ rules.
 * [x] Account loading failure, account-not-found, context-resolution failure,
       and no-eligible-market states are rendered distinctly and without
       fabricated data.
-* [ ] Cross-account tests prove that account ownership and eligibility are not
-      derived from caller-provided frontend state.
+* [ ] Cross-account runtime tests prove that account ownership and eligibility
+      are not derived from caller-provided frontend state. Backend negative
+      coverage exists; authenticated multi-account walkthrough remains pending.
 * [x] Existing Active Scan behavior remains unchanged unless the implementation
       explicitly reuses a compatible shared application service without
       changing its contract.

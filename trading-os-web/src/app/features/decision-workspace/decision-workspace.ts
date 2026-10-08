@@ -7,6 +7,7 @@ import {
   catchError,
   combineLatest,
   distinctUntilChanged,
+  forkJoin,
   map,
   Observable,
   of,
@@ -15,6 +16,7 @@ import {
   Subject,
   switchMap,
   tap,
+  timer,
 } from 'rxjs';
 
 import { Account } from '../../core/models/account.model';
@@ -62,6 +64,7 @@ export type DecisionWorkspaceMarketView =
   | { status: 'none' }
   | { status: 'loading' }
   | { status: 'ineligible' }
+  | { status: 'unavailable' }
   | { status: 'loaded'; market: MarketResponse }
   | { status: 'error' };
 
@@ -168,6 +171,10 @@ export class DecisionWorkspace {
   readonly orderBookDepths = ORDER_BOOK_DEPTHS;
   private readonly chartResetSubject = new BehaviorSubject<number>(0);
   readonly chartReset$ = this.chartResetSubject.asObservable();
+  readonly freshnessTick$ = timer(0, 1000).pipe(
+    map(() => true),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
 
   readonly marketView$ = combineLatest([this.context$, this.selectedMarketSubject]).pipe(
     switchMap(([contextView, marketId]) => {
@@ -180,7 +187,11 @@ export class DecisionWorkspace {
       }
 
       return this.marketService.findById(marketId).pipe(
-        map((market) => ({ status: 'loaded' as const, market })),
+        map((market) =>
+          market.marketState.tradable
+            ? { status: 'loaded' as const, market }
+            : { status: 'unavailable' as const },
+        ),
         catchError(() => of<DecisionWorkspaceMarketView>({ status: 'error' })),
         startWith<DecisionWorkspaceMarketView>({ status: 'loading' }),
       );
@@ -198,7 +209,11 @@ export class DecisionWorkspace {
         return of<DecisionWorkspaceTrendContextView>({ status: 'loading' });
       }
 
-      if (marketView.status === 'none' || marketView.status === 'ineligible') {
+      if (
+        marketView.status === 'none' ||
+        marketView.status === 'ineligible' ||
+        marketView.status === 'unavailable'
+      ) {
         return of<DecisionWorkspaceTrendContextView>({ status: 'none' });
       }
 
@@ -232,7 +247,7 @@ export class DecisionWorkspace {
     distinctUntilChanged((previous, current) => previous?.marketId === current?.marketId),
     tap((market) => {
       if (market === null) {
-        this.clearActiveSubscriptions();
+        this.clearActiveSubscriptions().subscribe();
       }
     }),
     shareReplay({ bufferSize: 1, refCount: true }),
@@ -307,27 +322,30 @@ export class DecisionWorkspace {
       }
 
       if (accountId !== this.selectedAccountId) {
-        this.clearActiveSubscriptions();
+        const marketToRestore = this.selectedAccountId === null ? marketId : null;
         this.selectedAccountId = accountId;
         this.selectedMarketId = null;
         this.manualTradeOpen = false;
-        this.selectedMarketSubject.next(null);
-        this.selectedAccountSubject.next(accountId);
+        this.clearActiveSubscriptions().subscribe(() => {
+          this.selectedMarketSubject.next(null);
+          this.selectedAccountSubject.next(accountId);
+          if (marketToRestore !== null) {
+            this.selectedMarketId = marketToRestore;
+            this.selectedMarketSubject.next(marketToRestore);
+          }
+        });
+        return;
       }
 
       if (marketId !== this.selectedMarketId) {
         this.selectedMarketId = marketId;
         this.manualTradeOpen = false;
-        this.clearActiveSubscriptions();
-        this.selectedMarketSubject.next(marketId);
+        this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
       }
     });
 
     this.destroyRef.onDestroy(() => {
-      this.unsubscribeActive(this.activeTickerSubscription);
-      this.unsubscribeActive(this.activeOhlcSubscription);
-      this.unsubscribeActive(this.activeOrderBookSubscription);
-      this.unsubscribeActive(this.activeRecentTradesSubscription);
+      this.clearActiveSubscriptions().subscribe();
     });
   }
 
@@ -337,8 +355,10 @@ export class DecisionWorkspace {
     this.manualTradeOpen = false;
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
-    this.selectedMarketSubject.next(null);
-    this.selectedAccountSubject.next(accountId || null);
+    this.clearActiveSubscriptions().subscribe(() => {
+      this.selectedMarketSubject.next(null);
+      this.selectedAccountSubject.next(accountId || null);
+    });
     void this.router.navigate([], {
       queryParams: { accountId: accountId || null, marketId: null },
       queryParamsHandling: 'merge',
@@ -351,8 +371,10 @@ export class DecisionWorkspace {
     this.manualTradeOpen = false;
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
-    this.selectedMarketSubject.next(null);
-    this.selectedAccountSubject.next(null);
+    this.clearActiveSubscriptions().subscribe(() => {
+      this.selectedMarketSubject.next(null);
+      this.selectedAccountSubject.next(null);
+    });
     void this.router.navigate([], {
       queryParams: { accountId: null, marketId: null },
       queryParamsHandling: 'merge',
@@ -367,8 +389,7 @@ export class DecisionWorkspace {
 
     this.selectedMarketId = marketId;
     this.manualTradeOpen = false;
-    this.clearActiveSubscriptions();
-    this.selectedMarketSubject.next(marketId);
+    this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
     void this.router.navigate([], {
       queryParams: { marketId },
       queryParamsHandling: 'merge',
@@ -597,25 +618,29 @@ export class DecisionWorkspace {
       .pipe(catchError(() => of(undefined)));
   }
 
-  private unsubscribeActive(subscription: ActiveSubscription | null): void {
-    if (subscription === null) {
-      return;
-    }
+  private clearActiveSubscriptions(): Observable<void> {
+    const activeSubscriptions = [
+      this.activeTickerSubscription,
+      this.activeOhlcSubscription,
+      this.activeOrderBookSubscription,
+      this.activeRecentTradesSubscription,
+    ].filter((subscription): subscription is ActiveSubscription => subscription !== null);
 
-    this.marketService.unsubscribe(subscription.marketId, subscription.request).subscribe({
-      error: () => undefined,
-    });
-  }
+    const cleanup$ =
+      activeSubscriptions.length === 0
+        ? of(undefined)
+        : forkJoin(
+            activeSubscriptions.map((subscription) => this.unsubscribePrevious(subscription)),
+          ).pipe(map(() => undefined));
 
-  private clearActiveSubscriptions(): void {
-    this.unsubscribeActive(this.activeTickerSubscription);
-    this.unsubscribeActive(this.activeOhlcSubscription);
-    this.unsubscribeActive(this.activeOrderBookSubscription);
-    this.unsubscribeActive(this.activeRecentTradesSubscription);
-    this.activeTickerSubscription = null;
-    this.activeOhlcSubscription = null;
-    this.activeOrderBookSubscription = null;
-    this.activeRecentTradesSubscription = null;
+    return cleanup$.pipe(
+      tap(() => {
+        this.activeTickerSubscription = null;
+        this.activeOhlcSubscription = null;
+        this.activeOrderBookSubscription = null;
+        this.activeRecentTradesSubscription = null;
+      }),
+    );
   }
 }
 

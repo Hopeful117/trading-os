@@ -24,22 +24,29 @@ No confirmed implementation defect was found in the delivered Story scope.
 
 ## Independent Review Follow-up
 
-The review found and corrected URL-driven stream cleanup: account changes and
-removal of `marketId` now unsubscribe active backend streams. The Story remains
-open because the required authenticated multi-account walkthrough and
-cross-account capability evidence are still missing.
+The review findings were corrected and covered by focused tests:
+
+* non-tradable markets are rejected before stream activation;
+* replacement cleanup waits for all four stream types;
+* freshness is periodically projected while streams are silent;
+* URL-driven account changes clear the previous market before resolving the new
+  account context.
+
+An authenticated multi-account walkthrough was then completed with two local
+PAPER accounts. The previous market was removed from URL state after switching
+accounts and was not reselected.
 
 ## Known Risks
 
 * Freshness thresholds are frontend display semantics and must not be treated as
   provider authority.
 * Complete broker/instrument compatibility remains dependent on Story `0051`.
-* Runtime validation with multiple accounts and live streams remains pending.
+* The local runtime returned explicit unavailable states for market streams;
+  subscription requests and the Kraken provider connection were confirmed in
+  Market Data logs, but usable live payload delivery was not observed.
 * The Decision Workspace stylesheet exceeds the existing component budget by a
   small amount; the build still succeeds.
 
 ## Human Review Required
 
-* Validate account switching and stream cleanup in the running application.
-* Confirm the intended freshness thresholds and UI presentation.
 * Review the stylesheet budget warning before final integration.
