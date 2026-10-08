@@ -6,11 +6,12 @@ import java.util.Objects;
 
 public record TrendContextEvidenceReference(
         TrendContextRole role, String interval, String ruleId, String ruleVersion,
-        String profileVersion, String inputFingerprint, Instant cutOffAt,
+        String profileId, String profileVersion, String inputFingerprint, Instant cutOffAt,
         List<String> sourceIds, Instant from, Instant to, String key) {
     public TrendContextEvidenceReference {
         Objects.requireNonNull(role); Objects.requireNonNull(interval);
         Objects.requireNonNull(ruleId); Objects.requireNonNull(ruleVersion);
+        profileId = profileId == null ? "UNKNOWN" : profileId;
         Objects.requireNonNull(profileVersion); Objects.requireNonNull(inputFingerprint);
         Objects.requireNonNull(cutOffAt); sourceIds = List.copyOf(sourceIds == null ? List.of() : sourceIds);
         Objects.requireNonNull(key);

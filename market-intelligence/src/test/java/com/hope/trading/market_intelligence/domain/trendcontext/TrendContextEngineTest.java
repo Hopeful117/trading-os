@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.domain.trendcontext;
 
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -31,6 +32,7 @@ class TrendContextEngineTest {
         assertThat(setup.lowRelation()).isEqualTo(SwingRelation.HL);
         assertThat(setup.protectedLevel()).isNotNull();
         assertThat(setup.protectedLevel().price()).isEqualByComparingTo("90");
+        assertThat(setup.evidence().getFirst().profileId()).isEqualTo("CONSERVATIVE_SWING_V1");
         assertThat(setup.atr().available()).isTrue();
         assertThat(setup.ema().available()).isTrue();
     }
@@ -102,6 +104,35 @@ class TrendContextEngineTest {
         assertThat(first.fingerprint()).isEqualTo(first.assessmentFingerprint());
     }
 
+    @Test
+    void missingRequiredStructureProducesSafeUnknownAssessment() {
+        TrendContextAssessment assessment = new TrendContextEngine().assess(input(false, false, false, 80), null);
+
+        assertThat(assessment.attention()).isEqualTo(TrendAttention.UNKNOWN);
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("REQUIRED_ROLE_MISSING");
+    }
+
+    @Test
+    void structureWithFutureCutoffIsRejected() {
+        TrendContextAssessmentInput input = input(false, false, false, 80);
+        Map<TrendContextRole, MarketStructureResult> structures =
+                new EnumMap<>(TrendContextStructureFixtures.structures(input));
+        MarketStructureResult setup = structures.get(TrendContextRole.SETUP);
+        structures.put(TrendContextRole.SETUP, new MarketStructureResult(
+                setup.marketId(), setup.provider(), setup.symbol(), setup.interval(),
+                ASSESSMENT.plusSeconds(1), setup.algorithmId(), setup.ruleVersion(), setup.policyId(),
+                setup.policyVersion(), setup.parameterFingerprint(), setup.inputFingerprint(),
+                setup.availability(), setup.findings(), setup.retained(), setup.all(), setup.relations(),
+                setup.resultFingerprint()));
+
+        TrendContextAssessment assessment = new TrendContextEngine().assess(input, structures);
+
+        assertThat(assessment.attention()).isEqualTo(TrendAttention.UNKNOWN);
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("INVALID_STRUCTURE");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"UP", "DOWN", "PULLBACK", "EXTENDED", "TRANSITION", "WICK", "EQUAL", "CONFLICT"})
     void canonicalScenarioFamiliesRemainTypedAndScoreless(String scenario) {
@@ -120,15 +151,23 @@ class TrendContextEngineTest {
     }
 
     private TrendContextAssessment assess(boolean equalHigh, boolean wick, boolean breakClose, int count, boolean excluded, boolean future) {
+        return TrendContextStructureFixtures.assess(input(equalHigh, wick, breakClose, count, excluded, future));
+    }
+
+    private TrendContextAssessmentInput input(boolean equalHigh, boolean wick, boolean breakClose, int count) {
+        return input(equalHigh, wick, breakClose, count, false, false);
+    }
+
+    private TrendContextAssessmentInput input(boolean equalHigh, boolean wick, boolean breakClose,
+                                              int count, boolean excluded, boolean future) {
         TrendContextProfile profile = profile();
         List<TrendContextCandle> candles = candles("SETUP", "1H", count, equalHigh, wick, breakClose, excluded, future);
         Map<TrendContextRole, TrendContextRoleSeries> roles = new EnumMap<>(TrendContextRole.class);
         roles.put(TrendContextRole.BIAS, series(TrendContextRole.BIAS, "4H", candles("BIAS", "4H", count, equalHigh, false, false, false, false)));
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP, "1H", candles));
-        TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(
+        return TrendContextAssessmentInput.accept(
                 new TrendContextAssessmentInput.Values(MARKET, "KRAKEN", "BTC/EUR",
                          ASSESSMENT, ASSESSMENT.minusNanos(1), profile, "rules-1", roles));
-        return TrendContextStructureFixtures.assess(input);
     }
 
     private TrendContextProfile profile() {

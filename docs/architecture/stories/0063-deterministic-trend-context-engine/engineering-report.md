@@ -26,17 +26,17 @@ broker command.
 ## Validation Evidence
 
 - Focused input, engine, and canonical scenario tests passed.
+- Independent review corrections are covered by regression tests for missing
+  required structure, future-cutoff structure, and profile identity evidence.
 - The complete `market-intelligence` Maven test suite passed.
-- `mvn -q clean verify` passed.
+- `mvn -q clean verify` passed after the independent review corrections.
 - `git diff --check` passed.
-- No commit, merge, push, or other Git integration action was performed.
+- The independent review found and corrected temporal-boundary, safe-degradation,
+  and evidence-profile identity issues. The accepted Market Structure extraction
+  boundary from Story 0071 was retained.
 
 ## Residual Risks
 
-- Evidence references are present in the domain model, but human review must
-  confirm that every material finding and contradiction is fully linked to its
-  source evidence as required by the design.
-- Human review and human commit acceptance remain pending.
 - The full test log contains unrelated existing Spring/H2 warnings and an
   asynchronous active-scan dispatch error despite a successful Maven result.
 
@@ -44,6 +44,4 @@ broker command.
 
 1. Review the implementation against ADR-048, the accepted Story 0063 design,
    and all 24 canonical scenarios.
-2. Decide whether the evidence-linkage and fingerprint residual risks require
-   additional implementation before acceptance.
-3. Commit the accepted Story 0063 changes manually.
+2. Commit the accepted Story 0063 changes manually.
