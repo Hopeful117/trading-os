@@ -567,6 +567,9 @@ describe('DecisionWorkspace', () => {
     expect(
       element.querySelector('[data-testid="trend-context-historical"]')?.textContent,
     ).toContain('NO_SETUP');
+    expect(
+      element.querySelector('[data-testid="trend-context-historical-provenance"]')?.textContent,
+    ).toContain('Profile');
   });
 
   it.each([
@@ -633,6 +636,7 @@ describe('DecisionWorkspace', () => {
     expect(component.manualTradeOpen).toBe(true);
     expect(element.textContent).toContain('Analytical evidence only');
     expect(element.textContent).toContain('Not Risk approval');
+    expect(element.textContent).toContain('Not execution authorization');
     expect(element.textContent).toContain('No optional trigger assessment was provided.');
   });
 });

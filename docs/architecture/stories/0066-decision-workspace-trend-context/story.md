@@ -6,7 +6,7 @@
 
 **Title:** Project Trend Context in the Decision Workspace
 
-**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
+**Status:** CLOSED - HUMAN ACCEPTED
 
 **Size:** MEDIUM
 

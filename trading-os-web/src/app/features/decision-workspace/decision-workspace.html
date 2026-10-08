@@ -141,6 +141,7 @@
                       type="button"
                       class="market-option"
                       [class.selected]="selectedMarketId === market.marketId"
+                      [attr.aria-pressed]="selectedMarketId === market.marketId"
                       (click)="selectMarket(market.marketId, view.context)"
                     >
                       <strong>{{ market.symbol ?? market.marketId }}</strong>
@@ -260,7 +261,7 @@
                               <span class="eyebrow">Analytical evidence</span>
                               <h3>Trend Context unavailable</h3>
                             </div>
-                            <span class="trend-context-authority">Not Risk approval</span>
+                             <span class="trend-context-authority">Not Risk approval / Not execution authorization</span>
                           </div>
                           <p class="section-placeholder error">{{ trendContext.message }}</p>
                         </section>
@@ -272,7 +273,7 @@
                               <span class="eyebrow">Analytical evidence only</span>
                               <h3>Trend Context</h3>
                             </div>
-                            <span class="trend-context-authority">Not Risk approval</span>
+                           <span class="trend-context-authority">Not Risk approval / Not execution authorization</span>
                           </div>
 
                             <div class="trend-context-meta" data-testid="trend-context-status">
@@ -578,6 +579,12 @@
                                 {{ historical.attention }} ·
                                 {{ historical.assessmentAt | date: 'medium' }}
                               </p>
+                              <div class="trend-context-meta" data-testid="trend-context-historical-provenance">
+                                <span>Profile {{ historical.profileId }} v{{ historical.profileVersion }}</span>
+                                <span>Rules {{ historical.ruleVersion }}</span>
+                                <span>Cut-off {{ historical.cutOffAt | date: 'medium' }}</span>
+                                <span>Assessment {{ historical.fingerprint }}</span>
+                              </div>
                             </div>
                           } @else {
                             <p
@@ -714,7 +721,8 @@
                           @for (timeframe of ohlcIntervals; track timeframe.minutes) {
                             <button
                               type="button"
-                              [class.active]="selectedTimeframe.minutes === timeframe.minutes"
+                               [class.active]="selectedTimeframe.minutes === timeframe.minutes"
+                               [attr.aria-pressed]="selectedTimeframe.minutes === timeframe.minutes"
                               (click)="selectOhlcInterval(timeframe)"
                             >
                               {{ timeframe.label }}
@@ -760,7 +768,8 @@
                             @for (depth of orderBookDepths; track depth) {
                               <button
                                 type="button"
-                                [class.active]="selectedDepth === depth"
+                                 [class.active]="selectedDepth === depth"
+                                 [attr.aria-pressed]="selectedDepth === depth"
                                 (click)="selectOrderBookDepth(depth)"
                               >
                                 {{ depth }} levels
