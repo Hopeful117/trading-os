@@ -4,7 +4,7 @@
 
 **ID:** `0068`
 **Title:** User Market Discovery V1
-**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
+**Status:** CLOSED - HUMAN ACCEPTED
 **Size:** MEDIUM
 **Implementation Risk:** MEDIUM
 

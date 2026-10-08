@@ -88,7 +88,7 @@ export class Markets {
 
   private uniqueValues(values: readonly (string | null | undefined)[]): string[] {
     return [...new Set(values.filter((value): value is string => Boolean(value)))].sort((a, b) =>
-      a.localeCompare(b),
+      a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0,
     );
   }
 }
