@@ -21,6 +21,7 @@ import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.model.Account;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -237,8 +238,15 @@ class ExecutionTimeRiskRevalidationServiceTest {
             List<MarketValuationPort.Asset> assets = invocation.getArgument(3);
             List<MarketValuationPort.Fact> valuationFacts = new ArrayList<>();
             assets.forEach(asset -> valuationFacts.add(new MarketValuationPort.Fact(
-                    "ASSET", asset.id(), null, asset.currency(), null, BigDecimal.ONE, null, BigDecimal.ONE,
+                    "ASSET", asset.id(), null, asset.currency(), null,
+                    "EUR".equals(asset.currency()) ? new BigDecimal("1.2") : BigDecimal.ONE,
+                    null, BigDecimal.ONE,
                     "AVAILABLE", "identity")));
+            if (assets.stream().noneMatch(asset -> "EUR".equals(asset.currency()))) {
+                valuationFacts.add(new MarketValuationPort.Fact(
+                        "ASSET", "EUR", null, "EUR", null, new BigDecimal("1.2"), null, BigDecimal.ONE,
+                        "AVAILABLE", "identity"));
+            }
             instruments.forEach(instrument -> valuationFacts.add(new MarketValuationPort.Fact(
                     "INSTRUMENT", instrument.id(), UUID.randomUUID(), null, instrument.priceUse(),
                     new BigDecimal("50000"), new BigDecimal("50000"), BigDecimal.ONE,
@@ -247,7 +255,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
                     "policy", "PT5M", true, valuationFacts, "valuation");
         });
         when(requiredMargins.resolve(any())).thenReturn(Optional.of(
-                new RequiredMarginPort.Fact(BigDecimal.ONE, "USD", "paper-margin", 1, now)));
+                new RequiredMarginPort.Fact(BigDecimal.ONE, "EUR", "paper-margin", 1, now)));
         when(persistence.baseline(any(), any(), any(), any(), any(), any(), any())).thenReturn(
                 new RiskPersistence.Baseline(1, new BigDecimal("10000"), "USD",
                         Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), 1, "baseline"));
@@ -262,6 +270,15 @@ class ExecutionTimeRiskRevalidationServiceTest {
 
         assertThat(outcome.approved()).as("decision=%s reason=%s", outcome.decision(), outcome.reasonCode()).isTrue();
         assertThat(outcome.decision()).isEqualTo(com.hope.trading.risk.domain.RiskTypes.RiskDecision.APPROVED);
+        ArgumentCaptor<List> valuationAssets = ArgumentCaptor.forClass(List.class);
+        verify(market, atLeastOnce()).value(any(), any(), any(), valuationAssets.capture());
+        assertThat(valuationAssets.getAllValues()).anyMatch(assets -> assets.stream()
+                .anyMatch(asset -> "EUR".equals(((MarketValuationPort.Asset) asset).currency())));
+        ArgumentCaptor<Object> writes = ArgumentCaptor.forClass(Object.class);
+        verify(persistence, atLeastOnce()).write(writes.capture());
+        assertThat(writes.getAllValues()).anyMatch(value -> value instanceof Map<?, ?> payload
+                && payload.get("request") instanceof com.hope.trading.risk.domain.RiskEvaluationRequest request
+                && request.proposedTrade().marginRequired().amount().compareTo(new BigDecimal("1.2")) == 0);
         verify(persistence).t1Evaluation(any(), eq(intent.id().value()), eq(evaluationId), eq(accountId),
                 any(), eq("COMPLETED"), eq("APPROVED"), isNull(), eq(1), any(), any(), any());
     }
@@ -343,13 +360,13 @@ class ExecutionTimeRiskRevalidationServiceTest {
         Instant observedAt = now.minusSeconds(1);
         RequiredMarginPort.Fact margin = new RequiredMarginPort.Fact(
                 BigDecimal.TEN, "USD", "broker-margin", 1, observedAt);
-        assertThat(invoke("authoritativeMargin",
-                new Class<?>[]{RequiredMarginPort.Fact.class, String.class, Instant.class}, margin, "USD", now))
-                .isEqualTo(BigDecimal.TEN);
-        assertThatThrownBy(() -> invoke("authoritativeMargin",
-                new Class<?>[]{RequiredMarginPort.Fact.class, String.class, Instant.class},
-                new RequiredMarginPort.Fact(BigDecimal.ZERO, "USD", "broker-margin", 1, observedAt), "USD", now))
-                .hasMessage("REQUIRED_MARGIN_INVALID");
+        MarketValuationPort.Snapshot marginValuation = new MarketValuationPort.Snapshot(
+                UUID.randomUUID(), 1, "USD", now, now, "policy", "PT30S", true, List.of(), "payload");
+        assertThat(com.hope.trading.trading_core.risk.application.RequiredMarginCurrencyNormalizer.normalize(
+                margin, "USD", marginValuation, now)).contains(BigDecimal.TEN);
+        assertThat(com.hope.trading.trading_core.risk.application.RequiredMarginCurrencyNormalizer.normalize(
+                new RequiredMarginPort.Fact(BigDecimal.ZERO, "USD", "broker-margin", 1, observedAt),
+                "USD", marginValuation, now)).isEmpty();
 
         MarketValuationPort.Fact asset = new MarketValuationPort.Fact(
                 "ASSET", "usd", null, "USD", null, BigDecimal.ONE, null, null, "AVAILABLE", "source");

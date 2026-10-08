@@ -24,6 +24,7 @@ import com.hope.trading.risk.snapshot.TradingContext;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.risk.application.RiskDay;
+import com.hope.trading.trading_core.risk.application.RequiredMarginCurrencyNormalizer;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Command;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Reason;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Response;
@@ -243,11 +244,22 @@ public class ExecutionTimeRiskRevalidationService {
                 .findFirst()
                 .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
         Instant marginObservedAt = clock.instant();
-        RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
-                        brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                        marginPrice, marginObservedAt))
+         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
+                         brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
+                         marginPrice, marginObservedAt))
                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
-        BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, clock.instant());
+         if (marginFact.currency() == null || marginFact.currency().isBlank()) {
+             throw unavailable("REQUIRED_MARGIN_INVALID");
+         }
+         if (!currency.equalsIgnoreCase(marginFact.currency())
+                 && currentAssets.stream().noneMatch(asset -> asset.equalsIgnoreCase(marginFact.currency()))) {
+             currentAssets.add(marginFact.currency());
+             current = market.value(currency, brokerSnapshot.observedAt(), instruments,
+                     currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList());
+             requireComplete(current, "CURRENT_MARKET_VALUATION_UNAVAILABLE");
+         }
+         BigDecimal requiredMargin = RequiredMarginCurrencyNormalizer.normalize(marginFact, currency, current, clock.instant())
+                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_INVALID"));
 
         var executionParams = intent.parameters();
         ProposedTrade proposed = new ProposedTrade(plan.tradePlanId(), plan.tradePlanVersion(), plan.instrument(),
@@ -595,20 +607,12 @@ public class ExecutionTimeRiskRevalidationService {
     private static BigDecimal positiveOrZero(BigDecimal value, String code) {
         if (value == null || value.signum() < 0) throw unavailable(code); return value;
     }
-    private static BigDecimal authoritativeMargin(RequiredMarginPort.Fact fact, String currency, Instant asOf) {
-        if (fact.amount() == null || fact.amount().signum() <= 0 || blank(fact.currency())
-                || !normalizedCurrency(fact.currency()).equals(normalizedCurrency(currency))
-                || blank(fact.sourceId()) || fact.sourceVersion() < 1 || fact.observedAt() == null
-                || fact.observedAt().isAfter(asOf)) {
-            throw unavailable("REQUIRED_MARGIN_INVALID");
-        }
-        return fact.amount();
-    }
-    private static String normalizedCurrency(String value) {
-        return value.strip().toUpperCase(java.util.Locale.ROOT);
-    }
     private static boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static String normalizedCurrency(String value) {
+        return value.strip().toUpperCase(java.util.Locale.ROOT);
     }
 
     private static final class ContextUnavailable extends RuntimeException {

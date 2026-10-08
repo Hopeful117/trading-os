@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.atLeastOnce;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
@@ -38,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
@@ -190,6 +192,29 @@ class TradePlanRiskEvaluationServiceTest {
         assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
         assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
                 .containsExactly("REQUIRED_MARGIN_UNAVAILABLE");
+    }
+
+    @Test
+    void convertsRequiredMarginBeforeRiskEvaluation() {
+        availableContext(List.of());
+        when(requiredMargins.resolve(any())).thenReturn(Optional.of(new RequiredMarginPort.Fact(
+                new BigDecimal("100"), "EUR", "broker-margin-quote", 7, now)));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.approved()).isTrue();
+
+        ArgumentCaptor<List> valuationAssets = ArgumentCaptor.forClass(List.class);
+        verify(market, atLeastOnce()).value(any(), any(), any(), valuationAssets.capture());
+        assertThat(valuationAssets.getAllValues()).anyMatch(assets -> assets.stream()
+                .anyMatch(asset -> "EUR".equals(((MarketValuationPort.Asset) asset).currency())));
+
+        ArgumentCaptor<Object> writes = ArgumentCaptor.forClass(Object.class);
+        verify(persistence, atLeastOnce()).write(writes.capture());
+        assertThat(writes.getAllValues()).anyMatch(value -> value instanceof Map<?, ?> payload
+                && payload.get("request") instanceof com.hope.trading.risk.domain.RiskEvaluationRequest request
+                && request.proposedTrade().marginRequired().amount().compareTo(new BigDecimal("120")) == 0);
     }
 
     @Test
@@ -480,6 +505,10 @@ class TradePlanRiskEvaluationServiceTest {
         requestedAssets.forEach(asset -> facts.add(new MarketValuationPort.Fact("ASSET", asset.id(), null,
                 asset.currency(), null, "EUR".equals(asset.currency()) ? new BigDecimal("1.2") : BigDecimal.ONE,
                 null, null, "AVAILABLE", "identity")));
+        if (requestedAssets.stream().noneMatch(asset -> "EUR".equals(asset.currency()))) {
+            facts.add(new MarketValuationPort.Fact("ASSET", "EUR", null, "EUR", null,
+                    new BigDecimal("1.2"), null, null, "AVAILABLE", "identity"));
+        }
         requestedInstruments.forEach(instrument -> facts.add(new MarketValuationPort.Fact("INSTRUMENT",
                 instrument.id(), UUID.randomUUID(), null, instrument.priceUse(), new BigDecimal("100"),
                 new BigDecimal("100"), BigDecimal.ONE, "AVAILABLE", "observation")));
