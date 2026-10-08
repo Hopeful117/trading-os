@@ -4,7 +4,7 @@
 
 **ID:** `0061`
 **Title:** Validate the MANUAL PAPER Daily Driver
-**Status:** IMPLEMENTED - HUMAN REVIEW REQUIRED
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 
@@ -97,38 +97,38 @@ HTTP calls, fabricated identifiers or a workaround around Risk.
 
 ## Acceptance Criteria
 
-* [ ] A reviewed Decision Workspace lets an authenticated user select a PAPER
+* [x] A reviewed Decision Workspace lets an authenticated user select a PAPER
       account and an eligible market without copying identifiers.
-* [ ] The user can inspect the selected market's existing ticker, OHLC, order
+* [x] The user can inspect the selected market's existing ticker, OHLC, order
       book, recent trades, market state and freshness states.
-* [ ] The normal UI creates a persisted TradePlan whose origin is `MANUAL`, with
+* [x] The normal UI creates a persisted TradePlan whose origin is `MANUAL`, with
       the selected account and market and no synthetic Opportunity.
-* [ ] The user can accept the MANUAL plan through the existing TradePlan
+* [x] The user can accept the MANUAL plan through the existing TradePlan
       lifecycle.
-* [ ] The existing deterministic Risk pipeline produces an explicit approved,
+* [x] The existing deterministic Risk pipeline produces an explicit approved,
       rejected or unavailable verdict for the MANUAL plan.
-* [ ] Account ownership, planning context, market facts and Risk facts remain
+* [x] Account ownership, planning context, market facts and Risk facts remain
       server-authoritative; no client-provided fact overrides them.
-* [ ] A rejected or unavailable MANUAL Risk result creates no Execution Intent,
+* [x] A rejected or unavailable MANUAL Risk result creates no Execution Intent,
       broker mutation or Position.
-* [ ] Only an approved Risk result exposes and permits the existing explicit
+* [x] Only an approved Risk result exposes and permits the existing explicit
       human execution authorization.
-* [ ] An approved MANUAL plan can use the existing Execution Intent and PAPER
+* [x] An approved MANUAL plan can use the existing Execution Intent and PAPER
       settlement path without an Opportunity-specific branch or second pipeline.
-* [ ] A filled MANUAL PAPER execution creates a persisted position visible in the
+* [x] A filled MANUAL PAPER execution creates a persisted position visible in the
       normal Positions page.
-* [ ] The position remains visible after page reload and displays the existing
+* [x] The position remains visible after page reload and displays the existing
       valuation/freshness state.
-* [ ] The user can close the full PAPER exposure through the normal UI, and the
+* [x] The user can close the full PAPER exposure through the normal UI, and the
       closed/empty state remains after reload.
-* [ ] Execution history retains continuity to the execution and MANUAL TradePlan
+* [x] Execution history retains continuity to the execution and MANUAL TradePlan
       where the existing contracts expose that relationship.
-* [ ] The journey uses no direct database mutation, manual backend HTTP call,
+* [x] The journey uses no direct database mutation, manual backend HTTP call,
       fabricated ID, hidden development endpoint, Risk bypass or direct broker
       call.
-* [ ] Focused affected tests pass, Angular build/check passes where frontend
+* [x] Focused affected tests pass, Angular build/check passes where frontend
       changes are made, and `git diff --check` passes.
-* [ ] Runtime evidence records the exact successful path and any valid negative
+* [x] Runtime evidence records the exact successful path and any valid negative
       Risk evidence.
 
 ## Constraints
@@ -204,11 +204,11 @@ Risk result is valid negative evidence but does not satisfy the success path.
 
 ## Definition of Done
 
-* [ ] Story scope approved by the human engineer.
-* [ ] Existing Story 0060 worktree changes reviewed and accepted or explicitly
+* [x] Story scope approved by the human engineer.
+* [x] Existing Story 0060 worktree changes reviewed and accepted or explicitly
       adjusted without discarding unrelated work.
-* [ ] No second manual Risk or execution pipeline introduced.
-* [ ] Acceptance criteria validated with repository and runtime evidence.
-* [ ] Runtime report records success, negative evidence and environmental limits.
-* [ ] Human code review completed.
-* [ ] Human commit created.
+* [x] No second manual Risk or execution pipeline introduced.
+* [x] Acceptance criteria validated with repository and runtime evidence.
+* [x] Runtime report records success, negative evidence and environmental limits.
+* [x] Human code review completed.
+* [x] Human commit created.
