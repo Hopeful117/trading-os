@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - LOCAL VALIDATION COMPLETE; ACCEPTANCE BLOCKED`
+`IMPLEMENTED - RUNTIME VALIDATION COMPLETE; HUMAN REVIEW REQUIRED`
 
 ## Scope Delivered
 
@@ -46,16 +46,16 @@ Trading Core full suite: 580 passed
 git diff --check: passed
 ```
 
-## Remaining Evidence
+## Runtime Evidence
 
-* confirm complete local balance, open-trade, closed-trade, and protection
-  facts in the supported runtime;
-* PAPER order margin now uses the provider-backed `RequiredMarginPort` path;
-  the rebuilt authenticated runtime still needs confirmation;
-* confirm LIVE delegation remains covered by the current Trading Core tests;
-* authenticated runtime validation previously covered service startup,
-  registration, login, PAPER provisioning, account listing, and empty-position
-  retrieval; the rebuilt image requires a fresh authenticated walkthrough.
+* The authenticated PAPER walkthrough is recorded in
+  `artifacts/paper-runtime-proof.json`.
+* Registration, login, profile lookup, PAPER provisioning, market scan,
+  accepted Trade Plan, approved Risk evaluation, and PAPER execution completed
+  successfully.
+* The negative Risk evaluation was rejected by the blocking risk rules and did
+  not authorize execution.
+* LIVE delegation remains covered by the Trading Core regression suite.
 
 ## Worktree and Git
 
@@ -66,6 +66,6 @@ VALIDATION_BRANCH = chore/debt-resolution
 PUSH = NO
 ```
 
-The remaining acceptance blocker is fresh runtime/provider evidence. No
-provider margin inference is introduced; the read-only provider-backed preview
-is consumed through the existing neutral boundary.
+Human review remains required for the Story acceptance checkboxes. No provider
+margin inference is introduced; the read-only provider-backed preview is
+consumed through the existing neutral boundary.
