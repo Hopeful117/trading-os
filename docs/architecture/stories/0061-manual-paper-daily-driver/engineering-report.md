@@ -54,16 +54,17 @@ Close execution intent: b1483c46-62c6-4e14-8a20-3661855b319c
 * Angular production build: passed with existing budget warnings.
 * `git diff --check`: passed.
 * Official authenticated PAPER runtime: completed.
+* Independent-review regression matrix: passed in `trading-core` and
+  `market-intelligence`; the exact commands are recorded in `code-review.md`.
 
 ## Known Limitations
 
 * Current-price display was unavailable during the runtime check, while the
   PAPER execution and persistence path remained successful.
 * Angular bundle/style budget warnings remain.
-* The independent review noted that the runtime identifiers are durable but the
-  repository does not contain a complete request trace or screenshot bundle.
-  This evidence-quality limitation is accepted for this Story; no implementation
-  defect remains.
+* The repository does not contain a complete request trace or screenshot bundle.
+  The deterministic negative paths are replayable through the focused regression
+  matrix; no implementation defect remains.
 
 ## Closure
 

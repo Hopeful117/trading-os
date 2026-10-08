@@ -49,8 +49,23 @@ An independent review returned `PASS WITH FINDINGS`:
 * no blocking, major or confirmed minor implementation finding remains;
 * the repository evidence records the persisted runtime identifiers and the
   complete successful PAPER lifecycle;
-* a complete request trace, screenshot bundle and independently replayable
-  rejected/unavailable-risk artifact are not stored in the repository.
+* a complete request trace and screenshot bundle are not stored in the
+  repository; the rejected/unavailable-risk behavior is independently
+  replayable through the deterministic regression tests listed below.
+
+The evidence gap was reduced without changing product behavior:
+
+```text
+trading-core:
+./mvnw -q -Dtest=ManualTradePlanOrchestrationServiceTest,MarketIntelligenceRiskClientTest,MarketValuationClientTest,TradePlanRiskEvaluationServiceTest,ExecutionTimeRiskRevalidationServiceTest,ValidateAndCreateServiceTest test
+
+market-intelligence:
+mvn -q -Dtest=TradePlanRiskHandoffServiceTest,TradePlanningEngineTest,TradePlanControllerTest test
+```
+
+Both focused suites passed. They cover MANUAL provenance, authoritative context,
+unavailable/fail-closed risk facts, execution-time risk, and the no-second-path
+invariants.
 
 The evidence-quality limitation is accepted for closure. The current-price
 display limitation and Angular budget warnings remain recorded as residual risks;
