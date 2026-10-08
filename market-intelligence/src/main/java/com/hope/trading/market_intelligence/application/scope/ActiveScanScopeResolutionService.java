@@ -44,24 +44,25 @@ public class ActiveScanScopeResolutionService {
 
     public ActiveScanScopeResolutionResult resolve(ActiveScanScopeResolutionRequest request) {
         requireOwnedAccount(request.accountId());
-        return resolveMarkets(request);
+        return resolveMarkets(request, true, false);
     }
 
     public DecisionContextResolution resolveDecisionContext(UUID accountId) {
         TradingCoreAccountClient.TradingCoreAccountResponse account = requireOwnedAccount(accountId);
         ActiveScanScopeResolutionResult scope = resolveMarkets(
                 new ActiveScanScopeResolutionRequest(accountId, "", null, MarketScopeMode.ALL_ELIGIBLE),
-                false);
+                false, true);
         return new DecisionContextResolution(account, scope);
     }
 
     private ActiveScanScopeResolutionResult resolveMarkets(ActiveScanScopeResolutionRequest request) {
-        return resolveMarkets(request, true);
+        return resolveMarkets(request, true, false);
     }
 
     private ActiveScanScopeResolutionResult resolveMarkets(
             ActiveScanScopeResolutionRequest request,
-            boolean applyEligibilityPolicy
+            boolean applyEligibilityPolicy,
+            boolean applyBrokerCapabilities
     ) {
         MarketScopeMode mode = resolveScopeMode(request);
         List<MarketResponse> catalog = loadCatalog();
@@ -73,11 +74,14 @@ public class ActiveScanScopeResolutionService {
         ));
 
         List<UUID> candidateIds = requestedCandidateIds(mode, request.requestedMarketIds(), catalog);
+        Map<String, TradingCoreAccountClient.MarketCapabilityResponse> capabilities = applyBrokerCapabilities
+                ? resolveCapabilities(request.accountId(), candidateIds, byId) : Map.of();
         EvaluationBudget budget = new EvaluationBudget(
                 !applyEligibilityPolicy || eligibilityPolicy == null ? Integer.MAX_VALUE
                         : eligibilityPolicy.properties().maxMarketFactEvaluationsPerScan());
         List<MarketEligibilityDecision> decisions = candidateIds.stream()
-                .map(marketId -> evaluateMarket(marketId, byId, budget, applyEligibilityPolicy))
+                .map(marketId -> evaluateMarket(marketId, byId, budget, applyEligibilityPolicy,
+                        applyBrokerCapabilities, capabilities))
                 .toList();
         List<UUID> effectiveMarketIds = decisions.stream()
                 .filter(MarketEligibilityDecision::eligible)
@@ -175,7 +179,9 @@ public class ActiveScanScopeResolutionService {
             UUID marketId,
             Map<UUID, MarketResponse> byId,
             EvaluationBudget budget,
-            boolean applyEligibilityPolicy
+            boolean applyEligibilityPolicy,
+            boolean applyBrokerCapabilities,
+            Map<String, TradingCoreAccountClient.MarketCapabilityResponse> capabilities
     ) {
         MarketResponse market = byId.get(marketId);
         if (market == null) {
@@ -198,6 +204,23 @@ public class ActiveScanScopeResolutionService {
                     List.of(MarketEligibilityReason.MARKET_NOT_TRADABLE),
                     MarketEligibilityStatus.EXCLUDED, null, null, null
             );
+        }
+        if (applyBrokerCapabilities) {
+            TradingCoreAccountClient.MarketCapabilityResponse capability =
+                    capabilities.get(capabilityKey(market.provider(), market.symbol()));
+            if (capability == null || !capability.available()) {
+                return new MarketEligibilityDecision(
+                        market.marketId(), market.symbol(), market.provider(), false,
+                        capabilityReasons(capability, MarketEligibilityReason.BROKER_CAPABILITY_UNAVAILABLE),
+                        MarketEligibilityStatus.EXCLUDED, null, null, null);
+            }
+            if (capability.supportedOrderTypes() == null || capability.supportedOrderTypes().stream()
+                    .noneMatch(type -> "MARKET".equalsIgnoreCase(type))) {
+                return new MarketEligibilityDecision(
+                        market.marketId(), market.symbol(), market.provider(), false,
+                        List.of(MarketEligibilityReason.BROKER_MARKET_ORDER_UNSUPPORTED),
+                        MarketEligibilityStatus.EXCLUDED, null, null, null);
+            }
         }
         if (applyEligibilityPolicy && eligibilityPolicy != null) {
             if (!budget.consume()) {
@@ -234,6 +257,47 @@ public class ActiveScanScopeResolutionService {
                 true,
                 List.of()
         );
+    }
+
+    private Map<String, TradingCoreAccountClient.MarketCapabilityResponse> resolveCapabilities(
+            UUID accountId, List<UUID> candidateIds, Map<UUID, MarketResponse> byId) {
+        List<String> instruments = candidateIds.stream().map(byId::get).filter(Objects::nonNull)
+                .map(MarketResponse::symbol).filter(Objects::nonNull).distinct().toList();
+        if (instruments.isEmpty()) return Map.of();
+        try {
+            return accounts.marketCapabilities(accountId,
+                            new TradingCoreAccountClient.MarketCapabilityRequest(instruments)).stream()
+                    .filter(value -> value != null && value.instrument() != null)
+                    .collect(Collectors.toMap(value -> capabilityKey(value.provider(), value.instrument()), Function.identity(),
+                            (first, ignored) -> first));
+        } catch (RuntimeException unavailable) {
+            return Map.of();
+        }
+    }
+
+    private List<MarketEligibilityReason> capabilityReasons(
+            TradingCoreAccountClient.MarketCapabilityResponse capability,
+            MarketEligibilityReason fallback) {
+        if (capability == null || capability.reasons() == null || capability.reasons().isEmpty()) {
+            return List.of(fallback);
+        }
+        return capability.reasons().stream().map(this::capabilityReason).toList();
+    }
+
+    private MarketEligibilityReason capabilityReason(String reason) {
+        try {
+            return MarketEligibilityReason.valueOf(reason);
+        } catch (RuntimeException ignored) {
+            return MarketEligibilityReason.BROKER_CAPABILITY_UNAVAILABLE;
+        }
+    }
+
+    private String normalizeInstrument(String instrument) {
+        return instrument == null ? "" : instrument.strip().toUpperCase(Locale.ROOT);
+    }
+
+    private String capabilityKey(String provider, String instrument) {
+        return normalizeInstrument(provider) + "|" + normalizeInstrument(instrument);
     }
 
     private static final class EvaluationBudget {

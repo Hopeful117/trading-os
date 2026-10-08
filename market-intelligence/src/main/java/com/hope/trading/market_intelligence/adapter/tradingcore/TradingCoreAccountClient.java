@@ -4,8 +4,12 @@ import com.hope.trading.market_intelligence.adapter.config.FeignAuthorizationCon
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @FeignClient(
@@ -15,6 +19,10 @@ import java.util.UUID;
 public interface TradingCoreAccountClient {
     @GetMapping("/api/v1/accounts/{accountId}")
     TradingCoreAccountResponse findOwnedAccount(@PathVariable UUID accountId);
+
+    @PostMapping("/api/v1/accounts/{accountId}/market-capabilities")
+    List<MarketCapabilityResponse> marketCapabilities(@PathVariable UUID accountId,
+                                                      @RequestBody MarketCapabilityRequest request);
 
     record TradingCoreAccountResponse(
             UUID accountId,
@@ -31,4 +39,11 @@ public interface TradingCoreAccountClient {
             Long tradePlanningProfileVersion
     ) {
     }
+
+    record MarketCapabilityRequest(List<String> instruments) { }
+
+    record MarketCapabilityResponse(String instrument, boolean available, List<String> supportedOrderTypes,
+                                    List<BigDecimal> supportedBuyLeverageLevels,
+                                    List<BigDecimal> supportedSellLeverageLevels, long sourceVersion,
+                                    Instant observedAt, String provider, List<String> reasons) { }
 }

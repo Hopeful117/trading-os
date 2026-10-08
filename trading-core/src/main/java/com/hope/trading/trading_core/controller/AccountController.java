@@ -4,7 +4,7 @@ import com.hope.trading.trading_core.dto.AccountDto;
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.service.AccountService;
 import com.hope.trading.trading_core.broker.service.BrokerSynchronizationService;
-import lombok.RequiredArgsConstructor;
+import com.hope.trading.trading_core.risk.infrastructure.client.BrokerCapabilityQueryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -22,10 +22,24 @@ import java.util.UUID;
 @Controller
 @RestController
 @RequestMapping("/api/v1/accounts")
-@RequiredArgsConstructor
 public class AccountController {
     private final AccountService accountService;
     private final BrokerSynchronizationService brokerSynchronizationService;
+    private final BrokerCapabilityQueryService brokerCapabilityQueryService;
+
+    public AccountController(AccountService accountService,
+                              BrokerSynchronizationService brokerSynchronizationService) {
+        this(accountService, brokerSynchronizationService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AccountController(AccountService accountService,
+                              BrokerSynchronizationService brokerSynchronizationService,
+                              BrokerCapabilityQueryService brokerCapabilityQueryService) {
+        this.accountService = accountService;
+        this.brokerSynchronizationService = brokerSynchronizationService;
+        this.brokerCapabilityQueryService = brokerCapabilityQueryService;
+    }
 
 
     /**
@@ -57,6 +71,20 @@ public class AccountController {
         return ResponseEntity.ok(accounts);
     }
 
+    @PostMapping("/{accountId}/market-capabilities")
+    public ResponseEntity<List<BrokerCapabilityQueryService.MarketCapability>> marketCapabilities(
+            @PathVariable UUID accountId,
+            @RequestBody MarketCapabilityRequest request,
+            Authentication authentication) {
+        UserDto user = (UserDto) authentication.getPrincipal();
+        assert user != null;
+        if (brokerCapabilityQueryService == null) {
+            return ResponseEntity.internalServerError().build();
+        }
+        return ResponseEntity.ok(brokerCapabilityQueryService.resolve(
+                accountId, user.getUsername(), request == null ? List.of() : request.instruments()));
+    }
+
     @PostMapping("/synchronize")
     public ResponseEntity<String> synchronize(Authentication authentication){
         log.info("synchronizing account for user {}",authentication.getPrincipal());
@@ -69,3 +97,5 @@ public class AccountController {
 
     }
 }
+
+record MarketCapabilityRequest(List<String> instruments) { }
