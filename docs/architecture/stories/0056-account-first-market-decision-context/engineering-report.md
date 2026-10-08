@@ -29,8 +29,7 @@ The implementation preserves the existing responsibility split:
 * Existing Active Scan behavior: preserved and covered by the full Market
   Intelligence suite.
 * Broker/instrument account-specific market differentiation: implemented through
-  Story `0051`; unavailable or stale facts fail closed. Authenticated runtime
-  walkthrough across multiple accounts remains pending.
+  Story `0051`; unavailable or stale facts fail closed.
 
 ## Validation Evidence
 
@@ -41,6 +40,9 @@ The implementation preserves the existing responsibility split:
 * Targeted frontend account-context tests: `6` passed.
 * Trading Core capability query tests: `3` passed.
 * Market Intelligence capability eligibility tests: `3` passed.
+* Authenticated runtime walkthrough completed with two owned PAPER accounts;
+  changing accounts cleared the previous market URL state and resolved the new
+  account context.
 * Prettier check passed for Story 0056 frontend files.
 * `git diff --check` passed.
 
@@ -55,7 +57,5 @@ MERGE = NO
 
 ## Remaining Follow-up
 
-1. Run an authenticated walkthrough with multiple account contexts when the
-   runtime environment provides them.
-2. Continue with the next approved Decision Workspace slice: account-scoped
+1. Continue with the next approved Decision Workspace slice: account-scoped
    live market context.
