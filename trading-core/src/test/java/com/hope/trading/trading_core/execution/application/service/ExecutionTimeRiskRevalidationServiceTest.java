@@ -267,6 +267,60 @@ class ExecutionTimeRiskRevalidationServiceTest {
     }
 
     @Test
+    void paperT1FailsClosedWhenMarketValueHasNoSourcePrice() {
+        RiskFactsProvider facts = mock(RiskFactsProvider.class);
+        Account account = Account.builder().accountId(accountId).brokerAccountId(intent.brokerAccountId())
+                .user(com.hope.trading.trading_core.model.User.builder().userId(intent.initiatorId()).build())
+                .name("paper").baseCurrency("USD").build();
+        BrokerAccount paperBroker = mock(BrokerAccount.class);
+        when(paperBroker.id()).thenReturn(intent.brokerAccountId());
+        when(paperBroker.ownerId()).thenReturn(intent.initiatorId());
+        when(paperBroker.executionMode()).thenReturn(com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER);
+        when(paperBroker.provider()).thenReturn(com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider.KRAKEN);
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        when(brokerAccounts.findByIdAndOwnerId(intent.brokerAccountId(), intent.initiatorId()))
+                .thenReturn(Optional.of(paperBroker));
+        when(persistence.configuration(accountId)).thenReturn(Optional.of(
+                new RiskPersistence.AccountConfiguration(accountId, intent.brokerAccountId(), "UTC", "USD", UUID.randomUUID())));
+        when(persistence.assignedProfile(accountId)).thenReturn(Optional.of(validProfile()));
+        when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(readyPlan());
+        when(facts.load(any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
+                intent.brokerAccountId(), 1, now, true, List.of(),
+                Map.of("USD", new BigDecimal("10000"), "ETH", BigDecimal.ZERO),
+                new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO, null),
+                List.of(), List.of(), List.of(), "paper-facts"));
+        when(market.value(any(), any(), any(), any())).thenAnswer(invocation -> {
+            List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
+            List<MarketValuationPort.Asset> assets = invocation.getArgument(3);
+            List<MarketValuationPort.Fact> valuationFacts = new ArrayList<>();
+            assets.forEach(asset -> valuationFacts.add(new MarketValuationPort.Fact(
+                    "ASSET", asset.id(), null, asset.currency(), null, BigDecimal.ONE, null, BigDecimal.ONE,
+                    "AVAILABLE", "identity")));
+            instruments.forEach(instrument -> valuationFacts.add(new MarketValuationPort.Fact(
+                    "INSTRUMENT", instrument.id(), UUID.randomUUID(), null, instrument.priceUse(),
+                    new BigDecimal("50000"), null, BigDecimal.ONE, "AVAILABLE", "paper-market")));
+            return new MarketValuationPort.Snapshot(UUID.randomUUID(), 1, "USD", invocation.getArgument(1), now,
+                    "policy", "PT5M", true, valuationFacts, "valuation");
+        });
+        when(requiredMargins.resolve(any())).thenReturn(Optional.of(
+                new RequiredMarginPort.Fact(BigDecimal.ONE, "USD", "paper-margin", 1, now)));
+        when(persistence.baseline(any(), any(), any(), any(), any(), any(), any())).thenReturn(
+                new RiskPersistence.Baseline(1, new BigDecimal("10000"), "USD",
+                        Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), 1, "baseline"));
+        when(persistence.component(any(), any(), any(), any(), any())).thenReturn(1L);
+        when(persistence.context(any(), any(), any())).thenReturn(1L);
+
+        ExecutionTimeRiskRevalidationService completeService = new ExecutionTimeRiskRevalidationService(
+                accounts, brokerAccounts, tradePlans, facts, market, requiredMargins, persistence, clock,
+                transactionManager, lifecycle, new RiskProfileValidator());
+
+        ExecutionTimeRiskRevalidationService.T1Outcome outcome = completeService.evaluateAndPersist(intent, now);
+
+        assertThat(outcome.approved()).isFalse();
+        assertThat(outcome.reasonCode()).isEqualTo("CURRENT_MARKET_VALUATION_UNAVAILABLE");
+    }
+
+    @Test
     void validatesRiskRevalidationHelpers() throws Exception {
         assertThat(invoke("direction", new Class<?>[]{String.class}, "LONG"))
                 .isEqualTo(com.hope.trading.risk.domain.RiskTypes.TradeDirection.LONG);

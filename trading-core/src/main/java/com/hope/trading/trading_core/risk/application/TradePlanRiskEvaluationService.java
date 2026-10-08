@@ -239,11 +239,12 @@ public class TradePlanRiskEvaluationService {
                 .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
+        Instant marginObservedAt = clock.instant();
         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
-                        brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                        marginPrice, brokerSnapshot.observedAt()))
-                .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
-        BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
+                         brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
+                         marginPrice, marginObservedAt))
+                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
+        BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, clock.instant());
         ProposedTrade proposed = new ProposedTrade(plan.tradePlanId(), plan.tradePlanVersion(), plan.instrument(),
                 direction(plan.direction()), positive(plan.quantity(), "PLAN_QUANTITY_INVALID"),
                 new Money(notional, currency), new Money(expectedLoss, currency), new Money(requiredMargin, currency));
@@ -570,6 +571,9 @@ public class TradePlanRiskEvaluationService {
                 || !normalizedCurrency(fact.currency()).equals(normalizedCurrency(currency))
                 || blank(fact.sourceId()) || fact.sourceVersion() < 1 || fact.observedAt() == null
                 || fact.observedAt().isAfter(asOf)) {
+            log.warn("required_margin_invalid currency={} factCurrency={} sourceId={} sourceVersion={} observedAt={} asOf={} amountPresent={}",
+                    currency, fact.currency(), fact.sourceId(), fact.sourceVersion(), fact.observedAt(), asOf,
+                    fact.amount() != null);
             throw unavailable("REQUIRED_MARGIN_INVALID");
         }
         return fact.amount();

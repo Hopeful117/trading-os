@@ -49,4 +49,23 @@ class MarketValuationClientTest {
         assertThat(result.sourcePayload()).contains("maxObservationAge", "PT30S");
         verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId, conversionMarketId)));
     }
+
+    @Test
+    void refreshesConversionMarketForAssetOnlyValuation() {
+        MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
+        UUID conversionMarketId = UUID.randomUUID();
+        Instant valuationAt = Instant.parse("2026-08-01T12:00:00Z");
+        when(feign.markets()).thenReturn(List.of(
+                new CatalogueMarket(conversionMarketId, "KRAKEN", "EURUSD", "EUR", "USD")));
+        when(feign.value(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(
+                UUID.randomUUID(), 1, "USD", valuationAt, valuationAt,
+                "conservative-v2", "PT30S", "COMPLETE", List.of()));
+        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules(),
+                Clock.fixed(valuationAt, ZoneOffset.UTC));
+
+        client.value("USD", valuationAt, List.of(),
+                List.of(new MarketValuationPort.Asset("EUR", "EUR")));
+
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(conversionMarketId)));
+    }
 }

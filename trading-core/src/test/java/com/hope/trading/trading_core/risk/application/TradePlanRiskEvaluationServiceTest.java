@@ -384,6 +384,28 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
+    void marketOrderWithMissingSourcePriceFailsClosed() {
+        availableContext(List.of());
+        doAnswer(invocation -> {
+            List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
+            List<MarketValuationPort.Asset> assets = invocation.getArgument(3);
+            List<MarketValuationPort.Fact> facts = new java.util.ArrayList<>();
+            assets.forEach(asset -> facts.add(new MarketValuationPort.Fact("ASSET", asset.id(), null,
+                    asset.currency(), null, BigDecimal.ONE, null, null, "AVAILABLE", "identity")));
+            instruments.forEach(instrument -> facts.add(new MarketValuationPort.Fact("INSTRUMENT",
+                    instrument.id(), UUID.randomUUID(), null, instrument.priceUse(), new BigDecimal("100"),
+                    null, BigDecimal.ONE, "AVAILABLE", "observation")));
+            return snapshot(invocation.getArgument(1), true, facts);
+        }).when(market).value(any(), any(), any(), any());
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("CURRENT_MARKET_VALUATION_UNAVAILABLE");
+    }
+
+    @Test
     void exactStoredCommandRetriesIncompleteAcknowledgmentWithoutReevaluationAndRejectsConflict() {
         Response storedResponse = new Response(UUID.randomUUID(), planId, 3, accountId, "COMPLETED",
                 "APPROVED", true, List.of(), List.of(), Map.of(), now,

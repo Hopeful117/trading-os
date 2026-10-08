@@ -242,11 +242,12 @@ public class ExecutionTimeRiskRevalidationService {
                 .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
+        Instant marginObservedAt = clock.instant();
         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
                         brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                        marginPrice, brokerSnapshot.observedAt()))
+                        marginPrice, marginObservedAt))
                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
-        BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
+        BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, clock.instant());
 
         var executionParams = intent.parameters();
         ProposedTrade proposed = new ProposedTrade(plan.tradePlanId(), plan.tradePlanVersion(), plan.instrument(),

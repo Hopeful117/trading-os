@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.model.Account;
@@ -66,8 +67,8 @@ class ModeAwareRiskFactsProviderTest {
         assertThat(snapshot.assetBalances()).containsEntry("USD", new BigDecimal("1000"));
         assertThat(snapshot.positions()).singleElement().extracting(RiskFactsProvider.Position::positionId)
                 .isEqualTo(tradeId);
-        assertThat(snapshot.complete()).isFalse();
-        assertThat(snapshot.unavailabilityReasons()).containsExactly("PAPER_MARGIN_UNAVAILABLE");
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.unavailabilityReasons()).isEmpty();
         assertThat(snapshot.positions().get(0).protectedQuantity()).isZero();
         assertThat(snapshot.positions().get(0).protectiveStops()).isEmpty();
         assertThat(snapshot.positions().get(0).protectionStatus().name()).isEqualTo("UNPROTECTED");
@@ -87,7 +88,7 @@ class ModeAwareRiskFactsProviderTest {
     }
 
     @Test
-    void paperWithoutAuthoritativeMarginIsIncomplete() {
+    void paperLocalFactsRemainCompleteWithoutOrderMargin() {
         UUID brokerId = UUID.randomUUID();
         Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency("USD")
                 .equity(new BigDecimal("1000")).balances(List.of(
@@ -96,12 +97,14 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
         when(brokerAccount.id()).thenReturn(brokerId);
 
-        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper())
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts,
+                new ObjectMapper().registerModule(new JavaTimeModule()))
                 .load(account, brokerAccount, brokerId, from, to);
 
-        assertThat(snapshot.complete()).isFalse();
-        assertThat(snapshot.account().margin()).isNull();
-        assertThat(snapshot.unavailabilityReasons()).containsExactly("PAPER_MARGIN_UNAVAILABLE");
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.account().margin()).isZero();
+        assertThat(snapshot.sourceVersion()).isEqualTo(1);
+        assertThat(snapshot.unavailabilityReasons()).isEmpty();
         verifyNoInteractions(liveFacts);
     }
 
@@ -119,12 +122,36 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
         when(brokerAccount.id()).thenReturn(brokerId);
 
-        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper())
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts,
+                new ObjectMapper().registerModule(new JavaTimeModule()))
                 .load(account, brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.sourceVersion()).isEqualTo(7);
         assertThat(snapshot.account().valuationAsset()).isEqualTo("USD");
         assertThat(snapshot.sourcePayload()).contains("accountVersion", "tradeVersions", tradeId.toString());
+    }
+
+    @Test
+    void paperClosedTradeMayHaveZeroStopLossSentinel() {
+        UUID brokerId = UUID.randomUUID();
+        Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency("USD")
+                .equity(new BigDecimal("1000")).balances(List.of(
+                        AccountBalance.builder().asset("USD").amount(new BigDecimal("1000")).build()))
+                .trades(List.of(Trade.builder().tradeId(UUID.randomUUID()).symbol("PEPE/EUR")
+                        .type(TradeType.SELL).entryPrice(new BigDecimal("0.000003829"))
+                        .quantity(new BigDecimal("75000000")).stopLoss(BigDecimal.ZERO)
+                        .takeProfit(BigDecimal.ZERO).pnl(new BigDecimal("-12.75"))
+                        .closedAt(to.minusSeconds(1)).tradeStatus(TradeStatus.CLOSED).build()))
+                .build();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccount.id()).thenReturn(brokerId);
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts,
+                new ObjectMapper().registerModule(new JavaTimeModule()))
+                .load(account, brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.unavailabilityReasons()).isEmpty();
     }
 
     @Test

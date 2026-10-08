@@ -72,9 +72,9 @@ public final class MarketValuationClient implements MarketValuationPort {
             throw new IllegalStateException("Market catalogue has a missing or ambiguous instrument");
         }
         Instant valuationAt = at;
-        if (!instruments.isEmpty()) {
-            client.refresh(new MarketPriceSnapshotRequest(refreshMarketIds(catalogue, instrumentRequests,
-                    assets, reportingCurrency)));
+        List<UUID> refreshMarketIds = refreshMarketIds(catalogue, instrumentRequests, assets, reportingCurrency);
+        if (!refreshMarketIds.isEmpty()) {
+            client.refresh(new MarketPriceSnapshotRequest(refreshMarketIds));
             valuationAt = clock.instant();
         }
         ValuationTransport value = client.value(new ValuationRequest(reportingCurrency, valuationAt,

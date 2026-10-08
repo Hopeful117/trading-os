@@ -88,7 +88,6 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
             reasons.add("PAPER_ACCOUNT_VALUATION_INCOMPLETE");
         }
         String payload = writePayload(account, balances, positions, closedTrades);
-        reasons.add("PAPER_MARGIN_UNAVAILABLE");
         return new RiskFactsProvider.Snapshot(
                 brokerAccount.id(),
                 sourceVersion(account, trades),
@@ -97,7 +96,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 reasons,
                 balances,
                 new RiskFactsProvider.Account(valuationAsset, balance, account == null ? null : account.getEquity(),
-                        null, account == null ? null : account.getStartingBalance()),
+                        BigDecimal.ZERO, account == null ? null : account.getStartingBalance()),
                 positions,
                 closedTrades,
                 List.of(),
@@ -152,7 +151,8 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
         long accountVersion = account == null ? 0 : account.getVersion();
         long tradeVersion = trades.stream().filter(java.util.Objects::nonNull)
                 .mapToLong(Trade::getVersion).max().orElse(0);
-        return Math.max(accountVersion, tradeVersion);
+        long version = Math.max(accountVersion, tradeVersion);
+        return account == null ? 0 : Math.max(1, version);
     }
 
     private boolean invalidTradeFacts(Trade trade) {
@@ -161,7 +161,8 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 || trade.getQuantity().signum() <= 0 || trade.getEntryPrice() == null
                 || trade.getEntryPrice().signum() <= 0 || trade.getTradeStatus() == null
                 || (trade.getCurrentPrice() != null && trade.getCurrentPrice().signum() <= 0)
-                || (trade.getStopLoss() != null && trade.getStopLoss().signum() <= 0)
+                || (trade.getTradeStatus() == TradeStatus.OPEN
+                    && trade.getStopLoss() != null && trade.getStopLoss().signum() <= 0)
                 || (trade.getTradeStatus() == TradeStatus.CLOSED
                     && (trade.getClosedAt() == null || trade.getPnl() == null));
     }

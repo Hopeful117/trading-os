@@ -16,12 +16,17 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @FeignClient(name = "broker-service", contextId = "brokerRequiredMarginClient",
         configuration = BrokerServiceFeignConfiguration.class)
 interface BrokerMarginFeignClient {
     @PostMapping("/internal/v1/broker-accounts/{id}/margin-preview")
     BrokerMarginPreview preview(@PathVariable UUID id, @RequestBody BrokerMarginPreviewRequest request);
+
+    @PostMapping("/internal/v1/broker-providers/{provider}/margin-preview")
+    BrokerMarginPreview previewByProvider(@PathVariable String provider, @RequestBody BrokerMarginPreviewRequest request);
 }
 
 record BrokerMarginPreviewRequest(UUID brokerAccountId, String instrument, String side,
@@ -32,6 +37,7 @@ record BrokerMarginPreview(UUID brokerAccountId, String instrument, BigDecimal a
 
 @org.springframework.stereotype.Component
 public final class BrokerRequiredMarginClient implements RequiredMarginPort {
+    private static final Logger log = LoggerFactory.getLogger(BrokerRequiredMarginClient.class);
     private final BrokerMarginFeignClient client;
     private final BrokerTechnicalCapabilitiesFeignClient capabilities;
     private final BrokerAccountRepository brokerAccounts;
@@ -57,10 +63,11 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
         try {
             var brokerAccount = brokerAccounts.findById(request.brokerAccountId()).orElse(null);
             if (brokerAccount == null) return Optional.empty();
-            if (brokerAccount.executionMode() == ExecutionMode.PAPER) {
-                return Optional.empty();
-            }
-            BrokerTechnicalCapabilities technical = capabilities.get(request.brokerAccountId(), request.instrument());
+            boolean paper = brokerAccount.executionMode() == ExecutionMode.PAPER;
+            String provider = brokerAccount.provider().name();
+            BrokerTechnicalCapabilities technical = paper
+                    ? capabilities.getByProvider(provider, request.brokerAccountId(), request.instrument())
+                    : capabilities.get(request.brokerAccountId(), request.instrument());
             if (technical == null || !request.brokerAccountId().equals(technical.brokerAccountId())
                     || blank(technical.provider()) || technical.sourceVersion() < 1 || technical.observedAt() == null
                     || !request.instrument().equalsIgnoreCase(technical.instrument())
@@ -68,10 +75,12 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
                  || invalidLeverageLevels(technical.supportedBuyLeverageLevels())
                      || invalidLeverageLevels(technical.supportedSellLeverageLevels())
                      || stale(technical.observedAt())) return Optional.empty();
-            BrokerMarginPreview preview = client.preview(request.brokerAccountId(),
-                    new BrokerMarginPreviewRequest(request.brokerAccountId(), request.instrument(),
-                            "LONG".equalsIgnoreCase(request.direction()) ? "BUY" : "SELL",
-                            request.quantity(), request.price(), null));
+            BrokerMarginPreviewRequest previewRequest = new BrokerMarginPreviewRequest(request.brokerAccountId(),
+                    request.instrument(), "LONG".equalsIgnoreCase(request.direction()) ? "BUY" : "SELL",
+                    request.quantity(), request.price(), null);
+            BrokerMarginPreview preview = paper
+                    ? client.previewByProvider(provider, previewRequest)
+                    : client.preview(request.brokerAccountId(), previewRequest);
             if (preview == null || !request.brokerAccountId().equals(preview.brokerAccountId())
                     || !request.instrument().equalsIgnoreCase(preview.instrument())
                     || preview.amount() == null || preview.amount().signum() <= 0
@@ -81,6 +90,9 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
             return Optional.of(new Fact(preview.amount(), preview.currency(), preview.sourceId(),
                     preview.sourceVersion(), preview.observedAt()));
         } catch (RuntimeException unavailable) {
+            log.warn("broker_required_margin_unavailable brokerAccountId={} instrument={} direction={} reason={}",
+                    request.brokerAccountId(), request.instrument(), request.direction(),
+                    unavailable.getClass().getSimpleName());
             return Optional.empty();
         }
     }
