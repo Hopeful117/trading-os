@@ -22,8 +22,10 @@ risk-compatibility concern addressed by Story 0055.
 * The runtime evidence distinguishes valuation availability from the subsequent
   risk rejection.
 
-## Human Review Required
+## Human Review Decision
 
-* Verify freshness and currency compatibility at the client boundary.
-* Run the negative stale/missing valuation tests.
-* Confirm the runtime evidence against service logs and persisted timestamps.
+The human reviewer accepts closure. Freshness and currency compatibility are
+preserved at the client boundary, the negative missing/incomplete valuation
+tests pass with fail-closed risk decisions, and the authenticated PAPER proof
+records the market and valuation timestamps. No live credentials or real
+transaction are required for this Story.

@@ -4,7 +4,7 @@
 
 **ID:** `0054`
 **Title:** Make PAPER market valuation available for runtime risk evaluation
-**Status:** Approved
+**Status:** COMPLETED - PAPER VALUATION VALIDATED
 
 ---
 
@@ -74,21 +74,21 @@ decision and the normal PAPER journey cannot continue to execution.
 
 ## Acceptance Criteria
 
-* [ ] A supported tradable PAPER market has a recent valuation available through
+* [x] A supported tradable PAPER market has a recent valuation available through
       the configured Market Data runtime path.
-* [ ] The valuation is compatible with the account currency and the Trade Plan
+* [x] The valuation is compatible with the account currency and the Trade Plan
       instrument.
-* [ ] A valid PAPER Trade Plan reaches deterministic risk evaluation without
+* [x] A valid PAPER Trade Plan reaches deterministic risk evaluation without
       `CURRENT_MARKET_VALUATION_UNAVAILABLE` when the valuation is recent.
-* [ ] Missing or stale valuation data still produces an explicit fail-closed
+* [x] Missing or stale valuation data still produces an explicit fail-closed
       decision and does not permit execution.
-* [ ] The user can reach the valuation-backed risk result from the web
+* [x] The user can reach the valuation-backed risk result from the web
       application without manually constructing an API request.
-* [ ] No live credentials, live order, security bypass, or synthetic price is
+* [x] No live credentials, live order, security bypass, or synthetic price is
       used by the validation scenario.
-* [ ] Focused Market Data, Trading Core, and frontend regression tests pass.
-* [ ] The Angular production build passes.
-* [ ] Runtime evidence identifies the market, quote timestamp/freshness,
+* [x] Focused Market Data, Trading Core, and frontend regression tests pass.
+* [x] The Angular production build passes.
+* [x] Runtime evidence identifies the market, quote timestamp/freshness,
       observed risk result, and any remaining blocker.
 
 ---
@@ -148,12 +148,12 @@ decision and the normal PAPER journey cannot continue to execution.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved.
-* [ ] Runtime scenario approved.
-* [ ] Implementation or regression fix completed within scope.
-* [ ] Relevant validation executed.
-* [ ] Story 0048 can continue past deterministic risk evaluation, or the
+* [x] Repository Analysis approved.
+* [x] Runtime scenario approved.
+* [x] Implementation or regression fix completed within scope.
+* [x] Relevant validation executed.
+* [x] Story 0048 can continue past deterministic risk evaluation, or the
       remaining blocker is documented with evidence.
-* [ ] Diff reviewed in IntelliJ.
-* [ ] Code Review approved.
+* [x] Diff reviewed in IntelliJ.
+* [x] Code Review approved.
 * [ ] Human commit created.
