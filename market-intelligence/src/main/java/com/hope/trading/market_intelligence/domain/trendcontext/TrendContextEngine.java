@@ -109,7 +109,11 @@ public final class TrendContextEngine {
                 && structure.all().stream().allMatch(value -> !value.pivotTime().isAfter(input.cutOffAt())
                 && !value.confirmationTime().isAfter(input.cutOffAt())
                 && !value.evidenceFrom().isAfter(input.cutOffAt())
-                && !value.evidenceTo().isAfter(input.cutOffAt()));
+                && !value.evidenceTo().isAfter(input.cutOffAt()))
+                && structure.retained().stream().allMatch(structure.all()::contains)
+                && structure.relations().stream().allMatch(relation ->
+                structure.retained().contains(relation.previous())
+                        && structure.retained().contains(relation.latest()));
     }
 
     private TrendContextTimeframeAssessment assessRole(TrendContextAssessmentInput input,
@@ -179,9 +183,9 @@ public final class TrendContextEngine {
                 swing.type() == MarketStructureSwingType.HIGH ? SwingType.HIGH : SwingType.LOW,
                 swing.index(), swing.pivotTime(), swing.price(), swing.confirmationTime(),
                 swing.pivotSourceId(), swing.confirmationSourceId(), swing.suppressed(), swing.suppressionReason(),
-                evidence(input, role, swing.type() == MarketStructureSwingType.HIGH ? "SWING_HIGH_V1" : "SWING_LOW_V1",
-                        List.of(swing.pivotSourceId(), swing.confirmationSourceId()), swing.pivotTime(),
-                        swing.confirmationTime(), swing.index() + ":" + swing.type()));
+                        evidence(input, role, swing.type() == MarketStructureSwingType.HIGH ? "SWING_HIGH_V1" : "SWING_LOW_V1",
+                        swing.evidenceSourceIds(), swing.evidenceFrom(), swing.evidenceTo(),
+                        swing.index() + ":" + swing.type()));
     }
 
     private StructureReplay replayBeforeBreak(TrendContextAssessmentInput input, TrendContextRole role,
@@ -272,7 +276,7 @@ public final class TrendContextEngine {
         int breakIndex = -1;
         for (int i = 0; i < candles.size() && breakIndex < 0; i++) {
             TrendContextCandle candle = candles.get(i);
-            if (candle.closeTime().isAfter(level.source().confirmationTime())) {
+            if (candle.closeTime().isAfter(level.source().pivotTime())) {
                 boolean wick = crossedByWick(direction, candle, level);
                 boolean close = crossedByClose(direction, candle, level);
                 if (wick && !close && unconfirmed == null) {
@@ -605,7 +609,7 @@ public final class TrendContextEngine {
         TrendTimeframeAlignment alignment = values.alignment();
         List<TrendContextContradiction> contradictions = values.contradictions();
         List<TrendContextExclusion> exclusions = values.exclusions();
-        if (bias == null || setup == null) return TrendAttention.UNKNOWN;
+        if (hasMissingRequiredRole(input, roles) || bias == null || setup == null) return TrendAttention.UNKNOWN;
         if (hasNoSetup(input, roles, bias, setup)) return TrendAttention.NO_SETUP;
         if (hasInvalidRequiredData(input, exclusions)) return TrendAttention.UNKNOWN;
         if (hasRequiredHistoryGap(input, exclusions)) return TrendAttention.NO_SETUP;
@@ -622,6 +626,12 @@ public final class TrendContextEngine {
         return roles.entrySet().stream().anyMatch(e -> required(input, e.getKey()) && !e.getValue().fresh())
                 || setup.direction() == TrendDirection.UNKNOWN || setup.direction() == TrendDirection.NEUTRAL
                 || bias.direction() == TrendDirection.UNKNOWN || bias.direction() == TrendDirection.NEUTRAL;
+    }
+
+    private boolean hasMissingRequiredRole(TrendContextAssessmentInput input,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles) {
+        return input.profile().roles().entrySet().stream()
+                .anyMatch(entry -> entry.getValue().required() && !roles.containsKey(entry.getKey()));
     }
 
     private boolean hasInvalidRequiredData(TrendContextAssessmentInput input,

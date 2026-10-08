@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - HUMAN REVIEW PENDING`
+`CLOSED - HUMAN ACCEPTED`
 
 The pure deterministic engine and focused domain tests are present in the
 Market Intelligence module. The Story remains open only for human code review
@@ -55,6 +55,8 @@ An independent review also identified and corrected three boundary issues:
   assessment instead of throwing;
 - every generated evidence reference now carries the profile identity in addition
   to the profile version, with legacy deserialization remaining non-fatal.
+- supplied relation endpoints are now required to belong to the retained swing
+  sequence, preventing suppressed structure from influencing direction.
 
 The review's concern about the two-argument engine boundary is not treated as a
 defect: Story 0071 subsequently formalized the extracted Market Structure
@@ -88,8 +90,8 @@ be handled separately if it becomes a test acceptance issue.
 - No Story `0064` observation integration or Story `0065` strategy integration
   is implemented by this pure engine Story.
 
-## Human Actions Required
+## Review Outcome
 
-1. Review the complete pure-domain diff and the remaining evidence/fingerprint
-   semantics against the canonical design.
-2. Perform the human code review and create the commit only after acceptance.
+Independent review found no remaining blocker or major defect. The final review
+confirmed that evidence windows, break boundaries, required-role outcomes, and
+retained-relation integrity remain inside the pure Trend Context boundary.

@@ -33,6 +33,8 @@ class TrendContextEngineTest {
         assertThat(setup.protectedLevel()).isNotNull();
         assertThat(setup.protectedLevel().price()).isEqualByComparingTo("90");
         assertThat(setup.evidence().getFirst().profileId()).isEqualTo("CONSERVATIVE_SWING_V1");
+        assertThat(setup.evidence().getFirst().sourceIds()).hasSizeGreaterThan(2);
+        assertThat(setup.evidence().getFirst().from()).isBefore(setup.evidence().getFirst().to());
         assertThat(setup.atr().available()).isTrue();
         assertThat(setup.ema().available()).isTrue();
     }
@@ -114,6 +116,27 @@ class TrendContextEngineTest {
     }
 
     @Test
+    void missingRequiredTriggerProducesUnknownAssessment() {
+        TrendContextAssessmentInput base = input(false, false, false, 80);
+        EnumMap<TrendContextRole, TrendContextRoleSeries> roleSeries = new EnumMap<>(base.roleSeries());
+        roleSeries.put(TrendContextRole.TRIGGER, series(TrendContextRole.TRIGGER, "15M",
+                candles("TRIGGER", "15M", 80, false, false, false, false, false)));
+        TrendContextAssessmentInput withRequiredTrigger = TrendContextAssessmentInput.accept(
+                new TrendContextAssessmentInput.Values(base.marketId(), base.provider(), base.symbol(),
+                        base.assessmentAt(), base.cutOffAt(), profileWithTrigger(), base.ruleVersion(),
+                        roleSeries));
+        Map<TrendContextRole, MarketStructureResult> structures =
+                new EnumMap<>(TrendContextStructureFixtures.structures(withRequiredTrigger));
+        structures.remove(TrendContextRole.TRIGGER);
+
+        TrendContextAssessment assessment = new TrendContextEngine().assess(withRequiredTrigger, structures);
+
+        assertThat(assessment.attention()).isEqualTo(TrendAttention.UNKNOWN);
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("REQUIRED_ROLE_MISSING");
+    }
+
+    @Test
     void structureWithFutureCutoffIsRejected() {
         TrendContextAssessmentInput input = input(false, false, false, 80);
         Map<TrendContextRole, MarketStructureResult> structures =
@@ -129,6 +152,24 @@ class TrendContextEngineTest {
         TrendContextAssessment assessment = new TrendContextEngine().assess(input, structures);
 
         assertThat(assessment.attention()).isEqualTo(TrendAttention.UNKNOWN);
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("INVALID_STRUCTURE");
+    }
+
+    @Test
+    void relationsReferencingNonRetainedSwingsAreRejected() {
+        TrendContextAssessmentInput input = input(false, false, false, 80);
+        Map<TrendContextRole, MarketStructureResult> structures =
+                new EnumMap<>(TrendContextStructureFixtures.structures(input));
+        MarketStructureResult setup = structures.get(TrendContextRole.SETUP);
+        structures.put(TrendContextRole.SETUP, new MarketStructureResult(
+                setup.marketId(), setup.provider(), setup.symbol(), setup.interval(), setup.cutOffAt(),
+                setup.algorithmId(), setup.ruleVersion(), setup.policyId(), setup.policyVersion(),
+                setup.parameterFingerprint(), setup.inputFingerprint(), setup.availability(), setup.findings(),
+                List.of(), setup.all(), setup.relations(), setup.resultFingerprint()));
+
+        TrendContextAssessment assessment = new TrendContextEngine().assess(input, structures);
+
         assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
                 .contains("INVALID_STRUCTURE");
     }
