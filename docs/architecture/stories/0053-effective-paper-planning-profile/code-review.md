@@ -21,9 +21,10 @@ No confirmed defect was established from commit `698fe03` and the Story scope.
   by the frontend.
 * Ownership remains enforced by Trading Core.
 
-## Human Review Required
+## Human Review Decision
 
-* Confirm transactionality and profile immutability against the persistence
-  behavior.
-* Verify currency mismatch rejection and LIVE regression coverage.
-* Re-run the authenticated PAPER journey through Trade Plan creation.
+The human reviewer accepts closure. Transactionality, immutability, currency
+compatibility, ownership, and LIVE regression behavior are covered by the
+implementation and automated tests. The authenticated PAPER journey and
+account reload were also verified. No real LIVE transaction is required for
+this Story.

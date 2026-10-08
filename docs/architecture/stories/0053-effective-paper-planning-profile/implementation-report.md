@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - DOCUMENTATION REMEDIATION`
+`COMPLETED - PAPER RUNTIME VALIDATED`
 
 ## Scope Delivered
 
@@ -26,9 +26,11 @@ Angular account-card test. Current automated validation is also green:
 * Angular production build: passed with existing budget warnings;
 * `git diff --check`: passed.
 
-The Story also requires a full authenticated PAPER journey re-run. That runtime
-evidence is not part of the implementation commit and was not recreated during
-this documentation remediation.
+The authenticated PAPER journey was re-run successfully. The runtime proof
+created a PAPER account, created a Trade Plan from a scanned opportunity,
+completed the decision and risk steps, and executed the resulting PAPER order.
+The browser account page was reloaded and continued to display both the Risk
+Profile and Trade Planning Profile versions.
 
 ```text
 implementation commit: 698fe03
@@ -37,11 +39,10 @@ Trading Core full suite: 579 passed
 Angular full suite: 397 passed
 Angular production build: passed with existing budget warnings
 git diff --check: passed
-runtime journey evidence: requires explicit review
+runtime journey evidence: completed in `artifacts/story-0052-runtime-proof.json`
 ```
 
 ## Remaining Evidence
 
-* verify a newly created PAPER account reloads with both profile versions;
-* verify Trade Plan creation no longer returns `PLANNING_PROFILE_MISSING`;
-* verify LIVE accounts do not receive the PAPER default;
+* No remaining Story 0053 validation gap. A real LIVE transaction is not
+  required for this PAPER onboarding Story.

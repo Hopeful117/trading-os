@@ -4,7 +4,7 @@
 
 **ID:** `0053`
 **Title:** Make a Trade Planning Profile effective for PAPER accounts
-**Status:** Approved
+**Status:** COMPLETED - PAPER RUNTIME VALIDATED
 
 ---
 
@@ -55,20 +55,21 @@ out of scope.
 
 ## Acceptance Criteria
 
-* [ ] PAPER account creation assigns a valid versioned Trade Planning Profile.
-* [ ] The assignment is transactional and remains immutable by version.
-* [ ] The effective planning profile endpoint returns the assigned profile to
+* [x] PAPER account creation assigns a valid versioned Trade Planning Profile.
+* [x] The assignment is transactional and remains immutable by version.
+* [x] The effective planning profile endpoint returns the assigned profile to
       the account owner.
-* [ ] Creating a Trade Plan from a PAPER opportunity no longer fails with
+* [x] Creating a Trade Plan from a PAPER opportunity no longer fails with
       `PLANNING_PROFILE_MISSING`.
-* [ ] Profile/account currency mismatch is rejected explicitly.
-* [ ] Ownership checks remain enforced for profile and account operations.
-* [ ] Account reload displays the selected risk profile and effective planning
+* [x] Profile/account currency mismatch is rejected explicitly.
+* [x] Ownership checks remain enforced for profile and account operations.
+* [x] Account reload displays the selected risk profile and effective planning
       profile versions.
-* [ ] LIVE accounts do not receive the PAPER default automatically.
-* [ ] Affected backend and frontend tests pass.
-* [ ] The Angular production build passes.
-* [ ] Story 0048 is re-run through Trade Plan creation from the web interface.
+* [x] LIVE accounts do not receive the PAPER default automatically.
+* [x] Affected backend and frontend tests pass.
+* [x] The Angular production build passes.
+* [x] Story 0048 is re-run through Trade Plan creation from the authenticated
+      PAPER journey.
 
 ---
 
@@ -97,7 +98,7 @@ out of scope.
 
 ## Definition of Done
 
-* [ ] Implementation completed within this Story's scope.
-* [ ] Acceptance criteria validated with evidence.
-* [ ] Human code review completed.
+* [x] Implementation completed within this Story's scope.
+* [x] Acceptance criteria validated with evidence.
+* [x] Human code review completed.
 * [ ] Human commit created.

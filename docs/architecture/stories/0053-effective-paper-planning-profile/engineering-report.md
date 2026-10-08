@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - RUNTIME EVIDENCE PARTIAL`
+`COMPLETED - PAPER RUNTIME VALIDATED`
 
 ## Outcome
 
@@ -21,16 +21,14 @@ implementation commit. Current automated validation also passes:
 * Trading OS Web production build: successful, with existing budget warnings;
 * `git diff --check`: successful.
 
-The required authenticated runtime walkthrough remains open.
+The authenticated PAPER runtime walkthrough is complete. A newly created PAPER
+account received both versioned profiles, reloaded with those references in the
+web interface, and continued through Trade Plan creation and PAPER execution.
+Evidence is recorded in `artifacts/story-0052-runtime-proof.json`.
 
 ## Known Limitations
 
-* Runtime proof of successful PAPER Trade Plan creation must be linked from the
-  Story 0048 evidence when available.
-* Acceptance of the profile version after account reload remains a human
-  validation item.
-* The Story file remains `Approved`; its acceptance checkboxes have not been
-  silently rewritten by this documentation remediation.
+* No remaining Story 0053 validation gap.
 
 ## Git State
 
@@ -43,6 +41,5 @@ MERGE = NO
 
 ## Human Actions Required
 
-1. Review ADR-046 and the provisioning transaction boundary.
-2. Re-run the authenticated PAPER journey.
-3. Update Story status after acceptance evidence is reviewed.
+1. Create the human-controlled commit for the reviewed Story 0053 diff.
+2. Continue with the next debt Story.
