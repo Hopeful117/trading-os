@@ -30,5 +30,8 @@ separate end-to-end evidence record.
 * record the exact account balance, effective limits, generated notional, and
   approved evaluation identifier for the final corrected scenario;
 * run the deliberately excessive-plan negative case;
-* attach current Trading Core, Risk Domain, and Angular test results;
 * verify LIVE account behavior remains unchanged.
+
+Current automated validation is recorded in the Engineering Report: Risk
+Domain (26 tests), Trading Core (579 tests), Angular (397 tests), Angular
+production build, and `git diff --check` all passed.

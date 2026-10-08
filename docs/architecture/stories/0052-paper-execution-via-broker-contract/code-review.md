@@ -23,6 +23,8 @@ available Story scope.
 
 ## Human Review Required
 
-* Inspect transaction and rollback guarantees for local PAPER settlement.
-* Verify ambiguous LIVE outcomes cannot become definitive rejections.
-* Run the affected backend and frontend suites.
+* Inspect transaction and rollback guarantees for local PAPER settlement in the
+  running environment.
+* Verify ambiguous LIVE outcomes cannot become definitive rejections against a
+  broker or representative integration environment.
+* Review the updated automated validation evidence before closing the Story.

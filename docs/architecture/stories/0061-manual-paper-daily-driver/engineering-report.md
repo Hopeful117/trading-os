@@ -17,6 +17,11 @@ reload, full close, reload and history continuity.
   was used.
 * No second execution pipeline was introduced.
 * The duplicate Risk acknowledgment was rejected by the existing invariant.
+* Asset-only valuation refreshes required conversion markets before valuation.
+* Execution Intent recovery is protected by exact TradePlan ID and version
+  matching, including a negative version-mismatch test.
+* Initial and execution-time Risk remain fail-closed when a MARKET valuation has
+  no authoritative source price.
 
 ## Runtime Evidence
 
@@ -38,7 +43,9 @@ Close execution intent: b1483c46-62c6-4e14-8a20-3661855b319c
 * Focused valuation and Risk tests: passed.
 * Execution-time Risk revalidation tests: passed.
 * Manual TradePlan orchestration tests: passed.
-* Angular PlanPage tests: `10` passed.
+* Angular PlanPage tests: `11` passed.
+* Trading Core full test suite: `584` passed.
+* Angular full test suite: `402` passed.
 * Trading Core compilation: passed.
 * Angular production build: passed with existing budget warnings.
 * `git diff --check`: passed.

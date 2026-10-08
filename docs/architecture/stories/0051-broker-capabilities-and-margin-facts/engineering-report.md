@@ -18,7 +18,7 @@ Fresh Maven validation completed after the documentation remediation:
 
 * Broker Service: `209` tests passed.
 * Broker Service `mvn verify`: passed; JaCoCo checks met.
-* Trading Core: `578` tests passed.
+* Trading Core: `580` tests passed.
 * Risk Domain: `26` tests passed.
 * `git diff --check`: passed.
 
@@ -35,8 +35,9 @@ Fresh Maven validation completed after the documentation remediation:
 * The proof used the configured public Kraken endpoint through the local Docker
   deployment; a separate sandbox/deployed-environment proof is not required by
   the Story acceptance criteria and remains an optional follow-up.
-* The end-to-end PAPER path reaches risk evaluation and returns the expected
-  blocking `PAPER_MARGIN_UNAVAILABLE` decision before execution.
+* The previous end-to-end PAPER proof returned `PAPER_MARGIN_UNAVAILABLE`.
+  Follow-up wiring now allows the PAPER path to request the provider-backed
+  order-margin preview; a fresh authenticated runtime proof is still pending.
 
 ## Git State
 

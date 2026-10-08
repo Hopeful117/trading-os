@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION EVIDENCE PARTIAL`
+`IMPLEMENTED - RUNTIME EVIDENCE PARTIAL`
 
 ## Outcome
 
@@ -14,8 +14,14 @@ application for account review.
 ## Validation
 
 Focused backend and Angular account-card tests are included in the
-implementation commit. The required authenticated runtime walkthrough and a
-fresh full-suite result are not attached to this remediation.
+implementation commit. Current automated validation also passes:
+
+* Trading Core: 579 tests;
+* Trading OS Web: 397 tests;
+* Trading OS Web production build: successful, with existing budget warnings;
+* `git diff --check`: successful.
+
+The required authenticated runtime walkthrough remains open.
 
 ## Known Limitations
 
@@ -30,7 +36,7 @@ fresh full-suite result are not attached to this remediation.
 
 ```text
 IMPLEMENTATION_COMMIT = 698fe03
-DOCUMENTATION_BRANCH = docs/story-artifact-remediation
+VALIDATION_BRANCH = chore/debt-resolution
 PUSH = NO
 MERGE = NO
 ```
@@ -38,6 +44,5 @@ MERGE = NO
 ## Human Actions Required
 
 1. Review ADR-046 and the provisioning transaction boundary.
-2. Run the affected tests and Angular build.
-3. Re-run the authenticated PAPER journey.
-4. Update Story status after acceptance evidence is reviewed.
+2. Re-run the authenticated PAPER journey.
+3. Update Story status after acceptance evidence is reviewed.

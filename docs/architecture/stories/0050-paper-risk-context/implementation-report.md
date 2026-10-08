@@ -42,7 +42,7 @@ Market Intelligence targeted tests: 8 passed
 Trading Core targeted tests: 29 passed
 Risk Domain full suite: 26 passed
 Market Intelligence full suite: 489 passed
-Trading Core full suite: 577 passed
+Trading Core full suite: 580 passed
 git diff --check: passed
 ```
 
@@ -50,21 +50,22 @@ git diff --check: passed
 
 * confirm complete local balance, open-trade, closed-trade, and protection
   facts in the supported runtime;
-* PAPER margin remains unavailable until an authoritative margin source is
-  defined and implemented;
+* PAPER order margin now uses the provider-backed `RequiredMarginPort` path;
+  the rebuilt authenticated runtime still needs confirmation;
 * confirm LIVE delegation remains covered by the current Trading Core tests;
-* authenticated runtime validation now covers service startup, registration,
-  login, PAPER provisioning, account listing, and empty-position retrieval;
-  the complete decision path reaches risk evaluation and remains blocked by the
-  unavailable margin fact; no execution is attempted without approval.
+* authenticated runtime validation previously covered service startup,
+  registration, login, PAPER provisioning, account listing, and empty-position
+  retrieval; the rebuilt image requires a fresh authenticated walkthrough.
 
 ## Worktree and Git
 
 ```text
-IMPLEMENTATION_COMMIT = pending
-DOCUMENTATION_BRANCH = docs/story-artifact-remediation
+IMPLEMENTATION_COMMIT = fdcb6ac
+FOLLOW_UP_HARDENING_COMMIT = 87dba4a
+VALIDATION_BRANCH = chore/debt-resolution
 PUSH = NO
 ```
 
-The working tree contains unrelated pre-existing changes and no commit was
-created by this implementation.
+The remaining acceptance blocker is fresh runtime/provider evidence. No
+provider margin inference is introduced; the read-only provider-backed preview
+is consumed through the existing neutral boundary.

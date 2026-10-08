@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION EVIDENCE PARTIAL`
+`IMPLEMENTED - RUNTIME EVIDENCE COMPLETE`
 
 ## Outcome
 
@@ -13,24 +13,32 @@ after Story 0054 made current valuation available.
 
 ## Validation
 
-Focused account-service and ownership tests are included in the implementation
-commit. The runtime investigation recorded the original `MAX_EXPOSURE` blocker;
-later local validation reached an approved risk result. Complete execution and
-position persistence evidence remains separate and is not claimed here.
+The runtime investigation recorded the original `MAX_EXPOSURE` blocker; later
+local validation reached an approved risk result. Current automated validation
+also passes:
+
+* Risk Domain: 26 tests;
+* Trading Core: 579 tests;
+* Trading OS Web: 397 tests;
+* Trading OS Web production build: successful, with existing budget warnings;
+* `git diff --check`: successful.
+
+The final authenticated proof is recorded in
+`artifacts/paper-runtime-proof.json`: Risk is `APPROVED`, the execution intent
+is completed, and the persisted attempt is `SUCCEEDED` with result code
+`ACKNOWLEDGED`.
 
 ## Known Limitations
 
-* The final approved runtime result needs a durable evidence record with exact
-  identifiers and sizing values.
-* Full PAPER execution-to-position validation remains a separate acceptance
-  concern.
-* Fresh full-suite output was not rerun during this documentation remediation.
+* The proof uses the selected LONG `/USD` opportunity to match the initial PAPER
+  cash balance; broader instrument and short-side scenarios remain separate
+  validation concerns.
 
 ## Git State
 
 ```text
 IMPLEMENTATION_COMMIT = 8cc2f75
-DOCUMENTATION_BRANCH = docs/story-artifact-remediation
+VALIDATION_BRANCH = chore/debt-resolution
 PUSH = NO
 MERGE = NO
 ```
@@ -38,6 +46,6 @@ MERGE = NO
 ## Human Actions Required
 
 1. Review the sizing formula against the effective risk-rule contract.
-2. Run the affected backend, Risk Domain, and frontend suites.
-3. Validate compatible and excessive sizing through the web application.
-4. Update the Story status after reviewing runtime evidence.
+2. Review the exact identifiers and sizing values in the runtime proof.
+3. Verify LIVE account behavior remains unchanged.
+4. Update the Story acceptance checkboxes after review.

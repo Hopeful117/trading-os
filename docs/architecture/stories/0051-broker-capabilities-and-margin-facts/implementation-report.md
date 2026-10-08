@@ -42,11 +42,12 @@ hardening.
 ```text
 implementation commit: not created; human review pending
 Broker Service: 209 tests passed
-Trading Core: 578 tests passed
+Trading Core: 580 tests passed
 Risk Domain: 26 tests passed
 mvn verify: passed; JaCoCo checks met
 git diff --check: passed
-runtime E2E: authenticated provider-backed Kraken proof passed; PAPER fail-closed proof remains expected
+runtime E2E: authenticated provider-backed Kraken proof passed; PAPER preview
+  revalidation is pending after follow-up Trading Core wiring
 ```
 
 ## Remaining Evidence

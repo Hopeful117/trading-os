@@ -9,7 +9,16 @@
 
 ## Findings
 
-No confirmed implementation defect was identified in the delivered Story scope.
+The independent review identified one valuation freshness defect and two test
+gaps. All three findings were corrected:
+
+* Asset-only valuations now refresh required conversion markets.
+* PlanPage recovery tests prove exact TradePlan version matching and reject
+  mismatched execution versions.
+* Initial and execution-time Risk tests cover missing authoritative source
+  prices for MARKET orders and preserve fail-closed behavior.
+
+No unresolved implementation defect remains in the reviewed scope.
 
 ## Review Notes
 

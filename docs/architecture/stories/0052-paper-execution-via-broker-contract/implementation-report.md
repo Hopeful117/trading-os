@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - DOCUMENTATION REMEDIATION`
+`IMPLEMENTED - AUTOMATED VALIDATION COMPLETE`
 
 ## Scope Delivered
 
@@ -21,18 +21,22 @@ existing idempotency and recovery boundaries.
 
 The implementation commit includes `ModeSpecificExecutionBoundaryTest` and
 `PaperSettlementExitTest`. The implementation plan requires Trading Core,
-Broker Service, and Angular validation. Fresh command output was not generated
-for this Story during documentation remediation.
+Broker Service, and Angular validation. Those suites have now been executed
+successfully.
 
 ```text
 implementation commit: a07b7ad
-focused mode-boundary and settlement tests: present in the implementation commit
-fresh full-suite execution: not run during documentation remediation
+follow-up hardening: a341f01
+Trading Core: ./mvnw -q test (579 tests, passed)
+Broker Service: ./mvnw -q test (passed)
+Angular tests: npm run test:ci (397 tests, passed)
+Angular build: npm run build (passed; existing budget warnings)
+git diff --check: passed
 ```
 
 ## Remaining Evidence
 
-* verify idempotency and version-conflict behavior for both modes;
-* verify LIVE unknown outcomes remain reconciliation-required;
-* verify PAPER settlement rollback or explicit recovery on local failure;
-* record current backend and frontend validation results.
+* verify the above mode-specific behaviors in a running environment;
+* verify PAPER settlement persistence and reloadability through the user journey;
+* verify LIVE unknown outcomes remain reconciliation-required against a broker
+  or representative integration environment.
