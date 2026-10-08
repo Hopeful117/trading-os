@@ -2,7 +2,6 @@ package com.hope.trading.market_intelligence.application.execution;
 
 import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
-import com.hope.trading.market_intelligence.application.observation.TrendContextObservationService;
 import com.hope.trading.market_intelligence.application.context.IntelligenceContextAssembler;
 import com.hope.trading.market_intelligence.application.planning.ExecutionPlanner;
 import com.hope.trading.market_intelligence.application.planning.PlanningRequest;
@@ -31,7 +30,6 @@ public class CapabilityAnalysisCoordinator {
     private final ExecutionPlanner planner;
     private final ExecutionEngine engine;
     private final Clock clock;
-    private final TrendContextObservationService trendContextObservations;
     private final Map<UUID, ExecutionControl> controls = new ConcurrentHashMap<>();
 
     public CapabilityAnalysisCoordinator(
@@ -42,26 +40,12 @@ public class CapabilityAnalysisCoordinator {
             ExecutionEngine engine,
             Clock clock
     ) {
-        this(strategies, contexts, artifacts, planner, engine, clock, null);
-    }
-
-    @Autowired
-    public CapabilityAnalysisCoordinator(
-            AnalysisStrategyRegistry strategies,
-            IntelligenceContextAssembler contexts,
-            ArtifactPersistencePort artifacts,
-            ExecutionPlanner planner,
-            ExecutionEngine engine,
-            Clock clock,
-            TrendContextObservationService trendContextObservations
-    ) {
         this.strategies = strategies;
         this.contexts = contexts;
         this.artifacts = artifacts;
         this.planner = planner;
         this.engine = engine;
         this.clock = clock;
-        this.trendContextObservations = trendContextObservations;
     }
 
     public ConsolidatedIntelligence analyze(
@@ -83,10 +67,6 @@ public class CapabilityAnalysisCoordinator {
             ExecutionSummary summary = engine.execute(
                     planner.plan(new PlanningRequest(
                             analysisExecutionId, selected, Set.of(), descriptors)), control);
-            if (trendContextObservations != null) {
-                trendContextObservations.buildIfAssessmentExists(
-                        analysisExecutionId, request.marketId().toString());
-            }
             return consolidate(request, context, summary, startedAt, strategy.timeout());
         } finally {
             controls.remove(analysisExecutionId);

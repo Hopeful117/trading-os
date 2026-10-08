@@ -82,6 +82,30 @@ class TrendContextObservationIntegrationTest {
     }
 
     @Test
+    void olderAssessmentCannotSupersedeTheCurrentObservation() {
+        InMemoryCapabilityExecutionRepository executions = new InMemoryCapabilityExecutionRepository();
+        InMemoryObservationRepository observations = new InMemoryObservationRepository();
+        ObservationBuilder builder = new ObservationBuilder(
+                executions, observations, new ObservationFactory(),
+                Clock.fixed(TrendContextTestFixtures.ASSESSMENT_AT, ZoneOffset.UTC));
+        UUID currentAnalysis = UUID.randomUUID();
+        UUID lateAnalysis = UUID.randomUUID();
+
+        TrendContextAssessment current = assessment(fingerprint('a'), fingerprint('b'));
+        executions.save(completed(currentAnalysis, current));
+        Observation currentObservation = builder.build(currentAnalysis, INSTRUMENT,
+                new TrendContextObservationRule());
+
+        TrendContextAssessment older = assessment(fingerprint('c'), fingerprint('d'));
+        when(older.cutOffAt()).thenReturn(TrendContextTestFixtures.ASSESSMENT_AT.minusSeconds(60));
+        executions.save(completed(lateAnalysis, older));
+
+        assertThat(builder.build(lateAnalysis, INSTRUMENT, new TrendContextObservationRule()))
+                .isSameAs(currentObservation);
+        assertThat(observations.findActive()).containsExactly(currentObservation);
+    }
+
+    @Test
     void noAssessmentDoesNotCreateTrendContextObservation() {
         CapabilityExecutionRepository executions = mock(CapabilityExecutionRepository.class);
         ObservationBuilder builder = mock(ObservationBuilder.class);

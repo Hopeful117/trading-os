@@ -65,6 +65,9 @@ public final class ObservationBuilder {
                 .filter(item -> item.status() == ObservationStatus.ACTIVE)
                 .max(Comparator.comparingLong(Observation::version))
                 .orElse(null);
+        if (current != null && isOlderTrendContextResult(current, result.payload())) {
+            return current;
+        }
         Observation next = factory.create(new ObservationFactory.CreateValues(
                 current == null ? UUID.randomUUID() : current.lineageId(),
                 current == null ? 1 : current.version() + 1,
@@ -79,6 +82,15 @@ public final class ObservationBuilder {
         Observation superseded = factory.superseded(current, next.id());
         observations.supersede(superseded, next);
         return next;
+    }
+
+    private boolean isOlderTrendContextResult(Observation current, ObservationPayload payload) {
+        if (!(current.payload().orElse(null) instanceof TrendContextObservationPayload currentPayload)
+                || !(payload instanceof TrendContextObservationPayload nextPayload)) {
+            return false;
+        }
+        return nextPayload.content().assessment().cutOffAt()
+                .isBefore(currentPayload.content().assessment().cutOffAt());
     }
 
     private List<String> evidenceFingerprint(List<ObservationEvidence> evidence) {

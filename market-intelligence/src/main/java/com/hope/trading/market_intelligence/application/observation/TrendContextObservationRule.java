@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.application.observation;
 
 import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
+import com.hope.trading.market_intelligence.domain.capability.ProducedArtifact;
 import com.hope.trading.market_intelligence.domain.capability.CapabilityExecution;
 import com.hope.trading.market_intelligence.domain.observation.*;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
@@ -22,23 +23,21 @@ public final class TrendContextObservationRule implements ObservationConsolidati
     @Override
     public ObservationRuleResult evaluate(
             String instrument, List<CapabilityExecution> results) {
-        TrendContextCapabilityContent content = results.stream()
+        ProducedArtifact assessmentArtifact = results.stream()
                 .flatMap(value -> value.result().stream())
                 .flatMap(value -> value.artifacts().stream())
                 .filter(value -> value.type().equals(ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT))
-                .map(value -> value.artifact().content())
-                .filter(TrendContextCapabilityContent.class::isInstance)
-                .map(TrendContextCapabilityContent.class::cast)
-                .filter(value -> value.assessment() != null)
+                .filter(value -> value.artifact().content() instanceof TrendContextCapabilityContent)
+                .filter(value -> ((TrendContextCapabilityContent) value.artifact().content()).assessment() != null)
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No Trend Context assessment is available"));
+        TrendContextCapabilityContent content = (TrendContextCapabilityContent) assessmentArtifact.artifact().content();
         TrendContextAssessment assessment = content.assessment();
         TrendAttention attention = assessment.attention();
         String title = "Trend Context " + attention;
         String explanation = "Deterministic Trend Context assessment from role-scoped market evidence.";
-        Instant validUntil = assessment.assessmentAt().plus(
-                Duration.ofHours(1));
+        Instant validUntil = assessmentArtifact.artifact().freshness().validUntil();
         ObservationEvidenceCandidate evidence = new ObservationEvidenceCandidate(
                 executionId(results), title, explanation, Map.of(), Map.of(),
                 assessment.assessmentAt(), BigDecimal.ONE);
