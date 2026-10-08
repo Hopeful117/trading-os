@@ -22,6 +22,13 @@ No confirmed implementation defect was found in the delivered Story scope.
 * Angular does not reimplement account eligibility or Risk rules.
 * Standalone `/markets` behavior remains outside the new Workspace flow.
 
+## Independent Review Follow-up
+
+The review found and corrected URL-driven stream cleanup: account changes and
+removal of `marketId` now unsubscribe active backend streams. The Story remains
+open because the required authenticated multi-account walkthrough and
+cross-account capability evidence are still missing.
+
 ## Known Risks
 
 * Freshness thresholds are frontend display semantics and must not be treated as

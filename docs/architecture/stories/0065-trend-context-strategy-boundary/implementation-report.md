@@ -39,5 +39,6 @@
 - `mvn -q -DskipTests compile`
 
 All commands completed successfully. Maven emitted normal Mockito/JDK agent and
-Spring/H2/Flyway warnings during the test suite. Changes remain unstaged and
-uncommitted.
+Spring/H2/Flyway warnings during the test suite. The implementation was
+independently reviewed and the Conservative strategy remains disabled and
+unvalidated by design.

@@ -307,6 +307,7 @@ export class DecisionWorkspace {
       }
 
       if (accountId !== this.selectedAccountId) {
+        this.clearActiveSubscriptions();
         this.selectedAccountId = accountId;
         this.selectedMarketId = null;
         this.manualTradeOpen = false;
@@ -317,9 +318,7 @@ export class DecisionWorkspace {
       if (marketId !== this.selectedMarketId) {
         this.selectedMarketId = marketId;
         this.manualTradeOpen = false;
-        if (marketId !== null) {
-          this.clearActiveSubscriptions();
-        }
+        this.clearActiveSubscriptions();
         this.selectedMarketSubject.next(marketId);
       }
     });

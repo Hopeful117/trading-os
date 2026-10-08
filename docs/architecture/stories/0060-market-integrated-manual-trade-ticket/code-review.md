@@ -21,11 +21,18 @@ No confirmed implementation defect was identified in the delivered Story scope.
 * Successful creation remains a MANUAL PROPOSED TradePlan, not execution.
 * Runtime Risk rejection was preserved rather than bypassed.
 
+## Independent Review Closure
+
+`PASS - CLOSED`
+
+The follow-up review confirmed and tested cleanup of URL-driven account changes
+and removal of `marketId`, preventing stale backend market subscriptions.
+
 ## Known Risks
 
 * Some market-data sections were STALE or UNAVAILABLE during runtime validation.
 * Frontend bundle/style budget warnings remain.
-* Human code review and multi-environment runtime validation remain pending.
+* Multi-environment runtime validation remains limited.
 
 ## Human Review Required
 

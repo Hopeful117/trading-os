@@ -31,6 +31,14 @@ available as authoritative facts in this repository. Story `0051` must be
 integrated before the Workspace can claim complete account-specific market
 availability.
 
+## Independent Review Follow-up
+
+`NEEDS EVIDENCE - REMAINS OPEN`
+
+Account-specific capability filtering and cross-account isolation are not
+demonstrated by sufficient negative tests or an authenticated multi-account
+walkthrough. Add that coverage before closure.
+
 ## Human Review Required
 
 * Inspect the new response contract and confirm its public exposure is

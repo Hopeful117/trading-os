@@ -2,7 +2,7 @@
 
 ## Status
 
-`RUNTIME VALIDATED - HUMAN REVIEW PENDING`
+`CLOSED - INDEPENDENT REVIEW PASSED`
 
 ## Scope Delivered
 
@@ -15,11 +15,14 @@
   `PlanPage`.
 * Preserved the standalone manual route as a fallback.
 * Added focused frontend and regression tests.
+* Independent review fixed and covered cleanup for account changes and URL
+  removal of the selected market.
 
 ## Validation Evidence
 
 ```text
 Frontend tests: 336 tests passed across 45 test files
+Decision Workspace stream-lifecycle follow-up: 33 tests passed
 Angular production build: passed with existing budget warnings
 Affected frontend Prettier check: passed
 git diff --check: passed
@@ -48,4 +51,5 @@ broker mutation or Position was claimed for this Story's runtime validation.
 * Runtime market data showed `STALE` and `UNAVAILABLE` states for some sections.
 * The runtime path stopped at deterministic Risk rejection, as required.
 * Angular build budget warnings remain existing non-failing warnings.
-* Human code review and human commit acceptance remain pending.
+* The runtime remains intentionally negative for stale/unavailable market data;
+  this does not authorize manual execution.

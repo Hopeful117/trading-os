@@ -25,6 +25,14 @@ No confirmed implementation defect was found in the delivered Story scope.
   not fabricated.
 * No provider-specific broker fields were added to the Trade Plan model.
 
+## Independent Review Follow-up
+
+`NEEDS EVIDENCE - REMAINS OPEN`
+
+The reported validation did not establish the affected Trading Core test suite,
+authenticated Gateway route, and production-profile Flyway migration behavior
+required by the Story. Execute and record those validations before closure.
+
 ## Known Risks
 
 * The manual request accepts explicit sizing and risk inputs. Trading Core Risk

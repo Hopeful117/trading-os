@@ -20,6 +20,14 @@ change.
 * Existing opportunity-origin compatibility remains the primary regression risk
   and is covered by the affected tests.
 
+## Independent Review Follow-up
+
+`NEEDS EVIDENCE - REMAINS OPEN`
+
+Focused tests now cover approved unprotected MANUAL plans and fail-closed
+unavailable facts without Trade Plan acknowledgment. An authenticated runtime
+walkthrough and explicit unknown-outcome runtime scenario remain missing.
+
 ## Known Risks
 
 * The Story's broader acceptance criteria require runtime evidence not present in

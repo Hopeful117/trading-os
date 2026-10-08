@@ -85,9 +85,8 @@ or Story 0066 changes were made.
 * Regression tests for late unrelated observations, degraded read state, history
   without current execution, and read-boundary provenance: passed.
 
-## Human Actions Required
+## Closure Record
 
-1. Review the complete Story 0064 diff and the three minimal production fixes.
-2. Decide whether the unrelated Active Scan null-claim warning should be tracked
-   separately.
-3. Create the human commit after review.
+Independent review passed the Story 0064 implementation and confirmed the
+unrelated Active Scan warning is outside Story scope. Closure was recorded after
+the dedicated implementation commit and validation evidence above.

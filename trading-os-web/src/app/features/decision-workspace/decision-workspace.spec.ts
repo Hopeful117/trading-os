@@ -448,6 +448,34 @@ describe('DecisionWorkspace', () => {
     subscription.unsubscribe();
   });
 
+  it('unsubscribes market streams when the URL account changes', () => {
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, marketId: 'market-1' }),
+    );
+    const subscription = component.ticker$.subscribe();
+    marketServiceMock.unsubscribe.mockClear();
+
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: 'account-2', marketId: 'market-1' }),
+    );
+
+    expect(marketServiceMock.unsubscribe).toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
+
+  it('unsubscribes market streams when the URL removes the selected market', () => {
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, marketId: 'market-1' }),
+    );
+    const subscription = component.ticker$.subscribe();
+    marketServiceMock.unsubscribe.mockClear();
+
+    routeQueryParamMap.next(convertToParamMap({ accountId: account.accountId }));
+
+    expect(marketServiceMock.unsubscribe).toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
+
   it('classifies market freshness from provider timestamps', () => {
     expect(component.marketFreshness({ status: 'waiting' }, null)).toBe('UNAVAILABLE');
     expect(component.marketFreshness({ status: 'live', data: {} }, new Date().toISOString())).toBe(

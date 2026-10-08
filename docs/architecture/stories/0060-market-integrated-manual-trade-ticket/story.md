@@ -4,7 +4,7 @@
 
 **ID:** `0060`
 **Title:** Market-Integrated MANUAL Trade Ticket
-**Status:** RUNTIME_VALIDATED - HUMAN REVIEW PENDING
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 

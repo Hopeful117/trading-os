@@ -17,6 +17,8 @@
 * Ensured account changes, market changes, invalid selections, and component destruction clean up active subscriptions.
 * Added responsive dark-dashboard styling without changing standalone `/markets` behavior.
 * Added focused account, URL, market, freshness, and stream-lifecycle tests.
+* Independent review corrected cleanup for URL-driven account changes and for
+  removing `marketId`; both paths now unsubscribe active backend streams.
 
 ## Validation
 
@@ -40,6 +42,8 @@ over its existing `4 kB` component budget.
   `0051` and is not invented by this Story.
 * No authenticated multi-account runtime walkthrough was available during this
   implementation.
+* Story closure remains blocked until the required multi-account runtime and
+  cross-account capability evidence is recorded.
 
 ## Out Of Scope Confirmed
 
