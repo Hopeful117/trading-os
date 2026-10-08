@@ -1,0 +1,11 @@
+4. [GET] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130 => [200] OK
+5. [POST] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/subscriptions => [204] No Content
+6. [GET] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/ohlc?interval=FIVE_MINUTES&limit=200 => [200] OK
+7. [POST] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/subscriptions => [204] No Content
+8. [POST] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/subscriptions => [204] No Content
+9. [POST] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/subscriptions => [204] No Content
+10. [GET] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/ohlc?interval=ONE_HOUR&limit=200 => [200] OK
+11. [DELETE] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/subscriptions => [204] No Content
+12. [POST] http://localhost:17085/api/v1/markets/42a30134-a94b-4049-b6f3-4f50ff367130/subscriptions => [204] No Content
+
+Note: 3 static requests not shown, run with "static" option to see them.

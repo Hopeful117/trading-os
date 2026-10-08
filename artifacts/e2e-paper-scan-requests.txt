@@ -1,0 +1,10 @@
+4. [GET] http://localhost:17085/api/v1/opportunities/active => [200] OK
+5. [GET] http://localhost:17085/api/v1/accounts => [200] OK
+6. [GET] http://localhost:17085/api/v1/markets => [200] OK
+7. [POST] http://localhost:17085/api/v1/intelligence/scans/scope => [200] OK
+8. [POST] http://localhost:17085/api/v1/intelligence/scans => [202] Accepted
+9. [GET] http://localhost:17085/api/v1/intelligence/scans/1d0bee93-872e-4235-9a12-6aa4faf5868c => [200] OK
+10. [GET] http://localhost:17085/api/v1/opportunities/active => [200] OK
+11. [GET] http://localhost:17085/api/v1/opportunities/87963000-7fff-3874-9dde-f5936e808765 => [200] OK
+
+Note: 3 static requests not shown, run with "static" option to see them.

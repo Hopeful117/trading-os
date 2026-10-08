@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-10-08T11:24:05Z",
+  "baseUrl": "http://localhost:17080",
+  "username": "runtime_paper_1791458640_16299",
+  "registration": {
+    "status": 200
+  },
+  "profile": {
+    "id": "0a10c7e2-9d1e-4f5a-b6c8-123456789043",
+    "version": "1.0.0"
+  },
+  "paper": {
+    "brokerAccountId": "a5805f5e-257e-48e3-973f-d4d13ff04225",
+    "accountId": "1a24377d-42c7-4f20-ac51-f039e0698efc"
+  },
+  "scan": {
+    "status": 202,
+    "id": "16355504-bf62-47be-9c03-3839492fe257",
+    "state": "COMPLETED",
+    "scopeStatus": 200
+  },
+  "opportunityId": "fdae80fe-b8df-359c-8c8f-aeb3c63fce4c",
+  "tradePlan": {
+    "status": 200,
+    "id": "6b1dfebb-b4b4-48c3-b71d-62e962231958",
+    "version": 2,
+    "decisionStatus": 200
+  },
+  "risk": {
+    "status": 200,
+    "evaluationId": "a53d0c4f-6298-403f-b2c7-7a6d6efb0204",
+    "approved": true,
+    "response": {
+      "evaluationId": "a53d0c4f-6298-403f-b2c7-7a6d6efb0204",
+      "tradePlanId": "6b1dfebb-b4b4-48c3-b71d-62e962231958",
+      "tradePlanVersion": 2,
+      "accountId": "1a24377d-42c7-4f20-ac51-f039e0698efc",
+      "status": "COMPLETED",
+      "decision": "APPROVED",
+      "approved": true,
+      "reasons": [],
+      "warnings": [],
+      "metrics": {
+        "exposureRatio": 0.029999999999742,
+        "dailyDrawdownRatio": 0.0003,
+        "totalDrawdownRatio": 0.0003000000,
+        "positionRiskRatio": 0.0003000000
+      },
+      "evaluatedAt": "2026-10-08T11:24:04.676887064Z",
+      "trace": {
+        "correlationId": "bea43a92-ae30-4b70-a201-cfcae703ae5b",
+        "engineVersion": "adr-028-standard-1",
+        "policyVersions": {
+          "TRADING_OS_STANDARD_RISK": "1.0.0"
+        },
+        "ruleVersions": {
+          "DAILY_DRAWDOWN": "1.0.0",
+          "MAX_EXPOSURE": "1.0.0",
+          "MAX_POSITION_RISK": "1.0.0"
+        },
+        "snapshotVersions": {
+          "ruleSet": 164,
+          "context": 41,
+          "market": 163,
+          "account": 161,
+          "portfolio": 162
+        }
+      }
+    }
+  },
+  "execution": {
+    "id": "bee65d0c-c120-4d73-b777-5412336257dd",
+    "status": "COMPLETED"
+  }
+}
