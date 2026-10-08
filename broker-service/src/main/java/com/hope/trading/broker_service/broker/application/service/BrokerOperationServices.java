@@ -4,7 +4,9 @@ import com.hope.trading.broker_service.broker.domain.capability.BrokerCapabiliti
 import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerAuthorizationException;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import com.hope.trading.broker_service.broker.infrastructure.monitoring.BrokerOperationsMetrics;
+import com.hope.trading.broker_service.broker.application.registry.BrokerProviderRegistry;
 import com.hope.trading.broker_service.connection.application.BrokerConnectionRepository;
+import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import java.util.*;
 import org.slf4j.Logger;import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,21 +29,39 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
         private final BrokerOperationsMetrics metrics;
         private final BrokerConnectionRepository connections;
         public GetTechnicalCapabilitiesService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}
-        public TechnicalCapabilities get(UUID ownerId,UUID id,String instrument){
-            requireOwnership(connections,id,ownerId);
-            return metrics.record("capabilities",()->require(providers.resolve(id),TechnicalCapability.class).capabilities(id,instrument));
-        }
-    }
+         public TechnicalCapabilities get(UUID ownerId,UUID id,String instrument){
+             requireOwnership(connections,id,ownerId);
+             return metrics.record("capabilities",()->require(providers.resolve(id),TechnicalCapability.class).capabilities(id,instrument));
+         }
+     }
+     @Service public static class GetProviderTechnicalCapabilitiesService {
+         private final BrokerProviderRegistry providers;
+         private final BrokerOperationsMetrics metrics;
+         public GetProviderTechnicalCapabilitiesService(BrokerProviderRegistry p,BrokerOperationsMetrics m){providers=p;metrics=m;}
+         public TechnicalCapabilities get(BrokerProviderId provider, UUID accountId, String instrument){
+             return metrics.record("provider_capabilities",()->require(providers.resolve(provider),TechnicalCapability.class)
+                     .capabilities(accountId,instrument));
+         }
+     }
      @Service public static class PreviewMarginService {
         private final BrokerProviderResolver providers;
         private final BrokerOperationsMetrics metrics;
         private final BrokerConnectionRepository connections;
         public PreviewMarginService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}
-        public MarginPreview preview(MarginPreviewRequest request,UUID ownerId){
-            requireOwnership(connections,request.brokerAccountId(),ownerId);
-            return metrics.record("margin_preview",()->require(providers.resolve(request.brokerAccountId()),MarginCapability.class).preview(request));
-        }
-    }
+         public MarginPreview preview(MarginPreviewRequest request,UUID ownerId){
+             requireOwnership(connections,request.brokerAccountId(),ownerId);
+             return metrics.record("margin_preview",()->require(providers.resolve(request.brokerAccountId()),MarginCapability.class).preview(request));
+         }
+     }
+     @Service public static class PreviewProviderMarginService {
+         private final BrokerProviderRegistry providers;
+         private final BrokerOperationsMetrics metrics;
+         public PreviewProviderMarginService(BrokerProviderRegistry p,BrokerOperationsMetrics m){providers=p;metrics=m;}
+         public MarginPreview preview(BrokerProviderId provider, MarginPreviewRequest request){
+             return metrics.record("provider_margin_preview",()->require(providers.resolve(provider),MarginCapability.class)
+                     .preview(request));
+         }
+     }
 
     @Service public static final class ResolveTargetService {
         private static final Logger log = LoggerFactory.getLogger(ResolveTargetService.class);
