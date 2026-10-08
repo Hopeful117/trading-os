@@ -24,11 +24,14 @@ Story 0061 rather than independently closed here.
 
 * Focused Market Intelligence handoff tests: passed.
 * Focused Trading Core risk-client tests: passed.
+* Trading Core manual evaluation matrix: 26 tests passed, including approved
+  unprotected MANUAL plans and fail-closed unavailable-facts rejection.
 * Commit `e00b26e` contains the implementation and focused regression tests.
 
 ## Known Limitations
 
-* The Story artifact still requires explicit full acceptance evidence.
+* The Story artifact still requires explicit full runtime acceptance evidence.
+* An unknown-outcome runtime walkthrough was not independently recorded here.
 * Runtime manual Risk evaluation was not independently recorded here.
 * Story 0061 provides the later end-to-end PAPER evidence.
 

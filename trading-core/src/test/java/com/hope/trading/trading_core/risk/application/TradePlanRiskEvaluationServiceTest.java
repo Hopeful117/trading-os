@@ -172,6 +172,39 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
+    void manualPlanMayBeApprovedWithoutProtectiveStopThroughTheSharedRiskPath() {
+        availableContext(List.of());
+        when(plans.load(planId, 3)).thenReturn(plan("USD", "USD", "MANUAL", null));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.approved()).isTrue();
+        verify(persistence).evaluation(any(), any(), any(), any(), anyLong(), any(), any(), any(), any(), any(), any(), any());
+        verify(acknowledgmentDelivery).deliver(response.evaluationId());
+    }
+
+    @Test
+    void manualPlanStillFailsClosedWhenRiskFactsAreUnavailable() {
+        availableContext(List.of());
+        when(plans.load(planId, 3)).thenReturn(plan("USD", "USD", "MANUAL", null));
+        when(broker.load(any(), any(), any())).thenReturn(new BrokerRiskFactsPort.Snapshot(
+                brokerAccountId, 11, now, false, List.of("BROKER_RISK_FACTS_INCOMPLETE"),
+                Map.of("USD", new BigDecimal("10000")),
+                new BrokerRiskFactsPort.Account("USD", new BigDecimal("10000"),
+                        new BigDecimal("10000"), new BigDecimal("100"), new BigDecimal("10000")),
+                List.of(), List.of(), List.of(), "{\"version\":11}"));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.approved()).isFalse();
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("BROKER_RISK_FACTS_INCOMPLETE");
+        verify(plans, never()).acknowledge(any(), anyLong(), any(), any(), any());
+    }
+
+    @Test
     void missingProviderStartingBalanceFallsBackToCurrentAccountBalance() {
         availableContext(List.of());
         when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(List.of(), List.of(), null));
