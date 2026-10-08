@@ -214,7 +214,7 @@ public class ProductionIntelligencePipeline {
         CreateOpportunityCommand command = matchOpportunities.command(
                 persisted.match(), definition, instrument, originOf(mode),
                 new ObservationReference(observation.id()),
-                observation.validFrom(),
+                evaluation.evaluatedAt(),
                 observation.validFrom(),
                 observation.validUntil().orElse(null),
                 evaluation,

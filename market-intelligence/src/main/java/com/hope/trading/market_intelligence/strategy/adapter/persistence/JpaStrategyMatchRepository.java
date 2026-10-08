@@ -91,6 +91,15 @@ public class JpaStrategyMatchRepository implements StrategyMatchRepository {
         entity.setDirection(match.direction().name());
         entity.setContextDigest(match.contextDigest());
         entity.setConditionResults(serialize(match));
+        if (match.provenance() != null) {
+            entity.setObservationLineageId(match.provenance().observationLineageId());
+            entity.setObservationVersion(match.provenance().observationVersion());
+            entity.setEvidenceCutOffAt(match.provenance().cutOffAt());
+            entity.setEvidenceProfileVersion(match.provenance().profileVersion());
+            entity.setEvidenceRuleVersion(match.provenance().ruleVersion());
+            entity.setEvidenceInputFingerprint(match.provenance().inputFingerprint());
+            entity.setEvidenceAssessmentFingerprint(match.provenance().assessmentFingerprint());
+        }
         entity.setMatchedAt(match.matchedAt());
         entity.setCreatedAt(match.createdAt());
         return entity;
@@ -107,8 +116,21 @@ public class JpaStrategyMatchRepository implements StrategyMatchRepository {
                 MatchedDirection.valueOf(entity.getDirection()),
                 entity.getContextDigest(),
                 deserialize(entity),
+                provenanceOf(entity),
                 entity.getMatchedAt(),
                 entity.getCreatedAt());
+    }
+
+    private com.hope.trading.market_intelligence.strategy.domain.StrategyEvidenceProvenance provenanceOf(
+            JpaStrategyMatchEntity entity) {
+        if (entity.getObservationLineageId() == null || entity.getObservationVersion() == null) {
+            return null;
+        }
+        return new com.hope.trading.market_intelligence.strategy.domain.StrategyEvidenceProvenance(
+                entity.getObservationId(), entity.getObservationLineageId(),
+                entity.getObservationVersion(), entity.getEvidenceCutOffAt(),
+                entity.getEvidenceProfileVersion(), entity.getEvidenceRuleVersion(),
+                entity.getEvidenceInputFingerprint(), entity.getEvidenceAssessmentFingerprint());
     }
 
     private String serialize(StrategyMatch match) {

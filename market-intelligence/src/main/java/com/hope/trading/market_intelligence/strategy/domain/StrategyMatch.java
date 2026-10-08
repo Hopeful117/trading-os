@@ -38,6 +38,7 @@ public final class StrategyMatch {
     private final MatchedDirection direction;
     private final String contextDigest;
     private final List<ConditionResult> conditionResults;
+    private final StrategyEvidenceProvenance provenance;
     private final Instant matchedAt;
     private final Instant createdAt;
 
@@ -51,6 +52,7 @@ public final class StrategyMatch {
             MatchedDirection direction,
             String contextDigest,
             List<ConditionResult> conditionResults,
+            StrategyEvidenceProvenance provenance,
             Instant matchedAt,
             Instant createdAt
     ) {
@@ -66,6 +68,7 @@ public final class StrategyMatch {
         this.contextDigest = requireText(contextDigest, "contextDigest");
         this.conditionResults = List.copyOf(
                 Objects.requireNonNull(conditionResults, "conditionResults is required"));
+        this.provenance = provenance;
         this.matchedAt = Objects.requireNonNull(matchedAt, "matchedAt is required");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt is required");
         this.matchId = matchId;
@@ -94,6 +97,11 @@ public final class StrategyMatch {
                     "only a MATCH evaluation may create a StrategyMatch (status="
                             + evaluation.status() + ")");
         }
+        if (evaluation.provenance() != null
+                && !evaluation.provenance().observationId().equals(observationId)) {
+            throw new IllegalArgumentException(
+                    "observationId must match evaluation provenance");
+        }
         return new StrategyMatch(
                 matchId,
                 evaluation.strategyId(),
@@ -104,6 +112,7 @@ public final class StrategyMatch {
                 evaluation.direction().orElseThrow(),
                 evaluation.contextDigest(),
                 evaluation.conditionResults(),
+                evaluation.provenance(),
                 evaluation.evaluatedAt(),
                 createdAt);
     }
@@ -127,7 +136,7 @@ public final class StrategyMatch {
     ) {
         return new StrategyMatch(matchId, new StrategyId(strategyId), strategyVersion,
                 marketId, analysisExecutionId, observationId, direction, contextDigest,
-                conditionResults, matchedAt, createdAt);
+                conditionResults, null, matchedAt, createdAt);
     }
 
     /** Rehydrates a persisted match. Persistence adapters only. */
@@ -144,9 +153,32 @@ public final class StrategyMatch {
             Instant matchedAt,
             Instant createdAt
     ) {
+        return rehydrate(matchId, strategyId, strategyVersion, marketId, analysisExecutionId,
+                observationId, direction, contextDigest, conditionResults, null, matchedAt,
+                createdAt);
+    }
+
+    public static StrategyMatch rehydrate(
+            UUID matchId,
+            StrategyId strategyId,
+            int strategyVersion,
+            UUID marketId,
+            UUID analysisExecutionId,
+            UUID observationId,
+            MatchedDirection direction,
+            String contextDigest,
+            List<ConditionResult> conditionResults,
+            StrategyEvidenceProvenance provenance,
+            Instant matchedAt,
+            Instant createdAt
+    ) {
+        if (provenance != null && !provenance.observationId().equals(observationId)) {
+            throw new IllegalArgumentException(
+                    "observationId must match match provenance");
+        }
         return new StrategyMatch(matchId, strategyId, strategyVersion, marketId,
                 analysisExecutionId, observationId, direction, contextDigest,
-                conditionResults, matchedAt, createdAt);
+                conditionResults, provenance, matchedAt, createdAt);
     }
 
     public StrategyMatchIdentity identity() {
@@ -171,6 +203,8 @@ public final class StrategyMatch {
     public String contextDigest() { return contextDigest; }
 
     public List<ConditionResult> conditionResults() { return conditionResults; }
+
+    public StrategyEvidenceProvenance provenance() { return provenance; }
 
     public Instant matchedAt() { return matchedAt; }
 

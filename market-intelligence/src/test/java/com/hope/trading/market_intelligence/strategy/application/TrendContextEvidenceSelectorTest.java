@@ -86,6 +86,19 @@ class TrendContextEvidenceSelectorTest {
         assertThat(selector.select(ANALYSIS, MARKET, trendInput(), NOW)).isEmpty();
     }
 
+    @Test
+    void rejectsFutureObservationEvidence() {
+        UUID currentCapabilityExecution = UUID.randomUUID();
+        CapabilityExecution execution = execution(currentCapabilityExecution);
+        when(executions.findByAnalysisExecutionId(ANALYSIS)).thenReturn(List.of(execution));
+        Observation future = observation(currentCapabilityExecution);
+        when(future.validFrom()).thenReturn(NOW.plusSeconds(1));
+        when(observations.findByType(new ObservationType("TREND_CONTEXT")))
+                .thenReturn(List.of(future));
+
+        assertThat(selector.select(ANALYSIS, MARKET, trendInput(), NOW)).isEmpty();
+    }
+
     private Observation observation(UUID capabilityExecutionId) {
         return observation(capabilityExecutionId, "AVAILABLE", true);
     }

@@ -27,6 +27,7 @@ public final class StrategyEvaluation {
     private final String explanation;
     private final Set<RequiredSemanticInput> consumedInputs;
     private final String contextDigest;
+    private final StrategyEvidenceProvenance provenance;
 
     private StrategyEvaluation(
             StrategyId strategyId,
@@ -39,7 +40,8 @@ public final class StrategyEvaluation {
             BigDecimal confidence,
             String explanation,
             Set<RequiredSemanticInput> consumedInputs,
-            String contextDigest
+            String contextDigest,
+            StrategyEvidenceProvenance provenance
     ) {
         Objects.requireNonNull(strategyId, "strategyId is required");
         if (strategyVersion < 1) {
@@ -58,6 +60,7 @@ public final class StrategyEvaluation {
         this.explanation = explanation == null || explanation.isBlank() ? null : explanation.trim();
         this.consumedInputs = consumedInputs == null ? Set.of() : Set.copyOf(consumedInputs);
         this.contextDigest = Objects.requireNonNull(contextDigest, "contextDigest is required");
+        this.provenance = provenance;
 
         if (status.requiresDirection() != (direction != null)) {
             throw new IllegalArgumentException(
@@ -124,7 +127,7 @@ public final class StrategyEvaluation {
         return new StrategyEvaluation(
                 definition.strategyId(), definition.version(), context.marketId(),
                 context.evaluatedAt(), status, direction, conditionResults, confidence,
-                explanation, consumedInputs, context.digest());
+                explanation, consumedInputs, context.digest(), context.provenance());
     }
 
     /** Derived convenience; {@link #status()} remains authoritative. */
@@ -153,6 +156,8 @@ public final class StrategyEvaluation {
     public Set<RequiredSemanticInput> consumedInputs() { return consumedInputs; }
 
     public String contextDigest() { return contextDigest; }
+
+    public StrategyEvidenceProvenance provenance() { return provenance; }
 
     @Override
     public boolean equals(Object other) {

@@ -44,6 +44,27 @@ public class JpaStrategyMatchEntity {
     @Column(name = "condition_results", nullable = false, columnDefinition = "text")
     private String conditionResults;
 
+    @Column(name = "observation_lineage_id")
+    private UUID observationLineageId;
+
+    @Column(name = "observation_version")
+    private Long observationVersion;
+
+    @Column(name = "evidence_cut_off_at", columnDefinition = "timestamp with time zone")
+    private Instant evidenceCutOffAt;
+
+    @Column(name = "evidence_profile_version")
+    private String evidenceProfileVersion;
+
+    @Column(name = "evidence_rule_version")
+    private String evidenceRuleVersion;
+
+    @Column(name = "evidence_input_fingerprint")
+    private String evidenceInputFingerprint;
+
+    @Column(name = "evidence_assessment_fingerprint")
+    private String evidenceAssessmentFingerprint;
+
     @Column(name = "matched_at", nullable = false, columnDefinition = "timestamp with time zone")
     private Instant matchedAt;
 
@@ -89,6 +110,21 @@ public class JpaStrategyMatchEntity {
     public void setConditionResults(String conditionResults) {
         this.conditionResults = conditionResults;
     }
+
+    public UUID getObservationLineageId() { return observationLineageId; }
+    public void setObservationLineageId(UUID value) { this.observationLineageId = value; }
+    public Long getObservationVersion() { return observationVersion; }
+    public void setObservationVersion(Long value) { this.observationVersion = value; }
+    public Instant getEvidenceCutOffAt() { return evidenceCutOffAt; }
+    public void setEvidenceCutOffAt(Instant value) { this.evidenceCutOffAt = value; }
+    public String getEvidenceProfileVersion() { return evidenceProfileVersion; }
+    public void setEvidenceProfileVersion(String value) { this.evidenceProfileVersion = value; }
+    public String getEvidenceRuleVersion() { return evidenceRuleVersion; }
+    public void setEvidenceRuleVersion(String value) { this.evidenceRuleVersion = value; }
+    public String getEvidenceInputFingerprint() { return evidenceInputFingerprint; }
+    public void setEvidenceInputFingerprint(String value) { this.evidenceInputFingerprint = value; }
+    public String getEvidenceAssessmentFingerprint() { return evidenceAssessmentFingerprint; }
+    public void setEvidenceAssessmentFingerprint(String value) { this.evidenceAssessmentFingerprint = value; }
 
     public Instant getMatchedAt() { return matchedAt; }
 

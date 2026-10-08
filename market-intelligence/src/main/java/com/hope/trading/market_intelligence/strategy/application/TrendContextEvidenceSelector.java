@@ -68,6 +68,8 @@ public class TrendContextEvidenceSelector {
                         .orElse(false))
                 .filter(observation -> observation.validUntil()
                         .map(evaluatedAt::isBefore).orElse(true))
+                .filter(observation -> observation.validFrom() == null
+                        || !observation.validFrom().isAfter(evaluatedAt))
                 .filter(observation -> observation.payload()
                         .filter(TrendContextObservationPayload.class::isInstance)
                         .map(TrendContextObservationPayload.class::cast)

@@ -65,6 +65,39 @@ class StrategyMatchTest {
     }
 
     @Test
+    void rejectsObservationIdentityThatConflictsWithEvaluationProvenance() {
+        StrategyEvaluation evaluation = StrategyEvaluation.match(
+                builtins.conservativeTrendFollowing(),
+                StrategyEvaluationContext.builder()
+                        .marketId(MARKET).instrument("ETH/USD")
+                        .timeframe(StrategyApplicability.Timeframe.M15).evaluatedAt(EVALUATED)
+                        .provenance(new StrategyEvidenceProvenance(
+                                OBSERVATION, UUID.randomUUID(), 1, EVALUATED,
+                                "profile-v1", "rule-v1", "input", "assessment"))
+                        .build(),
+                MatchedDirection.LONG, List.of(), BigDecimal.ONE, "match", java.util.Set.of());
+
+        assertThatThrownBy(() -> StrategyMatch.fromEvaluation(
+                evaluation, ANALYSIS, UUID.randomUUID(), UUID.randomUUID(), EVALUATED))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("observationId");
+    }
+
+    @Test
+    void rejectsRehydratedObservationIdentityThatConflictsWithProvenance() {
+        StrategyEvidenceProvenance provenance = new StrategyEvidenceProvenance(
+                OBSERVATION, UUID.randomUUID(), 1, EVALUATED,
+                "profile-v1", "rule-v1", "input", "assessment");
+
+        assertThatThrownBy(() -> StrategyMatch.rehydrate(
+                UUID.randomUUID(), new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID),
+                1, MARKET, ANALYSIS, UUID.randomUUID(), MatchedDirection.LONG,
+                "digest", List.of(), provenance, EVALUATED, EVALUATED))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("observationId");
+    }
+
+    @Test
     void noMatchNeverCreatesFact() {
         StrategyEvaluation noMatch = StrategyEvaluation.noMatch(
                 builtins.legacyOhlcTrend(),
