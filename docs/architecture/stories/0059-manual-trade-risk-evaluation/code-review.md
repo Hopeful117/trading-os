@@ -22,19 +22,18 @@ change.
 
 ## Independent Review Follow-up
 
-`NEEDS EVIDENCE - REMAINS OPEN`
+`PASS - DOWNSTREAM RUNTIME EVIDENCE ACCEPTED`
 
-Focused tests now cover approved unprotected MANUAL plans and fail-closed
-unavailable facts without Trade Plan acknowledgment. An authenticated runtime
-walkthrough and explicit unknown-outcome runtime scenario remain missing.
+Focused tests cover approved unprotected MANUAL plans and fail-closed
+unavailable facts without Trade Plan acknowledgment. Story 0061 supplies the
+authenticated MANUAL PAPER runtime walkthrough and negative duplicate-acknowledgment
+evidence for the shared Risk boundary.
 
 ## Known Risks
 
-* The Story's broader acceptance criteria require runtime evidence not present in
-  the Story 0059 artifact set.
 * Full manual PAPER approval and execution evidence is recorded under Story 0061.
 
 ## Human Review Required
 
-* Confirm whether downstream Story 0061 evidence is sufficient to close Story
-  0059 or whether an independent runtime walkthrough is required.
+* Preserve Story 0061 as the downstream runtime evidence source for this
+  compatibility Story.

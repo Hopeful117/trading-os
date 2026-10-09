@@ -6,7 +6,7 @@
 
 **Title:** Authorize Trade Plans through the Risk Domain
 
-**Status:** Completed
+**Status:** CLOSED - IMPLEMENTED, VALIDATED AND INDEPENDENTLY REVIEWED; HUMAN COMMIT PENDING
 
 ---
 

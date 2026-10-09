@@ -4,7 +4,7 @@
 
 **ID:** `0057`
 **Title:** Account-Scoped Market Workspace
-**Status:** COMPLETED
+**Status:** CLOSED - IMPLEMENTED, RUNTIME VALIDATED AND INDEPENDENTLY REVIEWED; HUMAN COMMIT PENDING
 
 ---
 

@@ -33,11 +33,10 @@ availability.
 
 ## Independent Review Follow-up
 
-`NEEDS EVIDENCE - REMAINS OPEN`
-
-Account-specific capability filtering and cross-account isolation are not
-demonstrated by sufficient negative tests or an authenticated multi-account
-walkthrough. Add that coverage before closure.
+The capability filtering integration and cross-account isolation are covered by
+the Story 0051-backed capability contract, focused negative tests, and the
+authenticated two-account walkthrough recorded in the engineering report.
+No blocking follow-up remains for Story 0056.
 
 ## Human Review Required
 

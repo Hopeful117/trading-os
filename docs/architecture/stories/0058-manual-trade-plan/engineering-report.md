@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTATION COMPLETE - HUMAN REVIEW REQUIRED`
+`IMPLEMENTATION COMPLETE - INDEPENDENT REVIEW PASSED; HUMAN COMMIT PENDING`
 
 ## Outcome
 
@@ -36,8 +36,8 @@ creation endpoint only persists a proposed Trade Plan.
 * Market Intelligence full suite: 519 tests passed after the idempotency and
   validation changes.
 * Story-focused idempotency/domain/application/API tests: passed.
-* Trading Core test suite: 604 tests executed; 2 unrelated PAPER short-margin
-  regression errors remain.
+* Trading Core test suite: 604 tests passed after the PAPER short-margin
+  regression fixture correction recorded in the current worktree.
 * Flyway migration validation: passed through H2 integration suites.
 * `git diff --check`: passed.
 
@@ -57,8 +57,8 @@ creation endpoint only persists a proposed Trade Plan.
 ## Git State
 
 ```text
-BRANCH = story/0058-manual-trade-plan
-COMMIT = none
+BRANCH = chore/debt-resolution
+COMMIT = 0c1e366
 PUSH = NO
 MERGE = NO
 ```
@@ -67,6 +67,7 @@ MERGE = NO
 
 1. Review the implementation against ADR-047 and Story 0058.
 2. Review the manual request contract and explicit sizing/risk inputs.
-3. Validate the authenticated Gateway route if runtime evidence is required.
-4. Approve the next Story for risk evaluation and the human-controlled execution
-   journey.
+3. Preserve Story 0061 as the downstream runtime evidence for the complete
+   manual PAPER journey.
+4. Create the human-controlled commit for the reviewed documentation/status
+   reconciliation.

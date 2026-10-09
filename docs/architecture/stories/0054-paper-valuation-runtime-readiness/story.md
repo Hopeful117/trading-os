@@ -4,7 +4,7 @@
 
 **ID:** `0054`
 **Title:** Make PAPER market valuation available for runtime risk evaluation
-**Status:** COMPLETED - PAPER VALUATION VALIDATED
+**Status:** CLOSED - PAPER VALUATION VALIDATED; HUMAN COMMIT PENDING
 
 ---
 

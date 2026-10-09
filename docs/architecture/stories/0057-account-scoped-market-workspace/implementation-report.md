@@ -45,8 +45,6 @@ over its existing `4 kB` component budget.
   backend/provider freshness authority.
 * Complete broker/instrument capability filtering remains dependent on Story
   `0051` and is not invented by this Story.
-* No authenticated multi-account runtime walkthrough was available during this
-  implementation.
 * Live payload delivery remains environment-dependent and was not observed in
   this local walkthrough.
 

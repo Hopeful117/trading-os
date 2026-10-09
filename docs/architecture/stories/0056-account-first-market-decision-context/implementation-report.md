@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - BROKER CAPABILITY FILTERING INTEGRATED; RUNTIME WALKTHROUGH PENDING`
+`IMPLEMENTED - BROKER CAPABILITY FILTERING INTEGRATED; RUNTIME VALIDATED`
 
 ## Scope Delivered
 
@@ -49,7 +49,9 @@ MARKET-order capability facts exclude the market deterministically.
 
 ## Runtime Evidence
 
-No authenticated multi-account runtime walkthrough was available during this
-implementation. Backend ownership is delegated to Trading Core and covered by
-the account lookup boundary, capability ownership lookup, and negative
-resolution tests.
+An authenticated multi-account runtime walkthrough was completed with two
+disposable local PAPER accounts. The account-scoped Decision Workspace resolved
+the first account, and switching accounts cleared the previous market URL state
+before resolving the second account. Backend ownership remains delegated to
+Trading Core and is also covered by the account lookup boundary, capability
+ownership lookup, and negative resolution tests.

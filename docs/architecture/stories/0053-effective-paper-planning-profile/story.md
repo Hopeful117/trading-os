@@ -4,7 +4,7 @@
 
 **ID:** `0053`
 **Title:** Make a Trade Planning Profile effective for PAPER accounts
-**Status:** COMPLETED - PAPER RUNTIME VALIDATED
+**Status:** CLOSED - PAPER RUNTIME VALIDATED; HUMAN COMMIT PENDING
 
 ---
 
