@@ -40,4 +40,15 @@ class AccountEquityServiceTest {
         assertThat(result.divergent()).isTrue();
         assertThat(result.equity()).isEqualByComparingTo("1000");
     }
+
+    @Test
+    void doesNotUseUntrustedBrokerTotalWhenCalculatedValuationIsIncomplete() {
+        AccountEquityResult result = service.select(
+                new AccountValuationResult(null, "INCOMPLETE", null, null, "missing"),
+                null, new BigDecimal("1100"), true, false
+        );
+
+        assertThat(result.equity()).isNull();
+        assertThat(result.source()).isEqualTo("UNAVAILABLE");
+    }
 }

@@ -42,6 +42,17 @@ public class PositionQueryService {
         return findPositions(accountId, brokerPositions, equity, calculatedAt, PositionSource.BROKER, null);
     }
 
+    public List<OpenPositionDashboardView> findPositions(
+            UUID accountId,
+            List<PositionFact> brokerPositions,
+            BigDecimal equity,
+            Instant calculatedAt,
+            String accountCurrency
+    ) {
+        return findPositions(accountId, brokerPositions, equity, calculatedAt,
+                PositionSource.BROKER, accountCurrency);
+    }
+
     private List<OpenPositionDashboardView> findPositions(
             UUID accountId,
             List<PositionFact> brokerPositions,
@@ -102,11 +113,16 @@ public class PositionQueryService {
     }
 
     public List<OpenPositionDashboardView> findPaperPositions(Account account, Instant calculatedAt) {
+        return findPaperPositions(account, account.getEquity(), calculatedAt);
+    }
+
+    public List<OpenPositionDashboardView> findPaperPositions(
+            Account account, BigDecimal equity, Instant calculatedAt) {
         List<PositionFact> positions = account.getTrades().stream()
                 .filter(trade -> trade.getTradeStatus() == TradeStatus.OPEN)
                 .map(this::toPositionFact)
                 .toList();
-        return findPositions(account.getAccountId(), positions, account.getEquity(), calculatedAt,
+        return findPositions(account.getAccountId(), positions, equity, calculatedAt,
                 PositionSource.TRADING_CORE, account.getBaseCurrency());
     }
 
@@ -205,9 +221,11 @@ public class PositionQueryService {
     }
 
     private String normalize(String symbol) {
-        return symbol == null ? "" : symbol.toUpperCase(Locale.ROOT)
-                .replace("XBT", "BTC")
-                .replaceAll("[^A-Z0-9]", "");
+        if (symbol == null) return "";
+        String normalized = symbol.toUpperCase(Locale.ROOT)
+                .replace("XXBT", "XBT")
+                .replace("XBT", "BTC");
+        return normalized.replaceAll("[^A-Z0-9]", "");
     }
 
     private record MarketLookup(

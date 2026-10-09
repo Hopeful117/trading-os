@@ -10,9 +10,12 @@ class KrakenAssetNormalizerTest {
     @Test
     void normalizesKnownLegacyAssetsAndPairs() {
         assertThat(KrakenAssetNormalizer.asset("ZUSD")).isEqualTo("USD");
+        assertThat(KrakenAssetNormalizer.asset("XETH")).isEqualTo("ETH");
         assertThat(KrakenAssetNormalizer.asset("XXBT")).isEqualTo("BTC");
+        assertThat(KrakenAssetNormalizer.asset("USDG")).isEqualTo("USDG");
         assertThat(KrakenAssetNormalizer.pair("XXBTZUSD").instrument()).isEqualTo("BTC/USD");
         assertThat(KrakenAssetNormalizer.pair("ETH/USDT").instrument()).isEqualTo("ETH/USDT");
+        assertThat(KrakenAssetNormalizer.pair("USDG/USD").instrument()).isEqualTo("USDG/USD");
     }
 
     @Test
@@ -20,6 +23,12 @@ class KrakenAssetNormalizerTest {
         assertThatThrownBy(()->KrakenAssetNormalizer.asset("ZUNKNOWN"))
                 .isInstanceOf(BrokerProtocolException.class);
         assertThatThrownBy(()->KrakenAssetNormalizer.pair("UNKNOWNZUSD"))
+                .isInstanceOf(BrokerProtocolException.class);
+    }
+
+    @Test
+    void rejectsUnknownPrefixedAssetAliases() {
+        assertThatThrownBy(() -> KrakenAssetNormalizer.asset("XFOO"))
                 .isInstanceOf(BrokerProtocolException.class);
     }
 }

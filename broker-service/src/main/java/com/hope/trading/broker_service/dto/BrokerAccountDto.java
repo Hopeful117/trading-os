@@ -28,5 +28,7 @@ public class BrokerAccountDto {
 
     private BigDecimal brokerEquity;
 
+    private boolean brokerEquityTotal;
+
     private Instant dataAt;
 }

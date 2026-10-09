@@ -68,4 +68,25 @@ class MarketValuationClientTest {
 
         verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(conversionMarketId)));
     }
+
+    @Test
+    void refreshesBothMarketsForTwoHopAssetValuation() {
+        MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
+        UUID assetUsdMarketId = UUID.randomUUID();
+        UUID eurUsdMarketId = UUID.randomUUID();
+        Instant valuationAt = Instant.parse("2026-08-01T12:00:00Z");
+        when(feign.markets()).thenReturn(List.of(
+                new CatalogueMarket(assetUsdMarketId, "KRAKEN", "USDGUSD", "USDG", "USD"),
+                new CatalogueMarket(eurUsdMarketId, "KRAKEN", "EURUSD", "EUR", "USD")));
+        when(feign.value(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(
+                UUID.randomUUID(), 1, "EUR", valuationAt, valuationAt,
+                "conservative-v3", "PT5M", "COMPLETE", List.of()));
+        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules(),
+                Clock.fixed(valuationAt, ZoneOffset.UTC));
+
+        client.value("EUR", valuationAt, List.of(),
+                List.of(new MarketValuationPort.Asset("USDG", "USDG")));
+
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(assetUsdMarketId, eurUsdMarketId)));
+    }
 }

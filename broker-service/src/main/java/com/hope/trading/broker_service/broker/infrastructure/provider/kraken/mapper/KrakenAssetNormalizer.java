@@ -9,7 +9,8 @@ public final class KrakenAssetNormalizer {
     private KrakenAssetNormalizer() {}
 
     public static String asset(String providerAsset) {
-        String normalized=providerAsset==null?null:ASSETS.get(providerAsset.trim().toUpperCase(Locale.ROOT));
+        String value = providerAsset == null ? null : providerAsset.trim().toUpperCase(Locale.ROOT);
+        String normalized = value == null ? null : ASSETS.get(value);
         if(normalized==null)throw new BrokerProtocolException("Unsupported Kraken asset alias");
         return normalized;
     }
@@ -56,7 +57,7 @@ public final class KrakenAssetNormalizer {
         aliases(values,"AUD","AUD","ZAUD");
         aliases(values,"CHF","CHF","ZCHF");
         for(String canonical:List.of("AAVE","ADA","ALGO","ATOM","BCH","DAI","DOT","EOS",
-                "ICP","LINK","MATIC","POL","SOL","TRX","UNI","USDC","USDT"))
+                "ICP","LINK","MATIC","POL","SOL","TRX","UNI","USDC","USDT","USDG"))
             aliases(values,canonical,canonical);
         return Map.copyOf(values);
     }

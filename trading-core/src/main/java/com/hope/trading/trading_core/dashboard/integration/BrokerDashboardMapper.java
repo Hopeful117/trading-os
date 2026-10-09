@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.helper.TradeType;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -13,10 +14,10 @@ import java.util.Map;
 @Component
 public class BrokerDashboardMapper {
     public BrokerAccountFact toFact(BrokerAccountDto dto) {
-        Map<String, BigDecimal> balances = dto.getBalances() == null
-                || dto.getBalances().getBalances() == null
-                ? Map.of()
-                : dto.getBalances().getBalances();
+        boolean balancesAvailable = dto.getBalances() != null
+                && dto.getBalances().getBalances() != null;
+        Map<String, BigDecimal> balances = balancesAvailable
+                ? dto.getBalances().getBalances() : Map.of();
         List<PositionFact> positions = dto.getOpenTrades() == null
                 ? List.of()
                 : dto.getOpenTrades().stream().map(this::toPositionFact).toList();
@@ -26,9 +27,12 @@ public class BrokerDashboardMapper {
                 dto.getBroker(),
                 dto.getBaseCurrency(),
                 balances,
+                balancesAvailable,
                 dto.getBrokerEquity(),
+                dto.isBrokerEquityTotal(),
                 positions,
-                dto.getDataAt() == null ? Instant.now() : dto.getDataAt()
+                dto.getDataAt() == null ? Instant.now() : dto.getDataAt(),
+                PositionPnlTreatment.ADDITIVE
         );
     }
 
@@ -39,7 +43,7 @@ public class BrokerDashboardMapper {
                 && position.getQuantity() != null
                 && position.getQuantity().signum() != 0) {
             entryPrice = position.getEntryValue().divide(
-                    position.getQuantity(), 12, java.math.RoundingMode.HALF_UP
+                    position.getQuantity(), MathContext.DECIMAL128
             );
         }
 

@@ -2,6 +2,7 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.dto.ValuationSnapshotBatchRequest;
 import com.hope.trading.market_data.dto.ValuationSnapshotBatchRequest.PriceUse;
+import com.hope.trading.market_data.dto.ValuationSnapshotBatchResponse;
 import com.hope.trading.market_data.dto.ValuationSnapshotBatchResponse.FactStatus;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
@@ -70,6 +71,49 @@ class ValuationSnapshotServiceTest {
     }
 
     @Test
+    void canonicalizesKrakenBitcoinAssetAliases() {
+        var response = service.create(new ValuationSnapshotBatchRequest(
+                "USD", VALUATION_TIME, List.of(), List.of(
+                new ValuationSnapshotBatchRequest.Asset("xxbt", "XXBT"),
+                new ValuationSnapshotBatchRequest.Asset("btc", "BTC"))));
+
+        assertThat(response.facts()).extracting(fact -> fact.asset())
+                .containsExactly("XBT", "XBT");
+    }
+
+    @Test
+    void canonicalizesGenericKrakenLegacyAssetPrefixes() {
+        var response = service.create(new ValuationSnapshotBatchRequest(
+                "USD", VALUATION_TIME, List.of(), List.of(
+                new ValuationSnapshotBatchRequest.Asset("eth", "XETH"),
+                new ValuationSnapshotBatchRequest.Asset("usd", "ZUSD"))));
+
+        assertThat(response.facts()).extracting(fact -> fact.asset())
+                .containsExactly("ETH", "USD");
+    }
+
+    @Test
+    void valuesAssetThroughOneIntermediateCurrency() {
+        observe(market("USDG/USD", "USDG", "USD"), "0.99", "1.01", VALUATION_TIME.minusSeconds(10));
+        observe(market("EUR/USD", "EUR", "USD"), "1.10", "1.11", VALUATION_TIME.minusSeconds(10));
+
+        var response = service.create(new ValuationSnapshotBatchRequest(
+                "EUR", VALUATION_TIME, List.of(), List.of(
+                new ValuationSnapshotBatchRequest.Asset("usdg", "USDG"))));
+
+        var fact = response.facts().getFirst();
+        assertThat(fact.status()).isEqualTo(FactStatus.AVAILABLE);
+        assertThat(fact.value()).isEqualByComparingTo(
+                new BigDecimal("0.99").multiply(
+                        BigDecimal.ONE.divide(new BigDecimal("1.11"), java.math.MathContext.DECIMAL128)));
+        assertThat(fact.conversionLegs()).hasSize(2);
+        assertThat(fact.conversionLegs()).extracting(ValuationSnapshotBatchResponse.ConversionLeg::fromCurrency)
+                .containsExactly("USDG", "USD");
+        assertThat(fact.conversionLegs()).extracting(ValuationSnapshotBatchResponse.ConversionLeg::toCurrency)
+                .containsExactly("USD", "EUR");
+    }
+
+    @Test
     void failsClosedForStaleAndFutureOnlyObservations() {
         observe(market("EUR/USD", "EUR", "USD"), "1.10", "1.11", VALUATION_TIME.minusSeconds(301));
         observe(market("GBP/USD", "GBP", "USD"), "1.20", "1.21", VALUATION_TIME.plusSeconds(1));
@@ -87,6 +131,21 @@ class ValuationSnapshotServiceTest {
                 .isEqualTo("PT5M1S");
         assertThat(response.facts().getFirst().conversionLegs().getFirst().source().capturedAt())
                 .isEqualTo(VALUATION_TIME.minusSeconds(301));
+    }
+
+    @Test
+    void failsClosedForNonPositiveDirectPrices() {
+        observe(market("ZERO/USD", "ZERO", "USD"), "0", "1", VALUATION_TIME.minusSeconds(10));
+        observe(market("NEG/USD", "NEG", "USD"), "-1", "1", VALUATION_TIME.minusSeconds(10));
+
+        var response = service.create(new ValuationSnapshotBatchRequest(
+                "USD", VALUATION_TIME, List.of(), List.of(
+                new ValuationSnapshotBatchRequest.Asset("zero", "ZERO"),
+                new ValuationSnapshotBatchRequest.Asset("negative", "NEG"))));
+
+        assertThat(response.facts()).extracting(fact -> fact.status())
+                .containsExactly(FactStatus.CONVERSION_UNAVAILABLE, FactStatus.CONVERSION_UNAVAILABLE);
+        assertThat(response.facts()).extracting(fact -> fact.value()).containsOnlyNulls();
     }
 
     @Test
@@ -138,7 +197,7 @@ class ValuationSnapshotServiceTest {
         assertThat(fact.conversionLegs().getFirst().source().priceType()).isEqualTo("IDENTITY");
         assertThat(first.capturedAt()).isEqualTo(VALUATION_TIME);
         assertThat(first.maxObservationAge()).isEqualTo("PT5M");
-        assertThat(first.policyVersion()).isEqualTo("CONSERVATIVE_DIRECT_FX_NO_LOOKAHEAD_V2");
+        assertThat(first.policyVersion()).isEqualTo("CONSERVATIVE_MULTI_HOP_FX_NO_LOOKAHEAD_V3");
     }
 
     private Market market(String symbol, String base, String quote) {

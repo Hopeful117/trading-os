@@ -26,14 +26,17 @@ import java.time.Duration;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ValuationSnapshotService {
-    static final String POLICY_VERSION = "CONSERVATIVE_DIRECT_FX_NO_LOOKAHEAD_V2";
+    static final String POLICY_VERSION = "CONSERVATIVE_MULTI_HOP_FX_NO_LOOKAHEAD_V3";
     private static final MathContext DIVISION_CONTEXT = MathContext.DECIMAL128;
 
     private final MarketRepository marketRepository;
@@ -107,9 +110,7 @@ public class ValuationSnapshotService {
         ValuationFact fact = new ValuationFact(
                 "INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(), observation,
                 sourcePriceType(request.priceUse()), marketPrice, observationAge, value, conversionStatus);
-        if (conversion.leg() != null) {
-            fact.addConversionLeg(conversion.leg());
-        }
+        conversion.legs().forEach(fact::addConversionLeg);
         return fact;
     }
 
@@ -120,61 +121,91 @@ public class ValuationSnapshotService {
         ValuationFact fact = new ValuationFact(
                 "ASSET", request.id(), null, asset, null, null, null, null,
                 null, conversion.status() == FactStatus.AVAILABLE ? conversion.rate() : null, conversion.status());
-        if (conversion.leg() != null) {
-            fact.addConversionLeg(conversion.leg());
-        }
+        conversion.legs().forEach(fact::addConversionLeg);
         return fact;
     }
 
     private Conversion conversion(String from, String to, Instant valuationTimestamp) {
         if (from.equals(to)) {
             return new Conversion(FactStatus.AVAILABLE, BigDecimal.ONE,
-                    new ValuationConversionLeg(from, to, BigDecimal.ONE, null, "IDENTITY", BigDecimal.ONE, null));
+                    List.of(new ValuationConversionLeg(from, to, BigDecimal.ONE, null, "IDENTITY", BigDecimal.ONE, null)));
         }
 
+        Conversion direct = singleHop(from, to, valuationTimestamp);
+        if (direct.hasProvenance()) return direct;
+
+        Conversion multiHop = multiHop(from, to, valuationTimestamp);
+        return multiHop.status() != FactStatus.CONVERSION_UNAVAILABLE ? multiHop : direct;
+    }
+
+    private Conversion singleHop(String from, String to, Instant valuationTimestamp) {
         Optional<PriceObservation> direct = observationRepository
                 .findTopByBaseAssetIgnoreCaseAndQuoteAssetIgnoreCaseAndEffectiveAtLessThanEqualAndCapturedAtLessThanEqualOrderByEffectiveAtDescCapturedAtDescObservationIdDesc(
                         from, to, valuationTimestamp, valuationTimestamp);
         if (direct.isPresent()) {
             PriceObservation source = direct.get();
-            String observationAge = observationAge(source, valuationTimestamp);
-            if (isStale(source, valuationTimestamp)) {
-                return new Conversion(FactStatus.STALE, null,
-                        new ValuationConversionLeg(from, to, null, source, "BID", source.getBid(),
-                                observationAge));
-            }
-            if (source.getBid() == null) {
-                return new Conversion(FactStatus.CONVERSION_UNAVAILABLE, null,
-                        new ValuationConversionLeg(from, to, null, source, "BID", null,
-                                observationAge));
+            String age = observationAge(source, valuationTimestamp);
+            ValuationConversionLeg leg = new ValuationConversionLeg(from, to, null, source, "BID",
+                    source.getBid(), age);
+            if (isStale(source, valuationTimestamp) || source.getBid() == null
+                    || source.getBid().signum() <= 0) {
+                return new Conversion(isStale(source, valuationTimestamp) ? FactStatus.STALE : FactStatus.CONVERSION_UNAVAILABLE,
+                        null, List.of(leg));
             }
             return new Conversion(FactStatus.AVAILABLE, source.getBid(),
-                    new ValuationConversionLeg(from, to, source.getBid(), source, "BID", source.getBid(),
-                            observationAge));
+                    List.of(new ValuationConversionLeg(from, to, source.getBid(), source, "BID", source.getBid(), age)));
         }
 
         Optional<PriceObservation> inverse = observationRepository
                 .findTopByBaseAssetIgnoreCaseAndQuoteAssetIgnoreCaseAndEffectiveAtLessThanEqualAndCapturedAtLessThanEqualOrderByEffectiveAtDescCapturedAtDescObservationIdDesc(
                         to, from, valuationTimestamp, valuationTimestamp);
-        if (inverse.isEmpty()) {
-            return new Conversion(FactStatus.CONVERSION_UNAVAILABLE, null, null);
-        }
+        if (inverse.isEmpty()) return new Conversion(FactStatus.CONVERSION_UNAVAILABLE, null, List.of());
+
         PriceObservation source = inverse.get();
-        String observationAge = observationAge(source, valuationTimestamp);
-        if (isStale(source, valuationTimestamp)) {
-            return new Conversion(FactStatus.STALE, null,
-                    new ValuationConversionLeg(from, to, null, source, "INVERSE_ASK", source.getAsk(),
-                            observationAge));
-        }
-        if (source.getAsk() == null || source.getAsk().signum() <= 0) {
-            return new Conversion(FactStatus.CONVERSION_UNAVAILABLE, null,
-                    new ValuationConversionLeg(from, to, null, source, "INVERSE_ASK", source.getAsk(),
-                            observationAge));
+        String age = observationAge(source, valuationTimestamp);
+        ValuationConversionLeg leg = new ValuationConversionLeg(from, to, null, source, "INVERSE_ASK",
+                source.getAsk(), age);
+        if (isStale(source, valuationTimestamp) || source.getAsk() == null || source.getAsk().signum() <= 0) {
+            return new Conversion(isStale(source, valuationTimestamp) ? FactStatus.STALE : FactStatus.CONVERSION_UNAVAILABLE,
+                    null, List.of(leg));
         }
         BigDecimal rate = BigDecimal.ONE.divide(source.getAsk(), DIVISION_CONTEXT);
         return new Conversion(FactStatus.AVAILABLE, rate,
-                new ValuationConversionLeg(from, to, rate, source, "INVERSE_ASK", source.getAsk(),
-                        observationAge));
+                List.of(new ValuationConversionLeg(from, to, rate, source, "INVERSE_ASK", source.getAsk(), age)));
+    }
+
+    private Conversion multiHop(String from, String to, Instant valuationTimestamp) {
+        List<Market> markets = marketRepository.findAll();
+        Set<String> fromNeighbors = neighbors(from, markets);
+        Set<String> toNeighbors = neighbors(to, markets);
+        List<String> intermediates = fromNeighbors.stream()
+                .filter(toNeighbors::contains)
+                .filter(asset -> !asset.equals(from) && !asset.equals(to))
+                .sorted(Comparator.naturalOrder())
+                .toList();
+
+        for (String intermediate : intermediates) {
+            Conversion first = singleHop(from, intermediate, valuationTimestamp);
+            Conversion second = singleHop(intermediate, to, valuationTimestamp);
+            if (first.status() == FactStatus.AVAILABLE && second.status() == FactStatus.AVAILABLE) {
+                List<ValuationConversionLeg> legs = new ArrayList<>(first.legs());
+                legs.addAll(second.legs());
+                return new Conversion(FactStatus.AVAILABLE, first.rate().multiply(second.rate()), legs);
+            }
+        }
+        return new Conversion(FactStatus.CONVERSION_UNAVAILABLE, null, List.of());
+    }
+
+    private Set<String> neighbors(String asset, List<Market> markets) {
+        return markets.stream()
+                .flatMap(market -> {
+                    String base = normalize(market.getBaseAsset());
+                    String quote = normalize(market.getQuoteAsset());
+                    if (asset.equals(base)) return java.util.stream.Stream.of(quote);
+                    if (asset.equals(quote)) return java.util.stream.Stream.of(base);
+                    return java.util.stream.Stream.empty();
+                })
+                .collect(Collectors.toSet());
     }
 
     private boolean isStale(PriceObservation observation, Instant valuationTimestamp) {
@@ -226,9 +257,18 @@ public class ValuationSnapshotService {
     }
 
     private String normalize(String currency) {
-        return currency.trim().toUpperCase(Locale.ROOT);
+        String normalized = currency.trim().toUpperCase(Locale.ROOT);
+        if (normalized.equals("BTC")) return "XBT";
+        if (normalized.length() == 4
+                && (normalized.startsWith("X") || normalized.startsWith("Z"))) {
+            return normalized.substring(1);
+        }
+        return normalized;
     }
 
-    private record Conversion(FactStatus status, BigDecimal rate, ValuationConversionLeg leg) {
+    private record Conversion(FactStatus status, BigDecimal rate, List<ValuationConversionLeg> legs) {
+        private boolean hasProvenance() {
+            return !legs.isEmpty();
+        }
     }
 }
