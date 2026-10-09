@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - OPPORTUNITY PAPER RUNTIME VALIDATED; MANUAL/LEGACY E2E PENDING`
+`IMPLEMENTED - ALL RUNTIME CRITERIA VALIDATED; HUMAN CLOSURE APPROVAL PENDING`
 
 ## Scope Delivered
 
@@ -29,20 +29,29 @@
 * Trading Core opportunity and manual orchestration tests:
   `mvn -Dtest=OpportunityTradePlanOrchestrationServiceTest,ManualTradePlanOrchestrationServiceTest test`
   passed, 10 tests.
+* Trading Core preparation persistence integration test:
+  `mvn -Dtest=OpportunityTradePlanPreparationIntegrationTest test` passed.
 * `git diff --check`: passed.
 
 ## Runtime Evidence
 
-The fresh authenticated PAPER walkthrough is recorded in
+The authenticated PAPER walkthroughs are recorded in
 `artifacts/story-0062-convergence-runtime-proof.json`. It confirmed an active
 Opportunity opening the account-scoped Workspace, account resolution before
 market selection, Opportunity provenance display, creation of a `PROPOSED`
 TradePlan through the Opportunity API, navigation to the shared PlanPage, and
-no `/executions` request in the filtered browser network log. The artifact also
-records its authentication indicator and evidence limitations. It does not
-claim that `ExecutionIntent` creation was independently verified.
+no execution request during preparation in the filtered browser network log. It
+also confirmed the MANUAL route and legacy preparation route each create a
+`PROPOSED` plan and reach the shared PlanPage. The lifecycle walkthrough then
+confirmed human acceptance for all three plans, deterministic Risk rejection for
+Opportunity and legacy plans, and a PAPER fill for the approved MANUAL plan.
+The targeted Trading Core orchestration test verifies that Opportunity
+preparation only calls Market Intelligence. The Spring integration test compares
+the exact identifiers in the real ExecutionIntent repository before and after
+preparation and confirms no intent is persisted; intent creation is only
+expected after human acceptance and approved Risk.
 
 ## Closure
 
-The Opportunity-origin criteria and automated regression suites are validated.
-Manual/legacy end-to-end convergence remains open and is not claimed as closed.
+All Story runtime criteria and automated regression suites are validated. Final
+independent review remains before the Story is marked closed.

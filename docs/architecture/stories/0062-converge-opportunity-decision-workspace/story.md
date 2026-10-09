@@ -4,7 +4,7 @@
 
 **ID:** `0062`
 **Title:** Converge Opportunity Decisions into the Decision Workspace
-**Status:** IMPLEMENTED - OPPORTUNITY PAPER RUNTIME VALIDATED; MANUAL/LEGACY E2E FOLLOW-UP OPEN
+**Status:** READY FOR HUMAN CLOSURE APPROVAL - ALL RUNTIME CRITERIA VALIDATED
 
 ## Goal
 
@@ -75,12 +75,12 @@ should not be duplicated.
       resolved.
 * [x] The Workspace displays the Opportunity context without presenting it as
       Risk approval.
-* [ ] `Prepare from opportunity` creates an OPPORTUNITY TradePlan using the
+* [x] `Prepare from opportunity` creates an OPPORTUNITY TradePlan using the
       existing authenticated API and no ExecutionIntent.
 * [x] The existing MANUAL ticket continues to create MANUAL TradePlans.
-* [ ] Both origins reach the existing PlanPage, Risk, human authorization, and
+* [x] Both origins reach the existing PlanPage, Risk, human authorization, and
       execution lifecycle without origin-specific execution code.
-* [ ] The legacy preparation route remains functional during migration.
+* [x] The legacy preparation route remains functional during migration.
 * [x] Frontend and backend focused tests, production build, and `git diff
       --check` pass.
 * [x] No unrelated worktree changes are modified.
@@ -133,5 +133,5 @@ should not be duplicated.
 * [x] Relevant validation executed.
 * [x] Runtime convergence evidence recorded.
 * [x] Diff reviewed in IntelliJ.
-* [ ] Code Review approved.
-* [x] Human commit created.
+* [x] Code Review completed; human closure approval pending.
+* [ ] Human commit created.

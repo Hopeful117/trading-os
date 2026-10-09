@@ -3,10 +3,10 @@
 ## Outcome
 
 The convergence implementation passes the focused and full automated frontend
-validation, targeted Trading Core orchestration tests, and the authenticated
-PAPER walkthrough from an active Opportunity. Independent review found no
-confirmed production-code defect, but identified evidence-scope gaps that remain
-open for MANUAL and legacy-route runtime validation.
+validation, targeted Trading Core orchestration tests, and authenticated PAPER
+walkthroughs from Opportunity, MANUAL, and legacy preparation entry points.
+The targeted orchestration test also verifies the preparation path has no
+ExecutionIntent dependency.
 
 ## Documentation Reconciliation
 
@@ -21,18 +21,23 @@ The runtime proof is recorded in
 * Angular production build: passed with existing budget warnings.
 * Market Intelligence full suite: `cd market-intelligence && mvn test`;
   519 tests passed, 0 failures, 0 errors, 0 skipped.
-* Authenticated PAPER convergence walkthrough: passed.
-* No execution request observed during preparation; `ExecutionIntent` creation
-  was not independently verified by the browser evidence.
-* MANUAL and legacy-route end-to-end walkthroughs: pending.
+* Authenticated PAPER convergence walkthroughs for Opportunity, MANUAL, and
+  legacy preparation: passed.
+* No execution request observed during preparation in the three browser traces.
+* Opportunity and legacy plans reached human acceptance and were correctly
+  blocked by Risk with `POSITION_PROTECTION_INCOMPLETE`.
+* MANUAL plan reached approved Risk and a PAPER broker fill.
+* Targeted orchestration and Spring persistence assertions compare exact
+  ExecutionIntent identifiers and verify none is persisted during preparation;
+  intent creation is downstream of approved execution.
 
 ## Independent Review
 
-No confirmed implementation defect was identified. The remaining finding is an
-evidence-scope gap, not a production-code defect.
+No confirmed implementation defect was identified. The prior evidence-scope
+findings are addressed by the expanded runtime artifact and targeted test.
 
 ## Closure
 
-The Opportunity-origin scope, automated validation, and runtime evidence are
-recorded. The Story remains open until MANUAL and legacy-route end-to-end
-convergence is independently validated.
+All Story scope, automated validation, and runtime evidence are recorded.
+Independent review passed. Human closure approval and commit of the current
+artifact set remain the delivery actions.
