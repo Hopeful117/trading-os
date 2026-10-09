@@ -304,8 +304,9 @@ describe('PlanPage', () => {
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="resume-authorized-execution-button"]'))
-      .toBeFalsy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="resume-authorized-execution-button"]'),
+    ).toBeFalsy();
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -368,7 +369,9 @@ describe('PlanPage', () => {
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="execution-result-state"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-result-state"]'),
+    ).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="positions-link"]')).toBeTruthy();
   });
 

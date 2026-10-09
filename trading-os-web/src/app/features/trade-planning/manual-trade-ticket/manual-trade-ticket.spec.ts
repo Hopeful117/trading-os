@@ -142,8 +142,9 @@ describe('ManualTradeTicket', () => {
 
     expect(createManual).not.toHaveBeenCalled();
     expect(fixture.componentInstance.errorMessage()).toContain('not tradable');
-    expect(fixture.nativeElement.querySelector('[data-testid="manual-market-not-tradable"]'))
-      .toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="manual-market-not-tradable"]'),
+    ).toBeTruthy();
   });
 
   it('recovers when navigation to the created plan fails', async () => {

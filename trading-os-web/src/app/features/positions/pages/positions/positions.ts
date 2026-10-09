@@ -206,7 +206,10 @@ export class Positions {
     state.showConfirmation = true;
   }
 
-  cancelCloseConfirmation(positionId: string, accountId: string | null = this.selectedAccountId.value): void {
+  cancelCloseConfirmation(
+    positionId: string,
+    accountId: string | null = this.selectedAccountId.value,
+  ): void {
     const state = this.getCloseState(positionId, accountId);
     state.showConfirmation = false;
   }

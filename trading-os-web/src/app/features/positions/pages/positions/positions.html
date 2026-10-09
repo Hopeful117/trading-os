@@ -228,7 +228,9 @@
                         <button
                           class="btn-confirm"
                           (click)="confirmFullExposureClose(vm.selectedAccountId!, position)"
-                          [disabled]="getCloseState(position.positionId, position.accountId).inFlight"
+                          [disabled]="
+                            getCloseState(position.positionId, position.accountId).inFlight
+                          "
                         >
                           Confirmer la fermeture complète
                         </button>
@@ -240,10 +242,16 @@
                 @if (getCloseState(position.positionId, position.accountId).status) {
                   <div
                     class="close-status"
-                    [class]="closeStatusClass(getCloseState(position.positionId, position.accountId).status!)"
+                    [class]="
+                      closeStatusClass(
+                        getCloseState(position.positionId, position.accountId).status!
+                      )
+                    "
                   >
                     <span class="status-badge">{{
-                       closeStatusLabel(getCloseState(position.positionId, position.accountId).status!)
+                      closeStatusLabel(
+                        getCloseState(position.positionId, position.accountId).status!
+                      )
                     }}</span>
                     @if (getCloseState(position.positionId, position.accountId).failureReason) {
                       <span class="failure-reason">{{
@@ -261,10 +269,13 @@
                         Réconcilier
                       </button>
                     }
-                    @if (getCloseState(position.positionId, position.accountId).reconciliationResult) {
+                    @if (
+                      getCloseState(position.positionId, position.accountId).reconciliationResult
+                    ) {
                       <span class="reconciliation-result">{{
                         reconciliationLabel(
-                           getCloseState(position.positionId, position.accountId).reconciliationResult!
+                          getCloseState(position.positionId, position.accountId)
+                            .reconciliationResult!
                         )
                       }}</span>
                     }

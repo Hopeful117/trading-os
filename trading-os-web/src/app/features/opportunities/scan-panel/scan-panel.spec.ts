@@ -384,12 +384,15 @@ describe('ScanPanel', () => {
       fixture.componentInstance.runScan();
       await fixture.whenStable();
 
-      expect(activeScanServiceMock.createScan).toHaveBeenCalledWith({
-        accountId: 'a1',
-        objective: undefined,
-        requestedMarketIds: ['m2'],
-        scopeMode: 'SELECTED',
-      }, expect.any(String));
+      expect(activeScanServiceMock.createScan).toHaveBeenCalledWith(
+        {
+          accountId: 'a1',
+          objective: undefined,
+          requestedMarketIds: ['m2'],
+          scopeMode: 'SELECTED',
+        },
+        expect.any(String),
+      );
     });
 
     it('purges a selected market when a refresh marks it non-tradable', async () => {

@@ -96,8 +96,10 @@ describe('MarketDiscoveryService', () => {
       { ...markets[1], marketId: 'a', provider: 'KRAKEN' },
     ] as MarketResponse[];
 
-    expect(service.sortMarkets(nullable, { field: 'PROVIDER', direction: 'ASC' }))
-      .toEqual([nullable[0], nullable[1]]);
+    expect(service.sortMarkets(nullable, { field: 'PROVIDER', direction: 'ASC' })).toEqual([
+      nullable[0],
+      nullable[1],
+    ]);
     expect(nullable[0].marketId).toBe('z');
   });
 
