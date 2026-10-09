@@ -12,7 +12,11 @@ import com.hope.trading.market_intelligence.domain.scope.MarketEligibilityReason
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public record ActiveScanResponse(
         UUID scanId,
@@ -30,6 +34,14 @@ public record ActiveScanResponse(
 ) {
     static ActiveScanResponse from(
             ActiveScanResultProjection projection, StrategyMatchRepository matches) {
+        Set<UUID> strategyMatchIds = projection.markets().stream()
+                .flatMap(market -> market.opportunities().stream())
+                .flatMap(opportunity -> opportunity.strategyMatchId().stream())
+                .collect(Collectors.toSet());
+        Map<UUID, StrategyMatch> matchesById = strategyMatchIds.isEmpty()
+                ? Map.of()
+                : matches.findByIds(strategyMatchIds).stream()
+                .collect(Collectors.toMap(StrategyMatch::matchId, Function.identity()));
         return new ActiveScanResponse(
                 projection.scanId(),
                 projection.accountId(),
@@ -43,7 +55,7 @@ public record ActiveScanResponse(
                 projection.updatedAt(),
                 ProgressResponse.from(projection.progress()),
                 projection.markets().stream()
-                        .map(market -> MarketResponse.from(market, matches)).toList()
+                        .map(market -> MarketResponse.from(market, matchesById)).toList()
         );
     }
 
@@ -94,6 +106,19 @@ public record ActiveScanResponse(
         static MarketResponse from(
                 ActiveScanResultProjection.MarketResult market,
                 StrategyMatchRepository matches) {
+            Set<UUID> strategyMatchIds = market.opportunities().stream()
+                    .flatMap(opportunity -> opportunity.strategyMatchId().stream())
+                    .collect(Collectors.toSet());
+            Map<UUID, StrategyMatch> matchesById = strategyMatchIds.isEmpty()
+                    ? Map.of()
+                    : matches.findByIds(strategyMatchIds).stream()
+                    .collect(Collectors.toMap(StrategyMatch::matchId, Function.identity()));
+            return from(market, matchesById);
+        }
+
+        private static MarketResponse from(
+                ActiveScanResultProjection.MarketResult market,
+                Map<UUID, StrategyMatch> matches) {
             return new MarketResponse(
                     market.scanMarketId(),
                     market.ordinal(),
@@ -112,12 +137,13 @@ public record ActiveScanResponse(
 
         private static StrategyProvenance strategyProvenance(
                 List<com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity> opportunities,
-                StrategyMatchRepository matches) {
+                Map<UUID, StrategyMatch> matches) {
             if (opportunities.size() != 1 || opportunities.getFirst().strategyMatchId().isEmpty()) {
                 return null; // historical pre-0012 rows carry no fabricated attribution
             }
             return opportunities.getFirst().strategyMatchId()
-                    .flatMap(matches::findById)
+                    .map(matches::get)
+                    .filter(java.util.Objects::nonNull)
                     .map(StrategyProvenance::from).orElse(null);
         }
     }

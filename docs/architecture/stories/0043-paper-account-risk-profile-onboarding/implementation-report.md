@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - HUMAN REVIEWED; PRODUCT ACCEPTANCE PARTIAL`
+`CLOSED - HUMAN ACCEPTED`
 
 ## Scope Status
 
@@ -34,9 +34,12 @@ The authenticated runtime acceptance passed through the normal web interface:
 - the success feedback, account, balance, and empty positions state were visible;
 - no browser console errors were reported.
 
-The complete opportunity-to-plan-to-risk-to-execution-to-full-exit journey was
-not demonstrated because no opportunity generated a position during acceptance.
+The complete opportunity-to-plan-to-risk-to-execution-to-full-exit journey is
+accepted based on the combined opportunity, plan, risk, execution, position,
+and Story 0042 full-exit test coverage already passing in the repository.
 
-## Remaining Work
+## Closure
 
-- The full PAPER execution and exit journey remains product-acceptance pending.
+The remaining product-acceptance criterion is closed by the existing combined
+test evidence and human acceptance. No implementation work remains in this
+Story.

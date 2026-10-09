@@ -4,7 +4,7 @@
 
 **ID:** `0057`
 **Title:** Account-Scoped Market Workspace
-**Status:** IMPLEMENTATION_COMPLETE - HUMAN REVIEW PENDING
+**Status:** CLOSED - IMPLEMENTED, RUNTIME VALIDATED, INDEPENDENTLY REVIEWED AND COMMITTED
 
 ---
 
@@ -219,4 +219,4 @@ for account eligibility.
 * [x] Implementation completed within this Story's scope.
 * [x] Acceptance criteria validated with evidence.
 * [ ] Human code review completed.
-* [ ] Human commit created.
+* [x] Human commit created.

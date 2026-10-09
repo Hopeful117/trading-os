@@ -37,13 +37,13 @@ export class MarketDiscoveryService {
   }
 
   matchesSearch(market: MarketDiscoveryIdentity, search: string): boolean {
-    const query = search.trim().toLocaleLowerCase();
+    const query = search.trim().toLowerCase();
     if (!query) {
       return true;
     }
 
     return [market.symbol, market.baseAsset, market.quoteAsset, market.provider].some((value) =>
-      value?.toLocaleLowerCase().includes(query),
+      value?.toLowerCase().includes(query),
     );
   }
 
@@ -68,7 +68,7 @@ export class MarketDiscoveryService {
       return sort.direction === 'DESC' ? -primary : primary;
     }
 
-    return left.marketId.localeCompare(right.marketId);
+    return this.compareText(left.marketId, right.marketId);
   }
 
   private compareField(
@@ -94,7 +94,11 @@ export class MarketDiscoveryService {
   }
 
   private compareText(left: string | null | undefined, right: string | null | undefined): number {
-    return (left ?? '').localeCompare(right ?? '', undefined, { sensitivity: 'base' });
+    const normalizedLeft = (left ?? '').toLowerCase();
+    const normalizedRight = (right ?? '').toLowerCase();
+    if (normalizedLeft < normalizedRight) return -1;
+    if (normalizedLeft > normalizedRight) return 1;
+    return 0;
   }
 
   private compareBoolean(

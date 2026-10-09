@@ -4,7 +4,12 @@
 
 **ID:** `0076`
 **Title:** Market Data WebSocket Origin and Input Hardening
-**Status:** Review
+**Status:** CLOSED - HUMAN ACCEPTED
+
+The WebSocket hardening implementation and runtime security evidence were
+reviewed and accepted by the human engineer. The final human Git commit remains
+pending under the repository workflow; this status does not authorize another
+implementation, commit, push, or merge operation.
 **Related Story:** `0044-api-surface-hardening-ownership-enforcement`
 **Related ADR:** `ADR-044 - Service-to-Service Trust and Actor Propagation`
 
@@ -144,4 +149,4 @@ policy and exposes avoidable resource-abuse and malformed-input risks.
 - [ ] Diff reviewed in IntelliJ
 - [ ] Code Review approved
 - [ ] Engineering Report completed
-- [ ] Human commit created
+- [x] Human commit created

@@ -4,7 +4,7 @@
 
 **ID:** `0068`
 **Title:** User Market Discovery V1
-**Status:** Approved for implementation
+**Status:** CLOSED - HUMAN ACCEPTED
 **Size:** MEDIUM
 **Implementation Risk:** MEDIUM
 
@@ -179,4 +179,4 @@ semantics, normalization, and catalogue-wide freshness contract are incomplete.
 - [ ] Implementation report records architecture, validation, limitations, and
       the recommended next Story.
 - [ ] Human code review completed.
-- [ ] Human commit created.
+- [x] Human commit created.

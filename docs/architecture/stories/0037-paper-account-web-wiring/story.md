@@ -6,7 +6,7 @@
 
 **Title:** Wire PAPER account creation and mode visibility in the web application
 
-**Status:** Review
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 
@@ -100,5 +100,5 @@ could not distinguish LIVE and PAPER accounts in the UI.
 - [x] Repository Analysis completed.
 - [x] Implementation completed.
 - [x] Relevant validation executed.
-- [ ] Diff reviewed and accepted by the human engineer.
-- [ ] Human commit created.
+- [x] Diff reviewed and accepted by the human engineer.
+- [x] Human commit created.

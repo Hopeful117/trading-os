@@ -1,5 +1,7 @@
 # Story 0012 — TradingOpportunity from StrategyMatch
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Changement d'autorité
 
 AVANT : Observation → OhlcTrendObservationRule → TradingOpportunity.

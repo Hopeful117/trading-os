@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
-import { BehaviorSubject, NEVER, of, throwError } from 'rxjs';
+import { BehaviorSubject, NEVER, of, Subject, throwError } from 'rxjs';
 
 import { Account } from '../../core/models/account.model';
 import { DecisionContextResponse } from '../../core/models/decision-context.model';
@@ -122,6 +122,10 @@ describe('DecisionWorkspace', () => {
     validUntil: null,
     assessment: null,
     lastSuccessfulAssessment: null,
+    analysisExecutionId: null,
+    capabilityExecutionIds: [],
+    diagnostics: [],
+    sourceReferences: {},
   };
 
   beforeEach(async () => {
@@ -395,6 +399,20 @@ describe('DecisionWorkspace', () => {
     expect(marketServiceMock.subscribe).not.toHaveBeenCalled();
   });
 
+  it('does not open streams when the loaded market is no longer tradable', async () => {
+    marketServiceMock.findById.mockReturnValueOnce(
+      of({ ...market, marketState: { ...market.marketState, tradable: false } }),
+    );
+
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="market-unavailable"]')).toBeTruthy();
+    expect(marketServiceMock.subscribe).not.toHaveBeenCalled();
+  });
+
   it('updates timeframe and order-book depth only when the value changes', () => {
     component.selectOhlcInterval({ label: '5m', minutes: 5, interval: OhlcInterval.FIVE_MINUTES });
     component.selectOhlcInterval({ label: '5m', minutes: 5, interval: OhlcInterval.FIVE_MINUTES });
@@ -444,6 +462,62 @@ describe('DecisionWorkspace', () => {
     subscription.unsubscribe();
   });
 
+  it('unsubscribes market streams when the URL account changes', () => {
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, marketId: 'market-1' }),
+    );
+    const subscription = component.ticker$.subscribe();
+    marketServiceMock.unsubscribe.mockClear();
+    const cleanup = new Subject<void>();
+    marketServiceMock.unsubscribe.mockReturnValue(cleanup);
+    contextServiceMock.resolve.mockClear();
+
+    routeQueryParamMap.next(convertToParamMap({ accountId: 'account-2', marketId: 'market-1' }));
+
+    expect(marketServiceMock.unsubscribe).toHaveBeenCalled();
+    expect(component.selectedMarketId).toBeNull();
+    expect(contextServiceMock.resolve).not.toHaveBeenCalledWith('account-2');
+    cleanup.next();
+    cleanup.complete();
+    expect(contextServiceMock.resolve).toHaveBeenCalledWith('account-2');
+    subscription.unsubscribe();
+  });
+
+  it('waits for active stream cleanup before activating replacement streams', () => {
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    const subscriptions = [
+      component.ticker$.subscribe(),
+      component.ohlc$.subscribe(),
+      component.orderBook$.subscribe(),
+      component.recentTrades$.subscribe(),
+    ];
+    const cleanup = new BehaviorSubject<void>(undefined);
+    marketServiceMock.unsubscribe.mockReset();
+    marketServiceMock.unsubscribe.mockReturnValue(cleanup);
+    marketServiceMock.subscribe.mockClear();
+
+    component.selectMarket('market-3', context);
+
+    expect(marketServiceMock.subscribe).not.toHaveBeenCalled();
+    cleanup.complete();
+    expect(marketServiceMock.subscribe).toHaveBeenCalledTimes(4);
+    subscriptions.forEach((subscription) => subscription.unsubscribe());
+  });
+
+  it('unsubscribes market streams when the URL removes the selected market', () => {
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, marketId: 'market-1' }),
+    );
+    const subscription = component.ticker$.subscribe();
+    marketServiceMock.unsubscribe.mockClear();
+
+    routeQueryParamMap.next(convertToParamMap({ accountId: account.accountId }));
+
+    expect(marketServiceMock.unsubscribe).toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
+
   it('classifies market freshness from provider timestamps', () => {
     expect(component.marketFreshness({ status: 'waiting' }, null)).toBe('UNAVAILABLE');
     expect(component.marketFreshness({ status: 'live', data: {} }, new Date().toISOString())).toBe(
@@ -461,6 +535,35 @@ describe('DecisionWorkspace', () => {
         new Date(Date.now() - 120_000).toISOString(),
       ),
     ).toBe('STALE');
+  });
+
+  it('exposes a periodic freshness projection for silent streams', () => {
+    expect(component.freshnessTick$).toBeTruthy();
+    expect(
+      component.marketFreshness(
+        { status: 'live', data: {} },
+        new Date(Date.now() - 61_000).toISOString(),
+      ),
+    ).toBe('STALE');
+  });
+
+  it('does not expose a stale ticker as the manual reference price', () => {
+    expect(
+      component.manualReferencePrice({
+        status: 'live',
+        data: {
+          marketId: 'market-1',
+          provider: 'KRAKEN',
+          symbol: 'BTC/USD',
+          streamType: 'TICKER',
+          bid: 100,
+          ask: 101,
+          last: 100.5,
+          volume: 10,
+          occurredAt: new Date(Date.now() - 120_000).toISOString(),
+        },
+      }),
+    ).toBeNull();
   });
 
   it('renders a context error without fabricating markets', async () => {
@@ -544,6 +647,9 @@ describe('DecisionWorkspace', () => {
     expect(
       element.querySelector('[data-testid="trend-context-historical"]')?.textContent,
     ).toContain('NO_SETUP');
+    expect(
+      element.querySelector('[data-testid="trend-context-historical-provenance"]')?.textContent,
+    ).toContain('Profile');
   });
 
   it.each([
@@ -610,6 +716,7 @@ describe('DecisionWorkspace', () => {
     expect(component.manualTradeOpen).toBe(true);
     expect(element.textContent).toContain('Analytical evidence only');
     expect(element.textContent).toContain('Not Risk approval');
+    expect(element.textContent).toContain('Not execution authorization');
     expect(element.textContent).toContain('No optional trigger assessment was provided.');
   });
 });

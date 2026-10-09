@@ -21,6 +21,8 @@ public class EconomicEventEntity {
     UUID id;
     @Column(name = "source_name", nullable = false, length = 100)
     String sourceName;
+    @Column(length = 100)
+    String source;
     @Column(name = "source_event_id", nullable = false, length = 200)
     String sourceEventId;
     @Column(nullable = false, length = 300)
@@ -61,6 +63,7 @@ public class EconomicEventEntity {
         entity.id = event.id() == null
                 ? NewsIdentity.eventId(event.sourceName(), event.sourceEventId()) : event.id();
         entity.sourceName = event.sourceName();
+        entity.source = event.source();
         entity.sourceEventId = event.sourceEventId();
         entity.title = event.title();
         entity.category = event.category();
@@ -81,7 +84,7 @@ public class EconomicEventEntity {
     }
 
     public EconomicEvent toDomain() {
-        return new EconomicEvent(id, sourceName, sourceEventId, title, category, scheduledAt,
+        return new EconomicEvent(id, sourceName, source, sourceEventId, title, category, scheduledAt,
                 actualAt, split(currencies), splitUuid(marketIds), impact, status, previousValue,
                 consensusValue, actualValue, unit, sourceUpdatedAt, fetchedAt, normalizationVersion);
     }

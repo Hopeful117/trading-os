@@ -4,7 +4,7 @@
 
 **ID:** `0007`  
 **Title:** Persistent Active Scan Lifecycle Reconciliation & Result Projection  
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 
@@ -383,4 +383,4 @@ This Story explicitly defers to a future Story 0008 candidate:
 - [ ] Implementation completed.
 - [ ] Relevant tests pass.
 - [ ] Runtime benchmark evidence recorded.
-- [ ] Human commit created.
+- [x] Human commit created.

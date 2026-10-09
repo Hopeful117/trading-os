@@ -6,7 +6,7 @@
 
 **Title:** Surface active Market Intelligence opportunities in the Web app
 
-**Status:** Approved
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 

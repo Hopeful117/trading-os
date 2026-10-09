@@ -27,20 +27,40 @@ public final class ManualTradePlanController {
 
     @PostMapping("/manual")
     public ResponseEntity<Object> create(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody Request request, Authentication authentication) {
         UUID actorId = authenticatedActor(authentication);
-        TradePlanningResult result = service.createManual(request.toApplicationRequest(actorId));
+        TradePlanningContext context = contexts.find(
+                        request.planningContextId(), request.contextVersion())
+                .orElse(null);
+        if (context == null) {
+            return failure(PlanningFailureReason.INVALID_TRADING_CONTEXT,
+                    "The requested planning context is not available");
+        }
+        if (!request.currency().trim().equalsIgnoreCase(context.accountCurrency())) {
+            return failure(PlanningFailureReason.INVALID_TRADING_CONTEXT,
+                    "The requested currency must match the planning context account currency");
+        }
+        TradePlanningResult result = service.createManual(
+                request.toApplicationRequest(actorId, context.tradingAccountId()), idempotencyKey);
         if (result instanceof TradePlanningResult.Success success) {
             TradePlan plan = success.plan();
-            TradePlanningContext context = contexts.find(
-                            plan.planningContext().id(), plan.planningContext().version())
-                    .orElseThrow();
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(TradePlanResponse.from(plan, context));
         }
         TradePlanningResult.Failure failure = (TradePlanningResult.Failure) result;
-        return ResponseEntity.unprocessableEntity().body(new TradePlanningFailureResponse(
-                failure.reason().name(), failure.explanation(), failure.conflicts()));
+        return failure(failure.reason(), failure.explanation(), failure.conflicts());
+    }
+
+    private static ResponseEntity<Object> failure(
+            PlanningFailureReason reason, String explanation) {
+        return failure(reason, explanation, List.of());
+    }
+
+    private static ResponseEntity<Object> failure(
+            PlanningFailureReason reason, String explanation, List<PlanningConflict> conflicts) {
+        return ResponseEntity.unprocessableEntity().body(
+                new TradePlanningFailureResponse(reason.name(), explanation, conflicts));
     }
 
     private static UUID authenticatedActor(Authentication authentication) {
@@ -59,9 +79,9 @@ public final class ManualTradePlanController {
             @NotNull EntryType entryType,
             BigDecimal entryPrice,
             @NotNull @Positive BigDecimal referencePrice,
-            @NotNull @Positive BigDecimal stopLoss,
-            @NotBlank String stopRationale,
-            @NotEmpty List<@Valid Target> takeProfits,
+             @Positive BigDecimal stopLoss,
+             String stopRationale,
+             List<@Valid Target> takeProfits,
             @NotNull @Positive BigDecimal quantity,
             @NotNull @Positive BigDecimal notional,
             @NotNull @Positive BigDecimal monetaryRisk,
@@ -73,12 +93,13 @@ public final class ManualTradePlanController {
             @NotEmpty Set<String> invalidationConditions,
             Set<String> managementRules
     ) {
-        ManualTradePlanningRequest toApplicationRequest(UUID actorId) {
+        ManualTradePlanningRequest toApplicationRequest(UUID actorId, UUID tradingAccountId) {
             return new ManualTradePlanningRequest(
-                    planningContextId, contextVersion, actorId, instrument, direction,
+                    planningContextId, contextVersion, actorId, tradingAccountId, instrument, direction,
                     new EntryStrategy(entryType, entryPrice, Set.of("Human-authored entry")),
-                    new StopLoss(stopLoss, stopRationale),
-                    takeProfits.stream().map(Target::toDomain).toList(),
+                    stopLoss == null ? null : new StopLoss(stopLoss,
+                            stopRationale == null ? "Manual protection" : stopRationale),
+                    takeProfits == null ? List.of() : takeProfits.stream().map(Target::toDomain).toList(),
                     new PositionSizing(quantity, notional, monetaryRisk, currency),
                     referencePrice, expiresAt, expirationPolicy, thesis,
                     confirmationConditions, invalidationConditions,

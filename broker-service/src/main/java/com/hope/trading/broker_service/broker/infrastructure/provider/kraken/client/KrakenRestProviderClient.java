@@ -20,6 +20,21 @@ public final class KrakenRestProviderClient implements KrakenProviderClient {
     private final RestClient client; private final KrakenRequestSigner signer;
     private final AtomicLong nonce=new AtomicLong(System.currentTimeMillis());
     public KrakenRestProviderClient(RestClient krakenRestClient,KrakenRequestSigner signer){this.client=krakenRestClient;this.signer=signer;}
+    public JsonNode publicGet(String path,Map<String,String> parameters){
+        long started=System.nanoTime();try{
+            String payload=client.get().uri(uriBuilder->{var builder=uriBuilder.path(path);parameters.forEach(builder::queryParam);return builder.build();})
+                    .retrieve().body(String.class);
+            if(payload==null||payload.isBlank())throw new BrokerProtocolException("Empty Kraken response");
+            JsonNode response=JSON.readTree(payload);translateErrors(response.path("error"));
+            log.info("broker_provider_call provider=KRAKEN operation={} result=SUCCESS durationNanos={}",path,System.nanoTime()-started);
+            return response.path("result");
+        }catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new BrokerProtocolException("Malformed Kraken response");}
+         catch(ResourceAccessException e){throw new BrokerUnavailableException("Kraken communication failed",e);}
+         catch(HttpClientErrorException.TooManyRequests e){throw new BrokerRateLimitException("Kraken rate limit exceeded");}
+         catch(HttpServerErrorException e){throw new BrokerUnavailableException("Kraken service unavailable",e);}
+         catch(RestClientException e){throw new UnknownBrokerException("Unexpected Kraken client failure",e);}
+         finally{log.debug("broker_provider_call_completed provider=KRAKEN operation={} durationNanos={}",path,System.nanoTime()-started);}
+    }
     public JsonNode privatePost(String path,Map<String,String> parameters,CredentialMaterial credentials){
         Map<String,String> signed=new LinkedHashMap<>();signed.put("nonce",Long.toString(nonce.updateAndGet(previous->Math.max(previous+1,System.currentTimeMillis()))));signed.putAll(parameters);
         var headers=signer.sign(path,signed,credentials);var body=new LinkedMultiValueMap<String,String>();signed.forEach(body::add);

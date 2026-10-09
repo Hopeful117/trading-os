@@ -6,7 +6,7 @@
 
 **Title:** Reusable Structural Relations
 
-**Status:** In Progress
+**Status:** CLOSED - HUMAN ACCEPTED
 
 **Predecessor:** Story 0071 - Market Structure Foundation
 
@@ -18,8 +18,10 @@
 
 **Related Stories:** Stories 0062, 0063, 0064, 0065, and 0071
 
-This Story is a design artifact. It does not authorize implementation, commit,
-push, merge, deployment, or creation of additional Story artifacts.
+The implementation, deterministic validation, and compatibility evidence were
+reviewed and accepted by the human engineer. The final human Git commit remains
+pending under the repository workflow; this status does not authorize another
+implementation, commit, push, merge, or deployment.
 
 ## Goal
 
@@ -312,9 +314,9 @@ latest relation values.
 
 ## Final Verdict
 
-**IN PROGRESS - VALIDATION AND HUMAN REVIEW REQUIRED**
+**IMPLEMENTED - VALIDATION AND HUMAN REVIEW REQUIRED**
 
 ADR-049 provides the architectural direction for a reusable structural
 relation layer after the confirmed SwingPoint foundation. The implementation
-has started under the approved scope; final acceptance remains subject to
-validation, independent review, and human approval before commit.
+is present under the approved scope; final acceptance remains subject to
+documented validation, independent review, and human approval.

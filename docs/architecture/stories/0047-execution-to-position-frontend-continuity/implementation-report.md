@@ -1,5 +1,9 @@
 # Implementation Report - Story 0047
 
+## Closure
+
+`CLOSED - HUMAN ACCEPTED`
+
 ## Result
 
 Implemented the frontend continuity from execution feedback to account
@@ -33,8 +37,12 @@ positions.
 
 ```text
 targeted tests: PASS - 43 tests
-full Angular tests: PASS - 307 tests
+full Angular tests: PASS - 395 tests
 npm run build: PASS - existing budget warnings only
 npx prettier --check: PASS
 git diff --check: PASS
+
+The independent review also added account-scoped close-result filtering,
+originating-account reconciliation, invalid route-account handling, and complete
+reconciliation response copying.
 ```

@@ -6,26 +6,26 @@
 
 **Title:** Close the Execution Feedback Loop
 
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
+
+**Revision date:** 2026-10-07
 
 ---
 
 ## Goal
 
-Establish a durable linkage between execution outcomes and their originating strategy provenance, enabling the system to trace any completed trade back through ExecutionIntent → TradePlan → TradingOpportunity → StrategyMatch → StrategyDefinition.
+Establish a durable, immutable provenance snapshot when a modern execution is accepted by the broker, enabling the system to trace the execution back through ExecutionIntent → TradePlan → TradingOpportunity → StrategyMatch → StrategyDefinition.
 
 ```text
 ExecutionIntent (COMPLETED)
     ↓
-TradeOutcome (new entity)
+TradeOutcome (new entity, entry snapshot)
     ↓
 links to TradePlanReference
     ↓
-links to OpportunityId (via TradePlan.rationale.opportunities)
+links to zero or more provenance records
     ↓
-links to StrategyMatchId (via TradingOpportunity.strategyMatchId)
-    ↓
-links to StrategyDefinition (via StrategyMatch.strategyId + strategyVersion)
+OpportunityId → StrategyMatchId → StrategyDefinition
 ```
 
 This closes the feedback loop that ADR-034 explicitly identifies as a prerequisite for strategy analytics, backtesting, and continuous improvement.
@@ -84,27 +84,22 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 **Trading Core domain**
 
 - Introduce `TradeOutcome` as a new domain entity in the `execution` bounded context
-- `TradeOutcome` captures the execution result with full strategy provenance:
+- `TradeOutcome` captures the immutable entry snapshot with full available strategy provenance:
   - `tradeOutcomeId` (UUID, PK)
   - `executionIntentId` (UUID, FK to ExecutionIntent)
   - `tradePlanId` (UUID, from ExecutionIntent.tradePlan)
   - `tradePlanVersion` (int, from ExecutionIntent.tradePlan)
-  - `opportunityId` (UUID, nullable, from TradePlan.rationale.opportunities)
-  - `strategyMatchId` (UUID, nullable, from TradingOpportunity.strategyMatchId)
-  - `strategyId` (String, nullable, from StrategyMatch.strategyId)
-  - `strategyVersion` (int, nullable, from StrategyMatch.strategyVersion)
+  - `provenance` (zero or more immutable records, one per referenced opportunity)
+  - each provenance record contains `opportunityId`, `opportunityVersion`, `strategyMatchId`, `strategyId`, and `strategyVersion`
   - `instrument` (String, from ExecutionParameters)
   - `direction` (String, from ExecutionParameters)
-  - `entryPrice` (BigDecimal, nullable, from broker fill or ExecutionParameters)
+  - `entryPrice` (BigDecimal, nullable, from broker fill; acknowledgement without a fill remains null)
   - `quantity` (BigDecimal, from ExecutionParameters)
-  - `stopLossPrice` (BigDecimal, from ExecutionParameters.stopLoss)
-  - `takeProfitPrices` (String, JSON-serialized list, from ExecutionParameters.takeProfits)
-  - `expectedMonetaryRisk` (BigDecimal, from ExecutionParameters.positionSizing)
-  - `riskRewardRatio` (BigDecimal, from ExecutionParameters.riskReward)
-  - `status` (TradeOutcomeStatus: ENTRY_ACKNOWLEDGED, POSITION_OPEN, POSITION_CLOSED, CANCELLED, EXPIRED)
-  - `realizedPnl` (BigDecimal, nullable, populated on close)
-  - `actualFee` (BigDecimal, nullable, populated on close)
-  - `closedAt` (Instant, nullable)
+  - execution parameters: instrument, direction, quantity, stop-loss, take-profit snapshot, expected risk, and risk/reward ratio
+  - `status` (TradeOutcomeStatus: ENTRY_ACKNOWLEDGED, POSITION_OPEN, CANCELLED, EXPIRED)
+  - `realizedPnl` (BigDecimal, nullable, reserved for the close-association follow-up)
+  - `actualFee` (BigDecimal, nullable, reserved for the close-association follow-up)
+  - `closedAt` (Instant, nullable, reserved for the close-association follow-up)
   - `createdAt` (Instant)
   - `updatedAt` (Instant)
   - `version` (long, optimistic locking)
@@ -113,18 +108,22 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 
 - `ExecutionFinalizationStep` creates a `TradeOutcome` with status `ENTRY_ACKNOWLEDGED` when the broker acknowledges an order
 - The `TradeOutcome` is linked to the `ExecutionIntent` via `executionIntentId`
-- Strategy provenance fields are populated from the `TradePlan` and `TradingOpportunity` at creation time (denormalized for queryability)
+- Strategy provenance is populated from an explicit immutable provenance snapshot carried by the TradePlan handoff (denormalized for queryability)
 
-**Position close integration**
+**Position close boundary**
 
-- When a `PositionCloseCommand` reaches `CLOSED` status, the linked `TradeOutcome` (if any) is updated with `realizedPnl`, `actualFee`, `closedAt`, and status `POSITION_CLOSED`
-- The linkage is established via `brokerPositionReference` matching between `PositionCloseCommand` and the broker order's external ID
+Position-close reconciliation is not implemented by this Story. A
+`brokerPositionReference` is a broker position identity, while
+`BrokerOrder.externalOrderId` identifies an order. They must not be matched
+heuristically. One full-exposure close may also affect multiple entry outcomes
+through provider FIFO semantics. Realized PnL, close fees, and allocation are
+deferred to a follow-up Story with an explicit association model.
 
 **Read API**
 
-- `GET /api/v1/accounts/{accountId}/trade-outcomes` — list trade outcomes with strategy provenance, filterable by strategy, instrument, status, date range
+- `GET /api/v1/accounts/{accountId}/trade-outcomes` — list entry outcomes with strategy provenance, filterable by strategy, instrument, status, date range
 - `GET /api/v1/accounts/{accountId}/trade-outcomes/{id}` — single trade outcome detail
-- Response includes: instrument, direction, entry, exit, PnL, fees, risk/reward, strategy identity, timestamps
+- Response includes: instrument, direction, entry snapshot, risk/reward, strategy provenance, timestamps, and nullable close fields reserved for a future association model
 
 **Database**
 
@@ -141,8 +140,8 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 - Modify broker synchronization — legacy path remains separate
 - Frontend trade-outcome display — later Story
 - Risk evaluation changes — no impact on T0/T1
-- Market Intelligence changes — no impact on opportunity generation
-- Broker Service changes — no impact on broker integration
+- Changing Market Intelligence opportunity semantics — no impact on opportunity generation
+- Broker provider mutation changes — no new broker mutation is introduced
 
 ---
 
@@ -151,15 +150,15 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 - [ ] **AC01** `TradeOutcome` entity exists with all required fields and is persisted in PostgreSQL
 - [ ] **AC02** `ExecutionFinalizationStep` creates a `TradeOutcome` with status `ENTRY_ACKNOWLEDGED` when broker acknowledges an order
 - [ ] **AC03** `TradeOutcome` stores `executionIntentId`, `tradePlanId`, `tradePlanVersion` from the execution context
-- [ ] **AC04** `TradeOutcome` stores `opportunityId`, `strategyMatchId`, `strategyId`, `strategyVersion` when available in the TradePlan provenance chain
-- [ ] **AC05** `TradeOutcome` stores execution parameters: instrument, direction, entryPrice, quantity, stopLossPrice, takeProfitPrices, expectedMonetaryRisk, riskRewardRatio
-- [ ] **AC06** `PositionCloseCommand` completion updates the linked `TradeOutcome` with `realizedPnl`, `actualFee`, `closedAt`, and status `POSITION_CLOSED`
-- [ ] **AC07** `GET /api/v1/accounts/{accountId}/trade-outcomes` returns trade outcomes with strategy provenance
-- [ ] **AC08** `GET /api/v1/accounts/{accountId}/trade-outcomes/{id}` returns single trade outcome detail
-- [ ] **AC09** Legacy `Trade` entity remains unchanged
-- [ ] **AC10** Legacy broker synchronization path remains unchanged
-- [ ] **AC11** Existing execution pipeline tests continue to pass
-- [ ] **AC12** New tests cover TradeOutcome creation, status transitions, and provenance population
+- [ ] **AC04** `TradeOutcome` stores zero or more immutable provenance records, one per referenced opportunity, when available in the explicit TradePlan provenance contract
+- [ ] **AC05** `TradeOutcome` stores execution parameters: instrument, direction, nullable fill-derived entryPrice, quantity, stopLossPrice, takeProfitPrices, expectedMonetaryRisk, riskRewardRatio
+- [ ] **AC06** `GET /api/v1/accounts/{accountId}/trade-outcomes` returns entry outcomes with strategy provenance
+- [ ] **AC07** `GET /api/v1/accounts/{accountId}/trade-outcomes/{id}` returns single entry outcome detail
+- [ ] **AC08** Legacy `Trade` entity remains unchanged
+- [ ] **AC09** Legacy broker synchronization path remains unchanged
+- [ ] **AC10** Existing execution pipeline tests continue to pass
+- [ ] **AC11** New tests cover outcome creation, idempotent finalization, missing provenance, multiple provenance records, and immutable snapshots
+- [ ] **AC12** No implementation infers a position-close outcome from `brokerPositionReference` and `externalOrderId`
 - [ ] **AC13** `git diff --check` passes
 
 ---
@@ -170,11 +169,13 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 - Preserve existing risk evaluation flow (T0/T1) unchanged
 - Preserve existing TradePlan lifecycle unchanged
 - Preserve legacy `Trade` entity for backward compatibility
-- Strategy provenance fields on `TradeOutcome` are denormalized at creation time for queryability — do not require runtime joins to StrategyMatch or TradingOpportunity
+- Strategy provenance is denormalized into an immutable snapshot at creation time for queryability — do not require runtime joins after creation
+- Market Intelligence must provide an explicit internal provenance snapshot in the TradePlan handoff; Trading Core must not guess provenance from opaque JSON or call Market Intelligence during execution finalization
+- Provenance is a collection because a TradePlan may reference multiple opportunities; no arbitrary first opportunity may be selected
 - Keep `TradeOutcome` within the `execution` bounded context of Trading Core
 - Do not introduce event-driven architecture or Spring event listeners
-- Do not modify Market Intelligence domain model
-- Do not modify Broker Service
+- Do not modify Market Intelligence opportunity semantics; an additive internal TradePlan provenance contract is allowed and required
+- Do not introduce new broker mutations or provider-specific behavior
 - Do not introduce new dependencies
 
 ---
@@ -197,7 +198,6 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 ## Validation
 
 - Targeted `trading-core` tests for TradeOutcome creation, status transitions, provenance population
-- Targeted `trading-core` tests for PositionCloseCommand → TradeOutcome linkage
 - Full `trading-core` Maven test suite
 - `git diff --check`
 - Manual review of the diff before approval
@@ -206,13 +206,13 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 
 ## Definition of Done
 
-- [ ] Repository Analysis approved
-- [ ] Implementation completed
-- [ ] Relevant validation executed
-- [ ] Diff reviewed in IntelliJ
-- [ ] Code Review approved
-- [ ] Engineering Report completed
-- [ ] Human commit created
+- [x] Repository Analysis approved
+- [x] Implementation completed
+- [x] Relevant validation executed
+- [x] Diff reviewed in IntelliJ
+- [x] Code Review approved
+- [x] Engineering Report completed
+- [x] Human commit created
 
 ---
 
@@ -230,26 +230,27 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 - Given a TradePlan with rationale.opportunities containing an OpportunityPlanReference
 - And the linked TradingOpportunity has strategyMatchId set
 - When the TradeOutcome is created
-- Then TradeOutcome stores opportunityId, strategyMatchId
-- And TradeOutcome stores strategyId, strategyVersion from the StrategyMatch lineage
+- Then TradeOutcome stores one provenance record per referenced opportunity
+- And each record stores strategy identity from the StrategyMatch lineage
 
 **S03 — TradeOutcome handles missing provenance gracefully**
 - Given a TradePlan with no linked opportunities (e.g., manual plan creation)
 - When the TradeOutcome is created
-- Then opportunityId, strategyMatchId, strategyId, strategyVersion are null
+- Then the provenance collection is empty
 - And TradeOutcome is still created with available provenance
 
-**S04 — Position close updates TradeOutcome**
-- Given a TradeOutcome with status ENTRY_ACKNOWLEDGED and linked to a broker order
-- When the corresponding PositionCloseCommand reaches CLOSED status
-- Then the TradeOutcome is updated with realizedPnl, actualFee, closedAt
-- And TradeOutcome status transitions to POSITION_CLOSED
+**S04 — Position close does not infer entry outcome**
+- Given a TradeOutcome and a separate PositionCloseCommand
+- When the PositionCloseCommand reaches CLOSED status
+- Then no TradeOutcome is updated by Story 0036
+- And no broker position identity is matched to an entry order identity
+- And the deferred association requirement remains explicit for the follow-up Story
 
 **S05 — TradeOutcome listing with strategy filter**
 - Given multiple TradeOutcomes with different strategy provenance
 - When GET /api/v1/accounts/{accountId}/trade-outcomes?strategyId=X is called
 - Then only TradeOutcomes with strategyId=X are returned
-- And results include instrument, direction, entry, exit, PnL, fees, timestamps
+- And results include instrument, direction, entry snapshot, provenance, and timestamps
 
 **S06 — Legacy Trade entity unchanged**
 - Given the legacy TradingServiceImpl.openTrade() path
@@ -263,7 +264,24 @@ Without this feedback loop, the system remains a trade-execution tool rather tha
 
 | Status | Value |
 |--------|-------|
-| IMPLEMENTATION_COMPLETE | NO |
-| FINAL_SAFETY_REVIEW_COMPLETE | NO |
-| HUMAN_ACCEPTANCE | NO |
-| STORY_0036_ACCEPTED | NO |
+| IMPLEMENTATION_COMPLETE | YES |
+| FINAL_SAFETY_REVIEW_COMPLETE | YES |
+| HUMAN_ACCEPTANCE | YES |
+| STORY_0036_ACCEPTED | YES |
+
+## Revision Decisions
+
+This revision resolves the repository conflicts identified during analysis:
+
+1. Provenance is a collection, not four singular fields, because a TradePlan
+   can reference multiple opportunities.
+2. Provenance is supplied through an explicit additive internal TradePlan
+   contract. Trading Core does not reconstruct it from opaque rationale JSON or
+   perform runtime joins to Market Intelligence.
+3. Position-close updates are deferred. `brokerPositionReference` and
+   `BrokerOrder.externalOrderId` are different identities, and provider-level
+   full-exposure close can affect multiple entries.
+4. Entry acknowledgement is not treated as a fill. `entryPrice` remains null
+   until authoritative fill evidence exists.
+5. This Story creates an entry outcome and provenance snapshot only. A follow-up
+   Story must define explicit close association and realized-PnL allocation.

@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.execution.domain.event.ExecutionEvent;
 import com.hope.trading.trading_core.execution.domain.exception.InvalidExecutionStateException;
 import com.hope.trading.trading_core.execution.domain.model.*;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
+import com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance;
 import java.time.Instant;
 import java.util.*;
 
@@ -16,7 +17,9 @@ public final class ExecutionIntent {
     private final IdempotencyKey idempotencyKey;
     private final UUID initiatorId;
     private final UUID brokerAccountId;
+    private final UUID accountId;
     private final ExecutionParameters parameters;
+    private final List<TradePlanProvenance> provenance;
     private final Instant createdAt;
     private final Instant expiresAt;
     private ExecutionStatus status;
@@ -27,15 +30,18 @@ public final class ExecutionIntent {
 
     private ExecutionIntent(ExecutionIntentId id, TradePlanReference tradePlan,
             RiskApprovalReference riskApproval, ExecutionPurpose purpose, UUID targetTradeId,
-            IdempotencyKey idempotencyKey, UUID initiatorId, UUID brokerAccountId,
-            ExecutionParameters parameters, ExecutionStatus status, ExecutionAttemptId activeAttemptId,
+            IdempotencyKey idempotencyKey, UUID initiatorId, UUID brokerAccountId, UUID accountId,
+            ExecutionParameters parameters, List<TradePlanProvenance> provenance,
+            ExecutionStatus status, ExecutionAttemptId activeAttemptId,
             Instant createdAt, Instant updatedAt, Instant expiresAt, long version) {
         this.id = Objects.requireNonNull(id); this.tradePlan = tradePlan;
         this.riskApproval = riskApproval; this.purpose = Objects.requireNonNull(purpose);
         this.targetTradeId = targetTradeId; this.idempotencyKey = Objects.requireNonNull(idempotencyKey);
         this.initiatorId = Objects.requireNonNull(initiatorId);
         this.brokerAccountId = Objects.requireNonNull(brokerAccountId);
+        this.accountId = accountId;
         this.parameters = Objects.requireNonNull(parameters); this.status = Objects.requireNonNull(status);
+        this.provenance = List.copyOf(Objects.requireNonNull(provenance));
         this.activeAttemptId = activeAttemptId; this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = Objects.requireNonNull(updatedAt); this.expiresAt = Objects.requireNonNull(expiresAt);
         this.version = version;
@@ -48,19 +54,27 @@ public final class ExecutionIntent {
 
     public static ExecutionIntent create(ExecutionIntentId id, TradePlanReference tradePlan,
             RiskApprovalReference approval, IdempotencyKey key, UUID initiatorId,
-            UUID brokerAccountId, ExecutionParameters parameters, Instant now, Instant expiresAt) {
+            UUID brokerAccountId, UUID accountId, ExecutionParameters parameters, List<TradePlanProvenance> provenance,
+            Instant now, Instant expiresAt) {
         ExecutionIntent intent = new ExecutionIntent(id, tradePlan, approval, ExecutionPurpose.ENTRY, null,
-                key, initiatorId, brokerAccountId, parameters, ExecutionStatus.CREATED,
+                key, initiatorId, brokerAccountId, accountId, parameters, provenance, ExecutionStatus.CREATED,
                 null, now, now, expiresAt, 0);
         intent.events.add(new ExecutionEvent.ExecutionIntentCreated(id, now));
         return intent;
+    }
+
+    public static ExecutionIntent create(ExecutionIntentId id, TradePlanReference tradePlan,
+            RiskApprovalReference approval, IdempotencyKey key, UUID initiatorId,
+            UUID brokerAccountId, ExecutionParameters parameters, Instant now, Instant expiresAt) {
+        return create(id, tradePlan, approval, key, initiatorId, brokerAccountId, initiatorId,
+                parameters, List.of(), now, expiresAt);
     }
 
     public static ExecutionIntent createExit(ExecutionIntentId id, UUID initiatorId,
             UUID brokerAccountId, UUID targetTradeId, ExecutionParameters parameters,
             IdempotencyKey key, Instant now, Instant expiresAt) {
         ExecutionIntent intent = new ExecutionIntent(id, null, null, ExecutionPurpose.EXIT, targetTradeId,
-                key, initiatorId, brokerAccountId, parameters, ExecutionStatus.CREATED,
+                key, initiatorId, brokerAccountId, null, parameters, List.of(), ExecutionStatus.CREATED,
                 null, now, now, expiresAt, 0);
         intent.events.add(new ExecutionEvent.ExecutionIntentCreated(id, now));
         return intent;
@@ -68,12 +82,22 @@ public final class ExecutionIntent {
 
     public static ExecutionIntent rehydrate(ExecutionIntentId id, TradePlanReference tradePlan,
             RiskApprovalReference approval, IdempotencyKey key, UUID initiatorId,
-            UUID brokerAccountId, ExecutionParameters parameters, ExecutionStatus status,
+            UUID brokerAccountId, UUID accountId, ExecutionParameters parameters, List<TradePlanProvenance> provenance,
+            ExecutionStatus status,
             ExecutionAttemptId activeAttemptId, Instant createdAt, Instant updatedAt,
             Instant expiresAt, long version) {
         return new ExecutionIntent(id, tradePlan, approval, ExecutionPurpose.ENTRY, null, key,
-                initiatorId, brokerAccountId, parameters, status, activeAttemptId,
+                initiatorId, brokerAccountId, accountId, parameters, provenance, status, activeAttemptId,
                 createdAt, updatedAt, expiresAt, version);
+    }
+
+    public static ExecutionIntent rehydrate(ExecutionIntentId id, TradePlanReference tradePlan,
+            RiskApprovalReference approval, IdempotencyKey key, UUID initiatorId,
+            UUID brokerAccountId, ExecutionParameters parameters, ExecutionStatus status,
+            ExecutionAttemptId activeAttemptId, Instant createdAt, Instant updatedAt,
+            Instant expiresAt, long version) {
+        return rehydrate(id, tradePlan, approval, key, initiatorId, brokerAccountId, initiatorId, parameters,
+                List.of(), status, activeAttemptId, createdAt, updatedAt, expiresAt, version);
     }
 
     public static ExecutionIntent rehydrateExit(ExecutionIntentId id, UUID targetTradeId,
@@ -81,7 +105,7 @@ public final class ExecutionIntent {
             ExecutionStatus status, ExecutionAttemptId activeAttemptId, Instant createdAt,
             Instant updatedAt, Instant expiresAt, long version) {
         return new ExecutionIntent(id, null, null, ExecutionPurpose.EXIT, targetTradeId, key,
-                initiatorId, brokerAccountId, parameters, status, activeAttemptId,
+                initiatorId, brokerAccountId, null, parameters, List.of(), status, activeAttemptId,
                 createdAt, updatedAt, expiresAt, version);
     }
 
@@ -128,7 +152,9 @@ public final class ExecutionIntent {
     public IdempotencyKey idempotencyKey() { return idempotencyKey; }
     public UUID initiatorId() { return initiatorId; }
     public UUID brokerAccountId() { return brokerAccountId; }
+    public UUID accountId() { return accountId; }
     public ExecutionParameters parameters() { return parameters; }
+    public List<TradePlanProvenance> provenance() { return provenance; }
     public ExecutionStatus status() { return status; }
     public Optional<ExecutionAttemptId> activeAttemptId() { return Optional.ofNullable(activeAttemptId); }
     public Instant createdAt() { return createdAt; }

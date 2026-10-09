@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -111,6 +111,62 @@ describe('ManualTradeTicket', () => {
 
     expect(createManual).not.toHaveBeenCalled();
     expect(fixture.componentInstance.errorMessage()).toContain('Complete the required');
+  });
+
+  it('clears an auto-filled reference price when market data becomes unavailable', () => {
+    fixture.componentRef.setInput('referencePrice', null);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.form.controls.referencePrice.value).toBeNull();
+  });
+
+  it('does not submit a non-tradable market', () => {
+    fixture.componentRef.setInput('market', {
+      ...market,
+      marketState: { ...market.marketState, tradable: false, tradingStatus: 'CLOSED' },
+    });
+    fixture.detectChanges();
+    fixture.componentInstance.form.patchValue({
+      referencePrice: 100,
+      stopLoss: 90,
+      stopRationale: 'Invalidation below support',
+      quantity: 2,
+      monetaryRisk: 20,
+      takeProfit: 120,
+      thesis: 'Manual setup',
+      confirmationConditions: 'Price confirms',
+      invalidationConditions: 'Support breaks',
+    });
+
+    fixture.componentInstance.submit();
+
+    expect(createManual).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.errorMessage()).toContain('not tradable');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="manual-market-not-tradable"]'),
+    ).toBeTruthy();
+  });
+
+  it('recovers when navigation to the created plan fails', async () => {
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'navigate').mockRejectedValue(new Error('navigation failed'));
+    fixture.componentInstance.form.patchValue({
+      referencePrice: 100,
+      stopLoss: 90,
+      stopRationale: 'Invalidation below support',
+      quantity: 2,
+      monetaryRisk: 20,
+      takeProfit: 120,
+      thesis: 'Manual setup',
+      confirmationConditions: 'Price confirms',
+      invalidationConditions: 'Support breaks',
+    });
+
+    fixture.componentInstance.submit();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.state()).toBe('error');
+    expect(fixture.componentInstance.errorMessage()).toContain('details page');
   });
 
   it('rejects empty confirmation or invalidation conditions', () => {

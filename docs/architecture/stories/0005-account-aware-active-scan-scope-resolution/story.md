@@ -4,7 +4,7 @@
 
 **ID:** `0005`
 **Title:** Account-Aware Active Scan Scope Resolution
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 
@@ -153,4 +153,4 @@ Expected validation for this Story:
 - [ ] Implementation completed.
 - [ ] Relevant tests pass.
 - [ ] Code review approved.
-- [ ] Human commit created.
+- [x] Human commit created.

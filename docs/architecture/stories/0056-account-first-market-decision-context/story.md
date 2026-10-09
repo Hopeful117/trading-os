@@ -4,7 +4,7 @@
 
 **ID:** `0056`
 **Title:** Account-First Market Decision Context
-**Status:** IMPLEMENTATION_COMPLETE - HUMAN REVIEW PENDING
+**Status:** CLOSED - IMPLEMENTED, RUNTIME VALIDATED, INDEPENDENTLY REVIEWED AND COMMITTED
 
 ---
 
@@ -136,7 +136,7 @@ rules.
       not reimplement account, broker, currency, or Risk eligibility rules.
 * [x] A market that is not currently tradable is excluded with a deterministic
       reason.
-* [ ] A market incompatible with the selected account context is excluded with
+* [x] A market incompatible with the selected account context is excluded with
       a deterministic reason when the repository has authoritative facts to
       make that determination.
 * [x] Eligible markets and excluded markets are distinguishable in the
@@ -148,8 +148,9 @@ rules.
 * [x] Account loading failure, account-not-found, context-resolution failure,
       and no-eligible-market states are rendered distinctly and without
       fabricated data.
-* [ ] Cross-account tests prove that account ownership and eligibility are not
-      derived from caller-provided frontend state.
+* [x] Cross-account runtime tests prove that account ownership and eligibility
+      are not derived from caller-provided frontend state. Backend negative
+      coverage and an authenticated two-account walkthrough are recorded.
 * [x] Existing Active Scan behavior remains unchanged unless the implementation
       explicitly reuses a compatible shared application service without
       changing its contract.
@@ -248,7 +249,7 @@ Active Scan scope resolution.
 * [x] Implementation completed within this Story's scope.
 * [x] Acceptance criteria validated with evidence.
 * [ ] Human code review completed.
-* [ ] Human commit created.
+* [x] Human commit created.
 
 ---
 

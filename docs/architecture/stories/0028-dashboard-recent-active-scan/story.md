@@ -1,5 +1,7 @@
 # Story 0028 — Integrate Recent Active Scan into Dashboard
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 Complete the Dashboard MI panel with recent Active Scan activity, allowing the trader to see the latest scan status at a glance.

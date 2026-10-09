@@ -9,7 +9,8 @@ shared snapshot contract.
 
 The physical implementation is narrower than the full Story acceptance list:
 the complete manual Risk and PAPER journey was subsequently validated through
-Story 0061 rather than independently closed here.
+the human-accepted Story 0061 runtime proof. That downstream evidence is
+accepted as the runtime evidence for this compatibility Story.
 
 ## Architectural Compliance
 
@@ -24,13 +25,15 @@ Story 0061 rather than independently closed here.
 
 * Focused Market Intelligence handoff tests: passed.
 * Focused Trading Core risk-client tests: passed.
+* Trading Core manual evaluation matrix: 26 tests passed, including approved
+  unprotected MANUAL plans and fail-closed unavailable-facts rejection.
 * Commit `e00b26e` contains the implementation and focused regression tests.
 
 ## Known Limitations
 
-* The Story artifact still requires explicit full acceptance evidence.
-* Runtime manual Risk evaluation was not independently recorded here.
-* Story 0061 provides the later end-to-end PAPER evidence.
+* Story 0061 provides the authenticated end-to-end MANUAL PAPER evidence,
+  including deterministic Risk approval, execution authorization, settlement,
+  and the negative duplicate-acknowledgment invariant.
 
 ## Git State
 
@@ -42,7 +45,6 @@ MERGE = not assessed in this report
 
 ## Human Actions Required
 
-1. Review whether Story 0059 should be closed as a compatibility story using
-   Story 0061 as downstream runtime evidence.
-2. If independent closure is required, record a focused manual Risk verdict
-   walkthrough and its negative execution evidence.
+1. Preserve the explicit downstream-evidence relationship with Story 0061.
+2. Create the human-controlled commit for the reviewed documentation/status
+   reconciliation.

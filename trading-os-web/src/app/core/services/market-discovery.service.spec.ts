@@ -90,6 +90,19 @@ describe('MarketDiscoveryService', () => {
     expect(source).toEqual(markets);
   });
 
+  it('sorts nullable fields deterministically without mutating the source', () => {
+    const nullable = [
+      { ...markets[0], marketId: 'z', provider: null },
+      { ...markets[1], marketId: 'a', provider: 'KRAKEN' },
+    ] as MarketResponse[];
+
+    expect(service.sortMarkets(nullable, { field: 'PROVIDER', direction: 'ASC' })).toEqual([
+      nullable[0],
+      nullable[1],
+    ]);
+    expect(nullable[0].marketId).toBe('z');
+  });
+
   it('returns an empty result when no catalogue market matches', () => {
     expect(service.filterAndSort(markets, { search: 'missing' })).toEqual([]);
   });

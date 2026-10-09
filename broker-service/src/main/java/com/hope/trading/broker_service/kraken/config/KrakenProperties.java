@@ -21,4 +21,5 @@ public class KrakenProperties {
     private long capabilityVersion = 1;
     private String marginCurrency = "USD";
     private List<BigDecimal> supportedLeverageLevels = new ArrayList<>(List.of(BigDecimal.ONE));
+    private List<String> supportedInstruments = new ArrayList<>();
 }

@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - RUNTIME EVIDENCE PARTIAL`
+`CLOSED - HUMAN ACCEPTED`
 
 ## Scope Delivered
 
@@ -27,8 +27,8 @@ separate end-to-end evidence record.
 
 ## Remaining Evidence
 
-* record the exact account balance, effective limits, generated notional, and
-  approved evaluation identifier for the final corrected scenario;
-* run the deliberately excessive-plan negative case;
-* attach current Trading Core, Risk Domain, and Angular test results;
-* verify LIVE account behavior remains unchanged.
+* create the final human Git commit.
+
+Current automated validation is recorded in the Engineering Report: Risk
+Domain (26 tests), Trading Core (580 tests), Angular (402 tests), Angular
+production build, and `git diff --check` all passed.

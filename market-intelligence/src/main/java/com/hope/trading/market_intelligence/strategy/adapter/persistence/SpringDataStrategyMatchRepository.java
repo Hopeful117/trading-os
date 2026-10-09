@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -20,6 +21,8 @@ public interface SpringDataStrategyMatchRepository
             UUID analysisExecutionId, String contextDigest);
 
     List<JpaStrategyMatchEntity> findByAnalysisExecutionId(UUID analysisExecutionId);
+
+    List<JpaStrategyMatchEntity> findByAnalysisExecutionIdIn(Collection<UUID> analysisExecutionIds);
 
     default JpaStrategyMatchEntity required(UUID matchId) {
         return findById(matchId).orElseThrow(EntityNotFoundException::new);

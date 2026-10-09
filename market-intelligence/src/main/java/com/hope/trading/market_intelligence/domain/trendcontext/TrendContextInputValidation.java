@@ -13,36 +13,61 @@ public final class TrendContextInputValidation {
     }
 
     public static List<Finding> validate(
+            java.util.UUID marketId,
+            String provider,
+            String symbol,
             TrendContextProfile profile,
             Map<TrendContextRole, TrendContextRoleSeries> roleSeries,
+            Instant assessmentAt,
             Instant cutOffAt
     ) {
+        Objects.requireNonNull(marketId, "marketId is required");
+        Objects.requireNonNull(provider, "provider is required");
+        Objects.requireNonNull(symbol, "symbol is required");
         Objects.requireNonNull(profile, "profile is required");
         Objects.requireNonNull(roleSeries, "roleSeries is required");
+        Objects.requireNonNull(assessmentAt, "assessmentAt is required");
         Objects.requireNonNull(cutOffAt, "cutOffAt is required");
 
         List<Finding> findings = new ArrayList<>();
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleSeries series = roleSeries.get(role);
             TrendContextRoleDefinition definition = profile.roles().get(role);
-            validateRole(role, series, definition, cutOffAt, findings);
+            validateRole(role, series, definition, marketId, provider, symbol,
+                    assessmentAt, cutOffAt, findings);
         }
         return List.copyOf(findings);
     }
 
     private static void validateRole(TrendContextRole role, TrendContextRoleSeries series,
-            TrendContextRoleDefinition definition, Instant cutOffAt, List<Finding> findings) {
+            TrendContextRoleDefinition definition, java.util.UUID marketId, String provider,
+            String symbol, Instant assessmentAt, Instant cutOffAt,
+            List<Finding> findings) {
         if (series == null) {
             if (definition != null && definition.required()) {
                 findings.add(new Finding("REQUIRED_ROLE_MISSING", role, "Required role is missing"));
             }
             return;
         }
+        if (series.role() != role) {
+            findings.add(new Finding("ROLE_IDENTITY_MISMATCH", role,
+                    "Role series identity does not match its map key"));
+        }
         if (definition == null || !definition.interval().equals(series.interval())) {
             findings.add(new Finding("ROLE_INTERVAL_MISMATCH", role,
                     "Role series interval does not match the profile"));
         }
-        validateCandles(role, series.candles(), cutOffAt, findings);
+        TrendContextSourceReference source = series.sourceReference();
+        if (!Objects.equals(source.marketId(), marketId)
+                || !Objects.equals(source.provider(), provider)
+                || !Objects.equals(source.symbol(), symbol)
+                || source.role() != role
+                || !Objects.equals(source.interval(), series.interval())) {
+            findings.add(new Finding("SOURCE_IDENTITY_MISMATCH", role,
+                    "Role source identity does not match the assessment input"));
+        }
+        validateCandles(role, series, definition, provider, symbol,
+                assessmentAt, cutOffAt, findings);
         if (definition != null && series.calculationReadyCandles().size()
                 < definition.minimumEligibleCandles()) {
             findings.add(new Finding("INSUFFICIENT_HISTORY", role,
@@ -69,7 +94,30 @@ public final class TrendContextInputValidation {
 
     private static void validateCandles(
             TrendContextRole role,
+            TrendContextRoleSeries series,
+            TrendContextRoleDefinition definition,
+            String provider,
+            String symbol,
+            Instant assessmentAt,
+            Instant cutOffAt,
+            List<Finding> findings
+    ) {
+        List<TrendContextCandle> candles = series.candles();
+        for (TrendContextCandle candle : candles) {
+            if (!Objects.equals(candle.provider(), provider)
+                    || !Objects.equals(candle.symbol(), symbol)
+                    || (definition != null && !Objects.equals(candle.interval(), definition.interval()))) {
+                findings.add(new Finding("CANDLE_IDENTITY_MISMATCH", role,
+                        "Candle identity or interval does not match the assessment input"));
+            }
+        }
+        validateCandleValues(role, candles, assessmentAt, cutOffAt, findings);
+    }
+
+    private static void validateCandleValues(
+            TrendContextRole role,
             List<TrendContextCandle> candles,
+            Instant assessmentAt,
             Instant cutOffAt,
             List<Finding> findings
     ) {
@@ -83,6 +131,10 @@ public final class TrendContextInputValidation {
             if (!validPrices(candle)) {
                 findings.add(new Finding("INVALID_OHLC", role,
                         "Candle OHLC values are invalid"));
+            }
+            if (candle.openTime().isAfter(assessmentAt) || candle.closeTime().isAfter(assessmentAt)) {
+                findings.add(new Finding("FUTURE_CANDLE", role,
+                        "Candle timestamp is after the assessment time"));
             }
             TrendContextCandle previous = byOpenTime.putIfAbsent(candle.openTime(), candle);
             if (previous != null && !sameEvidence(previous, candle)) {
@@ -131,7 +183,9 @@ public final class TrendContextInputValidation {
                 && Objects.equals(first.volume(), second.volume())
                 && first.closed() == second.closed()
                 && first.synthetic() == second.synthetic()
-                && Objects.equals(first.sourceOccurredAt(), second.sourceOccurredAt());
+                && Objects.equals(first.sourceId(), second.sourceId())
+                && Objects.equals(first.sourceOccurredAt(), second.sourceOccurredAt())
+                && Objects.equals(first.fetchedAt(), second.fetchedAt());
     }
 
     public record Finding(String code, TrendContextRole role, String message) {

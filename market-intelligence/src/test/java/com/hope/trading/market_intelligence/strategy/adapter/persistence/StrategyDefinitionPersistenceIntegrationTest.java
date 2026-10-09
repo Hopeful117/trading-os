@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class StrategyDefinitionPersistenceIntegrationTest {
 
@@ -90,6 +91,53 @@ class StrategyDefinitionPersistenceIntegrationTest {
                     .isEqualTo(com.hope.trading.market_intelligence.strategy.domain
                             .ValidationStatus.UNVALIDATED);
             assertThat(reloaded.isEligibleForLiveEvaluation()).isTrue();
+        }
+    }
+
+    @Test
+    void persistsScenarioEmptyInputsAndDelimiterContainingParameters() {
+        String database = "strategy_edge_cases_" + UUID.randomUUID().toString().replace("-", "");
+        StrategyId strategyId = StrategyId.random();
+        StrategyDefinition original = StrategyDefinition.create(
+                strategyId, 1, "Edge Strategy", "description", "scenario|with\nmarkers",
+                StrategyDirection.LONG,
+                new StrategyApplicability(Set.of("CRYPTO"), Set.of(StrategyApplicability.Timeframe.M15), Set.of()),
+                Set.of(),
+                new StrategyParameters(List.of(new StrategyParameter(
+                        "label|name", StrategyParameter.ParameterType.STRING, "value|with\nmarkers"))),
+                null, NOW);
+
+        try (ConfigurableApplicationContext context = context(database)) {
+            StrategyDefinitionRepository repository = context.getBean(StrategyDefinitionRepository.class);
+            repository.save(original);
+
+            StrategyDefinition reloaded = repository.find(strategyId, 1).orElseThrow();
+            assertThat(reloaded.scenario()).isEqualTo(original.scenario());
+            assertThat(reloaded.requiredInputs()).isEmpty();
+            assertThat(reloaded.parameters()).isEqualTo(original.parameters());
+        }
+    }
+
+    @Test
+    void rejectsSemanticMutationOfExistingVersion() {
+        String database = "strategy_immutable_version_" + UUID.randomUUID().toString().replace("-", "");
+        StrategyId strategyId = StrategyId.random();
+
+        try (ConfigurableApplicationContext context = context(database)) {
+            StrategyDefinitionRepository repository = context.getBean(StrategyDefinitionRepository.class);
+            repository.save(definition(strategyId, 1));
+            StrategyDefinition changed = StrategyDefinition.create(
+                    strategyId, 1, "Changed name", "Legacy bootstrap trend strategy", "OHLC_TREND",
+                    StrategyDirection.DYNAMIC,
+                    new StrategyApplicability(Set.of("CRYPTO"), Set.of(StrategyApplicability.Timeframe.M15), Set.of()),
+                    Set.of(new RequiredSemanticInput(SemanticInputType.OBSERVATION, "PRICE_TREND")),
+                    new StrategyParameters(List.of(new StrategyParameter(
+                            "lookback", StrategyParameter.ParameterType.INTEGER, 20L))),
+                    null, NOW);
+
+            assertThatThrownBy(() -> repository.save(changed))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("semantics are immutable");
         }
     }
 

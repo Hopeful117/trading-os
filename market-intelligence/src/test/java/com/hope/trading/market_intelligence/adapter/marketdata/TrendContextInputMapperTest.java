@@ -87,6 +87,31 @@ class TrendContextInputMapperTest {
     }
 
     @Test
+    void rejectsDuplicateWhenOnlyProvenanceDiffers() {
+        OhlcResponse bias = response("4H", Instant.parse("2026-09-23T04:00:00Z"),
+                Instant.parse("2026-09-23T08:00:00Z"), true, false, "bias", Instant.parse("2026-09-23T11:05:00Z"));
+        OhlcResponse setup = response("1H", Instant.parse("2026-09-23T10:00:00Z"),
+                Instant.parse("2026-09-23T11:00:00Z"), true, false, "setup", Instant.parse("2026-09-23T11:05:00Z"));
+
+        OhlcResponse differentSource = copyWithProvenance(setup, "other-source", setup.fetchedAt());
+        assertThatThrownBy(() -> mapper.map(
+                Map.of(TrendContextRole.BIAS, List.of(bias),
+                        TrendContextRole.SETUP, List.of(setup, differentSource)),
+                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Conflicting OHLC duplicate");
+
+        OhlcResponse differentFetch = copyWithProvenance(setup, setup.sourceId(),
+                setup.fetchedAt().plusSeconds(1));
+        assertThatThrownBy(() -> mapper.map(
+                Map.of(TrendContextRole.BIAS, List.of(bias),
+                        TrendContextRole.SETUP, List.of(setup, differentFetch)),
+                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Conflicting OHLC duplicate");
+    }
+
+    @Test
     void rejectsMarketIdentityConflictAcrossRoles() {
         OhlcResponse bias = response("4H", Instant.parse("2026-09-23T04:00:00Z"),
                 Instant.parse("2026-09-23T08:00:00Z"), true, false, "bias", Instant.parse("2026-09-23T11:05:00Z"));
@@ -131,5 +156,12 @@ class TrendContextInputMapperTest {
                 new BigDecimal("100"), new BigDecimal("105"), new BigDecimal("95"),
                 new BigDecimal("102"), new BigDecimal("10"), new BigDecimal("101"),
                 2, closed, closeTime, synthetic, sourceId, fetchedAt);
+    }
+
+    private OhlcResponse copyWithProvenance(OhlcResponse value, String sourceId, Instant fetchedAt) {
+        return new OhlcResponse(value.marketId(), value.provider(), value.symbol(), value.interval(),
+                value.openTime(), value.closeTime(), value.open(), value.high(), value.low(), value.close(),
+                value.volume(), value.vwap(), value.trades(), value.closed(), value.occurredAt(),
+                value.synthetic(), sourceId, fetchedAt);
     }
 }

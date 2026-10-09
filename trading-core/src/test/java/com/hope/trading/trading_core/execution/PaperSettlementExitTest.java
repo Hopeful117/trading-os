@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class PaperSettlementExitTest {
@@ -53,6 +54,34 @@ class PaperSettlementExitTest {
         assertThat(s.account.getEquity()).isEqualByComparingTo("10020");
         assertThat(s.trade.getPnl()).isEqualByComparingTo("20");
         assertThat(s.trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+    }
+
+    @Test
+    void longExitRejectsInsufficientBaseWithoutMutatingSettlement() {
+        Scenario s = scenario(TradeType.BUY, "0", "0");
+        s.account.getBalances().stream().filter(balance -> balance.getAsset().equals("BTC"))
+                .findFirst().orElseThrow().setAmount(new BigDecimal("1"));
+
+        assertThatThrownBy(() -> s.settle("110", "0"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER balance insufficient: BTC");
+        assertThat(s.trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(amount(s.account, "BTC")).isEqualByComparingTo("1");
+        assertThat(amount(s.account, "USD")).isEqualByComparingTo("9800");
+        assertThat(s.account.getEquity()).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void shortExitRejectsMissingQuoteBalanceWithoutMutatingSettlement() {
+        Scenario s = scenario(TradeType.SELL, "0", "0");
+        s.account.getBalances().removeIf(balance -> balance.getAsset().equals("USD"));
+
+        assertThatThrownBy(() -> s.settle("90", "0"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER balance unavailable: USD");
+        assertThat(s.trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(amount(s.account, "BTC")).isEqualByComparingTo("2");
+        assertThat(s.account.getEquity()).isEqualByComparingTo("10000");
     }
 
     @Test
@@ -94,6 +123,84 @@ class PaperSettlementExitTest {
             assertThat(trade.getStopLoss()).isEqualByComparingTo("90");
             assertThat(trade.getTakeProfit()).isEqualByComparingTo("120");
         });
+    }
+
+    @Test
+    void shortEntryBorrowsMissingBaseAssetAndCreditsQuoteBalance() {
+        UUID owner = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "paper", NOW);
+        Account account = Account.builder().accountId(UUID.randomUUID()).brokerAccountId(broker.id())
+                .broker("KRAKEN").name("paper").baseCurrency("USD").equity(new BigDecimal("10000"))
+                .peakEquity(new BigDecimal("10000")).user(User.builder().userId(owner).build()).build();
+        account.addBalance(AccountBalance.builder().asset("USD").amount(new BigDecimal("10000")).build());
+
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
+        when(accounts.save(account)).thenReturn(account);
+        TradePlanRiskPort plans = mock(TradePlanRiskPort.class);
+        UUID planId = UUID.randomUUID();
+        when(plans.loadReady(planId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(planId, 1, "READY_TO_EXECUTE",
+                NOW, UUID.randomUUID(), 1, NOW, owner, account.getAccountId(), "USD", UUID.randomUUID(), 1,
+                UUID.randomUUID(), 1, "BTC/USD", "SHORT", null, new BigDecimal("110"), new BigDecimal("90"),
+                new BigDecimal("2"), new BigDecimal("200"), new BigDecimal("10"), "USD", "{}"));
+
+        PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
+                new TradingCalculatorServiceImpl(), plans);
+        ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
+                new TradePlanReference(planId, 1),
+                new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
+                new IdempotencyKey("paper-short-entry"), owner, broker.id(),
+                new ExecutionParameters("BTC/USD", ExecutionParameters.Side.SELL,
+                        ExecutionParameters.OrderType.MARKET, new BigDecimal("2"), null), NOW, NOW.plusSeconds(300));
+        ExecutionAttempt attempt = ExecutionAttempt.create(ExecutionAttemptId.newId(), intent.id(), 1, NOW, null);
+        BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(), attempt.id(), "SIM", NOW);
+        order.addFill(new BrokerOrder.Fill("fill", new BigDecimal("2"), new BigDecimal("100"), BigDecimal.ZERO, NOW), true, NOW);
+
+        settlement.settle(intent, attempt, order);
+
+        assertThat(amount(account, "BTC")).isEqualByComparingTo("-2");
+        assertThat(amount(account, "USD")).isEqualByComparingTo("10200");
+        assertThat(account.getTrades()).singleElement().satisfies(trade -> {
+            assertThat(trade.getType()).isEqualTo(TradeType.SELL);
+            assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        });
+    }
+
+    @Test
+    void shortEntryRejectsInsufficientMarginCollateral() {
+        UUID owner = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "paper", NOW);
+        Account account = Account.builder().accountId(UUID.randomUUID()).brokerAccountId(broker.id())
+                .broker("KRAKEN").name("paper").baseCurrency("USD").equity(new BigDecimal("10000"))
+                .peakEquity(new BigDecimal("10000")).user(User.builder().userId(owner).build()).build();
+        account.addBalance(AccountBalance.builder().asset("USD").amount(new BigDecimal("100")).build());
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        TradePlanRiskPort plans = mock(TradePlanRiskPort.class);
+        UUID planId = UUID.randomUUID();
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
+        when(plans.loadReady(planId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(planId, 1, "READY_TO_EXECUTE",
+                NOW, UUID.randomUUID(), 1, NOW, owner, account.getAccountId(), "USD", UUID.randomUUID(), 1,
+                UUID.randomUUID(), 1, "BTC/USD", "SHORT", null, new BigDecimal("110"), new BigDecimal("90"),
+                new BigDecimal("2"), new BigDecimal("200"), new BigDecimal("10"), "USD", "{}"));
+        PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
+                new TradingCalculatorServiceImpl(), plans);
+        ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
+                new TradePlanReference(planId, 1),
+                new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
+                new IdempotencyKey("paper-short-collateral"), owner, broker.id(), new ExecutionParameters("BTC/USD", ExecutionParameters.Side.SELL,
+                        ExecutionParameters.OrderType.MARKET, new BigDecimal("2"), null), NOW, NOW.plusSeconds(300));
+        ExecutionAttempt attempt = ExecutionAttempt.create(ExecutionAttemptId.newId(), intent.id(), 1, NOW, null);
+        BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(), attempt.id(), "SIM", NOW);
+        order.addFill(new BrokerOrder.Fill("fill", new BigDecimal("2"), new BigDecimal("100"), BigDecimal.ZERO, NOW), true, NOW);
+
+        assertThatThrownBy(() -> settlement.settle(intent, attempt, order))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER short margin collateral insufficient");
+        assertThat(amount(account, "USD")).isEqualByComparingTo("100");
     }
 
     private Scenario scenario(TradeType type, String initialBase, String entryFee) {

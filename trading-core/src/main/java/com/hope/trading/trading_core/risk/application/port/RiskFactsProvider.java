@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.List;
 import java.util.Map;
 import java.math.BigDecimal;
+import com.hope.trading.risk.domain.RiskTypes.ProtectionStatus;
 
 /** Mode-aware application boundary for the facts consumed by risk evaluation. */
 public interface RiskFactsProvider {
@@ -21,7 +22,16 @@ public interface RiskFactsProvider {
     record Position(UUID positionId, String sourcePositionReference, String sourceReferenceProvenance,
                     String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
                     BigDecimal marketValue, BigDecimal margin, BigDecimal protectedQuantity,
-                    List<Stop> protectiveStops) { }
+                     List<Stop> protectiveStops, ProtectionStatus protectionStatus) {
+        public Position(UUID positionId, String sourcePositionReference, String sourceReferenceProvenance,
+                        String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
+                        BigDecimal marketValue, BigDecimal margin, BigDecimal protectedQuantity,
+                        List<Stop> protectiveStops) {
+            this(positionId, sourcePositionReference, sourceReferenceProvenance, instrument, signedQuantity,
+                    entryPrice, marketValue, margin, protectedQuantity, protectiveStops,
+                    RiskFactsProvider.protectionStatus(protectedQuantity, signedQuantity, protectiveStops));
+        }
+    }
     record Stop(String sourceOrderReference, String sourceReferenceProvenance,
                 BigDecimal quantity, BigDecimal stopPrice) { }
     record ClosedTrade(String sourceTradeReference, String instrument, String settlementAsset, BigDecimal fee,
@@ -36,8 +46,9 @@ public interface RiskFactsProvider {
         var positions = value.positions().stream().map(p -> new Position(p.positionId(),
                 p.providerPositionReference(), p.providerReferenceProvenance(), p.instrument(),
                 p.signedQuantity(), p.entryPrice(), p.marketValue(), p.margin(), p.protectedQuantity(),
-                p.protectiveStops().stream().map(s -> new Stop(s.providerOrderReference(),
-                        s.providerReferenceProvenance(), s.quantity(), s.stopPrice())).toList())).toList();
+                p.protectiveStops() == null ? List.of() : p.protectiveStops().stream().map(s -> new Stop(s.providerOrderReference(),
+                        s.providerReferenceProvenance(), s.quantity(), s.stopPrice())).toList(),
+                protectionStatus(p.protectedQuantity(), p.signedQuantity(), p.protectiveStops()))).toList();
         var closed = value.closedTrades().stream().map(t -> new ClosedTrade(t.providerTradeReference(),
                 t.instrument(), t.settlementAsset(), t.fee(), t.realizedPnl(), t.closedAt())).toList();
         var ledger = value.ledgerEntries().stream().map(e -> new LedgerEntry(e.providerLedgerReference(),
@@ -45,5 +56,19 @@ public interface RiskFactsProvider {
         return new Snapshot(value.brokerAccountId(), value.sourceVersion(), value.observedAt(), value.complete(),
                 value.unavailabilityReasons(), value.assetBalances(), account, positions, closed, ledger,
                 value.sourcePayload());
+    }
+
+    static ProtectionStatus protectionStatus(BigDecimal protectedQuantity, BigDecimal quantity,
+                                             List<?> protectiveStops) {
+        if (protectedQuantity == null || quantity == null || protectiveStops == null) {
+            return ProtectionStatus.UNKNOWN;
+        }
+        if (protectedQuantity.signum() == 0 && protectiveStops.isEmpty()) {
+            return ProtectionStatus.UNPROTECTED;
+        }
+        if (protectedQuantity.compareTo(quantity.abs()) == 0 && !protectiveStops.isEmpty()) {
+            return ProtectionStatus.PROTECTED;
+        }
+        return ProtectionStatus.PARTIALLY_PROTECTED;
     }
 }

@@ -1,5 +1,9 @@
 # Engineering Report - Story 0061
 
+## Status
+
+`COMPLETED - HUMAN ACCEPTED; PAPER RUNTIME VALIDATED`
+
 ## Outcome
 
 Story 0061 validated the complete MANUAL PAPER daily-driver journey through the
@@ -17,6 +21,11 @@ reload, full close, reload and history continuity.
   was used.
 * No second execution pipeline was introduced.
 * The duplicate Risk acknowledgment was rejected by the existing invariant.
+* Asset-only valuation refreshes required conversion markets before valuation.
+* Execution Intent recovery is protected by exact TradePlan ID and version
+  matching, including a negative version-mismatch test.
+* Initial and execution-time Risk remain fail-closed when a MARKET valuation has
+  no authoritative source price.
 
 ## Runtime Evidence
 
@@ -38,21 +47,27 @@ Close execution intent: b1483c46-62c6-4e14-8a20-3661855b319c
 * Focused valuation and Risk tests: passed.
 * Execution-time Risk revalidation tests: passed.
 * Manual TradePlan orchestration tests: passed.
-* Angular PlanPage tests: `10` passed.
+* Angular PlanPage tests: `11` passed.
+* Trading Core full test suite: `584` passed.
+* Angular full test suite: `402` passed.
 * Trading Core compilation: passed.
 * Angular production build: passed with existing budget warnings.
 * `git diff --check`: passed.
 * Official authenticated PAPER runtime: completed.
+* Independent-review regression matrix: passed in `trading-core` and
+  `market-intelligence`; the exact commands are recorded in `code-review.md`.
 
 ## Known Limitations
 
 * Current-price display was unavailable during the runtime check, while the
   PAPER execution and persistence path remained successful.
 * Angular bundle/style budget warnings remain.
-* Human code review and human commit acceptance remain pending.
+* The repository does not contain a complete request trace or screenshot bundle.
+  The deterministic negative paths are replayable through the focused regression
+  matrix; no implementation defect remains.
 
-## Human Actions Required
+## Closure
 
-1. Review the runtime evidence and the minimal valuation/recovery fixes.
-2. Confirm that the current-price freshness limitation is acceptable.
-3. Perform final human code review before committing the implementation.
+The independent review found no blocking, major or minor implementation defect.
+The human engineer requested closure after reviewing the implementation, tests,
+runtime evidence and documented residual limitations.

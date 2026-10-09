@@ -69,3 +69,15 @@ Positions remain live broker state projected through `PositionQueryService`. No 
 - No position detail drill-down view
 - No sorting or filtering of positions
 - The Angular bundle size budget warning (643 kB vs 500 kB budget) is pre-existing and unrelated to this story
+
+## G. Closure Validation
+
+Current repository validation confirms the implementation remains compatible
+with the surrounding execution flow:
+
+* Trading Core `mvn -q test` — passed.
+* Angular `npm run check` — 47 test files and 391 tests passed; production build succeeded with existing budget warnings.
+* `git diff --check` — passed.
+
+The page remains strictly read-only. No broker-mutating operation or position
+close action is part of this Story.

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.atLeastOnce;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
@@ -38,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
@@ -170,6 +172,39 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
+    void manualPlanMayBeApprovedWithoutProtectiveStopThroughTheSharedRiskPath() {
+        availableContext(List.of());
+        when(plans.load(planId, 3)).thenReturn(plan("USD", "USD", "MANUAL", null));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.approved()).isTrue();
+        verify(persistence).evaluation(any(), any(), any(), any(), anyLong(), any(), any(), any(), any(), any(), any(), any());
+        verify(acknowledgmentDelivery).deliver(response.evaluationId());
+    }
+
+    @Test
+    void manualPlanStillFailsClosedWhenRiskFactsAreUnavailable() {
+        availableContext(List.of());
+        when(plans.load(planId, 3)).thenReturn(plan("USD", "USD", "MANUAL", null));
+        when(broker.load(any(), any(), any())).thenReturn(new BrokerRiskFactsPort.Snapshot(
+                brokerAccountId, 11, now, false, List.of("BROKER_RISK_FACTS_INCOMPLETE"),
+                Map.of("USD", new BigDecimal("10000")),
+                new BrokerRiskFactsPort.Account("USD", new BigDecimal("10000"),
+                        new BigDecimal("10000"), new BigDecimal("100"), new BigDecimal("10000")),
+                List.of(), List.of(), List.of(), "{\"version\":11}"));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.approved()).isFalse();
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("BROKER_RISK_FACTS_INCOMPLETE");
+        verify(plans, never()).acknowledge(any(), anyLong(), any(), any(), any());
+    }
+
+    @Test
     void missingProviderStartingBalanceFallsBackToCurrentAccountBalance() {
         availableContext(List.of());
         when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(List.of(), List.of(), null));
@@ -190,6 +225,41 @@ class TradePlanRiskEvaluationServiceTest {
         assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
         assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
                 .containsExactly("REQUIRED_MARGIN_UNAVAILABLE");
+    }
+
+    @Test
+    void convertsRequiredMarginBeforeRiskEvaluation() {
+        availableContext(List.of());
+        when(requiredMargins.resolve(any())).thenReturn(Optional.of(new RequiredMarginPort.Fact(
+                new BigDecimal("100"), "EUR", "broker-margin-quote", 7, now)));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.approved()).isTrue();
+
+        ArgumentCaptor<List> valuationAssets = ArgumentCaptor.forClass(List.class);
+        verify(market, atLeastOnce()).value(any(), any(), any(), valuationAssets.capture());
+        assertThat(valuationAssets.getAllValues()).anyMatch(assets -> assets.stream()
+                .anyMatch(asset -> "EUR".equals(((MarketValuationPort.Asset) asset).currency())));
+
+        ArgumentCaptor<Object> writes = ArgumentCaptor.forClass(Object.class);
+        verify(persistence, atLeastOnce()).write(writes.capture());
+        assertThat(writes.getAllValues()).anyMatch(value -> value instanceof Map<?, ?> payload
+                && payload.get("request") instanceof com.hope.trading.risk.domain.RiskEvaluationRequest request
+                && request.proposedTrade().marginRequired().amount().compareTo(new BigDecimal("120")) == 0);
+    }
+
+    @Test
+    void automatedPlanWithoutProtectionFailsBeforeRiskEvaluation() {
+        availableContext(List.of());
+        when(plans.load(any(), anyLong())).thenReturn(plan("USD", "USD", "OPPORTUNITY", null));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("AUTOMATED_PROTECTION_REQUIRED");
     }
 
     @Test
@@ -372,6 +442,28 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
+    void marketOrderWithMissingSourcePriceFailsClosed() {
+        availableContext(List.of());
+        doAnswer(invocation -> {
+            List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
+            List<MarketValuationPort.Asset> assets = invocation.getArgument(3);
+            List<MarketValuationPort.Fact> facts = new java.util.ArrayList<>();
+            assets.forEach(asset -> facts.add(new MarketValuationPort.Fact("ASSET", asset.id(), null,
+                    asset.currency(), null, BigDecimal.ONE, null, null, "AVAILABLE", "identity")));
+            instruments.forEach(instrument -> facts.add(new MarketValuationPort.Fact("INSTRUMENT",
+                    instrument.id(), UUID.randomUUID(), null, instrument.priceUse(), new BigDecimal("100"),
+                    null, BigDecimal.ONE, "AVAILABLE", "observation")));
+            return snapshot(invocation.getArgument(1), true, facts);
+        }).when(market).value(any(), any(), any(), any());
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("CURRENT_MARKET_VALUATION_UNAVAILABLE");
+    }
+
+    @Test
     void exactStoredCommandRetriesIncompleteAcknowledgmentWithoutReevaluationAndRejectsConflict() {
         Response storedResponse = new Response(UUID.randomUUID(), planId, 3, accountId, "COMPLETED",
                 "APPROVED", true, List.of(), List.of(), Map.of(), now,
@@ -446,6 +538,10 @@ class TradePlanRiskEvaluationServiceTest {
         requestedAssets.forEach(asset -> facts.add(new MarketValuationPort.Fact("ASSET", asset.id(), null,
                 asset.currency(), null, "EUR".equals(asset.currency()) ? new BigDecimal("1.2") : BigDecimal.ONE,
                 null, null, "AVAILABLE", "identity")));
+        if (requestedAssets.stream().noneMatch(asset -> "EUR".equals(asset.currency()))) {
+            facts.add(new MarketValuationPort.Fact("ASSET", "EUR", null, "EUR", null,
+                    new BigDecimal("1.2"), null, null, "AVAILABLE", "identity"));
+        }
         requestedInstruments.forEach(instrument -> facts.add(new MarketValuationPort.Fact("INSTRUMENT",
                 instrument.id(), UUID.randomUUID(), null, instrument.priceUse(), new BigDecimal("100"),
                 new BigDecimal("100"), BigDecimal.ONE, "AVAILABLE", "observation")));
@@ -459,12 +555,17 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency) {
+        return plan(accountCurrency, sizingCurrency, "AUTOMATED", new BigDecimal("90"));
+    }
+
+    private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency,
+                                            String origin, BigDecimal stopPrice) {
         EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.MARKET, null);
-        return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", now,
+        return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", origin, now,
                 UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
                 UUID.randomUUID(), 2, UUID.randomUUID(), 4,
-                 "ETHUSD", "LONG", entryIntent, new BigDecimal("90"), new BigDecimal("120"), BigDecimal.ONE,
-                new BigDecimal("1000"), new BigDecimal("100"), sizingCurrency, "{\"accepted\":true}");
+                 "ETHUSD", "LONG", entryIntent, stopPrice, new BigDecimal("120"), BigDecimal.ONE,
+                 new BigDecimal("1000"), new BigDecimal("100"), null, sizingCurrency, "{\"accepted\":true}", List.of());
     }
 
     private RiskPersistence.Profile profile() {

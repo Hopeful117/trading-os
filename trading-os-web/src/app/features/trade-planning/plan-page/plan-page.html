@@ -522,6 +522,7 @@
               <button
                 class="btn-retry"
                 (click)="retry(view.execution.id, view.plan)"
+                [disabled]="busy$ | async"
                 data-testid="retry-button"
               >
                 Retry
@@ -531,6 +532,7 @@
               <button
                 class="btn-retry"
                 (click)="retryT1(view.execution.id, view.plan)"
+                [disabled]="busy$ | async"
                 data-testid="retry-t1-button"
               >
                 Retry execution
@@ -543,6 +545,7 @@
               <button
                 class="btn-reconcile"
                 (click)="reconcile(view.execution.id, view.plan)"
+                [disabled]="busy$ | async"
                 data-testid="reconcile-button"
               >
                 Check broker status

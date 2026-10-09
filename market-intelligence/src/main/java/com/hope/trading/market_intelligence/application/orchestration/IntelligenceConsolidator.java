@@ -33,9 +33,7 @@ public class IntelligenceConsolidator {
         requirements.stream()
                 .filter(ContextRequirement::required)
                 .map(requirement -> context.section(requirement.sectionType()).orElse(null))
-                .filter(section -> section == null
-                        || section.status() == ContextSectionStatus.MISSING
-                        || section.status() == ContextSectionStatus.UNAVAILABLE)
+                .filter(section -> section == null || section.status().blocksAnalysis())
                 .forEach(section -> warnings.add(
                         section == null ? "Required context missing" : section.message()
                 ));
@@ -76,17 +74,13 @@ public class IntelligenceConsolidator {
         boolean requiredUnavailable = requirements.stream()
                 .filter(ContextRequirement::required)
                 .map(requirement -> context.section(requirement.sectionType()).orElse(null))
-                .anyMatch(section -> section == null
-                        || section.status() == ContextSectionStatus.MISSING
-                        || section.status() == ContextSectionStatus.UNAVAILABLE);
+                .anyMatch(section -> section == null || section.status().blocksAnalysis());
         boolean stale = context.sections().values().stream()
                 .anyMatch(section -> section.status() == ContextSectionStatus.STALE);
         boolean optionalUnavailable = requirements.stream()
                 .filter(requirement -> !requirement.required())
                 .map(requirement -> context.section(requirement.sectionType()).orElse(null))
-                .anyMatch(section -> section == null
-                        || section.status() == ContextSectionStatus.MISSING
-                        || section.status() == ContextSectionStatus.UNAVAILABLE);
+                .anyMatch(section -> section == null || section.status().blocksAnalysis());
         boolean capabilityIssue = executions.stream()
                 .anyMatch(execution -> execution.status() != CapabilityExecutionStatus.COMPLETED);
         boolean completed = executions.stream()
@@ -94,8 +88,7 @@ public class IntelligenceConsolidator {
 
         boolean everySectionUnavailable = !context.sections().isEmpty()
                 && context.sections().values().stream()
-                    .allMatch(section -> section.status() == ContextSectionStatus.MISSING
-                            || section.status() == ContextSectionStatus.UNAVAILABLE);
+                    .allMatch(section -> section.status().blocksAnalysis());
         if (!completed && findings.isEmpty() && everySectionUnavailable) {
             return IntelligenceExecutionStatus.FAILED;
         }

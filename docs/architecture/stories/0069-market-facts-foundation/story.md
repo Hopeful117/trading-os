@@ -1,6 +1,6 @@
 # Story 0069: Market Facts Foundation
 
-**Status:** Runtime fix required - human review required  
+**Status:** CLOSED - HUMAN ACCEPTED
 **Size:** Large  
 **Risk:** High  
 **Predecessor:** Story 0068 - User Market Discovery  
@@ -394,5 +394,8 @@ any of the following:
 - The default Market Facts service caller remains `trading-core`.
 - `market-intelligence` access requires explicit deployment configuration and
   its trusted service JWT secret; it is not enabled by the default profile.
-- Runtime Kraken sandbox and deployed end-to-end validation remain pending.
-- Human review, acceptance, and Git commit remain pending.
+- Runtime Kraken validation was completed in the latest authenticated
+  revalidation. The open-candle readiness defect is fixed; the PEPE adjacent-read
+  difference remains explicitly inconclusive and is not a confirmed defect.
+- Human review and acceptance are complete. The human Git commit remains
+  pending under the repository workflow.

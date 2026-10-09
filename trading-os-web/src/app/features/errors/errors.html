@@ -12,6 +12,10 @@
       {{ message }}
     </p>
 
-    <a routerLink="/dashboard"> Retour au dashboard </a>
+    @if (status === 401) {
+      <a routerLink="/login"> Se reconnecter </a>
+    } @else {
+      <a routerLink="/dashboard"> Retour au dashboard </a>
+    }
   </div>
 </div>

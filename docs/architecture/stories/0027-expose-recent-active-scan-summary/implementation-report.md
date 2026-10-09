@@ -91,3 +91,15 @@ No changes. MI is already exposed via wildcard routing.
 ## Performance
 
 Single table scan with index. No N+1. No child loading. Bounded by limit.
+
+## Closure Validation
+
+Re-executed from the current repository state before closure:
+
+* `cd market-intelligence && mvn -q verify` — passed.
+* `git diff --check` — passed.
+* No frontend or Gateway changes were introduced by Story 0027.
+* No migration or lifecycle change was introduced by Story 0027.
+
+The current worktree contains an unrelated pre-existing migration artifact for
+the strategy-definition work; it is not part of this Story's change set.

@@ -2,7 +2,7 @@
 
 ## Status
 
-`COMPATIBILITY IMPLEMENTED - FOCUSED TESTS PASSED; FULL STORY VALIDATION DEFERRED`
+`IMPLEMENTED - FOCUSED EVALUATION MATRIX VALIDATED; RUNTIME VALIDATION DEFERRED`
 
 ## Scope Delivered
 
@@ -10,6 +10,10 @@
 * Preserved manual TradePlan provenance through the existing risk handoff.
 * Kept the existing Trading Core risk client contract compatible.
 * Added focused handoff and client regression coverage.
+* Added Trading Core coverage for manual plans that are approved without a
+  protective stop and rejected when authoritative risk facts are unavailable.
+* Confirmed that unavailable manual evaluations do not acknowledge the Trade
+  Plan for downstream progression.
 * Did not introduce a second Risk or execution pipeline.
 
 ## Validation Evidence
@@ -23,8 +27,9 @@
 
 ## Remaining Evidence
 
-* A dedicated manual approved/rejected/unknown evaluation matrix is not recorded
-  in this Story's artifacts.
+* The focused manual approved/rejected matrix is covered by
+  `TradePlanRiskEvaluationServiceTest`; an explicit unknown-outcome runtime
+  scenario is not recorded in this Story's artifacts.
 * No standalone authenticated runtime walkthrough was recorded for this Story.
 * The complete approved manual PAPER lifecycle belongs to Story 0061 and was
   validated there.

@@ -10,12 +10,23 @@ public final class NewsIdentity {
     }
 
     public static UUID eventId(String sourceName, String sourceEventId) {
-        return UUID.nameUUIDFromBytes((NAMESPACE + ":event:" + sourceName + ":" + sourceEventId)
+        return UUID.nameUUIDFromBytes(identityInput("event", sourceName, sourceEventId)
                 .getBytes(StandardCharsets.UTF_8));
     }
 
     public static UUID newsItemId(String sourceName, String sourceItemId) {
-        return UUID.nameUUIDFromBytes((NAMESPACE + ":item:" + sourceName + ":" + sourceItemId)
+        return UUID.nameUUIDFromBytes(identityInput("item", sourceName, sourceItemId)
                 .getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String identityInput(String kind, String sourceName, String sourceId) {
+        return NAMESPACE + ":" + kind + ":" + encode(sourceName) + encode(sourceId);
+    }
+
+    private static String encode(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("News source identity values must not be blank");
+        }
+        return value.length() + ":" + value;
     }
 }

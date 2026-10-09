@@ -2,7 +2,7 @@
 
 ## Status
 
-`COMPLETE - RUNTIME VALIDATED; LOCAL COMMIT READY`
+`CLOSED - HUMAN ACCEPTED; LOCAL COMMIT READY`
 
 ## Validation Commands
 
@@ -12,6 +12,9 @@
 | `mvn -q test` in `broker-service` | Passed |
 | `mvn -q test` in `market-intelligence` | Passed |
 | `mvn -q test` in `trading-core` | Passed |
+| `mvn -q test` in `gateway` | Passed |
+| `mvn -q test` in `market-data` | Passed |
+| `mvn -q -Dtest=TradingOwnershipPersistenceIntegrationTest test` in `trading-core` | Passed |
 | `git diff --check` | Passed |
 
 ## Test Counts
@@ -56,7 +59,7 @@ suites.
 
 ## Closure Decision
 
-Story 0044 is closed for the validated Core/Broker/Market Intelligence security
-boundary. Gateway, Market Data, WebSocket, and standalone-analysis ownership
-remain explicitly deferred and are not represented as implemented by this
-commit.
+Story 0044 is closed for the validated security boundary. Gateway, Market Data,
+WebSocket, and standalone-analysis ownership remain explicitly deferred and are
+not represented as implemented by this commit. This closure is authorized by the
+human request to close the Story with those deferred items preserved.

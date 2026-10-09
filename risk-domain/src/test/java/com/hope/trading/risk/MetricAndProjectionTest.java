@@ -98,6 +98,29 @@ class MetricAndProjectionTest {
         assertMoney(projected.totalDrawdown().orElseThrow(), "5");
     }
 
+    @Test void preservesUnprotectedStatusThroughPortfolioProjection() {
+        var position = new PositionSnapshot(UUID.randomUUID(), "EURUSD", BigDecimal.TEN,
+                usd("1000"), Optional.empty(), usd("100"), ProtectionStatus.UNPROTECTED);
+        var projected = engine.project(account,
+                new PortfolioSnapshot(UUID.randomUUID(), 1, NOW, List.of(position)), null);
+
+        assertEquals(ProtectionStatus.UNPROTECTED,
+                projected.portfolioState().positions().getFirst().protectionStatus());
+        assertTrue(projected.portfolioState().positions().getFirst().lossAtStop().isEmpty());
+        assertMoney(projected.portfolioHeat(), "0");
+    }
+
+    @Test void combinesUnprotectedExistingPositionWithProtectedIncreaseAsPartial() {
+        var position = new PositionSnapshot(UUID.randomUUID(), "EURUSD", BigDecimal.TEN,
+                usd("1000"), Optional.empty(), usd("100"), ProtectionStatus.UNPROTECTED);
+        var projected = engine.project(account,
+                new PortfolioSnapshot(UUID.randomUUID(), 1, NOW, List.of(position)),
+                trade(TradeDirection.LONG, "5", "500", "25", "50"));
+
+        assertEquals(ProtectionStatus.PARTIALLY_PROTECTED,
+                projected.portfolioState().positions().getFirst().protectionStatus());
+    }
+
     private PortfolioSnapshot emptyPortfolio() {
         return new PortfolioSnapshot(UUID.randomUUID(), 1, NOW, List.of());
     }

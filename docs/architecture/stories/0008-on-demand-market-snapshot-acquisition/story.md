@@ -4,7 +4,7 @@
 
 **ID:** `0008`  
 **Title:** On-Demand Market Snapshot Acquisition  
-**Status:** Implemented locally
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 

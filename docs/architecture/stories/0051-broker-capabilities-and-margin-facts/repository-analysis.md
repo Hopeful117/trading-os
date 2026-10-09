@@ -4,7 +4,7 @@
 
 ```text
 STORY = 0051-broker-capabilities-and-margin-facts
-BRANCH = story/0050-paper-risk-context (planning artifact; implementation branch to be created later)
+BRANCH = main (current workspace branch; the worktree contains pre-existing local modifications)
 WORKTREE = pre-existing local modifications plus Story 0050 artifacts
 ```
 

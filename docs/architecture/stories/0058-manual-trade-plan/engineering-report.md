@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - HUMAN REVIEW REQUIRED`
+`IMPLEMENTATION COMPLETE - INDEPENDENT REVIEW PASSED; HUMAN COMMIT PENDING`
 
 ## Outcome
 
@@ -25,31 +25,40 @@ creation endpoint only persists a proposed Trade Plan.
 * Provider-specific fields remain outside the Trade Plan model.
 * Authenticated principal identity is used for manual author attribution; the
   request body does not provide an authoritative actor identifier.
+* Manual creation now requires `Idempotency-Key`, persists a request fingerprint
+  and plan reference, replays identical requests, and rejects conflicting reuse
+  with `409`.
+* The idempotency record is durable and uniquely scoped by authenticated actor
+  and key; initial manual plan identity is deterministic for the same actor/key.
 
 ## Validation
 
-* Market Intelligence full suite: `349` tests passed.
-* Story-focused domain/application/API/persistence tests: `16` passed.
-* Trading Core test compilation: passed with tests skipped.
+* Market Intelligence full suite: 519 tests passed after the idempotency and
+  validation changes.
+* Story-focused idempotency/domain/application/API tests: passed.
+* Trading Core test suite: 604 tests passed after the PAPER short-margin
+  regression fixture correction recorded in the current worktree.
 * Flyway migration validation: passed through H2 integration suites.
 * `git diff --check`: passed.
 
 ## Known Limitations
 
 * The frontend does not yet expose the manual-trade form.
-* Gateway and deployed runtime authentication have not been exercised for the
-  new endpoint.
+* Deployed production authentication has not been exercised; the equivalent
+  local authenticated Gateway E2E has passed.
 * The complete path from manual plan to risk approval, human decision,
   Execution Intent and PAPER fill belongs to subsequent Stories.
 * Production database migration has not been executed in this environment.
+* Deployed runtime idempotency replay has not been exercised; local E2E replay
+  and conflict validation passed.
 * Existing unrelated worktree modifications were preserved and are not part of
   this Story's intended scope.
 
 ## Git State
 
 ```text
-BRANCH = story/0058-manual-trade-plan
-COMMIT = none
+BRANCH = chore/debt-resolution
+COMMIT = 0c1e366
 PUSH = NO
 MERGE = NO
 ```
@@ -58,6 +67,7 @@ MERGE = NO
 
 1. Review the implementation against ADR-047 and Story 0058.
 2. Review the manual request contract and explicit sizing/risk inputs.
-3. Validate the authenticated Gateway route if runtime evidence is required.
-4. Approve the next Story for risk evaluation and the human-controlled execution
-   journey.
+3. Preserve Story 0061 as the downstream runtime evidence for the complete
+   manual PAPER journey.
+4. Create the human-controlled commit for the reviewed documentation/status
+   reconciliation.

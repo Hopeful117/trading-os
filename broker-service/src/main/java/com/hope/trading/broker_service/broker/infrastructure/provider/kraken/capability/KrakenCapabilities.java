@@ -10,7 +10,6 @@ import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.map
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.mapper.KrakenAssetNormalizer;
 import com.hope.trading.broker_service.kraken.config.KrakenProperties;
 import java.math.BigDecimal;
-import java.math.MathContext;
 import java.time.Clock;
 import java.util.*;
 import org.springframework.stereotype.Component;
@@ -21,6 +20,9 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
         PositionCapability,OrderCapability,ExecutionCapability,ReconciliationCapability,
         TechnicalCapability,MarginCapability {
     private static final String PROVIDER = "KRAKEN";
+    private static final String ASSET_PAIRS_PATH = "/0/public/AssetPairs";
+    private static final String MARGIN_SOURCE = "KRAKEN_ASSET_PAIRS_MARGIN";
+    private static final BigDecimal CASH_LEVERAGE = BigDecimal.ONE;
     private final ProviderCredentialSession sessions;
     private final KrakenProviderClient client;
     private final KrakenOrderMapper mapper;
@@ -58,20 +60,51 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
         }catch(BrokerTechnicalException e){return new Inconsistent(safeCode(e));}
     }
     @Override public TechnicalCapabilities capabilities(UUID accountId,String instrument) {
-        return new TechnicalCapabilities(accountId,PROVIDER,instrument,properties.getCapabilityVersion(),clock.instant(),
-                List.of(OrderType.MARKET,OrderType.LIMIT),properties.getSupportedLeverageLevels());
-    }
+          MarginFacts facts = marginFacts(instrument);
+          if (instrument == null || (!properties.getSupportedInstruments().isEmpty() && properties.getSupportedInstruments().stream()
+                  .noneMatch(value -> value.equalsIgnoreCase(instrument))))
+              throw new BrokerTechnicalException("Instrument capability is unavailable");
+          return new TechnicalCapabilities(accountId,PROVIDER,instrument,properties.getCapabilityVersion(),clock.instant(),
+                  List.of(OrderType.MARKET,OrderType.LIMIT),List.copyOf(facts.buy()),List.copyOf(facts.sell()));
+     }
     @Override public MarginPreview preview(MarginPreviewRequest request) {
-        BigDecimal leverage=request.leverage()==null
-                ?properties.getSupportedLeverageLevels().stream().min(Comparator.naturalOrder()).orElseThrow(
-                        ()->new BrokerTechnicalException("No supported leverage configured"))
-                :request.leverage();
-        if (!properties.getSupportedLeverageLevels().contains(leverage))
-            throw new BrokerTechnicalException("Unsupported leverage");
-        return new MarginPreview(request.brokerAccountId(),request.instrument(),
-                request.quantity().multiply(request.price()).divide(leverage,MathContext.DECIMAL128),
-                properties.getMarginCurrency(),PROVIDER+":MARGIN_PREVIEW",properties.getCapabilityVersion(),clock.instant());
-    }
+          MarginFacts facts = marginFacts(request.instrument());
+          BigDecimal leverage = request.leverage() == null ? CASH_LEVERAGE : request.leverage();
+          if (leverage.compareTo(CASH_LEVERAGE) > 0 && !facts.leverageFor(request.side()).contains(leverage))
+              throw new BrokerTechnicalException("Requested leverage is unavailable for instrument and side");
+          BigDecimal amount = request.quantity().multiply(request.price()).divide(leverage, java.math.MathContext.DECIMAL64);
+          return new MarginPreview(request.brokerAccountId(),request.instrument(),amount,facts.quoteCurrency(),MARGIN_SOURCE,
+                  properties.getCapabilityVersion(),clock.instant());
+     }
+     private MarginFacts marginFacts(String instrument) {
+          if (instrument == null || instrument.isBlank() || (!properties.getSupportedInstruments().isEmpty() && properties.getSupportedInstruments().stream()
+                  .noneMatch(value -> value.equalsIgnoreCase(instrument))))
+              throw new BrokerTechnicalException("Instrument capability is unavailable");
+          JsonNode result = client.publicGet(ASSET_PAIRS_PATH,Map.of("pair",instrument,"info","info","assetVersion","1"));
+          JsonNode pair = findPair(result,instrument);
+          if (pair == null) throw new BrokerTechnicalException("Instrument capability is unavailable");
+          String quote = pair.path("quote").asText("").trim();
+          if (quote.isBlank()) throw new BrokerTechnicalException("Margin currency is unavailable");
+          Set<BigDecimal> buy = leverageLevels(pair.path("leverage_buy"));
+          Set<BigDecimal> sell = leverageLevels(pair.path("leverage_sell"));
+          buy.add(CASH_LEVERAGE); sell.add(CASH_LEVERAGE);
+          return new MarginFacts(KrakenAssetNormalizer.asset(quote),buy,sell);
+     }
+     private JsonNode findPair(JsonNode result,String instrument) {
+          Iterator<JsonNode> pairs=result.elements();
+          while(pairs.hasNext()) {
+              JsonNode pair=pairs.next();
+              String name=pair.path("wsname").asText(pair.path("altname").asText(""));
+              String canonical=pair.path("base").asText("")+"/"+pair.path("quote").asText("");
+              if(instrument.equalsIgnoreCase(name)||instrument.equalsIgnoreCase(pair.path("altname").asText("") )
+                      || instrument.equalsIgnoreCase(canonical)) return pair;
+          }
+          JsonNode direct=result.path(instrument);return direct.isObject()?direct:null;
+     }
+     private Set<BigDecimal> leverageLevels(JsonNode values) {Set<BigDecimal> levels=new TreeSet<>();if(values.isArray())values.elements().forEachRemaining(value->{if(value.isNumber()&&value.decimalValue().signum()>0)levels.add(value.decimalValue());});return levels;}
+     private record MarginFacts(String quoteCurrency,Set<BigDecimal> buy,Set<BigDecimal> sell) {
+          Set<BigDecimal> leverageFor(Side side){return side==Side.BUY?buy:sell;}
+     }
     private List<OrderSnapshot> readOrders(com.hope.trading.broker_service.credential.domain.CredentialMaterial c,String clientId){
         List<OrderSnapshot> result=new ArrayList<>();collect(client.privatePost("/0/private/OpenOrders",Map.of(),c).path("open"),clientId,result);collect(client.privatePost("/0/private/ClosedOrders",Map.of(),c).path("closed"),clientId,result);return List.copyOf(result);
     }

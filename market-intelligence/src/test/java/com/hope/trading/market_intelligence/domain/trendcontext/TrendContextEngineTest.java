@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.domain.trendcontext;
 
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -13,11 +14,12 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TrendContextEngineTest {
     private static final UUID MARKET = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final Instant START = Instant.parse("2026-09-20T00:00:00Z");
-    private static final Instant ASSESSMENT = START.plus(Duration.ofHours(79));
+    private static final Instant ASSESSMENT = START.plus(Duration.ofHours(80));
 
     @Test
     void strictStructureIsIndependentOfIndicatorsAndUsesProtectedLevel() {
@@ -30,6 +32,9 @@ class TrendContextEngineTest {
         assertThat(setup.lowRelation()).isEqualTo(SwingRelation.HL);
         assertThat(setup.protectedLevel()).isNotNull();
         assertThat(setup.protectedLevel().price()).isEqualByComparingTo("90");
+        assertThat(setup.evidence().getFirst().profileId()).isEqualTo("CONSERVATIVE_SWING_V1");
+        assertThat(setup.evidence().getFirst().sourceIds()).hasSizeGreaterThan(2);
+        assertThat(setup.evidence().getFirst().from()).isBefore(setup.evidence().getFirst().to());
         assertThat(setup.atr().available()).isTrue();
         assertThat(setup.ema().available()).isTrue();
     }
@@ -93,18 +98,80 @@ class TrendContextEngineTest {
     void cutOffReplayAndFingerprintAreDeterministic() {
         TrendContextAssessment first = assess(false, false, false, 80);
         TrendContextAssessment replay = assess(false, false, false, 80);
-        TrendContextAssessment withFuture = assess(false, false, false, 80, false, true);
+        assertThatThrownBy(() -> assess(false, false, false, 80, false, true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("FUTURE_CANDLE");
 
         assertThat(first.fingerprint()).isEqualTo(replay.fingerprint());
         assertThat(first.fingerprint()).isEqualTo(first.assessmentFingerprint());
-        assertThat(withFuture.roleAssessments().get(TrendContextRole.SETUP).direction())
-                .isEqualTo(first.roleAssessments().get(TrendContextRole.SETUP).direction());
-        assertThat(withFuture.roleAssessments().get(TrendContextRole.SETUP).swings().stream()
-                .map(ConfirmedSwing::pivotSourceId).toList())
-                .isEqualTo(first.roleAssessments().get(TrendContextRole.SETUP).swings().stream()
-                        .map(ConfirmedSwing::pivotSourceId).toList());
-        assertThat(withFuture.attention()).isEqualTo(first.attention());
-        assertThat(withFuture.fingerprint()).isNotEqualTo(first.fingerprint());
+    }
+
+    @Test
+    void missingRequiredStructureProducesSafeUnknownAssessment() {
+        TrendContextAssessment assessment = new TrendContextEngine().assess(input(false, false, false, 80), null);
+
+        assertThat(assessment.attention()).isEqualTo(TrendAttention.UNKNOWN);
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("REQUIRED_ROLE_MISSING");
+    }
+
+    @Test
+    void missingRequiredTriggerProducesUnknownAssessment() {
+        TrendContextAssessmentInput base = input(false, false, false, 80);
+        EnumMap<TrendContextRole, TrendContextRoleSeries> roleSeries = new EnumMap<>(base.roleSeries());
+        roleSeries.put(TrendContextRole.TRIGGER, series(TrendContextRole.TRIGGER, "15M",
+                candles("TRIGGER", "15M", 80, false, false, false, false, false)));
+        TrendContextAssessmentInput withRequiredTrigger = TrendContextAssessmentInput.accept(
+                new TrendContextAssessmentInput.Values(base.marketId(), base.provider(), base.symbol(),
+                        base.assessmentAt(), base.cutOffAt(), profileWithTrigger(), base.ruleVersion(),
+                        roleSeries));
+        Map<TrendContextRole, MarketStructureResult> structures =
+                new EnumMap<>(TrendContextStructureFixtures.structures(withRequiredTrigger));
+        structures.remove(TrendContextRole.TRIGGER);
+
+        TrendContextAssessment assessment = new TrendContextEngine().assess(withRequiredTrigger, structures);
+
+        assertThat(assessment.attention()).isEqualTo(TrendAttention.UNKNOWN);
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("REQUIRED_ROLE_MISSING");
+    }
+
+    @Test
+    void structureWithFutureCutoffIsRejected() {
+        TrendContextAssessmentInput input = input(false, false, false, 80);
+        Map<TrendContextRole, MarketStructureResult> structures =
+                new EnumMap<>(TrendContextStructureFixtures.structures(input));
+        MarketStructureResult setup = structures.get(TrendContextRole.SETUP);
+        structures.put(TrendContextRole.SETUP, new MarketStructureResult(
+                setup.marketId(), setup.provider(), setup.symbol(), setup.interval(),
+                ASSESSMENT.plusSeconds(1), setup.algorithmId(), setup.ruleVersion(), setup.policyId(),
+                setup.policyVersion(), setup.parameterFingerprint(), setup.inputFingerprint(),
+                setup.availability(), setup.findings(), setup.retained(), setup.all(), setup.relations(),
+                setup.resultFingerprint()));
+
+        TrendContextAssessment assessment = new TrendContextEngine().assess(input, structures);
+
+        assertThat(assessment.attention()).isEqualTo(TrendAttention.UNKNOWN);
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("INVALID_STRUCTURE");
+    }
+
+    @Test
+    void relationsReferencingNonRetainedSwingsAreRejected() {
+        TrendContextAssessmentInput input = input(false, false, false, 80);
+        Map<TrendContextRole, MarketStructureResult> structures =
+                new EnumMap<>(TrendContextStructureFixtures.structures(input));
+        MarketStructureResult setup = structures.get(TrendContextRole.SETUP);
+        structures.put(TrendContextRole.SETUP, new MarketStructureResult(
+                setup.marketId(), setup.provider(), setup.symbol(), setup.interval(), setup.cutOffAt(),
+                setup.algorithmId(), setup.ruleVersion(), setup.policyId(), setup.policyVersion(),
+                setup.parameterFingerprint(), setup.inputFingerprint(), setup.availability(), setup.findings(),
+                List.of(), setup.all(), setup.relations(), setup.resultFingerprint()));
+
+        TrendContextAssessment assessment = new TrendContextEngine().assess(input, structures);
+
+        assertThat(assessment.exclusions()).extracting(TrendContextExclusion::code)
+                .contains("INVALID_STRUCTURE");
     }
 
     @ParameterizedTest
@@ -125,15 +192,23 @@ class TrendContextEngineTest {
     }
 
     private TrendContextAssessment assess(boolean equalHigh, boolean wick, boolean breakClose, int count, boolean excluded, boolean future) {
+        return TrendContextStructureFixtures.assess(input(equalHigh, wick, breakClose, count, excluded, future));
+    }
+
+    private TrendContextAssessmentInput input(boolean equalHigh, boolean wick, boolean breakClose, int count) {
+        return input(equalHigh, wick, breakClose, count, false, false);
+    }
+
+    private TrendContextAssessmentInput input(boolean equalHigh, boolean wick, boolean breakClose,
+                                              int count, boolean excluded, boolean future) {
         TrendContextProfile profile = profile();
         List<TrendContextCandle> candles = candles("SETUP", "1H", count, equalHigh, wick, breakClose, excluded, future);
         Map<TrendContextRole, TrendContextRoleSeries> roles = new EnumMap<>(TrendContextRole.class);
         roles.put(TrendContextRole.BIAS, series(TrendContextRole.BIAS, "4H", candles("BIAS", "4H", count, equalHigh, false, false, false, false)));
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP, "1H", candles));
-        TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(
+        return TrendContextAssessmentInput.accept(
                 new TrendContextAssessmentInput.Values(MARKET, "KRAKEN", "BTC/EUR",
-                        ASSESSMENT, START.plus(Duration.ofHours(79)), profile, "rules-1", roles));
-        return TrendContextStructureFixtures.assess(input);
+                         ASSESSMENT, ASSESSMENT.minusNanos(1), profile, "rules-1", roles));
     }
 
     private TrendContextProfile profile() {
@@ -154,7 +229,7 @@ class TrendContextEngineTest {
                 candles("TRIGGER", "15M", 80, false, false, false, false, false)));
         TrendContextAssessmentInput input = TrendContextAssessmentInput.accept(
                 new TrendContextAssessmentInput.Values(MARKET, "KRAKEN", "BTC/EUR", ASSESSMENT,
-                        START.plus(Duration.ofHours(79)), profile, "rules-1", roles));
+                        ASSESSMENT.minusNanos(1), profile, "rules-1", roles));
         return TrendContextStructureFixtures.assess(input);
     }
 
@@ -179,8 +254,10 @@ class TrendContextEngineTest {
             if (i == count - 2 && wick) low = bd("89");
             boolean synthetic = excluded && i == 10;
             boolean closed = !(excluded && i == 12);
-            Instant open = START.plus(Duration.ofHours(i));
-            Instant closeTime = open.plus(Duration.ofHours(1));
+            Duration intervalDuration = interval.equals("15M") ? Duration.ofMinutes(15)
+                    : interval.equals("4H") ? Duration.ofHours(4) : Duration.ofHours(1);
+            Instant open = ASSESSMENT.minus(intervalDuration.multipliedBy(count - i));
+            Instant closeTime = open.plus(intervalDuration);
             if (future && i == count - 1) closeTime = ASSESSMENT.plus(Duration.ofHours(2));
             result.add(candle(prefix + '-' + i, interval, open, closeTime, high, low, close, closed, synthetic));
         }

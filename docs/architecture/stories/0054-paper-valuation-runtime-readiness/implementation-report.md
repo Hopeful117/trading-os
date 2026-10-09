@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - RUNTIME EVIDENCE PARTIAL`
+`IMPLEMENTED - RUNTIME VALIDATED`
 
 ## Scope Delivered
 
@@ -18,22 +18,28 @@ introduce a synthetic fallback price.
 
 ## Runtime Evidence
 
-The authenticated investigation reached deterministic risk evaluation for
-`ADA/USD` through the web application. The result was:
+The authenticated PAPER proof reached deterministic risk evaluation through the
+web application with a fresh observed valuation. The proof is recorded in
+`artifacts/paper-runtime-proof.json` and includes:
 
 ```text
-valuation unavailable: not observed at the risk boundary
-risk result: APPROVED = No
-reason: MAX_EXPOSURE
+valuation market: `8d90a581-ab33-4bbb-925a-a9f5ce726374`
+valuation observed at: `2026-10-08T18:50:52.752702Z`
+risk result: APPROVED = Yes
+notional: `299.999999999160000 USD`
 ```
 
-This confirms that the journey progressed beyond the original valuation
-availability blocker. It does not prove the complete execution-to-position
-journey, because the plan was correctly stopped before execution.
+The same proof contains a negative oversized plan. It was rejected by
+`MAX_POSITION_RISK`, `DAILY_DRAWDOWN` and `MAX_EXPOSURE`, confirming that the
+valuation and Risk boundaries remain fail-closed. The sizing compatibility
+correction used by the proof belongs to Story 0055.
+
+Focused Trading Core valuation-client and missing/incomplete valuation tests
+also preserve the fail-closed behavior when the authoritative valuation cannot
+be assembled.
 
 ## Remaining Evidence
 
-* attach focused Market Data and Trading Core test results;
-* perform a negative stale/missing valuation check;
-* rerun with a plan whose notional is compatible with the effective risk profile;
-* preserve the fail-closed result when valuation is unavailable.
+* No Story 0054 validation gap remains.
+* No real LIVE transaction is required by this Story.
+* Provider-backed LIVE execution and reconciliation remain outside this scope.

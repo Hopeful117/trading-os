@@ -29,12 +29,15 @@ V12 keeps the new relation nullable during rollout. It backfills only rows suppo
 - Ownership and missing/invalid profile rejection: covered by `BrokerAccountServiceOwnershipTest`.
 - Existing full-suite compatibility: 520 Trading Core tests passed.
 
-## Remaining Review Items
+## Closure Notes
 
-- Human review of the migration/backfill SQL against representative production data.
-- Human verification of the full diff and acceptance checklist.
-- Human commit and integration approval.
+- A production-data dry-run of the migration remains recommended before
+  deployment; it is an operational follow-up, not a Story implementation
+  finding.
+- Rollback coverage after configuration/assignment failure remains partial and
+  is documented for future hardening.
+- The human commit and integration approval remain outside the coding agent.
 
 ## Status
 
-`STORY_0039_IMPLEMENTED_READY_FOR_REVIEW`
+`STORY_0039_CLOSED_HUMAN_ACCEPTED_COMMIT_PENDING`

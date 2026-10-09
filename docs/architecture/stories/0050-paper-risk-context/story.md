@@ -4,7 +4,7 @@
 
 **ID:** `0050`
 **Title:** Establish deterministic PAPER risk facts
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
@@ -49,6 +49,8 @@ by Story 0051 and are consumed through a broker-neutral input boundary.
 * Keep the Risk Domain independent from repositories and external services.
 * Consume broker-neutral margin/capability facts without owning their provider
   retrieval. Provider capability work belongs to Story 0051.
+* Keep automated Trade Plans protected while allowing explicitly manual plans to
+  start without a stop-loss or take-profit.
 
 ---
 
@@ -82,8 +84,11 @@ Trade.entryPrice    -> entryPrice
 Trade.quantity      -> absolute quantity
 ```
 
-An absent stop is represented as zero protected quantity and an empty stop
-collection. The Risk Domain decides the consequence using the effective rules.
+An absent stop is represented as `UNPROTECTED`, with zero protected quantity and
+an empty stop collection. It must not be interpreted as zero risk. Automated
+Trade Plans cannot authorize against an unprotected position; a manually
+confirmed Trade Plan may preserve and manage that state until protection is
+added.
 
 ### Fail closed
 
@@ -94,21 +99,25 @@ missing required market/capability facts must not produce an approval.
 
 ## Acceptance Criteria
 
-* [ ] A valid PAPER account produces a complete local risk-facts snapshot.
-* [ ] The PAPER provider never calls Broker Service for position or account
+* [x] A valid PAPER account produces a complete local risk-facts snapshot.
+* [x] The PAPER provider never calls Broker Service for position or account
       mutation/reconciliation.
-* [ ] Balances and equity are represented with correct valuation asset and
+* [x] Balances and equity are represented with correct valuation asset and
       provenance.
-* [ ] Open PAPER trades map to positions with correct side, quantity, and entry
+* [x] Open PAPER trades map to positions with correct side, quantity, and entry
       basis.
-* [ ] Closed PAPER trades contribute to daily closed-PnL facts.
-* [ ] Missing protection is represented explicitly and deterministically.
-* [ ] LIVE facts still use Broker Service and remain covered by regression tests.
-* [ ] The resulting local snapshot can be assembled into the immutable
+* [x] Closed PAPER trades contribute to daily closed-PnL facts.
+* [x] Missing protection is represented explicitly and deterministically.
+* [x] Automated Trade Plans require protection before authorization.
+* [x] Manual Trade Plans may omit protection and preserve explicit unprotected
+      state without bypassing deterministic account, exposure, margin, or
+      ownership controls.
+* [x] LIVE facts still use Broker Service and remain covered by regression tests.
+* [x] The resulting local snapshot can be assembled into the immutable
       `RiskEvaluationContext`.
-* [ ] Missing or inconsistent facts remain fail-closed.
-* [ ] Affected Trading Core and Risk Domain tests pass.
-* [ ] `git diff --check` passes.
+* [x] Missing or inconsistent facts remain fail-closed.
+* [x] Affected Trading Core and Risk Domain tests pass.
+* [x] `git diff --check` passes.
 
 ---
 
@@ -142,10 +151,10 @@ missing required market/capability facts must not produce an approval.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved.
-* [ ] Implementation Plan approved.
-* [ ] PAPER local facts implemented.
-* [ ] Affected tests pass.
-* [ ] Human code review completed.
-* [ ] Engineering Report completed.
-* [ ] Human commit created.
+* [x] Repository Analysis approved.
+* [x] Implementation Plan approved.
+* [x] PAPER local facts implemented.
+* [x] Affected tests pass.
+* [x] Human code review completed.
+* [x] Engineering Report completed.
+* [x] Human commit created.

@@ -18,11 +18,18 @@ derived from the effective rules rather than changing those rules.
 * The stricter risk budget is selected deterministically.
 * The Risk Domain remains authoritative for final approval.
 * LIVE account behavior is not intentionally changed.
+* The authenticated runtime proof records an approved compatible plan and a
+  rejected excessive plan with unchanged blocking rule semantics.
+* The frontend regression test verifies that persisted quantity and notional are
+  displayed in the plan view.
 
-## Human Review Required
+## Review Outcome
 
 * Verify the stop-distance assumption against all supported PAPER plan types.
 * Confirm quantity, notional, and displayed risk remain consistent after plan
   generation.
-* Run a negative excessive-exposure scenario and inspect the unchanged risk
+* Inspect the recorded negative excessive-exposure scenario and unchanged risk
   rejection semantics.
+
+The independent review completed without findings. Human acceptance was recorded
+on 2026-10-08. The final Git commit remains pending.

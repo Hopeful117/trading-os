@@ -9,6 +9,7 @@ public record ManualTradePlanningRequest(
         UUID planningContextId,
         long contextVersion,
         UUID actorId,
+        UUID tradingAccountId,
         String instrument,
         TradeDirection direction,
         EntryStrategy entry,
@@ -27,13 +28,12 @@ public record ManualTradePlanningRequest(
         Objects.requireNonNull(planningContextId);
         if (contextVersion < 1) throw new IllegalArgumentException("Context version starts at 1");
         Objects.requireNonNull(actorId);
+        Objects.requireNonNull(tradingAccountId);
         instrument = Objects.requireNonNull(instrument).trim();
         if (instrument.isEmpty()) throw new IllegalArgumentException("instrument is required");
         Objects.requireNonNull(direction);
         Objects.requireNonNull(entry);
-        Objects.requireNonNull(stopLoss);
-        takeProfits = List.copyOf(takeProfits);
-        if (takeProfits.isEmpty()) throw new IllegalArgumentException("A target is required");
+        takeProfits = List.copyOf(takeProfits == null ? List.of() : takeProfits);
         Objects.requireNonNull(positionSizing);
         if (Objects.requireNonNull(referencePrice).signum() <= 0) {
             throw new IllegalArgumentException("referencePrice must be positive");
@@ -43,7 +43,7 @@ public record ManualTradePlanningRequest(
         thesis = required(thesis, "thesis");
         confirmationConditions = Set.copyOf(confirmationConditions);
         invalidationConditions = Set.copyOf(invalidationConditions);
-        managementRules = Set.copyOf(managementRules);
+        managementRules = Set.copyOf(managementRules == null ? Set.of() : managementRules);
         if (confirmationConditions.isEmpty() || invalidationConditions.isEmpty()) {
             throw new IllegalArgumentException("Confirmation and invalidation rules are required");
         }

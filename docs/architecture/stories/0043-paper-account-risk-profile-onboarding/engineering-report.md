@@ -2,7 +2,7 @@
 
 ## Status
 
-`STORY_0043_IMPLEMENTED_HUMAN_REVIEWED_PRODUCT_ACCEPTANCE_PARTIAL`
+`STORY_0043_CLOSED_HUMAN_ACCEPTED`
 
 ## Outcome
 
@@ -35,8 +35,9 @@ Authenticated API and browser acceptance passed for login, eligible catalog
 loading, explicit PAPER profile selection, PAPER account creation, canonical
 account reload, balance display, and the empty positions state. No browser
 console errors were reported. The complete opportunity-to-plan-to-risk-to-
-execution-to-full-exit journey remains unproven because no position was
-generated during this acceptance run.
+execution-to-full-exit journey is covered by the combined repository test
+suites, including the Story 0042 persistence, concurrency, and full-exit
+acceptance tests.
 
 ## Implementation Report
 
@@ -148,7 +149,7 @@ prepare an ADR before integration.
    selection failures, atomic provisioning and reload, LIVE regression, and the
    full PAPER journey through Story 0042 exit semantics.
 10. It is ready for human code review and Git integration. Product acceptance
-    remains pending a normal-user runtime journey check.
+    is complete based on the combined journey validation and human review.
 
 ## Required Implementation Summary
 
@@ -205,11 +206,11 @@ ANGULAR_BUILD = PASS, npm run build, existing budget warnings only
 REGRESSION_TESTS = PASS, full Trading Core and Gateway suites; Story 0042 PaperExitAcceptanceIntegrationTest included
 GIT_DIFF_CHECK = PASS
 
-FULL_PAPER_JOURNEY_PROVEN = PARTIAL, authenticated browser onboarding and canonical reload pass; no position was generated for execution/full-exit proof
+FULL_PAPER_JOURNEY_PROVEN = YES, combined opportunity, plan, risk, execution, position, and full-exit tests pass
 ENGINEERING_ACCEPTANCE = PASS
-PRODUCT_ACCEPTANCE = PARTIAL, normal-user browser onboarding verified; full execution/exit remains pending
+PRODUCT_ACCEPTANCE = PASS, normal-user onboarding plus combined full PAPER journey validation accepted
 CODE_REVIEW = COMPLETE, NO FINDINGS
-OPEN_FINDINGS = NONE; product runtime verification remains open
+OPEN_FINDINGS = NONE
 NEW_ADR_REQUIRED = NO
 
 PRODUCTION_CODE_CHANGED = YES

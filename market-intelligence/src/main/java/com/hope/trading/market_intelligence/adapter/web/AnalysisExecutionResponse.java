@@ -9,6 +9,7 @@ import java.util.UUID;
 public record AnalysisExecutionResponse(
         UUID executionId,
         AnalysisExecutionStatus status,
+        String failureCode,
         AnalysisResultQuality resultQuality,
         Instant requestedAt,
         Instant updatedAt,
@@ -21,6 +22,7 @@ public record AnalysisExecutionResponse(
         return new AnalysisExecutionResponse(
                 execution.executionId(),
                 execution.status(),
+                execution.failureCode().orElse(null),
                 execution.resultQuality().orElse(null),
                 execution.requestedAt(),
                 execution.updatedAt(),

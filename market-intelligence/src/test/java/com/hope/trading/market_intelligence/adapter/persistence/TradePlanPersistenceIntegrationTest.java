@@ -32,7 +32,7 @@ class TradePlanPersistenceIntegrationTest {
         TradePlanningResult.Success result = (TradePlanningResult.Success)
                 environment.service().createManual(new ManualTradePlanningRequest(
                         environment.context().id(), environment.context().version(),
-                        environment.owner(), "BTC/EUR", TradeDirection.LONG,
+                         environment.owner(), environment.context().tradingAccountId(), "BTC/EUR", TradeDirection.LONG,
                         new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
                         new StopLoss(BigDecimal.valueOf(99), "manual invalidation"),
                         List.of(new TakeProfit(BigDecimal.valueOf(102), BigDecimal.valueOf(100))),

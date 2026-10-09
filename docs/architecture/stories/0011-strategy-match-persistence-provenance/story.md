@@ -1,5 +1,7 @@
 # Story 0011 — StrategyMatch Persistence & Provenance
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 Introduce `StrategyMatch` as a persisted, immutable, append-only domain fact
@@ -65,40 +67,35 @@ through analysisExecutionId and are deliberately not duplicated.
   clock rather than the OHLC event time; intentional in 0011.
 - `created_at` = storage time. Both are distinct columns, never conflated.
 
-## Transaction model (corrected, mandatory)
+## Transaction model (current implementation)
 
 ```text
-T1 ProductionIntelligencePipeline @Transactional
+ProductionIntelligencePipeline @Transactional
     ├─ Observation build (unchanged)
-    ├─ legacy TradingOpportunity creation (unchanged authority)
+    ├─ legacy TradingOpportunity creation (legacy compatibility)
     ├─ shadow StrategyEvaluation (Story 0010)
-    ├─ snapshot immutable PendingStrategyMatchRecord (MATCH only)
-    └─ COMMIT
-         └─ afterCommit (TransactionSynchronization)
-              └─ StrategyMatchRecorder.persistSafely
-                   └─ T2 StrategyMatchPersister @Transactional(REQUIRES_NEW)
-                        └─ idempotent insert (CREATED | ALREADY_EXISTS)
+    ├─ StrategyMatchPersister.persist for MATCH evaluations
+    └─ idempotent insert in the same transaction
 ```
 
-A REQUIRES_NEW write BEFORE T1 commit is forbidden: it could durably commit a
-match whose observation later rolled back. The after-commit model makes that
-impossible by construction; tests prove no row exists before commit and none
-survives a rollback.
+The current implementation uses the main transaction rather than an
+after-commit `REQUIRES_NEW` write. This is the authoritative implementation
+because StrategyMatch is required truth for the downstream StrategyMatch-based
+opportunity path. A rollback therefore removes the match together with the
+surrounding analysis transaction; a successful transaction commits the match
+atomically. The database unique constraint remains authoritative for concurrent
+duplicates.
 
 ## Failure semantics & temporary crash window
 
-Shadow mode: any T2 failure is bounded (WARN log + in-memory counters:
-intents/persisted/duplicates/failures) and never retroactively fails
-AnalysisExecution, PipelineRun, Observation, TradingOpportunity or ActiveScan.
+Persistence failures participate in the enclosing transaction and therefore do
+not leave a committed analysis without its required StrategyMatch truth. The
+logical insert remains idempotent through the business-key uniqueness
+constraint.
 
-Accepted temporary crash window: if the process dies between T1 commit and T2
-commit, legacy truth exists while the match is missing. This is NOT claimed to
-be physically exactly-once; logical retry remains idempotent.
-
-**Story 0012 warning:** once TradingOpportunity derives from StrategyMatch,
-this crash window becomes unacceptable. Story 0012 MUST design a required-truth
-persistence/recovery model (in-transaction write, outbox, or reconciliation)
-before removing the legacy opportunity path.
+The downstream StrategyMatch-based opportunity path is already supported by
+this required-truth transaction model. The legacy opportunity path remains for
+compatibility until the later workflow stories remove it explicitly.
 
 ## Schema (V5__strategy_match_persistence.sql)
 

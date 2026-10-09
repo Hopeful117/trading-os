@@ -119,11 +119,11 @@ POST /executions/validate
 
 ## Test Results
 
-```bash
-mvn test
-# Tests run: 83, Failures: 1, Errors: 0, Skipped: 0
-# Failure: RiskAcknowledgmentOutboxPersistenceTest (pre-existing, DB-related)
-```
+The initial implementation run recorded one pre-existing
+`RiskAcknowledgmentOutboxPersistenceTest` database failure. The subsequent
+engineering validation reran the same module and recorded `83` tests with zero
+failures. The current Trading Core validation also passes after the unrelated
+PAPER short-margin test correction remains isolated in the worktree.
 
 ### New Tests — ValidateAndCreateServiceTest (9/9 ✅)
 

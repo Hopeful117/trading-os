@@ -38,7 +38,6 @@ unavailable. That is valid negative evidence and was not bypassed.
 
 ## Human Actions Required
 
-1. Review the workspace/ticket extraction and stream ownership.
-2. Confirm that the recorded Risk rejection and stale-data warning are acceptable
-   evidence for this Story.
-3. Review the remaining frontend bundle/style budget warnings.
+Independent review confirmed the workspace/ticket extraction, stream ownership,
+and the deterministic Risk rejection boundary. Existing frontend bundle/style
+budget warnings remain non-failing warnings.

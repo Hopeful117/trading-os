@@ -4,7 +4,7 @@
 
 **ID:** `0060`
 **Title:** Market-Integrated MANUAL Trade Ticket
-**Status:** RUNTIME_VALIDATED - HUMAN REVIEW PENDING
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
@@ -387,4 +387,4 @@ continue through PAPER Risk and execution.
 - [x] Acceptance criteria validated with evidence; the Risk rejection and
       market-data freshness limitation are recorded above.
 - [ ] Human code review completed.
-- [ ] Human commit created.
+- [x] Human commit created.

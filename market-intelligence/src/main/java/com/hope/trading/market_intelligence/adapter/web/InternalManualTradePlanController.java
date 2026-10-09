@@ -60,7 +60,8 @@ public final class InternalManualTradePlanController {
             throw new IllegalArgumentException("Manual Trade Plan context does not match actor or account");
         }
         contexts.saveSnapshot(request.context().toDomain());
-        TradePlanningResult result = service.createManual(request.toApplicationRequest(actorId));
+        TradePlanningResult result = service.createManual(
+                request.toApplicationRequest(actorId), idempotencyKey);
         if (result instanceof TradePlanningResult.Success success) {
             TradePlan plan = success.plan();
             TradePlanningContext context = contexts.find(
@@ -82,9 +83,9 @@ public final class InternalManualTradePlanController {
             @NotBlank String entryType,
             BigDecimal entryPrice,
             @NotNull @Positive BigDecimal referencePrice,
-            @NotNull @Positive BigDecimal stopLoss,
-            @NotBlank String stopRationale,
-            @NotEmpty List<@Valid Target> takeProfits,
+             @Positive BigDecimal stopLoss,
+             String stopRationale,
+             List<@Valid Target> takeProfits,
             @NotNull @Positive BigDecimal quantity,
             @NotNull @Positive BigDecimal notional,
             @NotNull @Positive BigDecimal monetaryRisk,
@@ -97,12 +98,13 @@ public final class InternalManualTradePlanController {
     ) {
         ManualTradePlanningRequest toApplicationRequest(UUID authenticatedActor) {
             return new ManualTradePlanningRequest(
-                    context.id(), context.version(), authenticatedActor, instrument,
+                    context.id(), context.version(), authenticatedActor, accountId, instrument,
                     TradeDirection.valueOf(direction),
                     new EntryStrategy(EntryType.valueOf(entryType), entryPrice,
                             Set.of("Human-authored entry")),
-                    new StopLoss(stopLoss, stopRationale),
-                    takeProfits.stream().map(value -> new TakeProfit(
+                    stopLoss == null ? null : new StopLoss(stopLoss,
+                            stopRationale == null ? "Manual protection" : stopRationale),
+                    takeProfits == null ? List.of() : takeProfits.stream().map(value -> new TakeProfit(
                             value.price(), value.allocationPercent())).toList(),
                     new PositionSizing(quantity, notional, monetaryRisk, context.accountCurrency()),
                     referencePrice, expiresAt, expirationPolicy, thesis,

@@ -1,5 +1,7 @@
 # Story 0026 — Dashboard V1: Operational Account & Market Intelligence Overview
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 Transform the current Trading OS Dashboard into a truthful operational overview of the trader's current state, combining Account data from Trading Core with Market Intelligence summary, while preserving zero/empty/unavailable/error semantics.

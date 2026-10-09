@@ -98,6 +98,26 @@ public final class BrokerQueryControllers {
     }
 
     @RestController
+    @RequestMapping("/internal/v1/broker-providers")
+    public static final class ProviderTechnicalCapabilitiesController {
+        private final GetProviderTechnicalCapabilitiesService service;
+
+        public ProviderTechnicalCapabilitiesController(GetProviderTechnicalCapabilitiesService service) {
+            this.service = service;
+        }
+
+        @GetMapping("/{provider}/capabilities")
+        public ResponseEntity<TechnicalCapabilities> get(
+                @PathVariable com.hope.trading.broker_service.connection.domain.BrokerProviderId provider,
+                @RequestParam UUID brokerAccountId,
+                @RequestParam String instrument,
+                @AuthenticationPrincipal BrokerPrincipal principal) {
+            requireDelegatedActor(principal);
+            return ResponseEntity.ok(service.get(provider, brokerAccountId, instrument));
+        }
+    }
+
+    @RestController
     @RequestMapping("/internal/v1/broker-accounts")
     public static final class MarginPreviewController {
         private final PreviewMarginService service;
@@ -116,6 +136,25 @@ public final class BrokerQueryControllers {
                 throw new IllegalArgumentException("Broker account path does not match request");
             }
             return ResponseEntity.ok(service.preview(request, principal.userId()));
+        }
+    }
+
+    @RestController
+    @RequestMapping("/internal/v1/broker-providers")
+    public static final class ProviderMarginPreviewController {
+        private final PreviewProviderMarginService service;
+
+        public ProviderMarginPreviewController(PreviewProviderMarginService service) {
+            this.service = service;
+        }
+
+        @PostMapping("/{provider}/margin-preview")
+        public ResponseEntity<MarginPreview> preview(
+                @PathVariable com.hope.trading.broker_service.connection.domain.BrokerProviderId provider,
+                @RequestBody MarginPreviewRequest request,
+                @AuthenticationPrincipal BrokerPrincipal principal) {
+            requireDelegatedActor(principal);
+            return ResponseEntity.ok(service.preview(provider, request));
         }
     }
 

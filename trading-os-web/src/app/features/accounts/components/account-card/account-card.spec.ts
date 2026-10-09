@@ -29,7 +29,7 @@ describe('AccountCard', () => {
     expect(component).toBeTruthy();
   });
 
-  it('shows risk and trade planning profile references when available', async () => {
+  it('does not show technical profile identifiers', async () => {
     const profileFixture = TestBed.createComponent(AccountCard);
     profileFixture.componentInstance.account = {
       ...component.account,
@@ -41,14 +41,8 @@ describe('AccountCard', () => {
 
     profileFixture.detectChanges();
 
-    expect(
-      profileFixture.nativeElement.querySelector('[data-testid="risk-profile-reference"]')
-        .textContent,
-    ).toContain('risk-profile-1 v1.0.0');
-    expect(
-      profileFixture.nativeElement.querySelector('[data-testid="trade-planning-profile-reference"]')
-        .textContent,
-    ).toContain('planning-profile-1 v1');
+    expect(profileFixture.nativeElement.textContent).not.toContain('risk-profile-1');
+    expect(profileFixture.nativeElement.textContent).not.toContain('planning-profile-1');
   });
 
   it('should return entries when balances exist', () => {

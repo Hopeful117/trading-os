@@ -38,6 +38,16 @@ describe('TokenService', () => {
     expect(localStorage.getItem('jwt')).toBeNull();
   });
 
+  it('getUsername reads the username claim from a JWT', () => {
+    const payload = btoa(JSON.stringify({ username: 'alice' }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    localStorage.setItem('jwt', `header.${payload}.signature`);
+
+    expect(service.getUsername()).toBe('alice');
+  });
+
   it('isLoggedIn returns true when token exists', () => {
     localStorage.setItem('jwt', 'existing-token');
     expect(service.isLoggedIn()).toBe(true);

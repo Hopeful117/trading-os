@@ -40,8 +40,13 @@ public class NewsCatalogService {
 
     @Transactional(readOnly = true)
     public NewsReadResult<EconomicEvent> findEvents(NewsQuery query) {
-        if (!isEconomicCalendarAvailable()) {
+        EconomicCalendarSourcePort provider = economicCalendarSource.getIfAvailable();
+        if (provider == null) {
             return unavailable();
+        }
+        NewsAvailability providerStatus = provider.availability();
+        if (providerStatus != null && providerStatus != NewsAvailability.AVAILABLE) {
+            return unavailable(providerStatus);
         }
         Instant from = query.from() == null ? Instant.now().minusSeconds(86400) : query.from();
         Instant to = query.to() == null ? Instant.now().plusSeconds(172800) : query.to();
@@ -57,8 +62,13 @@ public class NewsCatalogService {
 
     @Transactional(readOnly = true)
     public NewsReadResult<FinancialNewsItem> findNews(NewsQuery query) {
-        if (!isProviderAvailable()) {
+        NewsSourcePort provider = isProviderAvailable() ? source.getIfAvailable() : null;
+        if (provider == null) {
             return unavailable();
+        }
+        NewsAvailability providerStatus = provider.availability();
+        if (providerStatus != null && providerStatus != NewsAvailability.AVAILABLE) {
+            return unavailable(providerStatus);
         }
         Instant from = query.from() == null ? Instant.now().minusSeconds(172800) : query.from();
         Instant to = query.to() == null ? Instant.now() : query.to();
@@ -110,6 +120,15 @@ public class NewsCatalogService {
 
     private NewsAvailability contextAvailability(NewsAvailability eventsStatus,
                                                   NewsAvailability newsStatus) {
+        if (eventsStatus == NewsAvailability.INCOMPLETE || newsStatus == NewsAvailability.INCOMPLETE) {
+            return NewsAvailability.INCOMPLETE;
+        }
+        if (eventsStatus == NewsAvailability.UNSUPPORTED && newsStatus == NewsAvailability.UNSUPPORTED) {
+            return NewsAvailability.UNSUPPORTED;
+        }
+        if (eventsStatus == NewsAvailability.UNSUPPORTED || newsStatus == NewsAvailability.UNSUPPORTED) {
+            return NewsAvailability.INCOMPLETE;
+        }
         if (eventsStatus == NewsAvailability.STALE || newsStatus == NewsAvailability.STALE) {
             return NewsAvailability.STALE;
         }
@@ -120,8 +139,22 @@ public class NewsCatalogService {
     }
 
     private <T> NewsReadResult<T> unavailable() {
-        return new NewsReadResult<>(NewsAvailability.UNAVAILABLE, List.of(), Instant.now(),
-                "No production news provider is configured");
+        return unavailable(NewsAvailability.UNAVAILABLE);
+    }
+
+    private <T> NewsReadResult<T> unavailable(NewsAvailability status) {
+        return new NewsReadResult<>(status, List.of(), Instant.now(),
+                statusMessage(status));
+    }
+
+    private String statusMessage(NewsAvailability status) {
+        return switch (status) {
+            case UNSUPPORTED -> "The configured news provider is unsupported";
+            case INCOMPLETE -> "The configured news provider returned incomplete data";
+            case UNAVAILABLE -> "No production news provider is configured";
+            case STALE -> "News data exceeds the configured freshness policy";
+            case AVAILABLE -> null;
+        };
     }
 
     private NewsAvailability availability(List<?> items) {

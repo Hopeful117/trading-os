@@ -5,6 +5,7 @@ import com.hope.trading.news.domain.EconomicEvent;
 import com.hope.trading.news.domain.EconomicEventStatus;
 import com.hope.trading.news.domain.ImpactLevel;
 import com.hope.trading.news.domain.NewsIdentity;
+import com.hope.trading.news.domain.NewsAvailability;
 import com.hope.trading.news.persistence.EconomicEventEntity;
 import com.hope.trading.news.persistence.EconomicEventRepository;
 import com.hope.trading.news.persistence.FinancialNewsItemRepository;
@@ -36,6 +37,10 @@ class NewsCatalogServiceTest {
         assertThat(context.status().name()).isEqualTo("UNAVAILABLE");
         assertThat(context.events()).isEmpty();
         assertThat(context.news()).isEmpty();
+
+        NewsReadResult<EconomicEvent> result = service.findEvents(
+                new NewsQuery(null, null, null, null, null, 10));
+        assertThat(result.message()).contains("No production news provider");
     }
 
     @Test
@@ -66,6 +71,7 @@ class NewsCatalogServiceTest {
 
         assertThat(result.status()).isEqualTo(com.hope.trading.news.domain.NewsAvailability.STALE);
         assertThat(result.items()).hasSize(1);
+        assertThat(result.message()).contains("freshness policy");
     }
 
     @Test
@@ -92,6 +98,61 @@ class NewsCatalogServiceTest {
         assertThat(context.status()).isEqualTo(com.hope.trading.news.domain.NewsAvailability.AVAILABLE);
         assertThat(context.events()).hasSize(1);
         assertThat(context.news()).isEmpty();
+    }
+
+    @Test
+    void exposesUnsupportedCalendarProviderState() {
+        EconomicCalendarSourcePort source = new EconomicCalendarSourcePort() {
+            @Override
+            public java.util.List<EconomicEvent> economicEvents(Instant from, Instant to) {
+                return java.util.List.of();
+            }
+
+            @Override
+            public NewsAvailability availability() {
+                return NewsAvailability.UNSUPPORTED;
+            }
+        };
+        NewsCatalogService service = new NewsCatalogService(mock(EconomicEventRepository.class),
+                mock(FinancialNewsItemRepository.class), new NewsProviderProperties(),
+                mock(org.springframework.beans.factory.ObjectProvider.class), providerFor(source));
+
+        NewsReadResult<EconomicEvent> result = service.findEvents(
+                new NewsQuery(null, null, null, null, null, 10));
+
+        assertThat(result.status()).isEqualTo(NewsAvailability.UNSUPPORTED);
+        assertThat(result.message()).contains("unsupported");
+    }
+
+    @Test
+    void exposesIncompleteNewsProviderState() {
+        NewsSourcePort source = new NewsSourcePort() {
+            @Override
+            public java.util.List<EconomicEvent> economicEvents() {
+                return java.util.List.of();
+            }
+
+            @Override
+            public java.util.List<com.hope.trading.news.domain.FinancialNewsItem> financialNews() {
+                return java.util.List.of();
+            }
+
+            @Override
+            public NewsAvailability availability() {
+                return NewsAvailability.INCOMPLETE;
+            }
+        };
+        NewsProviderProperties properties = new NewsProviderProperties();
+        properties.setEnabled(true);
+        NewsCatalogService service = new NewsCatalogService(mock(EconomicEventRepository.class),
+                mock(FinancialNewsItemRepository.class), properties, providerFor(source),
+                mock(org.springframework.beans.factory.ObjectProvider.class));
+
+        NewsReadResult<com.hope.trading.news.domain.FinancialNewsItem> result = service.findNews(
+                new NewsQuery(null, null, null, null, null, 10));
+
+        assertThat(result.status()).isEqualTo(NewsAvailability.INCOMPLETE);
+        assertThat(result.message()).contains("incomplete");
     }
 
     @SuppressWarnings("unchecked")

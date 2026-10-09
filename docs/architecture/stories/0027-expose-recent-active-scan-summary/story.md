@@ -1,5 +1,7 @@
 # Story 0027 — Expose Recent Active Scan Summary Query
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 Add a bounded, actor-scoped read-only query capability allowing any authorized client to discover recent Active Scan activity without knowing a scanId in advance.

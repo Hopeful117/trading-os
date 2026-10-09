@@ -39,7 +39,7 @@ public final class TrendContextAssessmentInput {
         copy.putAll(Objects.requireNonNull(values.roleSeries(), "roleSeries is required"));
         this.roleSeries = Map.copyOf(copy);
         this.validationFindings = TrendContextInputValidation.validate(
-                profile, this.roleSeries, cutOffAt);
+                marketId, provider, symbol, profile, this.roleSeries, assessmentAt, cutOffAt);
         TrendContextInputValidation.requireAccepted(validationFindings);
         this.fingerprint = computeFingerprint();
     }
@@ -78,6 +78,9 @@ public final class TrendContextAssessmentInput {
                 .append("profileVersion=").append(profile.profileVersion()).append(';');
         appendProfile(canonical);
         for (TrendContextRole role : TrendContextRole.values()) {
+            appendRoleDefinition(canonical, role, profile.roles().get(role));
+        }
+        for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleDefinition definition = profile.roles().get(role);
             TrendContextRoleSeries series = roleSeries.get(role);
             canonical.append("role=").append(role).append(';');
@@ -90,6 +93,7 @@ public final class TrendContextAssessmentInput {
                     .append("minimum=").append(definition.minimumEligibleCandles()).append(';')
                     .append("requested=").append(definition.requestedCandles()).append(';');
             appendSource(canonical, series.sourceReference());
+            appendFreshness(canonical, series.freshness());
             for (TrendContextCandle candle : series.candles()) {
                 appendCandle(canonical, candle);
             }
@@ -109,6 +113,21 @@ public final class TrendContextAssessmentInput {
                     .map(TrendContextCandle::sourceId).sorted().toList()).append(';');
         }
         return sha256(canonical.toString());
+    }
+
+    private static void appendRoleDefinition(StringBuilder canonical,
+            TrendContextRole role, TrendContextRoleDefinition definition) {
+        canonical.append("roleDefinition=").append(role).append('|');
+        if (definition == null) {
+            canonical.append("absent;");
+            return;
+        }
+        canonical.append(definition.role()).append('|')
+                .append(definition.interval()).append('|')
+                .append(definition.intervalDuration()).append('|')
+                .append(definition.required()).append('|')
+                .append(definition.minimumEligibleCandles()).append('|')
+                .append(definition.requestedCandles()).append(';');
     }
 
     private void appendProfile(StringBuilder canonical) {
@@ -137,6 +156,16 @@ public final class TrendContextAssessmentInput {
                 .append(source.lastCandleTime()).append('|').append(source.sourceOccurredAt()).append('|')
                 .append(source.fetchedAt()).append('|').append(source.sourceSnapshot()).append('|')
                 .append(source.contentDigest()).append(';');
+    }
+
+    private static void appendFreshness(StringBuilder canonical, TrendContextFreshness freshness) {
+        canonical.append("freshnessEvidence=").append(freshness.expectedInterval()).append('|')
+                .append(freshness.latestEligibleClosedClose()).append('|')
+                .append(freshness.sourceOccurredAt()).append('|')
+                .append(freshness.fetchedAt()).append('|')
+                .append(freshness.assessmentAt()).append('|')
+                .append(freshness.roleAvailable()).append('|')
+                .append(freshness.eligibleEvidencePresent()).append(';');
     }
 
     private static void appendCandle(StringBuilder canonical, TrendContextCandle candle) {

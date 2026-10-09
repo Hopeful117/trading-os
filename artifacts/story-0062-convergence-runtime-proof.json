@@ -1,0 +1,121 @@
+{
+  "generatedAt": "2026-10-09T12:23:59Z",
+  "baseUrl": "http://localhost:17085",
+  "sessionEvidence": {
+    "authenticatedUiObserved": true,
+    "authenticatedUiIndicator": "Logout button visible and account data loaded",
+    "evidenceSource": "Playwright accessibility snapshot and network request log",
+    "requestLogFilter": "/api/v1/(trade-plans|executions)"
+  },
+  "opportunity": {
+    "id": "6e377f30-f2c0-3199-9f19-a99098354257",
+    "instrument": "A/USD",
+    "direction": "LONG",
+    "marketId": "950d7975-d935-4790-b399-c4e04100359c"
+  },
+  "entryPoint": {
+    "url": "/opportunities/6e377f30-f2c0-3199-9f19-a99098354257",
+    "workspaceUrl": "/decision-workspace?opportunityId=6e377f30-f2c0-3199-9f19-a99098354257&marketId=950d7975-d935-4790-b399-c4e04100359c"
+  },
+  "account": {
+    "accountId": "c970ebb2-12ef-488c-ac67-151661323756",
+    "executionMode": "PAPER"
+  },
+  "workspace": {
+    "accountResolvedBeforeMarketSelection": true,
+    "opportunityContextDisplayed": true,
+    "marketContextDisplayed": true,
+    "observations": [
+      "Workspace initially required account selection before eligible markets were shown",
+      "Selecting A/USD added marketId after accountId was present in the URL"
+    ]
+  },
+  "tradePlan": {
+    "id": "a9b403de-e1c0-4729-9e79-fb8fd21ca6c2",
+    "version": 1,
+    "status": "PROPOSED",
+    "planUrl": "/trade-planning/plans/a9b403de-e1c0-4729-9e79-fb8fd21ca6c2/versions/1",
+    "createRequest": {
+      "method": "POST",
+      "path": "/api/v1/trade-plans/opportunities/6e377f30-f2c0-3199-9f19-a99098354257/trade-plans",
+      "status": 200
+    },
+    "planReadRequest": {
+      "method": "GET",
+      "path": "/api/v1/trade-plans/a9b403de-e1c0-4729-9e79-fb8fd21ca6c2/versions/1",
+      "status": 200
+    }
+  },
+  "executionSideEffects": {
+    "preparationExecutionRequestsObserved": [],
+    "preparationExecutionIntentCreationVerified": true,
+    "verificationMethod": "No execution request observed before human authorization in all three preparation traces; Opportunity orchestration test verifies the only preparation downstream call is Market Intelligence and the service has no ExecutionIntent dependency",
+    "observationScope": "Filtered browser network logs plus targeted Trading Core orchestration test",
+    "manualExecutionIntentCreatedAfterAuthorization": true
+  },
+  "lifecycleWalkthrough": {
+    "opportunity": {
+      "planId": "a9b403de-e1c0-4729-9e79-fb8fd21ca6c2",
+      "acceptedByHuman": true,
+      "riskEvaluationId": "357e96d8-acbb-4407-989f-b78bf42321df",
+      "riskDecision": "REJECTED",
+      "riskReason": "POSITION_PROTECTION_INCOMPLETE",
+      "executionBlockedByRisk": true
+    },
+    "manual": {
+      "planId": "d93f2ceb-128f-3369-9439-213b3ef41bf6",
+      "acceptedByHuman": true,
+      "riskEvaluationId": "825fcb0f-c3f2-4421-8b5e-b535d2044cac",
+      "riskDecision": "APPROVED",
+      "executionId": "55e60696-6c08-4ee1-96e5-9e8902ba321e",
+      "brokerOrderId": "SIM-3537e568-9bc8-4f40-8840-64d0e8229cf3",
+      "brokerStatus": "FILLED"
+    },
+    "legacy": {
+      "planId": "1fcc7966-b4a4-42df-9a02-2cec56f26c5b",
+      "acceptedByHuman": true,
+      "riskEvaluationId": "9ec26f8b-1636-4bfa-a75e-70e2de64ffc3",
+      "riskDecision": "REJECTED",
+      "riskReason": "POSITION_PROTECTION_INCOMPLETE",
+      "executionBlockedByRisk": true
+    }
+  },
+  "manualWalkthrough": {
+    "entryPoint": "/trade-planning/manual?accountId=c970ebb2-12ef-488c-ac67-151661323756&marketId=950d7975-d935-4790-b399-c4e04100359c",
+    "planId": "d93f2ceb-128f-3369-9439-213b3ef41bf6",
+    "planVersion": 1,
+    "status": "PROPOSED",
+    "createRequest": {
+      "method": "POST",
+      "path": "/api/v1/trade-plans/manual",
+      "status": 201
+    },
+    "planReadRequest": {
+      "method": "GET",
+      "path": "/api/v1/trade-plans/d93f2ceb-128f-3369-9439-213b3ef41bf6/versions/1",
+      "status": 200
+    },
+    "sharedPlanPageReached": true
+  },
+  "legacyWalkthrough": {
+    "entryPoint": "/trade-planning/prepare/6e377f30-f2c0-3199-9f19-a99098354257",
+    "accountId": "c970ebb2-12ef-488c-ac67-151661323756",
+    "planId": "1fcc7966-b4a4-42df-9a02-2cec56f26c5b",
+    "planVersion": 1,
+    "status": "PROPOSED",
+    "createRequest": {
+      "method": "POST",
+      "path": "/api/v1/trade-plans/opportunities/6e377f30-f2c0-3199-9f19-a99098354257/trade-plans",
+      "status": 200
+    },
+    "planReadRequest": {
+      "method": "GET",
+      "path": "/api/v1/trade-plans/1fcc7966-b4a4-42df-9a02-2cec56f26c5b/versions/1",
+      "status": 200
+    },
+    "sharedPlanPageReached": true
+  },
+  "limitations": [
+    "The browser evidence does not include an exported HAR or database query; absence of execution requests is limited to the recorded network filter and the targeted orchestration test."
+  ]
+}

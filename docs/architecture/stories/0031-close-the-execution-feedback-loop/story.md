@@ -1,5 +1,7 @@
 # Story 0031 — Close the Execution Feedback Loop
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 After explicitly submitting a trade for execution, the trader can observe the resulting execution lifecycle—broker acknowledgement, fills when available, failure reasons, uncertain outcomes, and reconciliation progress—without reloading the page or guessing what happened.

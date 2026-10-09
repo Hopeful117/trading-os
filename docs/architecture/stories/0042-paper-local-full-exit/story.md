@@ -4,7 +4,7 @@
 
 **ID:** `0042`
 
-**Status:** IMPLEMENTED - REVIEWED - ACCEPTED
+**Status:** CLOSED - HUMAN ACCEPTED
 
 **Baseline:** `main` at `9843e4d` (Story 0041 merged)
 

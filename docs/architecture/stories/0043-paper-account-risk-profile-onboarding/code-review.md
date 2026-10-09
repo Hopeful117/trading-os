@@ -36,4 +36,4 @@ The following validations passed:
 
 ## Approval State
 
-`REVIEWED - APPROVED FOR HUMAN ACCEPTANCE`
+`REVIEWED - APPROVED - HUMAN ACCEPTED`

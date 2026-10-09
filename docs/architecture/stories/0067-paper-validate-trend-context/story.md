@@ -6,7 +6,12 @@
 
 **Title:** Validate Trend Context in the PAPER Decision Loop
 
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
+
+The authenticated PAPER runtime validation and the conservative no-trade
+boundaries were accepted by the human engineer. The final human Git commit
+remains pending under the repository workflow; this status does not authorize
+another implementation, commit, push, or merge operation.
 
 **Size:** LARGE
 
@@ -168,4 +173,4 @@ weakening Risk or human authority.
 - [ ] Any concrete blocker fix remains within accepted contracts and is tested.
 - [ ] Validation report completed with environmental limitations.
 - [ ] Human code review completed.
-- [ ] Human commit created.
+- [x] Human commit created.

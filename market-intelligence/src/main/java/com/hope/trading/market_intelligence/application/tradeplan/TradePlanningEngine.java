@@ -34,8 +34,11 @@ public final class TradePlanningEngine {
     public TradePlanningResult plan(TradePlanningRequest request) {
         try {
             List<TradingOpportunity> loaded = request.opportunityIds().stream()
-                    .map(id -> opportunities.findLatest(id).orElseThrow(
-                            () -> new IllegalArgumentException("Unknown Opportunity: " + id.value())))
+                    .map(id -> request.exactOpportunityVersions().isEmpty()
+                            ? opportunities.findLatest(id)
+                            : opportunities.find(id, request.exactOpportunityVersions().get(id)))
+                    .map(value -> value.orElseThrow(
+                            () -> new IllegalArgumentException("Unknown Opportunity")))
                     .toList();
             if (!compatible(loaded)) {
                 return failure(PlanningFailureReason.INCOMPATIBLE_OPPORTUNITIES,
@@ -91,6 +94,11 @@ public final class TradePlanningEngine {
     }
 
     public TradePlanningResult planManual(ManualTradePlanningRequest request) {
+        return planManual(request, identifiers.next());
+    }
+
+    public TradePlanningResult planManual(
+            ManualTradePlanningRequest request, TradePlanId identifier) {
         try {
             TradePlanningContext context = contexts.find(
                             request.planningContextId(), request.contextVersion())
@@ -100,7 +108,7 @@ public final class TradePlanningEngine {
                         "Trading Context is missing or unauthorized");
             }
             TradePlan plan = builder.buildManual(
-                    identifiers.next(), new TradePlanVersion(1), request, context, clock.instant());
+                    identifier, new TradePlanVersion(1), request, context, clock.instant());
             return new TradePlanningResult.Success(plan, List.of());
         } catch (IllegalArgumentException invalid) {
             return failure(PlanningFailureReason.INSUFFICIENT_DATA, invalid.getMessage());

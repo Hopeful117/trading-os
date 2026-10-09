@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.domain.trendcontext;
 import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult;
 import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureSwing;
 import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureSwingType;
+import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureAvailability;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.nio.charset.StandardCharsets;
@@ -25,8 +26,10 @@ public final class TrendContextEngine {
     private static final String BREAK_CONFIRM_RULE = "BREAK_CONFIRM_V1";
     private static final String MTF_ALIGNMENT_RULE = "MTF_ALIGNMENT_V1";
     public TrendContextAssessment assess(TrendContextAssessmentInput input,
-            Map<TrendContextRole, com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult> structures) {
+            Map<TrendContextRole, MarketStructureResult> structures) {
         Objects.requireNonNull(input, "input is required");
+        Map<TrendContextRole, MarketStructureResult> suppliedStructures = structures == null
+                ? Map.of() : structures;
         TrendContextProfile profile = input.profile();
         EnumMap<TrendContextRole, TrendContextTimeframeAssessment> roles = new EnumMap<>(TrendContextRole.class);
         List<TrendContextFinding> findings = new ArrayList<>();
@@ -38,11 +41,25 @@ public final class TrendContextEngine {
         }
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleSeries series = input.roleSeries().get(role);
-            if (series == null || (structures.get(role) == null && !required(input, role))) {
+            MarketStructureResult structure = suppliedStructures.get(role);
+            if (series == null || (structure == null && !required(input, role))) {
                 continue;
             }
-            TrendContextTimeframeAssessment assessment = assessRole(input, role, series,
-                    Objects.requireNonNull(structures.get(role), "Market Structure result is required for " + role));
+            if (structure == null) {
+                exclusions.add(exclusion(input, role, "REQUIRED_ROLE_MISSING",
+                        "Market Structure result is missing for required role"));
+                findings.add(finding(input, role, "STRUCTURE_UNAVAILABLE", "STRUCTURE_V1",
+                        "Market Structure result is missing for required role", null));
+                continue;
+            }
+            if (!compatible(input, series, structure)) {
+                exclusions.add(exclusion(input, role, "INVALID_STRUCTURE",
+                        "Market Structure result does not match the accepted Trend Context input"));
+                findings.add(finding(input, role, "STRUCTURE_INVALID", "STRUCTURE_V1",
+                        "Market Structure result does not match the accepted Trend Context input", null));
+                continue;
+            }
+            TrendContextTimeframeAssessment assessment = assessRole(input, role, series, structure);
             roles.put(role, assessment);
             findings.addAll(assessment.findings());
             for (String exclusion : series.exclusionFindings()) {
@@ -74,9 +91,34 @@ public final class TrendContextEngine {
                 contradictions, exclusions, invalidations, fingerprint));
     }
 
+    private boolean compatible(TrendContextAssessmentInput input, TrendContextRoleSeries series,
+            MarketStructureResult structure) {
+        return structure.availability() != MarketStructureAvailability.UNAVAILABLE
+                && structure.availability() != MarketStructureAvailability.STALE
+                && structure.availability() != MarketStructureAvailability.INVALID
+                && structure.marketId().equals(input.marketId())
+                && structure.provider().equals(input.provider())
+                && structure.symbol().equals(input.symbol())
+                && structure.interval().equals(series.interval())
+                && structure.cutOffAt().equals(input.cutOffAt())
+                && structure.algorithmId().equals("CONFIRMED_SWING_V1")
+                && structure.ruleVersion().equals(input.ruleVersion())
+                && structure.policyId().equals(input.profile().profileId())
+                && structure.policyVersion().equals(input.profile().profileVersion())
+                && structure.inputFingerprint().equals(input.fingerprint())
+                && structure.all().stream().allMatch(value -> !value.pivotTime().isAfter(input.cutOffAt())
+                && !value.confirmationTime().isAfter(input.cutOffAt())
+                && !value.evidenceFrom().isAfter(input.cutOffAt())
+                && !value.evidenceTo().isAfter(input.cutOffAt()))
+                && structure.retained().stream().allMatch(structure.all()::contains)
+                && structure.relations().stream().allMatch(relation ->
+                structure.retained().contains(relation.previous())
+                        && structure.retained().contains(relation.latest()));
+    }
+
     private TrendContextTimeframeAssessment assessRole(TrendContextAssessmentInput input,
             TrendContextRole role, TrendContextRoleSeries series,
-            com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureResult structure) {
+            MarketStructureResult structure) {
         TrendContextProfile p = input.profile();
         TrendContextRoleDefinition definition = p.roles().get(role);
         List<TrendContextCandle> candles = series.calculationReadyCandles().stream()
@@ -141,9 +183,9 @@ public final class TrendContextEngine {
                 swing.type() == MarketStructureSwingType.HIGH ? SwingType.HIGH : SwingType.LOW,
                 swing.index(), swing.pivotTime(), swing.price(), swing.confirmationTime(),
                 swing.pivotSourceId(), swing.confirmationSourceId(), swing.suppressed(), swing.suppressionReason(),
-                evidence(input, role, swing.type() == MarketStructureSwingType.HIGH ? "SWING_HIGH_V1" : "SWING_LOW_V1",
-                        List.of(swing.pivotSourceId(), swing.confirmationSourceId()), swing.pivotTime(),
-                        swing.confirmationTime(), swing.index() + ":" + swing.type()));
+                        evidence(input, role, swing.type() == MarketStructureSwingType.HIGH ? "SWING_HIGH_V1" : "SWING_LOW_V1",
+                        swing.evidenceSourceIds(), swing.evidenceFrom(), swing.evidenceTo(),
+                        swing.index() + ":" + swing.type()));
     }
 
     private StructureReplay replayBeforeBreak(TrendContextAssessmentInput input, TrendContextRole role,
@@ -234,7 +276,7 @@ public final class TrendContextEngine {
         int breakIndex = -1;
         for (int i = 0; i < candles.size() && breakIndex < 0; i++) {
             TrendContextCandle candle = candles.get(i);
-            if (candle.closeTime().isAfter(level.source().confirmationTime())) {
+            if (candle.closeTime().isAfter(level.source().pivotTime())) {
                 boolean wick = crossedByWick(direction, candle, level);
                 boolean close = crossedByClose(direction, candle, level);
                 if (wick && !close && unconfirmed == null) {
@@ -567,7 +609,7 @@ public final class TrendContextEngine {
         TrendTimeframeAlignment alignment = values.alignment();
         List<TrendContextContradiction> contradictions = values.contradictions();
         List<TrendContextExclusion> exclusions = values.exclusions();
-        if (bias == null || setup == null) return TrendAttention.UNKNOWN;
+        if (hasMissingRequiredRole(input, roles) || bias == null || setup == null) return TrendAttention.UNKNOWN;
         if (hasNoSetup(input, roles, bias, setup)) return TrendAttention.NO_SETUP;
         if (hasInvalidRequiredData(input, exclusions)) return TrendAttention.UNKNOWN;
         if (hasRequiredHistoryGap(input, exclusions)) return TrendAttention.NO_SETUP;
@@ -584,6 +626,12 @@ public final class TrendContextEngine {
         return roles.entrySet().stream().anyMatch(e -> required(input, e.getKey()) && !e.getValue().fresh())
                 || setup.direction() == TrendDirection.UNKNOWN || setup.direction() == TrendDirection.NEUTRAL
                 || bias.direction() == TrendDirection.UNKNOWN || bias.direction() == TrendDirection.NEUTRAL;
+    }
+
+    private boolean hasMissingRequiredRole(TrendContextAssessmentInput input,
+            Map<TrendContextRole, TrendContextTimeframeAssessment> roles) {
+        return input.profile().roles().entrySet().stream()
+                .anyMatch(entry -> entry.getValue().required() && !roles.containsKey(entry.getKey()));
     }
 
     private boolean hasInvalidRequiredData(TrendContextAssessmentInput input,
@@ -652,7 +700,7 @@ public final class TrendContextEngine {
                 evidence == null ? List.of() : List.of(evidence));
     }
     private String code(String value) { int colon = value.indexOf(':'); return colon < 0 ? value : value.substring(colon + 1); }
-    private TrendContextEvidenceReference evidence(TrendContextAssessmentInput input, TrendContextRole role, String rule, List<String> ids, Instant from, Instant to, String key) { return new TrendContextEvidenceReference(role, input.profile().roles().get(role).interval(), rule, input.ruleVersion(), input.profile().profileVersion(), input.fingerprint(), input.cutOffAt(), ids, from, to, key); }
+    private TrendContextEvidenceReference evidence(TrendContextAssessmentInput input, TrendContextRole role, String rule, List<String> ids, Instant from, Instant to, String key) { return new TrendContextEvidenceReference(role, input.profile().roles().get(role).interval(), rule, input.ruleVersion(), input.profile().profileId(), input.profile().profileVersion(), input.fingerprint(), input.cutOffAt(), ids, from, to, key); }
     private TrendContextEvidenceReference roleEvidenceCandles(TrendContextAssessmentInput input, TrendContextRole role, String rule, List<TrendContextCandle> candles, String key) {
         List<String> ids = candles.isEmpty() ? List.of() : List.of(candles.getFirst().sourceId(), candles.getLast().sourceId());
         Instant from = candles.isEmpty() ? input.cutOffAt() : candles.getFirst().closeTime();
@@ -834,7 +882,8 @@ public final class TrendContextEngine {
     private void appendEvidence(StringBuilder b, TrendContextEvidenceReference value) {
         b.append("|evidence=").append(value.role().name()).append('|').append(value.interval())
                 .append('|').append(value.ruleId()).append('|').append(value.ruleVersion()).append('|')
-                .append(value.profileVersion()).append('|').append(value.inputFingerprint()).append('|')
+                .append(value.profileId()).append('|').append(value.profileVersion()).append('|')
+                .append(value.inputFingerprint()).append('|')
                 .append(value.cutOffAt()).append('|').append(value.sourceIds()).append('|')
                 .append(value.from()).append('|').append(value.to()).append('|').append(value.key());
     }

@@ -6,7 +6,7 @@
 
 **Title:** Provide trade history and plan continuity in the web app
 
-**Status:** Completed
+**Status:** CLOSED - IMPLEMENTED, RUNTIME VALIDATED, INDEPENDENTLY REVIEWED AND COMMITTED
 
 ---
 

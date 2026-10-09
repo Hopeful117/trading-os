@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION EVIDENCE PARTIAL`
+`COMPLETED - PAPER RUNTIME VALIDATED`
 
 ## Outcome
 
@@ -14,30 +14,32 @@ application for account review.
 ## Validation
 
 Focused backend and Angular account-card tests are included in the
-implementation commit. The required authenticated runtime walkthrough and a
-fresh full-suite result are not attached to this remediation.
+implementation commit. Current automated validation also passes:
+
+* Trading Core: 579 tests;
+* Trading OS Web: 397 tests;
+* Trading OS Web production build: successful, with existing budget warnings;
+* `git diff --check`: successful.
+
+The authenticated PAPER runtime walkthrough is complete. A newly created PAPER
+account received both versioned profiles, reloaded with those references in the
+web interface, and continued through Trade Plan creation and PAPER execution.
+Evidence is recorded in `artifacts/story-0052-runtime-proof.json`.
 
 ## Known Limitations
 
-* Runtime proof of successful PAPER Trade Plan creation must be linked from the
-  Story 0048 evidence when available.
-* Acceptance of the profile version after account reload remains a human
-  validation item.
-* The Story file remains `Approved`; its acceptance checkboxes have not been
-  silently rewritten by this documentation remediation.
+* No remaining Story 0053 validation gap.
 
 ## Git State
 
 ```text
 IMPLEMENTATION_COMMIT = 698fe03
-DOCUMENTATION_BRANCH = docs/story-artifact-remediation
+VALIDATION_BRANCH = chore/debt-resolution
 PUSH = NO
 MERGE = NO
 ```
 
 ## Human Actions Required
 
-1. Review ADR-046 and the provisioning transaction boundary.
-2. Run the affected tests and Angular build.
-3. Re-run the authenticated PAPER journey.
-4. Update Story status after acceptance evidence is reviewed.
+1. Create the human-controlled commit for the reviewed Story 0053 diff.
+2. Continue with the next debt Story.

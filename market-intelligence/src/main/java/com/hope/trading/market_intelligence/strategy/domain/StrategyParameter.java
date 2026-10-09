@@ -35,7 +35,23 @@ public record StrategyParameter(String name, ParameterType type, Object value) {
             Long coerce(Object raw) {
                 return switch (raw) {
                     case Long longValue -> longValue;
-                    case Number number -> number.longValue();
+                    case Number number -> {
+                        BigDecimal decimal;
+                        try {
+                            decimal = number instanceof BigDecimal value
+                                    ? value : new BigDecimal(number.toString());
+                        } catch (NumberFormatException exception) {
+                            throw new IllegalArgumentException("not an INTEGER value: " + raw, exception);
+                        }
+                        if (decimal.stripTrailingZeros().scale() > 0) {
+                            throw new IllegalArgumentException("not an integral INTEGER value: " + raw);
+                        }
+                        try {
+                            yield decimal.longValueExact();
+                        } catch (ArithmeticException exception) {
+                            throw new IllegalArgumentException("INTEGER value is out of range: " + raw, exception);
+                        }
+                    }
                     case String text -> Long.parseLong(text.trim());
                     default -> throw new IllegalArgumentException("not an INTEGER value: " + raw);
                 };

@@ -40,6 +40,7 @@ class XoomarEconomicCalendarSourceTest {
                             {
                               "id": "xoomar:1",
                               "eventName": "CPI",
+                              "source": "BLS",
                               "sector": "inflation",
                               "currency": "USD",
                               "importance": "high",
@@ -72,6 +73,7 @@ class XoomarEconomicCalendarSourceTest {
 
         assertThat(events).hasSize(2);
         assertThat(events.getFirst().sourceName()).isEqualTo("xoomar");
+        assertThat(events.getFirst().source()).isEqualTo("BLS");
         assertThat(events.getFirst().sourceEventId()).isEqualTo("xoomar:1");
         assertThat(events.getFirst().scheduledAt()).isEqualTo(Instant.parse("2026-10-08T12:30:00Z"));
         assertThat(events.getFirst().category()).isEqualTo("inflation");

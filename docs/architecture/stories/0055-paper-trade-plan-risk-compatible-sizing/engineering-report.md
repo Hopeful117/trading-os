@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION EVIDENCE PARTIAL`
+`CLOSED - HUMAN ACCEPTED`
 
 ## Outcome
 
@@ -13,31 +13,44 @@ after Story 0054 made current valuation available.
 
 ## Validation
 
-Focused account-service and ownership tests are included in the implementation
-commit. The runtime investigation recorded the original `MAX_EXPOSURE` blocker;
-later local validation reached an approved risk result. Complete execution and
-position persistence evidence remains separate and is not claimed here.
+The runtime investigation recorded the original `MAX_EXPOSURE` blocker; later
+local validation reached an approved risk result. Current automated validation
+also passes:
+
+* Risk Domain: 26 tests;
+* Trading Core: 580 tests;
+* Trading OS Web: 402 tests;
+* Trading OS Web production build: successful, with existing budget warnings;
+* `git diff --check`: successful.
+
+The final authenticated proof is recorded in
+`artifacts/paper-runtime-proof.json`. It records the PAPER balance and
+effective rules, the market valuation timestamp, generated quantity and
+notional, Risk `APPROVED`, and a deliberately excessive manual plan rejected
+by `MAX_POSITION_RISK`, `DAILY_DRAWDOWN`, and `MAX_EXPOSURE`.
+
+The targeted `BrokerAccountServiceTest` verifies that LIVE account creation
+does not derive or assign the PAPER planning budget.
 
 ## Known Limitations
 
-* The final approved runtime result needs a durable evidence record with exact
-  identifiers and sizing values.
-* Full PAPER execution-to-position validation remains a separate acceptance
-  concern.
-* Fresh full-suite output was not rerun during this documentation remediation.
+* The proof uses the selected active `/USD` opportunity to match the initial
+  PAPER cash balance; broader instrument and short-side scenarios remain
+  separate validation concerns.
+* Execution is outside Story 0055's sizing acceptance criteria and is not
+  exercised by this proof.
 
 ## Git State
 
 ```text
 IMPLEMENTATION_COMMIT = 8cc2f75
-DOCUMENTATION_BRANCH = docs/story-artifact-remediation
+VALIDATION_BRANCH = chore/debt-resolution
 PUSH = NO
 MERGE = NO
 ```
 
-## Human Actions Required
+## Closure
 
-1. Review the sizing formula against the effective risk-rule contract.
-2. Run the affected backend, Risk Domain, and frontend suites.
-3. Validate compatible and excessive sizing through the web application.
-4. Update the Story status after reviewing runtime evidence.
+The human engineer accepted the Story after the independent review completed
+without findings. The final Git commit remains pending and was not created by
+the agent.

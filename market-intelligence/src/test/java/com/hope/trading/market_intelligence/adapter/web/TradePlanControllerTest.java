@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import com.hope.trading.market_intelligence.security.MiUserPrincipal;
+import java.util.UUID;
 
 class TradePlanControllerTest {
     @Test
@@ -109,7 +110,8 @@ class TradePlanControllerTest {
                 }
                 """.formatted(environment.context().id());
 
-        mvc.perform(post("/api/v1/intelligence/trade-plans/manual")
+                mvc.perform(post("/api/v1/intelligence/trade-plans/manual")
+                        .header("Idempotency-Key", "manual-plan-test")
                         .principal(new TestingAuthenticationToken(
                                 new MiUserPrincipal(environment.owner(), "user", "user@example.test"),
                                 null))
@@ -118,5 +120,53 @@ class TradePlanControllerTest {
                 .andExpect(jsonPath("$.origin").value("MANUAL"))
                 .andExpect(jsonPath("$.authorId").value(environment.owner().toString()))
                 .andExpect(jsonPath("$.opportunityIds").isEmpty());
+    }
+
+    @Test
+    void rejectsManualPlanWhenPlanningContextIsMissing() throws Exception {
+        var environment = TradePlanTestFixtures.environment();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new ManualTradePlanController(environment.service(), environment.contexts())).build();
+
+        mvc.perform(post("/api/v1/intelligence/trade-plans/manual")
+                        .header("Idempotency-Key", "missing-context")
+                        .principal(new TestingAuthenticationToken(
+                                new MiUserPrincipal(environment.owner(), "user", "user@example.test"), null))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(manualBody(environment, UUID.randomUUID(), "EUR")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.reason").value("INVALID_TRADING_CONTEXT"));
+    }
+
+    @Test
+    void rejectsManualPlanWhenCurrencyDoesNotMatchPlanningContext() throws Exception {
+        var environment = TradePlanTestFixtures.environment();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new ManualTradePlanController(environment.service(), environment.contexts())).build();
+
+        mvc.perform(post("/api/v1/intelligence/trade-plans/manual")
+                        .header("Idempotency-Key", "wrong-currency")
+                        .principal(new TestingAuthenticationToken(
+                                new MiUserPrincipal(environment.owner(), "user", "user@example.test"), null))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(manualBody(environment, environment.context().id(), "USD")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.reason").value("INVALID_TRADING_CONTEXT"));
+    }
+
+    private static String manualBody(
+            TradePlanTestFixtures.Environment environment, UUID contextId, String currency) {
+        return """
+                {
+                  "planningContextId":"%s", "contextVersion":1,
+                  "instrument":"BTC/EUR", "direction":"LONG", "entryType":"LIMIT",
+                  "entryPrice":100, "referencePrice":100, "stopLoss":99,
+                  "stopRationale":"manual invalidation", "takeProfits":[{"price":102,"allocationPercent":100}],
+                  "quantity":1, "notional":100, "monetaryRisk":1, "currency":"%s",
+                  "expiresAt":"2026-07-30T15:00:00Z", "expirationPolicy":"MANUAL_VALIDITY",
+                  "thesis":"Human discretionary setup", "confirmationConditions":["Price confirms setup"],
+                  "invalidationConditions":["Stop is reached"], "managementRules":[]
+                }
+                """.formatted(contextId, currency);
     }
 }

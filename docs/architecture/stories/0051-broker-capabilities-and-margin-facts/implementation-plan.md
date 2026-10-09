@@ -2,7 +2,7 @@
 
 ## Plan Status
 
-`PROPOSED - HUMAN APPROVAL REQUIRED`
+`APPROVED - IMPLEMENTED LOCALLY; HUMAN REVIEW REQUIRED`
 
 ## Phase 1 - Define contracts
 

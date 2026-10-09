@@ -6,7 +6,7 @@
 
 **Title:** Full Exposure Close
 
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 
@@ -57,7 +57,7 @@ Open Position Monitoring
 Full Exposure Close
 ```
 
-The governing architectural decision is ADR-040 (Position Management Command Architecture). That ADR is currently `Proposed`; this Story is defined against its decisions and may proceed to implementation once ADR-040 reaches `Accepted` under normal repository workflow.
+The governing architectural decision is ADR-040 (Position Management Command Architecture), which is `Accepted`.
 
 ---
 

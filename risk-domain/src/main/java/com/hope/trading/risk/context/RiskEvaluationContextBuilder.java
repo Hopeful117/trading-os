@@ -38,7 +38,7 @@ public final class RiskEvaluationContextBuilder {
         String currency = account.balance().currency();
         return portfolio.positions().stream().allMatch(p ->
                 currency.equals(p.marketValue().currency())
-                        && currency.equals(p.lossAtStop().currency())
+                        && p.lossAtStop().map(loss -> currency.equals(loss.currency())).orElse(true)
                         && currency.equals(p.marginUsed().currency()));
     }
 }

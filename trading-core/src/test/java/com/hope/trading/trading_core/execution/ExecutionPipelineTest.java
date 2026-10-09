@@ -8,12 +8,16 @@ import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.exception.InvalidExecutionStateException;
 import com.hope.trading.trading_core.execution.domain.service.*;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionStatus;
+import com.hope.trading.trading_core.execution.domain.valueobject.BrokerOrderStatus;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.risk.domain.RiskTypes.RiskDecision;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.hope.trading.trading_core.execution.ExecutionTestSupport.*;
@@ -49,7 +53,7 @@ class ExecutionPipelineTest {
                 new RecoverableExecutionDiscoveryStep(f.intents),
                 new ExecutionInspectionStep(f.attempts),
                 new RecoveryStrategyStep(new RecoveryStrategyService()),
-                new BrokerReconciliationStep(f.broker),
+                new BrokerReconciliationStep(f.broker, f.brokerAccounts),
                 new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
                 f.events,f.metrics,CLOCK,f.intents);
         recovery.recoverAll();
@@ -66,7 +70,7 @@ class ExecutionPipelineTest {
                 new RecoverableExecutionDiscoveryStep(f.intents),
                 new ExecutionInspectionStep(f.attempts),
                 new RecoveryStrategyStep(new RecoveryStrategyService()),
-                new BrokerReconciliationStep(f.broker),
+                new BrokerReconciliationStep(f.broker, f.brokerAccounts),
                 new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
                 f.events,f.metrics,CLOCK,f.intents);
         var recovered=recovery.recoverOne(intent.id());
@@ -79,11 +83,51 @@ class ExecutionPipelineTest {
                 new RecoverableExecutionDiscoveryStep(f.intents),
                 new ExecutionInspectionStep(f.attempts),
                 new RecoveryStrategyStep(new RecoveryStrategyService()),
-                new BrokerReconciliationStep(f.broker),
+                new BrokerReconciliationStep(f.broker, f.brokerAccounts),
                 new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
                 f.events,f.metrics,CLOCK,f.intents);
         assertThatThrownBy(()->recovery.recoverOne(intent.id()))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test void paperRecoveryCannotCallBrokerReconciliation(){
+        var f=fixture();
+        when(f.brokerAccounts.findById(ACCOUNT)).thenReturn(Optional.of(
+                BrokerAccount.create(USER, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "paper", NOW)));
+        f.broker.submission=new BrokerExecutionPort.Unknown("TIMEOUT");
+        var intent=intent(ExecutionStatus.CREATED);f.intents.save(intent);
+        f.execution.execute(intent.id());
+        var recovery=new RecoverExecutionService(
+                new RecoverableExecutionDiscoveryStep(f.intents),
+                new ExecutionInspectionStep(f.attempts),
+                new RecoveryStrategyStep(new RecoveryStrategyService()),
+                new BrokerReconciliationStep(f.broker, f.brokerAccounts),
+                new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
+                f.events,f.metrics,CLOCK,f.intents);
+        assertThatThrownBy(() -> recovery.recoverOne(intent.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER execution cannot use broker reconciliation");
+        assertThat(f.broker.reconciliations).isZero();
+    }
+
+    @Test void acknowledgedBrokerOrderRemainsBlockedDuringRecovery(){
+        var f=fixture();
+        f.broker.submission=new BrokerExecutionPort.Unknown("TIMEOUT");
+        f.broker.reconciliation=new BrokerExecutionPort.ReconciledOrder("order-1", "corr-1", BrokerOrderStatus.ACKNOWLEDGED);
+        var intent=intent(ExecutionStatus.CREATED);f.intents.save(intent);
+        f.execution.execute(intent.id());
+        var recovery=new RecoverExecutionService(
+                new RecoverableExecutionDiscoveryStep(f.intents),
+                new ExecutionInspectionStep(f.attempts),
+                new RecoveryStrategyStep(new RecoveryStrategyService()),
+                new BrokerReconciliationStep(f.broker, f.brokerAccounts),
+                new RecoveryFinalizationStep(f.intents,f.attempts,f.orders,new Ids()),
+                f.events,f.metrics,CLOCK,f.intents);
+        var recovered=recovery.recoverOne(intent.id());
+        assertThat(recovered.status()).isEqualTo(ExecutionStatus.RECOVERY_BLOCKED);
+        assertThat(f.orders.findByIntentId(intent.id())).isPresent();
+        recovery.recoverOne(intent.id());
+        assertThat(f.orders.values).hasSize(1);
     }
 
     @Test void t1RejectedTransitionsIntentToRiskRevalidationRejected() {
@@ -244,6 +288,8 @@ class ExecutionPipelineTest {
         var ids=new Ids();var broker=new Broker();var events=new Events();var metrics=new Metrics();
         var lifecycle=new ExecutionLifecycleService();
         var brokerAccountRepository = mock(BrokerAccountRepository.class);
+        when(brokerAccountRepository.findById(ACCOUNT)).thenReturn(Optional.of(
+                BrokerAccount.create(USER, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "live", NOW)));
         var paperSettlementService = mock(PaperSettlementService.class);
         var t1Revalidation = mock(ExecutionTimeRiskRevalidationService.class);
         var t1Outcome = new ExecutionTimeRiskRevalidationService.T1Outcome(UUID.randomUUID(), RiskDecision.APPROVED, null, true);
@@ -255,9 +301,9 @@ class ExecutionPipelineTest {
                 new BrokerSubmissionStep(broker,intents,attempts,lifecycle),
                 new BrokerResponseProcessingStep(ids),
                 new ExecutionFinalizationStep(intents,attempts,orders,lifecycle,metrics,paperSettlementService,brokerAccountRepository),events,CLOCK, t1Revalidation);
-        return new Fixture(intents,attempts,orders,broker,events,metrics,execution,lifecycle,ids);
+        return new Fixture(intents,attempts,orders,broker,brokerAccountRepository,events,metrics,execution,lifecycle,ids);
     }
     private record Fixture(Intents intents, Attempts attempts, Orders orders, Broker broker,
-                           Events events, Metrics metrics, ExecuteTradeService execution,
+                            BrokerAccountRepository brokerAccounts, Events events, Metrics metrics, ExecuteTradeService execution,
                            ExecutionLifecycleService lifecycle, Ids ids){}
 }

@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - DOCUMENTATION REMEDIATION`
+`CLOSED - INDEPENDENT REVIEW PASSED`
 
 ## Scope Delivered
 
@@ -17,39 +17,57 @@ The implementation represented by commit `fdcb6ac`:
 * preserves the broker-backed LIVE path;
 * retains fail-closed behavior when the required facts are not available;
 * updates the focused provider regression test.
+* rejects malformed local account/trade data without synthesizing a source
+  version or throwing during snapshot construction.
+* carries explicit `PROTECTED`, `PARTIALLY_PROTECTED`, `UNPROTECTED`, and
+  `UNKNOWN` position states through the risk snapshot;
+* represents unavailable stop-loss risk as absent rather than as a synthetic
+  zero value for unprotected positions;
+* permits optional stop-loss and take-profit values for manual Trade Plans;
+* keeps opportunity/automated Trade Plans fail-closed when protection is absent;
+* keeps manual unprotected positions available for management without treating
+  them as protected positions; exposure and margin controls remain active.
 
 No Risk Domain repository or provider dependency was introduced.
 
 ## Validation Evidence
 
-The implementation commit includes `ModeAwareRiskFactsProviderTest`. The
-original implementation workflow also recorded the Trading Core and Risk
-Domain Maven suites as the required validation boundary. A fresh Maven result
-was not recorded during this documentation remediation, so this report does
-not claim a new test execution.
+The implementation includes focused regression tests for the PAPER protection
+state, manual unprotected Trade Plans, automated protection enforcement, and
+Risk Domain projection state. The affected module suites were also executed.
 
 ```text
-implementation commit: fdcb6ac
-focused provider test: present in the implementation commit
-fresh Maven execution: not run during documentation remediation
-git diff --check: required for this remediation branch
+Risk Domain targeted tests: 10 passed
+Market Intelligence targeted tests: 8 passed
+ Trading Core targeted tests: 34 passed
+Risk Domain full suite: 26 passed
+Market Intelligence full suite: 489 passed
+Trading Core full suite: 580 passed
+git diff --check: passed
 ```
 
-## Remaining Evidence
+## Runtime Evidence
 
-* confirm complete local balance, open-trade, closed-trade, and protection
-  facts in the supported runtime;
-* confirm LIVE delegation remains covered by the current Trading Core tests;
-* record the exact Maven commands and results before changing the Story to
-  `Completed`.
+* The authenticated PAPER walkthrough is recorded in
+  `artifacts/paper-runtime-proof.json`.
+* Registration, login, profile lookup, PAPER provisioning, market scan,
+  accepted Trade Plan, approved Risk evaluation, and PAPER execution completed
+  successfully.
+* The negative Risk evaluation was rejected by the blocking risk rules and did
+  not authorize execution.
+* LIVE delegation remains covered by the Trading Core regression suite.
 
 ## Worktree and Git
 
 ```text
 IMPLEMENTATION_COMMIT = fdcb6ac
-DOCUMENTATION_BRANCH = docs/story-artifact-remediation
+FOLLOW_UP_HARDENING_COMMIT = 87dba4a
+VALIDATION_BRANCH = chore/debt-resolution
 PUSH = NO
 ```
 
-Only documentation files for this Story are included in the remediation task.
-Pre-existing source and untracked files outside this Story remain untouched.
+Independent review found no code defect. The runtime proof does not individually
+demonstrate every local mapping criterion, so those criteria are supported by
+the focused provider/application tests documented above. No provider margin
+inference is introduced; the read-only provider-backed preview is consumed
+through the existing neutral boundary.

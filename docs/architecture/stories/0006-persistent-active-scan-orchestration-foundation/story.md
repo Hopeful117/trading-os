@@ -4,7 +4,7 @@
 
 **ID:** `0006`
 **Title:** Persistent Active Scan Orchestration Foundation
-**Status:** Draft
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ## Goal
 
@@ -216,4 +216,4 @@ Expected validation for this Story:
 - [ ] Implementation completed.
 - [ ] Relevant tests pass.
 - [ ] Code review approved.
-- [ ] Human commit created.
+- [x] Human commit created.

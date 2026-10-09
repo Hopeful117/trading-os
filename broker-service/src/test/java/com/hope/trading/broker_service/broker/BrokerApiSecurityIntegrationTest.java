@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.Date;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.GetRiskSnapshotService;
+import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.GetTechnicalCapabilitiesService;
+import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.PreviewMarginService;
 import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerAuthorizationException;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,8 @@ import static org.mockito.Mockito.*;
 class BrokerApiSecurityIntegrationTest {
     @Autowired MockMvc mvc;
     @MockitoBean GetRiskSnapshotService riskSnapshots;
+    @MockitoBean GetTechnicalCapabilitiesService technicalCapabilities;
+    @MockitoBean PreviewMarginService marginPreviews;
     @Test void internalApiRequiresServiceJwtAndValidatesDtos() throws Exception {mvc.perform(post("/internal/v1/executions").contentType(MediaType.APPLICATION_JSON).content("{}" )).andExpect(status().isUnauthorized());mvc.perform(post("/internal/v1/executions").header("X-Service-Authorization","Bearer "+serviceToken()).contentType(MediaType.APPLICATION_JSON).content("{}" )).andExpect(status().isBadRequest());}
     @Test void riskSnapshotUsesAuthenticatedOwner() throws Exception {
         UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -63,6 +67,26 @@ class BrokerApiSecurityIntegrationTest {
                 .queryParam("instrument","BTC/USD")
                 .header("X-Service-Authorization","Bearer "+serviceTokenWithoutActor()))
                 .andExpect(status().isForbidden());
+    }
+    @Test void technicalCapabilitiesAcceptsAuthenticatedDelegatedActor() throws Exception {
+        UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
+        when(technicalCapabilities.get(owner,account,"BTC/USD")).thenReturn(new TechnicalCapabilities(account,"KRAKEN","BTC/USD",1,
+                Instant.parse("2026-08-01T00:00:00Z"),List.of(OrderType.MARKET,OrderType.LIMIT),List.of(java.math.BigDecimal.ONE,new java.math.BigDecimal("2")),List.of(java.math.BigDecimal.ONE)));
+        mvc.perform(get("/internal/v1/broker-accounts/{id}/capabilities",account).queryParam("instrument","BTC/USD")
+                .header("X-Service-Authorization","Bearer "+serviceToken(owner))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.supportedBuyLeverageLevels[1]").value(2))
+                .andExpect(jsonPath("$.supportedSellLeverageLevels[0]").value(1));
+        verify(technicalCapabilities).get(owner,account,"BTC/USD");
+    }
+    @Test void marginPreviewAcceptsAuthenticatedDelegatedActor() throws Exception {
+        UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
+        when(marginPreviews.preview(any(MarginPreviewRequest.class),eq(owner))).thenReturn(new MarginPreview(account,"BTC/USD",
+                new java.math.BigDecimal("100"),"USD","KRAKEN_ASSET_PAIRS_MARGIN",1,Instant.parse("2026-08-01T00:00:00Z")));
+        mvc.perform(post("/internal/v1/broker-accounts/{id}/margin-preview",account).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"brokerAccountId\":\""+account+"\",\"instrument\":\"BTC/USD\",\"side\":\"BUY\",\"quantity\":1,\"price\":100}")
+                .header("X-Service-Authorization","Bearer "+serviceToken(owner))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount").value(100)).andExpect(jsonPath("$.currency").value("USD"));
+        verify(marginPreviews).preview(any(MarginPreviewRequest.class),eq(owner));
     }
     @Test void marginPreviewRejectsPathAndBodyAccountMismatch() throws Exception {
         UUID pathAccount=UUID.randomUUID(),bodyAccount=UUID.randomUUID();

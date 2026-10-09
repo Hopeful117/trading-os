@@ -964,3 +964,29 @@ deterministic system candidate selection, where candidate ranking represents
 `ANALYSIS PRIORITY`, not trade probability, opportunity score, or a buy/sell
 recommendation. This is outside Story 0067; no Market Structure work or new
 Story is created here.
+
+## 21. Final Runtime Recheck - ETH/USDC
+
+On 2026-10-06, one additional authenticated PAPER scan was executed through the
+official Opportunities workflow for the liquid `ETH/USDC` market. No TradePlan,
+RiskEvaluation, ExecutionIntent, PAPER position, or broker operation followed.
+
+- Account: `d07ec2bd-e11b-4820-a1a5-2beb8ac89f3f` (`E2E Paper Validation`);
+- Market: `ETH/USDC`, provider `KRAKEN`;
+- Market ID: `cab929f0-507b-43f4-95e7-ec7b1333efb3`;
+- Active Scan ID: `758f1151-9d41-4dcb-8f2d-c05365d9693d`;
+- Analysis execution ID: `ac5837fe-b956-45ee-b638-8b5eb64f218a`;
+- Scan status: `COMPLETED`, result quality `DEGRADED`;
+- Trend Context: `AVAILABLE`, `VALID`, observation version `1`;
+- Trend Context result: `UP / TRANSITIONING / BIAS_TRANSITION`,
+  attention `CONTEXTUALLY_DANGEROUS`;
+- Invalidation: `INVALIDATION_UP_V1`;
+- Strategy result: separate `Legacy OHLC Trend` `SHORT` opportunity, not a
+  Trend Context StrategyMatch;
+- Conclusion: the current multi-timeframe evidence correctly prevented a
+  conservative Trend Context setup from becoming a trade proposal.
+
+This runtime evidence confirms the authenticated scan-to-observation-to-read
+path on a liquid market and preserves the human/Risk execution boundary. It
+does not validate or enable `CONSERVATIVE_TREND_FOLLOWING_V1`, which remains
+`DISABLED` and `UNVALIDATED`.

@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - HUMAN REVIEW PENDING`
+`CLOSED - HUMAN ACCEPTED`
 
 The pure deterministic engine and focused domain tests are present in the
 Market Intelligence module. The Story remains open only for human code review
@@ -46,6 +46,22 @@ following areas:
 - pivot windows intersecting a data gap had to be excluded from structural
   calculations.
 
+An independent review also identified and corrected three boundary issues:
+
+- externally supplied Market Structure results are now checked against market,
+  provider, symbol, interval, cut-off, profile/rule versions, input fingerprint,
+  availability, and evidence windows before they can influence the assessment;
+- missing required structural results now produce a deterministic safe `UNKNOWN`
+  assessment instead of throwing;
+- every generated evidence reference now carries the profile identity in addition
+  to the profile version, with legacy deserialization remaining non-fatal.
+- supplied relation endpoints are now required to belong to the retained swing
+  sequence, preventing suppressed structure from influencing direction.
+
+The review's concern about the two-argument engine boundary is not treated as a
+defect: Story 0071 subsequently formalized the extracted Market Structure
+capability and its precomputed-result consumption boundary.
+
 ## Files Added
 
 - `market-intelligence/src/main/java/com/hope/trading/market_intelligence/domain/trendcontext/`
@@ -60,7 +76,7 @@ following areas:
 ```text
 mvn -q -Dtest=TrendContextAssessmentInputTest,TrendContextEngineTest,TrendContextCanonicalScenarioTest test: passed
 mvn -q test: passed
-mvn -q clean verify: passed
+mvn -q clean verify: passed after review corrections
 git diff --check: passed
 ```
 
@@ -71,14 +87,11 @@ be handled separately if it becomes a test acceptance issue.
 
 ## Known Gaps
 
-- Human review has not yet confirmed every result field against the accepted
-  domain design, especially complete evidence linkage and assessment
-  fingerprint canonicalization.
 - No Story `0064` observation integration or Story `0065` strategy integration
-  has been implemented.
+  is implemented by this pure engine Story.
 
-## Human Actions Required
+## Review Outcome
 
-1. Review the complete pure-domain diff and the remaining evidence/fingerprint
-   semantics against the canonical design.
-2. Perform the human code review and create the commit only after acceptance.
+Independent review found no remaining blocker or major defect. The final review
+confirmed that evidence windows, break boundaries, required-role outcomes, and
+retained-relation integrity remain inside the pure Trend Context boundary.

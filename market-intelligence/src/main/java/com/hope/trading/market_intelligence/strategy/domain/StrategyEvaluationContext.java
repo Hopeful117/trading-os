@@ -119,7 +119,7 @@ public final class StrategyEvaluationContext {
     }
 
     private static String canonicalValue(SemanticValue value) {
-        return switch (value.type()) {
+        return value.type() + ":" + switch (value.type()) {
             case DECIMAL -> value.decimalValue().setScale(12, java.math.RoundingMode.HALF_UP)
                     .stripTrailingZeros().toPlainString();
             case INTEGER -> Long.toString(value.integerValue());

@@ -7,6 +7,9 @@ Intelligence. The existing confirmed-swing semantics remain the baseline, while
 Trend Context now consumes the extracted result on the production capability
 path.
 
+The implementation is present in commit `814bb2b`, which also contains the
+follow-up reusable structural-relations changes from Story 0072.
+
 ## Changes
 
 - Added neutral Market Structure contracts for candles, gaps, inputs, swings,
@@ -50,6 +53,7 @@ Passed:
 
 ```text
 ./trading-core/mvnw -q -f market-intelligence/pom.xml test
+./market-data/mvnw -q -f market-intelligence/pom.xml -Dtest=MarketStructureEngineTest,TrendContextEngineTest,TrendContextAnalysisCapabilityTest test
 git diff --check
 ```
 
@@ -57,10 +61,39 @@ The full Market Intelligence test suite passed. Test execution produced known
 environment warnings from Mockito, Flyway/H2, Spring configuration, and
 asynchronous test fixtures; none caused a test failure.
 
+The targeted validation additionally passed for the extracted Market Structure
+engine, the Trend Context engine, and the production Trend Context capability.
+These tests cover confirmation timing, cutoff replay, gap and synthetic/open
+evidence exclusion, deterministic fingerprints, structural-artifact
+consumption, and capability dependency planning.
+
+The PAPER active-scan runtime audit for scan
+`1d0bee93-872e-4235-9a12-6aa4faf5868c` and analysis execution
+`412f1b7b-f9c7-410f-b7dd-abd33f2a76e8` proved that the Market Structure capability
+was planned but failed before artifact persistence. Its parameter fingerprint
+was passed as a raw profile string to `ArtifactFingerprint`, which requires a
+SHA-256 value. This caused `CAPABILITY_EXECUTION_FAILED`, degraded Trend Context,
+and allowed the existing controlled Legacy OHLC strategy path to continue.
+The capability now hashes that parameter identity before constructing the
+artifact key, and a regression test verifies both persisted key fingerprints.
+
+The first post-fix deployed scan then exposed a second persistence issue: the
+artifact uniqueness constraint is scoped to one analysis execution and does not
+include the artifact scope timeframe. The Market Structure key now includes the
+interval in its parameter fingerprint, and the regression test verifies that
+multiple interval artifacts receive distinct identities.
+
+The subsequent deployed PAPER scan completed both
+`market-structure-analysis` and `trend-context-analysis`. It persisted three
+Market Structure artifacts for `FOUR_HOURS`, `ONE_HOUR`, and `FIFTEEN_MINUTES`.
+The analysis remained `DEGRADED` only because the OHLC context was stale; no
+Market Structure failure warning remained. The controlled Legacy OHLC strategy
+still produced the opportunity, as expected because the Trend Context strategy
+remains disabled and unvalidated.
+
 Not executed:
 
 - live or replayed Kraken validation;
-- deployed end-to-end validation;
 - frontend validation.
 
 ## Scope Notes
@@ -69,7 +102,15 @@ No new service, scanner, generic capability framework, persistence migration,
 relation model, break model, strategy behavior, risk behavior, execution
 behavior, or AI behavior was added.
 
-No commit, push, merge, or branch operation was performed.
+No commit, push, merge, or branch operation was performed by the implementation
+workflow itself; the current repository contains the implementation in the
+commit identified above.
+
+## Closure
+
+Human closure accepted on 2026-10-06 after focused automated validation and the
+authenticated PAPER runtime evidence. No new implementation, commit, push, or
+merge was performed by the coding agent.
 
 ## Remaining Risk
 

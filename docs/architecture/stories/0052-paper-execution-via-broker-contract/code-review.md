@@ -21,8 +21,11 @@ available Story scope.
 * The shared execution vocabulary must not imply identical completion semantics
   for PAPER and LIVE.
 
-## Human Review Required
+## Human Review Decision
 
-* Inspect transaction and rollback guarantees for local PAPER settlement.
-* Verify ambiguous LIVE outcomes cannot become definitive rejections.
-* Run the affected backend and frontend suites.
+The human reviewer accepts closure without a real LIVE transaction. A real
+broker transaction is not justified for this validation; LIVE behavior is
+validated through the broker-neutral contract, automated recovery tests, and
+the explicit PAPER/LIVE boundary. The authenticated PAPER runtime proof is
+complete and records successful settlement, persisted position state, and
+fail-closed negative risk validation.

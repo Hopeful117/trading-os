@@ -25,6 +25,7 @@ import com.hope.trading.trading_core.execution.domain.service.ExecutionLifecycle
 import com.hope.trading.trading_core.execution.domain.service.ExecutionValidationService;
 import com.hope.trading.trading_core.execution.domain.service.IdempotencyService;
 import com.hope.trading.trading_core.execution.domain.valueobject.BrokerOrderStatus;
+import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionAttemptId;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionIntentId;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionStatus;
 import com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey;
@@ -43,6 +44,8 @@ import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.service.TradingCalculatorServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -85,6 +88,35 @@ class PaperExecutionVerticalRegressionTest {
         verifyScenario(ExecutionParameters.Side.SELL, "PEPE/EUR", "75000000",
                 "0.000003829", "0.000003829", "10000", "75000000",
                 "0.000003829", "10287.175", "0", "10000");
+    }
+
+    @Test
+    void paperExecutionRejectsStaleSnapshotBeforeCreatingASettlement() {
+        UUID ownerId = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
+                ExecutionMode.PAPER, "Paper Account", NOW);
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+
+        UUID marketId = UUID.randomUUID();
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(marketData.findAll()).thenReturn(List.of(MarketResponse.builder()
+                .marketId(marketId).symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD").build()));
+        when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class)))
+                .thenReturn(List.of(new MarketPriceSnapshotDto(marketId, "BTC/USD",
+                        decimal("100"), decimal("99"), decimal("101"), true, NOW,
+                        MarketPriceSnapshotStatus.STALE)));
+
+        SimulatedExecutionAdapter adapter = new SimulatedExecutionAdapter(brokers, marketData);
+        var request = new BrokerExecutionPort.ExecutionRequest(
+                ExecutionIntentId.newId(), ExecutionAttemptId.newId(),
+                new IdempotencyKey("stale-paper-exit"), broker.id(),
+                new ExecutionParameters("BTC/USD", ExecutionParameters.Side.SELL,
+                        ExecutionParameters.OrderType.MARKET, decimal("1"), null));
+
+        BrokerExecutionPort.SubmissionResult result = adapter.submit(request);
+
+        assertThat(result).isEqualTo(new BrokerExecutionPort.Rejected(null, "MARKET_DATA_UNAVAILABLE"));
     }
 
     private void verifyScenario(ExecutionParameters.Side side, String instrument, String quantity,
@@ -137,6 +169,17 @@ class PaperExecutionVerticalRegressionTest {
                 brokerAccounts, marketData);
         RoutingBrokerExecutionAdapter routing = new RoutingBrokerExecutionAdapter(
                 new BrokerExecutionAdapter(liveClient), simulated, brokerAccounts);
+        TradePlanRiskPort tradePlans = mock(TradePlanRiskPort.class);
+        UUID tradePlanId = UUID.randomUUID();
+        if (side == ExecutionParameters.Side.SELL) {
+            BigDecimal fillPrice = decimal(expectedFillPrice);
+            when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
+                    tradePlanId, 1, "READY_TO_EXECUTE", NOW, UUID.randomUUID(), 1, NOW,
+                    ownerId, account.getAccountId(), "USD", UUID.randomUUID(), 1,
+                    UUID.randomUUID(), 1, instrument, "SHORT", null, null, null,
+                    decimal(quantity), fillPrice.multiply(decimal(quantity)),
+                    fillPrice.multiply(decimal(quantity)), "USD", "{}"));
+        }
 
         var intents = new ExecutionTestSupport.Intents();
         var attempts = new ExecutionTestSupport.Attempts();
@@ -145,7 +188,9 @@ class PaperExecutionVerticalRegressionTest {
         var events = new ExecutionTestSupport.Events();
         var metrics = new ExecutionTestSupport.Metrics();
         var lifecycle = new ExecutionLifecycleService();
-        PaperSettlementService settlement = spy(new PaperSettlementService(brokerAccounts, accounts));
+        PaperSettlementService settlement = spy(new PaperSettlementService(
+                brokerAccounts, accounts, new TradingCalculatorServiceImpl(),
+                tradePlans));
         ExecutionTimeRiskRevalidationService t1 = mock(ExecutionTimeRiskRevalidationService.class);
         when(t1.evaluateAndPersist(any(), any())).thenReturn(
                 new ExecutionTimeRiskRevalidationService.T1Outcome(
@@ -153,7 +198,7 @@ class PaperExecutionVerticalRegressionTest {
 
         ExecutionIntent intent = ExecutionIntent.create(
                 ExecutionIntentId.newId(),
-                new TradePlanReference(UUID.randomUUID(), 1),
+                new TradePlanReference(tradePlanId, 1),
                 new RiskApprovalReference(UUID.randomUUID(),
                         RiskApprovalReference.Decision.APPROVED, NOW.minusSeconds(1)),
                 new IdempotencyKey("paper-" + side.name().toLowerCase() + "-vertical"),

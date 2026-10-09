@@ -22,12 +22,14 @@ The implementation preserves the existing responsibility split:
 * Account context with Risk and Trade Planning Profile references: implemented
   and covered by backend contract tests.
 * Eligible/excluded market decisions and reasons: implemented.
+* Account-specific broker/instrument capability filtering: implemented through
+  the Trading Core batch capability contract backed by Story `0051`.
 * Account-change reset semantics: implemented and tested.
 * Explicit account, context, empty, and error states: implemented and tested.
 * Existing Active Scan behavior: preserved and covered by the full Market
   Intelligence suite.
-* Complete broker/instrument account-specific market differentiation: not
-  claimable until Story `0051` exposes the required authoritative facts.
+* Broker/instrument account-specific market differentiation: implemented through
+  Story `0051`; unavailable or stale facts fail closed.
 
 ## Validation Evidence
 
@@ -36,21 +38,24 @@ The implementation preserves the existing responsibility split:
 * `npm run build` in `trading-os-web`: succeeded with existing budget warnings.
 * Targeted backend account-context tests: `6` passed.
 * Targeted frontend account-context tests: `6` passed.
+* Trading Core capability query tests: `3` passed.
+* Market Intelligence capability eligibility tests: `3` passed.
+* Authenticated runtime walkthrough completed with two owned PAPER accounts;
+  changing accounts cleared the previous market URL state and resolved the new
+  account context.
 * Prettier check passed for Story 0056 frontend files.
 * `git diff --check` passed.
 
 ## Git State
 
 ```text
-BRANCH = story/0056-account-first-market-decision-context
-IMPLEMENTATION_COMMIT = 58c95e2
+BRANCH = chore/debt-resolution
+IMPLEMENTATION_COMMIT = 1d6ef55
 PUSH = NO
 MERGE = NO
 ```
 
 ## Remaining Follow-up
 
-1. Integrate broker/instrument capability facts from Story `0051`.
-2. Run an authenticated walkthrough with multiple account contexts.
-3. Continue with the next approved Decision Workspace slice: account-scoped
+1. Continue with the next approved Decision Workspace slice: account-scoped
    live market context.

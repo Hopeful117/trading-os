@@ -21,9 +21,9 @@ Trend Context mapping in Market Intelligence.
 
 ## Validation
 
-* Market Data full suite: `97` tests passed.
-* Market Intelligence full suite: `364` tests passed.
-* Focused Trend Context tests: `13` passed.
+* Market Data full suite: `147` tests passed.
+* Market Intelligence full suite: `497` tests passed.
+* Focused Trend Context and mapper tests: `63` passed.
 * Focused wire contract tests: `2` passed.
 * `git diff --check`: passed.
 
@@ -31,10 +31,13 @@ Trend Context mapping in Market Intelligence.
 
 * The current source contract has no provider revision identity; `sourceId` is
   an identity key, not a correction-version identifier.
-* Human code review and final human commit remain pending.
+* The no-look-ahead rule is enforced at input acceptance using `assessmentAt`;
+  `cutOffAt` remains the deterministic calculation boundary.
+* Independent review passed with no confirmed or material blocking findings.
+* Final human commit remains pending.
 
 ## Human Actions Required
 
-1. Review the completed immutable contract, mapper and evidence matrix.
-2. Confirm the explicit Story 0064 deferral for production orchestration.
-3. Create the human commit after code review.
+1. Review the isolated Story 0062 diff among the unrelated worktree changes.
+2. Preserve the explicit Story 0064 deferral for production orchestration.
+3. Create the human commit.

@@ -15,8 +15,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 interface BrokerTechnicalCapabilitiesFeignClient {
     @GetMapping("/internal/v1/broker-accounts/{id}/capabilities")
     BrokerTechnicalCapabilities get(@PathVariable UUID id, @RequestParam String instrument);
+
+    @GetMapping("/internal/v1/broker-providers/{provider}/capabilities")
+    BrokerTechnicalCapabilities getByProvider(@PathVariable String provider,
+                                              @RequestParam UUID brokerAccountId,
+                                              @RequestParam String instrument);
 }
 
 record BrokerTechnicalCapabilities(UUID brokerAccountId, String provider, String instrument, long sourceVersion,
                                    Instant observedAt, List<String> supportedOrderTypes,
-                                   List<BigDecimal> supportedLeverageLevels) { }
+                                   List<BigDecimal> supportedBuyLeverageLevels,
+                                   List<BigDecimal> supportedSellLeverageLevels) { }

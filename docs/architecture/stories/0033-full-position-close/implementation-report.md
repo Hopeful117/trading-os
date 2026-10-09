@@ -224,3 +224,16 @@ PUSH_PERFORMED = NO
 ```
 STORY_0033_IMPLEMENTED_READY_FOR_REVIEW
 ```
+
+## Closure Validation
+
+Current repository validation confirms the implementation remains green:
+
+* Trading Core `mvn -q test` — passed.
+* Broker Service `mvn -q test` — passed.
+* Angular `npm run check` — 47 test files and 391 tests passed; production build succeeded with existing budget warnings.
+* `git diff --check` — passed.
+
+ADR-040 is accepted. No live position-close command was submitted; the
+provider mutation and reconciliation behavior remain covered by controlled
+tests, with UNKNOWN outcomes requiring explicit reconciliation.

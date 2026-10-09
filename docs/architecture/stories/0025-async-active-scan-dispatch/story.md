@@ -1,5 +1,7 @@
 # Story 0025 — Async Active Scan Dispatch
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 Make `POST /api/v1/intelligence/scans` genuinely asynchronous: the endpoint

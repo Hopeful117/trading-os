@@ -74,12 +74,12 @@ The implementation does not add volume, asset-class inference, liquidity,
 spread, volatility, readiness, candidate selection, watchlists, persistence,
 backend discovery queries, or trading semantics.
 
-## Remaining Human Actions
+## Review Outcome
 
-- Review the complete diff in the IDE.
-- Decide whether to address the unrelated `localStorage` test-environment
-  failures separately.
-- Human code review and commit remain outstanding.
+Independent review found no blocker or major defect. Locale-independent
+comparison now covers catalogue and filter-option sorting, with nullable sorting
+and source immutability regression coverage. The unrelated `localStorage` test
+environment failures remain outside this Story.
 
 ## Recommended Next Story
 

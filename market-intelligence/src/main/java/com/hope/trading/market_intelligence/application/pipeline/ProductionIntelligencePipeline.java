@@ -26,6 +26,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -59,6 +60,7 @@ public class ProductionIntelligencePipeline {
     private final OpportunityEngine opportunities;
     private final MarketDataClient marketData;
     private final JpaIntelligencePipelineRunRepository runs;
+    private final JpaPipelineRunClaimService runClaims;
     private final Clock clock;
     private final LiveStrategyEvaluationRunner strategyEvaluation;
     private final ShadowStrategyParityMonitor parity;
@@ -70,6 +72,7 @@ public class ProductionIntelligencePipeline {
     public ProductionIntelligencePipeline(
             ObservationBuilder observations, OpportunityEngine opportunities,
             MarketDataClient marketData, JpaIntelligencePipelineRunRepository runs,
+            JpaPipelineRunClaimService runClaims,
             Clock clock, LiveStrategyEvaluationRunner strategyEvaluation,
             ShadowStrategyParityMonitor parity, StrategyMatchPersister matches,
             StrategyMatchOpportunityFactory matchOpportunities,
@@ -79,6 +82,7 @@ public class ProductionIntelligencePipeline {
         this.opportunities = opportunities;
         this.marketData = marketData;
         this.runs = runs;
+        this.runClaims = runClaims;
         this.clock = clock;
         this.strategyEvaluation = strategyEvaluation;
         this.parity = parity;
@@ -89,18 +93,25 @@ public class ProductionIntelligencePipeline {
     }
 
     @Transactional
-    public synchronized JpaIntelligencePipelineRunEntity process(
+    public JpaIntelligencePipelineRunEntity process(
             UUID analysisExecutionId, UUID marketId, AnalysisExecutionMode mode) {
-        return runs.findByAnalysisExecutionIdAndPipelineVersion(
-                analysisExecutionId, VERSION).orElseGet(() -> execute(
-                        analysisExecutionId, marketId, mode));
+        Optional<JpaIntelligencePipelineRunEntity> existing =
+                runs.findByAnalysisExecutionIdAndPipelineVersion(analysisExecutionId, VERSION);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        try {
+            return execute(analysisExecutionId, marketId, mode);
+        } catch (org.springframework.dao.DataIntegrityViolationException race) {
+            return runs.findByAnalysisExecutionIdAndPipelineVersion(analysisExecutionId, VERSION)
+                    .orElseThrow(() -> race);
+        }
     }
 
     private JpaIntelligencePipelineRunEntity execute(
             UUID analysisExecutionId, UUID marketId, AnalysisExecutionMode mode) {
-        JpaIntelligencePipelineRunEntity run = runs.save(
-                JpaIntelligencePipelineRunEntity.running(
-                        analysisExecutionId, VERSION, clock.instant()));
+        JpaIntelligencePipelineRunEntity run = runClaims.create(
+                analysisExecutionId, VERSION, clock.instant());
         String instrument;
         try {
             instrument = marketData.findMarket(marketId).symbol();
@@ -203,7 +214,7 @@ public class ProductionIntelligencePipeline {
         CreateOpportunityCommand command = matchOpportunities.command(
                 persisted.match(), definition, instrument, originOf(mode),
                 new ObservationReference(observation.id()),
-                observation.validFrom(),
+                evaluation.evaluatedAt(),
                 observation.validFrom(),
                 observation.validUntil().orElse(null),
                 evaluation,

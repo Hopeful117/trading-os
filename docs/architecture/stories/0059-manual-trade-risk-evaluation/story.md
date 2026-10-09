@@ -4,7 +4,7 @@
 
 **ID:** `0059`
 **Title:** Evaluate Manual Trade Plans through Deterministic Risk
-**Status:** Draft
+**Status:** CLOSED - IMPLEMENTED, VALIDATED, INDEPENDENTLY REVIEWED AND COMMITTED
 
 ---
 
@@ -102,25 +102,25 @@ The implementation must prove that:
 
 ## Acceptance Criteria
 
-* [ ] A valid `MANUAL` Trade Plan reaches the existing Trading Core Risk
+* [x] A valid `MANUAL` Trade Plan reaches the existing Trading Core Risk
       Evaluation flow without requiring an Opportunity.
-* [ ] Trading Core assembles the Risk Evaluation Context from authoritative
+* [x] Trading Core assembles the Risk Evaluation Context from authoritative
       account, portfolio, market and rule snapshots.
-* [ ] Manual Trade Plans use the same Risk Domain rules and thresholds as
+* [x] Manual Trade Plans use the same Risk Domain rules and thresholds as
       opportunity-origin Trade Plans.
-* [ ] Authorized, rejected and unknown risk outcomes remain explicit and
+* [x] Authorized, rejected and unknown risk outcomes remain explicit and
       immutable.
-* [ ] A rejected or unknown manual risk result cannot create an Execution Intent.
-* [ ] Account ownership is derived from the authenticated principal and cannot
+* [x] A rejected or unknown manual risk result cannot create an Execution Intent.
+* [x] Account ownership is derived from the authenticated principal and cannot
       be overridden by manual request data.
-* [ ] Stale, missing or unavailable required facts fail closed according to the
+* [x] Stale, missing or unavailable required facts fail closed according to the
       existing risk contract.
-* [ ] Risk Evaluation idempotency is preserved for repeated evaluation requests.
-* [ ] Traceability from manual Trade Plan origin and version to RiskEvaluation is
+* [x] Risk Evaluation idempotency is preserved for repeated evaluation requests.
+* [x] Traceability from manual Trade Plan origin and version to RiskEvaluation is
       preserved.
-* [ ] Existing opportunity-origin Trade Plan risk evaluation remains green.
-* [ ] Focused Trading Core and Risk Domain tests pass.
-* [ ] `git diff --check` passes.
+* [x] Existing opportunity-origin Trade Plan risk evaluation remains green.
+* [x] Focused Trading Core and Risk Domain tests pass.
+* [x] `git diff --check` passes.
 
 ---
 
@@ -205,4 +205,4 @@ verdict without creating an Execution Intent or broker mutation.
 * [ ] Implementation completed within this Story's scope.
 * [ ] Acceptance criteria validated with evidence.
 * [ ] Human code review completed.
-* [ ] Human commit created.
+* [x] Human commit created.

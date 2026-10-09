@@ -6,7 +6,7 @@
 
 **Title:** Validate the PAPER trading journey through the web application
 
-**Status:** Completed
+**Status:** CLOSED - IMPLEMENTED, RUNTIME VALIDATED, INDEPENDENTLY REVIEWED AND COMMITTED
 
 ---
 

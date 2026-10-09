@@ -226,7 +226,8 @@ public class TradePlanRiskEvaluationService {
         ClosedPnl dailyClosed = closedPnl(brokerSnapshot, currency, riskDay);
         BigDecimal dailyClosedPnl = dailyClosed.amount();
 
-        List<PositionSnapshot> positions = positions(brokerSnapshot.positions(), current, currency, accountRate);
+        List<PositionSnapshot> positions = positions(brokerSnapshot.positions(), current, currency, accountRate,
+                "MANUAL".equalsIgnoreCase(plan.origin()));
         BigDecimal sizingRate = assetRate(current, plan.sizingCurrency());
         BigDecimal notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
         BigDecimal expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
@@ -238,11 +239,23 @@ public class TradePlanRiskEvaluationService {
                 .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
-        RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
-                        brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                        marginPrice, brokerSnapshot.observedAt()))
-                .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
-        BigDecimal requiredMargin = authoritativeMargin(marginFact, currency, brokerSnapshot.observedAt());
+        Instant marginObservedAt = clock.instant();
+         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
+                         brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
+                         marginPrice, marginObservedAt))
+                  .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
+         if (marginFact.currency() == null || marginFact.currency().isBlank()) {
+             throw unavailable("REQUIRED_MARGIN_INVALID");
+         }
+         if (!currency.equalsIgnoreCase(marginFact.currency())
+                 && currentAssets.stream().noneMatch(asset -> asset.equalsIgnoreCase(marginFact.currency()))) {
+             currentAssets.add(marginFact.currency());
+             current = market.value(currency, brokerSnapshot.observedAt(), instruments,
+                     currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList());
+             requireComplete(current, "CURRENT_MARKET_VALUATION_UNAVAILABLE");
+         }
+         BigDecimal requiredMargin = RequiredMarginCurrencyNormalizer.normalize(marginFact, currency, current, clock.instant())
+                 .orElseThrow(() -> unavailable("REQUIRED_MARGIN_INVALID"));
         ProposedTrade proposed = new ProposedTrade(plan.tradePlanId(), plan.tradePlanVersion(), plan.instrument(),
                 direction(plan.direction()), positive(plan.quantity(), "PLAN_QUANTITY_INVALID"),
                 new Money(notional, currency), new Money(expectedLoss, currency), new Money(requiredMargin, currency));
@@ -355,6 +368,10 @@ public class TradePlanRiskEvaluationService {
             throw new RiskEvaluationException("TRADE_PLAN_FORBIDDEN", "Trade Plan ownership does not match account", 403);
         if (plan.sourcePayload() == null || plan.contextId() == null || plan.contextVersion() < 1)
             throw unavailable("TRADE_PLAN_PROVENANCE_INCOMPLETE");
+        if (blank(plan.origin())) throw unavailable("TRADE_PLAN_ORIGIN_MISSING");
+        if (!"MANUAL".equalsIgnoreCase(plan.origin()) && plan.stopPrice() == null) {
+            throw unavailable("AUTOMATED_PROTECTION_REQUIRED");
+        }
         if (blank(plan.accountCurrency())
                 || !normalizedCurrency(plan.accountCurrency()).equals(normalizedCurrency(reportingCurrency)))
             throw unavailable("TRADE_PLAN_ACCOUNT_CURRENCY_MISMATCH");
@@ -439,25 +456,28 @@ public class TradePlanRiskEvaluationService {
     }
 
     private List<PositionSnapshot> positions(List<RiskFactsProvider.Position> brokerPositions,
-                                             MarketValuationPort.Snapshot valuation, String currency,
-                                             BigDecimal marginConversionRate) {
+                                              MarketValuationPort.Snapshot valuation, String currency,
+                                              BigDecimal marginConversionRate, boolean allowUnprotected) {
         List<PositionSnapshot> result = new ArrayList<>();
         for (var position : brokerPositions) {
             if (position.positionId() == null || position.signedQuantity() == null
                     || position.signedQuantity().signum() == 0 || position.entryPrice() == null
-                    || position.margin() == null || position.protectedQuantity() == null
-                    || position.protectiveStops() == null
-                    || position.protectedQuantity().compareTo(position.signedQuantity().abs()) != 0) {
+                    || position.margin() == null || position.protectionStatus() == null) {
                 throw unavailable("POSITION_PROTECTION_INCOMPLETE");
             }
-            if (position.protectiveStops().stream().anyMatch(stop -> stop == null || stop.quantity() == null
+            if (position.protectionStatus() == com.hope.trading.risk.domain.RiskTypes.ProtectionStatus.UNPROTECTED) {
+                if (!allowUnprotected) throw unavailable("POSITION_PROTECTION_INCOMPLETE");
+            } else if (position.protectionStatus() != com.hope.trading.risk.domain.RiskTypes.ProtectionStatus.PROTECTED) {
+                throw unavailable("POSITION_PROTECTION_INCOMPLETE");
+            } else if (position.protectiveStops() == null || position.protectiveStops().stream().anyMatch(stop -> stop == null || stop.quantity() == null
                     || stop.quantity().signum() <= 0 || stop.stopPrice() == null || stop.stopPrice().signum() <= 0)) {
                 throw unavailable("POSITION_PROTECTION_INCOMPLETE");
-            }
-            BigDecimal protectedTotal = position.protectiveStops().stream().map(RiskFactsProvider.Stop::quantity)
+            } else {
+                BigDecimal protectedTotal = position.protectiveStops().stream().map(RiskFactsProvider.Stop::quantity)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            if (protectedTotal.compareTo(position.signedQuantity().abs()) != 0)
-                throw unavailable("POSITION_PROTECTION_AMBIGUOUS");
+                if (protectedTotal.compareTo(position.signedQuantity().abs()) != 0)
+                    throw unavailable("POSITION_PROTECTION_AMBIGUOUS");
+            }
             var price = fact(valuation, "position:" + position.positionId());
             if (price.value() == null || price.value().signum() <= 0
                     || price.sourcePrice() == null || price.sourcePrice().signum() <= 0
@@ -467,7 +487,7 @@ public class TradePlanRiskEvaluationService {
                 throw unavailable("POSITION_PRICE_PROVENANCE_INCOMPLETE");
             BigDecimal conversion = price.quoteToReportingRate();
             BigDecimal loss = BigDecimal.ZERO;
-            for (var stop : position.protectiveStops()) {
+            for (var stop : position.protectiveStops() == null ? List.<RiskFactsProvider.Stop>of() : position.protectiveStops()) {
                 BigDecimal distance = position.signedQuantity().signum() > 0
                         ? price.sourcePrice().subtract(stop.stopPrice())
                         : stop.stopPrice().subtract(price.sourcePrice());
@@ -476,7 +496,8 @@ public class TradePlanRiskEvaluationService {
             }
             result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                     new Money(position.signedQuantity().abs().multiply(price.value()), currency),
-                    new Money(loss, currency), new Money(position.margin().multiply(marginConversionRate), currency)));
+                    new Money(loss, currency), new Money(position.margin().multiply(marginConversionRate), currency),
+                    position.protectionStatus()));
         }
         return List.copyOf(result);
     }
@@ -555,15 +576,6 @@ public class TradePlanRiskEvaluationService {
     }
     private static BigDecimal positiveOrZero(BigDecimal value, String code) {
         if (value == null || value.signum() < 0) throw unavailable(code); return value;
-    }
-    private static BigDecimal authoritativeMargin(RequiredMarginPort.Fact fact, String currency, Instant asOf) {
-        if (fact.amount() == null || fact.amount().signum() <= 0 || blank(fact.currency())
-                || !normalizedCurrency(fact.currency()).equals(normalizedCurrency(currency))
-                || blank(fact.sourceId()) || fact.sourceVersion() < 1 || fact.observedAt() == null
-                || fact.observedAt().isAfter(asOf)) {
-            throw unavailable("REQUIRED_MARGIN_INVALID");
-        }
-        return fact.amount();
     }
     private static ContextUnavailable unavailable(String code) { return new ContextUnavailable(code); }
     private static final class ContextUnavailable extends RuntimeException {

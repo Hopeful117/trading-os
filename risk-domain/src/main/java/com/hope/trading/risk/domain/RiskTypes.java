@@ -24,4 +24,5 @@ public final class RiskTypes {
         public int rank() { return rank; }
     }
     public enum TradeDirection { LONG, SHORT }
+    public enum ProtectionStatus { PROTECTED, PARTIALLY_PROTECTED, UNPROTECTED, UNKNOWN }
 }

@@ -1,5 +1,7 @@
 # Story 0030 — Connect Risk Decision to Human-Controlled Execution
 
+**Status:** CLOSED - HUMAN ACCEPTED
+
 ## Goal
 
 After accepting a Trade Plan and receiving deterministic Risk Engine approval, the authenticated user can explicitly authorize execution, causing Trading OS to create and execute an ExecutionIntent against the correct owned Broker Account, and then display the execution outcome without ambiguity.

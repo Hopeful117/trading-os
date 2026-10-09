@@ -40,11 +40,12 @@ and trade state survives repository reload.
 - No execution test was found that proves rollback or absence of partial
   persistence after a failing transaction.
 
-## Remaining Review Items
+## Closure Notes
 
-- Human review must confirm the staged file set and migration naming/order.
-- SELL bid pricing, settlement exact-once, and rollback behavior are not
-  independently asserted by the new integration test.
+- The migration naming/order and Story file set were reviewed.
+- SELL bid pricing, settlement exact-once, and rollback behavior remain
+  explicitly qualified coverage boundaries, not acceptance criteria of this
+  persisted BUY regression.
 - No human commit has been created.
 
-`ENGINEERING_STATUS = READY_FOR_HUMAN_REVIEW`
+`ENGINEERING_STATUS = CLOSED - HUMAN_ACCEPTED - COMMIT_PENDING`

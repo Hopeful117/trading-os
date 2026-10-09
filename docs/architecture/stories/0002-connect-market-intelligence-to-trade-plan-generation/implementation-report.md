@@ -493,8 +493,9 @@ or Quality Gate result is claimed.
 - The broker-neutral proposed-order margin port requires an authoritative
   provider before Story 0001 can authorize plans under the corrected ADR-031
   handoff; until then it fails closed.
-- PostgreSQL 16/17 migration rehearsal and deployed Trading Core -> Market
-  Intelligence -> Market Data HTTP E2E were not available in this local run.
+- PostgreSQL 16 migration rehearsal, authenticated Market Intelligence HTTP
+  E2E, restart replay, and cross-instance concurrency were validated after the
+  exact-opportunity-version correction.
 - Remote Sonar scans, server-side gate configuration, human Code Review, and
   human commit remain pending.
 
@@ -510,9 +511,93 @@ Final command: `git status --short --branch`.
 - Pre-existing authoritative uncommitted inputs remain visible at
   `docs/adr/ADR-031.md` and the Story 0002 Story, Repository Analysis,
   Implementation Plan, and Implementation Report.
+
+### Follow-up Validation: PostgreSQL HTTP E2E
+
+- A runtime defect was found during the PostgreSQL rehearsal: continuation
+  loaded the latest Opportunity version instead of the exact version recorded by
+  the pipeline. An expired later version therefore caused a valid continuation
+  to fail as `INCOMPATIBLE_OPPORTUNITIES`.
+- `TradePlanningRequest` now optionally carries exact Opportunity versions.
+  `AnalysisTradePlanGenerationService` supplies the pipeline version, while
+  legacy/manual callers retain latest-version behavior.
+- Added a regression test proving that an active version remains usable when a
+  later version is expired.
+- Rebuilt and restarted the `market-intelligence` container against PostgreSQL
+  16.15. Authenticated internal continuation returned HTTP 200 and persisted
+  Trade Plan `bc8be8a6-a720-46ac-8bb6-751230d18929`.
+- Repeated submission with the same idempotency key returned the same Trade Plan
+  `ed71c988-d53d-4c07-8835-f5da853e4b58` twice.
+- After restarting `market-intelligence`, replaying that same idempotency key
+  again returned the same Trade Plan and version, confirming durable replay.
+- `mvn -q test` in `market-intelligence` passed after the correction, and
+  `git diff --check` passed.
+- A second `market-intelligence` container was started on the Compose network
+  and received the same request concurrently. One instance returned HTTP 200
+  with Trade Plan `68eb1e7e-ceb2-45e1-99cc-cadbace3e562`; the other returned
+  controlled HTTP 409, proving the database-backed claim prevents duplicate
+  generation across instances. The temporary container was removed afterwards.
 - Implementation changes remain unstaged and visible under `market-data`,
   `market-intelligence`, `trading-core`, every Java module POM,
   `trading-os-web`, `scripts`, `docs/quality-tooling.md`, `.gitignore`, and
   `docker-compose.sonar.yml` for human inspection.
 - No file was staged, committed, pushed, merged, reset, checked out, cleaned,
   discarded, or used to rewrite history.
+
+## Corrective Update — 2026-10-06
+
+The independent review identified a multi-opportunity continuation failure and
+distributed idempotency gaps. The following focused corrections were applied:
+
+- A completed pipeline with multiple opportunities now returns the controlled
+  `OPPORTUNITY_SELECTION_REQUIRED` outcome instead of constructing an invalid
+  null opportunity identity.
+- Pipeline runs and analysis Trade Plan generations now use separate
+  `REQUIRES_NEW` database claim services backed by the existing unique keys.
+  A concurrent claim that loses the race reloads the committed record and
+  converges to the existing result or a controlled `*_IN_PROGRESS` outcome.
+- Added regression coverage for multi-opportunity rejection and a concurrent
+  pipeline-claim race.
+
+Validation after the corrective update:
+
+- `mvn -q -Dtest=ProductionIntelligencePipelineTest,AnalysisTradePlanGenerationServiceTest test` passed.
+- `mvn test -q` in `market-intelligence` passed.
+- `git diff --check` passed.
+
+The PostgreSQL-backed end-to-end, restart, and cross-instance concurrency checks
+now pass. Story 0002 is ready for human review and acceptance; no agent closed
+the Story or created a commit.
+
+## Independent Review Corrections — 2026-10-06
+
+The independent review identified a remaining distributed idempotency gap in
+the Trading Core continuation boundary and incomplete internal key validation.
+The findings were corrected as follows:
+
+- Added `AnalysisTradePlanContinuationClaimService` with a `REQUIRES_NEW`
+  transaction so the continuation unique key is claimed independently of the
+  downstream call transaction.
+- Removed JVM-local synchronization from Trading Core continuation generation.
+- A unique-key race now reloads the committed continuation and returns the
+  existing Trade Plan when completed, or controlled `409
+  CONTINUATION_IN_PROGRESS` while another request owns the claim.
+- Existing pending continuations no longer invoke Market Intelligence a second
+  time, preventing duplicate downstream generation.
+- Added strict nonblank/max-200 `Idempotency-Key` validation at both the
+  Market Intelligence controller and application service boundaries.
+- Added Trading Core collision coverage, Market Intelligence key validation
+  coverage, and an application-level regression proving pipeline opportunity
+  version 3 is forwarded unchanged into the exact planning request.
+
+Validation after these corrections:
+
+- Trading Core focused continuation/controller tests: PASS.
+- Market Intelligence focused generation, exact-version, and planning tests:
+  PASS.
+- Trading Core full Maven suite: PASS on the final run.
+- Market Intelligence full Maven suite: PASS on the final run.
+- `git diff --check`: PASS.
+
+The repository has not been committed. Human review and Story acceptance remain
+required before changing the Story status.

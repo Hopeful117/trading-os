@@ -58,10 +58,14 @@ public class TradePlanningConfiguration {
     }
     @Bean TradePlanApplicationService tradePlanApplicationService(
             TradePlanningEngine engine, TradePlanRepository repository,
-            TradePlanLifecyclePolicy lifecycle, TradePlanEventPublisher events,
-            TradePlanningMetrics metrics, Clock clock) {
+             TradePlanLifecyclePolicy lifecycle, TradePlanEventPublisher events,
+             TradePlanningMetrics metrics, Clock clock,
+             ManualTradePlanIdempotencyRepository manualIdempotency,
+             ManualTradePlanFingerprintFactory manualFingerprints,
+             ManualTradePlanCreationTransaction manualCreation) {
         return new TradePlanApplicationService(
-                engine, repository, lifecycle, events, metrics, clock);
+                engine, repository, lifecycle, events, metrics, clock,
+                manualIdempotency, manualFingerprints, manualCreation);
     }
     @Bean TradePlanReplanningService tradePlanReplanningService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,
@@ -74,9 +78,12 @@ public class TradePlanningConfiguration {
     }
     @Bean TradePlanRiskHandoffService tradePlanRiskHandoffService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,
-            TradePlanRiskValidationBoundary lifecycle,
-            RiskValidationAcknowledgmentRepository acknowledgments, Clock clock) {
+             TradePlanRiskValidationBoundary lifecycle,
+             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
+             com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository opportunities,
+             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository strategyMatches) {
         return new TradePlanRiskHandoffService(
-                plans, contexts, lifecycle, acknowledgments, clock, UUID::randomUUID);
+                plans, contexts, lifecycle, acknowledgments, clock, UUID::randomUUID,
+                opportunities, strategyMatches);
     }
 }

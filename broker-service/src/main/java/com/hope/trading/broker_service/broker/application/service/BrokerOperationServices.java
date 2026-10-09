@@ -4,7 +4,9 @@ import com.hope.trading.broker_service.broker.domain.capability.BrokerCapabiliti
 import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerAuthorizationException;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import com.hope.trading.broker_service.broker.infrastructure.monitoring.BrokerOperationsMetrics;
+import com.hope.trading.broker_service.broker.application.registry.BrokerProviderRegistry;
 import com.hope.trading.broker_service.connection.application.BrokerConnectionRepository;
+import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import java.util.*;
 import org.slf4j.Logger;import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -22,26 +24,44 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
     @Service public static final class CancelOrderService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final com.hope.trading.broker_service.connection.application.BrokerConnectionRepository connections;public CancelOrderService(BrokerProviderResolver p,BrokerOperationsMetrics m,com.hope.trading.broker_service.connection.application.BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public void cancel(UUID id,String order,UUID ownerId){requireOwnership(connections,id,ownerId);metrics.record("cancel",()->require(providers.resolve(id),OrderCapability.class).cancel(id,order));}}
     @Service public static final class ReconcileExecutionService {private static final Logger log=LoggerFactory.getLogger(ReconcileExecutionService.class);private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final com.hope.trading.broker_service.connection.application.BrokerConnectionRepository connections;public ReconcileExecutionService(BrokerProviderResolver p,BrokerOperationsMetrics m,com.hope.trading.broker_service.connection.application.BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public ReconciliationResult reconcile(ReconciliationRequest r,UUID ownerId){log.info("broker_reconciliation providerAccount={} attempt={}",r.brokerAccountId(),r.executionAttemptId());requireOwnership(connections,r.brokerAccountId(),ownerId);return metrics.record("reconciliation",()->require(providers.resolve(r.brokerAccountId()),ReconciliationCapability.class).reconcile(r));}}
     @Service public static class GetRiskSnapshotService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final BrokerConnectionRepository connections;public GetRiskSnapshotService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public RiskSnapshot get(UUID ownerId,UUID id,java.time.Instant from,java.time.Instant to){Objects.requireNonNull(ownerId,"ownerId");Objects.requireNonNull(from,"from");Objects.requireNonNull(to,"to");if(!from.isBefore(to))throw new IllegalArgumentException("from must be before to");if(connections.findByBrokerAccountIdAndOwnerId(id,ownerId).isEmpty())throw new BrokerAuthorizationException("Broker account is not accessible");return metrics.record("risk_snapshot",()->require(providers.resolve(id),RiskSnapshotCapability.class).snapshot(id,from,to));}}
-    @Service public static final class GetTechnicalCapabilitiesService {
+     @Service public static class GetTechnicalCapabilitiesService {
         private final BrokerProviderResolver providers;
         private final BrokerOperationsMetrics metrics;
         private final BrokerConnectionRepository connections;
         public GetTechnicalCapabilitiesService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}
-        public TechnicalCapabilities get(UUID ownerId,UUID id,String instrument){
-            requireOwnership(connections,id,ownerId);
-            return metrics.record("capabilities",()->require(providers.resolve(id),TechnicalCapability.class).capabilities(id,instrument));
-        }
-    }
-    @Service public static final class PreviewMarginService {
+         public TechnicalCapabilities get(UUID ownerId,UUID id,String instrument){
+             requireOwnership(connections,id,ownerId);
+             return metrics.record("capabilities",()->require(providers.resolve(id),TechnicalCapability.class).capabilities(id,instrument));
+         }
+     }
+     @Service public static class GetProviderTechnicalCapabilitiesService {
+         private final BrokerProviderRegistry providers;
+         private final BrokerOperationsMetrics metrics;
+         public GetProviderTechnicalCapabilitiesService(BrokerProviderRegistry p,BrokerOperationsMetrics m){providers=p;metrics=m;}
+         public TechnicalCapabilities get(BrokerProviderId provider, UUID accountId, String instrument){
+             return metrics.record("provider_capabilities",()->require(providers.resolve(provider),TechnicalCapability.class)
+                     .capabilities(accountId,instrument));
+         }
+     }
+     @Service public static class PreviewMarginService {
         private final BrokerProviderResolver providers;
         private final BrokerOperationsMetrics metrics;
         private final BrokerConnectionRepository connections;
         public PreviewMarginService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}
-        public MarginPreview preview(MarginPreviewRequest request,UUID ownerId){
-            requireOwnership(connections,request.brokerAccountId(),ownerId);
-            return metrics.record("margin_preview",()->require(providers.resolve(request.brokerAccountId()),MarginCapability.class).preview(request));
-        }
-    }
+         public MarginPreview preview(MarginPreviewRequest request,UUID ownerId){
+             requireOwnership(connections,request.brokerAccountId(),ownerId);
+             return metrics.record("margin_preview",()->require(providers.resolve(request.brokerAccountId()),MarginCapability.class).preview(request));
+         }
+     }
+     @Service public static class PreviewProviderMarginService {
+         private final BrokerProviderRegistry providers;
+         private final BrokerOperationsMetrics metrics;
+         public PreviewProviderMarginService(BrokerProviderRegistry p,BrokerOperationsMetrics m){providers=p;metrics=m;}
+         public MarginPreview preview(BrokerProviderId provider, MarginPreviewRequest request){
+             return metrics.record("provider_margin_preview",()->require(providers.resolve(provider),MarginCapability.class)
+                     .preview(request));
+         }
+     }
 
     @Service public static final class ResolveTargetService {
         private static final Logger log = LoggerFactory.getLogger(ResolveTargetService.class);

@@ -13,7 +13,7 @@ page. LIVE creation retains its existing credential-validation behavior.
 |---|---|
 | Trading Core focused broker-account tests | 21 passed |
 | Trading Core complete suite | 516 passed |
-| Angular complete test suite | 293 passed |
+| Angular complete test suite | 391 passed |
 | Angular production build | Passed with existing bundle-budget warnings |
 | Prettier | Passed |
 | `git diff --check` | Passed |
@@ -25,11 +25,12 @@ IDE configuration, investigation documents, and other Trading Core tests. They
 remain uncommitted and must not be included automatically in a Story 0037
 commit.
 
-## Remaining Review Items
+## Closure Notes
 
-- Confirm the DTO field ordering and API compatibility in human review.
-- Confirm that the separate trading-account/broker-account resolution remains
-  the intended execution UX.
-- Review the exact staged file set before any future commit.
+- The DTO field ordering and API compatibility were reviewed within Story scope.
+- The separate trading-account/broker-account resolution remains intentionally
+  unchanged and outside this Story's scope.
+- The exact Story file set must still be selected manually if a commit is made;
+  unrelated worktree changes remain untouched.
 
-`ENGINEERING_STATUS = READY_FOR_HUMAN_REVIEW`
+`ENGINEERING_STATUS = CLOSED - HUMAN_ACCEPTED - COMMIT_PENDING`

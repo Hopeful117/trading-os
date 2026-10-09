@@ -137,6 +137,8 @@ public class StrategyEvaluationContextFactory {
         } else if (key.equals("TREND_CONTEXT_VALID")) {
             boolean valid = observation.status()
                     == com.hope.trading.market_intelligence.domain.observation.ObservationStatus.ACTIVE
+                    && (observation.validFrom() == null
+                            || !observation.validFrom().isAfter(evaluatedAt))
                     && observation.validUntil().map(evaluatedAt::isBefore).orElse(true)
                     && !content.cutOffAt().isAfter(evaluatedAt);
             builder.input(required, StrategyEvaluationContext.SemanticValue.string(Boolean.toString(valid)));

@@ -88,10 +88,6 @@ public class ExecutionController {
         var recovered=recovery.recoverOne(new ExecutionIntentId(id));
         return ResponseEntity.ok(toEnrichedDto(recovered));
     }
-    @PostMapping("/recovery") public ResponseEntity<List<ExecutionDto>> recover(){
-        return ResponseEntity.ok(recovery.recoverAll().stream()
-                .map(this::toEnrichedDto).toList());
-    }
     private ExecutionDto toEnrichedDto(
             com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent intent){
         return ExecutionDto.from(intent,

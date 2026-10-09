@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - VALIDATION COMPLETE; ACCOUNT-SPECIFIC CAPABILITY LIMITATION`
+`IMPLEMENTED - BROKER CAPABILITY FILTERING INTEGRATED; RUNTIME VALIDATED`
 
 ## Scope Delivered
 
@@ -19,6 +19,12 @@
 * Reset selected market state when the account changes.
 * Added explicit account, context, empty-market, and error states.
 * Added frontend navigation and focused backend/frontend tests.
+* Added a Trading Core account-owned batch capability contract backed by the
+  broker-neutral Story 0051 technical capability facts.
+* Applied capability availability and MARKET-order support to Decision Context
+  eligibility with deterministic fail-closed reasons.
+* Preserved the existing Market Data authority for catalogue, tradability, and
+  market-fact readiness.
 
 ## Validation
 
@@ -27,27 +33,25 @@
 * Angular production build succeeded.
 * Targeted account-context backend tests: `6` tests passed.
 * Targeted account-context frontend tests: `6` tests passed.
+* Targeted broker-capability query tests: `2` tests passed.
+* Targeted Market Intelligence capability eligibility tests: `2` tests passed.
 * Targeted Prettier check passed.
 * `git diff --check` passed.
 
 The Angular build still reports existing bundle and stylesheet budget warnings;
 they do not fail the build.
 
-## Known Limitation
+## Capability Boundary
 
-The current repository does not yet expose complete broker/instrument
-capability facts for account-specific market differentiation. The implementation
-therefore applies the authoritative facts currently available:
-
-* selected account ownership;
-* global market catalogue membership;
-* global market tradability.
-
-Full account-specific broker capability filtering remains dependent on Story
-`0051` and is not invented by this Story.
+Decision Context now consumes the authoritative Story 0051 technical capability
+facts through Trading Core. Missing, stale, ownership-invalid, or unsupported
+MARKET-order capability facts exclude the market deterministically.
 
 ## Runtime Evidence
 
-No authenticated multi-account runtime walkthrough was available during this
-implementation. Backend ownership is delegated to Trading Core and covered by
-the existing account lookup boundary plus negative resolution tests.
+An authenticated multi-account runtime walkthrough was completed with two
+disposable local PAPER accounts. The account-scoped Decision Workspace resolved
+the first account, and switching accounts cleared the previous market URL state
+before resolving the second account. Backend ownership remains delegated to
+Trading Core and is also covered by the account lookup boundary, capability
+ownership lookup, and negative resolution tests.

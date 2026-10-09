@@ -108,6 +108,14 @@ class StrategyEvaluationTest {
                 .input(b, StrategyEvaluationContext.SemanticValue.instant(NOW))
                 .build();
         assertThat(different.digest()).isNotEqualTo(first.digest());
+
+        var differentType = StrategyEvaluationContext.builder()
+                .marketId(MARKET).instrument("ETH/USD")
+                .timeframe(StrategyApplicability.Timeframe.M15).evaluatedAt(NOW)
+                .input(a, StrategyEvaluationContext.SemanticValue.string("1.5"))
+                .input(b, StrategyEvaluationContext.SemanticValue.instant(NOW))
+                .build();
+        assertThat(differentType.digest()).isNotEqualTo(first.digest());
     }
 
     @Test

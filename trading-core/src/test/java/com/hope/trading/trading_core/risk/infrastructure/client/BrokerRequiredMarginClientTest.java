@@ -33,7 +33,7 @@ class BrokerRequiredMarginClientTest {
         when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
         when(capabilities.get(broker.id(), "BTC/USD")).thenReturn(new BrokerTechnicalCapabilities(
                 broker.id(), "KRAKEN", "BTC/USD", 1, NOW.minus(Duration.ofMinutes(6)),
-                List.of("MARKET"), List.of(BigDecimal.ONE)));
+                 List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
 
         BrokerRequiredMarginClient client = new BrokerRequiredMarginClient(margin, capabilities, brokers, accounts,
                 Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5));
@@ -73,7 +73,7 @@ class BrokerRequiredMarginClientTest {
         when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
         when(capabilities.get(broker.id(), "BTC/USD")).thenReturn(new BrokerTechnicalCapabilities(
                 broker.id(), "KRAKEN", "BTC/USD", 1, NOW.minusSeconds(30),
-                List.of("MARKET"), List.of(BigDecimal.ONE)));
+                 List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
         when(margin.preview(eq(broker.id()), any())).thenReturn(new BrokerMarginPreview(
                 broker.id(), "BTC/USD", new BigDecimal("100"), "USD", "KRAKEN:MARGIN_PREVIEW", 1,
                 NOW.minus(Duration.ofMinutes(6))));
@@ -102,24 +102,79 @@ class BrokerRequiredMarginClientTest {
     }
 
     @Test
-    void derivesPaperMarginLocallyWithoutCallingBrokerService() {
+    void resolvesPaperMarginThroughTheAuthoritativeBrokerPreview() {
         UUID owner = UUID.randomUUID();
         BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "paper", NOW);
-        var account = com.hope.trading.trading_core.model.Account.builder().accountId(UUID.randomUUID())
-                .brokerAccountId(broker.id()).baseCurrency("USD").equity(new BigDecimal("1000")).build();
         BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
         AccountRepository accounts = mock(AccountRepository.class);
         BrokerMarginFeignClient margin = mock(BrokerMarginFeignClient.class);
         BrokerTechnicalCapabilitiesFeignClient capabilities = mock(BrokerTechnicalCapabilitiesFeignClient.class);
         when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
-        when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
+        when(capabilities.getByProvider("KRAKEN", broker.id(), "BTC/USD")).thenReturn(new BrokerTechnicalCapabilities(
+                broker.id(), "KRAKEN", "BTC/USD", 1, NOW,
+                List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
+        when(margin.previewByProvider(eq("KRAKEN"), any())).thenReturn(new BrokerMarginPreview(
+                broker.id(), "BTC/USD", new BigDecimal("100"), "USD", "KRAKEN_ASSET_PAIRS_MARGIN", 1, NOW));
+
+        BrokerRequiredMarginClient client = new BrokerRequiredMarginClient(margin, capabilities, brokers, accounts,
+                Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5));
+
+        Optional<RequiredMarginPort.Fact> result = client.resolve(new RequiredMarginPort.Request(broker.id(), "BTC/USD", "LONG",
+                new BigDecimal("2"), new BigDecimal("100"), NOW));
+        verify(capabilities).getByProvider("KRAKEN", broker.id(), "BTC/USD");
+        verify(margin).previewByProvider(eq("KRAKEN"), any());
+        assertThat(result)
+                .contains(new RequiredMarginPort.Fact(new BigDecimal("100"), "USD",
+                        "KRAKEN_ASSET_PAIRS_MARGIN", 1, NOW));
+    }
+
+    @Test
+    void rejectsPreviewWithMismatchedIdentityOrMissingProvenance() {
+        BrokerAccount broker = BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN,
+                ExecutionMode.LIVE, "live", NOW);
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        BrokerMarginFeignClient margin = mock(BrokerMarginFeignClient.class);
+        BrokerTechnicalCapabilitiesFeignClient capabilities = mock(BrokerTechnicalCapabilitiesFeignClient.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(capabilities.get(broker.id(), "BTC/USD")).thenReturn(new BrokerTechnicalCapabilities(
+                broker.id(), "KRAKEN", "BTC/USD", 1, NOW,
+                 List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
+        when(margin.preview(eq(broker.id()), any())).thenReturn(new BrokerMarginPreview(
+                UUID.randomUUID(), "ETH/USD", new BigDecimal("100"), "", "", 1, NOW));
 
         BrokerRequiredMarginClient client = new BrokerRequiredMarginClient(margin, capabilities, brokers, accounts,
                 Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5));
 
         assertThat(client.resolve(new RequiredMarginPort.Request(broker.id(), "BTC/USD", "LONG",
-                new BigDecimal("2"), new BigDecimal("100"), NOW))).get()
-                .satisfies(fact -> assertThat(fact.amount()).isEqualByComparingTo("200"));
-        verifyNoInteractions(margin, capabilities);
+                BigDecimal.ONE, new BigDecimal("100"), NOW))).isEmpty();
+    }
+
+    @Test
+    void rejectsInvalidRequestBeforeCallingBroker() {
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        BrokerMarginFeignClient margin = mock(BrokerMarginFeignClient.class);
+        BrokerTechnicalCapabilitiesFeignClient capabilities = mock(BrokerTechnicalCapabilitiesFeignClient.class);
+        BrokerRequiredMarginClient client = new BrokerRequiredMarginClient(margin, capabilities, brokers, accounts,
+                Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5));
+
+        assertThat(client.resolve(new RequiredMarginPort.Request(UUID.randomUUID(), "BTC/USD", "LONG",
+                BigDecimal.ZERO, new BigDecimal("100"), NOW))).isEmpty();
+        verifyNoInteractions(brokers, capabilities, margin);
+    }
+
+    @Test
+    void rejectsUnknownDirectionBeforeCallingBroker() {
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        BrokerMarginFeignClient margin = mock(BrokerMarginFeignClient.class);
+        BrokerTechnicalCapabilitiesFeignClient capabilities = mock(BrokerTechnicalCapabilitiesFeignClient.class);
+        BrokerRequiredMarginClient client = new BrokerRequiredMarginClient(margin, capabilities, brokers, accounts,
+                Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5));
+
+        assertThat(client.resolve(new RequiredMarginPort.Request(UUID.randomUUID(), "BTC/USD", "SHORTSELL",
+                BigDecimal.ONE, new BigDecimal("100"), NOW))).isEmpty();
+        verifyNoInteractions(brokers, capabilities, margin);
     }
 }

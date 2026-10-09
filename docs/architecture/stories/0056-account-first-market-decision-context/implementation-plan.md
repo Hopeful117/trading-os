@@ -27,6 +27,7 @@ Choose the smallest contract that supports:
 * effective profile references/status;
 * eligible markets;
 * excluded markets and reasons;
+ * authoritative broker/instrument capability facts where available;
 * resolution timestamp.
 
 The contract must not expose secrets or require frontend interpretation of raw
@@ -51,9 +52,15 @@ Cover:
 * non-tradable market is excluded;
 * account-incompatible market is excluded when authoritative facts support the
   decision;
+* stale, unavailable, or unsupported broker MARKET-order capability is excluded
+  with a deterministic reason;
 * duplicate requested markets do not duplicate results;
 * no Risk Domain invocation occurs;
 * existing Active Scan behavior remains compatible.
+
+Trading Core exposes the account-owned batch capability contract backed by Story
+0051. Market Intelligence consumes only the neutral response and never calls
+Broker Service directly.
 
 ## Step 4 - Implement Angular Account-First State
 

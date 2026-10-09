@@ -6,7 +6,7 @@
 
 **Title:** Trigger an Active Market Scan from Trading OS Web
 
-**Status:** Approved
+**Status:** CLOSED - HUMAN ACCEPTED
 
 ---
 

@@ -62,7 +62,7 @@ public final class MarketStructureAnalysisCapability implements Capability {
                             new ArtifactCacheKey(new ArtifactIdentity(ProductionArtifactTypes.MARKET_STRUCTURE.value(),
                             CAPABILITY_ID, CAPABILITY_VERSION),
                             ArtifactScope.publicMarket(mapped.marketId(), series.interval(), AnalysisExecutionMode.ACTIVE),
-                            new ArtifactFingerprint(result.parameterFingerprint()),
+                            ArtifactFingerprint.ofInputs(List.of(result.parameterFingerprint(), series.interval())),
                             new ArtifactFingerprint(result.inputFingerprint())),
                     new MarketStructureArtifactContent(result, result.cutOffAt(), result.inputFingerprint()),
                     ArtifactFreshness.validUntil(result.cutOffAt(),

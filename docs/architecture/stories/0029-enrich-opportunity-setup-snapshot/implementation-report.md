@@ -77,3 +77,15 @@ Unchanged — score remains observation-confidence×100 (=100 for all current op
 ## Price-based invalidation
 
 Not implemented. The snapshot now provides the data substrate (reference price + timestamp) that a future contextual invalidation engine would compare against.
+
+## Closure Validation
+
+Revalidated from the current repository state:
+
+* `cd market-intelligence && mvn -q test` — passed.
+* The frontend validation recorded for the current sequence passes with 47 test files and 391 tests, followed by a successful production build.
+* `git diff --check` — passed.
+
+The documented Docker and runtime evidence remains historical evidence from the
+implementation validation; no new runtime scan was required to close this
+unchanged implementation.

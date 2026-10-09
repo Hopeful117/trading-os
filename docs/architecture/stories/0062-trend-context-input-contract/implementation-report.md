@@ -26,9 +26,9 @@
 ## Validation Evidence
 
 ```text
-Market Data: 97 tests passed
-Market Intelligence: 364 tests passed
-Focused Trend Context tests: 13 tests passed
+Market Data: 147 tests passed
+Market Intelligence: 497 tests passed
+Focused Trend Context tests: 63 tests passed
 Focused wire contract tests: 2 tests passed
 git diff --check: passed
 ```
@@ -47,7 +47,24 @@ production orchestration are Story 0064 scope. Their absence is not a Story
 No pivot, structure, regime, EMA, ATR, observation, strategy, opportunity, Risk,
 TradePlan, execution, UI, ML or LLM behavior was added.
 
+## Review Corrections Validated
+
+* Assessment-time validation rejects candles after `assessmentAt` with an
+  explicit `FUTURE_CANDLE` finding.
+* Profile validation keeps `BIAS` and `SETUP` required while allowing optional
+  `TRIGGER` and does not require a `TRIGGER` definition when
+  `triggerRequired=false`.
+* Role-map key and declared role mismatches are rejected explicitly.
+ * Conflicting duplicate provenance now compares source identity, source
+   occurrence time and fetch time.
+ * Canonical Trend Context fixtures now use interval-correct historical times,
+   including valid stale and future-candle scenarios.
+* Role-series and candle identity, interval compatibility and source-reference
+  consistency are validated at the domain boundary.
+* Freshness metadata, including availability flags, participates in the input
+  fingerprint.
+
 ## Remaining Story 0062 Work
 
-None identified. Human code review and the human commit remain outside the
-implementation pass.
+None identified. Independent code review passed with no confirmed or material
+blocking findings. Human commit remains pending.

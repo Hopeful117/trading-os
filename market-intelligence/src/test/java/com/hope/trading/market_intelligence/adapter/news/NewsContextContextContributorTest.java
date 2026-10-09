@@ -38,12 +38,12 @@ class NewsContextContextContributorTest {
         Instant now = Instant.parse("2026-10-05T10:00:00Z");
         when(client.findContext(marketId)).thenReturn(new NewsClient.NewsContextResponse(
                 "AVAILABLE",
-                List.of(new NewsClient.NewsEventResponse(UUID.randomUUID(), "CPI", "ECONOMIC",
-                        now, null, List.of("EUR"), "HIGH", "SCHEDULED", "Calendar", now,
-                        now, "v1")),
-                List.of(new NewsClient.NewsItemResponse(UUID.randomUUID(), "Headline", "Summary",
+                List.of(new NewsClient.NewsEventResponse(UUID.randomUUID(), "xoomar", "BLS", "event-1",
+                        "CPI", "ECONOMIC", now, null, List.of("EUR"), "HIGH", "SCHEDULED",
+                        "3.0", "3.1", null, "%", now, now, "v1")),
+                List.of(new NewsClient.NewsItemResponse(UUID.randomUUID(), "wire", "item-1", "Headline", "Summary",
                         "https://example.test/news", now, "Publisher", List.of("macro"),
-                        List.of("EUR"), "MEDIUM", "Wire", now, now, "v1")),
+                        List.of("EUR"), "MEDIUM", now, now, "v1")),
                 now, now, null));
 
         ContextSection section = new NewsContextContextContributor(client).contribute(
@@ -53,6 +53,10 @@ class NewsContextContextContributorTest {
         NewsContext context = (NewsContext) section.payload();
         assertThat(context.events()).hasSize(1);
         assertThat(context.news()).hasSize(1);
+        assertThat(context.events().getFirst().source()).isEqualTo("BLS");
+        assertThat(context.events().getFirst().sourceEventId()).isEqualTo("event-1");
+        assertThat(context.events().getFirst().unit()).isEqualTo("%");
+        assertThat(context.news().getFirst().sourceItemId()).isEqualTo("item-1");
         assertThat(context.news().getFirst().canonicalUrl()).isEqualTo("https://example.test/news");
     }
 
@@ -82,5 +86,26 @@ class NewsContextContextContributorTest {
                 new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE, "context"));
 
         assertThat(section.status()).isEqualTo(ContextSectionStatus.UNAVAILABLE);
+    }
+
+    @Test
+    void preservesUnsupportedAndIncompleteStatuses() {
+        NewsClient client = mock(NewsClient.class);
+        UUID marketId = UUID.randomUUID();
+        when(client.findContext(marketId)).thenReturn(new NewsClient.NewsContextResponse(
+                "UNSUPPORTED", null, null, null, null, "Provider is not supported"));
+
+        ContextSection section = new NewsContextContextContributor(client).contribute(
+                new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE, "context"));
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.UNSUPPORTED);
+
+        when(client.findContext(marketId)).thenReturn(new NewsClient.NewsContextResponse(
+                "INCOMPLETE", null, null, null, null, "Provider returned incomplete facts"));
+
+        ContextSection incomplete = new NewsContextContextContributor(client).contribute(
+                new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE, "context"));
+
+        assertThat(incomplete.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
     }
 }

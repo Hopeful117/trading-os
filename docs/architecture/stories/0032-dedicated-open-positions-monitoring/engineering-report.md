@@ -18,6 +18,14 @@ The implementation extracts shared position projection logic into `PositionQuery
 
 **Key semantic invariant preserved:** This Story is strictly read-only position monitoring. No broker-mutating controls exist. Positions remain broker-authoritative external state.
 
+## Closure Status
+
+**CLOSED — HUMAN ACCEPTED**
+
+The current validation sequence passed Trading Core tests, Angular tests, the
+Angular production build, and `git diff --check`. The existing bundle budget
+warnings remain non-blocking and unrelated to this Story.
+
 ---
 
 ## Original Problem

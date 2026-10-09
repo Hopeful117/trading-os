@@ -20,12 +20,14 @@ class AnalysisTradePlanGenerationServiceTest {
     private final TradePlanningProfileService profiles = mock(TradePlanningProfileService.class);
     private final AnalysisTradePlanContinuationRepository continuations =
             mock(AnalysisTradePlanContinuationRepository.class);
+    private final AnalysisTradePlanContinuationClaimService continuationClaims =
+            mock(AnalysisTradePlanContinuationClaimService.class);
     private final MarketIntelligenceTradePlanningClient client =
             mock(MarketIntelligenceTradePlanningClient.class);
     private final Instant now = Instant.parse("2026-08-01T12:00:00Z");
     private final AnalysisTradePlanGenerationService service =
             new AnalysisTradePlanGenerationService(
-                    accounts, profiles, continuations, client,
+                    accounts, profiles, continuations, continuationClaims, client,
                     Clock.fixed(now, ZoneOffset.UTC));
 
     @Test
@@ -43,8 +45,14 @@ class AnalysisTradePlanGenerationServiceTest {
         when(continuations.findByAnalysisExecutionIdAndActorIdAndAccountIdAndIdempotencyKey(
                 analysisId, actorId, accountId, "key-1"))
                 .thenAnswer(ignored -> Optional.ofNullable(persisted.get()));
-        when(continuations.saveAndFlush(any())).thenAnswer(invocation -> {
-            persisted.set(invocation.getArgument(0)); return invocation.getArgument(0);
+        when(continuationClaims.create(any(), any(), any(), any(), any(), anyLong(),
+                any(), any(), anyLong(), any())).thenAnswer(invocation -> {
+            AnalysisTradePlanContinuationEntity value = AnalysisTradePlanContinuationEntity.pending(
+                    invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2),
+                    invocation.getArgument(3), invocation.getArgument(4), invocation.getArgument(5),
+                    invocation.getArgument(6), invocation.getArgument(7), invocation.getArgument(8),
+                    invocation.getArgument(9));
+            persisted.set(value); return value;
         });
         when(continuations.save(any())).thenAnswer(invocation -> {
             persisted.set(invocation.getArgument(0)); return invocation.getArgument(0);
@@ -65,6 +73,31 @@ class AnalysisTradePlanGenerationServiceTest {
         assertThat(command.getValue().context().riskBudget().sourceId()).isEqualTo(profileId);
         assertThat(command.getValue().context().riskBudget().sourceVersion()).isEqualTo(3);
         assertThat(command.getValue().context().preferences().version()).isEqualTo(3);
+    }
+
+    @Test
+    void concurrentClaimReturnsControlledInProgressWithoutCallingDownstreamTwice() {
+        UUID actorId = UUID.randomUUID(); UUID accountId = UUID.randomUUID();
+        UUID analysisId = UUID.randomUUID(); UUID profileId = UUID.randomUUID();
+        User user = User.builder().userId(actorId).build();
+        Account account = Account.builder().accountId(accountId).user(user)
+                .name("Primary").baseCurrency("USD").build();
+        TradePlanningProfile profile = profile(profileId, actorId);
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        when(profiles.effective(actorId, accountId)).thenReturn(profile);
+        when(continuations.findByAnalysisExecutionIdAndActorIdAndAccountIdAndIdempotencyKey(
+                analysisId, actorId, accountId, "key-1"))
+                .thenReturn(Optional.empty(), Optional.of(AnalysisTradePlanContinuationEntity.pending(
+                        analysisId, actorId, accountId, "key-1", UUID.randomUUID(), 1,
+                        now, profileId, profile.version(), now)));
+        when(continuationClaims.create(any(), any(), any(), any(), any(), anyLong(),
+                any(), any(), anyLong(), any()))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("race"));
+
+        assertThatThrownBy(() -> service.generate(actorId, analysisId, accountId, "key-1"))
+                .isInstanceOf(AnalysisTradePlanGenerationException.class)
+                .extracting("code").isEqualTo("CONTINUATION_IN_PROGRESS");
+        verifyNoInteractions(client);
     }
 
     @Test

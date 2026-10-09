@@ -41,5 +41,6 @@ public record TradePlanRiskSnapshot(
             Set<String> invalidationConditions
     ) { }
 
-    public record Opportunity(UUID id, long version) { }
+    public record Opportunity(UUID id, long version, UUID strategyMatchId,
+                              UUID strategyId, Integer strategyVersion) { }
 }

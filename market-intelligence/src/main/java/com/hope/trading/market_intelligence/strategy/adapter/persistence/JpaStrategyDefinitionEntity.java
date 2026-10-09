@@ -30,6 +30,9 @@ public class JpaStrategyDefinitionEntity {
     @Column(name = "description")
     private String description;
 
+    @Column(name = "scenario", nullable = false, length = 200)
+    private String scenario;
+
     @Column(name = "operational_status", nullable = false, length = 30)
     private String operationalStatus;
 
@@ -106,6 +109,10 @@ public class JpaStrategyDefinitionEntity {
     public String getDescription() { return description; }
 
     public void setDescription(String description) { this.description = description; }
+
+    public String getScenario() { return scenario; }
+
+    public void setScenario(String scenario) { this.scenario = scenario; }
 
     public String getOperationalStatus() { return operationalStatus; }
 

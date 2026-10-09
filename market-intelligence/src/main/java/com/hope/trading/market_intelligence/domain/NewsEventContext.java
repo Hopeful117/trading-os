@@ -6,6 +6,9 @@ import java.util.UUID;
 
 public record NewsEventContext(
         UUID id,
+        String sourceName,
+        String source,
+        String sourceEventId,
         String title,
         String category,
         Instant scheduledAt,
@@ -13,7 +16,10 @@ public record NewsEventContext(
         List<String> currencies,
         String impact,
         String status,
-        String sourceName,
+        String previousValue,
+        String consensusValue,
+        String actualValue,
+        String unit,
         Instant sourceUpdatedAt,
         Instant fetchedAt,
         String normalizationVersion

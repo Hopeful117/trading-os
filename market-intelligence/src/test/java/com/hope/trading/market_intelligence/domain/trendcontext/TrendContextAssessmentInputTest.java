@@ -73,6 +73,32 @@ class TrendContextAssessmentInputTest {
     }
 
     @Test
+    void rejectsProfilesWithOptionalRequiredRolesOrUndefinedRequiredTrigger() {
+        EnumMap<TrendContextRole, TrendContextRoleDefinition> optionalBias = roles("4H", "1H");
+        optionalBias.put(TrendContextRole.BIAS, new TrendContextRoleDefinition(
+                TrendContextRole.BIAS, "4H", Duration.ofHours(4), false, 1, 1));
+        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(optionalBias))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("BIAS and SETUP roles are required");
+
+        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(
+                "1.0.0", roles("4H", "1H"), true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Required TRIGGER must be defined");
+    }
+
+    @Test
+    void rejectsRoleDefinitionWhoseDeclaredRoleDiffersFromProfileKey() {
+        EnumMap<TrendContextRole, TrendContextRoleDefinition> invalid = roles("4H", "1H");
+        invalid.put(TrendContextRole.BIAS, new TrendContextRoleDefinition(
+                TrendContextRole.SETUP, "1H", Duration.ofHours(1), true, 1, 1));
+
+        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(invalid))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match profile key");
+    }
+
+    @Test
     void rejectsInvalidRoleParameters() {
         assertThatThrownBy(() -> new TrendContextRoleDefinition(
                 TrendContextRole.BIAS, "4H", Duration.ZERO, true, 1, 1))
@@ -129,6 +155,75 @@ class TrendContextAssessmentInputTest {
     }
 
     @Test
+    void rejectsFutureCandleAfterAssessmentTime() {
+        TrendContextCandle future = candle("1H", "100", "105", "95", "102", true, false,
+                "future", ASSESSMENT_AT.plusSeconds(1), ASSESSMENT_AT.plus(Duration.ofHours(1)), FETCHED_AT);
+
+        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"), future))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("FUTURE_CANDLE");
+    }
+
+    @Test
+    void rejectsRoleSeriesWhoseIdentityDiffersFromMapKey() {
+        EnumMap<TrendContextRole, TrendContextRoleSeries> roles = new EnumMap<>(TrendContextRole.class);
+        roles.put(TrendContextRole.BIAS, series(TrendContextRole.SETUP,
+                List.of(realCandle("bias", "4H")), CUTOFF_AT));
+        roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP,
+                List.of(realCandle("setup", "1H")), CUTOFF_AT));
+
+        assertThatThrownBy(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+                MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, CUTOFF_AT,
+                profile(), "rules-1", roles)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ROLE_IDENTITY_MISMATCH");
+    }
+
+    @Test
+    void rejectsCandlesWhoseIntervalDiffersFromTheRoleSeries() {
+        EnumMap<TrendContextRole, TrendContextRoleSeries> roles = new EnumMap<>(TrendContextRole.class);
+        roles.put(TrendContextRole.BIAS, series(TrendContextRole.BIAS,
+                List.of(realCandle("bias", "4H")), CUTOFF_AT));
+        roles.put(TrendContextRole.SETUP, seriesWithMetadata(TrendContextRole.SETUP,
+                List.of(realCandle("setup", "15M")), CUTOFF_AT,
+                "1H", MARKET_ID, "KRAKEN", "BTC/EUR", true, true));
+
+        assertThatThrownBy(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+                MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, CUTOFF_AT,
+                profile(), "rules-1", roles)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("CANDLE_IDENTITY_MISMATCH");
+    }
+
+    @Test
+    void rejectsRoleSourceIdentityThatDiffersFromTopLevelInput() {
+        EnumMap<TrendContextRole, TrendContextRoleSeries> roles = new EnumMap<>(TrendContextRole.class);
+        roles.put(TrendContextRole.BIAS, seriesWithMetadata(TrendContextRole.BIAS,
+                List.of(realCandle("bias", "4H")), CUTOFF_AT,
+                "4H", UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "KRAKEN", "BTC/EUR", true, true));
+        roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP,
+                List.of(realCandle("setup", "1H")), CUTOFF_AT));
+
+        assertThatThrownBy(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+                MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, CUTOFF_AT,
+                profile(), "rules-1", roles)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SOURCE_IDENTITY_MISMATCH");
+    }
+
+    @Test
+    void rejectsDuplicateCandlesWithDifferentProvenance() {
+        TrendContextCandle first = realCandle("duplicate-a", "1H");
+        TrendContextCandle second = candle("1H", "100", "105", "95", "102", true, false,
+                "duplicate-b", first.openTime(), first.closeTime(), FETCHED_AT);
+
+        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"), List.of(first, second)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("DUPLICATE_CONFLICT");
+    }
+
+    @Test
     void recordsInsufficientEligibleHistoryAsNonBlockingFinding() {
         TrendContextProfile profile = profile(2, "1.0.0");
         TrendContextAssessmentInput input = input(profile, realCandle("bias", "4H"),
@@ -142,10 +237,16 @@ class TrendContextAssessmentInputTest {
 
     @Test
     void fingerprintIsStableAcrossMapAndCandleOrdering() {
+        TrendContextCandle setupB = candle("1H", "100", "105", "95", "102", true, false,
+                "setup-b", CUTOFF_AT.minus(Duration.ofHours(2)),
+                CUTOFF_AT.minus(Duration.ofHours(1)), FETCHED_AT);
         TrendContextAssessmentInput first = input(profile(), realCandle("bias", "4H"),
-                List.of(realCandle("setup-a", "1H"), realCandle("setup-b", "1H")));
+                List.of(realCandle("setup-a", "1H"), setupB));
         TrendContextAssessmentInput second = inputWithRoleOrder(profile(),
-                List.of(realCandle("setup-b", "1H"), realCandle("setup-a", "1H")), true,
+                List.of(candle("1H", "100", "105", "95", "102", true, false,
+                                "setup-b", CUTOFF_AT.minus(Duration.ofHours(2)),
+                                CUTOFF_AT.minus(Duration.ofHours(1)), FETCHED_AT),
+                        realCandle("setup-a", "1H")), true,
                 realCandle("bias", "4H"));
 
         assertThat(first.fingerprint()).isEqualTo(second.fingerprint());
@@ -180,6 +281,24 @@ class TrendContextAssessmentInputTest {
                 .isNotEqualTo(base);
         assertThat(input(profile(), realCandle("bias", "4H"), realCandle("setup", "1H"),
                 CUTOFF_AT, "rules-2", profile(1, "1.0.0")).fingerprint()).isNotEqualTo(base);
+
+        EnumMap<TrendContextRole, TrendContextRoleDefinition> triggerRoles = roles("4H", "1H");
+        triggerRoles.put(TrendContextRole.TRIGGER, new TrendContextRoleDefinition(
+                TrendContextRole.TRIGGER, "15M", Duration.ofMinutes(15), false, 1, 2));
+        TrendContextProfile optionalTriggerProfile = TrendContextProfile.conservativeSwingV1(triggerRoles);
+        assertThat(input(optionalTriggerProfile, realCandle("bias", "4H"), realCandle("setup", "1H"))
+                .fingerprint()).isNotEqualTo(base);
+
+        EnumMap<TrendContextRole, TrendContextRoleSeries> freshnessRoles = new EnumMap<>(TrendContextRole.class);
+        freshnessRoles.put(TrendContextRole.BIAS, series(TrendContextRole.BIAS,
+                List.of(realCandle("bias", "4H")), CUTOFF_AT));
+        freshnessRoles.put(TrendContextRole.SETUP, seriesWithMetadata(TrendContextRole.SETUP,
+                List.of(realCandle("setup", "1H")), CUTOFF_AT,
+                "1H", MARKET_ID, "KRAKEN", "BTC/EUR", false, false));
+        String alteredFreshness = TrendContextAssessmentInput.accept(
+                new TrendContextAssessmentInput.Values(MARKET_ID, "KRAKEN", "BTC/EUR",
+                        ASSESSMENT_AT, CUTOFF_AT, profile(), "rules-1", freshnessRoles)).fingerprint();
+        assertThat(alteredFreshness).isNotEqualTo(base);
     }
 
     private TrendContextAssessmentInput input(
@@ -268,7 +387,43 @@ class TrendContextAssessmentInputTest {
             List<TrendContextCandle> candles,
             Instant cutoff
     ) {
-        TrendContextCandle first = candles.getFirst();
+        TrendContextCandle first = candles.stream()
+                .min(java.util.Comparator.comparing(TrendContextCandle::openTime))
+                .orElseThrow();
+        List<String> exclusions = new ArrayList<>();
+        List<TrendContextGapFinding> gaps = new ArrayList<>();
+        for (TrendContextCandle candle : candles) {
+            if (!candle.closed()) exclusions.add(candle.sourceId() + ":OPEN_CANDLE_EXCLUDED");
+            if (candle.synthetic()) {
+                exclusions.add(candle.sourceId() + ":SYNTHETIC_DATA_EXCLUDED");
+                gaps.add(new TrendContextGapFinding(role, "SYNTHETIC_DATA_EXCLUDED",
+                        candle.openTime(), candle.closeTime(), "Synthetic candle excluded"));
+            }
+            if (candle.closeTime().isAfter(cutoff)) {
+                exclusions.add(candle.sourceId() + ":CUTOFF_EXCLUDED");
+            }
+        }
+        return seriesWithMetadata(role, candles, cutoff, first.interval(), MARKET_ID,
+                first.provider(), first.symbol(), true, true);
+    }
+
+    private TrendContextRoleSeries seriesWithMetadata(
+            TrendContextRole role,
+            List<TrendContextCandle> candles,
+            Instant cutoff,
+            String interval,
+            UUID sourceMarketId,
+            String sourceProvider,
+            String sourceSymbol,
+            boolean roleAvailable,
+            boolean eligibleEvidencePresent
+    ) {
+        TrendContextCandle first = candles.stream()
+                .min(java.util.Comparator.comparing(TrendContextCandle::openTime))
+                .orElseThrow();
+        TrendContextCandle last = candles.stream()
+                .max(java.util.Comparator.comparing(TrendContextCandle::openTime))
+                .orElseThrow();
         List<String> exclusions = new ArrayList<>();
         List<TrendContextGapFinding> gaps = new ArrayList<>();
         for (TrendContextCandle candle : candles) {
@@ -283,12 +438,13 @@ class TrendContextAssessmentInputTest {
             }
         }
         return TrendContextRoleSeries.of(new TrendContextRoleSeries.Values(
-                role, first.interval(), candles, exclusions, gaps,
-                new TrendContextSourceReference("market-data", first.provider(), MARKET_ID,
-                        first.symbol(), role, first.interval(), first.openTime(), first.openTime(),
+                role, interval, candles, exclusions, gaps,
+                new TrendContextSourceReference("market-data", sourceProvider, sourceMarketId,
+                        sourceSymbol, role, interval, first.openTime(), first.openTime(),
                         first.sourceOccurredAt(), first.fetchedAt(), "snapshot", "digest"),
                 new TrendContextFreshness(Duration.ofHours(1), first.closeTime(),
-                        first.sourceOccurredAt(), first.fetchedAt(), ASSESSMENT_AT, true, true), cutoff));
+                        first.sourceOccurredAt(), first.fetchedAt(), ASSESSMENT_AT,
+                        roleAvailable, eligibleEvidencePresent), cutoff));
     }
 
     private TrendContextProfile profile() { return profile(1, "1.0.0"); }

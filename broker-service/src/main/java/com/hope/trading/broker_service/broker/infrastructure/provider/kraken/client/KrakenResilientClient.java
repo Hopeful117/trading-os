@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Qualifier;import org.springf
 
 @Primary @Component
 public final class KrakenResilientClient implements KrakenProviderClient, BrokerProviderHealth {
-    private static final java.util.Set<String> SAFE_READS=java.util.Set.of("/0/private/Balance","/0/private/OpenPositions","/0/private/OpenOrders","/0/private/ClosedOrders","/0/private/TradeBalance","/0/private/TradesHistory","/0/private/Ledgers");
+    private static final java.util.Set<String> SAFE_READS=java.util.Set.of("/0/public/AssetPairs","/0/private/Balance","/0/private/OpenPositions","/0/private/OpenOrders","/0/private/ClosedOrders","/0/private/TradeBalance","/0/private/TradesHistory","/0/private/Ledgers");
     private final KrakenProviderClient delegate;private final Clock clock;private final Semaphore bulkhead=new Semaphore(20);
     private final int readMaxAttempts,requestsPerSecond;private long rateWindowSecond=-1;private int rateWindowRequests;
     private final AtomicInteger consecutiveFailures=new AtomicInteger();private volatile Instant openUntil=Instant.EPOCH;
@@ -25,6 +25,15 @@ public final class KrakenResilientClient implements KrakenProviderClient, Broker
             catch(BrokerUnavailableException failure){if(attempt>=attempts)throw failure;}
         }
         catch(BrokerUnavailableException failure){if(consecutiveFailures.incrementAndGet()>=5)openUntil=clock.instant().plusSeconds(30);throw failure;}
+        finally{bulkhead.release();}
+    }
+    public JsonNode publicGet(String path,Map<String,String> parameters){
+        if(clock.instant().isBefore(openUntil))throw new BrokerUnavailableException("Kraken circuit breaker is open",null);
+        if(!bulkhead.tryAcquire())throw new BrokerUnavailableException("Kraken communication bulkhead is full",null);
+        try{
+            for(int attempt=1;;attempt++)try{acquireRatePermit();JsonNode result=delegate.publicGet(path,parameters);consecutiveFailures.set(0);return result;}
+            catch(BrokerUnavailableException failure){if(attempt>=readMaxAttempts)throw failure;}
+        }catch(BrokerUnavailableException failure){if(consecutiveFailures.incrementAndGet()>=5)openUntil=clock.instant().plusSeconds(30);throw failure;}
         finally{bulkhead.release();}
     }
     private synchronized void acquireRatePermit(){

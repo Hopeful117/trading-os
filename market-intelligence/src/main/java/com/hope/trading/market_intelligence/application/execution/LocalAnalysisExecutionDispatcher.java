@@ -3,11 +3,13 @@ package com.hope.trading.market_intelligence.application.execution;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionDispatcher;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 import com.hope.trading.market_intelligence.application.pipeline.ProductionIntelligencePipeline;
+import com.hope.trading.market_intelligence.application.observation.TrendContextObservationService;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.IntelligenceExecutionStatus;
 import com.hope.trading.market_intelligence.domain.execution.*;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.time.Instant;
@@ -25,6 +27,7 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
     private final CapabilityAnalysisCoordinator coordinator;
     private final ExecutorService executor;
     private final ProductionIntelligencePipeline pipeline;
+    private final TrendContextObservationService trendContextObservations;
     private final ConcurrentMap<UUID, Future<?>> tasks = new ConcurrentHashMap<>();
 
     public LocalAnalysisExecutionDispatcher(
@@ -33,9 +36,21 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
             ProductionIntelligencePipeline pipeline,
             @Qualifier("analysisExecutionDispatcherExecutor") ExecutorService executionDispatcher
     ) {
+        this(repository, coordinator, pipeline, null, executionDispatcher);
+    }
+
+    @Autowired
+    public LocalAnalysisExecutionDispatcher(
+            AnalysisExecutionRepository repository,
+            CapabilityAnalysisCoordinator coordinator,
+            ProductionIntelligencePipeline pipeline,
+            TrendContextObservationService trendContextObservations,
+            @Qualifier("analysisExecutionDispatcherExecutor") ExecutorService executionDispatcher
+    ) {
         this.repository = repository;
         this.coordinator = coordinator;
         this.pipeline = pipeline;
+        this.trendContextObservations = trendContextObservations;
         this.executor = executionDispatcher;
     }
 
@@ -65,6 +80,10 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
             }
             transition(executionId, AnalysisExecutionStatus.RUNNING);
             ConsolidatedIntelligence result = coordinator.analyze(executionId, request);
+            if (trendContextObservations != null) {
+                trendContextObservations.buildIfAssessmentExists(
+                        executionId, request.marketId().toString());
+            }
             repository.findById(executionId)
                     .filter(execution -> !execution.status().isTerminal())
                     .map(execution -> execution.complete(
@@ -79,9 +98,7 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
         } catch (AnalysisContextUnavailableException exception) {
             repository.findById(executionId)
                     .filter(execution -> !execution.status().isTerminal())
-                    .map(execution -> execution.transitionTo(
-                            AnalysisExecutionStatus.FAILED, Instant.now()
-                    ))
+                    .map(execution -> execution.fail(exception.code(), Instant.now()))
                     .ifPresent(repository::save);
         } catch (RuntimeException exception) {
             repository.findById(executionId)

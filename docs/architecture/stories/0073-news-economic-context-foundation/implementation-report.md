@@ -27,6 +27,19 @@ Intelligence integration.
   and service-JWT validation tests.
 - Kept production provider integration disabled by default with an explicit
   `UNAVAILABLE` context result.
+- Added explicit provider availability propagation for `UNSUPPORTED` and
+  `INCOMPLETE` states through News Service and Market Intelligence.
+- Replaced delimiter-ambiguous source identities with length-prefixed identity
+  inputs and added collision-boundary tests.
+- Preserved event and news provenance fields in the Market Intelligence NEWS
+  context contract.
+- Made public economic-event attribution configuration-driven by normalized
+  `sourceName` rather than hardcoded to one provider.
+- Updated the production analysis coordinator to consume each strategy's full
+  baseline context requirements, including the active strategy's optional
+  `NEWS` section.
+- Rejected blank source names and source identifiers before deterministic ID
+  generation.
 
 ## Validation
 
@@ -39,6 +52,14 @@ Executed successfully:
 - `docker compose config --quiet` with non-secret test environment values.
 - `git diff --check`.
 
+Additional correction validation:
+
+- `mvn test` in `news-service`: 40 tests passed.
+- `mvn test` in `market-intelligence`: 468 tests passed.
+- `git diff --check` after the correction set.
+- The production coordinator requirement test verifies that the active
+  strategy's `NEWS` context is requested.
+
 ## Limits
 
 - No production news or economic-calendar provider has been selected or
@@ -48,3 +69,14 @@ Executed successfully:
 - No frontend news presentation is included.
 - Live News data remains unavailable until a later provider integration Story
   enables `NEWS_PROVIDER_ENABLED` and supplies a `NewsSourcePort` adapter.
+
+## Documentation Reconciliation
+
+The implementation report records the correction set. Runtime configuration now
+contains provider attribution mappings, and the provider-neutral contracts now
+carry explicit availability and provenance states.
+
+## Vault Outcome
+
+The vault was not consulted because this correction set concerns repository
+contracts and service boundaries only. No vault action is proposed.

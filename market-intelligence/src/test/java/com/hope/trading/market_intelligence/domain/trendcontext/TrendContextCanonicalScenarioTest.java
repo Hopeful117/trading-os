@@ -16,8 +16,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TrendContextCanonicalScenarioTest {
     private static final UUID MARKET = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final Instant START = Instant.parse("2026-09-20T00:00:00Z");
-    private static final Instant ASSESSMENT = START.plus(Duration.ofHours(79));
-    private static final Instant CUTOFF = ASSESSMENT;
+    private static final Instant ASSESSMENT = START.plus(Duration.ofHours(80));
+    private static final Instant CUTOFF = ASSESSMENT.minusNanos(1);
 
     @Test
     void scenario01AlignedUp() {
@@ -367,9 +367,12 @@ class TrendContextCanonicalScenarioTest {
             }
             if (mode == Mode.ABNORMAL_ATR && i == count - 2) { high = bd("500"); low = bd("1"); close = bd("100"); }
             boolean synthetic = mode == Mode.SYNTHETIC && i == 10;
-            Instant open = START.plus(Duration.ofHours(i));
-            Instant closeTime = open.plus(Duration.ofHours(1));
-            if (mode == Mode.STALE && i == count - 1) closeTime = ASSESSMENT.minus(Duration.ofHours(3));
+            Duration intervalDuration = prefix.equals("trigger") ? Duration.ofMinutes(15)
+                    : prefix.equals("bias") ? Duration.ofHours(4) : Duration.ofHours(1);
+            Instant anchor = mode == Mode.STALE
+                    ? ASSESSMENT.minus(Duration.ofHours(3)) : ASSESSMENT;
+            Instant open = anchor.minus(intervalDuration.multipliedBy(count - i));
+            Instant closeTime = open.plus(intervalDuration);
             result.add(new TrendContextCandle("KRAKEN", "BTC/EUR", prefix.equals("trigger") ? "15M" : prefix.equals("bias") ? "4H" : "1H", open, closeTime, close, high, low, close, BigDecimal.TEN, true, synthetic, prefix + '-' + i, closeTime, closeTime));
         }
         return result;

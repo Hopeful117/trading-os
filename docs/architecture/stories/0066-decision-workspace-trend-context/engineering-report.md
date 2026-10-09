@@ -58,15 +58,9 @@ Result: 2 test files passed, 29 tests passed.
 npm run test:ci
 ```
 
-Result: 336 tests passed and 9 existing tests failed in:
-
-- `src/app/core/services/token.service.spec.ts`;
-- `src/app/app.spec.ts`;
-- `src/app/layout/shell/shell.spec.ts`.
-
-The failures are caused by `localStorage` being unavailable in the current
-jsdom environment. They occur in existing TokenService/application-shell tests,
-not in Story 0066 code. No unrelated tests were weakened or modified.
+Result: 402 tests passed across 47 test files. The previously observed
+`localStorage` failures were not reproduced in the current validation run.
+No unrelated tests were weakened or modified.
 
 ### Production build
 
@@ -99,7 +93,7 @@ Result: passed.
 - [x] Targeted tests pass.
 - [x] Production build completes.
 - [x] `git diff --check` passes.
-- [ ] Full frontend test suite is green; blocked by pre-existing jsdom `localStorage` failures documented above.
+- [x] Full frontend test suite is green.
 
 ## Known Limitations and Deferred Work
 
@@ -109,9 +103,15 @@ Result: passed.
 - The backend model does not expose a dedicated `why` string; supplied findings
   and provenance are rendered instead.
 - Existing production budget warnings remain.
-- The full frontend suite requires a separate test-environment correction for
-  `localStorage`.
+- The full frontend suite is green; existing bundle and component-style budget
+  warnings remain.
 - Story 0067 remains separate.
 - Market Structure, SwingPoint, TrendLine, new deterministic calculations,
   strategy validation, backtesting, AI/ML, and execution changes remain out of
   scope.
+
+## Review Outcome
+
+Independent review passed with no blocker or major defect. Story 0066 is closed
+after validating authority labels, historical provenance, reactive selection
+behavior, and accessible selection state.

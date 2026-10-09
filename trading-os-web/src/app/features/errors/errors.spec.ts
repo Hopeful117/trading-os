@@ -44,6 +44,8 @@ describe('Errors', () => {
     expect(component.status).toBe(401);
     expect(component.title).toBe('Session expirée');
     expect(component.message).toBe('Votre session a expiré, veuillez vous reconnecter.');
+    expect(fixture.nativeElement.querySelector('a')?.textContent).toContain('Se reconnecter');
+    expect(fixture.nativeElement.querySelector('a')?.getAttribute('routerLink')).toBe('/login');
   });
 
   it('should show 403 error with specific message', () => {
@@ -51,6 +53,7 @@ describe('Errors', () => {
     expect(component.status).toBe(403);
     expect(component.title).toBe('Accès refusé');
     expect(component.message).toContain('permissions');
+    expect(fixture.nativeElement.querySelector('a')?.getAttribute('routerLink')).toBe('/dashboard');
   });
 
   it('should show 404 error with specific message', () => {

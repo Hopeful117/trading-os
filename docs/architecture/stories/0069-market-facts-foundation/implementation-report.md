@@ -28,8 +28,8 @@ implementing Candidate Selection, ranking, strategy, Risk, or execution.
   `GET /internal/v1/market-facts/{marketId}`
 - Preserved the existing OHLC endpoint behavior by delegating it to normalized
   snapshot output.
-- Updated Story 0069 status to `Audit remediation implemented - human review
-  required`.
+- Updated Story 0069 status to `READY FOR HUMAN CLOSURE` after the authenticated
+  runtime revalidation completed.
 
 ## Boundaries and Failure Semantics
 
@@ -105,12 +105,21 @@ were preserved and not included in this implementation scope.
 - Confirm deployment secret provisioning before enabling
   `market-intelligence` as an authorized Market Facts caller.
 - Confirm the internal contract parameters before Story 0070 consumes them.
-- Complete runtime Kraken sandbox/deployed validation when the environment is
-  available.
-- Complete human code review and commit when approved.
+- Human acceptance is now recorded; the human Git commit remains pending under
+  the repository workflow.
 
-Runtime validation was subsequently executed against live Kraken data. It found
-that the current open candle is counted as a readiness cadence violation and
-recorded an unresolved PEPE arithmetic reconciliation discrepancy. See
-`runtime-validation.md`; Story 0069 is not ready for closure until those runtime
-findings are resolved.
+## Runtime Follow-up
+
+The latest authenticated runtime revalidation in `runtime-validation.md`
+confirmed available readiness for all four sampled Kraken markets, correct
+open-candle exclusion, freshness classification, cache reuse and refresh, quote
+domain separation, and absence of trading side effects. The PEPE adjacent-read
+difference remains `STILL_INCONCLUSIVE` because the public contract does not
+expose the exact provider snapshot used by the calculation. It is retained as a
+follow-up observation and does not block human closure.
+
+## Documentation Outcome
+
+Documentation update: the Story status and implementation state were reconciled
+with the latest runtime evidence. No additional API or operational documentation
+was required.

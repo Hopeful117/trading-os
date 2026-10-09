@@ -19,7 +19,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.Base64;
 
 @Repository
 public class JpaStrategyDefinitionRepository implements StrategyDefinitionRepository {
@@ -33,11 +35,22 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
 
     @Override
     public StrategyDefinition save(StrategyDefinition definition) {
-        JpaStrategyDefinitionEntity entity = new JpaStrategyDefinitionEntity();
+        JpaStrategyDefinitionEntity.Pk key = new JpaStrategyDefinitionEntity.Pk(
+                definition.strategyId().value(), definition.version());
+        JpaStrategyDefinitionEntity entity = jpa.findById(key).map(existing -> {
+            StrategyDefinition persisted = toDomain(existing);
+            if (!sameSemantics(persisted, definition)) {
+                throw new IllegalArgumentException(
+                        "strategy semantics are immutable for " + definition.strategyId()
+                                + " version " + definition.version());
+            }
+            return existing;
+        }).orElseGet(JpaStrategyDefinitionEntity::new);
         entity.setStrategyId(definition.strategyId().value());
         entity.setVersion(definition.version());
         entity.setName(definition.name());
         entity.setDescription(definition.description());
+        entity.setScenario(definition.scenario());
         entity.setOperationalStatus(definition.operationalStatus().name());
         entity.setValidationStatus(definition.validationStatus().name());
         entity.setDirection(definition.direction().name());
@@ -53,6 +66,20 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
         entity.setCreatedAt(definition.createdAt());
         entity.setUpdatedAt(definition.updatedAt());
         return toDomain(jpa.save(entity));
+    }
+
+    private static boolean sameSemantics(StrategyDefinition left, StrategyDefinition right) {
+        return left.strategyId().equals(right.strategyId())
+                && left.version() == right.version()
+                && Objects.equals(left.name(), right.name())
+                && Objects.equals(left.description(), right.description())
+                && Objects.equals(left.scenario(), right.scenario())
+                && left.direction() == right.direction()
+                && Objects.equals(left.applicability(), right.applicability())
+                && Objects.equals(left.requiredInputs(), right.requiredInputs())
+                && Objects.equals(left.parameters(), right.parameters())
+                && Objects.equals(left.researchRef(), right.researchRef())
+                && Objects.equals(left.createdAt(), right.createdAt());
     }
 
     @Override
@@ -81,6 +108,7 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
                 entity.getVersion(),
                 entity.getName(),
                 entity.getDescription(),
+                entity.getScenario(),
                 StrategyOperationalStatus.valueOf(entity.getOperationalStatus()),
                 ValidationStatus.valueOf(entity.getValidationStatus()),
                 entity.getValidationEvidenceRef(),
@@ -97,7 +125,7 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
     }
 
     private static String join(java.util.Set<String> values) {
-        return values == null || values.isEmpty() ? null : String.join(SEPARATOR, values);
+        return values == null || values.isEmpty() ? "" : String.join(SEPARATOR, values);
     }
 
     private static java.util.Set<String> split(String raw) {
@@ -127,15 +155,11 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
         return new RequiredSemanticInput(type, encoded.substring(separatorIndex + 1));
     }
 
-    /**
-     * Deterministic parameter encoding: {@code name|TYPE|value} entries joined
-     * by newline. DECIMAL and DURATION values are stored in their canonical
-     * string form so persistence never loses semantics.
-     */
+    /** Versioned, delimiter-safe parameter encoding for persisted semantics. */
     static String serializeParameters(StrategyParameters parameters) {
-        return parameters.values().stream()
-                .map(parameter -> parameter.name() + "|"
-                        + parameter.type() + "|" + canonicalValue(parameter))
+        return "v2\n" + parameters.values().stream()
+                .map(parameter -> encode(parameter.name()) + "|"
+                        + parameter.type() + "|" + encode(canonicalValue(parameter)))
                 .collect(Collectors.joining("\n"));
     }
 
@@ -143,20 +167,36 @@ public class JpaStrategyDefinitionRepository implements StrategyDefinitionReposi
         if (raw == null || raw.isBlank()) {
             return StrategyParameters.empty();
         }
+        boolean versioned = raw.startsWith("v2\n");
+        String encoded = versioned ? raw.substring(3) : raw;
+        if (encoded.isBlank()) {
+            return StrategyParameters.empty();
+        }
         List<StrategyParameter> parsed = new ArrayList<>();
-        for (String line : raw.split("\n")) {
+        for (String line : encoded.split("\n")) {
             String[] parts = line.split("\\|", 3);
             StrategyParameter.ParameterType type =
                     StrategyParameter.ParameterType.valueOf(parts[1]);
+            String name = versioned ? decode(parts[0]) : parts[0];
+            String valueText = versioned ? decode(parts[2]) : parts[2];
             Object value = switch (type) {
-                case DECIMAL -> new BigDecimal(parts[2]);
-                case INTEGER -> Long.parseLong(parts[2]);
-                case STRING -> parts[2];
-                case DURATION -> Duration.parse(parts[2]);
+                case DECIMAL -> new BigDecimal(valueText);
+                case INTEGER -> Long.parseLong(valueText);
+                case STRING -> valueText;
+                case DURATION -> Duration.parse(valueText);
             };
-            parsed.add(new StrategyParameter(parts[0], type, value));
+            parsed.add(new StrategyParameter(name, type, value));
         }
         return new StrategyParameters(parsed);
+    }
+
+    private static String encode(String value) {
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static String decode(String value) {
+        return new String(Base64.getUrlDecoder().decode(value), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private static String canonicalValue(StrategyParameter parameter) {

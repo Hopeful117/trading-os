@@ -4,7 +4,7 @@
 
 **ID:** `0051`
 **Title:** Expose broker capabilities and margin facts through broker-neutral contracts
-**Status:** Draft
+**Status:** CLOSED - HUMAN REVIEWED, COMMITTED AND PAPER RUNTIME VALIDATED
 
 ---
 
@@ -55,18 +55,18 @@ must not authorize a trade or own PAPER position state.
 
 ## Acceptance Criteria
 
-* [ ] Broker Service exposes broker-neutral capability contracts.
-* [ ] Provider-specific payloads do not cross the Broker Service boundary.
-* [ ] Capabilities are resolved from provider and instrument identity.
-* [ ] Supported leverage levels are returned explicitly and versioned.
-* [ ] Market Data remains authoritative for instrument metadata and constraints.
-* [ ] Margin preview returns amount, currency, source ID, version, and timestamp.
-* [ ] PAPER and LIVE use the same capability contract.
-* [ ] Capability and margin reads use Trading Core service authentication.
-* [ ] Missing or stale data produces a technical unavailable result.
-* [ ] Broker Service does not make a business risk decision.
-* [ ] Contract and integration tests pass.
-* [ ] `git diff --check` passes.
+* [x] Broker Service exposes broker-neutral capability contracts.
+* [x] Provider-specific payloads do not cross the Broker Service boundary.
+* [x] Capabilities are resolved from provider and instrument identity.
+* [x] Supported leverage levels are returned explicitly and versioned.
+* [x] Market Data remains authoritative for instrument metadata and constraints.
+* [x] Margin preview returns amount, currency, source ID, version, and timestamp.
+* [x] PAPER and LIVE use the same capability contract.
+* [x] Capability and margin reads use Trading Core service authentication.
+* [x] Missing or stale data produces a technical unavailable result.
+* [x] Broker Service does not make a business risk decision.
+* [x] Contract and integration tests pass.
+* [x] `git diff --check` passes.
 
 ## Related ADRs
 
@@ -85,11 +85,11 @@ must not authorize a trade or own PAPER position state.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved.
-* [ ] Implementation Plan approved.
-* [ ] Contracts and provider adapters implemented.
-* [ ] Security and ownership boundaries tested.
-* [ ] Affected tests pass.
-* [ ] Human code review completed.
-* [ ] Engineering Report completed.
-* [ ] Human commit created.
+* [x] Repository Analysis approved.
+* [x] Implementation Plan approved.
+* [x] Contracts and provider adapters implemented.
+* [x] Security and ownership boundaries tested.
+* [x] Affected tests pass.
+* [x] Human code review completed.
+* [x] Engineering Report completed.
+* [x] Human commit created.

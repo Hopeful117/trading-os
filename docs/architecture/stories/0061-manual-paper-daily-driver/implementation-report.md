@@ -38,6 +38,8 @@ close, close reload, and trade-history continuity.
 
 * `MarketValuationClient` now refreshes the quote-to-reporting conversion market
   for each proposed instrument.
+* `MarketValuationClient` now also refreshes required conversion markets for
+  asset-only valuations used by risk-day start and closed-P&L calculations.
 * Risk evaluation uses the authoritative current instrument source price for
   MARKET orders when no limit entry price exists.
 * Execution-time Risk revalidation uses the same authoritative current price
@@ -47,6 +49,8 @@ close, close reload, and trade-history continuity.
   It never starts a second Risk evaluation or creates a second Intent.
 * Execution summaries expose TradePlan version so recovery cannot select an
   Intent from another plan version.
+* Recovery tests verify exact TradePlan version matching and reject an
+  authorized Intent belonging to another plan version.
 
 ## Duplicate Risk Root Cause
 
@@ -74,11 +78,17 @@ plan to that existing Intent.
 MarketValuationClientTest, TradePlanRiskEvaluationServiceTest: passed
 MarketValuationClientTest, TradePlanRiskEvaluationServiceTest,
 ExecutionTimeRiskRevalidationServiceTest: passed
-PlanPage: 10 tests passed
+PlanPage: 11 tests passed
+Trading Core: 584 tests passed
+Angular: 402 tests passed
 Trading Core compile: passed
 Angular production build: passed with existing bundle/style budget warnings
 git diff --check: passed
 ```
+
+The boundary tests cover asset-only conversion refresh, exact execution Intent
+version matching, and fail-closed MARKET pricing when the authoritative source
+price is absent during both initial and execution-time Risk evaluation.
 
 ## Runtime Acceptance
 

@@ -13,17 +13,21 @@ unvalidated initial state. Therefore the production governance gate prevents it
 from producing a live match until a separate validation and activation decision
 is made.
 
+The evidence selector now requires `AVAILABLE` operational status, fresh BIAS
+and SETUP role assessments, and source references for both required roles.
+Degraded, unavailable, stale, or incomplete typed evidence is rejected before
+strategy evaluation.
+
 ## Verification
 
 Focused strategy and pipeline tests pass, including legacy strategy behavior,
 builtin bootstrap behavior, typed strategy outcomes, missing evidence handling,
-and context provenance. The complete Market Intelligence Maven test suite also
-passes. `git diff --check` passes.
+degraded/incomplete Trend Context evidence, and context provenance. The complete
+Market Intelligence Maven test suite also passes. `git diff --check` passes.
 
-## Human Review
+## Closure Record
 
-- Review the unstaged diff, especially the new typed input names and conservative
-  criteria.
-- Confirm the desired governance process before any future enablement or
-  validation of `Conservative Trend Following V1`.
-- No commit, push, merge, or Story 0066 implementation was performed.
+Independent review passed the typed input boundary, provenance preservation,
+governance filtering, and legacy compatibility. The Conservative Trend
+Following V1 strategy remains disabled and unvalidated; no enablement decision
+is implied by this closure.

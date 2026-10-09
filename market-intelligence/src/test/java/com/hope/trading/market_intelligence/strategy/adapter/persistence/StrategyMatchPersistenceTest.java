@@ -6,6 +6,9 @@ import com.hope.trading.market_intelligence.strategy.application.StrategyMatchPe
 import com.hope.trading.market_intelligence.strategy.domain.ConditionResult;
 import com.hope.trading.market_intelligence.strategy.domain.MatchedDirection;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluation;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyEvidenceProvenance;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyId;
+import com.hope.trading.market_intelligence.strategy.domain.StrategyMatch;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -76,6 +79,27 @@ class StrategyMatchPersistenceTest {
                         new BigDecimal("469.88").toPlainString()));
         // context digest round-trips exactly as produced by the evaluator
         assertThat(match.contextDigest()).isEqualTo(result.match().contextDigest());
+    }
+
+    @Test
+    void provenanceRoundTripsAndLegacyRowsRemainNullable() {
+        UUID lineage = UUID.randomUUID();
+        StrategyEvidenceProvenance provenance = new StrategyEvidenceProvenance(
+                OBSERVATION, lineage, 3, MATCHED.minusSeconds(30),
+                "profile-v1", "rule-v2", "input-fingerprint", "assessment-fingerprint");
+        StrategyMatch original = StrategyMatch.rehydrate(
+                UUID.randomUUID(), new StrategyId(STRATEGY), 1, MARKET, UUID.randomUUID(),
+                OBSERVATION, MatchedDirection.LONG, "provenance-digest",
+                List.of(new ConditionResult("c", true, "1")), provenance,
+                MATCHED, MATCHED.plusSeconds(1));
+
+        repository.save(original);
+        StrategyMatch reloaded = repository.findById(original.matchId()).orElseThrow();
+        assertThat(reloaded.provenance()).isEqualTo(provenance);
+
+        var legacy = persister.persist(evaluation(5000), ANALYSIS, OBSERVATION).orElseThrow();
+        assertThat(repository.findById(legacy.match().matchId()).orElseThrow().provenance())
+                .isNull();
     }
 
     @Test

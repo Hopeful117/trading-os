@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.when;
 
 class MarketPriceSnapshotServiceTest {
@@ -53,7 +55,7 @@ class MarketPriceSnapshotServiceTest {
         publisher.publish(new TickerEvent(
                 availableId, MarketProvider.KRAKEN, "BTC/USD",
                 new BigDecimal("99"), new BigDecimal("101"),
-                new BigDecimal("100"), BigDecimal.ONE, Instant.now()
+                 new BigDecimal("100"), BigDecimal.ONE, Instant.parse("2026-08-01T12:00:00Z")
         ));
 
         var result = service.findSnapshots(List.of(availableId, missingId, unknownId));
@@ -63,7 +65,7 @@ class MarketPriceSnapshotServiceTest {
         assertThat(result.get(0).lastPrice()).isEqualByComparingTo("100");
         assertThat(result.get(0).sourceSnapshotId()).startsWith("ticker:");
         assertThat(result.get(0).sourceSnapshotVersion()).isPositive();
-        assertThat(result.get(0).capturedAt()).isEqualTo(result.get(0).occurredAt());
+         assertThat(result.get(0).capturedAt()).isEqualTo(clock.instant());
         assertThat(result.get(1).status()).isEqualTo(MarketPriceSnapshotStatus.UNAVAILABLE);
         assertThat(result.get(1).tradable()).isFalse();
         assertThat(result.get(2).status()).isEqualTo(MarketPriceSnapshotStatus.UNKNOWN_MARKET);
@@ -188,6 +190,42 @@ class MarketPriceSnapshotServiceTest {
             executor.shutdownNow();
         }
 
+        assertThat(provider.calls).hasValue(1);
+    }
+
+    @Test
+    void futureObservationIsNotFresh() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "ETH/USD", true);
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        publisher.publish(ticker(marketId, "ETH/USD", "100", "102", "101", "2026-08-01T12:05:00Z"));
+        provider.failure = new IllegalStateException("Provider unavailable");
+
+        var result = service.findSnapshots(List.of(marketId)).getFirst();
+
+        assertThat(result.status()).isEqualTo(MarketPriceSnapshotStatus.STALE);
+    }
+
+    @Test
+    void successfulAcquisitionRemainsCachedWhenObservationPersistenceFails() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "ETH/USD", true);
+        PriceObservationRepository failingObservations = mock(PriceObservationRepository.class);
+        doThrow(new IllegalStateException("database unavailable"))
+                .when(failingObservations).save(any());
+        TickerEventPublisher failingPublisher = new TickerEventPublisher(
+                repository, failingObservations, Clock.systemUTC());
+        MarketPriceSnapshotService isolatedService = new MarketPriceSnapshotService(
+                repository, failingPublisher, List.of(provider), clock, Duration.ofSeconds(30));
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        when(repository.findById(marketId)).thenReturn(Optional.of(market));
+        provider.next = Optional.of(ticker(
+                marketId, "ETH/USD", "199", "201", "200", "2026-08-01T12:00:00Z"));
+
+        assertThat(isolatedService.findSnapshots(List.of(marketId)).getFirst().status())
+                .isEqualTo(MarketPriceSnapshotStatus.FRESH);
+        assertThat(isolatedService.findSnapshots(List.of(marketId)).getFirst().status())
+                .isEqualTo(MarketPriceSnapshotStatus.FRESH);
         assertThat(provider.calls).hasValue(1);
     }
 

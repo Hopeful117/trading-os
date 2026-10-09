@@ -62,6 +62,12 @@ public class SimulatedExecutionAdapter implements BrokerExecutionPort {
         }
         MarketPriceSnapshotDto snapshot = priceSnapshots.get(0);
 
+        if (!snapshot.tradable()
+                || snapshot.status() != com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotStatus.FRESH
+                || snapshot.occurredAt() == null) {
+            return new Rejected(null, "MARKET_DATA_UNAVAILABLE");
+        }
+
         // Determine fill price: BUY at ask, SELL at bid
         BigDecimal fillPrice;
         if (request.parameters().side() == ExecutionParameters.Side.BUY) {

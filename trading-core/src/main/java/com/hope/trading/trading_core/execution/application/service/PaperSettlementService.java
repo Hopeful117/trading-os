@@ -80,7 +80,7 @@ public class PaperSettlementService {
         if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT) {
             settleExit(account, intent, fill);
         } else {
-            updateBalances(account, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
+            updateBalances(account, intent, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
             updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
             recalculateEquity(account, fill.fee());
         }
@@ -120,13 +120,14 @@ public class PaperSettlementService {
 
     private void updateExitBalances(Account account, Trade trade, BrokerOrder.Fill fill) {
         String base = extractBaseAsset(trade.getSymbol());
+        String quote = extractQuoteAsset(trade.getSymbol(), account);
         BigDecimal notional = fill.price().multiply(fill.quantity());
         if (trade.getType() == TradeType.BUY) {
             deductBalance(account, base, fill.quantity());
-            addBalance(account, "USD", notional.subtract(fill.fee()));
+            addBalance(account, quote, notional.subtract(fill.fee()));
         } else {
             addBalance(account, base, fill.quantity());
-            deductBalance(account, "USD", notional.add(fill.fee()));
+            deductBalance(account, quote, notional.add(fill.fee()));
         }
     }
 
@@ -138,16 +139,46 @@ public class PaperSettlementService {
         return order.fills().get(order.fills().size() - 1);
     }
 
-    private void updateBalances(Account account, ExecutionParameters.Side side, BigDecimal quantity,
-                                BigDecimal fillPrice, BigDecimal fee, ExecutionParameters params) {
+    private void updateBalances(Account account, ExecutionIntent intent, ExecutionParameters.Side side, BigDecimal quantity,
+                                 BigDecimal fillPrice, BigDecimal fee, ExecutionParameters params) {
         BigDecimal notional = fillPrice.multiply(quantity);
+        String quote = extractQuoteAsset(params.instrument(), account);
 
         if (side == ExecutionParameters.Side.BUY) {
-            deductBalance(account, "USD", notional.add(fee));
+            deductBalance(account, quote, notional.add(fee));
             addBalance(account, extractBaseAsset(params.instrument()), quantity);
         } else {
-            deductBalance(account, extractBaseAsset(params.instrument()), quantity);
-            addBalance(account, "USD", notional.subtract(fee));
+            authorizeShortMargin(account, intent, params, notional);
+            // The negative base balance records borrowed inventory and is settled by
+            // the later BUY exit.
+            deductBalance(account, extractBaseAsset(params.instrument()), quantity, true);
+            addBalance(account, quote, notional.subtract(fee));
+        }
+    }
+
+    private void authorizeShortMargin(Account account, ExecutionIntent intent,
+                                      ExecutionParameters params, BigDecimal notional) {
+        if (intent.riskApproval() == null
+                || (intent.riskApproval().decision() != com.hope.trading.trading_core.execution.domain.model.RiskApprovalReference.Decision.APPROVED
+                && intent.riskApproval().decision() != com.hope.trading.trading_core.execution.domain.model.RiskApprovalReference.Decision.APPROVED_WITH_WARNINGS)) {
+            throw new IllegalStateException("PAPER short margin authorization unavailable");
+        }
+        TradePlanRiskPort.Snapshot plan = resolvePlan(intent);
+        if (plan == null || !"SHORT".equalsIgnoreCase(plan.direction())
+                || !params.instrument().equalsIgnoreCase(plan.instrument())) {
+            throw new IllegalStateException("PAPER short margin authorization unavailable");
+        }
+        if (account.getEquity() == null || account.getEquity().compareTo(notional) < 0) {
+            throw new IllegalStateException("PAPER short margin collateral insufficient");
+        }
+        String quote = extractQuoteAsset(params.instrument(), account);
+        BigDecimal availableCollateral = account.getBalances().stream()
+                .filter(balance -> quote.equals(balance.getAsset()))
+                .map(AccountBalance::getAmount)
+                .findFirst()
+                .orElse(BigDecimal.ZERO);
+        if (availableCollateral.compareTo(notional) < 0) {
+            throw new IllegalStateException("PAPER short margin collateral insufficient");
         }
     }
 
@@ -157,6 +188,17 @@ public class PaperSettlementService {
             return instrument.substring(0, slashIndex);
         }
         return instrument;
+    }
+
+    private String extractQuoteAsset(String instrument, Account account) {
+        int slashIndex = instrument.indexOf('/');
+        if (slashIndex >= 0 && slashIndex < instrument.length() - 1) {
+            String quote = instrument.substring(slashIndex + 1);
+            boolean hasQuoteBalance = account.getBalances().stream()
+                    .anyMatch(balance -> quote.equals(balance.getAsset()));
+            if (hasQuoteBalance) return quote;
+        }
+        return account.getBaseCurrency();
     }
 
     private void updatePosition(Account account, ExecutionIntent intent, ExecutionParameters.Side side, BigDecimal quantity,
@@ -223,11 +265,23 @@ public class PaperSettlementService {
     }
 
     private void deductBalance(Account account, String asset, BigDecimal amount) {
+        deductBalance(account, asset, amount, false);
+    }
+
+    private void deductBalance(Account account, String asset, BigDecimal amount, boolean allowBorrow) {
         Optional<AccountBalance> existing = account.getBalances().stream()
                 .filter(b -> asset.equals(b.getAsset()))
                 .findFirst();
-        if (existing.isPresent()) {
-            existing.get().setAmount(existing.get().getAmount().subtract(amount));
+        if (existing.isEmpty()) {
+            if (allowBorrow) {
+                addBalance(account, asset, amount.negate());
+                return;
+            }
+            throw new IllegalStateException("PAPER balance unavailable: " + asset);
         }
+        if (!allowBorrow && existing.get().getAmount().compareTo(amount) < 0) {
+            throw new IllegalStateException("PAPER balance insufficient: " + asset);
+        }
+        existing.get().setAmount(existing.get().getAmount().subtract(amount));
     }
 }

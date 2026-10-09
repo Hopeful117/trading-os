@@ -11,6 +11,16 @@ ADR-044 boundary, and the real-socket acceptance harness.
 
 ## Findings
 
+### Corrective pass
+
+- Removed the global user-facing execution recovery endpoint.
+- Restricted Market Data synchronization and subscription mutations to service
+  credentials while retaining bounded public GET reads.
+- Disabled Gateway discovery-based route generation.
+- Sanitized `X-Actor-Id` unconditionally at Gateway ingress.
+- Added persisted two-user ownership coverage for Trade reads, account-scoped
+  listing, stop-loss, and take-profit mutation.
+
 ### No blocking finding in the validated slice
 
 The validated Core-to-Broker and Core-to-Market-Intelligence service-auth slice

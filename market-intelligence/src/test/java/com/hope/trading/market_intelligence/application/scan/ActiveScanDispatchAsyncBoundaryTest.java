@@ -84,15 +84,19 @@ class ActiveScanDispatchAsyncBoundaryTest {
                 mock(AnalysisExecutionService.class),
                 scanDispatchExecutor
         );
-        ActiveScanApplicationService service = new ActiveScanApplicationService(
+        ActiveScanCreationTransaction creation = new ActiveScanCreationTransaction(
                 scans,
                 scopeResolution,
                 realAnalysisExecutionService(),
-                new ActiveScanFingerprintFactory(new ObjectMapper()),
                 new ActiveScanChildKeyFactory(),
                 coordinator,
-                mock(ActiveScanReconciliationService.class),
                 clock
+        );
+        ActiveScanApplicationService service = new ActiveScanApplicationService(
+                scans,
+                new ActiveScanFingerprintFactory(new ObjectMapper()),
+                creation,
+                mock(ActiveScanReconciliationService.class)
         );
 
         TransactionSynchronizationManager.initSynchronization();

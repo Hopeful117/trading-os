@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class CapabilityAnalysisCoordinatorTest {
     private final IntelligenceContextAssembler contexts = mock(IntelligenceContextAssembler.class);
@@ -50,6 +51,8 @@ class CapabilityAnalysisCoordinatorTest {
                 .hasMessage("Current market snapshot is unavailable");
         verifyNoInteractions(planner);
         verifyNoInteractions(engine);
+        verify(contexts).assemble(any(), argThat(requirements -> requirements.stream()
+                .anyMatch(requirement -> requirement.sectionType() == ContextSectionType.NEWS)));
     }
 
     @Test
@@ -91,7 +94,8 @@ class CapabilityAnalysisCoordinatorTest {
             public AnalysisExecutionPlan plan(IntelligenceAnalysisRequest request) {
                 return new AnalysisExecutionPlan(
                         List.of("spread-analysis"),
-                        List.of(ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT)),
+                        List.of(ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT),
+                                ContextRequirement.optionalPublic(ContextSectionType.NEWS)),
                         1,
                         Duration.ofSeconds(10)
                 );

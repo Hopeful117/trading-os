@@ -68,7 +68,7 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
 
     private Snapshot snapshot(AnalysisExecution value) {
         return new Snapshot(
-                value.resultQuality().orElse(null), value.executionPolicy(), value.capabilities(),
+                value.resultQuality().orElse(null), value.failureCode().orElse(null), value.executionPolicy(), value.capabilities(),
                 value.retryMetadata(), value.provenance(), value.traceMetadata(),
                 value.result().orElse(null));
     }
@@ -79,7 +79,7 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
                 AnalysisExecutionStatus.valueOf(entity.status), value.resultQuality(),
                 value.policy(), entity.requestedAt, entity.updatedAt, entity.expiresAt,
                 entity.completedAt, value.capabilities(), value.retryMetadata(),
-                value.provenance(), value.traceMetadata(), value.result());
+                value.provenance(), value.traceMetadata(), value.result(), value.failureCode());
     }
     private String write(Object value) {
         try { return mapper.writeValueAsString(value); }
@@ -90,7 +90,7 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
         catch (JsonProcessingException e) { throw new IllegalStateException("Cannot deserialize AnalysisExecution", e); }
     }
     private record Snapshot(
-            AnalysisResultQuality resultQuality, AnalysisExecutionPolicy policy,
+            AnalysisResultQuality resultQuality, String failureCode, AnalysisExecutionPolicy policy,
             List<String> capabilities, RetryMetadata retryMetadata,
             AnalysisExecutionProvenance provenance, AnalysisTraceMetadata traceMetadata,
             ConsolidatedIntelligence result) { }
