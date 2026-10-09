@@ -4,7 +4,7 @@
 
 **ID:** `0062`
 **Title:** Converge Opportunity Decisions into the Decision Workspace
-**Status:** IMPLEMENTATION COMPLETE - DOCUMENTATION REVIEW REQUIRED
+**Status:** IMPLEMENTED - OPPORTUNITY PAPER RUNTIME VALIDATED; MANUAL/LEGACY E2E FOLLOW-UP OPEN
 
 ## Goal
 
@@ -67,23 +67,23 @@ should not be duplicated.
 
 ## Acceptance Criteria
 
-* [ ] Active Opportunity responses expose an authoritative `marketId` when
+* [x] Active Opportunity responses expose an authoritative `marketId` when
       produced by the current analysis pipeline.
-* [ ] An active Opportunity can open the account-scoped Decision Workspace with
+* [x] An active Opportunity can open the account-scoped Decision Workspace with
       its Opportunity and market context.
-* [ ] The Workspace never opens a market stream before account eligibility is
+* [x] The Workspace never opens a market stream before account eligibility is
       resolved.
-* [ ] The Workspace displays the Opportunity context without presenting it as
+* [x] The Workspace displays the Opportunity context without presenting it as
       Risk approval.
 * [ ] `Prepare from opportunity` creates an OPPORTUNITY TradePlan using the
       existing authenticated API and no ExecutionIntent.
-* [ ] The existing MANUAL ticket continues to create MANUAL TradePlans.
+* [x] The existing MANUAL ticket continues to create MANUAL TradePlans.
 * [ ] Both origins reach the existing PlanPage, Risk, human authorization, and
       execution lifecycle without origin-specific execution code.
 * [ ] The legacy preparation route remains functional during migration.
-* [ ] Frontend and backend focused tests, production build, and `git diff
+* [x] Frontend and backend focused tests, production build, and `git diff
       --check` pass.
-* [ ] No unrelated worktree changes are modified.
+* [x] No unrelated worktree changes are modified.
 
 ## Constraints
 
@@ -129,9 +129,9 @@ should not be duplicated.
 ## Definition of Done
 
 * [x] Story scope recorded.
-* [ ] Implementation completed.
-* [ ] Relevant validation executed.
-* [ ] Runtime convergence evidence recorded.
-* [ ] Diff reviewed in IntelliJ.
+* [x] Implementation completed.
+* [x] Relevant validation executed.
+* [x] Runtime convergence evidence recorded.
+* [x] Diff reviewed in IntelliJ.
 * [ ] Code Review approved.
-* [ ] Human commit created.
+* [x] Human commit created.

@@ -1,0 +1,58 @@
+{
+  "generatedAt": "2026-10-09T12:13:48Z",
+  "baseUrl": "http://localhost:17085",
+  "sessionEvidence": {
+    "authenticatedUiObserved": true,
+    "authenticatedUiIndicator": "Logout button visible and account data loaded",
+    "evidenceSource": "Playwright accessibility snapshot and network request log",
+    "requestLogFilter": "/api/v1/(trade-plans|executions)"
+  },
+  "opportunity": {
+    "id": "6e377f30-f2c0-3199-9f19-a99098354257",
+    "instrument": "A/USD",
+    "direction": "LONG",
+    "marketId": "950d7975-d935-4790-b399-c4e04100359c"
+  },
+  "entryPoint": {
+    "url": "/opportunities/6e377f30-f2c0-3199-9f19-a99098354257",
+    "workspaceUrl": "/decision-workspace?opportunityId=6e377f30-f2c0-3199-9f19-a99098354257&marketId=950d7975-d935-4790-b399-c4e04100359c"
+  },
+  "account": {
+    "accountId": "c970ebb2-12ef-488c-ac67-151661323756",
+    "executionMode": "PAPER"
+  },
+  "workspace": {
+    "accountResolvedBeforeMarketSelection": true,
+    "opportunityContextDisplayed": true,
+    "marketContextDisplayed": true,
+    "observations": [
+      "Workspace initially required account selection before eligible markets were shown",
+      "Selecting A/USD added marketId after accountId was present in the URL"
+    ]
+  },
+  "tradePlan": {
+    "id": "a9b403de-e1c0-4729-9e79-fb8fd21ca6c2",
+    "version": 1,
+    "status": "PROPOSED",
+    "planUrl": "/trade-planning/plans/a9b403de-e1c0-4729-9e79-fb8fd21ca6c2/versions/1",
+    "createRequest": {
+      "method": "POST",
+      "path": "/api/v1/trade-plans/opportunities/6e377f30-f2c0-3199-9f19-a99098354257/trade-plans",
+      "status": 200
+    },
+    "planReadRequest": {
+      "method": "GET",
+      "path": "/api/v1/trade-plans/a9b403de-e1c0-4729-9e79-fb8fd21ca6c2/versions/1",
+      "status": 200
+    }
+  },
+  "executionSideEffects": {
+    "executionRequestsObserved": [],
+    "executionIntentCreationVerified": false,
+    "observationScope": "Filtered browser network log during prepare-from-opportunity action"
+  },
+  "limitations": [
+    "This artifact records the Opportunity-origin walkthrough only; MANUAL and legacy-route runtime walkthroughs remain separate validation work.",
+    "The browser evidence does not include an exported HAR or database query; absence of execution requests is limited to the recorded network filter."
+  ]
+}
