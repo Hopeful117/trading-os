@@ -36,11 +36,11 @@ public class RiskPersistence {
     }
 
     public Optional<StoredEvaluation> evaluation(UUID actorId, String key) {
-        return entityManager.createQuery("select e from RiskEvaluationEntity e where e.actorId=:actor and e.idempotencyKey=:key",
+        return entityManager.createQuery("select e from RiskEvaluationEntity e where e.actorId=:actor and e.idempotencyKey=:key and e.evaluationMode='PRE_TRADE'",
                         RiskEvaluationEntity.class).setParameter("actor", actorId).setParameter("key", key)
                 .getResultStream().findFirst().map(e -> new StoredEvaluation(e.id, e.tradePlanId,
                         e.tradePlanVersion, e.accountId, e.status, e.decision,
-                        read(e.responsePayload, Response.class)));
+                        read(e.responsePayload, Response.class), e.evaluationMode));
     }
 
     public Optional<AccountConfiguration> configuration(UUID accountId) {
@@ -149,7 +149,7 @@ public class RiskPersistence {
 
     public Baseline baseline(UUID accountId, LocalDate riskDay, Instant startsAt, Instant endsAt,
                              String currency, BigDecimal amount, String payload) {
-        if (entityManager.find(Account.class, accountId, LockModeType.PESSIMISTIC_WRITE) == null) {
+        if (entityManager.find(Account.class, accountId) == null) {
             throw new IllegalStateException("Account does not exist for risk-day baseline");
         }
         Optional<RiskDayBaselineEntity> existing = entityManager.createQuery(
@@ -176,9 +176,41 @@ public class RiskPersistence {
         entity.id = id; entity.actorId = actorId; entity.idempotencyKey = key;
         entity.tradePlanId = tradePlanId; entity.tradePlanVersion = tradePlanVersion; entity.accountId = accountId;
         entity.requestedAt = requestedAt; entity.status = status; entity.decision = decision;
+        entity.evaluationMode = "PRE_TRADE";
         entity.contextSnapshotVersion = contextVersion; entity.resultSchemaVersion = 1;
         entity.resultPayload = write(officialResult); entity.responseSchemaVersion = 1;
         entity.responsePayload = write(response); entityManager.persist(entity); entityManager.flush();
+    }
+
+    public void accountMonitoringEvaluation(UUID id, UUID actorId, String key, UUID accountId,
+                                             Instant requestedAt, String status, String decision,
+                                             Long contextVersion, Object officialResult) {
+        if (entityManager.createQuery("select e.id from RiskEvaluationEntity e where e.actorId=:actor and e.idempotencyKey=:key",
+                        UUID.class).setParameter("actor", actorId).setParameter("key", key)
+                .getResultStream().findFirst().isPresent()) {
+            return;
+        }
+        RiskEvaluationEntity entity = new RiskEvaluationEntity();
+        entity.id = id;
+        entity.actorId = actorId;
+        entity.idempotencyKey = key;
+        entity.accountId = accountId;
+        entity.requestedAt = requestedAt;
+        entity.status = status;
+        entity.decision = decision;
+        entity.evaluationMode = "ACCOUNT_MONITORING";
+        entity.contextSnapshotVersion = contextVersion;
+        entity.resultSchemaVersion = 1;
+        entity.resultPayload = write(officialResult);
+        entity.responseSchemaVersion = 1;
+        entity.responsePayload = write(java.util.Map.of(
+                "evaluationId", id,
+                "accountId", accountId,
+                "evaluationMode", "ACCOUNT_MONITORING",
+                "status", status,
+                "decision", decision == null ? "" : decision));
+        entityManager.persist(entity);
+        entityManager.flush();
     }
 
     public void acknowledgment(UUID evaluationId, UUID tradePlanId, long tradePlanVersion,
@@ -259,8 +291,10 @@ public class RiskPersistence {
     public Optional<StoredEvaluation> evaluationById(UUID evaluationId) {
         RiskEvaluationEntity e = entityManager.find(RiskEvaluationEntity.class, evaluationId);
         if (e == null) return Optional.empty();
+        Response response = "PRE_TRADE".equals(e.evaluationMode)
+                ? read(e.responsePayload, Response.class) : null;
         return Optional.of(new StoredEvaluation(e.id, e.tradePlanId, e.tradePlanVersion,
-                e.accountId, e.status, e.decision, read(e.responsePayload, Response.class)));
+                e.accountId, e.status, e.decision, response, e.evaluationMode));
     }
 
     public void t1Evaluation(UUID id, UUID executionIntentId, UUID t0EvaluationId, UUID accountId,
@@ -296,9 +330,14 @@ public class RiskPersistence {
                 .toList();
     }
 
-    public record StoredEvaluation(UUID id, UUID tradePlanId, long tradePlanVersion,
+    public record StoredEvaluation(UUID id, UUID tradePlanId, Long tradePlanVersion,
                                    UUID accountId, String status, String decision,
-                                   Response response) { }
+                                   Response response, String evaluationMode) {
+        public StoredEvaluation(UUID id, UUID tradePlanId, long tradePlanVersion,
+                                UUID accountId, String status, String decision, Response response) {
+            this(id, tradePlanId, tradePlanVersion, accountId, status, decision, response, "PRE_TRADE");
+        }
+    }
     public record AcknowledgmentDelivery(UUID evaluationId, UUID tradePlanId, long tradePlanVersion,
                                          String decision, Instant evaluatedAt, UUID claimToken) { }
     public record AccountConfiguration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
@@ -412,11 +451,12 @@ class RiskContextSnapshotEntity {
 class RiskEvaluationEntity {
     @Id UUID id; @Column(name="actor_id", nullable=false) UUID actorId;
     @Column(name="idempotency_key", nullable=false, length=160) String idempotencyKey;
-    @Column(name="trade_plan_id", nullable=false) UUID tradePlanId;
-    @Column(name="trade_plan_version", nullable=false) long tradePlanVersion;
+    @Column(name="trade_plan_id") UUID tradePlanId;
+    @Column(name="trade_plan_version") Long tradePlanVersion;
     @Column(name="account_id", nullable=false) UUID accountId;
     @Column(name="requested_at", nullable=false) Instant requestedAt;
     @Column(nullable=false, length=32) String status; @Column(length=32) String decision;
+    @Column(name="evaluation_mode", nullable=false, length=32) String evaluationMode;
     @Column(name="context_snapshot_version") Long contextSnapshotVersion;
     @Column(name="result_schema_version", nullable=false) int resultSchemaVersion;
     @Column(name="result_payload", nullable=false, columnDefinition="text") String resultPayload;

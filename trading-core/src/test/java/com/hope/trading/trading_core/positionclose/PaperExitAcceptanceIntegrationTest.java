@@ -2,7 +2,15 @@ package com.hope.trading.trading_core.positionclose;
 
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountService;
+import com.hope.trading.trading_core.brokeraccount.api.RiskProfileReference;
 import com.hope.trading.trading_core.brokeraccount.domain.*;
+import com.hope.trading.trading_core.challenge.application.ChallengeDefinitionRepository;
+import com.hope.trading.trading_core.challenge.application.ChallengeInstanceRepository;
+import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
+import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
+import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
+import com.hope.trading.trading_core.challenge.domain.ProgressionValueSource;
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.execution.application.service.*;
 import com.hope.trading.trading_core.execution.domain.aggregate.BrokerOrder;
@@ -18,6 +26,7 @@ import com.hope.trading.trading_core.model.*;
 import com.hope.trading.trading_core.positionclose.application.service.PaperExitService;
 import com.hope.trading.trading_core.repository.*;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -34,6 +43,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.annotation.DirtiesContext;
@@ -58,12 +68,17 @@ class PaperExitAcceptanceIntegrationTest {
     @Autowired private AccountRepository accounts;
     @Autowired private TradeRepository trades;
     @Autowired private BrokerAccountRepository brokerAccounts;
+    @Autowired private BrokerAccountService brokerAccountService;
+    @Autowired private ChallengeDefinitionRepository challengeDefinitions;
+    @Autowired private ChallengeInstanceRepository challengeInstances;
+    @Autowired private RiskPersistence riskPersistence;
     @Autowired private ExecutionIntentRepositoryPort intents;
     @Autowired private ExecuteTradeService execution;
     @Autowired private PaperExitService paperExit;
     @Autowired private EntityManager entityManager;
     @Autowired private MockMvc mvc;
     @Autowired private TransactionTemplate transactions;
+    @Autowired private JdbcTemplate jdbc;
     @Autowired private ExecutionIntentRepositoryPort intentRepository;
     @Autowired private BrokerOrderRepositoryPort orders;
 
@@ -106,7 +121,6 @@ class PaperExitAcceptanceIntegrationTest {
         ExecutionIntent entry = entryIntent(fixture, "round-trip-entry");
         execution.execute(entry.id());
 
-        entityManager.flush();
         entityManager.clear();
         Trade open = trades.findAllByAccount_AccountId(fixture.accountId).stream()
                 .filter(t -> t.getTradeStatus() == TradeStatus.OPEN).findFirst().orElseThrow();
@@ -133,6 +147,57 @@ class PaperExitAcceptanceIntegrationTest {
         mvc.perform(get("/api/v1/accounts/{accountId}/positions", fixture.accountId)
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, List.of()))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void paperSettlementReevaluatesChallengeAndPassesAtInclusiveBalanceTarget() {
+        UUID profileId = UUID.fromString("0a10c7e2-9d1e-4f5a-b6c8-123456789043");
+        String username = "challenge-e2e-" + UUID.randomUUID();
+        User owner = users.saveAndFlush(User.builder().username(username).password("password")
+                .email(username + "@test.local").role(Role.ROLE_USER).build());
+        var broker = brokerAccountService.create(owner.getUserId(), new com.hope.trading.trading_core.brokeraccount.api.CreateBrokerAccountRequest(
+                BrokerProvider.KRAKEN, "Challenge Paper", ExecutionMode.PAPER, new BigDecimal("10000"),
+                new RiskProfileReference(profileId, "1.0.0")));
+        Account account = accounts.findByBrokerAccountId(broker.id()).orElseThrow();
+        ChallengeDefinition definition = ChallengeDefinition.create(UUID.randomUUID(), "1.0.0", "TEST_PROVIDER",
+                "PAPER", "E2E", "USD", new BigDecimal("10000"), new BigDecimal("0.002"),
+                ProgressionValueSource.BALANCE, profileId, "1.0.0", "https://example.test", NOW, NOW,
+                "integration-test", NOW);
+        challengeDefinitions.saveAndFlush(definition);
+
+        ExecutionIntent entry = entryIntent(new Fixture(owner.getUserId(), username, account.getAccountId(), broker.id()),
+                "challenge-e2e-entry");
+        execution.execute(entry.id());
+
+        when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class))).thenReturn(
+                List.of(new MarketPriceSnapshotDto(MARKET_ID, "BTC/USD", decimal("110"),
+                        decimal("110"), decimal("111"), true, NOW, MarketPriceSnapshotStatus.FRESH)));
+        entityManager.clear();
+        Account reloaded = accounts.findById(account.getAccountId()).orElseThrow();
+        Trade open = trades.findAllByAccount_AccountId(account.getAccountId()).stream()
+                .filter(t -> t.getTradeStatus() == TradeStatus.OPEN).findFirst().orElseThrow();
+        ChallengeInstance challenge = ChallengeInstance.start(UUID.randomUUID(), account.getAccountId(), definition,
+                definition.startingCapital(), NOW);
+        challengeInstances.saveAndFlush(challenge);
+        ExecutionIntent exit = intents.save(ExecutionIntent.createExit(ExecutionIntentId.newId(), owner.getUserId(),
+                broker.id(), open.getTradeId(), new ExecutionParameters("BTC/USD", ExecutionParameters.Side.SELL,
+                        ExecutionParameters.OrderType.MARKET, decimal("2"), null),
+                new IdempotencyKey("challenge-e2e-exit"), NOW, NOW.plusSeconds(300)));
+        execution.execute(exit.id());
+
+        entityManager.clear();
+        ChallengeInstance completed = challengeInstances.findById(challenge.id()).orElseThrow();
+        var latestRisk = jdbc.queryForList("select status, decision, evaluation_mode from risk_evaluation "
+                + "where account_id=? order by requested_at desc", account.getAccountId());
+        assertThat(completed.status()).withFailMessage("equity=%s risk=%s",
+                accounts.findById(account.getAccountId()).orElseThrow().getEquity(),
+                latestRisk)
+                .isEqualTo(ChallengeStatus.PASSED);
+        assertThat(completed.terminalRiskEvaluationId()).isNotNull();
+        assertThat(riskPersistence.evaluationById(completed.terminalRiskEvaluationId()).orElseThrow().evaluationMode())
+                .isEqualTo("ACCOUNT_MONITORING");
+        assertThat(accounts.findById(reloaded.getAccountId()).orElseThrow().getEquity())
+                .isEqualByComparingTo("10020");
     }
 
     @Test

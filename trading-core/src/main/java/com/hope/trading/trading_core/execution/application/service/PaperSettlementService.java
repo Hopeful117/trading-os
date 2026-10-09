@@ -13,10 +13,13 @@ import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.challenge.application.ChallengeReevaluationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -25,32 +28,43 @@ import java.util.UUID;
 
 @Service
 public class PaperSettlementService {
+    private static final Logger log = LoggerFactory.getLogger(PaperSettlementService.class);
 
     private final BrokerAccountRepository brokerAccountRepository;
     private final AccountRepository accountRepository;
     private final TradingCalculatorService tradingCalculatorService;
     private final TradePlanRiskPort tradePlans;
+    private final ChallengeReevaluationService challengeReevaluation;
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
-                                  AccountRepository accountRepository) {
-        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null);
+                                   AccountRepository accountRepository) {
+        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
-                                  AccountRepository accountRepository,
-                                  TradingCalculatorService tradingCalculatorService) {
-        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null);
+                                   AccountRepository accountRepository,
+                                   TradingCalculatorService tradingCalculatorService) {
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null, null);
     }
 
     @Autowired
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                   AccountRepository accountRepository,
+                                   TradingCalculatorService tradingCalculatorService,
+                                   TradePlanRiskPort tradePlans) {
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans, null);
+    }
+
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                   AccountRepository accountRepository,
                                   TradingCalculatorService tradingCalculatorService,
-                                  TradePlanRiskPort tradePlans) {
+                                  TradePlanRiskPort tradePlans,
+                                  ChallengeReevaluationService challengeReevaluation) {
         this.brokerAccountRepository = brokerAccountRepository;
         this.accountRepository = accountRepository;
         this.tradingCalculatorService = tradingCalculatorService;
         this.tradePlans = tradePlans;
+        this.challengeReevaluation = challengeReevaluation;
     }
 
     @Transactional
@@ -86,6 +100,15 @@ public class PaperSettlementService {
         }
 
         accountRepository.save(account);
+        if (challengeReevaluation != null) {
+            accountRepository.flush();
+            try {
+                challengeReevaluation.reevaluate(account);
+            } catch (RuntimeException monitoringFailure) {
+                log.error("PAPER settlement completed but Challenge Risk reevaluation failed for account {}",
+                        account.getAccountId(), monitoringFailure);
+            }
+        }
     }
 
     private void settleExit(Account account, ExecutionIntent intent, BrokerOrder.Fill fill) {

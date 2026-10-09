@@ -72,6 +72,12 @@ public final class ValidateAndCreateService {
                     "Risk Evaluation has not completed", 422);
         }
 
+        if (!"PRE_TRADE".equals(evaluation.evaluationMode()) || evaluation.response() == null
+                || evaluation.tradePlanId() == null || evaluation.tradePlanVersion() == null) {
+            throw new ExecutionValidationException("EVALUATION_MODE_NOT_AUTHORIZED",
+                    "Only completed pre-trade Risk Evaluations authorize execution", 422);
+        }
+
         // 3. Verify evaluation decision authorizes execution
         String decision = evaluation.decision();
         if (!"APPROVED".equals(decision) && !"APPROVED_WITH_WARNINGS".equals(decision)) {

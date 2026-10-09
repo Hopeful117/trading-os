@@ -190,6 +190,21 @@ class ValidateAndCreateServiceTest {
     }
 
     @Test
+    void accountMonitoringEvaluationCannotAuthorizeExecution() {
+        RiskPersistence.StoredEvaluation evaluation = new RiskPersistence.StoredEvaluation(
+                evaluationId, null, null, tradingAccountId, "COMPLETED", "APPROVED", null,
+                "ACCOUNT_MONITORING");
+        when(riskPersistence.evaluationById(evaluationId)).thenReturn(Optional.of(evaluation));
+
+        assertThatThrownBy(() -> service.validateAndCreate(command()))
+                .isInstanceOf(ExecutionValidationException.class)
+                .satisfies(e -> {
+                    var validation = (ExecutionValidationException) e;
+                    assertThat(validation.code()).isEqualTo("EVALUATION_MODE_NOT_AUTHORIZED");
+                });
+    }
+
+    @Test
     void brokerAccountForbidden_throws403() {
         when(riskPersistence.evaluationById(evaluationId))
                 .thenReturn(Optional.of(storedEvaluation("COMPLETED", "APPROVED")));
