@@ -53,6 +53,32 @@ class RiskPersistenceTest {
     }
 
     @Test
+    void accountMonitoringEvaluationCanBeReadWithoutTradePlanResponse() {
+        UUID user = UUID.randomUUID();
+        UUID account = UUID.randomUUID();
+        UUID evaluation = UUID.randomUUID();
+        jdbc.update("insert into users(user_id,username,password,email,role) values(?,?,?,?,?)",
+                user, "monitoring-user", "x", "monitoring@test.local", "ROLE_USER");
+        jdbc.update("insert into accounts(account_id,name,base_currency,peak_equity,equity,user_id) values(?,?,?,?,?,?)",
+                account, "monitoring", "USD", 10000, 10000, user);
+
+        persistence.accountMonitoringEvaluation(evaluation, user, "monitoring-key", account,
+                Instant.now(), "COMPLETED", "APPROVED", null, java.util.Map.of("result", "official"));
+        persistence.accountMonitoringEvaluation(UUID.randomUUID(), user, "monitoring-key", account,
+                Instant.now(), "COMPLETED", "BREACHED", null, java.util.Map.of("result", "replay"));
+
+        RiskPersistence.StoredEvaluation stored = persistence.evaluationById(evaluation).orElseThrow();
+
+        assertThat(stored.evaluationMode()).isEqualTo("ACCOUNT_MONITORING");
+        assertThat(stored.tradePlanId()).isNull();
+        assertThat(stored.tradePlanVersion()).isNull();
+        assertThat(stored.response()).isNull();
+        assertThat(persistence.evaluation(user, "monitoring-key")).isEmpty();
+        assertThat(jdbc.queryForObject("select count(*) from risk_evaluation where actor_id=? and idempotency_key=?",
+                Integer.class, user, "monitoring-key")).isEqualTo(1);
+    }
+
+    @Test
     void flywayProvisionsPaperStandardProfileWithoutAssignmentOrAccount() {
         RiskPersistence.Profile profile = persistence.profile(PAPER_STANDARD_ID, "1.0.0").orElseThrow();
 

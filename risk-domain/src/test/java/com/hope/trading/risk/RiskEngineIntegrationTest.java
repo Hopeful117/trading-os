@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.time.*;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static com.hope.trading.risk.RiskFixture.*;
 import static com.hope.trading.risk.domain.RiskTypes.*;
@@ -65,6 +66,22 @@ class RiskEngineIntegrationTest {
         assertEquals(RiskDecision.APPROVED, result.decision().orElseThrow());
         assertEquals(new BigDecimal("0"),
                 result.globalMetrics().totalDrawdownRatio().orElseThrow().value());
+    }
+
+    @Test void accountMonitoringEvaluatesObservedStateWithoutAProposedTrade() {
+        var context = context(rules(
+                rule(DailyDrawdownRule.ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03"),
+                rule(MaximumTotalDrawdownRule.ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03")),
+                new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"), usd("9700"), usd("0"),
+                        java.util.Optional.of(usd("10000")),
+                        new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("0")), null);
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
+
+        assertEquals(ValidationMode.ACCOUNT_MONITORING, result.evaluationMode());
+        assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
+        assertEquals(1, result.violations().size());
+        assertEquals(MaximumTotalDrawdownRule.ID, result.violations().getFirst().ruleId());
     }
 
     @Test void approvesWithWarningsWithoutHidingThem() {
