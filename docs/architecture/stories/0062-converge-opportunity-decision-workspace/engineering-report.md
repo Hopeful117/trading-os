@@ -39,6 +39,5 @@ findings are addressed by the expanded runtime artifact and targeted test.
 
 ## Closure
 
-All Story scope, automated validation, and runtime evidence are recorded.
-Independent review passed. Human closure approval is the remaining delivery
-action; the current artifact set is committed.
+All Story scope, automated validation, runtime evidence, independent review, and
+human closure approval are recorded. The current artifact set is committed.

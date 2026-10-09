@@ -2,7 +2,7 @@
 
 ## Verdict
 
-`PASS - HUMAN CLOSURE APPROVAL PENDING`
+`PASS - HUMAN CLOSURE APPROVED`
 
 ## Findings
 
@@ -21,4 +21,5 @@ internally consistent. The authenticated walkthrough confirmed the Opportunity,
 MANUAL, and legacy entry points, shared PlanPage convergence, deterministic Risk
 outcomes, and the approved MANUAL PAPER fill. The Spring persistence integration
 test confirms that Opportunity preparation does not persist an ExecutionIntent.
-Human approval is still required before the Story is marked `CLOSED`.
+Human closure approval has been received; the Story is ready to remain
+`CLOSED`.
