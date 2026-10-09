@@ -44,6 +44,8 @@ import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.service.TradingCalculatorServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -167,6 +169,17 @@ class PaperExecutionVerticalRegressionTest {
                 brokerAccounts, marketData);
         RoutingBrokerExecutionAdapter routing = new RoutingBrokerExecutionAdapter(
                 new BrokerExecutionAdapter(liveClient), simulated, brokerAccounts);
+        TradePlanRiskPort tradePlans = mock(TradePlanRiskPort.class);
+        UUID tradePlanId = UUID.randomUUID();
+        if (side == ExecutionParameters.Side.SELL) {
+            BigDecimal fillPrice = decimal(expectedFillPrice);
+            when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(new TradePlanRiskPort.Snapshot(
+                    tradePlanId, 1, "READY_TO_EXECUTE", NOW, UUID.randomUUID(), 1, NOW,
+                    ownerId, account.getAccountId(), "USD", UUID.randomUUID(), 1,
+                    UUID.randomUUID(), 1, instrument, "SHORT", null, null, null,
+                    decimal(quantity), fillPrice.multiply(decimal(quantity)),
+                    fillPrice.multiply(decimal(quantity)), "USD", "{}"));
+        }
 
         var intents = new ExecutionTestSupport.Intents();
         var attempts = new ExecutionTestSupport.Attempts();
@@ -175,7 +188,9 @@ class PaperExecutionVerticalRegressionTest {
         var events = new ExecutionTestSupport.Events();
         var metrics = new ExecutionTestSupport.Metrics();
         var lifecycle = new ExecutionLifecycleService();
-        PaperSettlementService settlement = spy(new PaperSettlementService(brokerAccounts, accounts));
+        PaperSettlementService settlement = spy(new PaperSettlementService(
+                brokerAccounts, accounts, new TradingCalculatorServiceImpl(),
+                tradePlans));
         ExecutionTimeRiskRevalidationService t1 = mock(ExecutionTimeRiskRevalidationService.class);
         when(t1.evaluateAndPersist(any(), any())).thenReturn(
                 new ExecutionTimeRiskRevalidationService.T1Outcome(
@@ -183,7 +198,7 @@ class PaperExecutionVerticalRegressionTest {
 
         ExecutionIntent intent = ExecutionIntent.create(
                 ExecutionIntentId.newId(),
-                new TradePlanReference(UUID.randomUUID(), 1),
+                new TradePlanReference(tradePlanId, 1),
                 new RiskApprovalReference(UUID.randomUUID(),
                         RiskApprovalReference.Decision.APPROVED, NOW.minusSeconds(1)),
                 new IdempotencyKey("paper-" + side.name().toLowerCase() + "-vertical"),
