@@ -11,9 +11,13 @@
       </p>
 
       <div class="hero-actions">
-        <a routerLink="/login"> Se connecter </a>
+        @if (isLoggedIn()) {
+          <h2>Bienvenue {{ username() || 'dans Trading OS' }}.</h2>
+        } @else {
+          <a routerLink="/login"> Se connecter </a>
 
-        <a routerLink="/register"> Créer un compte </a>
+          <a routerLink="/register"> Créer un compte </a>
+        }
       </div>
     </div>
 

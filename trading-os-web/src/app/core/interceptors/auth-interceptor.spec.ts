@@ -12,11 +12,14 @@ import { TokenService } from '../services/token';
 describe('authInterceptor', () => {
   let httpClient: HttpClient;
   let httpMock: HttpTestingController;
-  let tokenService: { getToken: ReturnType<typeof vi.fn> };
+  let tokenService: {
+    getToken: ReturnType<typeof vi.fn>;
+    removeToken: ReturnType<typeof vi.fn>;
+  };
   let router: { navigate: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    tokenService = { getToken: vi.fn() };
+    tokenService = { getToken: vi.fn(), removeToken: vi.fn() };
     router = { navigate: vi.fn() };
 
     TestBed.configureTestingModule({
@@ -91,6 +94,7 @@ describe('authInterceptor', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/error'], {
       queryParams: { status: 401 },
     });
+    expect(tokenService.removeToken).toHaveBeenCalledOnce();
   });
 
   it('navigates to /error?status=403 on 403 response', () => {
@@ -106,6 +110,7 @@ describe('authInterceptor', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/error'], {
       queryParams: { status: 403 },
     });
+    expect(tokenService.removeToken).not.toHaveBeenCalled();
   });
 
   it('re-throws 500 error without redirect', () => {

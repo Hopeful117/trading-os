@@ -7,12 +7,17 @@ import { of } from 'rxjs';
 describe('Navbar', () => {
   let component: Navbar;
   let fixture: ComponentFixture<Navbar>;
-  let authService: { isLoggedIn: ReturnType<typeof vi.fn>; logout: ReturnType<typeof vi.fn> };
+  let authService: {
+    isLoggedIn: ReturnType<typeof vi.fn>;
+    getUsername: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
+  };
   let router: { navigate: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     authService = {
       isLoggedIn: vi.fn(() => false),
+      getUsername: vi.fn(() => null),
       logout: vi.fn(),
     };
     router = { navigate: vi.fn(() => Promise.resolve(true)) };
@@ -48,6 +53,7 @@ describe('Navbar', () => {
     expect(linkTexts).toContain('Dashboard');
     expect(linkTexts).toContain('Accounts');
     expect(linkTexts).toContain('Markets');
+    expect(linkTexts).toContain('Home');
     expect(linkTexts).not.toContain('Login');
     expect(linkTexts).not.toContain('Register');
   });
@@ -61,6 +67,7 @@ describe('Navbar', () => {
 
     expect(linkTexts).toContain('Login');
     expect(linkTexts).toContain('Register');
+    expect(linkTexts).toContain('Home');
     expect(linkTexts).not.toContain('Dashboard');
     expect(linkTexts).not.toContain('Accounts');
     expect(linkTexts).not.toContain('Markets');
