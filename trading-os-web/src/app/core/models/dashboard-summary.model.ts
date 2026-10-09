@@ -19,6 +19,9 @@ export interface AccountDashboardSummary {
   currentDrawdown: number | null;
   currentDrawdownPercentage: number | null;
   equitySource: string;
+  valuationStatus?: string;
+  valuationTimestamp?: string | null;
+  valuationPolicyVersion?: string | null;
 }
 
 export interface OpenPositionDashboardView {

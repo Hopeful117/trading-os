@@ -1,6 +1,8 @@
 package com.hope.trading.trading_core.dashboard.service;
 
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.dashboard.integration.*;
 import com.hope.trading.trading_core.dashboard.model.*;
 import com.hope.trading.trading_core.market_data.dto.*;
@@ -25,9 +27,11 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DashboardQueryService {
     private final AccountService accountService;
+    private final BrokerAccountRepository brokerAccounts;
     private final BrokerApiClient brokerApiClient;
     private final BrokerDashboardMapper brokerMapper;
     private final PositionQueryService positionQueryService;
+    private final AccountBalanceValuationService balanceValuationService;
     private final AccountEquityService equityService;
     private final DashboardFreshnessService freshnessService;
     private final DashboardAlertService alertService;
@@ -39,34 +43,45 @@ public class DashboardQueryService {
         Account account = accountService.getAccountById(accountId, username);
         Instant generatedAt = Instant.now();
 
+        boolean paper = isPaperAccount(account);
         BrokerAccountFact broker;
         try {
-            broker = brokerMapper.toFact(brokerApiClient.getAccount());
+            broker = paper
+                    ? paperFact(account, generatedAt)
+                    : brokerMapper.toFact(brokerApiClient.getAccount());
         } catch (RuntimeException exception) {
-            log.warn("Dashboard broker data unavailable accountId={}", accountId);
+            log.warn("Dashboard account data unavailable accountId={}", accountId);
             return unavailable(account, generatedAt);
         }
 
-        BigDecimal balance = broker.balances()
-                .getOrDefault(account.getBaseCurrency(), persistedBalance(account));
+        Map<String, BigDecimal> balances = paper
+                ? persistedBalances(account) : broker.balances();
+        BigDecimal balance = balances.getOrDefault(account.getBaseCurrency(), BigDecimal.ZERO);
         List<String> warnings = new ArrayList<>();
+        AccountValuationResult balanceValuation = broker.balancesAvailable()
+                ? balanceValuationService.value(account.getBaseCurrency(), balances)
+                : AccountValuationResult.unavailable("Soldes de compte indisponibles");
+        if (balanceValuation.warning() != null) warnings.add(balanceValuation.warning());
         boolean brokerStale = broker.dataAt() != null
                 && broker.dataAt().isBefore(generatedAt.minus(DashboardFreshnessService.STALE_AFTER));
 
-        List<OpenPositionDashboardView> initialPositions = positionQueryService.findPositions(
-                accountId, broker.positions(), balance, generatedAt
-        );
-        BigDecimal unrealizedPnl = initialPositions.stream()
-                .map(OpenPositionDashboardView::unrealizedPnl)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<OpenPositionDashboardView> initialPositions = paper
+                ? positionQueryService.findPaperPositions(account, account.getEquity(), generatedAt)
+                : positionQueryService.findPositions(accountId, broker.positions(), balance, generatedAt,
+                account.getBaseCurrency());
+        BigDecimal unrealizedPnl = positionPnl(initialPositions, broker.positionPnlTreatment());
         AccountEquityResult equity = equityService.select(
-                balance, unrealizedPnl, broker.brokerEquity(), brokerStale
+                balanceValuation, unrealizedPnl, broker.brokerEquity(), broker.brokerEquityTotal(), brokerStale
         );
+        if (equity.equity() == null) {
+            return unavailableEquity(account, broker, balance, equity, initialPositions,
+                    warnings, generatedAt);
+        }
 
-        List<OpenPositionDashboardView> positions = positionQueryService.findPositions(
-                accountId, broker.positions(), equity.equity(), generatedAt
-        );
+        List<OpenPositionDashboardView> positions = paper
+                ? positionQueryService.findPaperPositions(account, equity.equity(), generatedAt)
+                : positionQueryService.findPositions(accountId, broker.positions(), equity.equity(), generatedAt,
+                account.getBaseCurrency());
         BigDecimal dailyPnl = tradeAnalyticsService.getTodayPnL(accountId);
         BigDecimal drawdown = positive(account.getPeakEquity().subtract(equity.equity()));
         BigDecimal usedRisk = positions.stream()
@@ -89,8 +104,8 @@ public class DashboardQueryService {
                 broker.dataAt(),
                 List.of(),
                 true,
-                false,
-                !broker.positions().isEmpty(),
+                marketDataAvailable(balanceValuation, positions),
+                !broker.positions().isEmpty() || !broker.balances().isEmpty(),
                 warnings
         );
         List<DashboardAlert> alerts = alertService.build(
@@ -100,12 +115,20 @@ public class DashboardQueryService {
         AccountDashboardSummary accountSummary = new AccountDashboardSummary(
                 accountId, account.getName(), broker.broker(), account.getBaseCurrency(),
                 balance, equity.equity(), dailyPnl, dailyPnlPercentage,
-                drawdown, drawdownPercentage, equity.source()
+                drawdown, drawdownPercentage, equity.source(), equity.valuationStatus(),
+                equity.valuationTimestamp(), equity.valuationPolicyVersion()
         );
 
         return new DashboardSummary(
                 accountSummary, risk, positions, alerts, List.of(), freshness, generatedAt
         );
+    }
+
+    private boolean marketDataAvailable(AccountValuationResult balanceValuation,
+                                        List<OpenPositionDashboardView> positions) {
+        return "COMPLETE".equals(balanceValuation.status())
+                && positions.stream().allMatch(position ->
+                position.valuationStatus() == PositionValuationStatus.FRESH);
     }
 
     private DashboardSummary unavailable(Account account, Instant generatedAt) {
@@ -115,7 +138,7 @@ public class DashboardQueryService {
         AccountDashboardSummary summary = new AccountDashboardSummary(
                 account.getAccountId(), account.getName(), account.getBroker(),
                 account.getBaseCurrency(), null, null, null, null,
-                null, null, "UNAVAILABLE"
+                null, null, "UNAVAILABLE", "UNAVAILABLE", null, null
         );
         RiskDashboardSummary risk = new RiskDashboardSummary(
                 RiskStatus.UNAVAILABLE, BigDecimal.ZERO, BigDecimal.ZERO,
@@ -126,6 +149,35 @@ public class DashboardQueryService {
         return new DashboardSummary(
                 summary, risk, List.of(),
                 alertService.build(List.of(), freshness, risk, false),
+                List.of(), freshness, generatedAt
+        );
+    }
+
+    private DashboardSummary unavailableEquity(
+            Account account,
+            BrokerAccountFact broker,
+            BigDecimal balance,
+            AccountEquityResult equity,
+            List<OpenPositionDashboardView> positions,
+            List<String> warnings,
+            Instant generatedAt
+    ) {
+        DashboardFreshness freshness = freshnessService.evaluate(
+                broker.dataAt(), List.of(), true, false, true, warnings);
+        AccountDashboardSummary summary = new AccountDashboardSummary(
+                account.getAccountId(), account.getName(), broker.broker(), account.getBaseCurrency(),
+                balance, null, null, null, null, null, equity.source(),
+                equity.valuationStatus(), equity.valuationTimestamp(), equity.valuationPolicyVersion()
+        );
+        RiskDashboardSummary risk = new RiskDashboardSummary(
+                RiskStatus.UNAVAILABLE, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                ruleValue(account, RuleType.DAILY), BigDecimal.ZERO, BigDecimal.ZERO,
+                ruleValue(account, RuleType.DRAWDOWN), List.of()
+        );
+        return new DashboardSummary(
+                summary, risk, positions,
+                alertService.build(positions, freshness, risk, equity.divergent()),
                 List.of(), freshness, generatedAt
         );
     }
@@ -168,6 +220,41 @@ public class DashboardQueryService {
                 .map(AccountBalance::getAmount)
                 .findFirst()
                 .orElse(BigDecimal.ZERO);
+    }
+
+    private Map<String, BigDecimal> persistedBalances(Account account) {
+        return account.getBalances().stream()
+                .filter(balance -> balance.getAsset() != null)
+                .collect(Collectors.toMap(AccountBalance::getAsset, AccountBalance::getAmount,
+                        (first, ignored) -> first));
+    }
+
+    private BigDecimal positionPnl(List<OpenPositionDashboardView> positions,
+                                   PositionPnlTreatment treatment) {
+        if (treatment == PositionPnlTreatment.INCLUDED_IN_BALANCES) return BigDecimal.ZERO;
+        if (positions.stream().anyMatch(position -> position.unrealizedPnl() == null
+                || position.valuationStatus() == PositionValuationStatus.UNSUPPORTED_CURRENCY)) {
+            return null;
+        }
+        return positions.stream()
+                .map(OpenPositionDashboardView::unrealizedPnl)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private boolean isPaperAccount(Account account) {
+        return account.getBrokerAccountId() != null
+                && Optional.ofNullable(brokerAccounts.findById(account.getBrokerAccountId()))
+                .flatMap(value -> value)
+                .map(broker -> broker.executionMode() == ExecutionMode.PAPER)
+                .orElse(false);
+    }
+
+    private BrokerAccountFact paperFact(Account account, Instant generatedAt) {
+        return new BrokerAccountFact(
+                account.getBrokerAccountId() == null ? account.getAccountId().toString()
+                        : account.getBrokerAccountId().toString(),
+                account.getBroker(), account.getBaseCurrency(), persistedBalances(account), true,
+                null, false, List.of(), generatedAt, PositionPnlTreatment.INCLUDED_IN_BALANCES);
     }
 
     private BigDecimal percentage(BigDecimal value, BigDecimal reference) {

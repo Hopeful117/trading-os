@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.dashboard.model;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 public record AccountDashboardSummary(
@@ -14,6 +15,9 @@ public record AccountDashboardSummary(
         BigDecimal dailyPnlPercentage,
         BigDecimal currentDrawdown,
         BigDecimal currentDrawdownPercentage,
-        String equitySource
+        String equitySource,
+        String valuationStatus,
+        Instant valuationTimestamp,
+        String valuationPolicyVersion
 ) {
 }

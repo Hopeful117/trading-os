@@ -36,5 +36,40 @@ class BrokerDashboardMapperTest {
         assertThat(result.positions()).hasSize(1);
         assertThat(result.positions().getFirst().side()).isEqualTo(TradeType.SELL);
         assertThat(result.positions().getFirst().entryPrice()).isEqualByComparingTo("100");
+        assertThat(result.positionPnlTreatment()).isEqualTo(PositionPnlTreatment.ADDITIVE);
+        assertThat(result.balancesAvailable()).isTrue();
+        assertThat(result.brokerEquityTotal()).isFalse();
+    }
+
+    @Test
+    void distinguishesMissingBalancesFromAnEmptyAccount() {
+        BrokerAccountFact result = mapper.toFact(BrokerAccountDto.builder()
+                .broker("KRAKEN")
+                .baseCurrency("USD")
+                .build());
+
+        assertThat(result.balances()).isEmpty();
+        assertThat(result.balancesAvailable()).isFalse();
+    }
+
+    @Test
+    void preservesHighPrecisionWhenDerivingEntryPrice() {
+        BrokerAccountDto dto = BrokerAccountDto.builder()
+                .broker("KRAKEN")
+                .baseCurrency("USD")
+                .balances(AccountBalanceDto.builder().balances(Map.of()).build())
+                .openTrades(List.of(Position.builder()
+                        .brokerPositionId("p1")
+                        .symbol("BTC/USD")
+                        .side("buy")
+                        .quantity(new BigDecimal("3"))
+                        .entryValue(new BigDecimal("1"))
+                        .build()))
+                .build();
+
+        BrokerAccountFact result = mapper.toFact(dto);
+
+        assertThat(result.positions().getFirst().entryPrice())
+                .isEqualByComparingTo(new BigDecimal("0.3333333333333333333333333333333333"));
     }
 }

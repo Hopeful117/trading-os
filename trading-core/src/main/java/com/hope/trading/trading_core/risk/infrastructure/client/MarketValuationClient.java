@@ -122,14 +122,43 @@ public final class MarketValuationClient implements MarketValuationPort {
 
     private void addConversionMarket(List<CatalogueMarket> catalogue, LinkedHashSet<UUID> marketIds,
                                      String asset, String reportingCurrency) {
+        CatalogueMarket direct = findMarket(catalogue, asset, reportingCurrency);
+        if (direct != null) {
+            marketIds.add(direct.marketId());
+            return;
+        }
+
         catalogue.stream()
-                .filter(market -> (asset.equalsIgnoreCase(market.baseAsset())
-                        && reportingCurrency.equalsIgnoreCase(market.quoteAsset()))
-                        || (reportingCurrency.equalsIgnoreCase(market.baseAsset())
-                        && asset.equalsIgnoreCase(market.quoteAsset())))
-                .map(CatalogueMarket::marketId)
+                .map(CatalogueMarket::baseAsset)
+                .filter(java.util.Objects::nonNull)
+                .forEach(intermediate -> addTwoHopMarkets(
+                        catalogue, marketIds, asset, intermediate, reportingCurrency));
+        catalogue.stream()
+                .map(CatalogueMarket::quoteAsset)
+                .filter(java.util.Objects::nonNull)
+                .forEach(intermediate -> addTwoHopMarkets(
+                        catalogue, marketIds, asset, intermediate, reportingCurrency));
+    }
+
+    private void addTwoHopMarkets(List<CatalogueMarket> catalogue, LinkedHashSet<UUID> marketIds,
+                                  String asset, String intermediate, String reportingCurrency) {
+        if (asset.equalsIgnoreCase(intermediate) || reportingCurrency.equalsIgnoreCase(intermediate)) return;
+        CatalogueMarket first = findMarket(catalogue, asset, intermediate);
+        CatalogueMarket second = findMarket(catalogue, intermediate, reportingCurrency);
+        if (first != null && second != null) {
+            marketIds.add(first.marketId());
+            marketIds.add(second.marketId());
+        }
+    }
+
+    private CatalogueMarket findMarket(List<CatalogueMarket> catalogue, String from, String to) {
+        return catalogue.stream()
+                .filter(market -> (from.equalsIgnoreCase(market.baseAsset())
+                        && to.equalsIgnoreCase(market.quoteAsset()))
+                        || (to.equalsIgnoreCase(market.baseAsset())
+                        && from.equalsIgnoreCase(market.quoteAsset())))
                 .findFirst()
-                .ifPresent(marketIds::add);
+                .orElse(null);
     }
 
     private String preserve(Object source, List<?> legs) {
