@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED - HUMAN REVIEW REQUIRED`
+`IMPLEMENTATION COMPLETE - HUMAN REVIEW REQUIRED`
 
 ## Outcome
 
@@ -25,23 +25,32 @@ creation endpoint only persists a proposed Trade Plan.
 * Provider-specific fields remain outside the Trade Plan model.
 * Authenticated principal identity is used for manual author attribution; the
   request body does not provide an authoritative actor identifier.
+* Manual creation now requires `Idempotency-Key`, persists a request fingerprint
+  and plan reference, replays identical requests, and rejects conflicting reuse
+  with `409`.
+* The idempotency record is durable and uniquely scoped by authenticated actor
+  and key; initial manual plan identity is deterministic for the same actor/key.
 
 ## Validation
 
-* Market Intelligence full suite: `349` tests passed.
-* Story-focused domain/application/API/persistence tests: `16` passed.
-* Trading Core test compilation: passed with tests skipped.
+* Market Intelligence full suite: 519 tests passed after the idempotency and
+  validation changes.
+* Story-focused idempotency/domain/application/API tests: passed.
+* Trading Core test suite: 604 tests executed; 2 unrelated PAPER short-margin
+  regression errors remain.
 * Flyway migration validation: passed through H2 integration suites.
 * `git diff --check`: passed.
 
 ## Known Limitations
 
 * The frontend does not yet expose the manual-trade form.
-* Gateway and deployed runtime authentication have not been exercised for the
-  new endpoint.
+* Deployed production authentication has not been exercised; the equivalent
+  local authenticated Gateway E2E has passed.
 * The complete path from manual plan to risk approval, human decision,
   Execution Intent and PAPER fill belongs to subsequent Stories.
 * Production database migration has not been executed in this environment.
+* Deployed runtime idempotency replay has not been exercised; local E2E replay
+  and conflict validation passed.
 * Existing unrelated worktree modifications were preserved and are not part of
   this Story's intended scope.
 

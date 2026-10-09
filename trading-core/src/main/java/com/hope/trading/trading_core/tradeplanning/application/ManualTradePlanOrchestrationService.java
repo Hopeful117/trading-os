@@ -31,6 +31,14 @@ public final class ManualTradePlanOrchestrationService {
     }
 
     public Response create(UUID actorId, ManualTradePlanRequest request, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw failure(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED",
+                    "Idempotency-Key is required");
+        }
+        if (idempotencyKey.length() > 200) {
+            throw failure(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_INVALID",
+                    "Idempotency-Key must not exceed 200 characters");
+        }
         var account = accounts.findById(request.accountId())
                 .orElseThrow(() -> failure(HttpStatus.NOT_FOUND,
                         "ACCOUNT_NOT_FOUND", "Trading account does not exist"));
@@ -99,6 +107,10 @@ public final class ManualTradePlanOrchestrationService {
             return new Response(response.id(), response.version());
         } catch (FeignException exception) {
             int status = exception.status() > 0 ? exception.status() : HttpStatus.SERVICE_UNAVAILABLE.value();
+            if (status == HttpStatus.CONFLICT.value()) {
+                throw failure(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT",
+                        "Idempotency-Key is already bound to another manual Trade Plan request");
+            }
             throw failure(HttpStatus.valueOf(status), "MARKET_INTELLIGENCE_REJECTED",
                     "Market Intelligence could not create the manual Trade Plan");
         }

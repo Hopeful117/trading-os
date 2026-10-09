@@ -58,10 +58,14 @@ public class TradePlanningConfiguration {
     }
     @Bean TradePlanApplicationService tradePlanApplicationService(
             TradePlanningEngine engine, TradePlanRepository repository,
-            TradePlanLifecyclePolicy lifecycle, TradePlanEventPublisher events,
-            TradePlanningMetrics metrics, Clock clock) {
+             TradePlanLifecyclePolicy lifecycle, TradePlanEventPublisher events,
+             TradePlanningMetrics metrics, Clock clock,
+             ManualTradePlanIdempotencyRepository manualIdempotency,
+             ManualTradePlanFingerprintFactory manualFingerprints,
+             ManualTradePlanCreationTransaction manualCreation) {
         return new TradePlanApplicationService(
-                engine, repository, lifecycle, events, metrics, clock);
+                engine, repository, lifecycle, events, metrics, clock,
+                manualIdempotency, manualFingerprints, manualCreation);
     }
     @Bean TradePlanReplanningService tradePlanReplanningService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,

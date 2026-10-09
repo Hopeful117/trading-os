@@ -55,6 +55,7 @@ class TradePlanningEngineTest {
         var environment = TradePlanTestFixtures.environment();
         ManualTradePlanningRequest request = new ManualTradePlanningRequest(
                 environment.context().id(), environment.context().version(), environment.owner(),
+                environment.context().tradingAccountId(),
                 "BTC/EUR", TradeDirection.LONG,
                 new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
                 new StopLoss(BigDecimal.valueOf(99), "Manual invalidation"),
@@ -85,6 +86,7 @@ class TradePlanningEngineTest {
         var environment = TradePlanTestFixtures.environment();
         ManualTradePlanningRequest request = new ManualTradePlanningRequest(
                 environment.context().id(), environment.context().version(), environment.owner(),
+                environment.context().tradingAccountId(),
                 "BTC/EUR", TradeDirection.LONG,
                 new EntryStrategy(EntryType.MARKET, null, Set.of()),
                 null, List.of(),
@@ -100,6 +102,92 @@ class TradePlanningEngineTest {
                     assertThat(success.plan().execution().takeProfits()).isEmpty();
                     assertThat(success.plan().execution().riskReward()).isNull();
                 });
+    }
+
+    @Test
+    void manualFlowReplaysTheSamePlanForTheSameIdempotencyKey() {
+        var environment = TradePlanTestFixtures.environment();
+        ManualTradePlanningRequest request = manualRequest(environment);
+
+        TradePlanningResult first = environment.service().createManual(request, "manual-key");
+        TradePlanningResult replay = environment.service().createManual(request, "manual-key");
+
+        assertThat(first).isInstanceOf(TradePlanningResult.Success.class);
+        assertThat(replay).isInstanceOfSatisfying(TradePlanningResult.Success.class, success ->
+                assertThat(success.plan().id()).isEqualTo(
+                        ((TradePlanningResult.Success) first).plan().id()));
+        assertThat(environment.plans().history(
+                ((TradePlanningResult.Success) first).plan().id())).hasSize(1);
+    }
+
+    @Test
+    void manualFlowRejectsDifferentRequestWithTheSameIdempotencyKey() {
+        var environment = TradePlanTestFixtures.environment();
+        ManualTradePlanningRequest request = manualRequest(environment);
+        environment.service().createManual(request, "manual-key");
+
+        ManualTradePlanningRequest changed = new ManualTradePlanningRequest(
+                request.planningContextId(), request.contextVersion(), request.actorId(),
+                request.tradingAccountId(),
+                request.instrument(), request.direction(), request.entry(), request.stopLoss(),
+                request.takeProfits(), request.positionSizing(), request.referencePrice(),
+                request.expiresAt(), request.expirationPolicy(), "Changed thesis",
+                request.confirmationConditions(), request.invalidationConditions(), request.managementRules());
+
+        assertThatThrownBy(() -> environment.service().createManual(changed, "manual-key"))
+                .isInstanceOf(TradePlanIdempotencyException.class)
+                .hasMessageContaining("already bound");
+    }
+
+    @Test
+    void manualFlowRejectsDifferentExpirationWithTheSameIdempotencyKey() {
+        var environment = TradePlanTestFixtures.environment();
+        ManualTradePlanningRequest request = manualRequest(environment);
+        environment.service().createManual(request, "expiration-key");
+
+        ManualTradePlanningRequest changed = new ManualTradePlanningRequest(
+                request.planningContextId(), request.contextVersion(), request.actorId(),
+                request.tradingAccountId(), request.instrument(), request.direction(), request.entry(),
+                request.stopLoss(), request.takeProfits(), request.positionSizing(), request.referencePrice(),
+                request.expiresAt().plusSeconds(60), request.expirationPolicy(), request.thesis(),
+                request.confirmationConditions(), request.invalidationConditions(), request.managementRules());
+
+        assertThatThrownBy(() -> environment.service().createManual(changed, "expiration-key"))
+                .isInstanceOf(TradePlanIdempotencyException.class)
+                .hasMessageContaining("already bound");
+    }
+
+    @Test
+    void missingPlanForIdempotencyRecordProducesControlledStateError() {
+        var environment = TradePlanTestFixtures.environment();
+        ManualTradePlanningRequest request = manualRequest(environment);
+        String key = "orphaned-plan";
+        String fingerprint = new ManualTradePlanFingerprintFactory(
+                new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules())
+                .fingerprint(request);
+        environment.idempotency().save(new com.hope.trading.market_intelligence.application.port
+                .ManualTradePlanIdempotencyRepository.Entry(
+                        request.actorId(), key, fingerprint, UUID.randomUUID(), 1));
+
+        assertThatThrownBy(() -> environment.service().createManual(request, key))
+                .isInstanceOfSatisfying(TradePlanIdempotencyException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("IDEMPOTENCY_STATE_INVALID");
+                    assertThat(exception.status()).isEqualTo(500);
+                });
+    }
+
+    private ManualTradePlanningRequest manualRequest(TradePlanTestFixtures.Environment environment) {
+        return new ManualTradePlanningRequest(
+                environment.context().id(), environment.context().version(), environment.owner(),
+                environment.context().tradingAccountId(),
+                "BTC/EUR", TradeDirection.LONG,
+                new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
+                new StopLoss(BigDecimal.valueOf(99), "Manual invalidation"),
+                List.of(new TakeProfit(BigDecimal.valueOf(102), BigDecimal.valueOf(100))),
+                new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
+                BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
+                "Human discretionary setup", Set.of("Price confirms setup"),
+                Set.of("Stop is reached"), Set.of());
     }
 
     @Test

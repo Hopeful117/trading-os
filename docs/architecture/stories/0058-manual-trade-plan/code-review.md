@@ -11,7 +11,44 @@
 
 ## Findings
 
-No confirmed implementation defect was found in the delivered Story scope.
+The current working tree adds a durable idempotency record and propagates
+`Idempotency-Key`. The blocking findings from the independent review were
+corrected and revalidated.
+
+### Major - Public retry fingerprint is unstable
+
+Resolved. The fingerprint now uses stable actor/account and trade-request
+fields, excluding per-attempt context identifiers and timestamps.
+
+### Major - Plan and idempotency record are not atomic
+
+Resolved. `ManualTradePlanCreationTransaction` persists the Trade Plan and
+idempotency record in one transaction.
+
+### Major - JVM synchronization is not a distributed claim
+
+Resolved. Deterministic actor/account/key plan identity plus the unique
+database claim and transactional boundary protect concurrent instances.
+
+### Minor - Key validation and error propagation are incomplete
+
+Resolved. Keys are bounded to 200 characters and Trading Core preserves
+`IDEMPOTENCY_CONFLICT`.
+
+### Major - Manual request validation is incomplete
+
+Resolved. Missing planning contexts and currencies inconsistent with the
+account context are rejected before persistence with `INVALID_TRADING_CONTEXT`.
+
+### Minor - Orphaned idempotency records are uncontrolled
+
+Resolved. A durable idempotency record pointing to a missing plan now produces
+the controlled `IDEMPOTENCY_STATE_INVALID` server error.
+
+### Major - Fingerprint omits expiration
+
+Resolved. `expiresAt` is now part of the fingerprint and has a regression test
+covering same-key reuse with a changed expiration.
 
 ## Review Notes
 
@@ -24,20 +61,30 @@ No confirmed implementation defect was found in the delivered Story scope.
 * Existing rows are migrated to `OPPORTUNITY`; missing historical authors are
   not fabricated.
 * No provider-specific broker fields were added to the Trade Plan model.
+* Unit tests cover replay, payload conflicts, expiration conflicts, invalid
+  contexts, currency mismatches, and orphaned idempotency records.
+* The authenticated local E2E covers the public Gateway path, persisted replay,
+  and same-key conflict.
 
 ## Independent Review Follow-up
 
-`NEEDS EVIDENCE - REMAINS OPEN`
+`RESOLVED`
 
-The reported validation did not establish the affected Trading Core test suite,
-authenticated Gateway route, and production-profile Flyway migration behavior
-required by the Story. Execute and record those validations before closure.
+The dedicated local E2E replacement
+`artifacts/run-manual-trade-plan-idempotency-e2e.sh` passed after rebuilding the
+runtime services. It verified `201` creation, same plan ID/version on replay,
+and `409 IDEMPOTENCY_CONFLICT` for a changed request.
 
 ## Known Risks
 
 * The manual request accepts explicit sizing and risk inputs. Trading Core Risk
   Evaluation remains responsible for authorizing those values.
 * Gateway authentication and production database migration were not exercised.
+* The full Trading Core suite still has two unrelated PAPER short-margin
+  regression errors; the idempotency-related tests pass.
+* The broader PAPER scan proof remains independently limited by
+  `MARKET_FACT_EVALUATION_BUDGET_EXHAUSTED`; it is not required for this
+  idempotency review.
 * The complete manual-plan-to-PAPER-execution journey is a subsequent Story.
 
 ## Human Review Required

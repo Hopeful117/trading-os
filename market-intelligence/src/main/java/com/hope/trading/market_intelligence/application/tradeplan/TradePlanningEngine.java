@@ -94,6 +94,11 @@ public final class TradePlanningEngine {
     }
 
     public TradePlanningResult planManual(ManualTradePlanningRequest request) {
+        return planManual(request, identifiers.next());
+    }
+
+    public TradePlanningResult planManual(
+            ManualTradePlanningRequest request, TradePlanId identifier) {
         try {
             TradePlanningContext context = contexts.find(
                             request.planningContextId(), request.contextVersion())
@@ -103,7 +108,7 @@ public final class TradePlanningEngine {
                         "Trading Context is missing or unauthorized");
             }
             TradePlan plan = builder.buildManual(
-                    identifiers.next(), new TradePlanVersion(1), request, context, clock.instant());
+                    identifier, new TradePlanVersion(1), request, context, clock.instant());
             return new TradePlanningResult.Success(plan, List.of());
         } catch (IllegalArgumentException invalid) {
             return failure(PlanningFailureReason.INSUFFICIENT_DATA, invalid.getMessage());

@@ -9,6 +9,7 @@ public record ManualTradePlanningRequest(
         UUID planningContextId,
         long contextVersion,
         UUID actorId,
+        UUID tradingAccountId,
         String instrument,
         TradeDirection direction,
         EntryStrategy entry,
@@ -27,6 +28,7 @@ public record ManualTradePlanningRequest(
         Objects.requireNonNull(planningContextId);
         if (contextVersion < 1) throw new IllegalArgumentException("Context version starts at 1");
         Objects.requireNonNull(actorId);
+        Objects.requireNonNull(tradingAccountId);
         instrument = Objects.requireNonNull(instrument).trim();
         if (instrument.isEmpty()) throw new IllegalArgumentException("instrument is required");
         Objects.requireNonNull(direction);

@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.application.scan.ActiveScanException
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionNotFoundException;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionException;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanRiskHandoffException;
+import com.hope.trading.market_intelligence.application.tradeplan.TradePlanIdempotencyException;
 import com.hope.trading.market_intelligence.domain.execution.IllegalExecutionTransitionException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -19,6 +20,13 @@ public class MarketIntelligenceExceptionHandler {
             TradePlanRiskHandoffException exception) {
         return ResponseEntity.status(exception.status()).body(Map.of(
                  "code", exception.code(), ERROR, exception.getMessage()));
+    }
+
+    @ExceptionHandler(TradePlanIdempotencyException.class)
+    ResponseEntity<Map<String, String>> tradePlanIdempotency(
+            TradePlanIdempotencyException exception) {
+        return ResponseEntity.status(exception.status()).body(Map.of(
+                "code", exception.code(), ERROR, exception.getMessage()));
     }
 
     @ExceptionHandler(AnalysisExecutionNotFoundException.class)

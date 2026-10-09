@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.tradeplan;
 
 import com.hope.trading.market_intelligence.adapter.ai.DisabledAiTradePlanningAdapter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.adapter.persistence.*;
 import com.hope.trading.market_intelligence.application.opportunity.OpportunityTestFixtures;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
@@ -55,12 +56,18 @@ public final class TradePlanTestFixtures {
         var events = new ArrayList<com.hope.trading.market_intelligence.domain.tradeplan.TradePlanEvent>();
         var metrics = new com.hope.trading.market_intelligence.adapter.observability
                 .InMemoryTradePlanningMetrics();
+        var idempotency = new InMemoryManualTradePlanIdempotencyRepository();
+        var fingerprints = new ManualTradePlanFingerprintFactory(
+                new ObjectMapper().findAndRegisterModules());
+        var creation = new ManualTradePlanCreationTransaction(
+                engine, plans, idempotency, events::add, metrics, Clock.fixed(NOW, ZoneOffset.UTC));
         var service = new TradePlanApplicationService(
                 engine, plans, new TradePlanLifecyclePolicy(), events::add, metrics,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                idempotency, fingerprints, creation);
         return new Environment(
                 owner, opportunity, context, opportunityStore, contextStore, plans,
-                engine, service, events, metrics);
+                engine, service, idempotency, events, metrics);
     }
     public static TradePlanningRequest request(Environment environment) {
         return new TradePlanningRequest(
@@ -73,7 +80,7 @@ public final class TradePlanTestFixtures {
             InMemoryTradingOpportunityRepository opportunities,
             InMemoryTradePlanningContextRepository contexts,
             InMemoryTradePlanRepository plans, TradePlanningEngine engine,
-            TradePlanApplicationService service,
+            TradePlanApplicationService service, InMemoryManualTradePlanIdempotencyRepository idempotency,
             List<com.hope.trading.market_intelligence.domain.tradeplan.TradePlanEvent> events,
             com.hope.trading.market_intelligence.adapter.observability
                     .InMemoryTradePlanningMetrics metrics) {}

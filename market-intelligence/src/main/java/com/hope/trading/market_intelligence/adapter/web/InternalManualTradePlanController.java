@@ -60,7 +60,8 @@ public final class InternalManualTradePlanController {
             throw new IllegalArgumentException("Manual Trade Plan context does not match actor or account");
         }
         contexts.saveSnapshot(request.context().toDomain());
-        TradePlanningResult result = service.createManual(request.toApplicationRequest(actorId));
+        TradePlanningResult result = service.createManual(
+                request.toApplicationRequest(actorId), idempotencyKey);
         if (result instanceof TradePlanningResult.Success success) {
             TradePlan plan = success.plan();
             TradePlanningContext context = contexts.find(
@@ -97,7 +98,7 @@ public final class InternalManualTradePlanController {
     ) {
         ManualTradePlanningRequest toApplicationRequest(UUID authenticatedActor) {
             return new ManualTradePlanningRequest(
-                    context.id(), context.version(), authenticatedActor, instrument,
+                    context.id(), context.version(), authenticatedActor, accountId, instrument,
                     TradeDirection.valueOf(direction),
                     new EntryStrategy(EntryType.valueOf(entryType), entryPrice,
                             Set.of("Human-authored entry")),

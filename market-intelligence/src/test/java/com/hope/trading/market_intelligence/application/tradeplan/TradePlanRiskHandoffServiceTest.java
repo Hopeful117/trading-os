@@ -67,7 +67,8 @@ class TradePlanRiskHandoffServiceTest {
     void exposesManualOriginWithoutOpportunityProvenance() {
         var environment = TradePlanTestFixtures.environment();
         var result = environment.service().createManual(new ManualTradePlanningRequest(
-                environment.context().id(), environment.context().version(), environment.owner(),
+                 environment.context().id(), environment.context().version(), environment.owner(),
+                 environment.context().tradingAccountId(),
                 "BTC/EUR", TradeDirection.LONG,
                 new EntryStrategy(EntryType.LIMIT, BigDecimal.valueOf(100), Set.of()),
                 new StopLoss(BigDecimal.valueOf(99), "Manual invalidation"),
