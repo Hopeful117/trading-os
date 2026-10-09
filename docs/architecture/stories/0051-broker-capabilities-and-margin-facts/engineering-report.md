@@ -2,12 +2,12 @@
 
 ## Status
 
-`COMPLETED - HUMAN REVIEWED AND COMMITTED`
+`CLOSED - HUMAN REVIEWED, COMMITTED AND PAPER RUNTIME VALIDATED`
 
 ## Outcome
 
-The broker capability and required-margin boundary is implemented locally without
-a commit. Broker Service exposes neutral technical facts while provider details
+The broker capability and required-margin boundary is implemented in the Story
+commits. Broker Service exposes neutral technical facts while provider details
 remain in the Kraken adapter. Trading Core consumes those facts without moving
 authorization, risk rules, or PAPER position authority out of their owning
 domains.
@@ -35,14 +35,14 @@ Fresh Maven validation completed after the documentation remediation:
 * The proof used the configured public Kraken endpoint through the local Docker
   deployment; a separate sandbox/deployed-environment proof is not required by
   the Story acceptance criteria and remains an optional follow-up.
-* The previous end-to-end PAPER proof returned `PAPER_MARGIN_UNAVAILABLE`.
-  Follow-up wiring now allows the PAPER path to request the provider-backed
-  order-margin preview; a fresh authenticated runtime proof is still pending.
+* The fresh authenticated PAPER proof now reaches Risk with provider-backed
+  required-margin facts and no `PAPER_MARGIN_UNAVAILABLE` result.
 
 ## Git State
 
 ```text
-IMPLEMENTATION_COMMIT = NOT_CREATED
+IMPLEMENTATION_COMMIT = 3dcbf283070be9df0f0d0e9966e8a20bfd0de95
+DOCUMENTATION_COMMIT = f2eee8cdc729d74ccd2326bc07f71e376ab6af49
 DOCUMENTATION_BRANCH = main (current workspace branch)
 PUSH = NO
 MERGE = NO
@@ -50,5 +50,5 @@ MERGE = NO
 
 ## Human Actions Required
 
-1. Preserve the reviewed implementation as a story-scoped commit.
+1. Preserve the fresh runtime proof with the Story documentation commit.
 2. Continue with the remaining debt commits on the dedicated debt-resolution branch.

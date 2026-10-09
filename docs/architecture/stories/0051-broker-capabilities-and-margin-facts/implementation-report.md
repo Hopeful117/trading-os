@@ -2,12 +2,12 @@
 
 ## Status
 
-`COMPLETED - HUMAN REVIEWED AND COMMITTED`
+`CLOSED - HUMAN REVIEWED, COMMITTED AND PAPER RUNTIME VALIDATED`
 
 ## Scope Delivered
 
-The implementation now adds a provider-backed Kraken capability and required-margin
-query path without creating a commit.
+The implementation adds a provider-backed Kraken capability and required-margin
+query path through the Story implementation and documentation commits.
 
 * Broker Service exposes capability facts through its query controller and
   operation service.
@@ -40,20 +40,28 @@ Broker Service, Trading Core, and Risk Domain boundary after the client
 hardening.
 
 ```text
-implementation commit: not created; human review pending
-Broker Service: 209 tests passed
-Trading Core: 580 tests passed
+implementation commit: 3dcbf283070be9df0f0d0e9966e8a20bfd0de95
+documentation commit: f2eee8cdc729d74ccd2326bc07f71e376ab6af49
+Broker Service: tests passed (`./mvnw -q test` and `./mvnw -q verify`)
+Trading Core: full suite passed (`./mvnw -q test`)
 Risk Domain: 26 tests passed
 mvn verify: passed; JaCoCo checks met
 git diff --check: passed
-runtime E2E: authenticated provider-backed Kraken proof passed; PAPER preview
-  revalidation is pending after follow-up Trading Core wiring
+runtime E2E: authenticated provider-backed Kraken proof passed
+fresh PAPER proof: artifacts/story-0051-runtime-proof.json
+fresh PAPER scan: COMPLETED
+fresh PAPER Risk: APPROVED
+fresh PAPER Risk evaluation: `ec3e9f4b-4c67-4762-a715-f5827e729283`
+fresh PAPER TradePlan: `cb7a97dc-8ce4-4901-936a-dee6ce1d9f69`, version `2`
+fresh PAPER negative validation: REJECTED by blocking risk rules
+fresh PAPER execution: not attempted
 ```
 
 ## Remaining Evidence
 
 * the authenticated local runtime proof exercised `AssetPairs` and returned
-  side-specific leverage levels plus a `1000.00 USD` margin preview;
+  side-specific leverage levels plus a provider-backed margin preview;
 * provider-specific payload isolation is covered by the neutral contracts and
   adapter tests;
-* Story 0051 is closed after independent review, human approval, and commit creation.
+* Story 0051 is closed after independent review, human approval, commit
+  creation, and fresh PAPER validation.

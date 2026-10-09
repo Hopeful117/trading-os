@@ -4,7 +4,7 @@
 
 **ID:** `0051`
 **Title:** Expose broker capabilities and margin facts through broker-neutral contracts
-**Status:** COMPLETED
+**Status:** CLOSED - HUMAN REVIEWED, COMMITTED AND PAPER RUNTIME VALIDATED
 
 ---
 
@@ -85,11 +85,11 @@ must not authorize a trade or own PAPER position state.
 
 ## Definition of Done
 
-* [ ] Repository Analysis approved.
-* [ ] Implementation Plan approved.
-* [ ] Contracts and provider adapters implemented.
-* [ ] Security and ownership boundaries tested.
-* [ ] Affected tests pass.
+* [x] Repository Analysis approved.
+* [x] Implementation Plan approved.
+* [x] Contracts and provider adapters implemented.
+* [x] Security and ownership boundaries tested.
+* [x] Affected tests pass.
 * [x] Human code review completed.
 * [x] Engineering Report completed.
 * [x] Human commit created.
