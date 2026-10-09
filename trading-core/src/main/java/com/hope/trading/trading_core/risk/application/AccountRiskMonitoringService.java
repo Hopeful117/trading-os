@@ -157,7 +157,7 @@ public class AccountRiskMonitoringService {
                 throw new IllegalStateException("PAPER position Risk facts are incomplete");
             }
             result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
-                    new Money(position.marketValue(), currency), null,
+                    new Money(position.marketValue(), currency), java.util.Optional.empty(),
                     new Money(nonNegative(position.margin()), currency),
                     position.protectionStatus() == null
                             ? com.hope.trading.risk.domain.RiskTypes.ProtectionStatus.UNKNOWN
