@@ -4,7 +4,7 @@
 
 **ID:** `0058`
 **Title:** Create Manual-Origin Trade Plans
-**Status:** CLOSED - IMPLEMENTED, VALIDATED AND INDEPENDENTLY REVIEWED; HUMAN COMMIT PENDING
+**Status:** CLOSED - IMPLEMENTED, VALIDATED, INDEPENDENTLY REVIEWED AND COMMITTED
 
 ---
 
@@ -226,4 +226,4 @@ the accepted decision pipeline.
 * [x] Implementation completed within this Story's scope.
 * [x] Acceptance criteria validated with evidence.
 * [ ] Human code review completed.
-* [ ] Human commit created.
+* [x] Human commit created.

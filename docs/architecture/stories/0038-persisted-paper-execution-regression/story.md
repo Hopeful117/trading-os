@@ -120,4 +120,4 @@ vertical path.
 - [x] Regression implemented.
 - [x] Relevant validation executed.
 - [x] Diff reviewed by the implementation agent.
-- [ ] Human commit created.
+- [x] Human commit created.

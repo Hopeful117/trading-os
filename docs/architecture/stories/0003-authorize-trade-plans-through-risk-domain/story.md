@@ -6,7 +6,7 @@
 
 **Title:** Authorize Trade Plans through the Risk Domain
 
-**Status:** CLOSED - IMPLEMENTED, VALIDATED AND INDEPENDENTLY REVIEWED; HUMAN COMMIT PENDING
+**Status:** CLOSED - IMPLEMENTED, VALIDATED, INDEPENDENTLY REVIEWED AND COMMITTED
 
 ---
 
@@ -140,4 +140,4 @@ Expected validation:
 - [ ] Diff reviewed in IntelliJ.
 - [ ] Code Review approved.
 - [ ] Engineering Report completed.
-- [ ] Human commit created.
+- [x] Human commit created.

@@ -383,4 +383,4 @@ This Story explicitly defers to a future Story 0008 candidate:
 - [ ] Implementation completed.
 - [ ] Relevant tests pass.
 - [ ] Runtime benchmark evidence recorded.
-- [ ] Human commit created.
+- [x] Human commit created.

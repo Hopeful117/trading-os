@@ -4,7 +4,7 @@
 
 **ID:** `0053`
 **Title:** Make a Trade Planning Profile effective for PAPER accounts
-**Status:** CLOSED - PAPER RUNTIME VALIDATED; HUMAN COMMIT PENDING
+**Status:** CLOSED - PAPER RUNTIME VALIDATED AND COMMITTED
 
 ---
 
@@ -101,4 +101,4 @@ out of scope.
 * [x] Implementation completed within this Story's scope.
 * [x] Acceptance criteria validated with evidence.
 * [x] Human code review completed.
-* [ ] Human commit created.
+* [x] Human commit created.
