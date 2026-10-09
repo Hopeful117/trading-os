@@ -27,8 +27,9 @@ The runtime proof is recorded in
 * Opportunity and legacy plans reached human acceptance and were correctly
   blocked by Risk with `POSITION_PROTECTION_INCOMPLETE`.
 * MANUAL plan reached approved Risk and a PAPER broker fill.
-* Targeted orchestration and Spring persistence assertions compare exact
-  ExecutionIntent identifiers and verify none is persisted during preparation;
+* The targeted orchestration test verifies that preparation only calls Market
+  Intelligence. The Spring persistence integration test compares exact
+  ExecutionIntent identifiers and verifies none is persisted during preparation;
   intent creation is downstream of approved execution.
 
 ## Independent Review
@@ -39,5 +40,5 @@ findings are addressed by the expanded runtime artifact and targeted test.
 ## Closure
 
 All Story scope, automated validation, and runtime evidence are recorded.
-Independent review passed. Human closure approval and commit of the current
-artifact set remain the delivery actions.
+Independent review passed. Human closure approval is the remaining delivery
+action; the current artifact set is committed.
