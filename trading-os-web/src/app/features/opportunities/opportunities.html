@@ -48,11 +48,28 @@
                 @for (opportunity of view.opportunities; track opportunity.id) {
                   <tr
                     class="opportunity-row"
+                    [class.opening]="openingOpportunityId === opportunity.id"
                     tabindex="0"
-                    (click)="openOpportunity(opportunity.id)"
-                    (keydown.enter)="openOpportunity(opportunity.id)"
+                    (click)="openOpportunity(opportunity)"
+                    (keydown.enter)="openOpportunity(opportunity)"
                   >
-                    <td class="instrument">{{ opportunity.instrument }}</td>
+                    <td class="instrument">
+                      {{ opportunity.instrument }}
+                      @if (openingOpportunityId === opportunity.id) {
+                        <span class="opening-label">Opening plan…</span>
+                      }
+                      @if (preparationErrors[opportunity.id]; as failure) {
+                        <span class="opening-label risk-failure">
+                          {{ failure.code }}
+                          @if (failure.reasons.length > 0) {
+                            · {{ failure.reasons[0].code }}
+                          }
+                          @for (metric of metricEntries(failure); track metric[0]) {
+                            · {{ metric[0] }}={{ metric[1] }}
+                          }
+                        </span>
+                      }
+                    </td>
 
                     <td>
                       <span class="direction" [class.long]="opportunity.direction === 'LONG'">

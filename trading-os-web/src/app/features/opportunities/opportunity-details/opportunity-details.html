@@ -189,18 +189,74 @@
 
           @if (view.opportunity.status === 'ACTIVE') {
             <footer class="cta-section">
-              <a
-                class="btn-create-plan"
-                [routerLink]="['/decision-workspace']"
-                [queryParams]="{
-                  opportunityId: view.opportunity.id,
-                  marketId: view.opportunity.marketId,
-                  accountId: view.accountId,
-                }"
-                data-testid="create-trade-plan-button"
-              >
-                Open Decision Workspace
-              </a>
+              @if (view.accountId; as accountId) {
+                <button
+                  type="button"
+                  class="btn-create-plan"
+                  (click)="prepareTradePlan(view.opportunity.id, accountId)"
+                  [disabled]="preparing"
+                  data-testid="create-trade-plan-button"
+                >
+                  {{ preparing ? 'Preparing Trade Plan...' : 'Prepare Trade Plan' }}
+                </button>
+                <a
+                  class="btn-secondary"
+                  [routerLink]="['/decision-workspace']"
+                  [queryParams]="{
+                    opportunityId: view.opportunity.id,
+                    marketId: view.opportunity.marketId,
+                    accountId: accountId,
+                  }"
+                  data-testid="decision-workspace-link"
+                >
+                  Review in Decision Workspace
+                </a>
+                @if (preparationError) {
+                  <p class="state-message error" data-testid="preparation-error">
+                    {{ preparationErrorMessage }}
+                  </p>
+                  @if (preparationFailure; as failure) {
+                    @if (failure.reasons.length > 0) {
+                      <section class="risk-preflight" data-testid="risk-preflight-details">
+                        <h3>Risk preflight</h3>
+                        <ul>
+                          @for (reason of failure.reasons; track reason.code) {
+                            <li>
+                              <strong>{{ reason.code }}</strong>
+                              <span>{{ reason.message }}</span>
+                            </li>
+                          }
+                        </ul>
+                        @if (metricEntries(failure).length > 0) {
+                          <dl class="risk-metrics">
+                            @for (metric of metricEntries(failure); track metric[0]) {
+                              <div>
+                                <dt>{{ metric[0] }}</dt>
+                                <dd>{{ metric[1] }}</dd>
+                              </div>
+                            }
+                          </dl>
+                        }
+                        @if (failure.retryable) {
+                          <p class="retry-hint">Risk facts may change. Retry the preparation to re-evaluate.</p>
+                        }
+                      </section>
+                    }
+                  }
+                }
+              } @else {
+                <a
+                  class="btn-create-plan"
+                  [routerLink]="['/decision-workspace']"
+                  [queryParams]="{
+                    opportunityId: view.opportunity.id,
+                    marketId: view.opportunity.marketId,
+                  }"
+                  data-testid="create-trade-plan-button"
+                >
+                  Open Decision Workspace
+                </a>
+              }
             </footer>
           }
         </article>

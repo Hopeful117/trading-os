@@ -1,4 +1,32 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { RiskReason } from '../models/trade-plan.model';
+
+export interface TradePreparationFailure {
+  code: string;
+  message: string;
+  retryable: boolean;
+  reasons: RiskReason[];
+  warnings: RiskReason[];
+  metrics: Record<string, number>;
+}
+
+export function tradePreparationFailure(error: unknown): TradePreparationFailure | null {
+  if (!(error instanceof HttpErrorResponse) || typeof error.error?.code !== 'string') {
+    return null;
+  }
+  const body = error.error as Partial<TradePreparationFailure>;
+  if (body.code !== 'RISK_PREFLIGHT_REJECTED' && body.code !== 'RISK_PREFLIGHT_UNAVAILABLE') {
+    return null;
+  }
+  return {
+    code: body.code,
+    message: typeof body.message === 'string' ? body.message : 'Risk preflight failed.',
+    retryable: body.retryable !== false,
+    reasons: Array.isArray(body.reasons) ? body.reasons : [],
+    warnings: Array.isArray(body.warnings) ? body.warnings : [],
+    metrics: body.metrics && typeof body.metrics === 'object' ? body.metrics : {},
+  };
+}
 
 export function tradeFlowErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof HttpErrorResponse)) {
@@ -23,6 +51,10 @@ export function tradeFlowErrorMessage(error: unknown, fallback: string): string 
     case 'DECISION_NOT_AUTHORIZED':
     case 'RISK_DECISION_REJECTED':
       return 'The deterministic risk decision does not authorize this trade.';
+    case 'RISK_PREFLIGHT_REJECTED':
+      return 'The proposed trade is not feasible under the current risk limits. Review the blocking rules and try again later.';
+    case 'RISK_PREFLIGHT_UNAVAILABLE':
+      return 'The current risk context is unavailable. No trade plan was prepared. Try again later.';
   }
 
   if (error.status === 404) return 'The requested trading item could not be found.';

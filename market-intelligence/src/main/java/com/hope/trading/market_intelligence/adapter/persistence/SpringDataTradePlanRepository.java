@@ -10,6 +10,9 @@ import org.springframework.data.jpa.repository.Lock;
 interface SpringDataTradePlanRepository extends JpaRepository<JpaTradePlanEntity, JpaTradePlanId> {
     Optional<JpaTradePlanEntity> findTopByTradePlanIdOrderByVersionDesc(UUID tradePlanId);
 
+    List<JpaTradePlanEntity> findByRationalePayloadContainingOrderByCreatedAtDesc(
+            String opportunityId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<JpaTradePlanEntity> findFirstByTradePlanIdOrderByVersionDesc(UUID tradePlanId);
 

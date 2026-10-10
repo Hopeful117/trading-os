@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.application.port.TradePlanRepository;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -27,6 +28,15 @@ public final class InMemoryTradePlanRepository implements TradePlanRepository {
     @Override public Optional<TradePlan> findLatest(TradePlanId id) {
         return Optional.ofNullable(store.get(id)).filter(h -> !h.isEmpty())
                 .map(h -> mapper.toDomain(h.lastEntry().getValue()));
+    }
+    @Override public List<TradePlan> findLatestForOpportunity(OpportunityId opportunityId) {
+        return store.values().stream()
+                .filter(history -> !history.isEmpty())
+                .map(history -> mapper.toDomain(history.lastEntry().getValue()))
+                .filter(plan -> plan.rationale().opportunities().stream()
+                        .anyMatch(reference -> reference.id().equals(opportunityId)))
+                .sorted(Comparator.comparing(TradePlan::createdAt).reversed())
+                .toList();
     }
     @Override public Optional<TradePlan> findNext(
             TradePlanId id, TradePlanVersion version) {

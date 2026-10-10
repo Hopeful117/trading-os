@@ -8,6 +8,7 @@ import { OpportunityService } from '../../core/services/opportunity.service';
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { AccountService } from '../../core/services/account.service';
 import { ActiveScanService } from '../../core/services/active-scan.service';
+import { TradePlanService } from '../../core/services/trade-plan.service';
 import { SCAN_POLL_INTERVAL_MS } from './scan-panel/scan-poll-interval';
 
 describe('Opportunities', () => {
@@ -16,6 +17,7 @@ describe('Opportunities', () => {
   let routerMock: { navigate: ReturnType<typeof vi.fn> };
   let opportunityServiceMock: { findActive: ReturnType<typeof vi.fn> };
   let accountServiceMock: { getAccounts: ReturnType<typeof vi.fn> };
+  let tradePlanServiceMock: { createFromOpportunity: ReturnType<typeof vi.fn> };
   let activeScanServiceMock: {
     createScan: ReturnType<typeof vi.fn>;
     findScan: ReturnType<typeof vi.fn>;
@@ -76,6 +78,11 @@ describe('Opportunities', () => {
     routerMock = { navigate: vi.fn().mockResolvedValue(true) };
     opportunityServiceMock = { findActive: vi.fn().mockReturnValue(of(mockOpportunities)) };
     accountServiceMock = { getAccounts: vi.fn().mockReturnValue(of([])) };
+    tradePlanServiceMock = {
+      createFromOpportunity: vi
+        .fn()
+        .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
+    };
     activeScanServiceMock = {
       createScan: vi.fn(),
       findScan: vi.fn(),
@@ -88,6 +95,7 @@ describe('Opportunities', () => {
         { provide: OpportunityService, useValue: opportunityServiceMock },
         { provide: Router, useValue: routerMock },
         { provide: AccountService, useValue: accountServiceMock },
+        { provide: TradePlanService, useValue: tradePlanServiceMock },
         { provide: ActiveScanService, useValue: activeScanServiceMock },
         { provide: SCAN_POLL_INTERVAL_MS, useValue: 25 },
       ],
@@ -167,19 +175,30 @@ describe('Opportunities', () => {
   });
 
   describe('navigation', () => {
-    it('navigates to /opportunities/:id when a row is opened', () => {
-      component.openOpportunity('o1');
+    it('opens the opportunity detail when no account is selected', () => {
+      component.openOpportunity(mockOpportunities[0]);
 
       expect(routerMock.navigate).toHaveBeenCalledWith(['/opportunities', 'o1']);
     });
 
-    it('preserves the selected account when opening an opportunity', () => {
+    it('creates or reuses the plan and opens its page when an account is selected', () => {
       component.accountSelected('a1');
-      component.openOpportunity('o1');
+      component.openOpportunity(mockOpportunities[0]);
 
-      expect(routerMock.navigate).toHaveBeenCalledWith(['/opportunities', 'o1'], {
-        queryParams: { accountId: 'a1' },
-      });
+      expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith('o1', 'a1', 'o1:a1');
+      expect(routerMock.navigate).toHaveBeenCalledWith([
+        '/trade-planning',
+        'plans',
+        'plan-1',
+        'versions',
+        1,
+      ]);
+    });
+
+    it('uses the opportunity account when no account has been selected in the scan panel', () => {
+      component.openOpportunity({ ...mockOpportunities[0], accountId: 'a1' });
+
+      expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith('o1', 'a1', 'o1:a1');
     });
   });
 

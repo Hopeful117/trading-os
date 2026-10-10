@@ -1,9 +1,12 @@
 package com.hope.trading.trading_core.tradeplanning.application;
 
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Command;
+import com.hope.trading.trading_core.risk.application.TradePlanRiskEvaluationService;
 import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.infrastructure.MarketIntelligenceTradePlanningClient;
 import java.time.Clock;
+import java.util.Map;
 import java.util.UUID;
 import feign.FeignException;
 import org.springframework.http.HttpStatus;
@@ -19,14 +22,17 @@ public class OpportunityTradePlanOrchestrationService {
     private final AccountRepository accounts;
     private final TradePlanningProfileService profiles;
     private final MarketIntelligenceTradePlanningClient marketIntelligence;
+    private final TradePlanRiskEvaluationService risk;
     private final Clock clock;
 
     public OpportunityTradePlanOrchestrationService(
             AccountRepository accounts, TradePlanningProfileService profiles,
-            MarketIntelligenceTradePlanningClient marketIntelligence, Clock clock) {
+            MarketIntelligenceTradePlanningClient marketIntelligence,
+            TradePlanRiskEvaluationService risk, Clock clock) {
         this.accounts = accounts;
         this.profiles = profiles;
         this.marketIntelligence = marketIntelligence;
+        this.risk = risk;
         this.clock = clock;
     }
 
@@ -50,7 +56,25 @@ public class OpportunityTradePlanOrchestrationService {
             var response = marketIntelligence.generateFromOpportunity(
                     opportunityId, idempotencyKey,
                     new MarketIntelligenceTradePlanningClient.Request(actorId, accountId, context));
-            return new Response(response.tradePlanId(), response.tradePlanVersion());
+            boolean retryRejectedPreflight = response.reused()
+                    && risk.hasRejectedPreflight(actorId, response.tradePlanId(),
+                    response.tradePlanVersion(), accountId);
+            if (!response.reused() || retryRejectedPreflight) {
+                var preflight = risk.preflight(new Command(actorId, response.tradePlanId(),
+                        response.tradePlanVersion(), accountId, preflightKey(idempotencyKey), clock.instant()));
+                if (!preflight.approved()) {
+                    boolean unavailable = "CONTEXT_UNAVAILABLE".equals(preflight.status());
+                    String message = unavailable
+                            ? "Risk context is currently unavailable"
+                            : "Risk feasibility check rejected the Trade Plan";
+                    throw new AnalysisTradePlanGenerationException(
+                            unavailable ? "RISK_PREFLIGHT_UNAVAILABLE" : "RISK_PREFLIGHT_REJECTED", message,
+                            unavailable ? HttpStatus.SERVICE_UNAVAILABLE.value() : HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                            Map.of("reasons", preflight.reasons(), "warnings", preflight.warnings(),
+                                    "metrics", preflight.metrics(), "retryable", true));
+                }
+            }
+            return new Response(response.tradePlanId(), response.tradePlanVersion(), response.reused());
         } catch (FeignException exception) {
             int status = exception.status() > 0 ? exception.status() : HttpStatus.SERVICE_UNAVAILABLE.value();
             throw failure(HttpStatus.valueOf(status),
@@ -106,5 +130,11 @@ public class OpportunityTradePlanOrchestrationService {
         return new AnalysisTradePlanGenerationException(code, message, status.value());
     }
 
-    public record Response(UUID tradePlanId, long tradePlanVersion) { }
+    private String preflightKey(String idempotencyKey) {
+        String suffix = ":risk-preflight:" + clock.millis();
+        if (idempotencyKey.length() + suffix.length() <= 160) return idempotencyKey + suffix;
+        return idempotencyKey.substring(0, 160 - suffix.length()) + suffix;
+    }
+
+    public record Response(UUID tradePlanId, long tradePlanVersion, boolean reused) { }
 }

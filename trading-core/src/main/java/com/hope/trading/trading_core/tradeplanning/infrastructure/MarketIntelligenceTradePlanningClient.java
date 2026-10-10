@@ -62,7 +62,11 @@ public interface MarketIntelligenceTradePlanningClient {
     record Preferences(UUID id, long version, String entryType, String stopStrategy,
                        BigDecimal stopDistancePercent, String targetStrategy,
                        BigDecimal targetRiskMultiple, String horizon, Duration validity) { }
-    record Response(UUID tradePlanId, long tradePlanVersion) { }
+    record Response(UUID tradePlanId, long tradePlanVersion, boolean reused) {
+        public Response(UUID tradePlanId, long tradePlanVersion) {
+            this(tradePlanId, tradePlanVersion, false);
+        }
+    }
     record DecisionRequest(UUID actorId, String decision) { }
     record PlanTransport(UUID id, long version, Long previousVersion, String status,
                          String origin, UUID authorId,

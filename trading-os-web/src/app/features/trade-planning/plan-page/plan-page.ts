@@ -39,6 +39,7 @@ export type PlanView =
       plan?: TradePlanResponse;
       retryAction?:
         | 'ACCEPT'
+        | 'ACCEPT_AND_EVALUATE_RISK'
         | 'REJECT'
         | 'RISK'
         | 'EXECUTE'
@@ -101,6 +102,7 @@ export class PlanPage implements OnDestroy {
   private readonly executionService = inject(ExecutionService);
 
   private readonly acceptSubject = new Subject<TradePlanResponse>();
+  private readonly acceptAndEvaluateRiskSubject = new Subject<TradePlanResponse>();
   private readonly rejectSubject = new Subject<TradePlanResponse>();
   private readonly evaluateRiskSubject = new Subject<TradePlanResponse>();
   private readonly executeSubject = new Subject<{
@@ -193,6 +195,58 @@ export class PlanPage implements OnDestroy {
               retryable: true,
               plan,
               retryAction: 'REJECT',
+            }),
+          ),
+          startWith<PlanView>({ status: 'deciding' }),
+          finalize(() => (this.commandInFlight = false)),
+        ),
+      ),
+    );
+
+    const acceptAndEvaluateRisk$ = this.acceptAndEvaluateRiskSubject.pipe(
+      switchMap((plan) =>
+        this.tradePlanService.decide(plan.id, plan.version, 'ACCEPT').pipe(
+          switchMap((accepted) => {
+            const accountId = accepted.tradingAccountId;
+            if (!accountId) {
+              return of<PlanView>({
+                status: 'error',
+                message: 'The accepted trade plan has no trading account.',
+                retryable: false,
+                plan: accepted,
+              });
+            }
+
+            return this.tradePlanService
+              .evaluateRisk(accepted.id, accepted.version, accountId, crypto.randomUUID())
+              .pipe(
+                map((decision): PlanView =>
+                  decision.approved
+                    ? { status: 'executionReady', plan: accepted, decision }
+                    : { status: 'riskDecision', plan: accepted, decision },
+                ),
+                catchError((error: unknown) =>
+                  of<PlanView>({
+                    status: 'error',
+                    message: tradeFlowErrorMessage(
+                      error,
+                      'Risk evaluation could not be completed after acceptance.',
+                    ),
+                    retryable: true,
+                    plan: accepted,
+                    retryAction: 'RISK',
+                  }),
+                ),
+                startWith<PlanView>({ status: 'evaluatingRisk' }),
+              );
+          }),
+          catchError((error: unknown) =>
+            of<PlanView>({
+              status: 'error',
+              message: tradeFlowErrorMessage(error, 'The decision could not be recorded.'),
+              retryable: true,
+              plan,
+              retryAction: 'ACCEPT_AND_EVALUATE_RISK',
             }),
           ),
           startWith<PlanView>({ status: 'deciding' }),
@@ -360,6 +414,7 @@ export class PlanPage implements OnDestroy {
     this.view$ = merge(
       plan$,
       accept$,
+      acceptAndEvaluateRisk$,
       reject$,
       evaluateRisk$,
       execute$,
@@ -388,6 +443,12 @@ export class PlanPage implements OnDestroy {
     if (this.commandInFlight) return;
     this.commandInFlight = true;
     this.acceptSubject.next(plan);
+  }
+
+  acceptAndEvaluateRisk(plan: TradePlanResponse): void {
+    if (this.commandInFlight) return;
+    this.commandInFlight = true;
+    this.acceptAndEvaluateRiskSubject.next(plan);
   }
 
   reject(plan: TradePlanResponse): void {
@@ -435,6 +496,9 @@ export class PlanPage implements OnDestroy {
     switch (view.retryAction) {
       case 'ACCEPT':
         this.accept(view.plan);
+        break;
+      case 'ACCEPT_AND_EVALUATE_RISK':
+        this.acceptAndEvaluateRisk(view.plan);
         break;
       case 'REJECT':
         this.reject(view.plan);

@@ -107,7 +107,7 @@ public class TradePlanRiskEvaluationService {
     }
 
     public Response evaluate(Command command) {
-        Response response = transactions.execute(status -> evaluateOfficial(command));
+        Response response = transactions.execute(status -> evaluateOfficial(command, false));
         if (response == null) throw new IllegalStateException("Risk evaluation transaction returned no result");
         try {
             acknowledgmentDelivery.deliver(response.evaluationId());
@@ -117,8 +117,22 @@ public class TradePlanRiskEvaluationService {
         return response;
     }
 
-    private Response evaluateOfficial(Command command) {
-        var stored = persistence.evaluation(command.actorId(), command.idempotencyKey());
+    public Response preflight(Command command) {
+        Response response = transactions.execute(status -> evaluateOfficial(command, true));
+        if (response == null) throw new IllegalStateException("Risk preflight transaction returned no result");
+        return response;
+    }
+
+    public boolean hasRejectedPreflight(UUID actorId, UUID tradePlanId, long tradePlanVersion, UUID accountId) {
+        return persistence.latestRejectedPreflight(actorId, tradePlanId, tradePlanVersion, accountId)
+                .map(stored -> !stored.response().approved())
+                .orElse(false);
+    }
+
+    private Response evaluateOfficial(Command command, boolean preflight) {
+        var stored = preflight
+                ? persistence.preflightEvaluation(command.actorId(), command.idempotencyKey())
+                : persistence.evaluation(command.actorId(), command.idempotencyKey());
         if (stored.isPresent()) {
             var value = stored.get();
             if (!value.tradePlanId().equals(command.tradePlanId())
@@ -133,9 +147,9 @@ public class TradePlanRiskEvaluationService {
         UUID evaluationId = UUID.randomUUID();
         UUID correlationId = UUID.randomUUID();
         try {
-            return evaluateAvailable(command, evaluationId, correlationId);
+            return evaluateAvailable(command, evaluationId, correlationId, preflight);
         } catch (ContextUnavailable unavailable) {
-            return unavailable(command, evaluationId, correlationId, unavailable.code, unavailable.getMessage());
+            return unavailable(command, evaluationId, correlationId, unavailable.code, unavailable.getMessage(), preflight);
         } catch (RiskEvaluationException commandFailure) {
             throw commandFailure;
         } catch (RuntimeException dependencyFailure) {
@@ -143,11 +157,11 @@ public class TradePlanRiskEvaluationService {
                     evaluationId, dependencyFailure.getClass().getSimpleName(), dependencyFailure.getMessage(),
                     dependencyFailure);
             return unavailable(command, evaluationId, correlationId, "DEPENDENCY_UNAVAILABLE",
-                    "A required risk-context dependency is unavailable");
+                    "A required risk-context dependency is unavailable", preflight);
         }
     }
 
-    private Response evaluateAvailable(Command command, UUID evaluationId, UUID correlationId) {
+    private Response evaluateAvailable(Command command, UUID evaluationId, UUID correlationId, boolean preflight) {
         var account = accounts.findById(command.accountId())
                 .orElseThrow(() -> new RiskEvaluationException("ACCOUNT_NOT_FOUND", "Account not found", 404));
         if (account.getUser() == null || !command.actorId().equals(account.getUser().getUserId())) {
@@ -173,7 +187,7 @@ public class TradePlanRiskEvaluationService {
          }
 
         TradePlanRiskPort.Snapshot plan = tradePlans.load(command.tradePlanId(), command.tradePlanVersion());
-        validatePlan(command, plan, configuration.reportingCurrency());
+        validatePlan(command, plan, configuration.reportingCurrency(), preflight);
         RiskDay riskDay = RiskDay.containing(command.requestedAt(), configuration.riskTimeZone(),
                 LocalTime.parse(configuration.riskDayResetTime()));
         RiskFactsProvider.Snapshot brokerSnapshot = facts.load(account, brokerAccount,
@@ -319,11 +333,18 @@ public class TradePlanRiskEvaluationService {
         Response response = response(plan, command.accountId(), result, Map.of("account", accountVersion,
                 "portfolio", portfolioVersion, "market", marketVersion, "ruleSet", ruleVersion,
                 "context", contextVersion));
-        persistence.evaluation(evaluationId, command.actorId(), command.idempotencyKey(), command.tradePlanId(),
-                command.tradePlanVersion(), command.accountId(), command.requestedAt(),
-                result.evaluationStatus().name(), result.decision().map(Enum::name).orElse(null), contextVersion,
-                result, response);
-        if (result.evaluationStatus() == EvaluationStatus.COMPLETED && result.decision().isPresent()
+        if (preflight) {
+            persistence.evaluation(evaluationId, command.actorId(), command.idempotencyKey(), command.tradePlanId(),
+                    command.tradePlanVersion(), command.accountId(), command.requestedAt(),
+                    result.evaluationStatus().name(), result.decision().map(Enum::name).orElse(null), contextVersion,
+                    result, response, "PREFLIGHT");
+        } else {
+            persistence.evaluation(evaluationId, command.actorId(), command.idempotencyKey(), command.tradePlanId(),
+                    command.tradePlanVersion(), command.accountId(), command.requestedAt(),
+                    result.evaluationStatus().name(), result.decision().map(Enum::name).orElse(null), contextVersion,
+                    result, response);
+        }
+        if (!preflight && result.evaluationStatus() == EvaluationStatus.COMPLETED && result.decision().isPresent()
                 && (result.decision().get() == RiskDecision.APPROVED
                 || result.decision().get() == RiskDecision.APPROVED_WITH_WARNINGS)) {
             persistence.acknowledgment(evaluationId, plan.tradePlanId(), plan.tradePlanVersion(),
@@ -332,15 +353,22 @@ public class TradePlanRiskEvaluationService {
         return response;
     }
 
-    private Response unavailable(Command command, UUID evaluationId, UUID correlationId, String code, String message) {
+    private Response unavailable(Command command, UUID evaluationId, UUID correlationId, String code, String message,
+                                 boolean preflight) {
         Instant now = clock.instant();
         Response response = new Response(evaluationId, command.tradePlanId(), command.tradePlanVersion(),
                 command.accountId(), "CONTEXT_UNAVAILABLE", null, false,
                 List.of(new Reason(code, null, "BLOCKING", message, Map.of())), List.of(), Map.of(), now,
                 new Trace(correlationId, ENGINE_VERSION, Map.of(), Map.of(), Map.of()));
-        persistence.evaluation(evaluationId, command.actorId(), command.idempotencyKey(), command.tradePlanId(),
-                command.tradePlanVersion(), command.accountId(), command.requestedAt(),
-                "CONTEXT_UNAVAILABLE", null, null, response, response);
+        if (preflight) {
+            persistence.evaluation(evaluationId, command.actorId(), command.idempotencyKey(), command.tradePlanId(),
+                    command.tradePlanVersion(), command.accountId(), command.requestedAt(),
+                    "CONTEXT_UNAVAILABLE", null, null, response, response, "PREFLIGHT");
+        } else {
+            persistence.evaluation(evaluationId, command.actorId(), command.idempotencyKey(), command.tradePlanId(),
+                    command.tradePlanVersion(), command.accountId(), command.requestedAt(),
+                    "CONTEXT_UNAVAILABLE", null, null, response, response);
+        }
         return response;
     }
 
@@ -360,10 +388,18 @@ public class TradePlanRiskEvaluationService {
         }
     }
 
-    private void validatePlan(Command command, TradePlanRiskPort.Snapshot plan, String reportingCurrency) {
+    private void validatePlan(Command command, TradePlanRiskPort.Snapshot plan, String reportingCurrency,
+                              boolean preflight) {
         if (!command.tradePlanId().equals(plan.tradePlanId()) || command.tradePlanVersion() != plan.tradePlanVersion())
             throw new RiskEvaluationException("TRADE_PLAN_VERSION_MISMATCH", "Trade Plan version mismatch", 409);
-        if (!"ACCEPTED".equals(plan.status())) throw new RiskEvaluationException("TRADE_PLAN_NOT_ACCEPTED", "Trade Plan is not accepted", 422);
+        if (preflight) {
+            if (!"PROPOSED".equals(plan.status()) && !"DRAFT".equals(plan.status())) {
+                throw new RiskEvaluationException("TRADE_PLAN_NOT_PROPOSED",
+                        "Risk preflight requires a proposed Trade Plan", 422);
+            }
+        } else if (!"ACCEPTED".equals(plan.status())) {
+            throw new RiskEvaluationException("TRADE_PLAN_NOT_ACCEPTED", "Trade Plan is not accepted", 422);
+        }
         if (!command.actorId().equals(plan.ownerId()) || !command.accountId().equals(plan.tradingAccountId()))
             throw new RiskEvaluationException("TRADE_PLAN_FORBIDDEN", "Trade Plan ownership does not match account", 403);
         if (plan.sourcePayload() == null || plan.contextId() == null || plan.contextVersion() < 1)

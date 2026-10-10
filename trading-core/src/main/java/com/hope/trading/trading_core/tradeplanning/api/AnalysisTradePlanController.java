@@ -45,11 +45,16 @@ public class AnalysisTradePlanController {
     public record Request(@NotNull UUID accountId) { }
 }
 
-@RestControllerAdvice(assignableTypes = AnalysisTradePlanController.class)
+@RestControllerAdvice(assignableTypes = {
+        AnalysisTradePlanController.class, OpportunityTradePlanController.class
+})
 class AnalysisTradePlanGenerationExceptionHandler {
     @ExceptionHandler(AnalysisTradePlanGenerationException.class)
-    ResponseEntity<Map<String, String>> handle(AnalysisTradePlanGenerationException failure) {
-        return ResponseEntity.status(failure.status()).body(
-                Map.of("code", failure.code(), "message", failure.getMessage()));
+    ResponseEntity<Map<String, Object>> handle(AnalysisTradePlanGenerationException failure) {
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("code", failure.code());
+        response.put("message", failure.getMessage());
+        response.putAll(failure.details());
+        return ResponseEntity.status(failure.status()).body(response);
     }
 }

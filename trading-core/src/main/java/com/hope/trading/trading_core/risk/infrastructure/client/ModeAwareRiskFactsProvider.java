@@ -112,7 +112,9 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                         "TRADING_CORE", absoluteQuantity, trade.getStopLoss()));
         return new RiskFactsProvider.Position(trade.getTradeId(), "paper-trade:" + trade.getTradeId(),
                 "TRADING_CORE", trade.getSymbol(), quantity, trade.getEntryPrice(),
-                currentPrice == null || absoluteQuantity == null ? null : currentPrice.multiply(absoluteQuantity), null,
+                currentPrice == null || absoluteQuantity == null ? null : currentPrice.multiply(absoluteQuantity),
+                trade.getEntryPrice() == null || absoluteQuantity == null
+                        ? null : trade.getEntryPrice().multiply(absoluteQuantity),
                 trade.getStopLoss() == null ? BigDecimal.ZERO : absoluteQuantity, stops);
     }
 

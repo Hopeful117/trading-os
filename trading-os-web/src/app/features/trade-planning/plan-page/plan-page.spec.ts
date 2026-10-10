@@ -108,7 +108,9 @@ describe('PlanPage', () => {
     expect(card.textContent).toContain('BTC/EUR');
     expect(card.textContent).toContain('1.0000');
     expect(card.textContent).toContain('100.00');
-    expect(fixture.nativeElement.querySelector('[data-testid="accept-button"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="accept-and-evaluate-risk-button"]'),
+    ).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="reject-button"]')).toBeTruthy();
   });
 
@@ -146,6 +148,79 @@ describe('PlanPage', () => {
       fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]'),
     ).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="execute-button"]')).toBeTruthy();
+  });
+
+  it('accepts before evaluating risk and uses the accepted plan version', () => {
+    const decide = vi.fn(() => of(fakePlan('ACCEPTED', 2)));
+    const evaluateRisk = vi.fn(() => of(fakeRiskDecision('APPROVED')));
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        {
+          provide: TradePlanService,
+          useValue: {
+            getPlan: () => of(fakePlan('PROPOSED', 1)),
+            decide,
+            evaluateRisk,
+          },
+        },
+        {
+          provide: ExecutionService,
+          useValue: {
+            validate: () => of({ id: 'exec-1', status: 'VALIDATED' }),
+            execute: () => of({ id: 'exec-1', status: 'COMPLETED' }),
+          },
+        },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="accept-and-evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(decide).toHaveBeenCalledWith('tp-1', 1, 'ACCEPT');
+    expect(evaluateRisk).toHaveBeenCalledWith('tp-1', 2, 'acc-1', expect.any(String));
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-ready-state"]'),
+    ).toBeTruthy();
+  });
+
+  it('retains the accepted plan when chained risk evaluation fails', () => {
+    const decide = vi.fn(() => of(fakePlan('ACCEPTED', 2)));
+    const evaluateRisk = vi.fn(() => throwError(() => new Error('risk unavailable')));
+    TestBed.configureTestingModule({
+      imports: [PlanPage],
+      providers: [
+        { provide: ActivatedRoute, useValue: mockActivatedRoute({ planId: 'tp-1', version: '1' }) },
+        {
+          provide: TradePlanService,
+          useValue: {
+            getPlan: () => of(fakePlan('PROPOSED', 1)),
+            decide,
+            evaluateRisk,
+          },
+        },
+        { provide: ExecutionService, useValue: {} },
+      ],
+    });
+
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-testid="accept-and-evaluate-risk-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="error-state"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(
+      'Risk evaluation could not be completed after acceptance',
+    );
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="retry-command-button"]'),
+    ).toBeTruthy();
+    expect(evaluateRisk).toHaveBeenCalledWith('tp-1', 2, 'acc-1', expect.any(String));
   });
 
   it('clicking execute triggers execution flow and shows result', () => {
@@ -449,9 +524,9 @@ describe('PlanPage', () => {
     });
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
-    fixture.nativeElement.querySelector('[data-testid="accept-button"]')?.click();
+    fixture.nativeElement.querySelector('[data-testid="accept-and-evaluate-risk-button"]')?.click();
     fixture.detectChanges();
-    fixture.nativeElement.querySelector('[data-testid="accept-button"]')?.click();
+    fixture.nativeElement.querySelector('[data-testid="accept-and-evaluate-risk-button"]')?.click();
 
     expect(decide).toHaveBeenCalledTimes(1);
     expect(fixture.nativeElement.querySelector('[data-testid="deciding-state"]')).toBeTruthy();
@@ -481,7 +556,7 @@ describe('PlanPage', () => {
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
     fixture.detectChanges();
-    fixture.nativeElement.querySelector('[data-testid="accept-button"]')?.click();
+    fixture.nativeElement.querySelector('[data-testid="accept-and-evaluate-risk-button"]')?.click();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="error-state"]')).toBeTruthy();

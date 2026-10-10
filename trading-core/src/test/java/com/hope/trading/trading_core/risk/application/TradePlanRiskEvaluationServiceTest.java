@@ -492,6 +492,18 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
+    void preflightAllowsProposedPlanWithoutRemoteAcknowledgment() {
+        availableContext(List.of());
+        when(plans.load(planId, 3)).thenReturn(plan("USD", "USD", "PROPOSED", "AUTOMATED", new BigDecimal("90")));
+
+        Response response = service.preflight(command("preflight", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        verify(acknowledgmentDelivery, never()).deliver(any());
+        verify(plans, never()).acknowledge(any(), anyLong(), any(), any(), any());
+    }
+
+    @Test
     void localCommitFailureNeverAttemptsRemoteAcknowledgment() {
         availableContext(List.of());
         doThrow(new IllegalStateException("commit failed")).when(transactionManager).commit(any());
@@ -555,13 +567,18 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency) {
-        return plan(accountCurrency, sizingCurrency, "AUTOMATED", new BigDecimal("90"));
+        return plan(accountCurrency, sizingCurrency, "ACCEPTED", "AUTOMATED", new BigDecimal("90"));
     }
 
     private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency,
                                             String origin, BigDecimal stopPrice) {
+        return plan(accountCurrency, sizingCurrency, "ACCEPTED", origin, stopPrice);
+    }
+
+    private TradePlanRiskPort.Snapshot plan(String accountCurrency, String sizingCurrency,
+                                            String status, String origin, BigDecimal stopPrice) {
         EntryIntent entryIntent = new EntryIntent(EntryIntent.OrderType.MARKET, null);
-        return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", origin, now,
+        return new TradePlanRiskPort.Snapshot(planId, 3, status, origin, now,
                 UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
                 UUID.randomUUID(), 2, UUID.randomUUID(), 4,
                  "ETHUSD", "LONG", entryIntent, stopPrice, new BigDecimal("120"), BigDecimal.ONE,
