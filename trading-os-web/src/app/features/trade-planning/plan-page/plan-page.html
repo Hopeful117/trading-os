@@ -143,11 +143,11 @@
             </button>
             <button
               class="btn-accept"
-              (click)="accept(view.plan)"
+              (click)="acceptAndEvaluateRisk(view.plan)"
               [disabled]="busy$ | async"
-              data-testid="accept-button"
+              data-testid="accept-and-evaluate-risk-button"
             >
-              Accept Plan
+              Accept and Evaluate Risk
             </button>
           </footer>
         </article>

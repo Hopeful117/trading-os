@@ -36,7 +36,8 @@ class OpportunityTradePlanGenerationServiceTest {
         environment = TradePlanTestFixtures.environment();
         service = new OpportunityTradePlanGenerationService(
                 environment.opportunities(), environment.contexts(), marketData,
-                environment.service(), Clock.fixed(TradePlanTestFixtures.NOW, ZoneOffset.UTC),
+                environment.service(), environment.plans(),
+                Clock.fixed(TradePlanTestFixtures.NOW, ZoneOffset.UTC),
                 Duration.ofSeconds(30));
         when(marketData.findAllMarkets())
                 .thenReturn(List.of(market(environment.opportunity().marketId().orElseThrow(), "BTC/EUR")));
@@ -88,6 +89,18 @@ class OpportunityTradePlanGenerationServiceTest {
                 .findLatest(new TradePlanId(response.tradePlanId()))
                 .orElseThrow();
         assertThat(plan.execution().entry().price()).isEqualByComparingTo(BigDecimal.valueOf(101));
+    }
+
+    @Test
+    void reusesLatestPlanForOpportunityRegardlessOfStatus() {
+        var first = generate();
+        var plan = environment.plans().findLatest(new TradePlanId(first.tradePlanId())).orElseThrow();
+        environment.service().transition(plan.id(), TradePlanStatus.ACCEPTED);
+
+        var second = generate();
+
+        assertThat(second.tradePlanId()).isEqualTo(first.tradePlanId());
+        assertThat(second.tradePlanVersion()).isEqualTo(2);
     }
 
     @Test

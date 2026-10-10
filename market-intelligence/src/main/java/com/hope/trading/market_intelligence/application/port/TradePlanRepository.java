@@ -1,12 +1,14 @@
 package com.hope.trading.market_intelligence.application.port;
 
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
 import java.util.*;
 
 public interface TradePlanRepository {
     TradePlan append(TradePlan plan);
     Optional<TradePlan> find(TradePlanId id, TradePlanVersion version);
     Optional<TradePlan> findLatest(TradePlanId id);
+    List<TradePlan> findLatestForOpportunity(OpportunityId opportunityId);
     default Optional<TradePlan> findLatestForUpdate(TradePlanId id) {
         return findLatest(id);
     }

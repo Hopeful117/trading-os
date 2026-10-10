@@ -112,7 +112,11 @@ export class PreparePlanPage {
         if (view.status !== 'creating') return of(view);
 
         return this.tradePlanService
-          .createFromOpportunity(view.opportunityId, this.accountId, crypto.randomUUID())
+          .createFromOpportunity(
+            view.opportunityId,
+            this.accountId,
+            `${view.opportunityId}:${this.accountId}`,
+          )
           .pipe(
             map((created) => {
               void this.router.navigate([

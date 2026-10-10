@@ -3,6 +3,8 @@ package com.hope.trading.trading_core.tradeplanning.application;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.risk.application.RiskEvaluationModels;
+import com.hope.trading.trading_core.risk.application.TradePlanRiskEvaluationService;
 import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.infrastructure.MarketIntelligenceTradePlanningClient;
 import feign.FeignException;
@@ -25,12 +27,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class OpportunityTradePlanOrchestrationServiceTest {
     private AccountRepository accounts;
     private TradePlanningProfileService profiles;
     private MarketIntelligenceTradePlanningClient marketIntelligence;
+    private TradePlanRiskEvaluationService risk;
     private OpportunityTradePlanOrchestrationService service;
 
     private final UUID actorId = UUID.randomUUID();
@@ -42,10 +46,16 @@ class OpportunityTradePlanOrchestrationServiceTest {
         accounts = mock(AccountRepository.class);
         profiles = mock(TradePlanningProfileService.class);
         marketIntelligence = mock(MarketIntelligenceTradePlanningClient.class);
+        risk = mock(TradePlanRiskEvaluationService.class);
         service = new OpportunityTradePlanOrchestrationService(
-                accounts, profiles, marketIntelligence, Clock.systemUTC());
+                accounts, profiles, marketIntelligence, risk, Clock.systemUTC());
         when(accounts.findById(accountId)).thenReturn(Optional.of(account()));
         when(profiles.effective(actorId, accountId)).thenReturn(profile("EUR"));
+        when(risk.preflight(any())).thenReturn(new RiskEvaluationModels.Response(
+                UUID.randomUUID(), UUID.randomUUID(), 1, accountId, "COMPLETED", "APPROVED", true,
+                java.util.List.of(), java.util.List.of(), java.util.Map.of(), Instant.now(),
+                new RiskEvaluationModels.Trace(UUID.randomUUID(), "test", java.util.Map.of(),
+                        java.util.Map.of(), java.util.Map.of())));
     }
 
     private Account account() {
@@ -91,6 +101,67 @@ class OpportunityTradePlanOrchestrationServiceTest {
                                 && sent.context().tradingAccountId().equals(accountId)
                                 && sent.context().accountCurrency().equals("EUR")));
         verifyNoMoreInteractions(marketIntelligence);
+    }
+
+    @Test
+    void rejectsNewPlanWhenRiskPreflightFails() {
+        when(marketIntelligence.generateFromOpportunity(eq(opportunityId), eq("key-1"), any()))
+                .thenReturn(new MarketIntelligenceTradePlanningClient.Response(UUID.randomUUID(), 1, false));
+        when(risk.preflight(any())).thenReturn(new RiskEvaluationModels.Response(
+                UUID.randomUUID(), UUID.randomUUID(), 1, accountId, "COMPLETED", "REJECTED", false,
+                java.util.List.of(new RiskEvaluationModels.Reason(
+                        "MAX_EXPOSURE", "1", "BLOCKING", "Exposure exceeds the configured limit", java.util.Map.of())),
+                java.util.List.of(), java.util.Map.of(), Instant.now(),
+                new RiskEvaluationModels.Trace(UUID.randomUUID(), "test", java.util.Map.of(),
+                        java.util.Map.of(), java.util.Map.of())));
+
+        assertThatThrownBy(() -> service.createFromOpportunity(actorId, opportunityId, accountId, "key-1"))
+                .isInstanceOf(AnalysisTradePlanGenerationException.class)
+                .satisfies(error -> assertThat(((AnalysisTradePlanGenerationException) error).code())
+                        .isEqualTo("RISK_PREFLIGHT_REJECTED"));
+    }
+
+    @Test
+    void reusesExistingPlanWithoutRiskPreflight() {
+        when(marketIntelligence.generateFromOpportunity(eq(opportunityId), eq("key-1"), any()))
+                .thenReturn(new MarketIntelligenceTradePlanningClient.Response(UUID.randomUUID(), 1, true));
+
+        service.createFromOpportunity(actorId, opportunityId, accountId, "key-1");
+
+        org.mockito.Mockito.verify(risk, never()).preflight(any());
+    }
+
+    @Test
+    void retriesAPreviouslyRejectedPreflightWithCurrentFacts() {
+        when(marketIntelligence.generateFromOpportunity(eq(opportunityId), eq("key-1"), any()))
+                .thenReturn(new MarketIntelligenceTradePlanningClient.Response(UUID.randomUUID(), 1, true));
+        when(risk.hasRejectedPreflight(eq(actorId), any(), eq(1L), eq(accountId))).thenReturn(true);
+
+        service.createFromOpportunity(actorId, opportunityId, accountId, "key-1");
+
+        org.mockito.Mockito.verify(risk).preflight(any());
+    }
+
+    @Test
+    void exposesRiskContextUnavailableAsRetryableServiceFailure() {
+        when(marketIntelligence.generateFromOpportunity(eq(opportunityId), eq("key-1"), any()))
+                .thenReturn(new MarketIntelligenceTradePlanningClient.Response(UUID.randomUUID(), 1, false));
+        when(risk.preflight(any())).thenReturn(new RiskEvaluationModels.Response(
+                UUID.randomUUID(), UUID.randomUUID(), 1, accountId, "CONTEXT_UNAVAILABLE", null, false,
+                java.util.List.of(new RiskEvaluationModels.Reason(
+                        "BROKER_RISK_FACTS_INCOMPLETE", null, "BLOCKING", "Facts unavailable", java.util.Map.of())),
+                java.util.List.of(), java.util.Map.of(), Instant.now(),
+                new RiskEvaluationModels.Trace(UUID.randomUUID(), "test", java.util.Map.of(),
+                        java.util.Map.of(), java.util.Map.of())));
+
+        assertThatThrownBy(() -> service.createFromOpportunity(actorId, opportunityId, accountId, "key-1"))
+                .isInstanceOf(AnalysisTradePlanGenerationException.class)
+                .satisfies(error -> {
+                    var failure = (AnalysisTradePlanGenerationException) error;
+                    assertThat(failure.code()).isEqualTo("RISK_PREFLIGHT_UNAVAILABLE");
+                    assertThat(failure.status()).isEqualTo(503);
+                    assertThat(failure.details()).containsEntry("retryable", true);
+                });
     }
 
     @Test

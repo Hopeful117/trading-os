@@ -12,6 +12,7 @@ import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanVersion;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanOrigin;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContextReference;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradingRationale;
+import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -58,6 +59,22 @@ public class JpaTradePlanRepository implements TradePlanRepository {
     @Transactional(readOnly = true)
     public Optional<TradePlan> findLatest(TradePlanId id) {
         return repository.findTopByTradePlanIdOrderByVersionDesc(id.value()).map(this::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TradePlan> findLatestForOpportunity(OpportunityId opportunityId) {
+        return repository.findByRationalePayloadContainingOrderByCreatedAtDesc(
+                        opportunityId.value().toString())
+                .stream()
+                .map(this::toDomain)
+                .filter(plan -> plan.rationale().opportunities().stream()
+                        .anyMatch(reference -> reference.id().equals(opportunityId)))
+                .collect(java.util.stream.Collectors.toMap(
+                        TradePlan::id, plan -> plan,
+                        (left, right) -> left.version().value() >= right.version().value() ? left : right,
+                        java.util.LinkedHashMap::new))
+                .values().stream().toList();
     }
 
     @Override

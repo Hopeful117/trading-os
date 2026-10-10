@@ -461,7 +461,11 @@ export class DecisionWorkspace {
 
     this.opportunityPreparing = true;
     this.tradePlanService
-      .createFromOpportunity(this.opportunity.id, this.selectedAccountId, crypto.randomUUID())
+      .createFromOpportunity(
+        this.opportunity.id,
+        this.selectedAccountId,
+        `${this.opportunity.id}:${this.selectedAccountId}`,
+      )
       .subscribe({
         next: (created) => {
           void this.router.navigate([

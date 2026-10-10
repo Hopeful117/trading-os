@@ -72,7 +72,7 @@ class ModeAwareRiskFactsProviderTest {
         assertThat(snapshot.positions().get(0).protectedQuantity()).isZero();
         assertThat(snapshot.positions().get(0).protectiveStops()).isEmpty();
         assertThat(snapshot.positions().get(0).protectionStatus().name()).isEqualTo("UNPROTECTED");
-        assertThat(snapshot.positions().get(0).margin()).isNull();
+        assertThat(snapshot.positions().get(0).margin()).isEqualByComparingTo(new BigDecimal("100"));
         verifyNoInteractions(liveFacts);
     }
 

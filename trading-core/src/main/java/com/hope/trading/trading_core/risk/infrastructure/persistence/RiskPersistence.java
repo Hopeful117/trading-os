@@ -36,8 +36,30 @@ public class RiskPersistence {
     }
 
     public Optional<StoredEvaluation> evaluation(UUID actorId, String key) {
-        return entityManager.createQuery("select e from RiskEvaluationEntity e where e.actorId=:actor and e.idempotencyKey=:key and e.evaluationMode='PRE_TRADE'",
+        return evaluation(actorId, key, "PRE_TRADE");
+    }
+
+    public Optional<StoredEvaluation> preflightEvaluation(UUID actorId, String key) {
+        return evaluation(actorId, key, "PREFLIGHT");
+    }
+
+    public Optional<StoredEvaluation> latestRejectedPreflight(UUID actorId, UUID tradePlanId,
+                                                               long tradePlanVersion, UUID accountId) {
+        return entityManager.createQuery("select e from RiskEvaluationEntity e where e.actorId=:actor "
+                        + "and e.tradePlanId=:plan and e.tradePlanVersion=:version and e.accountId=:account "
+                        + "and e.evaluationMode='PREFLIGHT' order by e.requestedAt desc",
+                        RiskEvaluationEntity.class)
+                .setParameter("actor", actorId).setParameter("plan", tradePlanId)
+                .setParameter("version", tradePlanVersion).setParameter("account", accountId)
+                .setMaxResults(1).getResultStream().findFirst()
+                .map(e -> new StoredEvaluation(e.id, e.tradePlanId, e.tradePlanVersion, e.accountId,
+                        e.status, e.decision, read(e.responsePayload, Response.class), e.evaluationMode));
+    }
+
+    private Optional<StoredEvaluation> evaluation(UUID actorId, String key, String mode) {
+        return entityManager.createQuery("select e from RiskEvaluationEntity e where e.actorId=:actor and e.idempotencyKey=:key and e.evaluationMode=:mode",
                         RiskEvaluationEntity.class).setParameter("actor", actorId).setParameter("key", key)
+                .setParameter("mode", mode)
                 .getResultStream().findFirst().map(e -> new StoredEvaluation(e.id, e.tradePlanId,
                         e.tradePlanVersion, e.accountId, e.status, e.decision,
                         read(e.responsePayload, Response.class), e.evaluationMode));
@@ -172,11 +194,18 @@ public class RiskPersistence {
     public void evaluation(UUID id, UUID actorId, String key, UUID tradePlanId, long tradePlanVersion,
                            UUID accountId, Instant requestedAt, String status, String decision,
                            Long contextVersion, Object officialResult, Response response) {
+        evaluation(id, actorId, key, tradePlanId, tradePlanVersion, accountId, requestedAt, status, decision,
+                contextVersion, officialResult, response, "PRE_TRADE");
+    }
+
+    public void evaluation(UUID id, UUID actorId, String key, UUID tradePlanId, long tradePlanVersion,
+                           UUID accountId, Instant requestedAt, String status, String decision,
+                           Long contextVersion, Object officialResult, Response response, String evaluationMode) {
         RiskEvaluationEntity entity = new RiskEvaluationEntity();
         entity.id = id; entity.actorId = actorId; entity.idempotencyKey = key;
         entity.tradePlanId = tradePlanId; entity.tradePlanVersion = tradePlanVersion; entity.accountId = accountId;
         entity.requestedAt = requestedAt; entity.status = status; entity.decision = decision;
-        entity.evaluationMode = "PRE_TRADE";
+        entity.evaluationMode = evaluationMode;
         entity.contextSnapshotVersion = contextVersion; entity.resultSchemaVersion = 1;
         entity.resultPayload = write(officialResult); entity.responseSchemaVersion = 1;
         entity.responsePayload = write(response); entityManager.persist(entity); entityManager.flush();
@@ -291,7 +320,7 @@ public class RiskPersistence {
     public Optional<StoredEvaluation> evaluationById(UUID evaluationId) {
         RiskEvaluationEntity e = entityManager.find(RiskEvaluationEntity.class, evaluationId);
         if (e == null) return Optional.empty();
-        Response response = "PRE_TRADE".equals(e.evaluationMode)
+        Response response = ("PRE_TRADE".equals(e.evaluationMode) || "PREFLIGHT".equals(e.evaluationMode))
                 ? read(e.responsePayload, Response.class) : null;
         return Optional.of(new StoredEvaluation(e.id, e.tradePlanId, e.tradePlanVersion,
                 e.accountId, e.status, e.decision, response, e.evaluationMode));

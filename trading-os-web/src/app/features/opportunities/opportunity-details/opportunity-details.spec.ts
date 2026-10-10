@@ -1,15 +1,22 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { convertToParamMap, ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 
 import { OpportunityDetail, OpportunityDetailView } from './opportunity-details';
 import { OpportunityService } from '../../../core/services/opportunity.service';
+import { TradePlanService } from '../../../core/services/trade-plan.service';
 import { OpportunityResponse, OpportunitySetup } from '../../../core/models/opportunity.model';
 
 describe('OpportunityDetail', () => {
   let fixture: ComponentFixture<OpportunityDetail>;
   let opportunityServiceMock: { findById: ReturnType<typeof vi.fn> };
+  let tradePlanServiceMock: { createFromOpportunity: ReturnType<typeof vi.fn> };
+  let routerMock: {
+    navigate: ReturnType<typeof vi.fn>;
+    createUrlTree: ReturnType<typeof vi.fn>;
+    serializeUrl: ReturnType<typeof vi.fn>;
+  };
 
   const setup: OpportunitySetup = {
     referencePrice: 64120.5,
@@ -50,6 +57,8 @@ describe('OpportunityDetail', () => {
       imports: [OpportunityDetail],
       providers: [
         { provide: OpportunityService, useValue: opportunityServiceMock },
+        { provide: TradePlanService, useValue: tradePlanServiceMock },
+        { provide: Router, useValue: routerMock },
         {
           provide: ActivatedRoute,
           useValue: {
@@ -76,6 +85,20 @@ describe('OpportunityDetail', () => {
 
   beforeEach(() => {
     opportunityServiceMock = { findById: vi.fn().mockReturnValue(of(mockOpportunity)) };
+    tradePlanServiceMock = {
+      createFromOpportunity: vi
+        .fn()
+        .mockReturnValue(of({ tradePlanId: 'tp-1', tradePlanVersion: 1 })),
+    };
+    routerMock = {
+      navigate: vi.fn().mockResolvedValue(true),
+      createUrlTree: vi.fn((commands, extras) => ({ commands, extras })),
+      serializeUrl: vi.fn((tree) => {
+        const commands = tree.commands as string[];
+        const params = new URLSearchParams(tree.extras?.queryParams ?? {}).toString();
+        return `${commands.join('/')}${params ? `?${params}` : ''}`;
+      }),
+    };
   });
 
   it('should create', async () => {
@@ -118,11 +141,34 @@ describe('OpportunityDetail', () => {
       expect(element.textContent).toContain('obs-2');
     });
 
-    it('links active opportunities to the account-scoped decision workspace', async () => {
+    it('prepares directly when account context is available', async () => {
+      await createComponent('o1', 'account-1');
+
+      const button = fixture.nativeElement.querySelector(
+        '[data-testid="create-trade-plan-button"]',
+      ) as HTMLButtonElement;
+
+      button.click();
+
+      expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith(
+        'o1',
+        'account-1',
+        expect.any(String),
+      );
+      expect(routerMock.navigate).toHaveBeenCalledWith([
+        '/trade-planning',
+        'plans',
+        'tp-1',
+        'versions',
+        1,
+      ]);
+    });
+
+    it('keeps the Decision Workspace as a secondary account-scoped action', async () => {
       await createComponent('o1', 'account-1');
 
       const link = fixture.nativeElement.querySelector(
-        '[data-testid="create-trade-plan-button"]',
+        '[data-testid="decision-workspace-link"]',
       ) as HTMLAnchorElement;
 
       expect(link.getAttribute('href')).toContain('/decision-workspace');
@@ -139,6 +185,34 @@ describe('OpportunityDetail', () => {
       ) as HTMLAnchorElement;
 
       expect(link.getAttribute('href')).not.toContain('accountId=');
+    });
+
+    it('renders a retryable error when direct preparation fails', async () => {
+      tradePlanServiceMock.createFromOpportunity.mockReturnValue(
+        throwError(() => new Error('unavailable')),
+      );
+      await createComponent('o1', 'account-1');
+
+      fixture.nativeElement.querySelector('[data-testid="create-trade-plan-button"]').click();
+      fixture.detectChanges();
+
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="preparation-error"]'),
+      ).not.toBeNull();
+      expect(fixture.componentInstance.preparing).toBe(false);
+    });
+
+    it('does not submit duplicate direct preparation commands while pending', async () => {
+      tradePlanServiceMock.createFromOpportunity.mockReturnValue(new Observable(() => {}));
+      await createComponent('o1', 'account-1');
+
+      const button = fixture.nativeElement.querySelector(
+        '[data-testid="create-trade-plan-button"]',
+      ) as HTMLButtonElement;
+      button.click();
+      button.click();
+
+      expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledTimes(1);
     });
 
     it('does not fabricate provenance when no match exists', async () => {

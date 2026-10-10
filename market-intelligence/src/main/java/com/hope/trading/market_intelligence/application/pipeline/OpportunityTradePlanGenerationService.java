@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapsh
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse;
 import com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository;
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
+import com.hope.trading.market_intelligence.application.port.TradePlanRepository;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanApplicationService;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanningResult;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanningRequest;
@@ -35,6 +36,7 @@ public class OpportunityTradePlanGenerationService {
     private final TradePlanningContextRepository contexts;
     private final MarketDataClient marketData;
     private final TradePlanApplicationService tradePlans;
+    private final TradePlanRepository plans;
     private final Clock clock;
     private final Duration maximumPriceAge;
     private final PlanningPriceSelector priceSelector = new PlanningPriceSelector();
@@ -43,12 +45,13 @@ public class OpportunityTradePlanGenerationService {
             TradingOpportunityRepository opportunities,
             TradePlanningContextRepository contexts,
             MarketDataClient marketData,
-            TradePlanApplicationService tradePlans, Clock clock,
+            TradePlanApplicationService tradePlans, TradePlanRepository plans, Clock clock,
             @Value("${intelligence.planning.price-max-age:30s}") Duration maximumPriceAge) {
         this.opportunities = opportunities;
         this.contexts = contexts;
         this.marketData = marketData;
         this.tradePlans = tradePlans;
+        this.plans = plans;
         this.clock = clock;
         this.maximumPriceAge = maximumPriceAge;
     }
@@ -66,6 +69,15 @@ public class OpportunityTradePlanGenerationService {
         UUID opportunityAccountId = opportunity.accountId().orElse(null);
         if (opportunityAccountId == null || !opportunityAccountId.equals(accountId)) {
             throw failure(HttpStatus.FORBIDDEN, "OPPORTUNITY_ACCOUNT_MISMATCH");
+        }
+        var existing = plans.findLatestForOpportunity(new OpportunityId(opportunityId)).stream()
+                .filter(plan -> plan.authorId().map(actorId::equals).orElse(false))
+                .filter(plan -> contexts.find(plan.planningContext().id(), plan.planningContext().version())
+                        .map(saved -> saved.tradingAccountId().equals(accountId)).orElse(false))
+                .findFirst();
+        if (existing.isPresent()) {
+            TradePlan plan = existing.get();
+            return new GenerationResponse(plan.id().value(), plan.version().value(), true);
         }
         UUID marketId = opportunity.marketId().orElseGet(() -> marketData.findAllMarkets().stream()
                 .filter(item -> opportunity.instrument().equalsIgnoreCase(item.symbol()))
@@ -99,7 +111,7 @@ public class OpportunityTradePlanGenerationService {
             throw failure(HttpStatus.UNPROCESSABLE_ENTITY, failed.reason().name());
         }
         TradePlan plan = success.plan();
-        return new GenerationResponse(plan.id().value(), plan.version().value());
+        return new GenerationResponse(plan.id().value(), plan.version().value(), false);
     }
 
     private void validatePrice(MarketPriceSnapshotResponse price, String instrument) {
@@ -121,5 +133,5 @@ public class OpportunityTradePlanGenerationService {
         return new ResponseStatusException(status, code);
     }
 
-    public record GenerationResponse(UUID tradePlanId, long tradePlanVersion) { }
+    public record GenerationResponse(UUID tradePlanId, long tradePlanVersion, boolean reused) { }
 }

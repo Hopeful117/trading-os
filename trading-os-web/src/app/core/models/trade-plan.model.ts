@@ -58,6 +58,7 @@ export interface RiskReason {
   ruleVersion: string | null;
   severity: string;
   message: string;
+  metrics?: Record<string, number>;
 }
 
 export interface RiskDecisionResponse {
@@ -71,4 +72,5 @@ export interface RiskDecisionResponse {
   reasons: RiskReason[];
   warnings: RiskReason[];
   evaluatedAt: string;
+  metrics?: Record<string, number>;
 }

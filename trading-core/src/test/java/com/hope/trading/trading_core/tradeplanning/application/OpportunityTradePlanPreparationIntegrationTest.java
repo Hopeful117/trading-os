@@ -4,6 +4,8 @@ import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntent
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.risk.application.RiskEvaluationModels;
+import com.hope.trading.trading_core.risk.application.TradePlanRiskEvaluationService;
 import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.infrastructure.MarketIntelligenceTradePlanningClient;
 import java.math.BigDecimal;
@@ -40,6 +42,7 @@ class OpportunityTradePlanPreparationIntegrationTest {
     @MockitoBean private AccountRepository accounts;
     @MockitoBean private TradePlanningProfileService profiles;
     @MockitoBean private MarketIntelligenceTradePlanningClient marketIntelligence;
+    @MockitoBean private TradePlanRiskEvaluationService risk;
 
     @BeforeEach
     void setUp() {
@@ -47,6 +50,11 @@ class OpportunityTradePlanPreparationIntegrationTest {
         when(profiles.effective(actorId, accountId)).thenReturn(profile());
         when(marketIntelligence.generateFromOpportunity(eq(opportunityId), eq("integration-key"), any()))
                 .thenReturn(new MarketIntelligenceTradePlanningClient.Response(UUID.randomUUID(), 1));
+        when(risk.preflight(any())).thenReturn(new RiskEvaluationModels.Response(
+                UUID.randomUUID(), UUID.randomUUID(), 1, accountId, "COMPLETED", "APPROVED", true,
+                java.util.List.of(), java.util.List.of(), java.util.Map.of(), Instant.now(),
+                new RiskEvaluationModels.Trace(UUID.randomUUID(), "test", java.util.Map.of(),
+                        java.util.Map.of(), java.util.Map.of())));
     }
 
     @Test
