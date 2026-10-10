@@ -152,7 +152,7 @@ describe('DecisionWorkspace', () => {
       createManual: vi.fn(),
       createFromOpportunity: vi
         .fn()
-         .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
+        .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
     };
     opportunityServiceMock = { findById: vi.fn() };
     routeQueryParamMap = new BehaviorSubject(convertToParamMap({}));

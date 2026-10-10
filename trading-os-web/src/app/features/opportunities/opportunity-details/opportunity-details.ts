@@ -34,11 +34,11 @@ export class OpportunityDetail {
       }
 
       return this.opportunityService.findById(opportunityId).pipe(
-         map((opportunity) => ({
-           status: 'loaded' as const,
-           opportunity,
-           accountId: opportunity.accountId ?? accountId,
-         })),
+        map((opportunity) => ({
+          status: 'loaded' as const,
+          opportunity,
+          accountId: opportunity.accountId ?? accountId,
+        })),
         catchError((error: unknown) =>
           of<OpportunityDetailView>(
             error instanceof HttpErrorResponse && error.status === 404
