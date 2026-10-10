@@ -217,7 +217,10 @@ public class TradePlanRiskHandoffService {
     }
 
     private TradePlanRiskSnapshot.Opportunity opportunity(UUID id, long version) {
-        if (opportunities == null) return new TradePlanRiskSnapshot.Opportunity(id, version, null, null, null);
+        if (opportunities == null) {
+            return new TradePlanRiskSnapshot.Opportunity(
+                    id, version, null, null, null, null, null, null, null, null);
+        }
         return opportunities.find(new com.hope.trading.market_intelligence.domain.opportunity.OpportunityId(id),
                         new com.hope.trading.market_intelligence.domain.opportunity.OpportunityVersion(version))
                 .map(value -> {
@@ -226,8 +229,12 @@ public class TradePlanRiskHandoffService {
                             ? null : strategyMatches.findById(matchId).orElse(null);
                     return new TradePlanRiskSnapshot.Opportunity(id, version, matchId,
                             match == null ? null : match.strategyId().value(),
-                            match == null ? null : match.strategyVersion());
+                            match == null ? null : match.strategyVersion(),
+                            value.accountId().orElse(null), value.sourceScanId().orElse(null),
+                            value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null),
+                            value.marketId().orElse(null));
                 })
-                .orElseGet(() -> new TradePlanRiskSnapshot.Opportunity(id, version, null, null, null));
+                .orElseGet(() -> new TradePlanRiskSnapshot.Opportunity(
+                        id, version, null, null, null, null, null, null, null, null));
     }
 }

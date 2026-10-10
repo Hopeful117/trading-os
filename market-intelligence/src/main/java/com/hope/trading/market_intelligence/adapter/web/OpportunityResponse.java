@@ -11,7 +11,8 @@ public record OpportunityResponse(
         String scenario, String timeframe, String type, String origin, BigDecimal score,
         String explanation, Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-        UUID strategyMatchId, UUID marketId, OpportunitySetupResponse setup
+         UUID strategyMatchId, UUID marketId, UUID accountId, UUID sourceScanId,
+         UUID sourceScanMarketId, UUID analysisExecutionId, OpportunitySetupResponse setup
 ) {
     static OpportunityResponse from(TradingOpportunity value) {
         return new OpportunityResponse(
@@ -24,7 +25,9 @@ public record OpportunityResponse(
                 value.aiAnalyses().stream().map(AiAnalysisReference::analysisId)
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
                 value.evaluatedAt(), value.validFrom(), value.validUntil().orElse(null),
-                 value.createdAt(), value.strategyMatchId().orElse(null), value.marketId().orElse(null),
-                 OpportunitySetupResponse.from(value.setup().orElse(null)).orElse(null));
+                  value.createdAt(), value.strategyMatchId().orElse(null), value.marketId().orElse(null),
+                  value.accountId().orElse(null), value.sourceScanId().orElse(null),
+                  value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null),
+                  OpportunitySetupResponse.from(value.setup().orElse(null)).orElse(null));
     }
 }

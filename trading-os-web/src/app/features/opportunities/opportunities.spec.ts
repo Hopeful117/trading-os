@@ -172,6 +172,15 @@ describe('Opportunities', () => {
 
       expect(routerMock.navigate).toHaveBeenCalledWith(['/opportunities', 'o1']);
     });
+
+    it('preserves the selected account when opening an opportunity', () => {
+      component.accountSelected('a1');
+      component.openOpportunity('o1');
+
+      expect(routerMock.navigate).toHaveBeenCalledWith(['/opportunities', 'o1'], {
+        queryParams: { accountId: 'a1' },
+      });
+    });
   });
 
   describe('refresh', () => {

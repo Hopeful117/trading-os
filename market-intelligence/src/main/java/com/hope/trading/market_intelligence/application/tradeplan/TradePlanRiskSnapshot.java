@@ -42,5 +42,7 @@ public record TradePlanRiskSnapshot(
     ) { }
 
     public record Opportunity(UUID id, long version, UUID strategyMatchId,
-                              UUID strategyId, Integer strategyVersion) { }
+                              UUID strategyId, Integer strategyVersion, UUID accountId,
+                              UUID sourceScanId, UUID sourceScanMarketId,
+                              UUID analysisExecutionId, UUID marketId) { }
 }

@@ -40,6 +40,7 @@ describe('DecisionWorkspace', () => {
     createManual: ReturnType<typeof vi.fn>;
     createFromOpportunity: ReturnType<typeof vi.fn>;
   };
+  let opportunityServiceMock: { findById: ReturnType<typeof vi.fn> };
   let routeQueryParamMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
   const account: Account = {
@@ -151,8 +152,9 @@ describe('DecisionWorkspace', () => {
       createManual: vi.fn(),
       createFromOpportunity: vi
         .fn()
-        .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
+         .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
     };
+    opportunityServiceMock = { findById: vi.fn() };
     routeQueryParamMap = new BehaviorSubject(convertToParamMap({}));
     vi.stubGlobal(
       'ResizeObserver',
@@ -184,7 +186,7 @@ describe('DecisionWorkspace', () => {
         { provide: TrendContextService, useValue: trendContextServiceMock },
         { provide: MarketService, useValue: marketServiceMock },
         { provide: MarketDataStreamService, useValue: marketDataStreamServiceMock },
-        { provide: OpportunityService, useValue: { findById: vi.fn() } },
+        { provide: OpportunityService, useValue: opportunityServiceMock },
         { provide: TradePlanService, useValue: tradePlanServiceMock },
         { provide: Router, useValue: routerMock },
         {
@@ -438,6 +440,46 @@ describe('DecisionWorkspace', () => {
     expect(marketServiceMock.findById).not.toHaveBeenCalled();
     expect(marketServiceMock.subscribe).not.toHaveBeenCalled();
     expect(status).toBe('ineligible');
+  });
+
+  it('restores an eligible market from URL context after account resolution', async () => {
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, marketId: 'market-1' }),
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(contextServiceMock.resolve).toHaveBeenCalledWith(account.accountId);
+    expect(component.selectedAccountId).toBe(account.accountId);
+    expect(component.selectedMarketId).toBe('market-1');
+    expect(marketServiceMock.findById).toHaveBeenCalledWith('market-1');
+  });
+
+  it('clears opportunity context when the selected account changes', () => {
+    component.selectedAccountId = account.accountId;
+    component.opportunity = { id: 'opportunity-1' } as OpportunityResponse;
+
+    component.selectAccount('account-2');
+
+    expect(component.opportunity).toBeNull();
+    expect(component.opportunityError).toBe(false);
+  });
+
+  it('ignores a delayed opportunity response after the URL account changes', () => {
+    const response = new Subject<OpportunityResponse>();
+    opportunityServiceMock.findById.mockReturnValue(response.asObservable());
+
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, opportunityId: 'opportunity-1' }),
+    );
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: 'account-2', opportunityId: 'opportunity-1' }),
+    );
+
+    response.next({ id: 'opportunity-1' } as OpportunityResponse);
+
+    expect(component.opportunity).toBeNull();
+    expect(component.opportunityError).toBe(false);
   });
 
   it('unsubscribes the previous market streams when switching markets', () => {

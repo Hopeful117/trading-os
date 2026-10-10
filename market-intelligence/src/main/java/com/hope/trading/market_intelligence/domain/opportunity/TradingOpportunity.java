@@ -29,6 +29,10 @@ public final class TradingOpportunity {
      */
     private final OpportunitySetupSnapshot setupSnapshot;
     private final UUID marketId;
+    private final UUID accountId;
+    private final UUID sourceScanId;
+    private final UUID sourceScanMarketId;
+    private final UUID analysisExecutionId;
 
     TradingOpportunity(
             OpportunityId id, OpportunityVersion version, OpportunityStatus status,
@@ -37,7 +41,8 @@ public final class TradingOpportunity {
             OpportunityScore score, String explanation,
             Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
             Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-             UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId
+             UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId,
+             UUID accountId, UUID sourceScanId, UUID sourceScanMarketId, UUID analysisExecutionId
     ) {
         this.id = Objects.requireNonNull(id);
         this.version = Objects.requireNonNull(version);
@@ -65,6 +70,10 @@ public final class TradingOpportunity {
         this.strategyMatchId = strategyMatchId;
         this.setupSnapshot = setupSnapshot;
         this.marketId = marketId;
+        this.accountId = accountId;
+        this.sourceScanId = sourceScanId;
+        this.sourceScanMarketId = sourceScanMarketId;
+        this.analysisExecutionId = analysisExecutionId;
     }
 
     private static String required(String value, String name) {
@@ -100,4 +109,9 @@ public final class TradingOpportunity {
     public Optional<UUID> marketId() {
         return Optional.ofNullable(marketId);
     }
+
+    public Optional<UUID> accountId() { return Optional.ofNullable(accountId); }
+    public Optional<UUID> sourceScanId() { return Optional.ofNullable(sourceScanId); }
+    public Optional<UUID> sourceScanMarketId() { return Optional.ofNullable(sourceScanMarketId); }
+    public Optional<UUID> analysisExecutionId() { return Optional.ofNullable(analysisExecutionId); }
 }

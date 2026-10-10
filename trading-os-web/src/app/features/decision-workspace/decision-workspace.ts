@@ -131,6 +131,7 @@ export class DecisionWorkspace {
   opportunity: OpportunityResponse | null = null;
   opportunityPreparing = false;
   opportunityError = false;
+  private opportunityRequestKey: string | null = null;
 
   readonly accounts$ = this.accountsRefreshSubject.pipe(
     startWith(undefined),
@@ -309,15 +310,35 @@ export class DecisionWorkspace {
       const accountId = params.get('accountId');
       const marketId = params.get('marketId');
       const opportunityId = params.get('opportunityId');
+      const accountChanged =
+        this.selectedAccountId !== null && accountId !== this.selectedAccountId;
 
-      if (opportunityId !== this.opportunity?.id) {
+      if (accountChanged) {
+        this.opportunity = null;
+        this.opportunityError = false;
+        this.opportunityRequestKey = null;
+      }
+
+      if (!accountChanged && opportunityId !== this.opportunity?.id) {
         this.opportunity = null;
         this.opportunityError = false;
         if (opportunityId !== null) {
+          const requestKey = `${accountId ?? ''}:${opportunityId}`;
+          this.opportunityRequestKey = requestKey;
           this.opportunityService.findById(opportunityId).subscribe({
-            next: (opportunity) => (this.opportunity = opportunity),
-            error: () => (this.opportunityError = true),
+            next: (opportunity) => {
+              if (this.opportunityRequestKey === requestKey) {
+                this.opportunity = opportunity;
+              }
+            },
+            error: () => {
+              if (this.opportunityRequestKey === requestKey) {
+                this.opportunityError = true;
+              }
+            },
           });
+        } else {
+          this.opportunityRequestKey = null;
         }
       }
 
@@ -355,12 +376,15 @@ export class DecisionWorkspace {
     this.manualTradeOpen = false;
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
+    this.opportunity = null;
+    this.opportunityError = false;
+    this.opportunityRequestKey = null;
     this.clearActiveSubscriptions().subscribe(() => {
       this.selectedMarketSubject.next(null);
       this.selectedAccountSubject.next(accountId || null);
     });
     void this.router.navigate([], {
-      queryParams: { accountId: accountId || null, marketId: null },
+      queryParams: { accountId: accountId || null, marketId: null, opportunityId: null },
       queryParamsHandling: 'merge',
     });
   }
@@ -371,6 +395,7 @@ export class DecisionWorkspace {
     this.manualTradeOpen = false;
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
+    this.opportunityRequestKey = null;
     this.clearActiveSubscriptions().subscribe(() => {
       this.selectedMarketSubject.next(null);
       this.selectedAccountSubject.next(null);

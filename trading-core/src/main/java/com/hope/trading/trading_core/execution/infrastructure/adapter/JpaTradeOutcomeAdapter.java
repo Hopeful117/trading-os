@@ -37,7 +37,11 @@ public class JpaTradeOutcomeAdapter implements TradeOutcomeRepositoryPort {
             TradeOutcomeProvenanceEntity result = new TradeOutcomeProvenanceEntity();
             result.opportunityId = item.opportunityId(); result.opportunityVersion = item.opportunityVersion();
             result.strategyMatchId = item.strategyMatchId(); result.strategyId = item.strategyId();
-            result.strategyVersion = item.strategyVersion(); return result;
+            result.strategyVersion = item.strategyVersion();
+            result.accountId = item.accountId(); result.sourceScanId = item.sourceScanId();
+            result.sourceScanMarketId = item.sourceScanMarketId();
+            result.analysisExecutionId = item.analysisExecutionId(); result.marketId = item.marketId();
+            return result;
         }).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
         return toDomain(repository.saveAndFlush(entity));
     }
@@ -58,7 +62,9 @@ public class JpaTradeOutcomeAdapter implements TradeOutcomeRepositoryPort {
     private TradeOutcome toDomain(TradeOutcomeEntity value) {
         List<TradePlanProvenance> provenance = value.provenance == null ? List.of() : value.provenance.stream()
                 .map(item -> new TradePlanProvenance(item.opportunityId, item.opportunityVersion,
-                        item.strategyMatchId, item.strategyId, item.strategyVersion)).toList();
+                        item.strategyMatchId, item.strategyId, item.strategyVersion,
+                        item.accountId, item.sourceScanId, item.sourceScanMarketId,
+                        item.analysisExecutionId, item.marketId)).toList();
         return TradeOutcome.rehydrate(value.id, value.accountId, value.brokerAccountId, value.executionIntentId,
                 value.tradePlanId, value.tradePlanVersion, provenance, value.instrument,
                 com.hope.trading.trading_core.execution.domain.model.ExecutionParameters.Side.valueOf(value.side),

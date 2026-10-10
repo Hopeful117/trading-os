@@ -9,8 +9,16 @@ public record AnalysisExecutionProvenance(
         UUID marketId,
         AnalysisExecutionMode mode,
         String objective,
-        String strategyVersion
+        String strategyVersion,
+        UUID accountId,
+        UUID scanId,
+        UUID scanMarketId
 ) {
+    public AnalysisExecutionProvenance(
+            UUID marketId, AnalysisExecutionMode mode, String objective, String strategyVersion) {
+        this(marketId, mode, objective, strategyVersion, null, null, null);
+    }
+
     public AnalysisExecutionProvenance {
         Objects.requireNonNull(marketId);
         Objects.requireNonNull(mode);

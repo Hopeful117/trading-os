@@ -35,6 +35,35 @@ class OpportunityEngineTest {
     }
 
     @Test
+    void preservesAccountScopedProvenanceAcrossEquivalentVersions() {
+        Observation observation = OpportunityTestFixtures.observation();
+        InMemoryObservationRepository observationStore = new InMemoryObservationRepository();
+        observationStore.save(observation);
+        InMemoryTradingOpportunityRepository opportunities =
+                new InMemoryTradingOpportunityRepository();
+        OpportunityEngine engine = engine(observationStore, opportunities);
+        UUID accountId = UUID.randomUUID();
+        UUID firstScanId = UUID.randomUUID();
+        UUID firstScanMarketId = UUID.randomUUID();
+        UUID firstExecutionId = UUID.randomUUID();
+
+        TradingOpportunity first = engine.create(accountScopedCommand(
+                observation, accountId, firstScanId, firstScanMarketId, firstExecutionId))
+                .opportunity();
+        TradingOpportunity second = engine.create(accountScopedCommand(
+                observation, accountId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
+                .opportunity();
+
+        assertThat(second.version().value()).isEqualTo(2);
+        assertThat(second.accountId()).contains(accountId);
+        assertThat(second.sourceScanId()).contains(firstScanId);
+        assertThat(second.sourceScanMarketId()).contains(firstScanMarketId);
+        assertThat(second.analysisExecutionId()).contains(firstExecutionId);
+        assertThat(second.marketId()).isEqualTo(first.marketId());
+        assertThat(second.marketId()).isPresent();
+    }
+
+    @Test
     void explicitMatchLineagesRemainDistinctWhenOpportunitiesAreEquivalent() {
         Observation observation = OpportunityTestFixtures.observation();
         InMemoryObservationRepository observationStore = new InMemoryObservationRepository();
@@ -150,5 +179,17 @@ class OpportunityEngineTest {
                 opportunityId,
                 base.setupSnapshot()
         );
+    }
+
+    private CreateOpportunityCommand accountScopedCommand(
+            Observation observation, UUID accountId, UUID scanId,
+            UUID scanMarketId, UUID analysisExecutionId) {
+        return new CreateOpportunityCommand(
+                observation.instrument(), OpportunityDirection.LONG, "Bullish breakout", "5m",
+                OpportunityOrigin.ACTIVE_SCAN,
+                Set.of(new ObservationReference(observation.id())), Set.of(),
+                OpportunityTestFixtures.NOW, OpportunityTestFixtures.NOW.plusSeconds(300),
+                OpportunityTestFixtures.MATCH_ID, null, null, UUID.randomUUID(), accountId,
+                scanId, scanMarketId, analysisExecutionId);
     }
 }

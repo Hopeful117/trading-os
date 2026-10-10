@@ -45,7 +45,7 @@ describe('OpportunityDetail', () => {
     setup,
   };
 
-  function configureComponent(opportunityId: string | null): void {
+  function configureComponent(opportunityId: string | null, accountId: string | null = null): void {
     TestBed.configureTestingModule({
       imports: [OpportunityDetail],
       providers: [
@@ -56,14 +56,18 @@ describe('OpportunityDetail', () => {
             paramMap: of(
               opportunityId === null ? convertToParamMap({}) : convertToParamMap({ opportunityId }),
             ),
+            queryParamMap: of(accountId ? convertToParamMap({ accountId }) : convertToParamMap({})),
           },
         },
       ],
     });
   }
 
-  async function createComponent(opportunityId: string | null): Promise<void> {
-    configureComponent(opportunityId);
+  async function createComponent(
+    opportunityId: string | null,
+    accountId: string | null = null,
+  ): Promise<void> {
+    configureComponent(opportunityId, accountId);
     await TestBed.compileComponents();
 
     fixture = TestBed.createComponent(OpportunityDetail);
@@ -115,7 +119,7 @@ describe('OpportunityDetail', () => {
     });
 
     it('links active opportunities to the account-scoped decision workspace', async () => {
-      await createComponent('o1');
+      await createComponent('o1', 'account-1');
 
       const link = fixture.nativeElement.querySelector(
         '[data-testid="create-trade-plan-button"]',
@@ -124,6 +128,17 @@ describe('OpportunityDetail', () => {
       expect(link.getAttribute('href')).toContain('/decision-workspace');
       expect(link.getAttribute('href')).toContain('opportunityId=o1');
       expect(link.getAttribute('href')).toContain('marketId=market-1');
+      expect(link.getAttribute('href')).toContain('accountId=account-1');
+    });
+
+    it('keeps the account-less direct-entry fallback', async () => {
+      await createComponent('o1');
+
+      const link = fixture.nativeElement.querySelector(
+        '[data-testid="create-trade-plan-button"]',
+      ) as HTMLAnchorElement;
+
+      expect(link.getAttribute('href')).not.toContain('accountId=');
     });
 
     it('does not fabricate provenance when no match exists', async () => {

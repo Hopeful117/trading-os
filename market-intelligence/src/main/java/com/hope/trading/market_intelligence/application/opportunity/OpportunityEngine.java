@@ -79,6 +79,12 @@ public final class OpportunityEngine {
                     lineageId, command, fused, clock.instant());
             return new OpportunityCreationResult.Created(opportunities.append(created));
         }
+        if (command.origin() == OpportunityOrigin.ACTIVE_SCAN
+                && !command.accountId().equals(equivalent.accountId().orElse(null))) {
+            OpportunityId lineageId = identifiers.next();
+            TradingOpportunity created = builder.create(lineageId, command, fused, clock.instant());
+            return new OpportunityCreationResult.Created(opportunities.append(created));
+        }
         TradingOpportunity latest = opportunities.findLatest(equivalent.id()).orElseThrow();
         TradingOpportunity next = builder.nextVersion(latest, command, fused, clock.instant());
         return new OpportunityCreationResult.VersionCreated(opportunities.append(next));

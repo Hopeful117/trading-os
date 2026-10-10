@@ -12,7 +12,8 @@ public final class OpportunityFactory {
                 values.scenario(), values.timeframe(), values.type(), values.origin(), values.score(),
                 values.explanation(), values.observations(), values.aiAnalyses(), values.evaluatedAt(),
                 values.validFrom(), values.validUntil(), values.createdAt(), values.strategyMatchId(),
-                values.setupSnapshot(), values.marketId());
+                values.setupSnapshot(), values.marketId(), values.accountId(), values.sourceScanId(),
+                values.sourceScanMarketId(), values.analysisExecutionId());
     }
 
     public record Values(OpportunityId id, OpportunityVersion version, OpportunityStatus status,
@@ -21,5 +22,20 @@ public final class OpportunityFactory {
             Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
             Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
             UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot,
-            UUID marketId) { }
+             UUID marketId, UUID accountId, UUID sourceScanId, UUID sourceScanMarketId,
+             UUID analysisExecutionId) {
+        public Values(
+                OpportunityId id, OpportunityVersion version, OpportunityStatus status,
+                String instrument, OpportunityDirection direction, String scenario,
+                String timeframe, OpportunityType type, OpportunityOrigin origin,
+                OpportunityScore score, String explanation,
+                Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
+                Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
+                UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId) {
+            this(id, version, status, instrument, direction, scenario, timeframe, type, origin,
+                    score, explanation, observations, aiAnalyses, evaluatedAt, validFrom,
+                    validUntil, createdAt, strategyMatchId, setupSnapshot, marketId,
+                    null, null, null, null);
+        }
+    }
 }

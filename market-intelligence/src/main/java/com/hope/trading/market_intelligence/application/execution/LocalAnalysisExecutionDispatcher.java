@@ -91,7 +91,7 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
                     ))
                     .ifPresent(repository::save);
             if (result.status() != IntelligenceExecutionStatus.FAILED) {
-                pipeline.process(executionId, request.marketId(), request.mode());
+                pipeline.process(executionId, request);
             }
         } catch (CancellationException ignored) {
             // Cancellation state is owned by AnalysisExecutionService.

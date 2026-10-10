@@ -63,11 +63,22 @@ public class OpportunityTradePlanGenerationService {
         var opportunity = opportunities.findLatest(new OpportunityId(opportunityId))
                 .filter(item -> item.status() == OpportunityStatus.ACTIVE)
                 .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY, "OPPORTUNITY_NOT_ELIGIBLE"));
-        UUID marketId = marketData.findAllMarkets().stream()
-                .filter(market -> opportunity.instrument().equalsIgnoreCase(market.symbol()))
+        UUID opportunityAccountId = opportunity.accountId().orElse(null);
+        if (opportunityAccountId == null || !opportunityAccountId.equals(accountId)) {
+            throw failure(HttpStatus.FORBIDDEN, "OPPORTUNITY_ACCOUNT_MISMATCH");
+        }
+        UUID marketId = opportunity.marketId().orElseGet(() -> marketData.findAllMarkets().stream()
+                .filter(item -> opportunity.instrument().equalsIgnoreCase(item.symbol()))
                 .map(com.hope.trading.market_intelligence.adapter.marketdata.MarketResponse::marketId)
                 .findFirst()
+                .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_NOT_FOUND")));
+        var market = marketData.findAllMarkets().stream()
+                .filter(item -> item.marketId().equals(marketId))
+                .findFirst()
                 .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_NOT_FOUND"));
+        if (!opportunity.instrument().equalsIgnoreCase(market.symbol())) {
+            throw failure(HttpStatus.UNPROCESSABLE_ENTITY, "OPPORTUNITY_MARKET_MISMATCH");
+        }
         MarketPriceSnapshotResponse price = marketData.findPriceSnapshots(
                         new MarketPriceSnapshotRequest(List.of(marketId)))
                 .stream().findFirst().orElseThrow(() -> failure(

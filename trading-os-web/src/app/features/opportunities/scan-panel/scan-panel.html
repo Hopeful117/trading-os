@@ -16,7 +16,12 @@
             No account available for scanning.
           </p>
         } @else {
-          <select name="scanAccountId" [(ngModel)]="accountId" data-testid="account-select">
+          <select
+            name="scanAccountId"
+            [(ngModel)]="accountId"
+            (ngModelChange)="selectAccount($event)"
+            data-testid="account-select"
+          >
             <option value="" disabled>Select an account</option>
             @for (account of state.accounts; track account.accountId) {
               <option [value]="account.accountId">{{ account.name }}</option>
@@ -309,6 +314,7 @@
                           <a
                             class="opportunity-chip"
                             [routerLink]="['/opportunities', opportunity.id]"
+                            [queryParams]="{ accountId: opportunity.accountId ?? scan.accountId }"
                             [attr.data-opportunity-id]="opportunity.id"
                           >
                             <strong

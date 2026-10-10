@@ -22,6 +22,8 @@ export class Opportunities {
   private readonly opportunityService = inject(OpportunityService);
   private readonly router = inject(Router);
 
+  selectedAccountId = '';
+
   private readonly refreshSubject = new Subject<void>();
   private readonly refresh$ = this.refreshSubject.pipe(startWith(undefined));
 
@@ -40,7 +42,18 @@ export class Opportunities {
   );
 
   openOpportunity(opportunityId: string): void {
+    if (this.selectedAccountId) {
+      void this.router.navigate(['/opportunities', opportunityId], {
+        queryParams: { accountId: this.selectedAccountId },
+      });
+      return;
+    }
+
     void this.router.navigate(['/opportunities', opportunityId]);
+  }
+
+  accountSelected(accountId: string): void {
+    this.selectedAccountId = accountId;
   }
 
   refreshOpportunities(): void {

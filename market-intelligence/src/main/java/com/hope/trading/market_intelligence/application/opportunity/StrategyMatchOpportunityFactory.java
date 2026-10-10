@@ -56,6 +56,28 @@ public class StrategyMatchOpportunityFactory {
             BigDecimal referencePrice,
             Instant referencePriceAt
     ) {
+        return command(match, definition, instrument, origin, evidence, evaluatedAt,
+                validFrom, validUntil, evaluation, referencePrice, referencePriceAt,
+                null, null, null, null);
+    }
+
+    public CreateOpportunityCommand command(
+            StrategyMatch match,
+            StrategyDefinition definition,
+            String instrument,
+            OpportunityOrigin origin,
+            ObservationReference evidence,
+            Instant evaluatedAt,
+            Instant validFrom,
+            Instant validUntil,
+            StrategyEvaluation evaluation,
+            BigDecimal referencePrice,
+            Instant referencePriceAt,
+            UUID accountId,
+            UUID sourceScanId,
+            UUID sourceScanMarketId,
+            UUID analysisExecutionId
+    ) {
         Objects.requireNonNull(match, "match is required");
         Objects.requireNonNull(definition, "definition is required");
         Objects.requireNonNull(instrument, "instrument is required");
@@ -73,9 +95,9 @@ public class StrategyMatchOpportunityFactory {
                 evaluatedAt,
                 validUntil,
                  match.matchId(),
-                 deriveOpportunityLineageId(match.matchId()),
-                 setupSnapshot(match, evaluation, referencePrice, referencePriceAt),
-                 match.marketId());
+                  deriveOpportunityLineageId(match.matchId(), accountId),
+                  setupSnapshot(match, evaluation, referencePrice, referencePriceAt),
+                  match.marketId(), accountId, sourceScanId, sourceScanMarketId, analysisExecutionId);
     }
 
     /**
@@ -105,9 +127,16 @@ public class StrategyMatchOpportunityFactory {
      * distinct matches -> distinct lineages; never equal to the matchId.
      */
     public static UUID deriveOpportunityLineageId(UUID matchId) {
+        return deriveOpportunityLineageId(matchId, null);
+    }
+
+    public static UUID deriveOpportunityLineageId(UUID matchId, UUID accountId) {
         Objects.requireNonNull(matchId, "matchId is required");
         try {
-            byte[] name = ("trading-opportunity-lineage:" + matchId)
+            String lineageName = accountId == null
+                    ? "trading-opportunity-lineage:" + matchId
+                    : "trading-opportunity-lineage:" + matchId + ":" + accountId;
+            byte[] name = lineageName
                     .getBytes(StandardCharsets.UTF_8);
             // SHA-1 is used only as a stable UUID name derivation here, not for
             // authentication, secrecy, integrity, or any security decision.

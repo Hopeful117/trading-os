@@ -51,7 +51,9 @@ record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status
     record PositionSizing(BigDecimal quantity, BigDecimal notional,
                           BigDecimal expectedMonetaryRisk, String currency) { }
     record Rationale(List<Opportunity> opportunities) { }
-    record Opportunity(UUID id, long version, UUID strategyMatchId, UUID strategyId, Integer strategyVersion) { }
+    record Opportunity(UUID id, long version, UUID strategyMatchId, UUID strategyId,
+                       Integer strategyVersion, UUID accountId, UUID sourceScanId,
+                       UUID sourceScanMarketId, UUID analysisExecutionId, UUID marketId) { }
 }
 
 @Component
@@ -151,9 +153,11 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
     private static List<com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance> provenance(
             TradePlanTransport value) {
         if (value.rationale() == null || value.rationale().opportunities() == null) return List.of();
-        return value.rationale().opportunities().stream()
-                .map(item -> new com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance(
-                        item.id(), item.version(), item.strategyMatchId(), item.strategyId(), item.strategyVersion()))
+                return value.rationale().opportunities().stream()
+                        .map(item -> new com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance(
+                        item.id(), item.version(), item.strategyMatchId(), item.strategyId(), item.strategyVersion(),
+                        item.accountId(), item.sourceScanId(), item.sourceScanMarketId(),
+                        item.analysisExecutionId(), item.marketId()))
                 .toList();
     }
 }
