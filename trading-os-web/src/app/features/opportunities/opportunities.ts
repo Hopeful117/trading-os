@@ -6,7 +6,10 @@ import { catchError, map, of, shareReplay, startWith, Subject, switchMap } from 
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { OpportunityService } from '../../core/services/opportunity.service';
 import { TradePlanService } from '../../core/services/trade-plan.service';
-import { tradePreparationFailure, TradePreparationFailure } from '../../core/utils/trade-flow-error';
+import {
+  tradePreparationFailure,
+  TradePreparationFailure,
+} from '../../core/utils/trade-flow-error';
 import { ScanPanel } from './scan-panel/scan-panel';
 
 export type OpportunitiesView =
