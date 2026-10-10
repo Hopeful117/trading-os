@@ -40,6 +40,10 @@ export interface OpportunityResponse {
   createdAt: string;
   strategyMatchId: string | null;
   marketId?: string | null;
+  accountId?: string | null;
+  sourceScanId?: string | null;
+  sourceScanMarketId?: string | null;
+  analysisExecutionId?: string | null;
   setup?: OpportunitySetup | null;
 }
 

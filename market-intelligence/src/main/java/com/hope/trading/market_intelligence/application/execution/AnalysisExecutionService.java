@@ -79,7 +79,8 @@ public class AnalysisExecutionService {
                     now,
                     plan.capabilityIds(),
                     new AnalysisExecutionProvenance(
-                            request.marketId(), request.mode(), request.objective(), "v1"
+                            request.marketId(), request.mode(), request.objective(), "v1",
+                            request.accountId(), request.scanId(), request.scanMarketId()
                     ),
                     new AnalysisTraceMetadata(List.of(trace))
             );
@@ -112,7 +113,10 @@ public class AnalysisExecutionService {
                 execution.executionId(),
                 execution.provenance().marketId(),
                 execution.provenance().mode(),
-                execution.provenance().objective()
+                execution.provenance().objective(),
+                execution.provenance().accountId(),
+                execution.provenance().scanId(),
+                execution.provenance().scanMarketId()
         ));
     }
 

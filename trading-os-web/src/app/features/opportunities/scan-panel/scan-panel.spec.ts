@@ -590,7 +590,7 @@ describe('ScanPanel', () => {
 
       const links = fixture.nativeElement.querySelectorAll('.opportunity-chip');
       expect(links.length).toBe(2);
-      expect(links[0].getAttribute('href')).toBe('/opportunities/o1');
+      expect(links[0].getAttribute('href')).toBe('/opportunities/o1?accountId=a1');
       links[1].click();
       expect(navigateByUrl).toHaveBeenCalled();
     });

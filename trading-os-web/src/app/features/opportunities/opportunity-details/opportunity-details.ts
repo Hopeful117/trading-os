@@ -2,7 +2,7 @@ import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { catchError, map, of, shareReplay, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, map, of, shareReplay, startWith, switchMap } from 'rxjs';
 
 import { OpportunityResponse } from '../../../core/models/opportunity.model';
 import { OpportunityService } from '../../../core/services/opportunity.service';
@@ -11,7 +11,7 @@ export type OpportunityDetailView =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'notFound' }
-  | { status: 'loaded'; opportunity: OpportunityResponse };
+  | { status: 'loaded'; opportunity: OpportunityResponse; accountId: string | null };
 
 @Component({
   selector: 'app-opportunity-details',
@@ -23,15 +23,22 @@ export class OpportunityDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly opportunityService = inject(OpportunityService);
 
-  readonly view$ = this.route.paramMap.pipe(
-    map((params) => params.get('opportunityId')),
-    switchMap((opportunityId) => {
+  readonly view$ = combineLatest([this.route.paramMap, this.route.queryParamMap]).pipe(
+    map(([params, queryParams]) => ({
+      opportunityId: params.get('opportunityId'),
+      accountId: queryParams.get('accountId'),
+    })),
+    switchMap(({ opportunityId, accountId }) => {
       if (opportunityId === null) {
         return of<OpportunityDetailView>({ status: 'notFound' });
       }
 
       return this.opportunityService.findById(opportunityId).pipe(
-        map((opportunity) => ({ status: 'loaded' as const, opportunity })),
+        map((opportunity) => ({
+          status: 'loaded' as const,
+          opportunity,
+          accountId: opportunity.accountId ?? accountId,
+        })),
         catchError((error: unknown) =>
           of<OpportunityDetailView>(
             error instanceof HttpErrorResponse && error.status === 404

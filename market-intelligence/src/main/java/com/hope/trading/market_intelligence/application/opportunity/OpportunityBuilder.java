@@ -23,7 +23,9 @@ final class OpportunityBuilder {
                         command.timeframe(), result.type(), command.origin(), result.score(),
                         result.explanation(), result.observations(), result.aiAnalyses(),
                         command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
-                        command.strategyMatchId(), command.setupSnapshot(), command.marketId()));
+                         command.strategyMatchId(), command.setupSnapshot(), command.marketId(),
+                         command.accountId(), command.sourceScanId(), command.sourceScanMarketId(),
+                         command.analysisExecutionId()));
     }
 
     TradingOpportunity nextVersion(
@@ -37,8 +39,10 @@ final class OpportunityBuilder {
                         command.timeframe(), result.type(), command.origin(), result.score(),
                         result.explanation(), result.observations(), result.aiAnalyses(),
                         command.evaluatedAt(), result.validFrom(), result.validUntil(), createdAt,
-                        previous.strategyMatchId().orElse(command.strategyMatchId()),
-                        command.setupSnapshot(), command.marketId()));
+                         previous.strategyMatchId().orElse(command.strategyMatchId()),
+                          command.setupSnapshot(), previous.marketId().orElse(null),
+                          previous.accountId().orElse(null), previous.sourceScanId().orElse(null),
+                          previous.sourceScanMarketId().orElse(null), previous.analysisExecutionId().orElse(null)));
     }
 
     TradingOpportunity transition(
@@ -53,6 +57,8 @@ final class OpportunityBuilder {
                         previous.validFrom(), previous.validUntil().orElse(null), createdAt,
                         previous.strategyMatchId().orElse(null),
                         // Historical setup truth is immutable across status transitions.
-                        previous.setup().orElse(null), previous.marketId().orElse(null)));
+                         previous.setup().orElse(null), previous.marketId().orElse(null),
+                         previous.accountId().orElse(null), previous.sourceScanId().orElse(null),
+                         previous.sourceScanMarketId().orElse(null), previous.analysisExecutionId().orElse(null)));
     }
 }

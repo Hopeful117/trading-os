@@ -39,13 +39,13 @@ class OpportunityTradePlanGenerationServiceTest {
                 environment.service(), Clock.fixed(TradePlanTestFixtures.NOW, ZoneOffset.UTC),
                 Duration.ofSeconds(30));
         when(marketData.findAllMarkets())
-                .thenReturn(List.of(market("BTC/EUR")));
+                .thenReturn(List.of(market(environment.opportunity().marketId().orElseThrow(), "BTC/EUR")));
         when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class)))
                 .thenReturn(List.of(freshPrice()));
     }
 
-    private MarketResponse market(String symbol) {
-        return new MarketResponse(UUID.randomUUID(), "KRAKEN", symbol, "BTC", "EUR",
+    private MarketResponse market(UUID marketId, String symbol) {
+        return new MarketResponse(marketId, "KRAKEN", symbol, "BTC", "EUR",
                 new MarketResponse.MarketStateResponse("OPEN", true, "",
                         TradePlanTestFixtures.NOW));
     }
@@ -60,7 +60,8 @@ class OpportunityTradePlanGenerationServiceTest {
 
     private OpportunityTradePlanGenerationService.GenerationResponse generate() {
         var context = TradePlanTestFixtures.context(
-                UUID.randomUUID(), 1, environment.owner());
+                UUID.randomUUID(), 1, environment.owner(),
+                environment.context().tradingAccountId());
         return service.generate(
                 environment.opportunity().id().value(),
                 environment.owner(),
@@ -101,7 +102,8 @@ class OpportunityTradePlanGenerationServiceTest {
 
     @Test
     void rejectsInstrumentWithoutMarketCatalogueEntry() {
-        when(marketData.findAllMarkets()).thenReturn(List.of(market("ETH/EUR")));
+        when(marketData.findAllMarkets())
+                .thenReturn(List.of(market(UUID.randomUUID(), "ETH/EUR")));
 
         assertThatThrownBy(this::generate)
                 .isInstanceOf(ResponseStatusException.class)
@@ -132,6 +134,29 @@ class OpportunityTradePlanGenerationServiceTest {
                 context.tradingAccountId(), context))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(x -> org.assertj.core.api.Assertions.assertThat(String.valueOf(((ResponseStatusException) x).getReason()))
-                        .contains("PLANNING_CONTEXT_FORBIDDEN"));
+                .contains("PLANNING_CONTEXT_FORBIDDEN"));
+    }
+
+    @Test
+    void rejectsOpportunityOwnedByAnotherAccount() {
+        var context = TradePlanTestFixtures.context(UUID.randomUUID(), 1, environment.owner());
+
+        assertThatThrownBy(() -> service.generate(
+                environment.opportunity().id().value(), environment.owner(),
+                context.tradingAccountId(), context))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(x -> assertThat(String.valueOf(((ResponseStatusException) x).getReason()))
+                        .contains("OPPORTUNITY_ACCOUNT_MISMATCH"));
+    }
+
+    @Test
+    void rejectsAccountlessOpportunity() {
+        environment.opportunities().append(
+                TradePlanTestFixtures.accountlessNextVersion(environment.opportunity()));
+
+        assertThatThrownBy(this::generate)
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(x -> assertThat(String.valueOf(((ResponseStatusException) x).getReason()))
+                        .contains("OPPORTUNITY_ACCOUNT_MISMATCH"));
     }
 }

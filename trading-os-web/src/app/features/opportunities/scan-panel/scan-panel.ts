@@ -72,6 +72,7 @@ export class ScanPanel {
 
   /** Emitted once when a tracked scan reaches any terminal backend status. */
   readonly scanCompleted = output<ActiveScanResponse>();
+  readonly accountSelected = output<string>();
 
   accountId = '';
   objective = '';
@@ -159,6 +160,11 @@ export class ScanPanel {
 
   reloadMarkets(): void {
     this.marketsRefreshSubject.next();
+  }
+
+  selectAccount(accountId: string): void {
+    this.accountId = accountId;
+    this.accountSelected.emit(accountId);
   }
 
   canRun(): boolean {

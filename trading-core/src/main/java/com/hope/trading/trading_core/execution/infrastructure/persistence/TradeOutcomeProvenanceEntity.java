@@ -11,4 +11,9 @@ public class TradeOutcomeProvenanceEntity {
     @Column(name = "strategy_match_id", updatable = false) public UUID strategyMatchId;
     @Column(name = "strategy_id", updatable = false) public UUID strategyId;
     @Column(name = "strategy_version", updatable = false) public Integer strategyVersion;
+    @Column(name = "account_id", updatable = false) public UUID accountId;
+    @Column(name = "source_scan_id", updatable = false) public UUID sourceScanId;
+    @Column(name = "source_scan_market_id", updatable = false) public UUID sourceScanMarketId;
+    @Column(name = "analysis_execution_id", updatable = false) public UUID analysisExecutionId;
+    @Column(name = "market_id", updatable = false) public UUID marketId;
 }

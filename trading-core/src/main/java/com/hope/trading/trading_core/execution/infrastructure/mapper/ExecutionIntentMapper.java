@@ -40,6 +40,11 @@ public final class ExecutionIntentMapper {
             result.strategyMatchId = item.strategyMatchId();
             result.strategyId = item.strategyId();
             result.strategyVersion = item.strategyVersion();
+            result.accountId = item.accountId();
+            result.sourceScanId = item.sourceScanId();
+            result.sourceScanMarketId = item.sourceScanMarketId();
+            result.analysisExecutionId = item.analysisExecutionId();
+            result.marketId = item.marketId();
             return result;
         }).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
         return target;
@@ -67,7 +72,9 @@ public final class ExecutionIntentMapper {
                 new IdempotencyKey(value.idempotencyKey),value.initiatorId,value.brokerAccountId,value.accountId,
                 parameters, value.provenance == null ? List.of() : value.provenance.stream().map(item ->
                         new TradePlanProvenance(item.opportunityId, item.opportunityVersion,
-                                item.strategyMatchId, item.strategyId, item.strategyVersion)).toList(),
+                                item.strategyMatchId, item.strategyId, item.strategyVersion,
+                                item.accountId, item.sourceScanId, item.sourceScanMarketId,
+                                item.analysisExecutionId, item.marketId)).toList(),
                 ExecutionStatus.valueOf(value.status),
                 value.activeAttemptId==null?null:new ExecutionAttemptId(value.activeAttemptId),
                 value.createdAt,value.updatedAt,value.expiresAt,value.version);

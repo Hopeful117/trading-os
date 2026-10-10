@@ -117,7 +117,10 @@ public class ActiveScanCreationTransaction {
                             UUID.randomUUID(),
                             decision.marketId(),
                             AnalysisExecutionMode.ACTIVE,
-                            scan.objective()
+                            scan.objective(),
+                            scan.accountId(),
+                            scan.scanId(),
+                            scanMarketId
                     ),
                     childKeys.forMarket(scan.scanId(), decision.marketId()),
                     scan.scanId().toString(),

@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.adapter.persistence.*;
 import com.hope.trading.market_intelligence.application.observation.ObservationBuilder;
 import com.hope.trading.market_intelligence.application.opportunity.*;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
+import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
 import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
@@ -95,13 +96,21 @@ public class ProductionIntelligencePipeline {
     @Transactional
     public JpaIntelligencePipelineRunEntity process(
             UUID analysisExecutionId, UUID marketId, AnalysisExecutionMode mode) {
+        return process(analysisExecutionId,
+                new IntelligenceAnalysisRequest(analysisExecutionId, marketId, mode, ""));
+    }
+
+    public JpaIntelligencePipelineRunEntity process(
+            UUID analysisExecutionId, IntelligenceAnalysisRequest request) {
+        UUID marketId = request.marketId();
+        AnalysisExecutionMode mode = request.mode();
         Optional<JpaIntelligencePipelineRunEntity> existing =
                 runs.findByAnalysisExecutionIdAndPipelineVersion(analysisExecutionId, VERSION);
         if (existing.isPresent()) {
             return existing.get();
         }
         try {
-            return execute(analysisExecutionId, marketId, mode);
+            return execute(analysisExecutionId, request);
         } catch (org.springframework.dao.DataIntegrityViolationException race) {
             return runs.findByAnalysisExecutionIdAndPipelineVersion(analysisExecutionId, VERSION)
                     .orElseThrow(() -> race);
@@ -109,7 +118,9 @@ public class ProductionIntelligencePipeline {
     }
 
     private JpaIntelligencePipelineRunEntity execute(
-            UUID analysisExecutionId, UUID marketId, AnalysisExecutionMode mode) {
+            UUID analysisExecutionId, IntelligenceAnalysisRequest request) {
+        UUID marketId = request.marketId();
+        AnalysisExecutionMode mode = request.mode();
         JpaIntelligencePipelineRunEntity run = runClaims.create(
                 analysisExecutionId, VERSION, clock.instant());
         String instrument;
@@ -171,7 +182,7 @@ public class ProductionIntelligencePipeline {
             if (evaluation.status() == StrategyEvaluationStatus.MATCH) {
                 TradingOpportunity opportunity = handleMatch(
                         evaluation, definition, analysisExecutionId, strategyEvidence,
-                        instrument, mode);
+                        instrument, mode, request);
                 createdOpportunities.add(opportunity);
                 completionEvidence = strategyEvidence;
                 log.info("Strategy {}v{} MATCH for market {}: created opportunity {}",
@@ -206,20 +217,27 @@ public class ProductionIntelligencePipeline {
             UUID analysisExecutionId,
             Observation observation,
             String instrument,
-            AnalysisExecutionMode mode
+            AnalysisExecutionMode mode,
+            IntelligenceAnalysisRequest request
     ) {
         var persisted = matches.persist(
                 evaluation, analysisExecutionId, observation.id()).orElseThrow();
         ReferencePrice reference = referencePriceOf(observation);
-        CreateOpportunityCommand command = matchOpportunities.command(
-                persisted.match(), definition, instrument, originOf(mode),
-                new ObservationReference(observation.id()),
-                evaluation.evaluatedAt(),
-                observation.validFrom(),
-                observation.validUntil().orElse(null),
-                evaluation,
-                reference.price(),
-                reference.observedAt());
+        CreateOpportunityCommand command;
+        if (request.accountId() == null) {
+            command = matchOpportunities.command(
+                    persisted.match(), definition, instrument, originOf(mode),
+                    new ObservationReference(observation.id()), evaluation.evaluatedAt(),
+                    observation.validFrom(), observation.validUntil().orElse(null), evaluation,
+                    reference.price(), reference.observedAt());
+        } else {
+            command = matchOpportunities.command(
+                    persisted.match(), definition, instrument, originOf(mode),
+                    new ObservationReference(observation.id()), evaluation.evaluatedAt(),
+                    observation.validFrom(), observation.validUntil().orElse(null), evaluation,
+                    reference.price(), reference.observedAt(), request.accountId(), request.scanId(),
+                    request.scanMarketId(), analysisExecutionId);
+        }
         OpportunityCreationResult created = opportunities.create(command);
         TradingOpportunity analyzed = opportunities.transition(
                 created.opportunity().id(), OpportunityStatus.ANALYZED);

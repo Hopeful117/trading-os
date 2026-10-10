@@ -13,7 +13,10 @@ import java.util.*;
 public final class TradePlanTestFixtures {
     public static final Instant NOW = Instant.parse("2026-07-30T14:00:00Z");
     public static TradePlanningContext context(UUID id, long version, UUID owner) {
-        return new TradePlanningContext(id, version, NOW, owner, UUID.randomUUID(), "EUR",
+        return context(id, version, owner, UUID.randomUUID());
+    }
+    public static TradePlanningContext context(UUID id, long version, UUID owner, UUID accountId) {
+        return new TradePlanningContext(id, version, NOW, owner, accountId, "EUR",
                 new RiskBudget(BigDecimal.valueOf(100), "EUR", UUID.randomUUID(), 3), preferences());
     }
     public static PlanningPreferences preferences() {
@@ -26,6 +29,27 @@ public final class TradePlanTestFixtures {
         return OpportunityTestFixtures.opportunity(
                 new OpportunityId(UUID.randomUUID()), 1, OpportunityStatus.ACTIVE,
                 new OpportunityScore(BigDecimal.valueOf(80)), NOW);
+    }
+    public static TradingOpportunity activeOpportunity(UUID accountId) {
+        UUID marketId = UUID.randomUUID();
+        return new OpportunityFactory().create(new OpportunityFactory.Values(
+                new OpportunityId(UUID.randomUUID()), new OpportunityVersion(1), OpportunityStatus.ACTIVE,
+                "BTC/EUR", OpportunityDirection.LONG, "Bullish breakout", "5m",
+                OpportunityType.SCALPING, OpportunityOrigin.USER_REQUEST,
+                new OpportunityScore(BigDecimal.valueOf(80)), "Confirmed",
+                Set.of(new ObservationReference(UUID.randomUUID())), Set.of(), NOW, NOW,
+                NOW.plusSeconds(300), NOW, UUID.randomUUID(), null, marketId, accountId,
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()));
+    }
+    public static TradingOpportunity accountlessNextVersion(TradingOpportunity source) {
+        return new OpportunityFactory().create(new OpportunityFactory.Values(
+                source.id(), source.version().next(), source.status(), source.instrument(),
+                source.direction(), source.scenario(), source.timeframe(), source.type(),
+                source.origin(), source.score(), source.explanation(), source.observations(),
+                source.aiAnalyses(), source.evaluatedAt(), source.validFrom(),
+                source.validUntil().orElse(null), source.createdAt(),
+                source.strategyMatchId().orElse(null), source.setup().orElse(null),
+                source.marketId().orElse(null), null, null, null, null));
     }
     public static PlanningPolicyRegistry policies() {
         return new PlanningPolicyRegistry(List.of(
@@ -41,11 +65,11 @@ public final class TradePlanTestFixtures {
     }
     public static Environment environment() {
         UUID owner = UUID.randomUUID();
-        TradingOpportunity opportunity = activeOpportunity();
+        TradePlanningContext context = context(UUID.randomUUID(), 1, owner);
+        TradingOpportunity opportunity = activeOpportunity(context.tradingAccountId());
         var opportunityStore = new InMemoryTradingOpportunityRepository();
         opportunityStore.append(opportunity);
         var contextStore = new InMemoryTradePlanningContextRepository();
-        TradePlanningContext context = context(UUID.randomUUID(), 1, owner);
         contextStore.saveSnapshot(context);
         var plans = new InMemoryTradePlanRepository();
         var engine = new TradePlanningEngine(
