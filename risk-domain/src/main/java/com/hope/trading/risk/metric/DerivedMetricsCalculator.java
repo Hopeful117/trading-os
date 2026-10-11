@@ -15,7 +15,7 @@ public final class DerivedMetricsCalculator {
         BigDecimal projectedPositionLoss = trade == null ? BigDecimal.ZERO
                 : projected.portfolioState().positions().stream()
                     .filter(p -> p.instrument().equals(trade.instrument()))
-                    .findFirst().flatMap(p -> p.lossAtStop().map(value -> value.amount()))
+                .findFirst().flatMap(p -> p.lossAtStop().map(Money::amount))
                     .orElse(BigDecimal.ZERO);
         Ratio positionRisk = divide(
                 projectedPositionLoss, observed.balance().amount());
