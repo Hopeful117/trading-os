@@ -43,7 +43,7 @@ class RiskEngineIntegrationTest {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500"),
                 usd("0"), java.util.Optional.of(usd("50000")),
                 new DailyRiskBaseline(usd("50000"), NOW, "TEST", java.util.Map.of()), usd("0"));
-        var context = context(rules(rule(MaximumTotalDrawdownRule.ID, RuleCategory.ACCOUNT,
+        var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
                 RuleSeverity.BLOCKING, "0.03")), account, null);
 
         var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
@@ -58,7 +58,7 @@ class RiskEngineIntegrationTest {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("55000"), usd("52000"),
                 usd("0"), java.util.Optional.of(usd("50000")),
                 new DailyRiskBaseline(usd("55000"), NOW, "TEST", java.util.Map.of()), usd("0"));
-        var context = context(rules(rule(MaximumTotalDrawdownRule.ID, RuleCategory.ACCOUNT,
+        var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
                 RuleSeverity.BLOCKING, "0.06")), account, null);
 
         var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
@@ -71,7 +71,7 @@ class RiskEngineIntegrationTest {
     @Test void accountMonitoringEvaluatesObservedStateWithoutAProposedTrade() {
         var context = context(rules(
                 rule(DailyDrawdownRule.ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03"),
-                rule(MaximumTotalDrawdownRule.ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03")),
+                rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03")),
                 new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"), usd("9700"), usd("0"),
                         java.util.Optional.of(usd("10000")),
                         new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("0")), null);
@@ -81,7 +81,7 @@ class RiskEngineIntegrationTest {
         assertEquals(ValidationMode.ACCOUNT_MONITORING, result.evaluationMode());
         assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
         assertEquals(1, result.violations().size());
-        assertEquals(MaximumTotalDrawdownRule.ID, result.violations().getFirst().ruleId());
+        assertEquals(MaximumTotalDrawdownRule.RULE_ID, result.violations().getFirst().ruleId());
     }
 
     @Test void approvesWithWarningsWithoutHidingThem() {
