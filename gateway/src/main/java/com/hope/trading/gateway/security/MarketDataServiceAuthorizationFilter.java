@@ -13,7 +13,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.util.Date;
+import java.util.Date; // NOSONAR: JJWT exposes only java.util.Date for these claims.
 import java.util.UUID;
 
 @SuppressWarnings("java:S2143") // JJWT exposes only java.util.Date for these claims.
