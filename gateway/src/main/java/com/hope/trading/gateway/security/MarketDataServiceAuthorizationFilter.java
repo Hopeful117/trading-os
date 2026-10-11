@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
@@ -20,15 +19,17 @@ import java.util.UUID;
 @Component
 public final class MarketDataServiceAuthorizationFilter implements GlobalFilter, Ordered {
     private static final String SERVICE_AUTHORIZATION = "X-Service-Authorization";
-    private static final String MARKET_DATA_PATH = "/api/v1/markets/";
     private static final String SERVICE_NAME = "trading-core";
     private static final String AUDIENCE = "market-data";
 
     private final String signingSecret;
+    private final String marketDataPath;
 
     public MarketDataServiceAuthorizationFilter(
-            @Value("${security.market-data-service.secret:}") String secret) {
+            @Value("${security.market-data-service.secret:}") String secret,
+            @Value("${security.market-data-service.subscription-path:/api/v1/markets/}") String subscriptionPath) {
         this.signingSecret = secret;
+        this.marketDataPath = subscriptionPath;
     }
 
     @Override
@@ -45,11 +46,12 @@ public final class MarketDataServiceAuthorizationFilter implements GlobalFilter,
 
     private boolean requiresServiceDelegation(ServerWebExchange exchange) {
         String path = exchange.getRequest().getPath().value();
-        boolean subscription = path.matches(MARKET_DATA_PATH + "[^/]+/subscriptions");
+        boolean subscription = path.matches(marketDataPath + "[^/]+/subscriptions");
         return subscription && (HttpMethod.POST.equals(exchange.getRequest().getMethod())
                 || HttpMethod.DELETE.equals(exchange.getRequest().getMethod()));
     }
 
+    @SuppressWarnings("java:S2143") // JJWT exposes only java.util.Date for these claims.
     private String issueToken() {
         if (signingSecret.isBlank()) {
             throw new IllegalStateException("Market Data service JWT secret is not configured");

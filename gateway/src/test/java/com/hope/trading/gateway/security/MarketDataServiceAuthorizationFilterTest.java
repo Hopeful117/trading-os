@@ -6,8 +6,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
-
 import java.util.Base64;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -29,7 +27,7 @@ class MarketDataServiceAuthorizationFilterTest {
             return value.getResponse().setComplete();
         };
 
-        new MarketDataServiceAuthorizationFilter(SECRET).filter(exchange, chain).block();
+        new MarketDataServiceAuthorizationFilter(SECRET, "/api/v1/markets/").filter(exchange, chain).block();
 
         String header = forwarded.get().getRequest().getHeaders().getFirst("X-Service-Authorization");
         assertThat(header).startsWith("Bearer ").isNotEqualTo("Bearer client-value");
@@ -46,7 +44,7 @@ class MarketDataServiceAuthorizationFilterTest {
             return value.getResponse().setComplete();
         };
 
-        new MarketDataServiceAuthorizationFilter(SECRET).filter(exchange, chain).block();
+        new MarketDataServiceAuthorizationFilter(SECRET, "/api/v1/markets/").filter(exchange, chain).block();
 
         assertThat(forwarded.get().getRequest().getHeaders().getFirst("X-Service-Authorization"))
                 .isNull();
