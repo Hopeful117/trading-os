@@ -63,6 +63,9 @@ export class MarketChartComponent implements AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
     this.createChart();
     this.observeContainerSize();
     this.chartReady.set(true);

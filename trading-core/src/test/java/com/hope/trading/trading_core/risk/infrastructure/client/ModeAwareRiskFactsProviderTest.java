@@ -77,6 +77,15 @@ class ModeAwareRiskFactsProviderTest {
     }
 
     @Test
+    void completeProtectiveStopOrdersOverrideMissingAggregateQuantity() {
+        BigDecimal quantity = BigDecimal.TEN;
+
+        assertThat(RiskFactsProvider.protectionStatus(BigDecimal.ZERO, quantity,
+                List.of(new RiskFactsProvider.Stop("stop-1", "provider", quantity, new BigDecimal("90")))))
+                .isEqualTo(com.hope.trading.risk.domain.RiskTypes.ProtectionStatus.PROTECTED);
+    }
+
+    @Test
     void unavailableExecutionModeDoesNotFallBackToPaper() {
         when(brokerAccount.executionMode()).thenReturn(null);
         ModeAwareRiskFactsProvider provider = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper());

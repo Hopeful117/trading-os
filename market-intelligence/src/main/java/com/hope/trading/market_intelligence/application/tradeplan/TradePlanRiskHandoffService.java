@@ -92,6 +92,30 @@ public class TradePlanRiskHandoffService {
         return snapshot(requested, context);
     }
 
+    public TradePlanRiskSnapshot loadPreflightSnapshot(TradePlanId id, TradePlanVersion version) {
+        TradePlan requested = plans.find(id, version).orElseThrow(() ->
+                TradePlanRiskHandoffException.notFound("Trade Plan version not found"));
+        TradePlan latest = plans.findLatest(id).orElseThrow(() ->
+                TradePlanRiskHandoffException.notFound("Trade Plan not found"));
+        if (!latest.version().equals(version) || requested.status() != TradePlanStatus.PROPOSED) {
+            throw TradePlanRiskHandoffException.conflict(
+                    "TRADE_PLAN_NOT_PROPOSED", "Risk preflight requires the exact latest proposed Trade Plan");
+        }
+        TradePlanningContext context = contexts.find(
+                        requested.planningContext().id(), requested.planningContext().version())
+                .orElseThrow(() -> TradePlanRiskHandoffException.notFound(CONTEXT_NOT_FOUND));
+        if (!context.capturedAt().equals(requested.planningContext().capturedAt())) {
+            throw TradePlanRiskHandoffException.conflict(
+                    "TRADING_CONTEXT_MISMATCH", "Referenced Trading Context identity is inconsistent");
+        }
+        if (!requested.execution().positionSizing().currency().equals(context.accountCurrency())) {
+            throw TradePlanRiskHandoffException.conflict(
+                    "POSITION_SIZING_CURRENCY_MISMATCH",
+                    "Position sizing currency must equal the account currency");
+        }
+        return snapshot(requested, context);
+    }
+
     @Transactional
     public TradePlanRiskSnapshot prepareForExecution(
             TradePlanId id, TradePlanVersion acceptedVersion, UUID evaluationId) {

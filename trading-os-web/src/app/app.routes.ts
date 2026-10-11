@@ -11,7 +11,6 @@ import { Markets } from './features/markets/markets';
 import { MarketDetail } from './features/markets/markets-details/markets-details';
 import { Opportunities } from './features/opportunities/opportunities';
 import { OpportunityDetail } from './features/opportunities/opportunity-details/opportunity-details';
-import { PreparePlanPage } from './features/trade-planning/prepare-plan-page/prepare-plan-page';
 import { PlanPage } from './features/trade-planning/plan-page/plan-page';
 import { Positions } from './features/positions/pages/positions/positions';
 import { ExecutionHistory } from './features/executions/pages/execution-history/execution-history';
@@ -73,11 +72,6 @@ export const routes: Routes = [
   {
     path: 'opportunities/:opportunityId',
     component: OpportunityDetail,
-    canActivate: [authGuard],
-  },
-  {
-    path: 'trade-planning/prepare/:opportunityId',
-    component: PreparePlanPage,
     canActivate: [authGuard],
   },
   {

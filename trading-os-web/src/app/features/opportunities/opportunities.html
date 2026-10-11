@@ -10,6 +10,9 @@
 
   <app-scan-panel
     (accountSelected)="accountSelected($event)"
+    (opportunitySelected)="openOpportunity($event)"
+    [openingOpportunityId]="openingOpportunityId"
+    [preparationErrors]="preparationErrors"
     (scanCompleted)="refreshOpportunities()"
   />
 

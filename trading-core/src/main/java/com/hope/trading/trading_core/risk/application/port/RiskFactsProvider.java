@@ -43,12 +43,14 @@ public interface RiskFactsProvider {
         var account = value.account() == null ? null : new Account(value.account().valuationAsset(),
                 value.account().balance(), value.account().equity(), value.account().margin(),
                 value.account().startingBalance());
-        var positions = value.positions().stream().map(p -> new Position(p.positionId(),
-                p.providerPositionReference(), p.providerReferenceProvenance(), p.instrument(),
-                p.signedQuantity(), p.entryPrice(), p.marketValue(), p.margin(), p.protectedQuantity(),
-                p.protectiveStops() == null ? List.of() : p.protectiveStops().stream().map(s -> new Stop(s.providerOrderReference(),
-                        s.providerReferenceProvenance(), s.quantity(), s.stopPrice())).toList(),
-                protectionStatus(p.protectedQuantity(), p.signedQuantity(), p.protectiveStops()))).toList();
+        var positions = value.positions().stream().map(p -> {
+            List<Stop> stops = p.protectiveStops() == null ? List.of() : p.protectiveStops().stream()
+                    .map(s -> new Stop(s.providerOrderReference(), s.providerReferenceProvenance(),
+                            s.quantity(), s.stopPrice())).toList();
+            return new Position(p.positionId(), p.providerPositionReference(), p.providerReferenceProvenance(),
+                    p.instrument(), p.signedQuantity(), p.entryPrice(), p.marketValue(), p.margin(),
+                    p.protectedQuantity(), stops, protectionStatus(p.protectedQuantity(), p.signedQuantity(), stops));
+        }).toList();
         var closed = value.closedTrades().stream().map(t -> new ClosedTrade(t.providerTradeReference(),
                 t.instrument(), t.settlementAsset(), t.fee(), t.realizedPnl(), t.closedAt())).toList();
         var ledger = value.ledgerEntries().stream().map(e -> new LedgerEntry(e.providerLedgerReference(),
@@ -59,14 +61,25 @@ public interface RiskFactsProvider {
     }
 
     static ProtectionStatus protectionStatus(BigDecimal protectedQuantity, BigDecimal quantity,
-                                             List<?> protectiveStops) {
+                                              List<?> protectiveStops) {
         if (protectedQuantity == null || quantity == null || protectiveStops == null) {
             return ProtectionStatus.UNKNOWN;
+        }
+        BigDecimal positionQuantity = quantity.abs();
+        BigDecimal stopQuantity = protectiveStops.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(stop -> stop instanceof Stop value ? value.quantity() : null)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Some broker adapters expose the correlated stop orders but do not populate
+        // their aggregate protected quantity. The orders are the stronger evidence.
+        if (!protectiveStops.isEmpty() && stopQuantity.compareTo(positionQuantity) == 0) {
+            return ProtectionStatus.PROTECTED;
         }
         if (protectedQuantity.signum() == 0 && protectiveStops.isEmpty()) {
             return ProtectionStatus.UNPROTECTED;
         }
-        if (protectedQuantity.compareTo(quantity.abs()) == 0 && !protectiveStops.isEmpty()) {
+        if (protectedQuantity.compareTo(positionQuantity) == 0 && !protectiveStops.isEmpty()) {
             return ProtectionStatus.PROTECTED;
         }
         return ProtectionStatus.PARTIALLY_PROTECTED;

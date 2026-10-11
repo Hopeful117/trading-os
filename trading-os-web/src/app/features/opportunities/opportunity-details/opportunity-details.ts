@@ -96,7 +96,7 @@ export class OpportunityDetail {
           this.preparationFailure = tradePreparationFailure(error);
           this.preparationErrorMessage = tradeFlowErrorMessage(
             error,
-            'The Trade Plan could not be prepared. Try again later.',
+            'The Trade Plan could not be created. Try again later.',
           );
         },
       });

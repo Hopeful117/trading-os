@@ -512,8 +512,8 @@ public class ExecutionTimeRiskRevalidationService {
                 BigDecimal distance = position.signedQuantity().signum() > 0
                         ? price.sourcePrice().subtract(stop.stopPrice())
                         : stop.stopPrice().subtract(price.sourcePrice());
-                if (distance.signum() <= 0) throw unavailable("POSITION_STOP_NOT_PROTECTIVE");
-                loss = loss.add(distance.multiply(stop.quantity()).multiply(conversion));
+                // The stop remains protective evidence after the market crosses it.
+                loss = loss.add(distance.max(BigDecimal.ZERO).multiply(stop.quantity()).multiply(conversion));
             }
             result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                     new Money(position.signedQuantity().abs().multiply(price.value()), currency),

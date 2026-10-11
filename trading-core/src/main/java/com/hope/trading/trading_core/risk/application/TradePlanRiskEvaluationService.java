@@ -186,7 +186,9 @@ public class TradePlanRiskEvaluationService {
              throw unavailable(invalid.code());
          }
 
-        TradePlanRiskPort.Snapshot plan = tradePlans.load(command.tradePlanId(), command.tradePlanVersion());
+        TradePlanRiskPort.Snapshot plan = preflight
+                ? tradePlans.loadPreflight(command.tradePlanId(), command.tradePlanVersion())
+                : tradePlans.load(command.tradePlanId(), command.tradePlanVersion());
         validatePlan(command, plan, configuration.reportingCurrency(), preflight);
         RiskDay riskDay = RiskDay.containing(command.requestedAt(), configuration.riskTimeZone(),
                 LocalTime.parse(configuration.riskDayResetTime()));
@@ -527,8 +529,10 @@ public class TradePlanRiskEvaluationService {
                 BigDecimal distance = position.signedQuantity().signum() > 0
                         ? price.sourcePrice().subtract(stop.stopPrice())
                         : stop.stopPrice().subtract(price.sourcePrice());
-                if (distance.signum() <= 0) throw unavailable("POSITION_STOP_NOT_PROTECTIVE");
-                loss = loss.add(distance.multiply(stop.quantity()).multiply(conversion));
+                // The stop remains protective evidence after the market crosses it.
+                // Do not turn that valid broker state into a context failure; there
+                // is no additional loss distance between the current price and stop.
+                loss = loss.add(distance.max(BigDecimal.ZERO).multiply(stop.quantity()).multiply(conversion));
             }
             result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                     new Money(position.signedQuantity().abs().multiply(price.value()), currency),

@@ -7,6 +7,8 @@ import { vi } from 'vitest';
 import { RiskDecisionResponse, TradePlanResponse } from '../../../core/models/trade-plan.model';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
 import { ExecutionService } from '../../../core/services/execution.service';
+import { MarketService } from '../../../core/services/market.service';
+import { MarketDataStreamService } from '../../../core/services/market-data-stream.service';
 import { PlanPage } from './plan-page';
 
 function fakePlan(status: string, version = 1): TradePlanResponse {
@@ -67,8 +69,49 @@ function mockActivatedRoute(params: Record<string, string>) {
   };
 }
 
+const marketServiceMock = {
+  findAll: () =>
+    of([
+      {
+        marketId: 'market-1',
+        provider: 'test',
+        symbol: 'BTC/EUR',
+        baseAsset: 'BTC',
+        quoteAsset: 'EUR',
+        marketState: { tradingStatus: 'OPEN', tradable: true, closureReason: '', lastUpdated: '2025-01-01T00:00:00Z' },
+        marketConstraints: { minimumOrderSize: 0, minimumCost: 0, tickSize: 0, quantityPrecision: 8, pricePrecision: 2 },
+      },
+    ]),
+  findOhlcHistory: () => of([]),
+  subscribe: () => of(undefined),
+};
+
+const marketDataStreamServiceMock = {
+  streamTicker: () =>
+    of({
+      marketId: 'market-1',
+      provider: 'test',
+      symbol: 'BTC/EUR',
+      streamType: 'TICKER' as const,
+      bid: 99.9,
+      ask: 100.1,
+      last: 100,
+      volume: 12,
+      occurredAt: '2025-01-01T00:00:00Z',
+    }),
+};
+
 describe('PlanPage', () => {
   let fixture: ComponentFixture<PlanPage>;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: MarketService, useValue: marketServiceMock },
+        { provide: MarketDataStreamService, useValue: marketDataStreamServiceMock },
+      ],
+    });
+  });
 
   function configureMocks(
     plan$: Observable<TradePlanResponse> = of(fakePlan('PROPOSED')),
@@ -94,6 +137,7 @@ describe('PlanPage', () => {
         { provide: ActivatedRoute, useValue: mockActivatedRoute(params) },
         { provide: TradePlanService, useValue: tradePlanService },
         { provide: ExecutionService, useValue: executionService },
+        { provide: MarketService, useValue: marketServiceMock },
       ],
     });
   }
@@ -108,6 +152,7 @@ describe('PlanPage', () => {
     expect(card.textContent).toContain('BTC/EUR');
     expect(card.textContent).toContain('1.0000');
     expect(card.textContent).toContain('100.00');
+    expect(fixture.nativeElement.querySelector('[data-testid="market-context"]')).toBeTruthy();
     expect(
       fixture.nativeElement.querySelector('[data-testid="accept-and-evaluate-risk-button"]'),
     ).toBeTruthy();
@@ -172,6 +217,7 @@ describe('PlanPage', () => {
             execute: () => of({ id: 'exec-1', status: 'COMPLETED' }),
           },
         },
+        { provide: MarketService, useValue: marketServiceMock },
       ],
     });
 
@@ -204,6 +250,7 @@ describe('PlanPage', () => {
           },
         },
         { provide: ExecutionService, useValue: {} },
+        { provide: MarketService, useValue: marketServiceMock },
       ],
     });
 
@@ -273,6 +320,7 @@ describe('PlanPage', () => {
             getExecution: () => of({ id: 'exec-1', status: 'CREATED' }),
           },
         },
+        { provide: MarketService, useValue: marketServiceMock },
       ],
     });
 
@@ -520,6 +568,7 @@ describe('PlanPage', () => {
             execute: () => of({}),
           },
         },
+        { provide: MarketService, useValue: marketServiceMock },
       ],
     });
     fixture = TestBed.createComponent(PlanPage);

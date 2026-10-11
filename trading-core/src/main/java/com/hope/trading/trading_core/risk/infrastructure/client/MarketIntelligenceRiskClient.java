@@ -24,6 +24,9 @@ interface MarketIntelligenceRiskFeignClient {
     @GetMapping("/internal/v1/trade-plans/{id}/versions/{version}/risk-validation-snapshot")
     TradePlanTransport get(@PathVariable UUID id, @PathVariable long version);
 
+    @GetMapping("/internal/v1/trade-plans/{id}/versions/{version}/risk-preflight-snapshot")
+    TradePlanTransport getPreflight(@PathVariable UUID id, @PathVariable long version);
+
     @PostMapping("/internal/v1/trade-plans/{id}/versions/{version}/execution-readiness")
     TradePlanTransport prepareForExecution(@PathVariable UUID id, @PathVariable long version,
                                             @RequestBody ExecutionReadinessRequest body);
@@ -68,9 +71,18 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
 
     @Override
     public Snapshot load(UUID tradePlanId, long version) {
+        return loadTransport(() -> client.get(tradePlanId, version));
+    }
+
+    @Override
+    public Snapshot loadPreflight(UUID tradePlanId, long version) {
+        return loadTransport(() -> client.getPreflight(tradePlanId, version));
+    }
+
+    private Snapshot loadTransport(java.util.function.Supplier<TradePlanTransport> loader) {
         TradePlanTransport value;
         try {
-            value = client.get(tradePlanId, version);
+            value = loader.get();
         } catch (FeignException failure) {
             if (failure.status() == 404 || failure.status() == 409 || failure.status() == 422) {
                 throw new RiskEvaluationException("TRADE_PLAN_COMMAND_REJECTED",

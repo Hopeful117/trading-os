@@ -31,6 +31,13 @@ public final class InternalTradePlanRiskController {
                 new TradePlanId(tradePlanId), new TradePlanVersion(version)));
     }
 
+    @GetMapping("/risk-preflight-snapshot")
+    public ResponseEntity<TradePlanRiskSnapshot> preflightSnapshot(
+            @PathVariable UUID tradePlanId, @PathVariable long version) {
+        return ResponseEntity.ok(service.loadPreflightSnapshot(
+                new TradePlanId(tradePlanId), new TradePlanVersion(version)));
+    }
+
     @PostMapping("/risk-validation-acknowledgments")
     public ResponseEntity<RiskValidationAcknowledgment> acknowledge(
             @PathVariable UUID tradePlanId, @PathVariable long version,
