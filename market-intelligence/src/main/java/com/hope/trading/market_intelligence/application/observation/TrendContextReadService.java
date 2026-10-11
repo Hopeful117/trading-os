@@ -22,6 +22,7 @@ import java.util.UUID;
 
 @Service
 public class TrendContextReadService {
+    private static final String UNAVAILABLE = "UNAVAILABLE";
     private final ObservationRepository observations;
     private final AnalysisExecutionRepository executions;
     private final CapabilityExecutionRepository capabilityExecutions;
@@ -112,14 +113,14 @@ public class TrendContextReadService {
         if (execution.isPresent()) {
             AnalysisExecutionStatus status = execution.get().status();
             if (status == AnalysisExecutionStatus.COMPLETED) {
-                if (!current) return valid ? "STALE" : "UNAVAILABLE";
+                if (!current) return valid ? "STALE" : UNAVAILABLE;
                 return payload(observation).map(value -> value.content().operationalStatus())
-                        .orElse("UNAVAILABLE");
+                        .orElse(UNAVAILABLE);
             }
             if (status == AnalysisExecutionStatus.FAILED
                     || status == AnalysisExecutionStatus.EXPIRED
                     || status == AnalysisExecutionStatus.CANCELLED) {
-                return "UNAVAILABLE";
+                return UNAVAILABLE;
             }
             return "IN_PROGRESS";
         }

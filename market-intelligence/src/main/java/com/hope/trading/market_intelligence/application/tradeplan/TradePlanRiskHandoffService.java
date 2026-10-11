@@ -18,13 +18,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
-import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
 
 public class TradePlanRiskHandoffService {
     private static final String CONTEXT_NOT_FOUND = "Referenced Trading Context snapshot not found";
+    private static final String TRADE_PLAN_NOT_FOUND = "Trade Plan not found";
     private final TradePlanRepository plans;
     private final TradePlanningContextRepository contexts;
     private final TradePlanRiskValidationBoundary lifecycle;
@@ -63,7 +63,7 @@ public class TradePlanRiskHandoffService {
         TradePlan requested = plans.find(id, version).orElseThrow(() ->
                 TradePlanRiskHandoffException.notFound("Trade Plan version not found"));
         TradePlan latest = plans.findLatest(id).orElseThrow(() ->
-                TradePlanRiskHandoffException.notFound("Trade Plan not found"));
+                TradePlanRiskHandoffException.notFound(TRADE_PLAN_NOT_FOUND));
         boolean acknowledgedAcceptedVersion = requested.status() == TradePlanStatus.ACCEPTED
                 && acknowledgments.find(id, version).isPresent()
                 && (latest.status() == TradePlanStatus.RISK_VALIDATED
@@ -96,7 +96,7 @@ public class TradePlanRiskHandoffService {
         TradePlan requested = plans.find(id, version).orElseThrow(() ->
                 TradePlanRiskHandoffException.notFound("Trade Plan version not found"));
         TradePlan latest = plans.findLatest(id).orElseThrow(() ->
-                TradePlanRiskHandoffException.notFound("Trade Plan not found"));
+                TradePlanRiskHandoffException.notFound(TRADE_PLAN_NOT_FOUND));
         if (!latest.version().equals(version) || requested.status() != TradePlanStatus.PROPOSED) {
             throw TradePlanRiskHandoffException.conflict(
                     "TRADE_PLAN_NOT_PROPOSED", "Risk preflight requires the exact latest proposed Trade Plan");
@@ -124,7 +124,7 @@ public class TradePlanRiskHandoffService {
                 .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
                         "Risk validation acknowledgment not found"));
         TradePlan latest = plans.findLatestForUpdate(id).orElseThrow(() ->
-                TradePlanRiskHandoffException.notFound("Trade Plan not found"));
+                TradePlanRiskHandoffException.notFound(TRADE_PLAN_NOT_FOUND));
         TradePlan ready = latest.status() == TradePlanStatus.READY_TO_EXECUTE
                 ? latest
                 : lifecycle.markReadyToExecute(id, new TradePlanVersion(
