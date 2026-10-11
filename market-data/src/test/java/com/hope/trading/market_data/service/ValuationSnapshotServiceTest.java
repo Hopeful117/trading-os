@@ -143,7 +143,7 @@ class ValuationSnapshotServiceTest {
                 new ValuationSnapshotBatchRequest.Asset("zero", "ZERO"),
                 new ValuationSnapshotBatchRequest.Asset("negative", "NEG"))));
 
-        assertThat(response.facts()).extracting(fact -> fact.status())
+        assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::status)
                 .containsExactly(FactStatus.CONVERSION_UNAVAILABLE, FactStatus.CONVERSION_UNAVAILABLE);
         assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::value).containsOnlyNulls();
     }
