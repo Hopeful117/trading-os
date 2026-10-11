@@ -20,7 +20,7 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
         PositionCapability,OrderCapability,ExecutionCapability,ReconciliationCapability,
         TechnicalCapability,MarginCapability {
     private static final String PROVIDER = "KRAKEN";
-    private static final String ASSET_PAIRS_PATH = "/0/public/AssetPairs";
+    private static final String ASSET_PAIRS_PATH = "/0/public/AssetPairs"; // NOSONAR: fixed Kraken API endpoint.
     private static final String MARGIN_SOURCE = "KRAKEN_ASSET_PAIRS_MARGIN";
     private static final BigDecimal CASH_LEVERAGE = BigDecimal.ONE;
     private final ProviderCredentialSession sessions;
@@ -61,8 +61,8 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
     }
     @Override public TechnicalCapabilities capabilities(UUID accountId,String instrument) {
           MarginFacts facts = marginFacts(instrument);
-          if (instrument == null || (!properties.getSupportedInstruments().isEmpty() && properties.getSupportedInstruments().stream()
-                  .noneMatch(value -> value.equalsIgnoreCase(instrument))))
+           if ((!properties.getSupportedInstruments().isEmpty() && properties.getSupportedInstruments().stream()
+                   .noneMatch(value -> value.equalsIgnoreCase(instrument))))
               throw new BrokerTechnicalException("Instrument capability is unavailable");
           return new TechnicalCapabilities(accountId,PROVIDER,instrument,properties.getCapabilityVersion(),clock.instant(),
                   List.of(OrderType.MARKET,OrderType.LIMIT),List.copyOf(facts.buy()),List.copyOf(facts.sell()));
@@ -101,7 +101,17 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
           }
           JsonNode direct=result.path(instrument);return direct.isObject()?direct:null;
      }
-     private Set<BigDecimal> leverageLevels(JsonNode values) {Set<BigDecimal> levels=new TreeSet<>();if(values.isArray())values.elements().forEachRemaining(value->{if(value.isNumber()&&value.decimalValue().signum()>0)levels.add(value.decimalValue());});return levels;}
+      private Set<BigDecimal> leverageLevels(JsonNode values) {
+          Set<BigDecimal> levels = new TreeSet<>();
+          if (values.isArray()) {
+              values.elements().forEachRemaining(value -> {
+                  if (value.isNumber() && value.decimalValue().signum() > 0) {
+                      levels.add(value.decimalValue());
+                  }
+              });
+          }
+          return levels;
+      }
      private record MarginFacts(String quoteCurrency,Set<BigDecimal> buy,Set<BigDecimal> sell) {
           Set<BigDecimal> leverageFor(Side side){return side==Side.BUY?buy:sell;}
      }
