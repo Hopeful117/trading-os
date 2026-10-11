@@ -14,6 +14,8 @@ import java.util.UUID;
 
 @Component
 public class TrendContextInputMapper {
+    private static final String SOURCE_ID = "sourceId";
+
     public TrendContextAssessmentInput map(
             Map<TrendContextRole, List<OhlcResponse>> responsesByRole,
             TrendContextProfile profile,
@@ -113,7 +115,7 @@ public class TrendContextInputMapper {
         List<OhlcResponse> sorted = responses.stream()
                 .sorted(Comparator.comparing(OhlcResponse::openTime)
                         .thenComparing(OhlcResponse::closeTime)
-                        .thenComparing(value -> required(value.sourceId(), "sourceId")))
+                        .thenComparing(value -> required(value.sourceId(), SOURCE_ID)))
                 .toList();
         List<OhlcResponse> deduplicated = new ArrayList<>();
         for (OhlcResponse response : sorted) {
@@ -177,7 +179,7 @@ public class TrendContextInputMapper {
                 Objects.requireNonNull(response.closeTime(), "closeTime is required"),
                 response.open(), response.high(), response.low(), response.close(),
                 response.volume(), response.closed(), response.synthetic(),
-                required(response.sourceId(), "sourceId"), response.occurredAt(),
+                required(response.sourceId(), SOURCE_ID), response.occurredAt(),
                 Objects.requireNonNull(response.fetchedAt(), "fetchedAt is required"));
     }
 
@@ -221,8 +223,8 @@ public class TrendContextInputMapper {
                 && first.closed() == second.closed()
                 && first.synthetic() == second.synthetic()
                 && Objects.equals(first.occurredAt(), second.occurredAt())
-                && Objects.equals(required(first.sourceId(), "sourceId"),
-                        required(second.sourceId(), "sourceId"))
+                && Objects.equals(required(first.sourceId(), SOURCE_ID),
+                        required(second.sourceId(), SOURCE_ID))
                 && Objects.equals(first.fetchedAt(), second.fetchedAt())
                 && Objects.equals(normalize(first.interval()), normalize(second.interval()));
     }

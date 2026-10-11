@@ -256,7 +256,6 @@ class LegacyOhlcTrendEvaluator implements StrategyEvaluator {
         return context.get(BuiltinStrategies.OBSERVED_AT).instantValue();
     }
 
-    private static final RequiredSemanticInput PRICE_CHANGE = BuiltinStrategies.PRICE_CHANGE;
 }
 
 @Component

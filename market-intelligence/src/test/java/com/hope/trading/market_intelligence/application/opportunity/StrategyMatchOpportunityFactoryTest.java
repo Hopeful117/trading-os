@@ -43,13 +43,13 @@ class StrategyMatchOpportunityFactoryTest {
             new StrategyMatchOpportunityFactory();
 
     private StrategyMatch match(MatchedDirection direction) {
-        return StrategyMatch.rehydrate(
+        return StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 MATCH, new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID), 1,
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 direction, "digest",
                 List.of(ConditionResult.of("directional_price_change", true,
                         new BigDecimal("12.5"))),
-                MATCHED, MATCHED.plusSeconds(1));
+                 null, MATCHED, MATCHED.plusSeconds(1)));
     }
 
     private StrategyEvaluationContext context() {
@@ -74,11 +74,13 @@ class StrategyMatchOpportunityFactoryTest {
     @Test
     void longMatchProjectsLongOhlcTrendOpportunity() {
         StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
-        var command = factory.command(match(MatchedDirection.LONG), definition, "ETH/USD",
+        var command = factory.command(new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                match(MatchedDirection.LONG), definition, "ETH/USD",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, MATCHED.plusSeconds(1800),
                 evaluation(definition, MatchedDirection.LONG),
-                new BigDecimal("64120.50"), OBSERVED_AT);
+                new BigDecimal("64120.50"), OBSERVED_AT,
+                StrategyMatchOpportunityFactory.OpportunityProvenance.none()));
 
         assertThat(command.direction()).isEqualTo(OpportunityDirection.LONG);
         assertThat(command.scenario()).isEqualTo("OHLC_TREND");
@@ -93,21 +95,25 @@ class StrategyMatchOpportunityFactoryTest {
     @Test
     void shortMatchProjectsShortOpportunity() {
         StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
-        var command = factory.command(match(MatchedDirection.SHORT), definition, "ETH/USD",
+        var command = factory.command(new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                match(MatchedDirection.SHORT), definition, "ETH/USD",
                 OpportunityOrigin.USER_REQUEST, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, null,
-                evaluation(definition, MatchedDirection.SHORT), null, null);
+                evaluation(definition, MatchedDirection.SHORT), null, null,
+                StrategyMatchOpportunityFactory.OpportunityProvenance.none()));
         assertThat(command.direction()).isEqualTo(OpportunityDirection.SHORT);
     }
 
     @Test
     void snapshotPreservesConditionResultsMatchedAtAndDescription() {
         StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
-        var command = factory.command(match(MatchedDirection.LONG), definition, "ETH/USD",
+        var command = factory.command(new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                match(MatchedDirection.LONG), definition, "ETH/USD",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, null,
                 evaluation(definition, MatchedDirection.LONG),
-                new BigDecimal("64120.50"), OBSERVED_AT);
+                new BigDecimal("64120.50"), OBSERVED_AT,
+                StrategyMatchOpportunityFactory.OpportunityProvenance.none()));
 
         var snapshot = command.setupSnapshot();
         assertThat(snapshot).isNotNull();
@@ -128,14 +134,18 @@ class StrategyMatchOpportunityFactoryTest {
         StrategyMatch sameMatch = match(MatchedDirection.LONG);
         StrategyEvaluation sameEvaluation = evaluation(definition, MatchedDirection.LONG);
 
-        var first = factory.command(sameMatch, definition, "ETH/USD",
+        var first = factory.command(new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                sameMatch, definition, "ETH/USD",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, null, sameEvaluation,
-                new BigDecimal("100"), OBSERVED_AT).setupSnapshot();
-        var second = factory.command(sameMatch, definition, "ETH/USD",
+                new BigDecimal("100"), OBSERVED_AT,
+                StrategyMatchOpportunityFactory.OpportunityProvenance.none())).setupSnapshot();
+        var second = factory.command(new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                sameMatch, definition, "ETH/USD",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, null, sameEvaluation,
-                new BigDecimal("100"), OBSERVED_AT).setupSnapshot();
+                new BigDecimal("100"), OBSERVED_AT,
+                StrategyMatchOpportunityFactory.OpportunityProvenance.none())).setupSnapshot();
 
         assertThat(first).isEqualTo(second);
     }
@@ -154,12 +164,39 @@ class StrategyMatchOpportunityFactoryTest {
     @Test
     void commandCarriesDeterministicLineageIdFromMatch() {
         StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
-        var command = factory.command(match(MatchedDirection.LONG), definition, "ETH/USD",
+        var command = factory.command(new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                match(MatchedDirection.LONG), definition, "ETH/USD",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
                 MATCHED, MATCHED, null,
-                evaluation(definition, MatchedDirection.LONG), null, null);
+                evaluation(definition, MatchedDirection.LONG), null, null,
+                StrategyMatchOpportunityFactory.OpportunityProvenance.none()));
         assertThat(command.opportunityId())
                 .isEqualTo(StrategyMatchOpportunityFactory.deriveOpportunityLineageId(MATCH));
+    }
+
+    @Test
+    void commandCarriesAccountScopedOpportunityProvenance() {
+        StrategyDefinition definition = new BuiltinStrategies().legacyOhlcTrend();
+        UUID accountId = UUID.randomUUID();
+        UUID scanId = UUID.randomUUID();
+        UUID scanMarketId = UUID.randomUUID();
+        UUID executionId = UUID.randomUUID();
+
+        var command = factory.command(
+                new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                        match(MatchedDirection.LONG), definition, "ETH/USD",
+                        OpportunityOrigin.ACTIVE_SCAN,
+                        new ObservationReference(UUID.randomUUID()), MATCHED,
+                        MATCHED, MATCHED.plusSeconds(1800),
+                        evaluation(definition, MatchedDirection.LONG),
+                        new BigDecimal("64120.50"), OBSERVED_AT,
+                        new StrategyMatchOpportunityFactory.OpportunityProvenance(
+                                accountId, scanId, scanMarketId, executionId)));
+
+        assertThat(command.accountId()).isEqualTo(accountId);
+        assertThat(command.sourceScanId()).isEqualTo(scanId);
+        assertThat(command.sourceScanMarketId()).isEqualTo(scanMarketId);
+        assertThat(command.analysisExecutionId()).isEqualTo(executionId);
     }
 
     @Test
@@ -177,20 +214,22 @@ class StrategyMatchOpportunityFactoryTest {
                 Set.of(new RequiredSemanticInput(SemanticInputType.OBSERVATION, "X")),
                 StrategyParameters.empty(), null, MATCHED);
 
-        StrategyMatch fakeMatch = StrategyMatch.rehydrate(
+        StrategyMatch fakeMatch = StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 UUID.randomUUID(), new StrategyId(FAKE_STRATEGY_ID), 1,
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 MatchedDirection.LONG, "d",
                 List.of(ConditionResult.of("fake_condition", true, new BigDecimal("7"))),
-                MATCHED, MATCHED);
+                 null, MATCHED, MATCHED));
         StrategyEvaluation fakeEvaluation = StrategyEvaluation.match(
                 fakeDefinition, context(), MatchedDirection.LONG,
                 List.of(ConditionResult.of("fake_condition", true, new BigDecimal("7"))),
                 BigDecimal.ONE, "Fake momentum trigger", Set.of());
 
-        var command = factory.command(fakeMatch, fakeDefinition, "X/Y",
+        var command = factory.command(new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                fakeMatch, fakeDefinition, "X/Y",
                 OpportunityOrigin.PASSIVE_SCAN, new ObservationReference(UUID.randomUUID()),
-                MATCHED, MATCHED, null, fakeEvaluation, null, null);
+                MATCHED, MATCHED, null, fakeEvaluation, null, null,
+                StrategyMatchOpportunityFactory.OpportunityProvenance.none()));
 
         assertThat(command.scenario()).isEqualTo("FAKE_MOMENTUM");
         assertThat(command.direction()).isEqualTo(OpportunityDirection.LONG);

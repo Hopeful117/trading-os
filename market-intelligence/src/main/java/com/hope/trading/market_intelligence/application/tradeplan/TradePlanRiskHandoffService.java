@@ -39,16 +39,15 @@ public class TradePlanRiskHandoffService {
             TradePlanRiskValidationBoundary lifecycle,
             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
             Supplier<UUID> acknowledgmentIds,
-            TradingOpportunityRepository opportunities,
-            StrategyMatchRepository strategyMatches) {
+            AttributionRepositories attributionRepositories) {
         this.plans = plans;
         this.contexts = contexts;
         this.lifecycle = lifecycle;
         this.acknowledgments = acknowledgments;
         this.clock = clock;
         this.acknowledgmentIds = acknowledgmentIds;
-        this.opportunities = opportunities;
-        this.strategyMatches = strategyMatches;
+        this.opportunities = attributionRepositories.opportunities();
+        this.strategyMatches = attributionRepositories.strategyMatches();
     }
 
     public TradePlanRiskHandoffService(
@@ -56,8 +55,13 @@ public class TradePlanRiskHandoffService {
             TradePlanRiskValidationBoundary lifecycle,
             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
             Supplier<UUID> acknowledgmentIds) {
-        this(plans, contexts, lifecycle, acknowledgments, clock, acknowledgmentIds, null, null);
+        this(plans, contexts, lifecycle, acknowledgments, clock, acknowledgmentIds,
+                new AttributionRepositories(null, null));
     }
+
+    public record AttributionRepositories(
+            TradingOpportunityRepository opportunities,
+            StrategyMatchRepository strategyMatches) { }
 
     public TradePlanRiskSnapshot loadAcceptedSnapshot(TradePlanId id, TradePlanVersion version) {
         TradePlan requested = plans.find(id, version).orElseThrow(() ->

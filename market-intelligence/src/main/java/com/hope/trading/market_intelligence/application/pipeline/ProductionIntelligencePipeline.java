@@ -102,8 +102,6 @@ public class ProductionIntelligencePipeline {
 
     public JpaIntelligencePipelineRunEntity process(
             UUID analysisExecutionId, IntelligenceAnalysisRequest request) {
-        UUID marketId = request.marketId();
-        AnalysisExecutionMode mode = request.mode();
         Optional<JpaIntelligencePipelineRunEntity> existing =
                 runs.findByAnalysisExecutionIdAndPipelineVersion(analysisExecutionId, VERSION);
         if (existing.isPresent()) {
@@ -226,17 +224,22 @@ public class ProductionIntelligencePipeline {
         CreateOpportunityCommand command;
         if (request.accountId() == null) {
             command = matchOpportunities.command(
-                    persisted.match(), definition, instrument, originOf(mode),
-                    new ObservationReference(observation.id()), evaluation.evaluatedAt(),
-                    observation.validFrom(), observation.validUntil().orElse(null), evaluation,
-                    reference.price(), reference.observedAt());
+                    new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                            persisted.match(), definition, instrument, originOf(mode),
+                            new ObservationReference(observation.id()), evaluation.evaluatedAt(),
+                            observation.validFrom(), observation.validUntil().orElse(null), evaluation,
+                            reference.price(), reference.observedAt(),
+                            StrategyMatchOpportunityFactory.OpportunityProvenance.none()));
         } else {
             command = matchOpportunities.command(
-                    persisted.match(), definition, instrument, originOf(mode),
-                    new ObservationReference(observation.id()), evaluation.evaluatedAt(),
-                    observation.validFrom(), observation.validUntil().orElse(null), evaluation,
-                    reference.price(), reference.observedAt(), request.accountId(), request.scanId(),
-                    request.scanMarketId(), analysisExecutionId);
+                    new StrategyMatchOpportunityFactory.OpportunityCommandInput(
+                            persisted.match(), definition, instrument, originOf(mode),
+                            new ObservationReference(observation.id()), evaluation.evaluatedAt(),
+                            observation.validFrom(), observation.validUntil().orElse(null), evaluation,
+                            reference.price(), reference.observedAt(),
+                            new StrategyMatchOpportunityFactory.OpportunityProvenance(
+                                    request.accountId(), request.scanId(), request.scanMarketId(),
+                                    analysisExecutionId)));
         }
         OpportunityCreationResult created = opportunities.create(command);
         TradingOpportunity analyzed = opportunities.transition(

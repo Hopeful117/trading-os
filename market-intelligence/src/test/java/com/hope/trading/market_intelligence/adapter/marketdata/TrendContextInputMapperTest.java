@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextRole
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextRoleDefinition;
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextProfile;
 import org.junit.jupiter.api.Test;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -94,19 +95,21 @@ class TrendContextInputMapperTest {
                 Instant.parse("2026-09-23T11:00:00Z"), true, false, "setup", Instant.parse("2026-09-23T11:05:00Z"));
 
         OhlcResponse differentSource = copyWithProvenance(setup, "other-source", setup.fetchedAt());
-        assertThatThrownBy(() -> mapper.map(
+        ThrowingCallable firstMapping = () -> mapper.map(
                 Map.of(TrendContextRole.BIAS, List.of(bias),
                         TrendContextRole.SETUP, List.of(setup, differentSource)),
-                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1"))
+                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1");
+        assertThatThrownBy(firstMapping)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Conflicting OHLC duplicate");
 
         OhlcResponse differentFetch = copyWithProvenance(setup, setup.sourceId(),
                 setup.fetchedAt().plusSeconds(1));
-        assertThatThrownBy(() -> mapper.map(
+        ThrowingCallable secondMapping = () -> mapper.map(
                 Map.of(TrendContextRole.BIAS, List.of(bias),
                         TrendContextRole.SETUP, List.of(setup, differentFetch)),
-                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1"))
+                profile(), ASSESSMENT_AT, CUTOFF_AT, "trend-context-rules-1");
+        assertThatThrownBy(secondMapping)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Conflicting OHLC duplicate");
     }

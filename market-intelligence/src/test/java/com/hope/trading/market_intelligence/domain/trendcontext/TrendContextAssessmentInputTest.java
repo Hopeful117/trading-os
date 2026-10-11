@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TrendContextAssessmentInputTest {
@@ -81,8 +82,9 @@ class TrendContextAssessmentInputTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("BIAS and SETUP roles are required");
 
-        assertThatThrownBy(() -> TrendContextProfile.conservativeSwingV1(
-                "1.0.0", roles("4H", "1H"), true))
+        var undefinedTrigger = catchThrowable(() -> TrendContextProfile.conservativeSwingV1(
+                "1.0.0", roles("4H", "1H"), true));
+        assertThat(undefinedTrigger)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Required TRIGGER must be defined");
     }
@@ -159,7 +161,8 @@ class TrendContextAssessmentInputTest {
         TrendContextCandle future = candle("1H", "100", "105", "95", "102", true, false,
                 "future", ASSESSMENT_AT.plusSeconds(1), ASSESSMENT_AT.plus(Duration.ofHours(1)), FETCHED_AT);
 
-        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"), future))
+        var futureCandle = catchThrowable(() -> input(profile(), realCandle("bias", "4H"), future));
+        assertThat(futureCandle)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("FUTURE_CANDLE");
     }
@@ -172,9 +175,10 @@ class TrendContextAssessmentInputTest {
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP,
                 List.of(realCandle("setup", "1H")), CUTOFF_AT));
 
-        assertThatThrownBy(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+        var roleIdentityMismatch = catchThrowable(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
                 MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, CUTOFF_AT,
-                profile(), "rules-1", roles)))
+                profile(), "rules-1", roles)));
+        assertThat(roleIdentityMismatch)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("ROLE_IDENTITY_MISMATCH");
     }
@@ -188,9 +192,10 @@ class TrendContextAssessmentInputTest {
                 List.of(realCandle("setup", "15M")), CUTOFF_AT,
                 "1H", MARKET_ID, "KRAKEN", "BTC/EUR", true, true));
 
-        assertThatThrownBy(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+        var candleIdentityMismatch = catchThrowable(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
                 MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, CUTOFF_AT,
-                profile(), "rules-1", roles)))
+                profile(), "rules-1", roles)));
+        assertThat(candleIdentityMismatch)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("CANDLE_IDENTITY_MISMATCH");
     }
@@ -205,9 +210,10 @@ class TrendContextAssessmentInputTest {
         roles.put(TrendContextRole.SETUP, series(TrendContextRole.SETUP,
                 List.of(realCandle("setup", "1H")), CUTOFF_AT));
 
-        assertThatThrownBy(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
+        var sourceIdentityMismatch = catchThrowable(() -> TrendContextAssessmentInput.accept(new TrendContextAssessmentInput.Values(
                 MARKET_ID, "KRAKEN", "BTC/EUR", ASSESSMENT_AT, CUTOFF_AT,
-                profile(), "rules-1", roles)))
+                profile(), "rules-1", roles)));
+        assertThat(sourceIdentityMismatch)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SOURCE_IDENTITY_MISMATCH");
     }
@@ -215,10 +221,14 @@ class TrendContextAssessmentInputTest {
     @Test
     void rejectsDuplicateCandlesWithDifferentProvenance() {
         TrendContextCandle first = realCandle("duplicate-a", "1H");
-        TrendContextCandle second = candle("1H", "100", "105", "95", "102", true, false,
-                "duplicate-b", first.openTime(), first.closeTime(), FETCHED_AT);
+        TrendContextCandle second = new TrendContextCandle(
+                first.provider(), first.symbol(), first.interval(), first.openTime(), first.closeTime(),
+                first.open(), first.high(), first.low(), first.close(), first.volume(),
+                first.closed(), first.synthetic(), "duplicate-b",
+                first.sourceOccurredAt().plusSeconds(1), first.fetchedAt());
 
-        assertThatThrownBy(() -> input(profile(), realCandle("bias", "4H"), List.of(first, second)))
+        var duplicateConflict = catchThrowable(() -> input(profile(), realCandle("bias", "4H"), List.of(first, second)));
+        assertThat(duplicateConflict)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("DUPLICATE_CONFLICT");
     }
@@ -391,13 +401,10 @@ class TrendContextAssessmentInputTest {
                 .min(java.util.Comparator.comparing(TrendContextCandle::openTime))
                 .orElseThrow();
         List<String> exclusions = new ArrayList<>();
-        List<TrendContextGapFinding> gaps = new ArrayList<>();
         for (TrendContextCandle candle : candles) {
             if (!candle.closed()) exclusions.add(candle.sourceId() + ":OPEN_CANDLE_EXCLUDED");
             if (candle.synthetic()) {
                 exclusions.add(candle.sourceId() + ":SYNTHETIC_DATA_EXCLUDED");
-                gaps.add(new TrendContextGapFinding(role, "SYNTHETIC_DATA_EXCLUDED",
-                        candle.openTime(), candle.closeTime(), "Synthetic candle excluded"));
             }
             if (candle.closeTime().isAfter(cutoff)) {
                 exclusions.add(candle.sourceId() + ":CUTOFF_EXCLUDED");
@@ -420,9 +427,6 @@ class TrendContextAssessmentInputTest {
     ) {
         TrendContextCandle first = candles.stream()
                 .min(java.util.Comparator.comparing(TrendContextCandle::openTime))
-                .orElseThrow();
-        TrendContextCandle last = candles.stream()
-                .max(java.util.Comparator.comparing(TrendContextCandle::openTime))
                 .orElseThrow();
         List<String> exclusions = new ArrayList<>();
         List<TrendContextGapFinding> gaps = new ArrayList<>();

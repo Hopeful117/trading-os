@@ -89,6 +89,21 @@ class TrendContextReadServiceTest {
     }
 
     @Test
+    void missingHistoryAndExecutionIsReportedAsMissing() {
+        AnalysisExecutionRepository executions = mock(AnalysisExecutionRepository.class);
+        when(executions.findLatestByMarketId(TrendContextTestFixtures.MARKET_ID))
+                .thenReturn(Optional.empty());
+
+        TrendContextReadModel model = service(
+                new InMemoryObservationRepository(), executions,
+                mock(CapabilityExecutionRepository.class)).find(
+                TrendContextTestFixtures.MARKET_ID);
+
+        assertThat(model.operationalStatus()).isEqualTo("MISSING");
+        assertThat(model.assessmentValidity()).isEqualTo("NONE");
+    }
+
+    @Test
     void failureWithoutHistoryHasNoFabricatedAssessment() {
         AnalysisExecutionRepository executions = repository(
                 execution(AnalysisExecutionStatus.FAILED, NOW.minusSeconds(60)));
@@ -103,6 +118,18 @@ class TrendContextReadServiceTest {
         assertThat(model.assessment()).isNull();
         assertThat(model.lastSuccessfulAssessment()).isNull();
         assertThat(model.assessmentValidity()).isEqualTo("NONE");
+    }
+
+    @Test
+    void runningExecutionIsReportedAsInProgress() {
+        TrendContextReadModel model = service(
+                new InMemoryObservationRepository(),
+                repository(execution(AnalysisExecutionStatus.RUNNING, NOW.minusSeconds(60))),
+                mock(CapabilityExecutionRepository.class)).find(
+                TrendContextTestFixtures.MARKET_ID);
+
+        assertThat(model.operationalStatus()).isEqualTo("IN_PROGRESS");
+        assertThat(model.assessmentPresent()).isFalse();
     }
 
     @ParameterizedTest
@@ -130,7 +157,7 @@ class TrendContextReadServiceTest {
         InMemoryObservationRepository observations = new InMemoryObservationRepository();
         TrendContextAssessment assessment = assessment(TrendAttention.WATCH);
         UUID oldCapabilityExecutionId = UUID.randomUUID();
-        Observation observation = saveObservation(observations, assessment, NOW.minusSeconds(60),
+        saveObservation(observations, assessment, NOW.minusSeconds(60),
                 oldCapabilityExecutionId, "AVAILABLE");
         AnalysisExecution latestExecution = execution(AnalysisExecutionStatus.COMPLETED,
                 NOW.minusSeconds(120));

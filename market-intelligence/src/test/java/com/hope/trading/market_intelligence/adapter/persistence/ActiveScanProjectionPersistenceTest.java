@@ -140,7 +140,7 @@ class ActiveScanProjectionPersistenceTest {
 
     private StrategyMatch strategyMatch(UUID matchId) {
         Instant now = OpportunityTestFixtures.NOW;
-        return StrategyMatch.rehydrate(
+        return StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 matchId,
                 new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID),
                 1,
@@ -149,10 +149,8 @@ class ActiveScanProjectionPersistenceTest {
                 UUID.randomUUID(),
                 MatchedDirection.LONG,
                 "digest-" + matchId,
-                List.of(),
-                now,
-                now
-        );
+                List.of(), null, now, now
+        ));
     }
 
     private TradingOpportunity opportunity(

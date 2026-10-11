@@ -88,7 +88,8 @@ public final class TradePlanTestFixtures {
         var service = new TradePlanApplicationService(
                 engine, plans, new TradePlanLifecyclePolicy(), events::add, metrics,
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                idempotency, fingerprints, creation);
+                new TradePlanApplicationService.ManualTradePlanDependencies(
+                        idempotency, fingerprints, creation));
         return new Environment(
                 owner, opportunity, context, opportunityStore, contextStore, plans,
                 engine, service, idempotency, events, metrics);

@@ -22,7 +22,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -118,7 +117,9 @@ class ActiveScanConcurrencyIntegrationTest {
                 () -> claims.claimForDispatch(scanId, scanMarketId)
         );
 
-        assertThat(results).allSatisfy(result -> assertThat(result.analysisExecutionId()).isEqualTo(executionId));
+        assertThat(results).isNotEmpty();
+        assertThat(results).extracting(ActiveScanDispatchClaimService.ClaimResult::analysisExecutionId)
+                .containsOnly(executionId);
         assertThat(scanRepository.findMarketById(scanMarketId)).get()
                 .extracting(ActiveScanMarket::status)
                 .isEqualTo(ActiveScanMarketStatus.DISPATCH_REQUESTED);

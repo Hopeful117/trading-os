@@ -11,6 +11,7 @@ import com.hope.trading.market_intelligence.application.opportunity.OpportunityE
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityStatus;
 import com.hope.trading.market_intelligence.application.opportunity.StrategyMatchOpportunityFactory;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
+import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
 import com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity;
@@ -46,6 +47,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -164,9 +166,8 @@ class ProductionIntelligencePipelineTest {
                 .thenReturn(new OpportunityCreationResult.Created(opportunity));
         when(opportunities.transition(any(OpportunityId.class), any(OpportunityStatus.class)))
                 .thenReturn(opportunity);
-        when(matchOpportunities.command(any(), any(StrategyDefinition.class),
-                anyString(), any(), any(), any(Instant.class), any(Instant.class), any(),
-                any(), any(), any()))
+        when(matchOpportunities.command(any(
+                StrategyMatchOpportunityFactory.OpportunityCommandInput.class)))
                 .thenReturn(mock(CreateOpportunityCommand.class));
     }
 
@@ -209,6 +210,30 @@ class ProductionIntelligencePipelineTest {
     }
 
     @Test
+    void accountScopedMatchCarriesActiveScanProvenance() {
+        StrategyDefinition definition = enabledStrategy("Account Strategy");
+        when(definitions.findAll()).thenReturn(List.of(definition));
+        stubMatch(definition);
+
+        UUID accountId = UUID.randomUUID();
+        UUID scanId = UUID.randomUUID();
+        UUID scanMarketId = UUID.randomUUID();
+        JpaIntelligencePipelineRunEntity run = pipeline.process(
+                analysisExecutionId,
+                new IntelligenceAnalysisRequest(
+                        analysisExecutionId, marketId, AnalysisExecutionMode.ACTIVE,
+                        "active scan", accountId, scanId, scanMarketId));
+
+        assertThat(run.state()).isEqualTo("COMPLETED");
+        verify(matchOpportunities).command(
+                org.mockito.ArgumentMatchers.argThat(input ->
+                        accountId.equals(input.provenance().accountId())
+                                && scanId.equals(input.provenance().sourceScanId())
+                                && scanMarketId.equals(input.provenance().sourceScanMarketId())
+                                && analysisExecutionId.equals(input.provenance().analysisExecutionId())));
+    }
+
+    @Test
     void multipleMatchesCompleteRunWithoutSingularOpportunityId() {
         StrategyDefinition first = enabledStrategy("First Strategy");
         StrategyDefinition second = enabledStrategy("Second Strategy");
@@ -222,7 +247,7 @@ class ProductionIntelligencePipelineTest {
         assertThat(run.state()).isEqualTo("COMPLETED");
         // No hidden first-pick: the singular projection is not representable.
         assertThat(run.opportunityId()).isNull();
-        verify(opportunities, org.mockito.Mockito.times(2)).create(any());
+        verify(opportunities, times(2)).create(any());
     }
 
     @Test

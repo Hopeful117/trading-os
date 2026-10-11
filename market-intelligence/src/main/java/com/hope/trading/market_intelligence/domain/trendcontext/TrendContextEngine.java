@@ -34,41 +34,7 @@ public final class TrendContextEngine {
         EnumMap<TrendContextRole, TrendContextTimeframeAssessment> roles = new EnumMap<>(TrendContextRole.class);
         List<TrendContextFinding> findings = new ArrayList<>();
         List<TrendContextExclusion> exclusions = new ArrayList<>();
-        for (TrendContextInputValidation.Finding validation : input.validationFindings()) {
-            if (!validation.code().equals("INSUFFICIENT_HISTORY")) {
-                exclusions.add(exclusion(input, validation.role(), validation.code(), validation.message()));
-            }
-        }
-        for (TrendContextRole role : TrendContextRole.values()) {
-            TrendContextRoleSeries series = input.roleSeries().get(role);
-            MarketStructureResult structure = suppliedStructures.get(role);
-            if (series == null || (structure == null && !required(input, role))) {
-                continue;
-            }
-            if (structure == null) {
-                exclusions.add(exclusion(input, role, "REQUIRED_ROLE_MISSING",
-                        "Market Structure result is missing for required role"));
-                findings.add(finding(input, role, "STRUCTURE_UNAVAILABLE", "STRUCTURE_V1",
-                        "Market Structure result is missing for required role", null));
-                continue;
-            }
-            if (!compatible(input, series, structure)) {
-                exclusions.add(exclusion(input, role, "INVALID_STRUCTURE",
-                        "Market Structure result does not match the accepted Trend Context input"));
-                findings.add(finding(input, role, "STRUCTURE_INVALID", "STRUCTURE_V1",
-                        "Market Structure result does not match the accepted Trend Context input", null));
-                continue;
-            }
-            TrendContextTimeframeAssessment assessment = assessRole(input, role, series, structure);
-            roles.put(role, assessment);
-            findings.addAll(assessment.findings());
-            for (String exclusion : series.exclusionFindings()) {
-                exclusions.add(exclusion(input, role, code(exclusion), exclusion));
-            }
-            for (TrendContextGapFinding gap : series.gapFindings()) {
-                exclusions.add(exclusion(input, role, gap.code(), gap.detail()));
-            }
-        }
+        assessRoles(input, suppliedStructures, roles, findings, exclusions);
 
         TrendContextTimeframeAssessment bias = roles.get(TrendContextRole.BIAS);
         TrendContextTimeframeAssessment setup = roles.get(TrendContextRole.SETUP);
@@ -89,6 +55,64 @@ public final class TrendContextEngine {
                 input.cutOffAt(), input.fingerprint(), profile.profileId(), profile.profileVersion(),
                 input.ruleVersion(), roles, alignment, direction, regime, phase, attention, findings,
                 contradictions, exclusions, invalidations, fingerprint));
+    }
+
+    private void assessRoles(TrendContextAssessmentInput input,
+            Map<TrendContextRole, MarketStructureResult> structures,
+            EnumMap<TrendContextRole, TrendContextTimeframeAssessment> roles,
+            List<TrendContextFinding> findings,
+            List<TrendContextExclusion> exclusions) {
+        for (TrendContextInputValidation.Finding validation : input.validationFindings()) {
+            if (!validation.code().equals("INSUFFICIENT_HISTORY")) {
+                exclusions.add(exclusion(input, validation.role(), validation.code(), validation.message()));
+            }
+        }
+        for (TrendContextRole role : TrendContextRole.values()) {
+            TrendContextRoleSeries series = input.roleSeries().get(role);
+            MarketStructureResult structure = structures.get(role);
+            if (series != null) {
+                if (structure == null) {
+                    if (required(input, role)) {
+                        addUnavailableRole(input, role, findings, exclusions);
+                    }
+                } else if (!compatible(input, series, structure)) {
+                    addInvalidRole(input, role, findings, exclusions);
+                } else {
+                    addRoleAssessment(input, role, series, structure, roles, findings, exclusions);
+                }
+            }
+        }
+    }
+
+    private void addUnavailableRole(TrendContextAssessmentInput input, TrendContextRole role,
+            List<TrendContextFinding> findings, List<TrendContextExclusion> exclusions) {
+        exclusions.add(exclusion(input, role, "REQUIRED_ROLE_MISSING",
+                "Market Structure result is missing for required role"));
+        findings.add(finding(input, role, "STRUCTURE_UNAVAILABLE", "STRUCTURE_V1",
+                "Market Structure result is missing for required role", null));
+    }
+
+    private void addInvalidRole(TrendContextAssessmentInput input, TrendContextRole role,
+            List<TrendContextFinding> findings, List<TrendContextExclusion> exclusions) {
+        exclusions.add(exclusion(input, role, "INVALID_STRUCTURE",
+                "Market Structure result does not match the accepted Trend Context input"));
+        findings.add(finding(input, role, "STRUCTURE_INVALID", "STRUCTURE_V1",
+                "Market Structure result does not match the accepted Trend Context input", null));
+    }
+
+    private void addRoleAssessment(TrendContextAssessmentInput input, TrendContextRole role,
+            TrendContextRoleSeries series, MarketStructureResult structure,
+            EnumMap<TrendContextRole, TrendContextTimeframeAssessment> roles,
+            List<TrendContextFinding> findings, List<TrendContextExclusion> exclusions) {
+        TrendContextTimeframeAssessment assessment = assessRole(input, role, series, structure);
+        roles.put(role, assessment);
+        findings.addAll(assessment.findings());
+        for (String exclusion : series.exclusionFindings()) {
+            exclusions.add(exclusion(input, role, code(exclusion), exclusion));
+        }
+        for (TrendContextGapFinding gap : series.gapFindings()) {
+            exclusions.add(exclusion(input, role, gap.code(), gap.detail()));
+        }
     }
 
     private boolean compatible(TrendContextAssessmentInput input, TrendContextRoleSeries series,

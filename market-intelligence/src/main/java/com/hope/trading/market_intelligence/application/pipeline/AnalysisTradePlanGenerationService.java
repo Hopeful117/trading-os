@@ -21,6 +21,8 @@ import java.util.*;
 
 @Service
 public class AnalysisTradePlanGenerationService {
+    private static final String COMPLETED = "COMPLETED";
+
     private final AnalysisExecutionRepository analyses;
     private final JpaIntelligencePipelineRunRepository pipelineRuns;
     private final TradingOpportunityRepository opportunities;
@@ -53,6 +55,35 @@ public class AnalysisTradePlanGenerationService {
     public GenerationResponse generate(
             UUID analysisId, String idempotencyKey,
             InternalAnalysisTradePlanRequest request) {
+        validateRequest(idempotencyKey, request);
+        Optional<GenerationResponse> replay = replayResponse(analysisId, idempotencyKey, request);
+        if (replay.isPresent()) {
+            return replay.get();
+        }
+        TradePlanningContext context = context(request.context());
+        contexts.saveSnapshot(context);
+        GenerationClaim claim = createGeneration(
+                analysisId, idempotencyKey, request, context);
+        if (claim.replay() != null) {
+            return claim.replay();
+        }
+        JpaAnalysisTradePlanGenerationEntity generation = claim.generation();
+        try {
+            return generatePlan(analysisId, request, context, generation);
+        } catch (ResponseStatusException exception) {
+            generation.fail(exception.getReason() == null
+                    ? "GENERATION_FAILED" : exception.getReason(), clock.instant());
+            generations.save(generation);
+            throw exception;
+        } catch (FeignException exception) {
+            generation.fail("DEPENDENCY_UNAVAILABLE", clock.instant());
+            generations.save(generation);
+            throw failure(HttpStatus.SERVICE_UNAVAILABLE, "DEPENDENCY_UNAVAILABLE");
+        }
+    }
+
+    private void validateRequest(String idempotencyKey,
+                                 InternalAnalysisTradePlanRequest request) {
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 200) {
             throw failure(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED");
         }
@@ -60,30 +91,37 @@ public class AnalysisTradePlanGenerationService {
                 || !request.accountId().equals(request.context().tradingAccountId())) {
             throw failure(HttpStatus.FORBIDDEN, "PLANNING_CONTEXT_FORBIDDEN");
         }
+    }
+
+    private Optional<GenerationResponse> replayResponse(
+            UUID analysisId, String idempotencyKey, InternalAnalysisTradePlanRequest request) {
         Optional<JpaAnalysisTradePlanGenerationEntity> replay = generations
                 .findByAnalysisExecutionIdAndActorIdAndAccountIdAndIdempotencyKey(
                         analysisId, request.actorId(), request.accountId(), idempotencyKey);
-        if (replay.isPresent()) {
-            JpaAnalysisTradePlanGenerationEntity value = replay.get();
-            if (!value.contextId().equals(request.context().id())
-                    || value.contextVersion() != request.context().version()) {
-                throw failure(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT");
-            }
-            if ("COMPLETED".equals(value.state())) {
-                return new GenerationResponse(value.tradePlanId(), value.tradePlanVersion());
-            }
-            if ("FAILED".equals(value.state())) {
-                throw failure(HttpStatus.CONFLICT, value.failureCode());
-            }
-            throw failure(HttpStatus.CONFLICT, "GENERATION_IN_PROGRESS");
+        if (replay.isEmpty()) {
+            return Optional.empty();
         }
-        TradePlanningContext context = context(request.context());
-        contexts.saveSnapshot(context);
-        JpaAnalysisTradePlanGenerationEntity generation;
+        JpaAnalysisTradePlanGenerationEntity value = replay.get();
+        if (!value.contextId().equals(request.context().id())
+                || value.contextVersion() != request.context().version()) {
+            throw failure(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT");
+        }
+        if (COMPLETED.equals(value.state())) {
+            return Optional.of(new GenerationResponse(value.tradePlanId(), value.tradePlanVersion()));
+        }
+        if ("FAILED".equals(value.state())) {
+            throw failure(HttpStatus.CONFLICT, value.failureCode());
+        }
+        throw failure(HttpStatus.CONFLICT, "GENERATION_IN_PROGRESS");
+    }
+
+    private GenerationClaim createGeneration(
+            UUID analysisId, String idempotencyKey,
+            InternalAnalysisTradePlanRequest request, TradePlanningContext context) {
         try {
-            generation = generationClaims.create(
+            return new GenerationClaim(generationClaims.create(
                     analysisId, request.actorId(), request.accountId(), context.id(),
-                    context.version(), idempotencyKey, clock.instant());
+                    context.version(), idempotencyKey, clock.instant()), null);
         } catch (org.springframework.dao.DataIntegrityViolationException race) {
             JpaAnalysisTradePlanGenerationEntity concurrent = generations
                     .findByAnalysisExecutionIdAndActorIdAndAccountIdAndIdempotencyKey(
@@ -93,13 +131,18 @@ public class AnalysisTradePlanGenerationService {
                     || concurrent.contextVersion() != context.version()) {
                 throw failure(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT");
             }
-            if ("COMPLETED".equals(concurrent.state())) {
-                return new GenerationResponse(concurrent.tradePlanId(), concurrent.tradePlanVersion());
+            if (COMPLETED.equals(concurrent.state())) {
+                return new GenerationClaim(null,
+                        new GenerationResponse(concurrent.tradePlanId(), concurrent.tradePlanVersion()));
             }
             throw failure(HttpStatus.CONFLICT, "GENERATION_IN_PROGRESS");
         }
-        try {
-            var analysis = analyses.findById(analysisId)
+    }
+
+    private GenerationResponse generatePlan(
+            UUID analysisId, InternalAnalysisTradePlanRequest request,
+            TradePlanningContext context, JpaAnalysisTradePlanGenerationEntity generation) {
+        var analysis = analyses.findById(analysisId)
                     .orElseThrow(() -> failure(HttpStatus.NOT_FOUND, "ANALYSIS_NOT_FOUND"));
             if (analysis.status() != AnalysisExecutionStatus.COMPLETED) {
                 throw failure(HttpStatus.CONFLICT, "ANALYSIS_NOT_COMPLETE");
@@ -109,7 +152,7 @@ public class AnalysisTradePlanGenerationService {
                             analysisId, ProductionIntelligencePipeline.VERSION)
                     .orElseThrow(() -> failure(
                             HttpStatus.UNPROCESSABLE_ENTITY, "PIPELINE_NOT_COMPLETE"));
-            if (!"COMPLETED".equals(pipeline.state())) {
+            if (!COMPLETED.equals(pipeline.state())) {
                 throw failure(HttpStatus.UNPROCESSABLE_ENTITY, pipeline.state());
             }
             if (pipeline.opportunityId() == null || pipeline.opportunityVersion() == null) {
@@ -151,21 +194,12 @@ public class AnalysisTradePlanGenerationService {
                     price.lastPrice(), opportunity.id().value(), opportunity.version().value(),
                     plan.id().value(), plan.version().value(), clock.instant());
             generations.save(generation);
-            return new GenerationResponse(plan.id().value(), plan.version().value());
-        } catch (ResponseStatusException exception) {
-            generation.fail(exception.getReason() == null
-                    ? "GENERATION_FAILED" : exception.getReason(), clock.instant());
-            generations.save(generation);
-            throw exception;
-        } catch (FeignException exception) {
-            generation.fail("DEPENDENCY_UNAVAILABLE", clock.instant());
-            generations.save(generation);
-            throw failure(HttpStatus.SERVICE_UNAVAILABLE, "DEPENDENCY_UNAVAILABLE");
-        }
+        return new GenerationResponse(plan.id().value(), plan.version().value());
     }
 
     private TradePlanningContext context(InternalAnalysisTradePlanRequest.Context value) {
-        var budget = value.riskBudget(); var preferences = value.preferences();
+        var budget = value.riskBudget();
+        var preferences = value.preferences();
         return new TradePlanningContext(
                 value.id(), value.version(), value.capturedAt(), value.ownerId(),
                 value.tradingAccountId(), value.accountCurrency(),
@@ -200,6 +234,11 @@ public class AnalysisTradePlanGenerationService {
     private ResponseStatusException failure(HttpStatus status, String code) {
         return new ResponseStatusException(status, code);
     }
+
+    private record GenerationClaim(
+            JpaAnalysisTradePlanGenerationEntity generation,
+            GenerationResponse replay
+    ) { }
 
     public record GenerationResponse(UUID tradePlanId, long tradePlanVersion) { }
 }

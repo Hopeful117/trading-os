@@ -8,7 +8,6 @@ import com.hope.trading.market_intelligence.domain.observation.*;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 

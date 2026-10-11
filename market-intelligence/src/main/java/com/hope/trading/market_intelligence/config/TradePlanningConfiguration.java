@@ -2,7 +2,6 @@ package com.hope.trading.market_intelligence.config;
 
 import com.hope.trading.market_intelligence.adapter.ai.DisabledAiTradePlanningAdapter;
 import com.hope.trading.market_intelligence.adapter.observability.*;
-import com.hope.trading.market_intelligence.adapter.persistence.*;
 import com.hope.trading.market_intelligence.application.port.*;
 import com.hope.trading.market_intelligence.application.tradeplan.*;
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
@@ -65,7 +64,8 @@ public class TradePlanningConfiguration {
              ManualTradePlanCreationTransaction manualCreation) {
         return new TradePlanApplicationService(
                 engine, repository, lifecycle, events, metrics, clock,
-                manualIdempotency, manualFingerprints, manualCreation);
+                new TradePlanApplicationService.ManualTradePlanDependencies(
+                        manualIdempotency, manualFingerprints, manualCreation));
     }
     @Bean TradePlanReplanningService tradePlanReplanningService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,
@@ -79,11 +79,11 @@ public class TradePlanningConfiguration {
     @Bean TradePlanRiskHandoffService tradePlanRiskHandoffService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,
              TradePlanRiskValidationBoundary lifecycle,
-             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
+                RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
              com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository opportunities,
              com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository strategyMatches) {
         return new TradePlanRiskHandoffService(
                 plans, contexts, lifecycle, acknowledgments, clock, UUID::randomUUID,
-                opportunities, strategyMatches);
+                new TradePlanRiskHandoffService.AttributionRepositories(opportunities, strategyMatches));
     }
 }

@@ -3,7 +3,6 @@ package com.hope.trading.market_intelligence.strategy.domain;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -42,41 +41,24 @@ public final class StrategyMatch {
     private final Instant matchedAt;
     private final Instant createdAt;
 
-    private StrategyMatch(
-            UUID matchId,
-            StrategyId strategyId,
-            int strategyVersion,
-            UUID marketId,
-            UUID analysisExecutionId,
-            UUID observationId,
-            MatchedDirection direction,
-            String contextDigest,
-            List<ConditionResult> conditionResults,
-            StrategyEvidenceProvenance provenance,
-            Instant matchedAt,
-            Instant createdAt
-    ) {
-        Objects.requireNonNull(matchId, "matchId is required");
-        Objects.requireNonNull(strategyId, "strategyId is required");
-        if (strategyVersion < 1) {
+    private StrategyMatch(Rehydration values) {
+        Objects.requireNonNull(values.matchId(), "matchId is required");
+        Objects.requireNonNull(values.strategyId(), "strategyId is required");
+        if (values.strategyVersion() < 1) {
             throw new IllegalArgumentException("strategy version starts at 1");
         }
-        Objects.requireNonNull(marketId, "marketId is required");
-        Objects.requireNonNull(analysisExecutionId, "analysisExecutionId is required");
-        Objects.requireNonNull(observationId, "observationId is required");
-        this.direction = Objects.requireNonNull(direction, "MATCH requires a direction");
-        this.contextDigest = requireText(contextDigest, "contextDigest");
-        this.conditionResults = List.copyOf(
-                Objects.requireNonNull(conditionResults, "conditionResults is required"));
-        this.provenance = provenance;
-        this.matchedAt = Objects.requireNonNull(matchedAt, "matchedAt is required");
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt is required");
-        this.matchId = matchId;
-        this.strategyId = strategyId;
-        this.strategyVersion = strategyVersion;
-        this.marketId = marketId;
-        this.analysisExecutionId = analysisExecutionId;
-        this.observationId = observationId;
+        this.matchId = values.matchId();
+        this.strategyId = values.strategyId();
+        this.strategyVersion = values.strategyVersion();
+        this.marketId = Objects.requireNonNull(values.marketId(), "marketId is required");
+        this.analysisExecutionId = Objects.requireNonNull(values.analysisExecutionId(), "analysisExecutionId is required");
+        this.observationId = Objects.requireNonNull(values.observationId(), "observationId is required");
+        this.direction = Objects.requireNonNull(values.direction(), "MATCH requires a direction");
+        this.contextDigest = requireText(values.contextDigest(), "contextDigest");
+        this.conditionResults = List.copyOf(Objects.requireNonNull(values.conditionResults(), "conditionResults is required"));
+        this.provenance = values.provenance();
+        this.matchedAt = Objects.requireNonNull(values.matchedAt(), "matchedAt is required");
+        this.createdAt = Objects.requireNonNull(values.createdAt(), "createdAt is required");
     }
 
     /**
@@ -102,7 +84,7 @@ public final class StrategyMatch {
             throw new IllegalArgumentException(
                     "observationId must match evaluation provenance");
         }
-        return new StrategyMatch(
+        return new StrategyMatch(new Rehydration(
                 matchId,
                 evaluation.strategyId(),
                 evaluation.strategyVersion(),
@@ -114,72 +96,38 @@ public final class StrategyMatch {
                 evaluation.conditionResults(),
                 evaluation.provenance(),
                 evaluation.evaluatedAt(),
-                createdAt);
+                createdAt));
     }
 
     /**
      * Creates the fact from already-extracted MATCH values (pending recording
      * intent path). Same invariants as {@link #fromEvaluation}.
      */
-    public static StrategyMatch fromEvaluationFields(
-            UUID strategyId,
-            int strategyVersion,
-            UUID marketId,
-            UUID analysisExecutionId,
-            UUID observationId,
-            MatchedDirection direction,
-            String contextDigest,
-            List<ConditionResult> conditionResults,
-            Instant matchedAt,
-            UUID matchId,
-            Instant createdAt
-    ) {
-        return new StrategyMatch(matchId, new StrategyId(strategyId), strategyVersion,
-                marketId, analysisExecutionId, observationId, direction, contextDigest,
-                conditionResults, null, matchedAt, createdAt);
+    public static StrategyMatch fromEvaluationFields(EvaluationFields values) {
+        return new StrategyMatch(new Rehydration(
+                values.matchId(), new StrategyId(values.strategyId()), values.strategyVersion(),
+                values.marketId(), values.analysisExecutionId(), values.observationId(), values.direction(),
+                values.contextDigest(), values.conditionResults(), null, values.matchedAt(), values.createdAt()));
     }
 
     /** Rehydrates a persisted match. Persistence adapters only. */
-    public static StrategyMatch rehydrate(
-            UUID matchId,
-            StrategyId strategyId,
-            int strategyVersion,
-            UUID marketId,
-            UUID analysisExecutionId,
-            UUID observationId,
-            MatchedDirection direction,
-            String contextDigest,
-            List<ConditionResult> conditionResults,
-            Instant matchedAt,
-            Instant createdAt
-    ) {
-        return rehydrate(matchId, strategyId, strategyVersion, marketId, analysisExecutionId,
-                observationId, direction, contextDigest, conditionResults, null, matchedAt,
-                createdAt);
-    }
-
-    public static StrategyMatch rehydrate(
-            UUID matchId,
-            StrategyId strategyId,
-            int strategyVersion,
-            UUID marketId,
-            UUID analysisExecutionId,
-            UUID observationId,
-            MatchedDirection direction,
-            String contextDigest,
-            List<ConditionResult> conditionResults,
-            StrategyEvidenceProvenance provenance,
-            Instant matchedAt,
-            Instant createdAt
-    ) {
-        if (provenance != null && !provenance.observationId().equals(observationId)) {
+    public static StrategyMatch rehydrate(Rehydration values) {
+        if (values.provenance() != null && !values.provenance().observationId().equals(values.observationId())) {
             throw new IllegalArgumentException(
                     "observationId must match match provenance");
         }
-        return new StrategyMatch(matchId, strategyId, strategyVersion, marketId,
-                analysisExecutionId, observationId, direction, contextDigest,
-                conditionResults, provenance, matchedAt, createdAt);
+        return new StrategyMatch(values);
     }
+
+    public record EvaluationFields(UUID strategyId, int strategyVersion, UUID marketId,
+            UUID analysisExecutionId, UUID observationId, MatchedDirection direction,
+            String contextDigest, List<ConditionResult> conditionResults, Instant matchedAt,
+            UUID matchId, Instant createdAt) { }
+
+    public record Rehydration(UUID matchId, StrategyId strategyId, int strategyVersion,
+            UUID marketId, UUID analysisExecutionId, UUID observationId, MatchedDirection direction,
+            String contextDigest, List<ConditionResult> conditionResults,
+            StrategyEvidenceProvenance provenance, Instant matchedAt, Instant createdAt) { }
 
     public StrategyMatchIdentity identity() {
         return new StrategyMatchIdentity(strategyId.value(), strategyVersion,

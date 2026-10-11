@@ -133,7 +133,7 @@ class TradePlanControllerTest {
                         .principal(new TestingAuthenticationToken(
                                 new MiUserPrincipal(environment.owner(), "user", "user@example.test"), null))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(manualBody(environment, UUID.randomUUID(), "EUR")))
+                        .content(manualBody(UUID.randomUUID(), "EUR")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.reason").value("INVALID_TRADING_CONTEXT"));
     }
@@ -149,13 +149,12 @@ class TradePlanControllerTest {
                         .principal(new TestingAuthenticationToken(
                                 new MiUserPrincipal(environment.owner(), "user", "user@example.test"), null))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(manualBody(environment, environment.context().id(), "USD")))
+                        .content(manualBody(environment.context().id(), "USD")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.reason").value("INVALID_TRADING_CONTEXT"));
     }
 
-    private static String manualBody(
-            TradePlanTestFixtures.Environment environment, UUID contextId, String currency) {
+    private static String manualBody(UUID contextId, String currency) {
         return """
                 {
                   "planningContextId":"%s", "contextVersion":1,

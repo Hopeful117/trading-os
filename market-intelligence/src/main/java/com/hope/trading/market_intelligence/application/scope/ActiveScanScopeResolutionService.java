@@ -55,10 +55,6 @@ public class ActiveScanScopeResolutionService {
         return new DecisionContextResolution(account, scope);
     }
 
-    private ActiveScanScopeResolutionResult resolveMarkets(ActiveScanScopeResolutionRequest request) {
-        return resolveMarkets(request, true, false);
-    }
-
     private ActiveScanScopeResolutionResult resolveMarkets(
             ActiveScanScopeResolutionRequest request,
             boolean applyEligibilityPolicy,
@@ -115,9 +111,6 @@ public class ActiveScanScopeResolutionService {
         } catch (FeignException.NotFound exception) {
             throw ActiveScanScopeResolutionException.notFound(
                     "Account is not available for decision context resolution");
-        } catch (FeignException exception) {
-            throw ActiveScanScopeResolutionException.unavailable(
-                    "Account lookup failed for decision context resolution");
         } catch (RuntimeException exception) {
             throw ActiveScanScopeResolutionException.unavailable(
                     "Account lookup failed for decision context resolution");
@@ -133,9 +126,6 @@ public class ActiveScanScopeResolutionService {
                             .thenComparing(MarketResponse::symbol, Comparator.nullsLast(String::compareToIgnoreCase))
                             .thenComparing(MarketResponse::marketId))
                     .toList();
-        } catch (FeignException exception) {
-            throw ActiveScanScopeResolutionException.unavailable(
-                    "Market catalog is unavailable for decision context resolution");
         } catch (RuntimeException exception) {
             throw ActiveScanScopeResolutionException.unavailable(
                     "Market catalog is unavailable for decision context resolution");
@@ -206,49 +196,13 @@ public class ActiveScanScopeResolutionService {
             );
         }
         if (applyBrokerCapabilities) {
-            TradingCoreAccountClient.MarketCapabilityResponse capability =
-                    capabilities.get(capabilityKey(market.provider(), market.symbol()));
-            if (capability == null || !capability.available()) {
-                return new MarketEligibilityDecision(
-                        market.marketId(), market.symbol(), market.provider(), false,
-                        capabilityReasons(capability, MarketEligibilityReason.BROKER_CAPABILITY_UNAVAILABLE),
-                        MarketEligibilityStatus.EXCLUDED, null, null, null);
-            }
-            if (capability.supportedOrderTypes() == null || capability.supportedOrderTypes().stream()
-                    .noneMatch(type -> "MARKET".equalsIgnoreCase(type))) {
-                return new MarketEligibilityDecision(
-                        market.marketId(), market.symbol(), market.provider(), false,
-                        List.of(MarketEligibilityReason.BROKER_MARKET_ORDER_UNSUPPORTED),
-                        MarketEligibilityStatus.EXCLUDED, null, null, null);
+            Optional<MarketEligibilityDecision> brokerDecision = brokerDecision(market, capabilities);
+            if (brokerDecision.isPresent()) {
+                return brokerDecision.get();
             }
         }
         if (applyEligibilityPolicy && eligibilityPolicy != null) {
-            if (!budget.consume()) {
-                return new MarketEligibilityDecision(
-                        market.marketId(), market.symbol(), market.provider(), false,
-                        List.of(MarketEligibilityReason.MARKET_FACT_EVALUATION_BUDGET_EXHAUSTED),
-                        MarketEligibilityStatus.NOT_EVALUABLE, null, null, null);
-            }
-            try {
-                MarketEligibilityPolicy.Evaluation evaluation = eligibilityPolicy.evaluate(
-                        marketData.findMarketFacts(
-                                market.marketId(),
-                                eligibilityPolicy.properties().interval(),
-                                eligibilityPolicy.properties().activityWindowMinutes(),
-                                eligibilityPolicy.properties().readinessLookbackCandles(),
-                                eligibilityPolicy.properties().minimumCompletedCandles(),
-                                eligibilityPolicy.properties().maxObservationAgeSeconds()));
-                return new MarketEligibilityDecision(
-                        market.marketId(), market.symbol(), market.provider(),
-                        evaluation.status() == MarketEligibilityStatus.ELIGIBLE,
-                        evaluation.reasons(), evaluation.status(),
-                        evaluation.factsStatus(), evaluation.factsCalculationVersion(), evaluation.provenance());
-            } catch (RuntimeException exception) {
-                return new MarketEligibilityDecision(
-                        market.marketId(), market.symbol(), market.provider(), false,
-                        List.of(MarketEligibilityReason.DATA_UNAVAILABLE),
-                        MarketEligibilityStatus.NOT_EVALUABLE, "UNAVAILABLE", null, null);
-            }
+            return evaluateEligibility(market, budget);
         }
         return new MarketEligibilityDecision(
                 market.marketId(),
@@ -257,6 +211,57 @@ public class ActiveScanScopeResolutionService {
                 true,
                 List.of()
         );
+    }
+
+    private Optional<MarketEligibilityDecision> brokerDecision(
+            MarketResponse market,
+            Map<String, TradingCoreAccountClient.MarketCapabilityResponse> capabilities) {
+        TradingCoreAccountClient.MarketCapabilityResponse capability =
+                capabilities.get(capabilityKey(market.provider(), market.symbol()));
+        if (capability == null || !capability.available()) {
+            return Optional.of(new MarketEligibilityDecision(
+                    market.marketId(), market.symbol(), market.provider(), false,
+                    capabilityReasons(capability, MarketEligibilityReason.BROKER_CAPABILITY_UNAVAILABLE),
+                    MarketEligibilityStatus.EXCLUDED, null, null, null));
+        }
+        if (capability.supportedOrderTypes() == null || capability.supportedOrderTypes().stream()
+                .noneMatch("MARKET"::equalsIgnoreCase)) {
+            return Optional.of(new MarketEligibilityDecision(
+                    market.marketId(), market.symbol(), market.provider(), false,
+                    List.of(MarketEligibilityReason.BROKER_MARKET_ORDER_UNSUPPORTED),
+                    MarketEligibilityStatus.EXCLUDED, null, null, null));
+        }
+        return Optional.empty();
+    }
+
+    private MarketEligibilityDecision evaluateEligibility(
+            MarketResponse market, EvaluationBudget budget) {
+        if (!budget.consume()) {
+            return new MarketEligibilityDecision(
+                    market.marketId(), market.symbol(), market.provider(), false,
+                    List.of(MarketEligibilityReason.MARKET_FACT_EVALUATION_BUDGET_EXHAUSTED),
+                    MarketEligibilityStatus.NOT_EVALUABLE, null, null, null);
+        }
+        try {
+            MarketEligibilityPolicy.Evaluation evaluation = eligibilityPolicy.evaluate(
+                    marketData.findMarketFacts(
+                            market.marketId(),
+                            eligibilityPolicy.properties().interval(),
+                            eligibilityPolicy.properties().activityWindowMinutes(),
+                            eligibilityPolicy.properties().readinessLookbackCandles(),
+                            eligibilityPolicy.properties().minimumCompletedCandles(),
+                            eligibilityPolicy.properties().maxObservationAgeSeconds()));
+            return new MarketEligibilityDecision(
+                    market.marketId(), market.symbol(), market.provider(),
+                    evaluation.status() == MarketEligibilityStatus.ELIGIBLE,
+                    evaluation.reasons(), evaluation.status(),
+                    evaluation.factsStatus(), evaluation.factsCalculationVersion(), evaluation.provenance());
+        } catch (RuntimeException exception) {
+            return new MarketEligibilityDecision(
+                    market.marketId(), market.symbol(), market.provider(), false,
+                    List.of(MarketEligibilityReason.DATA_UNAVAILABLE),
+                    MarketEligibilityStatus.NOT_EVALUABLE, "UNAVAILABLE", null, null);
+        }
     }
 
     private Map<String, TradingCoreAccountClient.MarketCapabilityResponse> resolveCapabilities(

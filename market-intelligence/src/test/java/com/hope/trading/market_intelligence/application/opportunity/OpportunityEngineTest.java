@@ -151,7 +151,7 @@ class OpportunityEngineTest {
             ObservationRepository observations,
             TradingOpportunityRepository opportunities) {
         return new OpportunityEngine(
-                observations, references -> references.isEmpty(), opportunities,
+                observations, Collection::isEmpty, opportunities,
                 new DeterministicOpportunityFusionPolicy(),
                 new OpportunityDeduplicationPolicy(Duration.ofMinutes(15)),
                 new OpportunityLifecyclePolicy(), new OpportunityFactory(),

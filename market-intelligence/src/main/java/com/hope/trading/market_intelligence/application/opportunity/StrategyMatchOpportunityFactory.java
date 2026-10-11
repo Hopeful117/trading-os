@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -43,41 +44,18 @@ public class StrategyMatchOpportunityFactory {
     private static final UUID OPPORTUNITY_LINEAGE_NAMESPACE =
             UUID.fromString("5f0d1e62-3b7a-4c48-9a2e-6c1d84b90f34");
 
-    public CreateOpportunityCommand command(
-            StrategyMatch match,
-            StrategyDefinition definition,
-            String instrument,
-            OpportunityOrigin origin,
-            ObservationReference evidence,
-            Instant evaluatedAt,
-            Instant validFrom,
-            Instant validUntil,
-            StrategyEvaluation evaluation,
-            BigDecimal referencePrice,
-            Instant referencePriceAt
-    ) {
-        return command(match, definition, instrument, origin, evidence, evaluatedAt,
-                validFrom, validUntil, evaluation, referencePrice, referencePriceAt,
-                null, null, null, null);
-    }
-
-    public CreateOpportunityCommand command(
-            StrategyMatch match,
-            StrategyDefinition definition,
-            String instrument,
-            OpportunityOrigin origin,
-            ObservationReference evidence,
-            Instant evaluatedAt,
-            Instant validFrom,
-            Instant validUntil,
-            StrategyEvaluation evaluation,
-            BigDecimal referencePrice,
-            Instant referencePriceAt,
-            UUID accountId,
-            UUID sourceScanId,
-            UUID sourceScanMarketId,
-            UUID analysisExecutionId
-    ) {
+    public CreateOpportunityCommand command(OpportunityCommandInput input) {
+        StrategyMatch match = input.match();
+        StrategyDefinition definition = input.definition();
+        String instrument = input.instrument();
+        OpportunityOrigin origin = input.origin();
+        ObservationReference evidence = input.evidence();
+        Instant evaluatedAt = input.evaluatedAt();
+        Instant validUntil = input.validUntil();
+        StrategyEvaluation evaluation = input.evaluation();
+        BigDecimal referencePrice = input.referencePrice();
+        Instant referencePriceAt = input.referencePriceAt();
+        OpportunityProvenance provenance = input.provenance();
         Objects.requireNonNull(match, "match is required");
         Objects.requireNonNull(definition, "definition is required");
         Objects.requireNonNull(instrument, "instrument is required");
@@ -95,9 +73,10 @@ public class StrategyMatchOpportunityFactory {
                 evaluatedAt,
                 validUntil,
                  match.matchId(),
-                  deriveOpportunityLineageId(match.matchId(), accountId),
-                  setupSnapshot(match, evaluation, referencePrice, referencePriceAt),
-                  match.marketId(), accountId, sourceScanId, sourceScanMarketId, analysisExecutionId);
+                   deriveOpportunityLineageId(match.matchId(), provenance.accountId()),
+                   setupSnapshot(match, evaluation, referencePrice, referencePriceAt),
+                   match.marketId(), provenance.accountId(), provenance.sourceScanId(),
+                   provenance.sourceScanMarketId(), provenance.analysisExecutionId());
     }
 
     /**
@@ -171,7 +150,7 @@ public class StrategyMatchOpportunityFactory {
         return bytes;
     }
 
-    private OpportunityDirection directionOf(StrategyMatch match) {
+    private static OpportunityDirection directionOf(StrategyMatch match) {
         return switch (match.direction()) {
             case LONG -> OpportunityDirection.LONG;
             case SHORT -> OpportunityDirection.SHORT;
@@ -182,12 +161,37 @@ public class StrategyMatchOpportunityFactory {
      * Derives the trader-facing timeframe label from the strategy definition's
      * primary applicability timeframe. Defaults to the first declared timeframe.
      */
-    private String timeframeOf(StrategyDefinition definition) {
+    private static String timeframeOf(StrategyDefinition definition) {
         return definition.applicability().timeframes().stream()
                 .findFirst()
                 .map(tf -> tf.name().toLowerCase(Locale.ROOT))
                 .orElse("unknown");
     }
 
-    private static final java.util.Locale Locale = java.util.Locale.ROOT;
+    public record OpportunityProvenance(
+            UUID accountId,
+            UUID sourceScanId,
+            UUID sourceScanMarketId,
+            UUID analysisExecutionId
+    ) {
+        public static OpportunityProvenance none() {
+            return new OpportunityProvenance(null, null, null, null);
+        }
+    }
+
+    public record OpportunityCommandInput(
+            StrategyMatch match,
+            StrategyDefinition definition,
+            String instrument,
+            OpportunityOrigin origin,
+            ObservationReference evidence,
+            Instant evaluatedAt,
+            Instant validFrom,
+            Instant validUntil,
+            StrategyEvaluation evaluation,
+            BigDecimal referencePrice,
+            Instant referencePriceAt,
+            OpportunityProvenance provenance
+    ) {
+    }
 }
