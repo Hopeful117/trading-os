@@ -14,12 +14,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -105,9 +105,10 @@ class OpportunityTradePlanGenerationServiceTest {
 
     @Test
     void rejectsUnknownOrNonActiveOpportunity() {
-        assertThatThrownBy(() -> service.generate(
+        var unknownOpportunity = catchThrowable(() -> service.generate(
                 UUID.randomUUID(), environment.owner(),
-                environment.context().tradingAccountId(), environment.context()))
+                environment.context().tradingAccountId(), environment.context()));
+        assertThat(unknownOpportunity)
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(x -> org.assertj.core.api.Assertions.assertThat(String.valueOf(((ResponseStatusException) x).getReason()))
                         .contains("OPPORTUNITY_NOT_ELIGIBLE"));
@@ -118,7 +119,8 @@ class OpportunityTradePlanGenerationServiceTest {
         when(marketData.findAllMarkets())
                 .thenReturn(List.of(market(UUID.randomUUID(), "ETH/EUR")));
 
-        assertThatThrownBy(this::generate)
+        var missingMarket = catchThrowable(this::generate);
+        assertThat(missingMarket)
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(x -> org.assertj.core.api.Assertions.assertThat(String.valueOf(((ResponseStatusException) x).getReason()))
                         .contains("MARKET_NOT_FOUND"));
@@ -142,9 +144,10 @@ class OpportunityTradePlanGenerationServiceTest {
     @Test
     void rejectsForeignPlanningContext() {
         var context = TradePlanTestFixtures.context(UUID.randomUUID(), 1, environment.owner());
-        assertThatThrownBy(() -> service.generate(
+        var foreignContext = catchThrowable(() -> service.generate(
                 environment.opportunity().id().value(), UUID.randomUUID(),
-                context.tradingAccountId(), context))
+                context.tradingAccountId(), context));
+        assertThat(foreignContext)
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(x -> org.assertj.core.api.Assertions.assertThat(String.valueOf(((ResponseStatusException) x).getReason()))
                 .contains("PLANNING_CONTEXT_FORBIDDEN"));
@@ -154,12 +157,15 @@ class OpportunityTradePlanGenerationServiceTest {
     void rejectsOpportunityOwnedByAnotherAccount() {
         var context = TradePlanTestFixtures.context(UUID.randomUUID(), 1, environment.owner());
 
-        assertThatThrownBy(() -> service.generate(
-                environment.opportunity().id().value(), environment.owner(),
-                context.tradingAccountId(), context))
+        var opportunityId = environment.opportunity().id().value();
+        var ownerId = environment.owner();
+        var accountId = context.tradingAccountId();
+        var thrown = catchThrowable(() -> service.generate(opportunityId, ownerId, accountId, context));
+        assertThat(thrown)
                 .isInstanceOf(ResponseStatusException.class)
-                .satisfies(x -> assertThat(String.valueOf(((ResponseStatusException) x).getReason()))
-                        .contains("OPPORTUNITY_ACCOUNT_MISMATCH"));
+                .extracting(x -> String.valueOf(((ResponseStatusException) x).getReason()))
+                .asString()
+                .contains("OPPORTUNITY_ACCOUNT_MISMATCH");
     }
 
     @Test

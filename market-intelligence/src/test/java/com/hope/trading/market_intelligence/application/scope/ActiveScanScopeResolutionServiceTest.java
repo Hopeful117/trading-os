@@ -202,6 +202,29 @@ class ActiveScanScopeResolutionServiceTest {
     }
 
     @Test
+    void excludesTradableMarketWhenBrokerDoesNotSupportMarketOrders() {
+        UUID accountId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(
+                new TradingCoreAccountClient.MarketCapabilityResponse(
+                        "BTC/USD", true, List.of("LIMIT"), List.of(), List.of(), 0, NOW, "KRAKEN", List.of())));
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(marketId, "KRAKEN", "BTC/USD", true)
+        ));
+
+        DecisionContextResolution result = service(accounts, marketData)
+                .resolveDecisionContext(accountId);
+
+        assertThat(result.scope().effectiveScope().marketIds()).isEmpty();
+        assertThat(result.scope().decisions()).singleElement()
+                .satisfies(decision -> assertThat(decision.reasons())
+                        .containsExactly(MarketEligibilityReason.BROKER_MARKET_ORDER_UNSUPPORTED));
+    }
+
+    @Test
     void doesNotReuseCapabilityAcrossMarketProviders() {
         UUID accountId = UUID.randomUUID();
         UUID marketId = UUID.randomUUID();

@@ -20,6 +20,7 @@ public final class KrakenRestProviderClient implements KrakenProviderClient {
     private final RestClient client; private final KrakenRequestSigner signer;
     private final AtomicLong nonce=new AtomicLong(System.currentTimeMillis());
     public KrakenRestProviderClient(RestClient krakenRestClient,KrakenRequestSigner signer){this.client=krakenRestClient;this.signer=signer;}
+    @Override
     public JsonNode publicGet(String path,Map<String,String> parameters){
         long started=System.nanoTime();try{
             String payload=client.get().uri(uriBuilder->{var builder=uriBuilder.path(path);parameters.forEach(builder::queryParam);return builder.build();})
@@ -35,6 +36,7 @@ public final class KrakenRestProviderClient implements KrakenProviderClient {
          catch(RestClientException e){throw new UnknownBrokerException("Unexpected Kraken client failure",e);}
          finally{log.debug("broker_provider_call_completed provider=KRAKEN operation={} durationNanos={}",path,System.nanoTime()-started);}
     }
+    @Override
     public JsonNode privatePost(String path,Map<String,String> parameters,CredentialMaterial credentials){
         Map<String,String> signed=new LinkedHashMap<>();signed.put("nonce",Long.toString(nonce.updateAndGet(previous->Math.max(previous+1,System.currentTimeMillis()))));signed.putAll(parameters);
         var headers=signer.sign(path,signed,credentials);var body=new LinkedMultiValueMap<String,String>();signed.forEach(body::add);

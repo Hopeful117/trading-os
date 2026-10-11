@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import { provideRouter, Router } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 
 import { ScanPanel, ScanPanelView } from './scan-panel';
@@ -178,7 +177,6 @@ describe('ScanPanel', () => {
         { provide: AccountService, useValue: accountServiceMock },
         { provide: MarketService, useValue: marketServiceMock },
         { provide: SCAN_POLL_INTERVAL_MS, useValue: 25 },
-        provideRouter([]),
       ],
     }).compileComponents();
 
@@ -568,7 +566,7 @@ describe('ScanPanel', () => {
   });
 
   describe('per-market results', () => {
-    it('renders every opportunity as a distinct detail link', async () => {
+    it('emits the selected opportunity for direct plan creation', async () => {
       const first = opportunity('o1', 'BTC/EUR');
       const second = opportunity('o2', 'BTC/EUR');
       activeScanServiceMock.createScan.mockReturnValue(
@@ -581,18 +579,16 @@ describe('ScanPanel', () => {
         ),
       );
       await createComponent();
-      const navigateByUrl = vi
-        .spyOn(TestBed.inject(Router), 'navigateByUrl')
-        .mockResolvedValue(true);
+      const selected: OpportunityResponse[] = [];
+      fixture.componentInstance.opportunitySelected.subscribe((value) => selected.push(value));
 
       await selectAccountAndRun();
       fixture.detectChanges();
 
       const links = fixture.nativeElement.querySelectorAll('.opportunity-chip');
       expect(links.length).toBe(2);
-      expect(links[0].getAttribute('href')).toBe('/opportunities/o1?accountId=a1');
       links[1].click();
-      expect(navigateByUrl).toHaveBeenCalled();
+      expect(selected).toEqual([second]);
     });
 
     it('filters outcomes without hiding successful siblings from the full result', async () => {

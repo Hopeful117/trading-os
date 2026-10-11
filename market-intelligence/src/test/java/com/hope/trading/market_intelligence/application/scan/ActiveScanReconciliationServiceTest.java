@@ -407,7 +407,7 @@ class ActiveScanReconciliationServiceTest {
     }
 
     private StrategyMatch strategyMatch(UUID matchId, AnalysisExecution execution) {
-        return StrategyMatch.rehydrate(
+        return StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 matchId,
                 new StrategyId(UUID.randomUUID()),
                 1,
@@ -416,10 +416,8 @@ class ActiveScanReconciliationServiceTest {
                 UUID.randomUUID(),
                 MatchedDirection.LONG,
                 "digest-" + matchId,
-                List.of(),
-                now,
-                now
-        );
+                List.of(), null, now, now
+        ));
     }
 
     private TradingOpportunity opportunity(UUID strategyMatchId, String score) {

@@ -1,8 +1,7 @@
 import { AsyncPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import {
   catchError,
   exhaustMap,
@@ -28,6 +27,8 @@ import {
   isActiveScanTerminal,
 } from '../../../core/models/active-scan.model';
 import { MarketResponse } from '../../../core/models/market-response';
+import { OpportunityResponse } from '../../../core/models/opportunity.model';
+import { TradePreparationFailure } from '../../../core/utils/trade-flow-error';
 import { AccountService } from '../../../core/services/account.service';
 import { ActiveScanService } from '../../../core/services/active-scan.service';
 import { MarketService } from '../../../core/services/market.service';
@@ -60,7 +61,7 @@ export type ScanPanelView =
 
 @Component({
   selector: 'app-scan-panel',
-  imports: [AsyncPipe, DatePipe, FormsModule, RouterLink],
+  imports: [AsyncPipe, DatePipe, FormsModule],
   templateUrl: './scan-panel.html',
   styleUrl: './scan-panel.scss',
 })
@@ -73,6 +74,9 @@ export class ScanPanel {
   /** Emitted once when a tracked scan reaches any terminal backend status. */
   readonly scanCompleted = output<ActiveScanResponse>();
   readonly accountSelected = output<string>();
+  readonly opportunitySelected = output<OpportunityResponse>();
+  readonly openingOpportunityId = input<string | null>(null);
+  readonly preparationErrors = input<Record<string, TradePreparationFailure>>({});
 
   accountId = '';
   objective = '';
@@ -227,6 +231,10 @@ export class ScanPanel {
 
   readable(value: string): string {
     return value.replaceAll('_', ' ').toLowerCase();
+  }
+
+  selectOpportunity(opportunity: OpportunityResponse): void {
+    this.opportunitySelected.emit(opportunity);
   }
 
   private runSession(

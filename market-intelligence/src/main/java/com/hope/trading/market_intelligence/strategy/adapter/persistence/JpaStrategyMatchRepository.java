@@ -106,7 +106,7 @@ public class JpaStrategyMatchRepository implements StrategyMatchRepository {
     }
 
     private StrategyMatch toDomain(JpaStrategyMatchEntity entity) {
-        return StrategyMatch.rehydrate(
+        return StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 entity.getMatchId(),
                 new StrategyId(entity.getStrategyId()),
                 entity.getStrategyVersion(),
@@ -118,7 +118,7 @@ public class JpaStrategyMatchRepository implements StrategyMatchRepository {
                 deserialize(entity),
                 provenanceOf(entity),
                 entity.getMatchedAt(),
-                entity.getCreatedAt());
+                entity.getCreatedAt()));
     }
 
     private com.hope.trading.market_intelligence.strategy.domain.StrategyEvidenceProvenance provenanceOf(

@@ -62,7 +62,9 @@ export class Opportunities {
       .subscribe({
         next: (created) => {
           this.openingOpportunityId = null;
-          delete this.preparationErrors[opportunity.id];
+          const remainingErrors = { ...this.preparationErrors };
+          delete remainingErrors[opportunity.id];
+          this.preparationErrors = remainingErrors;
           void this.router.navigate([
             '/trade-planning',
             'plans',
@@ -74,7 +76,12 @@ export class Opportunities {
         error: (error: unknown) => {
           this.openingOpportunityId = null;
           const failure = tradePreparationFailure(error);
-          if (failure) this.preparationErrors[opportunity.id] = failure;
+          if (failure) {
+            this.preparationErrors = {
+              ...this.preparationErrors,
+              [opportunity.id]: failure,
+            };
+          }
         },
       });
   }

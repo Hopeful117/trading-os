@@ -22,6 +22,7 @@ import java.util.UUID;
 
 @Service
 public class TrendContextReadService {
+    private static final String UNAVAILABLE = "UNAVAILABLE";
     private final ObservationRepository observations;
     private final AnalysisExecutionRepository executions;
     private final CapabilityExecutionRepository capabilityExecutions;
@@ -40,29 +41,18 @@ public class TrendContextReadService {
 
     public TrendContextReadModel find(UUID marketId) {
         Instant now = clock.instant();
-        Optional<Observation> latest = observations.findByType(new ObservationType("TREND_CONTEXT"))
-                .stream()
-                .filter(value -> payload(value)
-                        .map(item -> item.content().assessment().marketId().equals(marketId))
-                        .orElse(false))
-                .max(Comparator.comparing(Observation::createdAt));
-        Optional<AnalysisExecution> execution = executions.findLatestByMarketId(marketId)
-                .filter(value -> value.capabilities().contains(TrendContextAnalysisCapability.CAPABILITY_ID));
+        Optional<Observation> latest = latestObservation(marketId);
+        Optional<AnalysisExecution> execution = latestExecution(marketId);
 
         TrendContextObservationPayload lastPayload = latest.flatMap(this::payload).orElse(null);
         Observation latestObservation = latest.orElse(null);
-        boolean valid = latestObservation != null
-                && latestObservation.status() == ObservationStatus.ACTIVE
-                && latestObservation.validUntil().map(now::isBefore).orElse(true);
+        boolean valid = isValid(latestObservation, now);
         boolean current = valid && execution.filter(this::isCompleted)
                 .map(value -> producedBy(latestObservation, value))
                 .orElse(false);
         String operationalStatus = operationalStatus(execution, valid, latestObservation, current);
         var content = lastPayload == null ? null : lastPayload.content();
-        List<UUID> capabilityExecutionIds = latestObservation == null ? List.of()
-                : latestObservation.evidence().stream()
-                .map(value -> value.capabilityResult().capabilityExecutionId())
-                .distinct().toList();
+        List<UUID> capabilityExecutionIds = capabilityExecutionIds(latestObservation);
         return new TrendContextReadModel(
                 marketId,
                 operationalStatus,
@@ -80,6 +70,35 @@ public class TrendContextReadService {
                 capabilityExecutionIds,
                 content == null ? List.of() : content.diagnostics(),
                 content == null ? Map.of() : content.sourceReferences());
+    }
+
+    private boolean isValid(Observation observation, Instant now) {
+        return observation != null
+                && observation.status() == ObservationStatus.ACTIVE
+                && observation.validUntil().map(now::isBefore).orElse(true);
+    }
+
+    private List<UUID> capabilityExecutionIds(Observation observation) {
+        if (observation == null) {
+            return List.of();
+        }
+        return observation.evidence().stream()
+                .map(value -> value.capabilityResult().capabilityExecutionId())
+                .distinct().toList();
+    }
+
+    private Optional<Observation> latestObservation(UUID marketId) {
+        return observations.findByType(new ObservationType("TREND_CONTEXT")).stream()
+                .filter(value -> payload(value)
+                        .map(item -> item.content().assessment().marketId().equals(marketId))
+                        .orElse(false))
+                .max(Comparator.comparing(Observation::createdAt));
+    }
+
+    private Optional<AnalysisExecution> latestExecution(UUID marketId) {
+        return executions.findLatestByMarketId(marketId)
+                .filter(value -> value.capabilities()
+                        .contains(TrendContextAnalysisCapability.CAPABILITY_ID));
     }
 
     private Optional<TrendContextObservationPayload> payload(Observation observation) {
@@ -112,14 +131,14 @@ public class TrendContextReadService {
         if (execution.isPresent()) {
             AnalysisExecutionStatus status = execution.get().status();
             if (status == AnalysisExecutionStatus.COMPLETED) {
-                if (!current) return valid ? "STALE" : "UNAVAILABLE";
+                if (!current) return valid ? "STALE" : UNAVAILABLE;
                 return payload(observation).map(value -> value.content().operationalStatus())
-                        .orElse("UNAVAILABLE");
+                        .orElse(UNAVAILABLE);
             }
             if (status == AnalysisExecutionStatus.FAILED
                     || status == AnalysisExecutionStatus.EXPIRED
                     || status == AnalysisExecutionStatus.CANCELLED) {
-                return "UNAVAILABLE";
+                return UNAVAILABLE;
             }
             return "IN_PROGRESS";
         }

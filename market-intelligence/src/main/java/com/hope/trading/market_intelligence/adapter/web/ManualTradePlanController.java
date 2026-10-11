@@ -94,16 +94,27 @@ public final class ManualTradePlanController {
             Set<String> managementRules
     ) {
         ManualTradePlanningRequest toApplicationRequest(UUID actorId, UUID tradingAccountId) {
+            StopLoss stopLossValue = stopLossValue();
             return new ManualTradePlanningRequest(
                     planningContextId, contextVersion, actorId, tradingAccountId, instrument, direction,
                     new EntryStrategy(entryType, entryPrice, Set.of("Human-authored entry")),
-                    stopLoss == null ? null : new StopLoss(stopLoss,
-                            stopRationale == null ? "Manual protection" : stopRationale),
+                    stopLossValue,
                     takeProfits == null ? List.of() : takeProfits.stream().map(Target::toDomain).toList(),
                     new PositionSizing(quantity, notional, monetaryRisk, currency),
                     referencePrice, expiresAt, expirationPolicy, thesis,
                     confirmationConditions, invalidationConditions,
                     managementRules == null ? Set.of() : managementRules);
+        }
+
+        private StopLoss stopLossValue() {
+            if (stopLoss == null) {
+                return null;
+            }
+            String rationale = stopRationale;
+            if (rationale == null) {
+                rationale = "Manual protection";
+            }
+            return new StopLoss(stopLoss, rationale);
         }
     }
 

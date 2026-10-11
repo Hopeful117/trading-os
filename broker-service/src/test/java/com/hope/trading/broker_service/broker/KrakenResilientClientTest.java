@@ -1,5 +1,6 @@
 package com.hope.trading.broker_service.broker;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerUnavailableException;
 import com.hope.trading.broker_service.broker.infrastructure.monitoring.BrokerProviderHealth;
@@ -22,6 +23,47 @@ class KrakenResilientClientTest {
     @Test void opensCircuitAfterFiveFailedOperationsAndRecoversAfterWindow(){
         MutableClock clock=new MutableClock();AtomicInteger calls=new AtomicInteger();KrakenProviderClient failing=(p,b,c)->{calls.incrementAndGet();throw unavailable();};var client=client(failing,clock);
         try(var credentials=credentials()){for(int i=0;i<5;i++)assertThatThrownBy(()->client.privatePost("/0/private/AddOrder",Map.of(),credentials)).isInstanceOf(BrokerUnavailableException.class);assertThat(client.status()).isEqualTo(BrokerProviderHealth.Status.UNAVAILABLE);assertThatThrownBy(()->client.privatePost("/0/private/AddOrder",Map.of(),credentials)).isInstanceOf(BrokerUnavailableException.class);assertThat(calls).hasValue(5);clock.advance(Duration.ofSeconds(31));assertThat(client.status()).isEqualTo(BrokerProviderHealth.Status.DEGRADED);}
+     }
+    @Test void retriesPublicReadsAndReportsHealthyAfterSuccess(){
+        AtomicInteger calls=new AtomicInteger();
+        KrakenProviderClient delegate=new KrakenProviderClient(){
+            @Override public JsonNode publicGet(String path,Map<String,String> parameters){
+                if(calls.incrementAndGet()<3)throw unavailable();
+                return JsonNodeFactory.instance.objectNode();
+            }
+            @Override public JsonNode privatePost(String path,Map<String,String> parameters,CredentialMaterial credentials){
+                throw new UnsupportedOperationException();
+            }
+        };
+        var client=client(delegate,new MutableClock());
+        assertThat(client.publicGet("/0/public/AssetPairs",Map.of())).isNotNull();
+        assertThat(calls).hasValue(3);
+        assertThat(client.status()).isEqualTo(BrokerProviderHealth.Status.AVAILABLE);
+    }
+    @Test void enforcesLocalPublicRateLimit(){
+        KrakenProviderClient delegate=new KrakenProviderClient(){
+            @Override public JsonNode publicGet(String path,Map<String,String> parameters){return JsonNodeFactory.instance.objectNode();}
+            @Override public JsonNode privatePost(String path,Map<String,String> parameters,CredentialMaterial credentials){throw new UnsupportedOperationException();}
+        };
+        MutableClock clock=new MutableClock();
+        KrakenProperties properties=new KrakenProperties();properties.setReadMaxAttempts(1);properties.setRequestsPerSecond(1);
+        var client=new KrakenResilientClient(delegate,clock,properties);
+        client.publicGet("/0/public/AssetPairs",Map.of());
+        assertThatThrownBy(()->client.publicGet("/0/public/AssetPairs",Map.of()))
+                .isInstanceOf(com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerRateLimitException.class);
+    }
+    @Test void opensCircuitAfterExhaustingPublicReadRetries(){
+        MutableClock clock=new MutableClock();
+        AtomicInteger calls=new AtomicInteger();
+        KrakenProviderClient failing=new KrakenProviderClient(){
+            @Override public JsonNode publicGet(String path,Map<String,String> parameters){calls.incrementAndGet();throw unavailable();}
+            @Override public JsonNode privatePost(String path,Map<String,String> parameters,CredentialMaterial credentials){throw new UnsupportedOperationException();}
+        };
+        var client=client(failing,clock);
+        assertThatThrownBy(()->client.publicGet("/0/public/AssetPairs",Map.of())).isInstanceOf(BrokerUnavailableException.class);
+        assertThat(calls).hasValue(3);
+        for(int i=0;i<4;i++) assertThatThrownBy(()->client.publicGet("/0/public/AssetPairs",Map.of())).isInstanceOf(BrokerUnavailableException.class);
+        assertThat(client.status()).isEqualTo(BrokerProviderHealth.Status.UNAVAILABLE);
     }
     private KrakenResilientClient client(KrakenProviderClient delegate,Clock clock){KrakenProperties p=new KrakenProperties();p.setReadMaxAttempts(3);p.setRequestsPerSecond(100);return new KrakenResilientClient(delegate,clock,p);}
     private BrokerUnavailableException unavailable(){return new BrokerUnavailableException("down",new RuntimeException());}

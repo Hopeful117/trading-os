@@ -87,11 +87,11 @@ class StrategyMatchPersistenceTest {
         StrategyEvidenceProvenance provenance = new StrategyEvidenceProvenance(
                 OBSERVATION, lineage, 3, MATCHED.minusSeconds(30),
                 "profile-v1", "rule-v2", "input-fingerprint", "assessment-fingerprint");
-        StrategyMatch original = StrategyMatch.rehydrate(
+        StrategyMatch original = StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 UUID.randomUUID(), new StrategyId(STRATEGY), 1, MARKET, UUID.randomUUID(),
                 OBSERVATION, MatchedDirection.LONG, "provenance-digest",
                 List.of(new ConditionResult("c", true, "1")), provenance,
-                MATCHED, MATCHED.plusSeconds(1));
+                 MATCHED, MATCHED.plusSeconds(1)));
 
         repository.save(original);
         StrategyMatch reloaded = repository.findById(original.matchId()).orElseThrow();
@@ -114,15 +114,13 @@ class StrategyMatchPersistenceTest {
         String digest = repository.findByAnalysisExecutionId(ANALYSIS).stream()
                 .filter(m -> m.matchedAt().equals(MATCHED.plusSeconds(2000)))
                 .findFirst().orElseThrow().contextDigest();
+        StrategyMatch duplicate = StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
+                UUID.randomUUID(), new StrategyId(STRATEGY), 1, MARKET, ANALYSIS, OBSERVATION,
+                MatchedDirection.LONG, digest, List.of(new ConditionResult("c", true, "1")),
+                null, MATCHED.plusSeconds(2000), MATCHED));
 
         // raw second insert of the same logical identity must hit the constraint
-        assertThatThrownBy(() -> repository.save(
-                com.hope.trading.market_intelligence.strategy.domain.StrategyMatch.rehydrate(
-                        UUID.randomUUID(), new com.hope.trading.market_intelligence.strategy.domain.StrategyId(STRATEGY),
-                        1, MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG,
-                        digest,
-                        List.of(new ConditionResult("c", true, "1")),
-                        MATCHED.plusSeconds(2000), MATCHED)))
+        assertThatThrownBy(() -> repository.save(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

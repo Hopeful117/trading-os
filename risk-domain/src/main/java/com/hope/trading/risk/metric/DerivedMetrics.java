@@ -14,6 +14,6 @@ public record DerivedMetrics(
         Objects.requireNonNull(remainingRisk); Objects.requireNonNull(portfolioHeat);
         Objects.requireNonNull(riskUtilization); Objects.requireNonNull(positionRiskRatio);
         Objects.requireNonNull(exposureRatio); Objects.requireNonNull(dailyDrawdownRatio);
-        totalDrawdownRatio = Objects.requireNonNull(totalDrawdownRatio);
+        Objects.requireNonNull(totalDrawdownRatio);
     }
 }

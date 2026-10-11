@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,7 +46,8 @@ class CapabilityAnalysisCoordinatorTest {
                         "Current market snapshot is unavailable")
         )));
 
-        assertThatThrownBy(() -> coordinator.analyze(request.analysisId(), request))
+        var unavailable = catchThrowable(() -> coordinator.analyze(request.analysisId(), request));
+        assertThat(unavailable)
                 .isInstanceOf(AnalysisContextUnavailableException.class)
                 .hasMessage("Current market snapshot is unavailable");
         verifyNoInteractions(planner);
@@ -76,7 +77,8 @@ class CapabilityAnalysisCoordinatorTest {
                         "Current market snapshot is stale")
         )));
 
-        assertThatThrownBy(() -> coordinator.analyze(request.analysisId(), request))
+        var stale = catchThrowable(() -> coordinator.analyze(request.analysisId(), request));
+        assertThat(stale)
                 .isInstanceOf(AnalysisContextUnavailableException.class)
                 .hasMessage("Current market snapshot is stale");
         verifyNoInteractions(planner);

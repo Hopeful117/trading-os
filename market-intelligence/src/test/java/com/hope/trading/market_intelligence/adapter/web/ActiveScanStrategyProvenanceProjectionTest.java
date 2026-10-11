@@ -48,10 +48,10 @@ class ActiveScanStrategyProvenanceProjectionTest {
     }
 
     private StrategyMatch match() {
-        return StrategyMatch.rehydrate(
+        return StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 MATCH_ID, new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID), 1,
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                MatchedDirection.LONG, "digest", List.of(), NOW, NOW);
+                MatchedDirection.LONG, "digest", List.of(), null, NOW, NOW));
     }
 
     private ActiveScanResultProjection.MarketResult market(TradingOpportunity opportunity) {

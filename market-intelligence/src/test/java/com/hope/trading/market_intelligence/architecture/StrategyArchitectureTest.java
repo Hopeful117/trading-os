@@ -1,7 +1,6 @@
 package com.hope.trading.market_intelligence.architecture;
 
 import com.hope.trading.market_intelligence.strategy.application.StrategyEvaluator;
-import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluationContext;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.junit.jupiter.api.Test;

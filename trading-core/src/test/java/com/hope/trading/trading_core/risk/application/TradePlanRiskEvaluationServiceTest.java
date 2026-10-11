@@ -494,7 +494,8 @@ class TradePlanRiskEvaluationServiceTest {
     @Test
     void preflightAllowsProposedPlanWithoutRemoteAcknowledgment() {
         availableContext(List.of());
-        when(plans.load(planId, 3)).thenReturn(plan("USD", "USD", "PROPOSED", "AUTOMATED", new BigDecimal("90")));
+        when(plans.loadPreflight(planId, 3)).thenReturn(
+                plan("USD", "USD", "PROPOSED", "AUTOMATED", new BigDecimal("90")));
 
         Response response = service.preflight(command("preflight", 3));
 

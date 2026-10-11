@@ -1,7 +1,6 @@
 package com.hope.trading.market_intelligence.application.execution;
 
 import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
-import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
 import com.hope.trading.market_intelligence.application.context.IntelligenceContextAssembler;
 import com.hope.trading.market_intelligence.application.planning.ExecutionPlanner;
 import com.hope.trading.market_intelligence.application.planning.PlanningRequest;
@@ -14,7 +13,6 @@ import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.planning.ArtifactDescriptor;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
 import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.time.*;

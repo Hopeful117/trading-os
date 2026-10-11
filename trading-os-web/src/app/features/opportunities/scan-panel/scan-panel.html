@@ -311,10 +311,11 @@
                     } @else {
                       <div class="opportunity-list">
                         @for (opportunity of market.opportunities; track opportunity.id) {
-                          <a
+                          <button
+                            type="button"
                             class="opportunity-chip"
-                            [routerLink]="['/opportunities', opportunity.id]"
-                            [queryParams]="{ accountId: opportunity.accountId ?? scan.accountId }"
+                            (click)="selectOpportunity(opportunity)"
+                            [disabled]="openingOpportunityId() === opportunity.id"
                             [attr.data-opportunity-id]="opportunity.id"
                           >
                             <strong
@@ -322,7 +323,15 @@
                             >
                             <span>{{ opportunity.scenario }} · {{ opportunity.timeframe }}</span>
                             <span>Score {{ opportunity.score }} · {{ opportunity.status }}</span>
-                          </a>
+                          </button>
+                          @if (preparationErrors()[opportunity.id]; as failure) {
+                            <small class="opportunity-error">
+                              {{ failure.message }}
+                              @if (failure.reasons.length > 0) {
+                                · {{ failure.reasons[0].code }}
+                              }
+                            </small>
+                          }
                         }
                       </div>
                     }

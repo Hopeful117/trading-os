@@ -18,13 +18,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
-import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
 
 public class TradePlanRiskHandoffService {
     private static final String CONTEXT_NOT_FOUND = "Referenced Trading Context snapshot not found";
+    private static final String TRADE_PLAN_NOT_FOUND = "Trade Plan not found";
     private final TradePlanRepository plans;
     private final TradePlanningContextRepository contexts;
     private final TradePlanRiskValidationBoundary lifecycle;
@@ -39,16 +39,15 @@ public class TradePlanRiskHandoffService {
             TradePlanRiskValidationBoundary lifecycle,
             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
             Supplier<UUID> acknowledgmentIds,
-            TradingOpportunityRepository opportunities,
-            StrategyMatchRepository strategyMatches) {
+            AttributionRepositories attributionRepositories) {
         this.plans = plans;
         this.contexts = contexts;
         this.lifecycle = lifecycle;
         this.acknowledgments = acknowledgments;
         this.clock = clock;
         this.acknowledgmentIds = acknowledgmentIds;
-        this.opportunities = opportunities;
-        this.strategyMatches = strategyMatches;
+        this.opportunities = attributionRepositories.opportunities();
+        this.strategyMatches = attributionRepositories.strategyMatches();
     }
 
     public TradePlanRiskHandoffService(
@@ -56,14 +55,19 @@ public class TradePlanRiskHandoffService {
             TradePlanRiskValidationBoundary lifecycle,
             RiskValidationAcknowledgmentRepository acknowledgments, Clock clock,
             Supplier<UUID> acknowledgmentIds) {
-        this(plans, contexts, lifecycle, acknowledgments, clock, acknowledgmentIds, null, null);
+        this(plans, contexts, lifecycle, acknowledgments, clock, acknowledgmentIds,
+                new AttributionRepositories(null, null));
     }
+
+    public record AttributionRepositories(
+            TradingOpportunityRepository opportunities,
+            StrategyMatchRepository strategyMatches) { }
 
     public TradePlanRiskSnapshot loadAcceptedSnapshot(TradePlanId id, TradePlanVersion version) {
         TradePlan requested = plans.find(id, version).orElseThrow(() ->
                 TradePlanRiskHandoffException.notFound("Trade Plan version not found"));
         TradePlan latest = plans.findLatest(id).orElseThrow(() ->
-                TradePlanRiskHandoffException.notFound("Trade Plan not found"));
+                TradePlanRiskHandoffException.notFound(TRADE_PLAN_NOT_FOUND));
         boolean acknowledgedAcceptedVersion = requested.status() == TradePlanStatus.ACCEPTED
                 && acknowledgments.find(id, version).isPresent()
                 && (latest.status() == TradePlanStatus.RISK_VALIDATED
@@ -92,6 +96,30 @@ public class TradePlanRiskHandoffService {
         return snapshot(requested, context);
     }
 
+    public TradePlanRiskSnapshot loadPreflightSnapshot(TradePlanId id, TradePlanVersion version) {
+        TradePlan requested = plans.find(id, version).orElseThrow(() ->
+                TradePlanRiskHandoffException.notFound("Trade Plan version not found"));
+        TradePlan latest = plans.findLatest(id).orElseThrow(() ->
+                TradePlanRiskHandoffException.notFound(TRADE_PLAN_NOT_FOUND));
+        if (!latest.version().equals(version) || requested.status() != TradePlanStatus.PROPOSED) {
+            throw TradePlanRiskHandoffException.conflict(
+                    "TRADE_PLAN_NOT_PROPOSED", "Risk preflight requires the exact latest proposed Trade Plan");
+        }
+        TradePlanningContext context = contexts.find(
+                        requested.planningContext().id(), requested.planningContext().version())
+                .orElseThrow(() -> TradePlanRiskHandoffException.notFound(CONTEXT_NOT_FOUND));
+        if (!context.capturedAt().equals(requested.planningContext().capturedAt())) {
+            throw TradePlanRiskHandoffException.conflict(
+                    "TRADING_CONTEXT_MISMATCH", "Referenced Trading Context identity is inconsistent");
+        }
+        if (!requested.execution().positionSizing().currency().equals(context.accountCurrency())) {
+            throw TradePlanRiskHandoffException.conflict(
+                    "POSITION_SIZING_CURRENCY_MISMATCH",
+                    "Position sizing currency must equal the account currency");
+        }
+        return snapshot(requested, context);
+    }
+
     @Transactional
     public TradePlanRiskSnapshot prepareForExecution(
             TradePlanId id, TradePlanVersion acceptedVersion, UUID evaluationId) {
@@ -100,7 +128,7 @@ public class TradePlanRiskHandoffService {
                 .orElseThrow(() -> TradePlanRiskHandoffException.notFound(
                         "Risk validation acknowledgment not found"));
         TradePlan latest = plans.findLatestForUpdate(id).orElseThrow(() ->
-                TradePlanRiskHandoffException.notFound("Trade Plan not found"));
+                TradePlanRiskHandoffException.notFound(TRADE_PLAN_NOT_FOUND));
         TradePlan ready = latest.status() == TradePlanStatus.READY_TO_EXECUTE
                 ? latest
                 : lifecycle.markReadyToExecute(id, new TradePlanVersion(

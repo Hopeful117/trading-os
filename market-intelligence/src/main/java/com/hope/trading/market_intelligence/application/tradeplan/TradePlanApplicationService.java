@@ -7,6 +7,8 @@ import java.time.*;
 import java.util.*;
 
 public final class TradePlanApplicationService {
+    private static final String TRADE_PLANS_CREATED = "trade_plans_created";
+
     private final TradePlanningEngine engine;
     private final TradePlanRepository repository;
     private final TradePlanLifecyclePolicy lifecycle;
@@ -22,38 +24,35 @@ public final class TradePlanApplicationService {
             TradePlanLifecyclePolicy lifecycle, TradePlanEventPublisher events,
             TradePlanningMetrics metrics, Clock clock) {
         this(engine, repository, lifecycle, events, metrics, clock,
-                null,
-                null, null);
+                null);
     }
 
     public TradePlanApplicationService(
             TradePlanningEngine engine, TradePlanRepository repository,
             TradePlanLifecyclePolicy lifecycle, TradePlanEventPublisher events,
             TradePlanningMetrics metrics, Clock clock,
-            ManualTradePlanIdempotencyRepository manualIdempotency,
-            ManualTradePlanFingerprintFactory manualFingerprints,
-            ManualTradePlanCreationTransaction manualCreation) {
+            ManualTradePlanDependencies manualDependencies) {
         this.engine = engine; this.repository = repository; this.lifecycle = lifecycle;
         this.events = events; this.metrics = metrics; this.clock = clock;
-        this.manualIdempotency = manualIdempotency;
-        this.manualFingerprints = manualFingerprints;
-        this.manualCreation = manualCreation;
+        this.manualIdempotency = manualDependencies == null ? null : manualDependencies.idempotency();
+        this.manualFingerprints = manualDependencies == null ? null : manualDependencies.fingerprints();
+        this.manualCreation = manualDependencies == null ? null : manualDependencies.creation();
     }
 
     public TradePlanningResult create(TradePlanningRequest request) {
         Instant started = clock.instant();
         TradePlanningResult result = engine.plan(request);
         metrics.recordDuration(Duration.between(started, clock.instant()));
-        if (result instanceof TradePlanningResult.Success success) {
-            repository.append(success.plan());
-            boolean version = success.plan().version().value() > 1;
-            metrics.increment(version ? "trade_plans_replanned" : "trade_plans_created");
+        if (result instanceof TradePlanningResult.Success(var plan, var warnings)) {
+            repository.append(plan);
+            boolean version = plan.version().value() > 1;
+            metrics.increment(version ? "trade_plans_replanned" : TRADE_PLANS_CREATED);
             events.publish(version
                     ? new TradePlanEvent.VersionCreated(
-                            success.plan().id(), success.plan().version(), clock.instant())
+                            plan.id(), plan.version(), clock.instant())
                     : new TradePlanEvent.Created(
-                            success.plan().id(), success.plan().version(), clock.instant()));
-            if (success.warnings().stream().anyMatch(
+                            plan.id(), plan.version(), clock.instant()));
+            if (warnings.stream().anyMatch(
                     warning -> warning.startsWith("AI contribution rejected"))) {
                 metrics.increment("trade_plan_ai_contribution_failures");
             }
@@ -70,7 +69,7 @@ public final class TradePlanApplicationService {
         metrics.recordDuration(Duration.between(started, clock.instant()));
         if (result instanceof TradePlanningResult.Success success) {
             repository.append(success.plan());
-            metrics.increment("trade_plans_created");
+            metrics.increment(TRADE_PLANS_CREATED);
             events.publish(new TradePlanEvent.Created(
                     success.plan().id(), success.plan().version(), clock.instant()));
         }
@@ -126,7 +125,7 @@ public final class TradePlanApplicationService {
         metrics.recordDuration(Duration.between(started, clock.instant()));
         if (result instanceof TradePlanningResult.Success success) {
             repository.append(success.plan());
-            metrics.increment("trade_plans_created");
+            metrics.increment(TRADE_PLANS_CREATED);
             events.publish(new TradePlanEvent.Created(
                     success.plan().id(), success.plan().version(), clock.instant()));
         }
@@ -168,7 +167,7 @@ public final class TradePlanApplicationService {
                 metrics.increment("trade_plans_expired");
                 events.publish(new TradePlanEvent.Expired(id, next.version(), clock.instant()));
             }
-            default -> { }
+            default -> { /* No event is emitted for intermediate states. */ }
         }
         return next;
     }
@@ -177,4 +176,10 @@ public final class TradePlanApplicationService {
     }
     public Optional<TradePlan> latest(TradePlanId id) { return repository.findLatest(id); }
     public List<TradePlan> history(TradePlanId id) { return repository.history(id); }
+
+    public record ManualTradePlanDependencies(
+            ManualTradePlanIdempotencyRepository idempotency,
+            ManualTradePlanFingerprintFactory fingerprints,
+            ManualTradePlanCreationTransaction creation
+    ) { }
 }

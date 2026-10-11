@@ -5,19 +5,17 @@ import com.hope.trading.market_intelligence.application.pipeline.ProductionIntel
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.execution.*;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -56,13 +54,13 @@ class LocalAnalysisExecutionDispatcherTest {
     }
 
     private AnalysisExecution awaitFailure(
-            InMemoryAnalysisExecutionRepository repository, UUID executionId) throws Exception {
+            InMemoryAnalysisExecutionRepository repository, UUID executionId) {
         for (int attempt = 0; attempt < 100; attempt++) {
             AnalysisExecution execution = repository.findById(executionId).orElseThrow();
             if (execution.status() == AnalysisExecutionStatus.FAILED) {
                 return execution;
             }
-            Thread.sleep(10);
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
         }
         return repository.findById(executionId).orElseThrow();
     }

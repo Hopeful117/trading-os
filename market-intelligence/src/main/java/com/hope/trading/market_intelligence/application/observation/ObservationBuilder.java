@@ -85,12 +85,14 @@ public final class ObservationBuilder {
     }
 
     private boolean isOlderTrendContextResult(Observation current, ObservationPayload payload) {
-        if (!(current.payload().orElse(null) instanceof TrendContextObservationPayload currentPayload)
-                || !(payload instanceof TrendContextObservationPayload nextPayload)) {
+        if (!(current.payload().orElse(null) instanceof TrendContextObservationPayload(
+                var currentContent))) {
             return false;
         }
-        return nextPayload.content().assessment().cutOffAt()
-                .isBefore(currentPayload.content().assessment().cutOffAt());
+        if (!(payload instanceof TrendContextObservationPayload(var nextContent))) {
+            return false;
+        }
+        return nextContent.assessment().cutOffAt().isBefore(currentContent.assessment().cutOffAt());
     }
 
     private List<String> evidenceFingerprint(List<ObservationEvidence> evidence) {

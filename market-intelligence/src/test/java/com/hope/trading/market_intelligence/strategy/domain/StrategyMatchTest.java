@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
  * Story 0011 domain invariants: only MATCH creates a StrategyMatch; the fact
@@ -65,6 +65,32 @@ class StrategyMatchTest {
     }
 
     @Test
+    void extractedMatchFieldsCreateFact() {
+        UUID matchId = UUID.randomUUID();
+        StrategyMatch match = StrategyMatch.fromEvaluationFields(new StrategyMatch.EvaluationFields(
+                BuiltinStrategies.LEGACY_OHLC_TREND_ID, 1, MARKET, ANALYSIS,
+                OBSERVATION, MatchedDirection.LONG, "digest", List.of(), EVALUATED,
+                matchId, EVALUATED));
+
+        assertThat(match.matchId()).isEqualTo(matchId);
+        assertThat(match.strategyId().value()).isEqualTo(BuiltinStrategies.LEGACY_OHLC_TREND_ID);
+        assertThat(match.observationId()).isEqualTo(OBSERVATION);
+        assertThat(match.provenance()).isNull();
+    }
+
+    @Test
+    void strategyVersionMustStartAtOne() {
+        var error = catchThrowable(() -> StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
+                UUID.randomUUID(), new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID), 0,
+                MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG, "digest", List.of(),
+                null, EVALUATED, EVALUATED)));
+
+        assertThat(error)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("starts at 1");
+    }
+
+    @Test
     void rejectsObservationIdentityThatConflictsWithEvaluationProvenance() {
         StrategyEvaluation evaluation = StrategyEvaluation.match(
                 builtins.conservativeTrendFollowing(),
@@ -77,8 +103,9 @@ class StrategyMatchTest {
                         .build(),
                 MatchedDirection.LONG, List.of(), BigDecimal.ONE, "match", java.util.Set.of());
 
-        assertThatThrownBy(() -> StrategyMatch.fromEvaluation(
-                evaluation, ANALYSIS, UUID.randomUUID(), UUID.randomUUID(), EVALUATED))
+        var missingObservation = catchThrowable(() -> StrategyMatch.fromEvaluation(
+                evaluation, ANALYSIS, UUID.randomUUID(), UUID.randomUUID(), EVALUATED));
+        assertThat(missingObservation)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("observationId");
     }
@@ -89,10 +116,11 @@ class StrategyMatchTest {
                 OBSERVATION, UUID.randomUUID(), 1, EVALUATED,
                 "profile-v1", "rule-v1", "input", "assessment");
 
-        assertThatThrownBy(() -> StrategyMatch.rehydrate(
+        var conflictingObservation = catchThrowable(() -> StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 UUID.randomUUID(), new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID),
                 1, MARKET, ANALYSIS, UUID.randomUUID(), MatchedDirection.LONG,
-                "digest", List.of(), provenance, EVALUATED, EVALUATED))
+                "digest", List.of(), provenance, EVALUATED, EVALUATED)));
+        assertThat(conflictingObservation)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("observationId");
     }
@@ -107,9 +135,10 @@ class StrategyMatchTest {
                 List.of(ConditionResult.of("directional_price_change", false, (java.math.BigDecimal) null)),
                 "no signal",
                 java.util.Set.of());
-        assertThatThrownBy(() -> StrategyMatch.fromEvaluation(
+        var noMatchError = catchThrowable(() -> StrategyMatch.fromEvaluation(
                 noMatch, ANALYSIS, OBSERVATION,
-                UUID.randomUUID(), Instant.now()))
+                UUID.randomUUID(), Instant.now()));
+        assertThat(noMatchError)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("MATCH");
     }
@@ -122,8 +151,9 @@ class StrategyMatchTest {
                         StrategyApplicability.Timeframe.M15, EVALUATED,
                         BigDecimal.ONE, OBSERVED),
                 "missing input");
-        assertThatThrownBy(() -> StrategyMatch.fromEvaluation(
-                evaluation, ANALYSIS, OBSERVATION, UUID.randomUUID(), Instant.now()))
+        var notEvaluableError = catchThrowable(() -> StrategyMatch.fromEvaluation(
+                evaluation, ANALYSIS, OBSERVATION, UUID.randomUUID(), Instant.now()));
+        assertThat(notEvaluableError)
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -135,8 +165,9 @@ class StrategyMatchTest {
                         StrategyApplicability.Timeframe.M15, EVALUATED,
                         BigDecimal.ONE, OBSERVED),
                 "boom");
-        assertThatThrownBy(() -> StrategyMatch.fromEvaluation(
-                evaluation, ANALYSIS, OBSERVATION, UUID.randomUUID(), Instant.now()))
+        var failedError = catchThrowable(() -> StrategyMatch.fromEvaluation(
+                evaluation, ANALYSIS, OBSERVATION, UUID.randomUUID(), Instant.now()));
+        assertThat(failedError)
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -144,24 +175,27 @@ class StrategyMatchTest {
     void conditionResultsAreDefensivelyCopied() {
         List<ConditionResult> mutable = new ArrayList<>();
         mutable.add(ConditionResult.of("directional_price_change", true, BigDecimal.TEN));
-        StrategyMatch match = StrategyMatch.rehydrate(
+        StrategyMatch match = StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 UUID.randomUUID(), new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID),
                 1, MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG, "digest",
-                mutable, EVALUATED, EVALUATED);
+                mutable, null, EVALUATED, EVALUATED));
 
         mutable.clear();
         assertThat(match.conditionResults()).hasSize(1);
-        assertThatThrownBy(() -> match.conditionResults()
-                .add(ConditionResult.of("x", false, null)))
+        var immutableResults = match.conditionResults();
+        var immutableError = catchThrowable(() -> immutableResults.add(
+                ConditionResult.of("x", false, null)));
+        assertThat(immutableError)
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
     void directionIsRequired() {
-        assertThatThrownBy(() -> StrategyMatch.rehydrate(
+        var missingDirection = catchThrowable(() -> StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 UUID.randomUUID(), new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID),
                 1, MARKET, ANALYSIS, OBSERVATION, null, "digest",
-                List.of(), EVALUATED, EVALUATED))
+                List.of(), null, EVALUATED, EVALUATED)));
+        assertThat(missingDirection)
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("direction");
     }
@@ -169,18 +203,35 @@ class StrategyMatchTest {
     @Test
     void rehydrationIsFaithfulAndIdentityMatchesBusinessKey() {
         UUID matchId = UUID.randomUUID();
-        StrategyMatch match = StrategyMatch.rehydrate(
+        StrategyMatch match = StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 matchId, new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID), 7,
                 MARKET, ANALYSIS, OBSERVATION, MatchedDirection.SHORT, "digest-x",
-                List.of(ConditionResult.of("c", false, (java.math.BigDecimal) null)), EVALUATED, EVALUATED);
+                List.of(ConditionResult.of("c", false, (java.math.BigDecimal) null)), null, EVALUATED, EVALUATED));
 
         assertThat(match.matchId()).isEqualTo(matchId);
         assertThat(match.identity()).isEqualTo(new StrategyMatchIdentity(
                 BuiltinStrategies.LEGACY_OHLC_TREND_ID, 7, MARKET, ANALYSIS, "digest-x"));
-        // equality is technical identity (matchId)
-        assertThat(match).isEqualTo(StrategyMatch.rehydrate(
+        StrategyMatch expected = StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
                 matchId, new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID), 7,
                 MARKET, ANALYSIS, OBSERVATION, MatchedDirection.SHORT, "digest-x",
-                List.of(ConditionResult.of("c", false, (java.math.BigDecimal) null)), EVALUATED, EVALUATED));
+                List.of(ConditionResult.of("c", false, (java.math.BigDecimal) null)), null, EVALUATED, EVALUATED));
+        // equality is technical identity (matchId)
+        assertThat(match).isEqualTo(expected)
+                .hasSameHashCodeAs(matchId)
+                .hasToString("StrategyMatch{matchId=" + matchId
+                + ", strategy=" + new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID)
+                + "v7, market=" + MARKET + ", direction=SHORT, matchedAt=" + EVALUATED + "}");
+    }
+
+    @Test
+    void contextDigestMustNotBeBlank() {
+        var error = catchThrowable(() -> StrategyMatch.rehydrate(new StrategyMatch.Rehydration(
+                UUID.randomUUID(), new StrategyId(BuiltinStrategies.LEGACY_OHLC_TREND_ID), 1,
+                MARKET, ANALYSIS, OBSERVATION, MatchedDirection.LONG, "   ", List.of(),
+                null, EVALUATED, EVALUATED)));
+
+        assertThat(error)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("contextDigest");
     }
 }

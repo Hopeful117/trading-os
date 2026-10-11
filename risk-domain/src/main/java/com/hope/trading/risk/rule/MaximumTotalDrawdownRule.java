@@ -7,9 +7,9 @@ import java.time.Instant;
 
 /** Evaluates a static drawdown floor relative to the account starting balance. */
 public final class MaximumTotalDrawdownRule implements RiskRule {
-    public static final String ID = RiskRuleIds.MAX_TOTAL_DRAWDOWN;
+    public static final String RULE_ID = RiskRuleIds.MAX_TOTAL_DRAWDOWN;
 
-    @Override public String id() { return ID; }
+    @Override public String id() { return RULE_ID; }
 
     @Override public RiskRuleResult evaluate(RiskRuleEvaluationContext context,
                                               RuleConfiguration configuration, Instant time) {

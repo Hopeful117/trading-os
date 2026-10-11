@@ -134,7 +134,8 @@ class TradePlanningEngineTest {
                 request.expiresAt(), request.expirationPolicy(), "Changed thesis",
                 request.confirmationConditions(), request.invalidationConditions(), request.managementRules());
 
-        assertThatThrownBy(() -> environment.service().createManual(changed, "manual-key"))
+        var firstError = catchThrowable(() -> environment.service().createManual(changed, "manual-key"));
+        assertThat(firstError)
                 .isInstanceOf(TradePlanIdempotencyException.class)
                 .hasMessageContaining("already bound");
     }
@@ -152,7 +153,8 @@ class TradePlanningEngineTest {
                 request.expiresAt().plusSeconds(60), request.expirationPolicy(), request.thesis(),
                 request.confirmationConditions(), request.invalidationConditions(), request.managementRules());
 
-        assertThatThrownBy(() -> environment.service().createManual(changed, "expiration-key"))
+        var secondError = catchThrowable(() -> environment.service().createManual(changed, "expiration-key"));
+        assertThat(secondError)
                 .isInstanceOf(TradePlanIdempotencyException.class)
                 .hasMessageContaining("already bound");
     }

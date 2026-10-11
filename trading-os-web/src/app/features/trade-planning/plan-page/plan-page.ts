@@ -28,6 +28,15 @@ import {
 } from '../../../core/models/execution.model';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
 import { ExecutionService } from '../../../core/services/execution.service';
+import { MarketService } from '../../../core/services/market.service';
+import { MarketResponse } from '../../../core/models/market-response';
+import { OhlcEvent } from '../../../core/models/ohlc-event.model';
+import { OhlcInterval } from '../../../core/models/ohlc-interval';
+import { TickerEvent } from '../../../core/models/ticker-event.model';
+import { MarketDataStreamService } from '../../../core/services/market-data-stream.service';
+import { MarketStreamRequest } from '../../../core/models/market-stream-request';
+import { MarketStreamType } from '../../../core/models/market-stream-type';
+import { MarketChartComponent } from '../../markets/market-chart-component/market-chart-component';
 import { tradeFlowErrorMessage } from '../../../core/utils/trade-flow-error';
 
 export type PlanView =
@@ -50,7 +59,13 @@ export type PlanView =
       execution?: ExecutionDto;
       decision?: RiskDecisionResponse;
     }
-  | { status: 'proposal'; plan: TradePlanResponse }
+  | {
+      status: 'proposal';
+      plan: TradePlanResponse;
+      market?: MarketResponse;
+      candles?: OhlcEvent[];
+      ticker$?: Observable<TickerEvent>;
+    }
   | { status: 'deciding' }
   | { status: 'accepted'; plan: TradePlanResponse }
   | { status: 'evaluatingRisk' }
@@ -92,7 +107,7 @@ const BROKER_ORDER_LABELS: Record<string, string> = {
 
 @Component({
   selector: 'app-plan-page',
-  imports: [AsyncPipe, DatePipe, DecimalPipe, RouterLink],
+  imports: [AsyncPipe, DatePipe, DecimalPipe, RouterLink, MarketChartComponent],
   templateUrl: './plan-page.html',
   styleUrl: './plan-page.scss',
 })
@@ -100,6 +115,12 @@ export class PlanPage implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly tradePlanService = inject(TradePlanService);
   private readonly executionService = inject(ExecutionService);
+  private readonly marketService = inject(MarketService);
+  private readonly marketDataStreamService = inject(MarketDataStreamService);
+  private readonly tickerRequest: MarketStreamRequest = {
+    type: MarketStreamType.TICKER,
+    parameters: null,
+  };
 
   private readonly acceptSubject = new Subject<TradePlanResponse>();
   private readonly acceptAndEvaluateRiskSubject = new Subject<TradePlanResponse>();
@@ -634,6 +655,9 @@ export class PlanPage implements OnDestroy {
 
   private loadPlanView(plan: TradePlanResponse): Observable<PlanView> {
     if (plan.status === 'EXECUTED') return this.loadExecutedPlanView(plan);
+    if (plan.status === 'PROPOSED' || plan.status === 'DRAFT') {
+      return this.loadProposalView(plan);
+    }
     if (plan.status !== 'READY_TO_EXECUTE') return of(this.toViewForPlan(plan));
 
     return this.executionService.list().pipe(
@@ -659,6 +683,32 @@ export class PlanPage implements OnDestroy {
           : of<PlanView>(this.toViewForPlan(plan));
       }),
       catchError(() => of<PlanView>(this.toViewForPlan(plan))),
+    );
+  }
+
+  private loadProposalView(plan: TradePlanResponse): Observable<PlanView> {
+    return this.marketService.findAll().pipe(
+      map((markets) => {
+        const market = markets.find(
+          (candidate) => candidate.symbol.toUpperCase() === plan.instrument.toUpperCase(),
+        );
+        if (!market) throw new Error(`Market data is unavailable for ${plan.instrument}.`);
+        return market;
+      }),
+      switchMap((market) =>
+        this.marketService.findOhlcHistory(market.marketId, OhlcInterval.ONE_HOUR, 24).pipe(
+          map((candles) => ({
+            status: 'proposal' as const,
+            plan,
+            market,
+            candles,
+            ticker$: this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
+              switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
+              shareReplay({ bufferSize: 1, refCount: true }),
+            ),
+          })),
+        ),
+      ),
     );
   }
 

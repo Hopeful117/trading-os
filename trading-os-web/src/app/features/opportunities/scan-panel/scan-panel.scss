@@ -303,12 +303,25 @@ table {
   border-radius: 8px;
   background: #3b82f614;
   color: #93c5fd;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   text-decoration: none;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
 
   span {
     color: #94a3b8;
     font-size: 0.68rem;
   }
+}
+
+.opportunity-error {
+  color: #fca5a5;
+  font-size: 0.68rem;
 }
 
 .empty-result,

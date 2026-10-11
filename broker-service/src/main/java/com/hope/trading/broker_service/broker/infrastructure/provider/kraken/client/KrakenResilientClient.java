@@ -16,6 +16,7 @@ public final class KrakenResilientClient implements KrakenProviderClient, Broker
     private final int readMaxAttempts,requestsPerSecond;private long rateWindowSecond=-1;private int rateWindowRequests;
     private final AtomicInteger consecutiveFailures=new AtomicInteger();private volatile Instant openUntil=Instant.EPOCH;
     public KrakenResilientClient(@Qualifier("krakenRestProviderClient") KrakenProviderClient delegate,Clock clock,KrakenProperties properties){this.delegate=delegate;this.clock=clock;this.readMaxAttempts=Math.max(1,properties.getReadMaxAttempts());this.requestsPerSecond=Math.max(1,properties.getRequestsPerSecond());}
+    @Override
     public JsonNode privatePost(String path,Map<String,String> parameters,CredentialMaterial credentials){
         if(clock.instant().isBefore(openUntil))throw new BrokerUnavailableException("Kraken circuit breaker is open",null);
         if(!bulkhead.tryAcquire())throw new BrokerUnavailableException("Kraken communication bulkhead is full",null);
@@ -27,14 +28,33 @@ public final class KrakenResilientClient implements KrakenProviderClient, Broker
         catch(BrokerUnavailableException failure){if(consecutiveFailures.incrementAndGet()>=5)openUntil=clock.instant().plusSeconds(30);throw failure;}
         finally{bulkhead.release();}
     }
+    @Override
     public JsonNode publicGet(String path,Map<String,String> parameters){
         if(clock.instant().isBefore(openUntil))throw new BrokerUnavailableException("Kraken circuit breaker is open",null);
         if(!bulkhead.tryAcquire())throw new BrokerUnavailableException("Kraken communication bulkhead is full",null);
         try{
-            for(int attempt=1;;attempt++)try{acquireRatePermit();JsonNode result=delegate.publicGet(path,parameters);consecutiveFailures.set(0);return result;}
-            catch(BrokerUnavailableException failure){if(attempt>=readMaxAttempts)throw failure;}
-        }catch(BrokerUnavailableException failure){if(consecutiveFailures.incrementAndGet()>=5)openUntil=clock.instant().plusSeconds(30);throw failure;}
+            return publicGetWithRetry(path, parameters);
+        }catch(BrokerUnavailableException failure){
+            if(consecutiveFailures.incrementAndGet()>=5) {
+                openUntil=clock.instant().plusSeconds(30);
+            }
+            throw failure;
+        }
         finally{bulkhead.release();}
+    }
+    private JsonNode publicGetWithRetry(String path, Map<String,String> parameters) {
+        for(int attempt=1;;attempt++) {
+            try {
+                acquireRatePermit();
+                JsonNode result=delegate.publicGet(path,parameters);
+                consecutiveFailures.set(0);
+                return result;
+            } catch(BrokerUnavailableException failure) {
+                if(attempt>=readMaxAttempts) {
+                    throw failure;
+                }
+            }
+        }
     }
     private synchronized void acquireRatePermit(){
         long second=clock.instant().getEpochSecond();
@@ -42,6 +62,8 @@ public final class KrakenResilientClient implements KrakenProviderClient, Broker
         if(rateWindowRequests>=requestsPerSecond)throw new com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerRateLimitException("Local Kraken rate limit exceeded");
         rateWindowRequests++;
     }
+    @Override
     public BrokerProviderId providerId(){return BrokerProviderId.KRAKEN;}
+    @Override
     public Status status(){if(clock.instant().isBefore(openUntil))return Status.UNAVAILABLE;return consecutiveFailures.get()==0?Status.AVAILABLE:Status.DEGRADED;}
 }

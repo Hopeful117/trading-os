@@ -9,6 +9,9 @@ import com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance;
 
 public interface TradePlanRiskPort {
     Snapshot load(UUID tradePlanId, long version);
+    default Snapshot loadPreflight(UUID tradePlanId, long version) {
+        return load(tradePlanId, version);
+    }
     Snapshot prepareForExecution(UUID tradePlanId, long acceptedVersion, UUID evaluationId);
     Snapshot loadReady(UUID tradePlanId, long version);
     void acknowledge(UUID tradePlanId, long version, UUID evaluationId, String decision, Instant evaluatedAt);
