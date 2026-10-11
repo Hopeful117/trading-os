@@ -62,8 +62,9 @@ class NewsSynchronizationTest {
                 mock(FinancialNewsItemRepository.class), new NewsProviderProperties(),
                 mock(org.springframework.beans.factory.ObjectProvider.class), providerFor(source));
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.synchronizeEconomicEvents(
-                        source, Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z")))
+         Instant from = Instant.parse("2026-01-01T00:00:00Z");
+         Instant to = Instant.parse("2026-01-02T00:00:00Z");
+         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.synchronizeEconomicEvents(source, from, to))
                 .isInstanceOf(XoomarEconomicCalendarSourceException.class)
                 .hasMessageContaining("timeout");
 

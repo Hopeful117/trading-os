@@ -77,7 +77,7 @@ class ValuationSnapshotServiceTest {
                 new ValuationSnapshotBatchRequest.Asset("xxbt", "XXBT"),
                 new ValuationSnapshotBatchRequest.Asset("btc", "BTC"))));
 
-        assertThat(response.facts()).extracting(fact -> fact.asset())
+        assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::asset)
                 .containsExactly("XBT", "XBT");
     }
 
@@ -88,7 +88,7 @@ class ValuationSnapshotServiceTest {
                 new ValuationSnapshotBatchRequest.Asset("eth", "XETH"),
                 new ValuationSnapshotBatchRequest.Asset("usd", "ZUSD"))));
 
-        assertThat(response.facts()).extracting(fact -> fact.asset())
+        assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::asset)
                 .containsExactly("ETH", "USD");
     }
 
@@ -123,9 +123,9 @@ class ValuationSnapshotServiceTest {
                 new ValuationSnapshotBatchRequest.Asset("stale", "EUR"),
                 new ValuationSnapshotBatchRequest.Asset("future", "GBP"))));
 
-        assertThat(response.facts()).extracting(fact -> fact.status())
+        assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::status)
                 .containsExactly(FactStatus.STALE, FactStatus.CONVERSION_UNAVAILABLE);
-        assertThat(response.facts()).extracting(fact -> fact.value()).containsOnlyNulls();
+        assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::value).containsOnlyNulls();
         assertThat(response.maxObservationAge()).isEqualTo("PT5M");
         assertThat(response.facts().getFirst().conversionLegs().getFirst().source().observationAge())
                 .isEqualTo("PT5M1S");

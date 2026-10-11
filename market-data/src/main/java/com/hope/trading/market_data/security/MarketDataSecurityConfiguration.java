@@ -15,6 +15,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 @EnableConfigurationProperties(ServiceJwtProperties.class)
 public class MarketDataSecurityConfiguration {
+    private static final String ROLE_SERVICE = "ROLE_SERVICE";
+
     @Bean
     ServiceJwtAuthenticationFilter serviceJwtAuthenticationFilter(
             ServiceJwtService serviceJwt, ServiceJwtProperties properties) {
@@ -30,10 +32,10 @@ public class MarketDataSecurityConfiguration {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/internal/**").hasAuthority("ROLE_SERVICE")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/markets/synchronize").hasAuthority("ROLE_SERVICE")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/markets/*/subscriptions").hasAuthority("ROLE_SERVICE")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/markets/*/subscriptions").hasAuthority("ROLE_SERVICE")
+                        .requestMatchers("/internal/**").hasAuthority(ROLE_SERVICE)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/markets/synchronize").hasAuthority(ROLE_SERVICE)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/markets/*/subscriptions").hasAuthority(ROLE_SERVICE)
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/markets/*/subscriptions").hasAuthority(ROLE_SERVICE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/markets/**").permitAll()
                         .anyRequest().denyAll())
                 .addFilterBefore(serviceJwtFilter, UsernamePasswordAuthenticationFilter.class)
