@@ -57,7 +57,7 @@ class ValuationSnapshotServiceTest {
                 new ValuationSnapshotBatchRequest.Asset("inverse", "CHF"),
                 new ValuationSnapshotBatchRequest.Asset("same", "USD"))));
 
-        assertThat(response.facts()).extracting(fact -> fact.status())
+        assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::status)
                 .containsExactly(FactStatus.AVAILABLE, FactStatus.AVAILABLE, FactStatus.AVAILABLE);
         assertThat(response.facts().get(0).value()).isEqualByComparingTo("1.10");
         assertThat(response.facts().get(0).conversionLegs().getFirst().source().priceType()).isEqualTo("BID");
@@ -145,7 +145,7 @@ class ValuationSnapshotServiceTest {
 
         assertThat(response.facts()).extracting(fact -> fact.status())
                 .containsExactly(FactStatus.CONVERSION_UNAVAILABLE, FactStatus.CONVERSION_UNAVAILABLE);
-        assertThat(response.facts()).extracting(fact -> fact.value()).containsOnlyNulls();
+        assertThat(response.facts()).extracting(ValuationSnapshotBatchResponse.Fact::value).containsOnlyNulls();
     }
 
     @Test
