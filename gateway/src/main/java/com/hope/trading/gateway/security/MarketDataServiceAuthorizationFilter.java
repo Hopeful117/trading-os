@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
+@SuppressWarnings("java:S2143") // JJWT exposes only java.util.Date for these claims.
 @Component
 public final class MarketDataServiceAuthorizationFilter implements GlobalFilter, Ordered {
     private static final String SERVICE_AUTHORIZATION = "X-Service-Authorization";
@@ -51,7 +52,6 @@ public final class MarketDataServiceAuthorizationFilter implements GlobalFilter,
                 || HttpMethod.DELETE.equals(exchange.getRequest().getMethod()));
     }
 
-    @SuppressWarnings("java:S2143") // JJWT exposes only java.util.Date for these claims.
     private String issueToken() {
         if (signingSecret.isBlank()) {
             throw new IllegalStateException("Market Data service JWT secret is not configured");
