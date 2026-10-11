@@ -696,19 +696,18 @@ export class PlanPage implements OnDestroy {
         return market;
       }),
       switchMap((market) =>
-        this.marketService
-          .findOhlcHistory(market.marketId, OhlcInterval.ONE_HOUR, 24)
-          .pipe(
-            map((candles) => ({
-              status: 'proposal' as const,
-              plan,
-              market,
-              candles,
-              ticker$: this.marketService
-                .subscribe(market.marketId, this.tickerRequest)
-                .pipe(switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)), shareReplay({ bufferSize: 1, refCount: true })),
-            })),
-          ),
+        this.marketService.findOhlcHistory(market.marketId, OhlcInterval.ONE_HOUR, 24).pipe(
+          map((candles) => ({
+            status: 'proposal' as const,
+            plan,
+            market,
+            candles,
+            ticker$: this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
+              switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
+              shareReplay({ bufferSize: 1, refCount: true }),
+            ),
+          })),
+        ),
       ),
     );
   }

@@ -63,7 +63,7 @@
             </div>
           </header>
 
-           <section class="facts-grid">
+          <section class="facts-grid">
             <div class="fact">
               <span class="label">Entry price</span>
               <span class="value">{{ view.plan.entryPrice | number: '1.2-2' }}</span>
@@ -101,31 +101,45 @@
               <span class="label">Expires</span>
               <span class="value">{{ view.plan.expiresAt | date: 'MMM d, HH:mm' }}</span>
             </div>
-           </section>
+          </section>
 
-           <section class="market-context" data-testid="market-context">
-             <div class="market-context-header">
-               <div>
-                 <h2>Market context</h2>
-                 <p>{{ view.market?.symbol }} · {{ view.market?.marketState?.tradingStatus }}</p>
-               </div>
-               <span class="market-updated">Updated {{ view.market?.marketState?.lastUpdated | date: 'MMM d, HH:mm' }}</span>
-             </div>
-             @if (view.ticker$ | async; as ticker) {
-               <div class="ticker-grid" data-testid="market-ticker">
-                 <article class="ticker-card ticker-card--primary"><span>Last</span><strong>{{ ticker.last | number: '1.2-8' }}</strong><small>{{ ticker.occurredAt | date: 'mediumTime' }}</small></article>
-                 <article class="ticker-card"><span>Bid</span><strong>{{ ticker.bid | number: '1.2-8' }}</strong></article>
-                 <article class="ticker-card"><span>Ask</span><strong>{{ ticker.ask | number: '1.2-8' }}</strong></article>
-                 <article class="ticker-card"><span>Spread</span><strong>{{ ticker.ask - ticker.bid | number: '1.2-8' }}</strong></article>
-                 @if (ticker.volume !== null) {
-                   <article class="ticker-card"><span>Volume</span><strong>{{ ticker.volume | number: '1.0-2' }}</strong></article>
-                 }
-               </div>
-             } @else {
-               <p class="market-loading">Waiting for live ticker…</p>
-             }
-             <app-market-chart [history]="view.candles ?? []" />
-           </section>
+          <section class="market-context" data-testid="market-context">
+            <div class="market-context-header">
+              <div>
+                <h2>Market context</h2>
+                <p>{{ view.market?.symbol }} · {{ view.market?.marketState?.tradingStatus }}</p>
+              </div>
+              <span class="market-updated"
+                >Updated {{ view.market?.marketState?.lastUpdated | date: 'MMM d, HH:mm' }}</span
+              >
+            </div>
+            @if (view.ticker$ | async; as ticker) {
+              <div class="ticker-grid" data-testid="market-ticker">
+                <article class="ticker-card ticker-card--primary">
+                  <span>Last</span><strong>{{ ticker.last | number: '1.2-8' }}</strong
+                  ><small>{{ ticker.occurredAt | date: 'mediumTime' }}</small>
+                </article>
+                <article class="ticker-card">
+                  <span>Bid</span><strong>{{ ticker.bid | number: '1.2-8' }}</strong>
+                </article>
+                <article class="ticker-card">
+                  <span>Ask</span><strong>{{ ticker.ask | number: '1.2-8' }}</strong>
+                </article>
+                <article class="ticker-card">
+                  <span>Spread</span
+                  ><strong>{{ ticker.ask - ticker.bid | number: '1.2-8' }}</strong>
+                </article>
+                @if (ticker.volume !== null) {
+                  <article class="ticker-card">
+                    <span>Volume</span><strong>{{ ticker.volume | number: '1.0-2' }}</strong>
+                  </article>
+                }
+              </div>
+            } @else {
+              <p class="market-loading">Waiting for live ticker…</p>
+            }
+            <app-market-chart [history]="view.candles ?? []" />
+          </section>
 
           <section class="thesis">
             <h2>Thesis</h2>
@@ -159,15 +173,15 @@
           <footer class="card-actions">
             <button
               class="btn-reject"
-               (click)="reject(view.plan)"
+              (click)="reject(view.plan)"
               [disabled]="busy$ | async"
-               data-testid="reject-button"
+              data-testid="reject-button"
             >
               Reject
             </button>
             <button
               class="btn-accept"
-               (click)="acceptAndEvaluateRisk(view.plan)"
+              (click)="acceptAndEvaluateRisk(view.plan)"
               [disabled]="busy$ | async"
               data-testid="accept-and-evaluate-risk-button"
             >
