@@ -9,5 +9,7 @@ public record CreateTradePlanRequest(
         @NotNull UUID planningContextId,
         @Positive long contextVersion,
         @NotNull UUID actorId,
-        @NotNull @Positive BigDecimal marketPrice
+        @NotNull @Positive BigDecimal marketPrice,
+        String instrumentProvider,
+        String instrumentProductType
 ) {}

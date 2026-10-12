@@ -22,8 +22,20 @@ public record ManualTradePlanningRequest(
         String thesis,
         Set<String> confirmationConditions,
         Set<String> invalidationConditions,
-        Set<String> managementRules
+        Set<String> managementRules,
+        String instrumentProvider,
+        String instrumentProductType
 ) {
+    public ManualTradePlanningRequest(
+            UUID planningContextId, long contextVersion, UUID actorId, UUID tradingAccountId,
+            String instrument, TradeDirection direction, EntryStrategy entry, StopLoss stopLoss,
+            List<TakeProfit> takeProfits, PositionSizing positionSizing, BigDecimal referencePrice,
+            Instant expiresAt, String expirationPolicy, String thesis, Set<String> confirmationConditions,
+            Set<String> invalidationConditions, Set<String> managementRules) {
+        this(planningContextId, contextVersion, actorId, tradingAccountId, instrument, direction, entry,
+                stopLoss, takeProfits, positionSizing, referencePrice, expiresAt, expirationPolicy, thesis,
+                confirmationConditions, invalidationConditions, managementRules, null, null);
+    }
     public ManualTradePlanningRequest {
         Objects.requireNonNull(planningContextId);
         if (contextVersion < 1) throw new IllegalArgumentException("Context version starts at 1");
@@ -44,6 +56,8 @@ public record ManualTradePlanningRequest(
         confirmationConditions = Set.copyOf(confirmationConditions);
         invalidationConditions = Set.copyOf(invalidationConditions);
         managementRules = Set.copyOf(managementRules == null ? Set.of() : managementRules);
+        instrumentProvider = instrumentProvider == null ? null : instrumentProvider.trim();
+        instrumentProductType = instrumentProductType == null ? null : instrumentProductType.trim();
         if (confirmationConditions.isEmpty() || invalidationConditions.isEmpty()) {
             throw new IllegalArgumentException("Confirmation and invalidation rules are required");
         }

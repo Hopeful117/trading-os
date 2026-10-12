@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository;
+import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
 import com.hope.trading.market_intelligence.application.tradeplan.*;
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
 import com.hope.trading.market_intelligence.security.MiUserPrincipal;
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -18,11 +20,20 @@ import org.springframework.web.bind.annotation.*;
 public final class ManualTradePlanController {
     private final TradePlanApplicationService service;
     private final TradePlanningContextRepository contexts;
+    private final MarketDataClient markets;
+
+    @Autowired
+    public ManualTradePlanController(
+            TradePlanApplicationService service, TradePlanningContextRepository contexts,
+            MarketDataClient markets) {
+        this.service = service;
+        this.contexts = contexts;
+        this.markets = markets;
+    }
 
     public ManualTradePlanController(
             TradePlanApplicationService service, TradePlanningContextRepository contexts) {
-        this.service = service;
-        this.contexts = contexts;
+        this(service, contexts, null);
     }
 
     @PostMapping("/manual")
@@ -41,8 +52,26 @@ public final class ManualTradePlanController {
             return failure(PlanningFailureReason.INVALID_TRADING_CONTEXT,
                     "The requested currency must match the planning context account currency");
         }
+        if (markets == null) {
+            TradePlanningResult result = service.createManual(
+                    request.toApplicationRequest(actorId, context.tradingAccountId()), idempotencyKey);
+            if (result instanceof TradePlanningResult.Success success) {
+                return ResponseEntity.status(HttpStatus.CREATED)
+                        .body(TradePlanResponse.from(success.plan(), context));
+            }
+            TradePlanningResult.Failure failure = (TradePlanningResult.Failure) result;
+            return failure(failure.reason(), failure.explanation(), failure.conflicts());
+        }
+        var matches = markets.findAllMarkets().stream()
+                .filter(value -> value != null && request.instrument().equalsIgnoreCase(value.symbol()))
+                .toList();
+        if (matches.size() != 1 || matches.getFirst().productType() == null) {
+            return failure(PlanningFailureReason.INSUFFICIENT_DATA,
+                    "Canonical instrument product identity is unavailable or ambiguous");
+        }
+        var market = matches.getFirst();
         TradePlanningResult result = service.createManual(
-                request.toApplicationRequest(actorId, context.tradingAccountId()), idempotencyKey);
+                request.toApplicationRequest(actorId, context.tradingAccountId(), market.provider(), market.productType()), idempotencyKey);
         if (result instanceof TradePlanningResult.Success success) {
             TradePlan plan = success.plan();
             return ResponseEntity.status(HttpStatus.CREATED)
@@ -89,11 +118,18 @@ public final class ManualTradePlanController {
             @NotNull Instant expiresAt,
             @NotBlank String expirationPolicy,
             @NotBlank String thesis,
-            @NotEmpty Set<String> confirmationConditions,
-            @NotEmpty Set<String> invalidationConditions,
-            Set<String> managementRules
+        @NotEmpty Set<String> confirmationConditions,
+        @NotEmpty Set<String> invalidationConditions,
+        Set<String> managementRules,
+        String instrumentProvider,
+        String instrumentProductType
     ) {
         ManualTradePlanningRequest toApplicationRequest(UUID actorId, UUID tradingAccountId) {
+            return toApplicationRequest(actorId, tradingAccountId, instrumentProvider, instrumentProductType);
+        }
+
+        ManualTradePlanningRequest toApplicationRequest(UUID actorId, UUID tradingAccountId,
+                                                       String provider, String productType) {
             StopLoss stopLossValue = stopLossValue();
             return new ManualTradePlanningRequest(
                     planningContextId, contextVersion, actorId, tradingAccountId, instrument, direction,
@@ -103,7 +139,7 @@ public final class ManualTradePlanController {
                     new PositionSizing(quantity, notional, monetaryRisk, currency),
                     referencePrice, expiresAt, expirationPolicy, thesis,
                     confirmationConditions, invalidationConditions,
-                    managementRules == null ? Set.of() : managementRules);
+                     managementRules == null ? Set.of() : managementRules, provider, productType);
         }
 
         private StopLoss stopLossValue() {

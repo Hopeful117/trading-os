@@ -79,6 +79,8 @@ public final class InternalManualTradePlanController {
             @NotNull UUID accountId,
             @NotNull Context context,
             @NotBlank String instrument,
+            @NotBlank String instrumentProvider,
+            @NotBlank String instrumentProductType,
             @NotBlank String direction,
             @NotBlank String entryType,
             BigDecimal entryPrice,
@@ -109,7 +111,8 @@ public final class InternalManualTradePlanController {
                     new PositionSizing(quantity, notional, monetaryRisk, context.accountCurrency()),
                     referencePrice, expiresAt, expirationPolicy, thesis,
                     confirmationConditions, invalidationConditions,
-                    managementRules == null ? Set.of() : managementRules);
+                     managementRules == null ? Set.of() : managementRules,
+                     instrumentProvider, instrumentProductType);
         }
 
         private StopLoss stopLossValue() {

@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.List;
 import com.hope.trading.trading_core.shared.domain.model.TradePlanProvenance;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 
 public interface TradePlanRiskPort {
     Snapshot load(UUID tradePlanId, long version);
@@ -21,7 +22,8 @@ public interface TradePlanRiskPort {
                     UUID ownerId, UUID tradingAccountId, String accountCurrency,
                     UUID riskBudgetSourceId, long riskBudgetSourceVersion,
                     UUID planningPreferencesId, long planningPreferencesVersion,
-                     String instrument, String direction, EntryIntent entryIntent, BigDecimal stopPrice,
+                      String instrument, String instrumentProvider, InstrumentProductType instrumentProductType,
+                      String direction, EntryIntent entryIntent, BigDecimal stopPrice,
                      BigDecimal takeProfit,
                      BigDecimal quantity, BigDecimal notional, BigDecimal expectedMonetaryRisk,
                      BigDecimal riskRewardRatio, String sizingCurrency, String sourcePayload,
@@ -37,8 +39,24 @@ public interface TradePlanRiskPort {
             this(tradePlanId, tradePlanVersion, status, "AUTOMATED", createdAt, contextId, contextVersion,
                     contextSnapshotAt, ownerId, tradingAccountId, accountCurrency, riskBudgetSourceId,
                     riskBudgetSourceVersion, planningPreferencesId, planningPreferencesVersion,
-                    instrument, direction, entryIntent, stopPrice, takeProfit, quantity, notional,
+                    instrument, null, null, direction, entryIntent, stopPrice, takeProfit, quantity, notional,
                     expectedMonetaryRisk, null, sizingCurrency, sourcePayload, List.of());
+        }
+
+        public Snapshot(UUID tradePlanId, long tradePlanVersion, String status, String origin, Instant createdAt,
+                        UUID contextId, long contextVersion, Instant contextSnapshotAt,
+                        UUID ownerId, UUID tradingAccountId, String accountCurrency,
+                        UUID riskBudgetSourceId, long riskBudgetSourceVersion,
+                        UUID planningPreferencesId, long planningPreferencesVersion,
+                        String instrument, String direction, EntryIntent entryIntent, BigDecimal stopPrice,
+                        BigDecimal takeProfit, BigDecimal quantity, BigDecimal notional,
+                        BigDecimal expectedMonetaryRisk, BigDecimal riskRewardRatio,
+                        String sizingCurrency, String sourcePayload, List<TradePlanProvenance> provenance) {
+            this(tradePlanId, tradePlanVersion, status, origin, createdAt, contextId, contextVersion,
+                    contextSnapshotAt, ownerId, tradingAccountId, accountCurrency, riskBudgetSourceId,
+                    riskBudgetSourceVersion, planningPreferencesId, planningPreferencesVersion,
+                    instrument, null, null, direction, entryIntent, stopPrice, takeProfit, quantity, notional,
+                    expectedMonetaryRisk, riskRewardRatio, sizingCurrency, sourcePayload, provenance);
         }
 
         public Snapshot {

@@ -35,9 +35,10 @@ public class ExecutionConfiguration {
             RiskPersistence riskPersistence, TradePlanRiskPort tradePlans,
              BrokerAccountRepository brokerAccounts, CreateExecutionIntentService intentCreation,
              ExecutionIntentRepositoryPort intents,
-             ExecutionLifecycleService lifecycle, ExecutionEventPublisher events, Clock clock){
-        return new ValidateAndCreateService(riskPersistence, tradePlans, brokerAccounts,
-                intentCreation, intents, lifecycle, events, clock);
+              ExecutionLifecycleService lifecycle, ExecutionEventPublisher events, Clock clock,
+              com.hope.trading.trading_core.challenge.application.ChallengeInstrumentCompatibilityService challengeCompatibility){
+         return new ValidateAndCreateService(riskPersistence, tradePlans, brokerAccounts,
+                 intentCreation, intents, lifecycle, events, clock, challengeCompatibility);
     }
     @Bean BrokerExecutionAdapter brokerExecutionAdapter(BrokerExecutionClient client){
         return new BrokerExecutionAdapter(client);
@@ -79,16 +80,17 @@ public class ExecutionConfiguration {
     @Bean ExecuteTradeService executeTradeService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
             BrokerExecutionPort broker,ExecutionIdGenerator ids,ExecutionEventPublisher events,
-            ExecutionMetrics metrics,ExecutionValidationService validation,
-            IdempotencyService idempotency,ExecutionLifecycleService lifecycle,Clock clock,
-            ExecutionTimeRiskRevalidationService t1Revalidation,
-            ExecutionFinalizationStep executionFinalizationStep){
+             ExecutionMetrics metrics,ExecutionValidationService validation,
+             IdempotencyService idempotency,ExecutionLifecycleService lifecycle,Clock clock,
+             ExecutionTimeRiskRevalidationService t1Revalidation,
+             ExecutionFinalizationStep executionFinalizationStep,
+             com.hope.trading.trading_core.challenge.application.ChallengeExecutionAdmissionService challengeAdmission){
         return new ExecuteTradeService(intents,new ExecutionValidationStep(validation,lifecycle),
                 new IdempotencyVerificationStep(idempotency),
                 new ExecutionAttemptCreationStep(attempts,ids),
                 new BrokerSubmissionStep(broker,intents,attempts,lifecycle),
                 new BrokerResponseProcessingStep(ids),
-                executionFinalizationStep,events,clock, t1Revalidation);
+                 executionFinalizationStep,events,clock, t1Revalidation, challengeAdmission);
     }
     @Bean RetryExecutionService retryExecutionService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,

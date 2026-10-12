@@ -1,6 +1,8 @@
 package com.hope.trading.trading_core.execution.application.service;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.challenge.application.ChallengeInstrumentCompatibilityException;
+import com.hope.trading.trading_core.challenge.application.ChallengeInstrumentCompatibilityService;
 import com.hope.trading.trading_core.execution.application.command.ValidateAndCreateCommand;
 import com.hope.trading.trading_core.execution.application.port.ExecutionEventPublisher;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
@@ -39,15 +41,17 @@ public final class ValidateAndCreateService {
     private final ExecutionLifecycleService lifecycle;
     private final ExecutionEventPublisher events;
     private final Clock clock;
+    private final ChallengeInstrumentCompatibilityService challengeCompatibility;
 
     public ValidateAndCreateService(RiskPersistence riskPersistence,
                                      TradePlanRiskPort tradePlans,
                                       BrokerAccountRepository brokerAccounts,
                                        CreateExecutionIntentService intentCreation,
-                                       ExecutionIntentRepositoryPort intents,
-                                       ExecutionLifecycleService lifecycle,
-                                       ExecutionEventPublisher events,
-                                       Clock clock) {
+                                      ExecutionIntentRepositoryPort intents,
+                                      ExecutionLifecycleService lifecycle,
+                                      ExecutionEventPublisher events,
+                                      Clock clock,
+                                      ChallengeInstrumentCompatibilityService challengeCompatibility) {
         this.riskPersistence = Objects.requireNonNull(riskPersistence);
         this.tradePlans = Objects.requireNonNull(tradePlans);
         this.brokerAccounts = Objects.requireNonNull(brokerAccounts);
@@ -56,6 +60,18 @@ public final class ValidateAndCreateService {
         this.lifecycle = Objects.requireNonNull(lifecycle);
         this.events = Objects.requireNonNull(events);
         this.clock = Objects.requireNonNull(clock);
+        this.challengeCompatibility = challengeCompatibility;
+    }
+
+    public ValidateAndCreateService(RiskPersistence riskPersistence,
+                                    TradePlanRiskPort tradePlans,
+                                    BrokerAccountRepository brokerAccounts,
+                                    CreateExecutionIntentService intentCreation,
+                                    ExecutionIntentRepositoryPort intents,
+                                    ExecutionLifecycleService lifecycle,
+                                    ExecutionEventPublisher events,
+                                    Clock clock) {
+        this(riskPersistence, tradePlans, brokerAccounts, intentCreation, intents, lifecycle, events, clock, null);
     }
 
     public ExecutionIntent validateAndCreate(ValidateAndCreateCommand command) {
@@ -153,6 +169,14 @@ public final class ValidateAndCreateService {
 
         TradePlanRiskPort.Snapshot readyPlan = tradePlans.prepareForExecution(
                 command.tradePlanId(), command.tradePlanVersion(), command.evaluationId());
+
+        if (challengeCompatibility != null) {
+            try {
+                challengeCompatibility.validate(readyPlan.tradingAccountId(), readyPlan.instrumentProductType());
+            } catch (ChallengeInstrumentCompatibilityException failure) {
+                throw new ExecutionValidationException(failure.code(), failure.getMessage(), 422);
+            }
+        }
 
         // 13. Derive ExecutionParameters from authoritative TradePlan
         ExecutionParameters parameters = deriveParameters(readyPlan);

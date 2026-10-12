@@ -4,10 +4,13 @@ import com.hope.trading.market_intelligence.application.tradeplan.*;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
+import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
 
 @RestController
 @RequestMapping("/trade-plans")
@@ -15,11 +18,22 @@ public final class TradePlanController {
     private final TradePlanApplicationService service;
     private final TradePlanReplanningService replanning;
     private final com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository contexts;
+    private final TradingOpportunityRepository opportunities;
+    private final MarketDataClient marketData;
+
+    @Autowired
+    public TradePlanController(
+            TradePlanApplicationService service, TradePlanReplanningService replanning,
+            com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository contexts,
+            TradingOpportunityRepository opportunities, MarketDataClient marketData) {
+        this.service = service; this.replanning = replanning; this.contexts = contexts;
+        this.opportunities = opportunities; this.marketData = marketData;
+    }
 
     public TradePlanController(
             TradePlanApplicationService service, TradePlanReplanningService replanning,
             com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository contexts) {
-        this.service = service; this.replanning = replanning; this.contexts = contexts;
+        this(service, replanning, contexts, null, null);
     }
 
     private TradePlanResponse view(TradePlan plan) {
@@ -30,13 +44,35 @@ public final class TradePlanController {
 
     @PostMapping
     public ResponseEntity<Object> create(@Valid @RequestBody CreateTradePlanRequest request) {
+        var identity = opportunities == null || marketData == null
+                ? new InstrumentIdentity(request.instrumentProvider(), request.instrumentProductType())
+                : canonicalIdentity(request.opportunityIds());
         return response(service.create(new TradePlanningRequest(
                 request.opportunityIds().stream().map(OpportunityId::new)
                         .collect(Collectors.toUnmodifiableSet()),
                 request.planningContextId(), request.contextVersion(), request.actorId(),
                 request.marketPrice(),
-                null, null, "")), HttpStatus.CREATED);
+                 null, null, "", Map.of(), identity.provider(), identity.productType())),
+                HttpStatus.CREATED);
     }
+
+    private InstrumentIdentity canonicalIdentity(Set<UUID> opportunityIds) {
+        var markets = opportunityIds.stream()
+                .map(id -> opportunities.findLatest(new OpportunityId(id)).orElseThrow())
+                .map(opportunity -> opportunity.marketId().orElseThrow())
+                .map(marketData::findMarket)
+                .toList();
+        if (markets.isEmpty() || markets.stream().anyMatch(market -> market.provider() == null
+                || market.productType() == null)
+                || markets.stream().map(market -> market.provider() + ":" + market.productType())
+                .distinct().count() != 1) {
+            throw new IllegalArgumentException("Canonical market identity is unavailable or inconsistent");
+        }
+        var market = markets.getFirst();
+        return new InstrumentIdentity(market.provider(), market.productType());
+    }
+
+    private record InstrumentIdentity(String provider, String productType) { }
     @GetMapping("/{id}")
     public ResponseEntity<TradePlanResponse> latest(@PathVariable UUID id) {
         return service.latest(new TradePlanId(id)).map(this::view)

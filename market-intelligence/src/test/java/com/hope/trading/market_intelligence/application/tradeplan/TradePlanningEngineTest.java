@@ -44,7 +44,8 @@ class TradePlanningEngineTest {
         TradePlanningRequest exact = new TradePlanningRequest(
                 Set.of(environment.opportunity().id()), environment.context().id(),
                 environment.context().version(), environment.owner(), BigDecimal.valueOf(100),
-                null, null, "", Map.of(environment.opportunity().id(), new OpportunityVersion(1)));
+                 null, null, "", Map.of(environment.opportunity().id(), new OpportunityVersion(1)),
+                 "KRAKEN", "SPOT");
 
         assertThat(environment.engine().plan(exact))
                 .isInstanceOf(TradePlanningResult.Success.class);
@@ -63,7 +64,7 @@ class TradePlanningEngineTest {
                 new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
                 BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
                 "Human discretionary setup", Set.of("Price confirms setup"),
-                Set.of("Stop is reached"), Set.of());
+                 Set.of("Stop is reached"), Set.of(), "KRAKEN", "SPOT");
 
         TradePlanningResult result = environment.service().createManual(request);
 
@@ -93,7 +94,7 @@ class TradePlanningEngineTest {
                 new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
                 BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
                 "Human discretionary entry without initial protection", Set.of("Human confirms entry"),
-                Set.of("Trader adds protection later"), Set.of());
+                 Set.of("Trader adds protection later"), Set.of(), "KRAKEN", "SPOT");
 
         assertThat(environment.service().createManual(request))
                 .isInstanceOfSatisfying(TradePlanningResult.Success.class, success -> {
@@ -132,7 +133,8 @@ class TradePlanningEngineTest {
                 request.instrument(), request.direction(), request.entry(), request.stopLoss(),
                 request.takeProfits(), request.positionSizing(), request.referencePrice(),
                 request.expiresAt(), request.expirationPolicy(), "Changed thesis",
-                request.confirmationConditions(), request.invalidationConditions(), request.managementRules());
+                 request.confirmationConditions(), request.invalidationConditions(), request.managementRules(),
+                 request.instrumentProvider(), request.instrumentProductType());
 
         var firstError = catchThrowable(() -> environment.service().createManual(changed, "manual-key"));
         assertThat(firstError)
@@ -151,7 +153,8 @@ class TradePlanningEngineTest {
                 request.tradingAccountId(), request.instrument(), request.direction(), request.entry(),
                 request.stopLoss(), request.takeProfits(), request.positionSizing(), request.referencePrice(),
                 request.expiresAt().plusSeconds(60), request.expirationPolicy(), request.thesis(),
-                request.confirmationConditions(), request.invalidationConditions(), request.managementRules());
+                 request.confirmationConditions(), request.invalidationConditions(), request.managementRules(),
+                 request.instrumentProvider(), request.instrumentProductType());
 
         var secondError = catchThrowable(() -> environment.service().createManual(changed, "expiration-key"));
         assertThat(secondError)
@@ -189,7 +192,7 @@ class TradePlanningEngineTest {
                 new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
                 BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
                 "Human discretionary setup", Set.of("Price confirms setup"),
-                Set.of("Stop is reached"), Set.of());
+                 Set.of("Stop is reached"), Set.of(), "KRAKEN", "SPOT");
     }
 
     @Test

@@ -45,8 +45,9 @@ public interface MarketIntelligenceTradePlanningClient {
 
     record Request(UUID actorId, UUID accountId, Context context) { }
     record ManualRequest(UUID actorId, UUID accountId, Context context,
-                         String instrument, String direction, String entryType,
-                         BigDecimal entryPrice, BigDecimal referencePrice, BigDecimal stopLoss,
+                          String instrument, String direction, String entryType,
+                          String instrumentProvider, String instrumentProductType,
+                          BigDecimal entryPrice, BigDecimal referencePrice, BigDecimal stopLoss,
                          String stopRationale, java.util.List<TakeProfit> takeProfits,
                          BigDecimal quantity, BigDecimal notional, BigDecimal monetaryRisk,
                          Instant expiresAt, String expirationPolicy, String thesis,
@@ -71,13 +72,35 @@ public interface MarketIntelligenceTradePlanningClient {
     record PlanTransport(UUID id, long version, Long previousVersion, String status,
                          String origin, UUID authorId,
                          UUID planningContextId, long planningContextVersion,
-                         Instant contextCapturedAt, String instrument, String direction,
-                         String entryType, BigDecimal entryPrice, BigDecimal stopLoss,
+                          Instant contextCapturedAt, String instrument, String direction,
+                          String instrumentProvider, String instrumentProductType,
+                          String entryType, BigDecimal entryPrice, BigDecimal stopLoss,
                          java.util.List<BigDecimal> takeProfits, BigDecimal quantity,
                          BigDecimal notional, BigDecimal monetaryRisk, BigDecimal riskReward,
                          Instant expiresAt, String thesis, java.util.Set<UUID> opportunityIds,
                          java.util.Set<UUID> observationIds, java.util.Set<UUID> aiAnalysisIds,
                          java.util.Set<String> confirmationConditions,
-                         java.util.Set<String> invalidationConditions,
-                         java.util.Set<String> managementRules, Instant createdAt, UUID tradingAccountId) { }
+                          java.util.Set<String> invalidationConditions,
+                          java.util.Set<String> managementRules, Instant createdAt, UUID tradingAccountId) {
+        public PlanTransport(UUID id, long version, Long previousVersion, String status,
+                             String origin, UUID authorId, UUID planningContextId,
+                             long planningContextVersion, Instant contextCapturedAt,
+                             String instrument, String direction, String entryType,
+                             BigDecimal entryPrice, BigDecimal stopLoss,
+                             java.util.List<BigDecimal> takeProfits, BigDecimal quantity,
+                             BigDecimal notional, BigDecimal monetaryRisk, BigDecimal riskReward,
+                             Instant expiresAt, String thesis, java.util.Set<UUID> opportunityIds,
+                             java.util.Set<UUID> observationIds, java.util.Set<UUID> aiAnalysisIds,
+                             java.util.Set<String> confirmationConditions,
+                             java.util.Set<String> invalidationConditions,
+                             java.util.Set<String> managementRules, Instant createdAt,
+                             UUID tradingAccountId) {
+            this(id, version, previousVersion, status, origin, authorId, planningContextId,
+                    planningContextVersion, contextCapturedAt, instrument, null, null, direction,
+                    entryType, entryPrice, stopLoss, takeProfits, quantity, notional, monetaryRisk,
+                    riskReward, expiresAt, thesis, opportunityIds, observationIds, aiAnalysisIds,
+                    confirmationConditions, invalidationConditions, managementRules, createdAt,
+                    tradingAccountId);
+        }
+    }
 }

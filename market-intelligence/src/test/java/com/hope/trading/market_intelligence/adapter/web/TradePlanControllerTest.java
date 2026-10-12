@@ -25,7 +25,9 @@ class TradePlanControllerTest {
                   "planningContextId":"%s",
                   "contextVersion":1,
                   "actorId":"%s",
-                  "marketPrice":100
+                  "marketPrice":100,
+                  "instrumentProvider":"KRAKEN",
+                  "instrumentProductType":"SPOT"
                 }
                 """.formatted(
                 environment.opportunity().id().value(), environment.context().id(),
@@ -89,7 +91,9 @@ class TradePlanControllerTest {
                 {
                   "planningContextId":"%s",
                   "contextVersion":1,
-                  "instrument":"BTC/EUR",
+                   "instrument":"BTC/EUR",
+                   "instrumentProvider":"KRAKEN",
+                   "instrumentProductType":"SPOT",
                   "direction":"LONG",
                   "entryType":"LIMIT",
                   "entryPrice":100,
@@ -158,7 +162,8 @@ class TradePlanControllerTest {
         return """
                 {
                   "planningContextId":"%s", "contextVersion":1,
-                  "instrument":"BTC/EUR", "direction":"LONG", "entryType":"LIMIT",
+                   "instrument":"BTC/EUR", "instrumentProvider":"KRAKEN", "instrumentProductType":"SPOT",
+                   "direction":"LONG", "entryType":"LIMIT",
                   "entryPrice":100, "referencePrice":100, "stopLoss":99,
                   "stopRationale":"manual invalidation", "takeProfits":[{"price":102,"allocationPercent":100}],
                   "quantity":1, "notional":100, "monetaryRisk":1, "currency":"%s",

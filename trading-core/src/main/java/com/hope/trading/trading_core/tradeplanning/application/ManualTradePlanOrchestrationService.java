@@ -84,6 +84,11 @@ public final class ManualTradePlanOrchestrationService {
             throw failure(HttpStatus.UNPROCESSABLE_ENTITY,
                     "STOP_RATIONALE_REQUIRED", "A stop rationale is required when a stop-loss is provided");
         }
+        if (market.getProvider() == null || market.getProductType() == null) {
+            throw failure(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "INSTRUMENT_PRODUCT_IDENTITY_UNAVAILABLE",
+                    "Market product identity is unavailable");
+        }
         var context = context(actorId, request.accountId(), account.getBaseCurrency(), profile);
         BigDecimal notional = request.quantity().multiply(
                 entryType.equals("LIMIT") ? request.entryPrice() : request.referencePrice());
@@ -96,6 +101,7 @@ public final class ManualTradePlanOrchestrationService {
                     idempotencyKey,
                     new MarketIntelligenceTradePlanningClient.ManualRequest(
                             actorId, request.accountId(), context, market.getSymbol(), direction, entryType,
+                            market.getProvider().name(), market.getProductType().name(),
                             request.entryPrice(), request.referencePrice(), request.stopLoss(),
                             request.stopRationale(), request.takeProfits().stream()
                                     .map(value -> new MarketIntelligenceTradePlanningClient.TakeProfit(
