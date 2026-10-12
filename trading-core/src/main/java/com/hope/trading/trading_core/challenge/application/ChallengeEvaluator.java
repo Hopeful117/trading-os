@@ -8,7 +8,6 @@ import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import com.hope.trading.trading_core.challenge.domain.ProgressionValueSource;
 import com.hope.trading.trading_core.model.Account;
-import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -19,6 +18,8 @@ import java.util.UUID;
 /** Applies one authoritative Risk and progression evaluation to a Challenge. */
 @Service
 public final class ChallengeEvaluator {
+    private final ChallengeProgressionValueResolver progressionValues = new ChallengeProgressionValueResolver();
+
     public ChallengeStatus evaluate(ChallengeInstance challenge, ChallengeDefinition definition,
                                     Account account, RiskValidationResult risk, UUID riskEvaluationId,
                                     Instant evaluatedAt) {
@@ -36,28 +37,19 @@ public final class ChallengeEvaluator {
         if (risk.evaluationStatus() != com.hope.trading.risk.domain.RiskTypes.EvaluationStatus.COMPLETED) {
             return ChallengeStatus.ACTIVE;
         }
-        if (definition.progressionValueSource() == ProgressionValueSource.BALANCE) {
-            BigDecimal balance = progressionValue(account, definition);
+        if (definition.progressionValueSource() == ProgressionValueSource.BALANCE
+                || definition.progressionValueSource() == ProgressionValueSource.EQUITY) {
+            BigDecimal value = progressionValues.resolve(account, definition).orElse(null);
+            if (value == null) return ChallengeStatus.ACTIVE;
             BigDecimal target = definition.startingCapital()
                     .add(definition.startingCapital().multiply(definition.profitTargetRatio()));
-            if (balance.compareTo(target) >= 0) {
-                challenge.pass(evaluatedAt, "Challenge balance target reached", riskEvaluationId);
+            if (value.compareTo(target) >= 0) {
+                challenge.pass(evaluatedAt, "Challenge " + definition.progressionValueSource().name().toLowerCase()
+                        + " target reached", riskEvaluationId);
                 return ChallengeStatus.PASSED;
             }
         }
         return ChallengeStatus.ACTIVE;
-    }
-
-    private BigDecimal progressionValue(Account account, ChallengeDefinition definition) {
-        if (account.getSettlementModel() == SettlementModel.CASH && account.getRealizedBalance() != null) {
-            return account.getRealizedBalance();
-        }
-        return account.getBalances().stream()
-                .filter(value -> definition.capitalCurrency().equalsIgnoreCase(value.getAsset()))
-                .map(value -> value.getAmount())
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Challenge balance is unavailable"));
     }
 
     private boolean terminalRiskViolation(ChallengeInstance challenge, RiskValidationResult risk) {

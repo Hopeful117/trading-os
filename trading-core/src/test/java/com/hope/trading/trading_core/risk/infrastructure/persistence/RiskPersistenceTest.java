@@ -12,16 +12,23 @@ import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.risk.application.RiskProfileCatalogService;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
-import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -116,6 +123,7 @@ class RiskPersistenceTest {
                 user, "risk-profile", "x", "risk-profile@test.local", "ROLE_USER");
         jdbc.update("insert into accounts(account_id,name,base_currency,peak_equity,equity,user_id) values(?,?,?,?,?,?)",
                 account, "main", "USD", 0, 0, user);
+        insertRiskConfiguration(account);
         jdbc.update("insert into risk_profile(id,semantic_version,policy_id,policy_version,authority,created_at,provenance) values(?,?,?,?,?,?,?)",
                 profile, "2.1.0", "policy", "7.0.0", "PLATFORM", Instant.now(), "policy-source");
         for (String rule : new String[]{"MAX_POSITION_RISK", "MAX_EXPOSURE", "DAILY_DRAWDOWN"}) {
@@ -175,6 +183,7 @@ class RiskPersistenceTest {
                 user, "baseline-user", "x", "baseline@test.local", "ROLE_USER");
         jdbc.update("insert into accounts(account_id,name,base_currency,peak_equity,equity,user_id) values(?,?,?,?,?,?)",
                 account, "main", "USD", 0, 0, user);
+        insertRiskConfiguration(account);
         LocalDate day = LocalDate.parse("2026-08-01");
         Instant startsAt = Instant.parse("2026-08-01T00:00:00Z");
         Instant endsAt = Instant.parse("2026-08-02T00:00:00Z");
@@ -189,5 +198,77 @@ class RiskPersistenceTest {
         assertThat(second.payload()).isEqualTo("first-provenance");
         assertThat(jdbc.queryForObject("select count(*) from risk_day_baseline where account_id=? and risk_day=?",
                 Integer.class, account, day)).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentBaselineCreationReturnsTheFirstStoredBaseline() throws Exception {
+        UUID user = UUID.randomUUID(); UUID account = UUID.randomUUID();
+        jdbc.update("insert into users(user_id,username,password,email,role) values(?,?,?,?,?)",
+                user, "concurrent-baseline-user", "x", "concurrent-baseline@test.local", "ROLE_USER");
+        jdbc.update("insert into accounts(account_id,name,base_currency,peak_equity,equity,user_id) values(?,?,?,?,?,?)",
+                account, "main", "USD", 0, 0, user);
+        insertRiskConfiguration(account);
+        LocalDate day = LocalDate.parse("2026-08-02");
+        Instant startsAt = Instant.parse("2026-08-02T00:00:00Z");
+        Instant endsAt = Instant.parse("2026-08-03T00:00:00Z");
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<RiskPersistence.Baseline>> futures = new ArrayList<>();
+            futures.add(executor.submit(() -> baselineAfter(start, ready, account, day, startsAt, endsAt,
+                    new BigDecimal("10000"), "first")));
+            futures.add(executor.submit(() -> baselineAfter(start, ready, account, day, startsAt, endsAt,
+                    new BigDecimal("99999"), "second")));
+            ready.await();
+            start.countDown();
+
+            RiskPersistence.Baseline first = futures.get(0).get();
+            RiskPersistence.Baseline second = futures.get(1).get();
+            assertThat(first.version()).isEqualTo(second.version());
+            assertThat(first.amount()).isEqualByComparingTo(second.amount());
+            assertThat(List.of("first", "second")).contains(first.payload());
+            assertThat(List.of("first", "second")).contains(second.payload());
+            assertThat(jdbc.queryForObject("select count(*) from risk_day_baseline where account_id=? and risk_day=?",
+                    Integer.class, account, day)).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+            jdbc.update("delete from risk_day_baseline where account_id=?", account);
+            jdbc.update("delete from account_risk_configuration where account_id=?", account);
+            jdbc.update("delete from accounts where account_id=?", account);
+            jdbc.update("delete from users where user_id=?", user);
+        }
+    }
+
+    private RiskPersistence.Baseline baselineAfter(CountDownLatch start, CountDownLatch ready, UUID account,
+                                                     LocalDate day, Instant startsAt, Instant endsAt,
+                                                     BigDecimal amount, String payload) throws Exception {
+        ready.countDown();
+        start.await();
+        return persistence.baseline(account, day, startsAt, endsAt, "USD", amount, payload);
+    }
+
+    private void insertRiskConfiguration(UUID account) {
+        jdbc.update("insert into account_risk_configuration(account_id,broker_account_id,risk_time_zone,"
+                        + "risk_day_reset_time,reporting_currency,portfolio_id) values(?,?,?,?,?,?)",
+                account, UUID.randomUUID(), "UTC", "00:00", "USD", UUID.randomUUID());
+    }
+
+    @Test
+    void challengeMigrationAllowsEquityAndSettlementRequirement() {
+        UUID definition = UUID.randomUUID();
+        Instant now = Instant.parse("2026-10-12T10:00:00Z");
+        jdbc.update("insert into challenge_definition(id,definition_version,provider,product,plan_code,"
+                        + "capital_currency,starting_capital,profit_target_ratio,progression_value_source,"
+                        + "required_settlement_model,risk_policy_id,risk_policy_version,source_url,retrieved_at,"
+                        + "effective_from,provenance,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                definition, "1.0.0", "TEST", "PROP", "EQUITY", "USD", 10000, .10, "EQUITY", "CASH",
+                PAPER_STANDARD_ID, "1.0.0", "https://example.test", now, now, "test", now);
+
+        assertThat(jdbc.queryForObject("select progression_value_source from challenge_definition where id=?",
+                String.class, definition)).isEqualTo("EQUITY");
+        assertThat(jdbc.queryForObject("select required_settlement_model from challenge_definition where id=?",
+                String.class, definition)).isEqualTo("CASH");
     }
 }

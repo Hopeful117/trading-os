@@ -13,6 +13,7 @@ import com.hope.trading.trading_core.challenge.domain.ProgressionValueSource;
 import com.hope.trading.trading_core.helper.Role;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
+import com.hope.trading.trading_core.model.AccountValuationStatus;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class ChallengeEvaluatorTest {
     private final UUID policyId = UUID.randomUUID();
     private final ChallengeDefinition definition = ChallengeDefinition.create(UUID.randomUUID(), "1.0.0",
             "TEST_PROVIDER", "TEST_PRODUCT", "PLAN_A", "USD", new BigDecimal("10000"),
-            new BigDecimal("0.10"), ProgressionValueSource.BALANCE, policyId, "1.0.0",
+            new BigDecimal("0.10"), ProgressionValueSource.BALANCE, SettlementModel.INVENTORY, policyId, "1.0.0",
             "https://example.test", NOW, NOW, "test", NOW);
     private final ChallengeEvaluator evaluator = new ChallengeEvaluator();
 
@@ -57,6 +58,60 @@ class ChallengeEvaluatorTest {
         account.setSettlementModel(SettlementModel.CASH);
         account.setRealizedBalance(new BigDecimal("10000"));
         assertThat(evaluator.evaluate(challenge, definition, account, risk(List.of()), UUID.randomUUID(), NOW))
+                .isEqualTo(ChallengeStatus.ACTIVE);
+    }
+
+    @Test
+    void freshAuthoritativeEquityCanPassWhileRealizedBalanceIsBelowTarget() {
+        ChallengeDefinition equityDefinition = ChallengeDefinition.create(UUID.randomUUID(), "1.0.0",
+                "TEST_PROVIDER", "TEST_PRODUCT", "PLAN_EQUITY", "USD", new BigDecimal("10000"),
+                new BigDecimal("0.10"), ProgressionValueSource.EQUITY, SettlementModel.CASH, policyId,
+                "1.0.0", "https://example.test", NOW, NOW, "test", NOW);
+        Account account = account("11000");
+        account.setSettlementModel(SettlementModel.CASH);
+        account.setRealizedBalance(new BigDecimal("10000"));
+        account.setValuationStatus(AccountValuationStatus.FRESH);
+        account.setValuedAt(NOW);
+        ChallengeInstance challenge = ChallengeInstance.start(UUID.randomUUID(), UUID.randomUUID(), equityDefinition,
+                equityDefinition.startingCapital(), NOW);
+
+        assertThat(evaluator.evaluate(challenge, equityDefinition, account, risk(List.of()), UUID.randomUUID(), NOW))
+                .isEqualTo(ChallengeStatus.PASSED);
+    }
+
+    @Test
+    void realizedBalanceCannotPassEquityChallengeWhenEquityIsBelowTarget() {
+        ChallengeDefinition equityDefinition = ChallengeDefinition.create(UUID.randomUUID(), "1.0.0",
+                "TEST_PROVIDER", "TEST_PRODUCT", "PLAN_EQUITY", "USD", new BigDecimal("10000"),
+                new BigDecimal("0.10"), ProgressionValueSource.EQUITY, SettlementModel.CASH, policyId,
+                "1.0.0", "https://example.test", NOW, NOW, "test", NOW);
+        Account account = account("10500");
+        account.setSettlementModel(SettlementModel.CASH);
+        account.setRealizedBalance(new BigDecimal("11000"));
+        account.setValuationStatus(AccountValuationStatus.FRESH);
+        account.setValuedAt(NOW);
+        ChallengeInstance challenge = ChallengeInstance.start(UUID.randomUUID(), UUID.randomUUID(), equityDefinition,
+                equityDefinition.startingCapital(), NOW);
+
+        assertThat(evaluator.evaluate(challenge, equityDefinition, account, risk(List.of()), UUID.randomUUID(), NOW))
+                .isEqualTo(ChallengeStatus.ACTIVE);
+    }
+
+    @Test
+    void staleEquityCannotPassChallenge() {
+        ChallengeDefinition equityDefinition = ChallengeDefinition.create(UUID.randomUUID(), "1.0.0",
+                "TEST_PROVIDER", "TEST_PRODUCT", "PLAN_EQUITY", "USD", new BigDecimal("10000"),
+                new BigDecimal("0.10"), ProgressionValueSource.EQUITY, SettlementModel.CASH, policyId,
+                "1.0.0", "https://example.test", NOW, NOW, "test", NOW);
+        Account account = account("11000");
+        account.setSettlementModel(SettlementModel.CASH);
+        account.setRealizedBalance(new BigDecimal("10000"));
+        account.setValuationStatus(AccountValuationStatus.STALE);
+        account.setValuedAt(NOW);
+        ChallengeInstance challenge = ChallengeInstance.start(UUID.randomUUID(), UUID.randomUUID(), equityDefinition,
+                equityDefinition.startingCapital(), NOW);
+
+        assertThat(evaluator.evaluate(challenge, equityDefinition, account, risk(List.of()), UUID.randomUUID(), NOW))
                 .isEqualTo(ChallengeStatus.ACTIVE);
     }
 

@@ -84,7 +84,8 @@ class ChallengeReevaluationServiceTest {
 
     private ChallengeDefinition definition(UUID policyId) {
         return ChallengeDefinition.create(UUID.randomUUID(), "1.0.0", "TEST", "PAPER", "PLAN_A", "USD",
-                new BigDecimal("10000"), new BigDecimal("0.10"), ProgressionValueSource.BALANCE, policyId,
+                new BigDecimal("10000"), new BigDecimal("0.10"), ProgressionValueSource.BALANCE,
+                com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY, policyId,
                 "1.0.0", "https://example.test", NOW, NOW, "test", NOW);
     }
 

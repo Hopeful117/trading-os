@@ -115,10 +115,44 @@ class StartChallengeServiceTest {
         verify(instances, never()).save(any());
     }
 
+    @Test
+    void rejectsSettlementMismatchBeforeCreatingChallenge() {
+        AccountRepository accounts = mock(AccountRepository.class);
+        ChallengeDefinitionRepository definitions = mock(ChallengeDefinitionRepository.class);
+        ChallengeInstanceRepository instances = mock(ChallengeInstanceRepository.class);
+        RiskPersistence riskPersistence = mock(RiskPersistence.class);
+        UUID ownerId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        UUID policyId = UUID.randomUUID();
+        User owner = User.builder().userId(ownerId).username("owner").role(Role.ROLE_USER).build();
+        Account account = Account.builder().accountId(accountId).baseCurrency("USD")
+                .settlementModel(com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY)
+                .startingBalance(new BigDecimal("10000")).user(owner).build();
+        ChallengeDefinition definition = ChallengeDefinition.create(definitionId, "1.0.0", "TEST_PROVIDER",
+                "TEST_CHALLENGE", "PLAN_A", "USD", new BigDecimal("10000"), new BigDecimal("0.12"),
+                com.hope.trading.trading_core.challenge.domain.ProgressionValueSource.BALANCE,
+                com.hope.trading.trading_core.shared.domain.model.SettlementModel.CASH, policyId, "1.0.0",
+                "https://example.test/definition", NOW, NOW, "source", NOW);
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        when(definitions.findById(new ChallengeDefinitionKey(definitionId, "1.0.0")))
+                .thenReturn(Optional.of(definition));
+        when(instances.existsByAccountIdAndStatus(accountId, ChallengeStatus.ACTIVE)).thenReturn(false);
+
+        StartChallengeService service = new StartChallengeService(accounts, definitions, instances, riskPersistence,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.start(new StartChallengeCommand(ownerId, accountId, definitionId, "1.0.0")));
+        verify(riskPersistence, never()).profile(any(), any());
+        verify(instances, never()).save(any());
+    }
+
     private static ChallengeDefinition definition(UUID id, UUID policyId) {
         return ChallengeDefinition.create(id, "1.0.0", "TEST_PROVIDER", "TEST_CHALLENGE", "PLAN_A", "USD",
                 new BigDecimal("10000"), new BigDecimal("0.12"),
-                com.hope.trading.trading_core.challenge.domain.ProgressionValueSource.BALANCE, policyId,
+                com.hope.trading.trading_core.challenge.domain.ProgressionValueSource.BALANCE,
+                com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY, policyId,
                 "1.0.0", "https://example.test/definition", NOW, NOW, "source", NOW);
     }
 }

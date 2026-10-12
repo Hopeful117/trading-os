@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ChallengeDefinitionTest {
@@ -34,10 +35,12 @@ class ChallengeDefinitionTest {
         assertThrows(IllegalArgumentException.class,
                 () -> ChallengeDefinition.create(UUID.randomUUID(), "1.0.0", "TEST", "PROP", "PLAN_A",
                         "USD", BigDecimal.ZERO, new BigDecimal("0.1"), ProgressionValueSource.BALANCE,
+                        com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY,
                         UUID.randomUUID(), "1.0.0", "https://example.test", NOW, NOW, "source", NOW));
         assertThrows(IllegalArgumentException.class,
                 () -> ChallengeDefinition.create(UUID.randomUUID(), "1.0.0", "TEST", "PROP", "PLAN_A",
                         "USD", BigDecimal.TEN, BigDecimal.ZERO, ProgressionValueSource.BALANCE,
+                        com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY,
                         UUID.randomUUID(), "1.0.0", "https://example.test", NOW, NOW, "source", NOW));
     }
 
@@ -54,9 +57,20 @@ class ChallengeDefinitionTest {
         assertEquals(first.planCode(), second.planCode());
     }
 
+    @Test
+    void preservesNullableSettlementRequirementForHistoricalDefinitions() {
+        ChallengeDefinition definition = ChallengeDefinition.create(UUID.randomUUID(), "1.0.0", "TEST", "PROP",
+                "PLAN_A", "USD", new BigDecimal("10000"), new BigDecimal("0.12"),
+                ProgressionValueSource.BALANCE, null, UUID.randomUUID(), "1.0.0",
+                "https://example.test/definition", NOW, NOW, "source", NOW);
+
+        assertNull(definition.requiredSettlementModel());
+    }
+
     public static ChallengeDefinition definition(UUID id, String version, UUID policyId) {
         return ChallengeDefinition.create(id, version, "TEST_PROVIDER", "TEST_CHALLENGE", "PLAN_A", "USD",
-                new BigDecimal("10000"), new BigDecimal("0.12"), ProgressionValueSource.BALANCE, policyId,
+                new BigDecimal("10000"), new BigDecimal("0.12"), ProgressionValueSource.BALANCE,
+                com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY, policyId,
                 "1.0.0", "https://example.test/definition", NOW, NOW, "source", NOW);
     }
 }
