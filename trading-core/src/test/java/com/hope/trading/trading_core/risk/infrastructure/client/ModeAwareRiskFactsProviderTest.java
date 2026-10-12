@@ -83,15 +83,15 @@ class ModeAwareRiskFactsProviderTest {
     void paperCashRefreshesValuationBeforeRiskFacts() {
         UUID brokerId = UUID.randomUUID();
         Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency("USD")
-                .settlementModel(SettlementModel.CASH).realizedBalance(new BigDecimal("1000"))
-                .equity(new BigDecimal("900")).balances(List.of(
+                .settlementModel(SettlementModel.CASH).realizedBalance(new BigDecimal("1200"))
+                .equity(new BigDecimal("1100")).balances(List.of(
                         AccountBalance.builder().asset("USD").amount(new BigDecimal("1000")).build()))
                 .build();
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
         when(brokerAccount.id()).thenReturn(brokerId);
         PaperDerivativeAccountValuationService valuation = mock(PaperDerivativeAccountValuationService.class);
         when(valuation.refresh(account)).thenReturn(new PaperDerivativeAccountValuationService.ValuationResult(
-                new BigDecimal("1000"), new BigDecimal("-100"), new BigDecimal("900"),
+                new BigDecimal("1200"), new BigDecimal("-100"), new BigDecimal("1100"),
                 AccountValuationStatus.FRESH, from, from, null));
         ModeAwareRiskFactsProvider provider = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper(),
                 java.time.Clock.systemUTC(), valuation);
@@ -99,7 +99,8 @@ class ModeAwareRiskFactsProviderTest {
         RiskFactsProvider.Snapshot snapshot = provider.load(account, brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isTrue();
-        assertThat(snapshot.account().equity()).isEqualByComparingTo("900");
+        assertThat(snapshot.account().balance()).isEqualByComparingTo("1200");
+        assertThat(snapshot.account().equity()).isEqualByComparingTo("1100");
         verify(valuation).refresh(account);
     }
 

@@ -16,7 +16,6 @@ import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.RulesRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
-import com.hope.trading.trading_core.risk.application.RiskDay;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidationException;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileService;
@@ -82,7 +81,8 @@ public class BrokerAccountService {
                 throw new IllegalArgumentException("initialCapital must be positive for PAPER accounts");
             }
             createPaperAccount(ownerId, savedAccount, request.initialCapital(), profileReference,
-                    effectiveRiskProfile, request.settlementModel());
+                    effectiveRiskProfile, request.settlementModel(), request.riskTimeZone(),
+                    request.riskDayResetTime());
         }
 
         return map(savedAccount);
@@ -91,7 +91,9 @@ public class BrokerAccountService {
     private void createPaperAccount(UUID ownerId, BrokerAccount brokerAccount, BigDecimal initialCapital,
                                      RiskProfileReference profileReference,
                                      EffectiveRiskRuleSet effectiveRiskProfile,
-                                     SettlementModel requestedSettlementModel) {
+                                     SettlementModel requestedSettlementModel,
+                                     String riskTimeZone,
+                                     String riskDayResetTime) {
         // Get default rules (or create default if none exists)
         Rules rules = rulesRepository.findByName("Default Paper Trading Rules")
                 .orElseGet(() -> createDefaultRules());
@@ -125,15 +127,8 @@ public class BrokerAccountService {
         // Link the account to the user and broker account
         // Note: The user relationship is set via the owner in the service layer
         Account savedAccount = accountRepository.save(account);
-        riskPersistence.configuration(savedAccount.getAccountId(), brokerAccount.id(), "UTC",
-                savedAccount.getBaseCurrency(), savedAccount.getAccountId());
-        RiskDay riskDay = RiskDay.containing(clock.instant(), "UTC");
-        riskPersistence.baseline(savedAccount.getAccountId(), riskDay.date(), riskDay.startsAt(), riskDay.endsAt(),
-                savedAccount.getBaseCurrency(), initialCapital,
-                riskPersistence.write(java.util.Map.of(
-                        "source", "PAPER_ACCOUNT_PROVISIONING",
-                        "initialCapital", initialCapital,
-                        "accountVersion", savedAccount.getVersion())));
+        riskPersistence.configuration(savedAccount.getAccountId(), brokerAccount.id(), riskTimeZone,
+                savedAccount.getBaseCurrency(), savedAccount.getAccountId(), riskDayResetTime);
         riskPersistence.assignProfile(savedAccount.getAccountId(), profileReference.profileId(),
                 profileReference.semanticVersion(), clock.instant(), "paper-account-provisioning");
         TradePlanningProfile profile = tradePlanningProfiles.create(ownerId,

@@ -93,7 +93,9 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
         if (trades.stream().anyMatch(this::invalidTradeFacts)) {
             reasons.add("PAPER_TRADE_FACTS_INVALID");
         }
-        BigDecimal balance = valuationAsset == null ? null : balances.get(valuationAsset);
+        BigDecimal balance = account != null && account.getSettlementModel() == SettlementModel.CASH
+                ? account.getRealizedBalance()
+                : valuationAsset == null ? null : balances.get(valuationAsset);
         if (balance == null || account.getEquity() == null) {
             reasons.add("PAPER_ACCOUNT_VALUATION_INCOMPLETE");
         }

@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -110,6 +111,8 @@ public class RiskPersistence {
     @Transactional
     public void configuration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
                               String reportingCurrency, UUID portfolioId, String riskDayResetTime) {
+        ZoneId.of(riskTimeZone);
+        LocalTime.parse(riskDayResetTime);
         AccountRiskConfigurationEntity value = new AccountRiskConfigurationEntity();
         value.accountId = accountId;
         value.brokerAccountId = brokerAccountId;
@@ -169,10 +172,15 @@ public class RiskPersistence {
         return entity.version;
     }
 
+    @Transactional
     public Baseline baseline(UUID accountId, LocalDate riskDay, Instant startsAt, Instant endsAt,
                              String currency, BigDecimal amount, String payload) {
         if (entityManager.find(Account.class, accountId) == null) {
             throw new IllegalStateException("Account does not exist for risk-day baseline");
+        }
+        if (entityManager.find(AccountRiskConfigurationEntity.class, accountId,
+                LockModeType.PESSIMISTIC_WRITE) == null) {
+            throw new IllegalStateException("Account risk configuration does not exist for risk-day baseline");
         }
         Optional<RiskDayBaselineEntity> existing = entityManager.createQuery(
                         "select b from RiskDayBaselineEntity b where b.accountId=:account and b.riskDay=:day",

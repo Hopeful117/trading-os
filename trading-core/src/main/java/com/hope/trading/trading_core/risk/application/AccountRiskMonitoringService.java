@@ -36,6 +36,7 @@ import java.util.UUID;
 @Service
 public class AccountRiskMonitoringService {
     private static final String ENGINE_VERSION = TradePlanRiskEvaluationService.ENGINE_VERSION;
+    private static final String SOURCE_KEY = "source";
 
     private final AccountRepositoryAdapter accounts;
     private final BrokerAccountRepository brokerAccounts;
@@ -91,6 +92,9 @@ public class AccountRiskMonitoringService {
         String currency = configuration.reportingCurrency();
         BigDecimal balance = snapshot.account().balance();
         BigDecimal equity = snapshot.account().equity();
+        if (balance.signum() <= 0) {
+            throw new IllegalStateException("Authoritative Risk balance is invalid");
+        }
         BigDecimal starting = account.getStartingBalance();
         if (starting == null || starting.signum() <= 0) {
             throw new IllegalStateException("Account starting balance is unavailable");
@@ -98,9 +102,10 @@ public class AccountRiskMonitoringService {
         UUID evaluationId = UUID.randomUUID();
         Instant capturedAt = snapshot.observedAt();
         RiskPersistence.Baseline baseline = persistence.baseline(account.getAccountId(), day.date(),
-                day.startsAt(), day.endsAt(), currency, starting,
-                persistence.write(Map.of("source", "ACCOUNT_STARTING_BALANCE",
-                        "accountVersion", account.getVersion(), "riskDay", day.date().toString())));
+                day.startsAt(), day.endsAt(), currency, balance,
+                persistence.write(Map.of(SOURCE_KEY, "AUTHORITATIVE_BALANCE_FIRST_EVALUATION",
+                        "accountVersion", account.getVersion(), "sourceVersion", snapshot.sourceVersion(),
+                        "observedAt", snapshot.observedAt(), "riskDay", day.date().toString())));
         long accountVersion = persistence.component(evaluationId, "ACCOUNT",
                 "paper-account:" + Math.max(1, snapshot.sourceVersion()), capturedAt,
                 persistence.write(snapshot.account()));
@@ -109,7 +114,7 @@ public class AccountRiskMonitoringService {
                 "paper-account:" + Math.max(1, snapshot.sourceVersion()), capturedAt,
                 persistence.write(positions));
         long marketVersion = persistence.component(evaluationId, "MARKET", "PAPER_ACCOUNT_STATE",
-                capturedAt, persistence.write(Map.of("source", "PAPER_ACCOUNT_STATE")));
+                capturedAt, persistence.write(Map.of(SOURCE_KEY, "PAPER_ACCOUNT_STATE")));
         long ruleVersion = persistence.component(evaluationId, "RULE_SET",
                 profile.id() + ":" + profile.semanticVersion(), requestedAt, persistence.write(profile));
 
@@ -121,7 +126,7 @@ public class AccountRiskMonitoringService {
                 ValidationMode.ACCOUNT_MONITORING, null, requestedAt);
         var trading = new TradingContext(account.getUser().getUserId(), account.getAccountId(), requestedAt,
                 day.date().toString(), Map.of("riskTimeZone", configuration.riskTimeZone(),
-                        "reportingCurrency", currency, "source", "PAPER_ACCOUNT"));
+                        "reportingCurrency", currency, SOURCE_KEY, "PAPER_ACCOUNT"));
         var accountSnapshot = new AccountSnapshot(account.getAccountId(), Math.max(1, accountVersion), capturedAt,
                 new Money(balance, currency), new Money(equity, currency),
                 new Money(nonNegative(snapshot.account().margin()), currency),

@@ -48,6 +48,10 @@ public class StartChallengeService {
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(command.definitionId(), command.definitionVersion()))
                 .orElseThrow(() -> new IllegalArgumentException("Challenge definition does not exist"));
+        if (definition.requiredSettlementModel() != null
+                && definition.requiredSettlementModel() != account.getSettlementModel()) {
+            throw new IllegalArgumentException("Account settlement model does not match Challenge requirement");
+        }
         if (riskPersistence.profile(definition.riskPolicyId(), definition.riskPolicyVersion()).isEmpty()) {
             throw new IllegalArgumentException("Challenge Risk Policy does not exist");
         }

@@ -17,10 +17,28 @@ public record CreateBrokerAccountRequest(
         @NotNull ExecutionMode executionMode,
         BigDecimal initialCapital,
         @Valid RiskProfileReference riskProfile,
-        SettlementModel settlementModel
+        SettlementModel settlementModel,
+        String riskTimeZone,
+        String riskDayResetTime
         ) {
+    private static final String DEFAULT_RISK_DAY_RESET_TIME = "00:00";
+
+    public CreateBrokerAccountRequest {
+        riskTimeZone = riskTimeZone == null || riskTimeZone.isBlank() ? "UTC" : riskTimeZone.strip();
+        riskDayResetTime = riskDayResetTime == null || riskDayResetTime.isBlank()
+                ? DEFAULT_RISK_DAY_RESET_TIME : riskDayResetTime.strip();
+    }
+
     public CreateBrokerAccountRequest(BrokerProvider provider, String displayName, ExecutionMode executionMode,
                                       BigDecimal initialCapital, RiskProfileReference riskProfile) {
-        this(provider, displayName, executionMode, initialCapital, riskProfile, null);
+        this(provider, displayName, executionMode, initialCapital, riskProfile, null, "UTC",
+                DEFAULT_RISK_DAY_RESET_TIME);
+    }
+
+    public CreateBrokerAccountRequest(BrokerProvider provider, String displayName, ExecutionMode executionMode,
+                                      BigDecimal initialCapital, RiskProfileReference riskProfile,
+                                      SettlementModel settlementModel) {
+        this(provider, displayName, executionMode, initialCapital, riskProfile, settlementModel, "UTC",
+                DEFAULT_RISK_DAY_RESET_TIME);
     }
 }

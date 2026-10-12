@@ -164,7 +164,8 @@ class ChallengePersistenceTest {
 
     private static ChallengeDefinition definition(UUID id, String version) {
         return ChallengeDefinition.create(id, version, "TEST_PROVIDER", "TEST_CHALLENGE", "PLAN_A", "USD",
-                new BigDecimal("10000"), new BigDecimal("0.12"), ProgressionValueSource.BALANCE, POLICY_ID,
+                new BigDecimal("10000"), new BigDecimal("0.12"), ProgressionValueSource.BALANCE,
+                com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY, POLICY_ID,
                 "1.0.0", "https://example.test/definition", NOW, NOW, "source", NOW);
     }
 }

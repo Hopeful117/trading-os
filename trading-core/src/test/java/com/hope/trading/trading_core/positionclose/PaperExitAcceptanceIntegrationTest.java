@@ -166,7 +166,9 @@ class PaperExitAcceptanceIntegrationTest {
         Account account = accounts.findByBrokerAccountId(broker.id()).orElseThrow();
         ChallengeDefinition definition = ChallengeDefinition.create(UUID.randomUUID(), "1.0.0", "TEST_PROVIDER",
                 "PAPER", "E2E", "USD", new BigDecimal("10000"), new BigDecimal("0.002"),
-                ProgressionValueSource.BALANCE, profileId, "1.0.0", "https://example.test", NOW, NOW,
+                ProgressionValueSource.BALANCE,
+                com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY, profileId, "1.0.0",
+                "https://example.test", NOW, NOW,
                 "integration-test", NOW);
         challengeDefinitions.saveAndFlush(definition);
 
