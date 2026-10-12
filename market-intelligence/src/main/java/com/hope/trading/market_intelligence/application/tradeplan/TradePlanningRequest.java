@@ -10,7 +10,8 @@ public record TradePlanningRequest(
         Set<OpportunityId> opportunityIds, UUID planningContextId, long contextVersion,
         UUID actorId, BigDecimal marketPrice,
         TradePlanId predecessorId, TradePlanVersion predecessorVersion, String replanningReason,
-        Map<OpportunityId, OpportunityVersion> exactOpportunityVersions
+        Map<OpportunityId, OpportunityVersion> exactOpportunityVersions,
+        String instrumentProvider, String instrumentProductType
 ) {
     public TradePlanningRequest(
             Set<OpportunityId> opportunityIds, UUID planningContextId, long contextVersion,
@@ -18,6 +19,15 @@ public record TradePlanningRequest(
             TradePlanVersion predecessorVersion, String replanningReason) {
         this(opportunityIds, planningContextId, contextVersion, actorId, marketPrice,
                 predecessorId, predecessorVersion, replanningReason, Map.of());
+    }
+
+    public TradePlanningRequest(
+            Set<OpportunityId> opportunityIds, UUID planningContextId, long contextVersion,
+            UUID actorId, BigDecimal marketPrice, TradePlanId predecessorId,
+            TradePlanVersion predecessorVersion, String replanningReason,
+            Map<OpportunityId, OpportunityVersion> exactOpportunityVersions) {
+        this(opportunityIds, planningContextId, contextVersion, actorId, marketPrice,
+                predecessorId, predecessorVersion, replanningReason, exactOpportunityVersions, null, null);
     }
 
     public TradePlanningRequest {
@@ -37,6 +47,8 @@ public record TradePlanningRequest(
             throw new IllegalArgumentException("Complete predecessor reference is required");
         }
         replanningReason = replanningReason == null ? "" : replanningReason.trim();
+        instrumentProvider = instrumentProvider == null ? null : instrumentProvider.trim();
+        instrumentProductType = instrumentProductType == null ? null : instrumentProductType.trim();
     }
 
     public static TradePlanningRequest withExactOpportunityVersion(
@@ -48,5 +60,17 @@ public record TradePlanningRequest(
                 contextVersion, actorId, marketPrice, predecessorId,
                 predecessorVersion, replanningReason,
                 Map.of(opportunityId, opportunityVersion));
+    }
+
+    public static TradePlanningRequest withExactOpportunityVersion(
+            OpportunityId opportunityId, OpportunityVersion opportunityVersion,
+            UUID planningContextId, long contextVersion, UUID actorId,
+            BigDecimal marketPrice, TradePlanId predecessorId,
+            TradePlanVersion predecessorVersion, String replanningReason,
+            String instrumentProvider, String instrumentProductType) {
+        return new TradePlanningRequest(Set.of(opportunityId), planningContextId,
+                contextVersion, actorId, marketPrice, predecessorId,
+                predecessorVersion, replanningReason,
+                Map.of(opportunityId, opportunityVersion), instrumentProvider, instrumentProductType);
     }
 }

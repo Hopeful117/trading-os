@@ -41,7 +41,11 @@ final class TradePlanBuilder {
         ExecutionParameters execution = new ExecutionParameters(
                 input.instrument(), input.direction(), entry, stop, targets, sizing,
                 new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
-                expiration, management);
+                expiration, management, input.instrumentProvider(), input.instrumentProductType());
+        if (input.instrumentProvider() == null || input.instrumentProvider().isBlank()
+                || input.instrumentProductType() == null || input.instrumentProductType().isBlank()) {
+            throw new IllegalArgumentException("Canonical instrument product identity is required");
+        }
         Set<OpportunityPlanReference> opportunities = input.opportunities().stream()
                 .map(item -> new OpportunityPlanReference(item.id(), item.version()))
                 .collect(Collectors.toUnmodifiableSet());
@@ -73,7 +77,11 @@ final class TradePlanBuilder {
                 risk == null || reward == null ? null
                         : new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
                 new PlanExpiration(request.expiresAt(), request.expirationPolicy()),
-                request.managementRules());
+                request.managementRules(), request.instrumentProvider(), request.instrumentProductType());
+        if (request.instrumentProvider() == null || request.instrumentProvider().isBlank()
+                || request.instrumentProductType() == null || request.instrumentProductType().isBlank()) {
+            throw new IllegalArgumentException("Canonical instrument product identity is required");
+        }
         TradingRationale rationale = new TradingRationale(
                 Set.of(), Set.of(), Set.of(), request.thesis(),
                 request.confirmationConditions(), request.invalidationConditions());

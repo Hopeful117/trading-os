@@ -211,7 +211,8 @@ public class TradePlanRiskHandoffService {
                         context.riskBudget().sourceId(), context.riskBudget().sourceVersion(),
                         context.preferences().id(), context.preferences().version()),
                 new TradePlanRiskSnapshot.Execution(
-                        execution.instrument(), execution.direction().name(),
+                        execution.instrument(), execution.instrumentProvider(), execution.instrumentProductType(),
+                        execution.direction().name(),
                         new TradePlanRiskSnapshot.Entry(
                                 execution.entry().type().name(), execution.entry().price(),
                                 execution.entry().conditions()),

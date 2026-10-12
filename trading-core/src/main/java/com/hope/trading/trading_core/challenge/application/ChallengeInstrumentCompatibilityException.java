@@ -1,0 +1,14 @@
+package com.hope.trading.trading_core.challenge.application;
+
+public final class ChallengeInstrumentCompatibilityException extends RuntimeException {
+    private final String code;
+
+    public ChallengeInstrumentCompatibilityException(String code, String message) {
+        super(message);
+        this.code = code;
+    }
+
+    public String code() {
+        return code;
+    }
+}

@@ -176,13 +176,17 @@ public class AnalysisTradePlanGenerationService {
             } catch (IllegalArgumentException exception) {
                 throw failure(HttpStatus.SERVICE_UNAVAILABLE, "MARKET_PRICE_SIDE_UNAVAILABLE");
             }
+            var market = marketData.findMarket(analysis.provenance().marketId());
+            if (market == null || market.provider() == null || market.productType() == null) {
+                throw failure(HttpStatus.SERVICE_UNAVAILABLE, "INSTRUMENT_PRODUCT_IDENTITY_UNAVAILABLE");
+            }
             String side = selection.side();
             BigDecimal selected = selection.price();
             TradePlanningResult result = tradePlans.create(
                     TradePlanningRequest.withExactOpportunityVersion(
-                            opportunityId, new OpportunityVersion(pipeline.opportunityVersion()),
-                            context.id(), context.version(), request.actorId(), selected,
-                            null, null, null));
+                             opportunityId, new OpportunityVersion(pipeline.opportunityVersion()),
+                             context.id(), context.version(), request.actorId(), selected,
+                             null, null, null, market.provider(), market.productType()));
             if (!(result instanceof TradePlanningResult.Success success)) {
                 TradePlanningResult.Failure failed = (TradePlanningResult.Failure) result;
                 throw failure(HttpStatus.UNPROCESSABLE_ENTITY, failed.reason().name());

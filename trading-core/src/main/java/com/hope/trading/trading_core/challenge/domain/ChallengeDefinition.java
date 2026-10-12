@@ -9,6 +9,7 @@ import jakarta.persistence.IdClass;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -55,6 +56,10 @@ public class ChallengeDefinition {
     @Column(name = "required_settlement_model", length = 32, updatable = false)
     private SettlementModel requiredSettlementModel;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "required_instrument_product_type", length = 32, updatable = false)
+    private InstrumentProductType requiredInstrumentProductType;
+
     @Column(name = "risk_policy_id", nullable = false, updatable = false)
     private UUID riskPolicyId;
 
@@ -81,8 +86,9 @@ public class ChallengeDefinition {
 
     private ChallengeDefinition(UUID id, String definitionVersion, String provider, String product,
                                  String planCode, String capitalCurrency, BigDecimal startingCapital,
-                                 BigDecimal profitTargetRatio, ProgressionValueSource progressionValueSource,
-                                 SettlementModel requiredSettlementModel,
+                                  BigDecimal profitTargetRatio, ProgressionValueSource progressionValueSource,
+                                  SettlementModel requiredSettlementModel,
+                                  InstrumentProductType requiredInstrumentProductType,
                                  UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
                                 Instant retrievedAt, Instant effectiveFrom, String provenance, Instant createdAt) {
         this.id = requireId(id, "id");
@@ -95,6 +101,7 @@ public class ChallengeDefinition {
         this.profitTargetRatio = positive(profitTargetRatio, "profitTargetRatio");
         this.progressionValueSource = Objects.requireNonNull(progressionValueSource, "progressionValueSource");
         this.requiredSettlementModel = requiredSettlementModel;
+        this.requiredInstrumentProductType = requiredInstrumentProductType;
         this.riskPolicyId = requireId(riskPolicyId, "riskPolicyId");
         this.riskPolicyVersion = required(riskPolicyVersion, "riskPolicyVersion", 64);
         this.sourceUrl = required(sourceUrl, "sourceUrl", 2048);
@@ -109,10 +116,24 @@ public class ChallengeDefinition {
                                               BigDecimal profitTargetRatio, ProgressionValueSource progressionValueSource,
                                               SettlementModel requiredSettlementModel,
                                               UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
+                                              Instant retrievedAt, Instant effectiveFrom, String provenance,
+                                              Instant createdAt) {
+        return create(id, definitionVersion, provider, product, planCode, capitalCurrency, startingCapital,
+                profitTargetRatio, progressionValueSource, requiredSettlementModel, null, riskPolicyId,
+                riskPolicyVersion, sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt);
+    }
+
+    public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
+                                              String planCode, String capitalCurrency, BigDecimal startingCapital,
+                                               BigDecimal profitTargetRatio, ProgressionValueSource progressionValueSource,
+                                               SettlementModel requiredSettlementModel,
+                                               InstrumentProductType requiredInstrumentProductType,
+                                              UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
                                              Instant retrievedAt, Instant effectiveFrom, String provenance,
                                              Instant createdAt) {
         return new ChallengeDefinition(id, definitionVersion, provider, product, planCode, capitalCurrency,
                 startingCapital, profitTargetRatio, progressionValueSource, requiredSettlementModel,
+                requiredInstrumentProductType,
                 riskPolicyId, riskPolicyVersion,
                 sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt);
     }
@@ -150,6 +171,7 @@ public class ChallengeDefinition {
     public BigDecimal profitTargetRatio() { return profitTargetRatio; }
     public ProgressionValueSource progressionValueSource() { return progressionValueSource; }
     public SettlementModel requiredSettlementModel() { return requiredSettlementModel; }
+    public InstrumentProductType requiredInstrumentProductType() { return requiredInstrumentProductType; }
     public UUID riskPolicyId() { return riskPolicyId; }
     public String riskPolicyVersion() { return riskPolicyVersion; }
     public String sourceUrl() { return sourceUrl; }

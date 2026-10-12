@@ -8,8 +8,13 @@ import java.util.List;
 
 public record PlanningInput(
         List<TradingOpportunity> opportunities, TradePlanningContext context,
-        BigDecimal marketPrice, Instant plannedAt
+        BigDecimal marketPrice, Instant plannedAt, String instrumentProvider,
+        String instrumentProductType
 ) {
+    public PlanningInput(List<TradingOpportunity> opportunities, TradePlanningContext context,
+                         BigDecimal marketPrice, Instant plannedAt) {
+        this(opportunities, context, marketPrice, plannedAt, null, null);
+    }
     public PlanningInput { opportunities = List.copyOf(opportunities); }
     public TradeDirection direction() {
         return opportunities.getFirst().direction()

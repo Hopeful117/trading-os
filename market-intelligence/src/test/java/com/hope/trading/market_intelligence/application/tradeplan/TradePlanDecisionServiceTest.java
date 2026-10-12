@@ -33,7 +33,8 @@ class TradePlanDecisionServiceTest {
                 new TradePlanningRequest(
                         java.util.Set.of(environment.opportunity().id()),
                         context.id(), context.version(), environment.owner(),
-                        java.math.BigDecimal.valueOf(100), null, null, "")));
+                         java.math.BigDecimal.valueOf(100), null, null, "", java.util.Map.of(),
+                         "KRAKEN", "SPOT")));
         return created;
     }
 

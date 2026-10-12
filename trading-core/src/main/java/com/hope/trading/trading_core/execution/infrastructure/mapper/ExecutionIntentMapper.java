@@ -59,7 +59,7 @@ public final class ExecutionIntentMapper {
                 value.expectedMonetaryRisk, value.riskRewardRatio);
         if (ExecutionPurpose.valueOf(value.purpose == null ? "ENTRY" : value.purpose) == ExecutionPurpose.EXIT) {
             return ExecutionIntent.rehydrateExit(new ExecutionIntentId(value.id), value.targetTradeId,
-                    new IdempotencyKey(value.idempotencyKey), value.initiatorId, value.brokerAccountId,
+                    new IdempotencyKey(value.idempotencyKey), value.initiatorId, value.brokerAccountId, value.accountId,
                     parameters, ExecutionStatus.valueOf(value.status),
                     value.activeAttemptId==null?null:new ExecutionAttemptId(value.activeAttemptId),
                     value.createdAt,value.updatedAt,value.expiresAt,value.version);

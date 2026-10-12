@@ -46,7 +46,7 @@ class OpportunityTradePlanGenerationServiceTest {
     }
 
     private MarketResponse market(UUID marketId, String symbol) {
-        return new MarketResponse(marketId, "KRAKEN", symbol, "BTC", "EUR",
+        return new MarketResponse(marketId, "KRAKEN", symbol, "BTC", "EUR", "SPOT",
                 new MarketResponse.MarketStateResponse("OPEN", true, "",
                         TradePlanTestFixtures.NOW));
     }

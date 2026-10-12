@@ -75,7 +75,8 @@ class TradePlanRiskHandoffServiceTest {
                 List.of(new TakeProfit(BigDecimal.valueOf(102), BigDecimal.valueOf(100))),
                 new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
                 BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600), "MANUAL_VALIDITY",
-                "Human discretionary setup", Set.of("Price confirms"), Set.of("Stop is reached"), Set.of()));
+                 "Human discretionary setup", Set.of("Price confirms"), Set.of("Stop is reached"), Set.of(),
+                 "KRAKEN", "SPOT"));
         TradePlan proposed = ((TradePlanningResult.Success) result).plan();
         TradePlan accepted = environment.service().transition(proposed.id(), TradePlanStatus.ACCEPTED);
 

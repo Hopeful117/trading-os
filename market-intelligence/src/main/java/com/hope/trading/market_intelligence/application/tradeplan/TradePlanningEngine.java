@@ -52,7 +52,8 @@ public final class TradePlanningEngine {
                         "Trading Context is missing or unauthorized");
             }
             PlanningInput input = new PlanningInput(
-                    loaded, context, request.marketPrice(), clock.instant());
+                    loaded, context, request.marketPrice(), clock.instant(),
+                    request.instrumentProvider(), request.instrumentProductType());
             TradePlanDraft draft = new TradePlanDraft();
             List<PlanningContribution> deterministic = new ArrayList<>();
             for (PlanningPolicy policy : policies.applicable(input)) {

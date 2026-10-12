@@ -39,7 +39,8 @@ class TradePlanPersistenceIntegrationTest {
                         new PositionSizing(BigDecimal.ONE, BigDecimal.valueOf(100), BigDecimal.ONE, "EUR"),
                         BigDecimal.valueOf(100), TradePlanTestFixtures.NOW.plusSeconds(3600),
                         "MANUAL_VALIDITY", "Human discretionary setup",
-                        Set.of("Price confirms setup"), Set.of("Stop is reached"), Set.of()));
+                         Set.of("Price confirms setup"), Set.of("Stop is reached"), Set.of(),
+                         "KRAKEN", "SPOT"));
 
         TradePlanMapper mapper = new TradePlanMapper();
         TradePlan rehydrated = mapper.toDomain(mapper.toEntity(result.plan()));

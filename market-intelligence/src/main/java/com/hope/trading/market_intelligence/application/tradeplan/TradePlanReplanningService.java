@@ -26,6 +26,7 @@ public final class TradePlanReplanningService {
                 .map(reference -> reference.id()).collect(Collectors.toUnmodifiableSet());
         return service.create(new TradePlanningRequest(
                 opportunityIds, context.id(), context.version(), actorId, marketPrice,
-                current.id(), current.version(), reason));
+                current.id(), current.version(), reason, Map.of(),
+                current.execution().instrumentProvider(), current.execution().instrumentProductType()));
     }
 }

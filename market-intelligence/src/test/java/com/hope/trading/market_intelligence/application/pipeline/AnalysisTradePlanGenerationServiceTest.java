@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.pipeline;
 
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
+import com.hope.trading.market_intelligence.adapter.marketdata.MarketResponse;
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse;
 import com.hope.trading.market_intelligence.adapter.persistence.JpaAnalysisTradePlanGenerationEntity;
 import com.hope.trading.market_intelligence.adapter.persistence.JpaAnalysisTradePlanGenerationRepository;
@@ -136,6 +137,11 @@ class AnalysisTradePlanGenerationServiceTest {
                 analysisId, ProductionIntelligencePipeline.VERSION)).thenReturn(Optional.of(pipeline));
         TradePlanningContextRepository contexts = mock(TradePlanningContextRepository.class);
         MarketDataClient marketData = mock(MarketDataClient.class);
+        MarketResponse market = new MarketResponse(
+                marketId, "KRAKEN", "BTC/EUR", "BTC", "EUR", "SPOT",
+                new MarketResponse.MarketStateResponse("OPEN", true, "", now));
+        when(marketData.findAllMarkets()).thenReturn(List.of(market));
+        when(marketData.findMarket(marketId)).thenReturn(market);
         when(marketData.findPriceSnapshots(any())).thenReturn(List.of(new MarketPriceSnapshotResponse(
                 marketId, "BTC/EUR", BigDecimal.valueOf(101), BigDecimal.valueOf(100),
                 BigDecimal.valueOf(102), true, now, "FRESH", "snapshot-1", 1L, now)));

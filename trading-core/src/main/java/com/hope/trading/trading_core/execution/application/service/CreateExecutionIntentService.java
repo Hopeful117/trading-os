@@ -41,7 +41,7 @@ public final class CreateExecutionIntentService {
         return intent;
     }
 
-    public ExecutionIntent createExit(UUID initiatorId, UUID brokerAccountId, UUID targetTradeId,
+    public ExecutionIntent createExit(UUID initiatorId, UUID brokerAccountId, UUID accountId, UUID targetTradeId,
                                       com.hope.trading.trading_core.execution.domain.model.ExecutionParameters parameters,
                                       com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey key,
                                       Instant expiresAt) {
@@ -52,7 +52,7 @@ public final class CreateExecutionIntentService {
             throw exception;
         }
         ExecutionIntent intent = ExecutionIntent.createExit(ids.nextIntentId(), initiatorId,
-                brokerAccountId, targetTradeId, parameters, key, clock.instant(), expiresAt);
+                brokerAccountId, accountId, targetTradeId, parameters, key, clock.instant(), expiresAt);
         intents.save(intent); events.publish(intent.pullEvents()); metrics.executionCreated();
         return intent;
     }

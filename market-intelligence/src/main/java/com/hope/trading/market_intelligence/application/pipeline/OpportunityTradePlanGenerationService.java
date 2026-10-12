@@ -16,6 +16,7 @@ import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContex
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
@@ -79,11 +80,17 @@ public class OpportunityTradePlanGenerationService {
             TradePlan plan = existing.get();
             return new GenerationResponse(plan.id().value(), plan.version().value(), true);
         }
-        UUID marketId = opportunity.marketId().orElseGet(() -> marketData.findAllMarkets().stream()
-                .filter(item -> opportunity.instrument().equalsIgnoreCase(item.symbol()))
-                .map(com.hope.trading.market_intelligence.adapter.marketdata.MarketResponse::marketId)
-                .findFirst()
-                .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_NOT_FOUND")));
+        var allMarkets = marketData.findAllMarkets();
+        UUID marketId = opportunity.marketId().orElseGet(() -> {
+            var matches = allMarkets.stream()
+                    .filter(item -> opportunity.instrument().equalsIgnoreCase(item.symbol()))
+                    .toList();
+            if (matches.size() != 1) {
+                throw failure(HttpStatus.UNPROCESSABLE_ENTITY, matches.isEmpty()
+                        ? "MARKET_NOT_FOUND" : "MARKET_IDENTITY_AMBIGUOUS");
+            }
+            return matches.getFirst().marketId();
+        });
         var market = marketData.findAllMarkets().stream()
                 .filter(item -> item.marketId().equals(marketId))
                 .findFirst()
@@ -105,7 +112,8 @@ public class OpportunityTradePlanGenerationService {
         contexts.saveSnapshot(context);
         TradePlanningResult result = tradePlans.create(new TradePlanningRequest(
                 Set.of(new OpportunityId(opportunityId)), context.id(), context.version(),
-                actorId, selection.price(), null, null, null));
+                actorId, selection.price(), null, null, null, Map.of(),
+                market.provider(), market.productType()));
         if (!(result instanceof TradePlanningResult.Success success)) {
             TradePlanningResult.Failure failed = (TradePlanningResult.Failure) result;
             throw failure(HttpStatus.UNPROCESSABLE_ENTITY, failed.reason().name());

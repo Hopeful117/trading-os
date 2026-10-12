@@ -40,14 +40,22 @@ interface MarketIntelligenceRiskFeignClient {
 
 record Acknowledgment(UUID evaluationId, String decision, Instant evaluatedAt) { }
 record ExecutionReadinessRequest(UUID evaluationId) { }
-record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status, String origin, Instant createdAt,
+    record TradePlanTransport(UUID tradePlanId, long tradePlanVersion, String status, String origin, Instant createdAt,
                            Context context, Execution execution, Rationale rationale) {
     record Context(UUID id, long version, Instant capturedAt, UUID ownerId, UUID tradingAccountId,
                    String accountCurrency, UUID riskBudgetSourceId, long riskBudgetSourceVersion,
                    UUID planningPreferencesId, long planningPreferencesVersion) { }
-    record Execution(String instrument, String direction, Entry entry, StopLoss stopLoss,
+    record Execution(String instrument, String instrumentProvider, String instrumentProductType,
+                     String direction, Entry entry, StopLoss stopLoss,
                      List<TakeProfit> takeProfits, PositionSizing positionSizing,
-                     BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules) { }
+                     BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules) {
+        public Execution(String instrument, String direction, Entry entry, StopLoss stopLoss,
+                         List<TakeProfit> takeProfits, PositionSizing positionSizing,
+                         BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules) {
+            this(instrument, null, null, direction, entry, stopLoss, takeProfits, positionSizing,
+                    riskRewardRatio, expiration, managementRules);
+        }
+    }
     record Entry(String type, BigDecimal price, Set<String> conditions) { }
     record StopLoss(BigDecimal price, String rationale) { }
     record TakeProfit(BigDecimal price, BigDecimal allocationPercent) { }
@@ -97,7 +105,8 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
                      value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
                      value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
                      value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
-                    value.execution().instrument(), value.execution().direction(), entryIntent,
+                    value.execution().instrument(), value.execution().instrumentProvider(),
+                    parseProductType(value.execution().instrumentProductType()), value.execution().direction(), entryIntent,
                      value.execution().stopLoss() == null ? null : value.execution().stopLoss().price(), firstTakeProfit(value),
                      value.execution().positionSizing().quantity(),
                     value.execution().positionSizing().notional(),
@@ -134,7 +143,8 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
                     value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
                     value.context().riskBudgetSourceId(), value.context().riskBudgetSourceVersion(),
                     value.context().planningPreferencesId(), value.context().planningPreferencesVersion(),
-                    value.execution().instrument(), value.execution().direction(), entryIntent,
+                    value.execution().instrument(), value.execution().instrumentProvider(),
+                    parseProductType(value.execution().instrumentProductType()), value.execution().direction(), entryIntent,
                      value.execution().stopLoss() == null ? null : value.execution().stopLoss().price(), firstTakeProfit(value),
                     value.execution().positionSizing().quantity(),
                     value.execution().positionSizing().notional(), value.execution().positionSizing().expectedMonetaryRisk(),
@@ -153,6 +163,15 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
             default -> throw new IllegalArgumentException("Unknown entry type: " + entry.type());
         };
         return new EntryIntent(orderType, entry.price());
+    }
+
+    private static com.hope.trading.trading_core.shared.domain.model.InstrumentProductType parseProductType(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return com.hope.trading.trading_core.shared.domain.model.InstrumentProductType.valueOf(value);
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalStateException("Unknown instrument product type", invalid);
+        }
     }
 
     private BigDecimal firstTakeProfit(TradePlanTransport value) {

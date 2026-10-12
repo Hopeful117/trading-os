@@ -9,8 +9,13 @@ public record MarketResponse(
         String symbol,
         String baseAsset,
         String quoteAsset,
+        String productType,
         MarketStateResponse marketState
 ) {
+    public MarketResponse(UUID marketId, String provider, String symbol, String baseAsset,
+                          String quoteAsset, MarketStateResponse marketState) {
+        this(marketId, provider, symbol, baseAsset, quoteAsset, null, marketState);
+    }
     public record MarketStateResponse(
             String tradingStatus,
             boolean tradable,

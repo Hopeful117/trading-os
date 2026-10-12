@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import org.springframework.transaction.annotation.Transactional;
+import com.hope.trading.trading_core.challenge.application.ChallengeExecutionAdmissionService;
 
 public class ExecuteTradeService {
     private final ExecutionIntentRepositoryPort intents;
@@ -24,12 +25,14 @@ public class ExecuteTradeService {
     private final ExecutionEventPublisher events;
     private final Clock clock;
     private final ExecutionTimeRiskRevalidationService t1Revalidation;
+    private final ChallengeExecutionAdmissionService challengeAdmission;
     public ExecuteTradeService(ExecutionIntentRepositoryPort intents,
             ExecutionValidationStep validation, IdempotencyVerificationStep idempotency,
             ExecutionAttemptCreationStep attemptCreation, BrokerSubmissionStep submission,
             BrokerResponseProcessingStep responseProcessing,
             ExecutionFinalizationStep finalization, ExecutionEventPublisher events, Clock clock,
-            ExecutionTimeRiskRevalidationService t1Revalidation) {
+            ExecutionTimeRiskRevalidationService t1Revalidation,
+            ChallengeExecutionAdmissionService challengeAdmission) {
         this.intents = Objects.requireNonNull(intents); this.validation = Objects.requireNonNull(validation);
         this.idempotency = Objects.requireNonNull(idempotency);
         this.attemptCreation = Objects.requireNonNull(attemptCreation);
@@ -38,6 +41,17 @@ public class ExecuteTradeService {
         this.finalization = Objects.requireNonNull(finalization);
         this.events = Objects.requireNonNull(events); this.clock = Objects.requireNonNull(clock);
         this.t1Revalidation = Objects.requireNonNull(t1Revalidation);
+        this.challengeAdmission = challengeAdmission;
+    }
+
+    public ExecuteTradeService(ExecutionIntentRepositoryPort intents,
+            ExecutionValidationStep validation, IdempotencyVerificationStep idempotency,
+            ExecutionAttemptCreationStep attemptCreation, BrokerSubmissionStep submission,
+            BrokerResponseProcessingStep responseProcessing,
+            ExecutionFinalizationStep finalization, ExecutionEventPublisher events, Clock clock,
+            ExecutionTimeRiskRevalidationService t1Revalidation) {
+        this(intents, validation, idempotency, attemptCreation, submission, responseProcessing,
+                finalization, events, clock, t1Revalidation, null);
     }
     @Transactional
     public ExecutionIntent execute(ExecutionIntentId id) {
@@ -55,6 +69,13 @@ public class ExecuteTradeService {
 
         // T1 APPROVED - continue existing pipeline
         ExecutionPipelineContext context = new ExecutionPipelineContext(intent, now);
+        if (challengeAdmission != null && intent.accountId() != null) {
+            try {
+                challengeAdmission.validate(intent.accountId(), intent.parameters().instrument());
+            } catch (RuntimeException failure) {
+                throw new InvalidExecutionStateException(failure.getMessage());
+            }
+        }
         if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
             var t1Outcome = t1Revalidation.evaluateAndPersist(intent, now);
             if (!t1Outcome.approved()) {

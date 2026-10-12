@@ -52,6 +52,8 @@ class ManualTradePlanOrchestrationServiceTest {
         MarketState marketState = mock(MarketState.class);
         when(market.getMarketId()).thenReturn(MARKET_ID);
         when(market.getSymbol()).thenReturn("BTC/USD");
+        when(market.getProvider()).thenReturn(com.hope.trading.trading_core.market_data.helper.MarketProvider.KRAKEN);
+        when(market.getProductType()).thenReturn(com.hope.trading.trading_core.shared.domain.model.InstrumentProductType.SPOT);
         when(market.getMarketState()).thenReturn(marketState);
         when(marketState.isTradable()).thenReturn(true);
         when(markets.findAll()).thenReturn(List.of(market));

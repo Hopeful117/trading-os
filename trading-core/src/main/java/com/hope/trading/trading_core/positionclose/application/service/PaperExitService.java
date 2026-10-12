@@ -9,11 +9,13 @@ import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntent
 import com.hope.trading.trading_core.execution.domain.repository.BrokerOrderRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey;
 import com.hope.trading.trading_core.execution.domain.model.ExecutionParameters;
+import com.hope.trading.trading_core.challenge.application.ChallengeExecutionAdmissionService;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -28,12 +30,22 @@ public class PaperExitService {
     private final ExecuteTradeService execution;
     private final BrokerOrderRepositoryPort orders;
     private final Clock clock;
+    private final ChallengeExecutionAdmissionService challengeAdmission;
+
+    @Autowired
+    public PaperExitService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
+                            CreateExecutionIntentService intentCreation, ExecutionIntentRepositoryPort intents,
+                            ExecuteTradeService execution, BrokerOrderRepositoryPort orders, Clock clock,
+                            ChallengeExecutionAdmissionService challengeAdmission) {
+        this.accounts = accounts; this.brokerAccounts = brokerAccounts; this.intentCreation = intentCreation;
+        this.intents = intents; this.execution = execution; this.orders = orders; this.clock = clock;
+        this.challengeAdmission = challengeAdmission;
+    }
 
     public PaperExitService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
                             CreateExecutionIntentService intentCreation, ExecutionIntentRepositoryPort intents,
                             ExecuteTradeService execution, BrokerOrderRepositoryPort orders, Clock clock) {
-        this.accounts = accounts; this.brokerAccounts = brokerAccounts; this.intentCreation = intentCreation;
-        this.intents = intents; this.execution = execution; this.orders = orders; this.clock = clock;
+        this(accounts, brokerAccounts, intentCreation, intents, execution, orders, clock, null);
     }
 
     @Transactional
@@ -64,7 +76,14 @@ public class PaperExitService {
         }
         ExecutionParameters.Side side = trade.getType() == com.hope.trading.trading_core.helper.TradeType.BUY
                 ? ExecutionParameters.Side.SELL : ExecutionParameters.Side.BUY;
-        ExecutionIntent intent = intentCreation.createExit(userId, broker.id(), tradeId,
+        if (challengeAdmission != null) {
+            try {
+                challengeAdmission.validate(accountId, trade.getSymbol());
+            } catch (RuntimeException failure) {
+                throw new PaperExitException(failure.getMessage());
+            }
+        }
+        ExecutionIntent intent = intentCreation.createExit(userId, broker.id(), accountId, tradeId,
                 new ExecutionParameters(trade.getSymbol(), side, ExecutionParameters.OrderType.MARKET,
                         trade.getQuantity(), null), new IdempotencyKey(idempotencyKey), clock.instant().plusSeconds(300));
         intent = execution.execute(intent.id());

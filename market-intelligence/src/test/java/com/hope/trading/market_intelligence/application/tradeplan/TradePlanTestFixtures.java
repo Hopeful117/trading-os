@@ -98,7 +98,7 @@ public final class TradePlanTestFixtures {
         return new TradePlanningRequest(
                 Set.of(environment.opportunity().id()), environment.context().id(),
                 environment.context().version(), environment.owner(), BigDecimal.valueOf(100),
-                null, null, "");
+                null, null, "", Map.of(), "KRAKEN", "SPOT");
     }
     public record Environment(
             UUID owner, TradingOpportunity opportunity, TradePlanningContext context,

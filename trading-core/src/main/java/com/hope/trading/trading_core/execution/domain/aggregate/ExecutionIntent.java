@@ -71,13 +71,19 @@ public final class ExecutionIntent {
     }
 
     public static ExecutionIntent createExit(ExecutionIntentId id, UUID initiatorId,
-            UUID brokerAccountId, UUID targetTradeId, ExecutionParameters parameters,
+            UUID brokerAccountId, UUID accountId, UUID targetTradeId, ExecutionParameters parameters,
             IdempotencyKey key, Instant now, Instant expiresAt) {
         ExecutionIntent intent = new ExecutionIntent(id, null, null, ExecutionPurpose.EXIT, targetTradeId,
-                key, initiatorId, brokerAccountId, null, parameters, List.of(), ExecutionStatus.CREATED,
+                key, initiatorId, brokerAccountId, accountId, parameters, List.of(), ExecutionStatus.CREATED,
                 null, now, now, expiresAt, 0);
         intent.events.add(new ExecutionEvent.ExecutionIntentCreated(id, now));
         return intent;
+    }
+
+    public static ExecutionIntent createExit(ExecutionIntentId id, UUID initiatorId,
+            UUID brokerAccountId, UUID targetTradeId, ExecutionParameters parameters,
+            IdempotencyKey key, Instant now, Instant expiresAt) {
+        return createExit(id, initiatorId, brokerAccountId, null, targetTradeId, parameters, key, now, expiresAt);
     }
 
     public static ExecutionIntent rehydrate(ExecutionIntentId id, TradePlanReference tradePlan,
@@ -101,12 +107,21 @@ public final class ExecutionIntent {
     }
 
     public static ExecutionIntent rehydrateExit(ExecutionIntentId id, UUID targetTradeId,
-            IdempotencyKey key, UUID initiatorId, UUID brokerAccountId, ExecutionParameters parameters,
+            IdempotencyKey key, UUID initiatorId, UUID brokerAccountId, UUID accountId,
+            ExecutionParameters parameters,
             ExecutionStatus status, ExecutionAttemptId activeAttemptId, Instant createdAt,
             Instant updatedAt, Instant expiresAt, long version) {
         return new ExecutionIntent(id, null, null, ExecutionPurpose.EXIT, targetTradeId, key,
-                initiatorId, brokerAccountId, null, parameters, List.of(), status, activeAttemptId,
+                initiatorId, brokerAccountId, accountId, parameters, List.of(), status, activeAttemptId,
                 createdAt, updatedAt, expiresAt, version);
+    }
+
+    public static ExecutionIntent rehydrateExit(ExecutionIntentId id, UUID targetTradeId,
+            IdempotencyKey key, UUID initiatorId, UUID brokerAccountId, ExecutionParameters parameters,
+            ExecutionStatus status, ExecutionAttemptId activeAttemptId, Instant createdAt,
+            Instant updatedAt, Instant expiresAt, long version) {
+        return rehydrateExit(id, targetTradeId, key, initiatorId, brokerAccountId, null, parameters,
+                status, activeAttemptId, createdAt, updatedAt, expiresAt, version);
     }
 
     public void transition(ExecutionStatus target, Instant now) {
