@@ -111,7 +111,7 @@ class PaperSettlementExitTest {
                 new BigDecimal("100"), new BigDecimal("10"), "USD", "{}"));
 
         PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
-                new TradingCalculatorServiceImpl(), plans);
+                new TradingCalculatorServiceImpl(), plans, null, spotMarketData());
         ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
                 new TradePlanReference(planId, 1),
                 new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
@@ -152,7 +152,7 @@ class PaperSettlementExitTest {
                 new BigDecimal("2"), new BigDecimal("200"), new BigDecimal("10"), "USD", "{}"));
 
         PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
-                new TradingCalculatorServiceImpl(), plans);
+                new TradingCalculatorServiceImpl(), plans, null, spotMarketData());
         ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
                 new TradePlanReference(planId, 1),
                 new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
@@ -192,7 +192,7 @@ class PaperSettlementExitTest {
                 UUID.randomUUID(), 1, "BTC/USD", "SHORT", null, new BigDecimal("110"), new BigDecimal("90"),
                 new BigDecimal("2"), new BigDecimal("200"), new BigDecimal("10"), "USD", "{}"));
         PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
-                new TradingCalculatorServiceImpl(), plans);
+                new TradingCalculatorServiceImpl(), plans, null, spotMarketData());
         ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
                 new TradePlanReference(planId, 1),
                 new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
@@ -209,7 +209,7 @@ class PaperSettlementExitTest {
     }
 
     @Test
-    void cashPaperAccountCannotUseLegacyInventorySettlement() {
+    void cashPaperAccountRejectsWhenProductIdentityIsUnavailable() {
         UUID owner = UUID.randomUUID();
         BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "cash", NOW);
         Account account = Account.builder().accountId(UUID.randomUUID()).brokerAccountId(broker.id())
@@ -233,11 +233,44 @@ class PaperSettlementExitTest {
         BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(), attempt.id(), "SIM", NOW);
         order.addFill(new BrokerOrder.Fill("fill", BigDecimal.ONE, new BigDecimal("100"), BigDecimal.ZERO, NOW), true, NOW);
 
-        assertThatThrownBy(() -> new PaperSettlementService(brokers, accounts,
-                new TradingCalculatorServiceImpl()).settle(intent, attempt, order))
+        PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
+                new TradingCalculatorServiceImpl());
+        assertThatThrownBy(() -> settlement.settle(intent, attempt, order))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("PAPER settlement model is not supported by inventory settlement");
+                .hasMessage("PAPER instrument product identity is unavailable or ambiguous");
         assertThat(amount(account, "USD")).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void cashPaperAccountRejectsSpotSettlement() {
+        UUID owner = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "cash-spot", NOW);
+        Account account = Account.builder().accountId(UUID.randomUUID()).brokerAccountId(broker.id())
+                .broker("KRAKEN").name("cash-spot").baseCurrency("USD").settlementModel(SettlementModel.CASH)
+                .equity(new BigDecimal("10000")).peakEquity(new BigDecimal("10000"))
+                .user(User.builder().userId(owner).build()).build();
+        account.addBalance(AccountBalance.builder().asset("USD").amount(new BigDecimal("10000")).build());
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
+        ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
+                new TradePlanReference(UUID.randomUUID(), 1),
+                new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
+                new IdempotencyKey("cash-spot-unsupported"), owner, broker.id(),
+                new ExecutionParameters("BTC/USD", ExecutionParameters.Side.BUY,
+                        ExecutionParameters.OrderType.MARKET, BigDecimal.ONE, null), NOW, NOW.plusSeconds(300));
+        ExecutionAttempt attempt = ExecutionAttempt.create(ExecutionAttemptId.newId(), intent.id(), 1, NOW, null);
+        BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(), attempt.id(), "SIM", NOW);
+        order.addFill(new BrokerOrder.Fill("fill", BigDecimal.ONE, new BigDecimal("100"), BigDecimal.ZERO, NOW), true, NOW);
+
+        PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
+                new TradingCalculatorServiceImpl(), null, null, spotMarketData());
+        assertThatThrownBy(() -> settlement.settle(intent, attempt, order))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER settlement model is incompatible with instrument product type");
+        assertThat(amount(account, "USD")).isEqualByComparingTo("10000");
+        assertThat(account.getTrades()).isEmpty();
     }
 
     @Test
@@ -299,8 +332,17 @@ class PaperSettlementExitTest {
         when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
         when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
         when(accounts.save(account)).thenReturn(account);
-        return new Scenario(new PaperSettlementService(brokers, accounts, new TradingCalculatorServiceImpl()), account, trade,
+        return new Scenario(new PaperSettlementService(brokers, accounts, new TradingCalculatorServiceImpl(),
+                null, null, spotMarketData()), account, trade,
                 owner, broker, entryFee);
+    }
+
+    private static MarketDataClient spotMarketData() {
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(marketData.findAll()).thenReturn(java.util.List.of(MarketResponse.builder()
+                .provider(MarketProvider.KRAKEN).symbol("BTC/USD")
+                .productType(InstrumentProductType.SPOT).build()));
+        return marketData;
     }
 
     private static BigDecimal amount(Account account, String asset) {

@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.shared.domain.model.SettlementCompatibilityPolicy;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
 import org.springframework.stereotype.Service;
@@ -101,19 +102,21 @@ public class PaperSettlementService {
             return;
         }
         Account account = accountOpt.get();
-        if (account.getSettlementModel() != com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY) {
-            throw new IllegalStateException("PAPER settlement model is not supported by inventory settlement");
-        }
         if (account.getUser() == null || !brokerAccount.ownerId().equals(account.getUser().getUserId())
                 || (account.getBroker() != null && !brokerAccount.provider().name().equals(account.getBroker()))) {
             throw new IllegalStateException("PAPER account identity is inconsistent");
         }
         ExecutionParameters params = intent.parameters();
-        requireCompatibleSettlement(account, brokerAccount, params.instrument());
+        InstrumentProductType productType = requireCompatibleSettlement(account, brokerAccount, params.instrument());
+        boolean cashSettledDerivative = account.getSettlementModel() == SettlementModel.CASH
+                && productType == InstrumentProductType.LINEAR_PERPETUAL;
         BrokerOrder.Fill fill = getFill(order);
 
         if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT) {
-            settleExit(account, intent, fill);
+            settleExit(account, intent, fill, cashSettledDerivative);
+        } else if (cashSettledDerivative) {
+            updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
+            recalculateEquity(account, fill.fee());
         } else {
             updateBalances(account, intent, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
             updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
@@ -132,9 +135,9 @@ public class PaperSettlementService {
         }
     }
 
-    private void requireCompatibleSettlement(Account account,
-                                             com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
-                                             String symbol) {
+    private InstrumentProductType requireCompatibleSettlement(Account account,
+                                                               com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
+                                                               String symbol) {
         InstrumentProductType productType = resolveProductType(brokerAccount, symbol);
         try {
             SettlementCompatibilityPolicy.requireCompatible(account.getSettlementModel(), productType);
@@ -142,13 +145,14 @@ public class PaperSettlementService {
             throw new IllegalStateException("PAPER settlement model is incompatible with instrument product type",
                     incompatible);
         }
+        return productType;
     }
 
     private InstrumentProductType resolveProductType(
-            com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
-            String symbol) {
+        com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
+             String symbol) {
         if (marketDataClient == null) {
-            return InstrumentProductType.SPOT;
+            throw new IllegalStateException("PAPER instrument product identity is unavailable or ambiguous");
         }
         List<MarketResponse> matches = Optional.ofNullable(marketDataClient.findAll()).orElse(List.of()).stream()
                 .filter(market -> market != null
@@ -162,7 +166,8 @@ public class PaperSettlementService {
         return matches.getFirst().getProductType();
     }
 
-    private void settleExit(Account account, ExecutionIntent intent, BrokerOrder.Fill fill) {
+    private void settleExit(Account account, ExecutionIntent intent, BrokerOrder.Fill fill,
+                            boolean cashSettledDerivative) {
         UUID targetId = intent.targetTradeId().orElseThrow(() -> new IllegalStateException("EXIT target is required"));
         Trade trade = account.getTrades().stream().filter(candidate -> targetId.equals(candidate.getTradeId()))
                 .findFirst().orElseThrow(() -> new IllegalStateException("EXIT target trade not found"));
@@ -178,7 +183,9 @@ public class PaperSettlementService {
             throw new IllegalStateException("EXIT side does not match target trade");
         }
 
-        updateExitBalances(account, trade, fill);
+        if (!cashSettledDerivative) {
+            updateExitBalances(account, trade, fill);
+        }
         BigDecimal pnl = tradingCalculatorService.calculatePnL(trade.getType(), trade.getEntryPrice(),
                 fill.price(), trade.getQuantity());
         trade.setExitPrice(fill.price());

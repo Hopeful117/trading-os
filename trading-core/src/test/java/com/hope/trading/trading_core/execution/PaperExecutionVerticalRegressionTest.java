@@ -40,12 +40,15 @@ import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotDto;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotStatus;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
+import com.hope.trading.trading_core.market_data.helper.MarketProvider;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.service.TradingCalculatorServiceImpl;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -91,6 +94,13 @@ class PaperExecutionVerticalRegressionTest {
     }
 
     @Test
+    void cashDerivativePaperEntryUsesVerticalFlowWithoutChangingBalances() {
+        verifyScenario(ExecutionParameters.Side.SELL, "BTC/USD", "2",
+                "100", "100", "10000", "3", "100", "10000", "3", "10000",
+                SettlementModel.CASH, InstrumentProductType.LINEAR_PERPETUAL);
+    }
+
+    @Test
     void paperExecutionRejectsStaleSnapshotBeforeCreatingASettlement() {
         UUID ownerId = UUID.randomUUID();
         BrokerAccount broker = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
@@ -120,10 +130,21 @@ class PaperExecutionVerticalRegressionTest {
     }
 
     private void verifyScenario(ExecutionParameters.Side side, String instrument, String quantity,
+                                 String bid, String ask, String initialEquity,
+                                 String initialBaseBalance, String expectedFillPrice,
+                                 String expectedUsdBalance, String expectedBaseBalance,
+                                 String expectedEquity) {
+        verifyScenario(side, instrument, quantity, bid, ask, initialEquity, initialBaseBalance,
+                expectedFillPrice, expectedUsdBalance, expectedBaseBalance, expectedEquity,
+                SettlementModel.INVENTORY, InstrumentProductType.SPOT);
+    }
+
+    private void verifyScenario(ExecutionParameters.Side side, String instrument, String quantity,
                                 String bid, String ask, String initialEquity,
                                 String initialBaseBalance, String expectedFillPrice,
                                 String expectedUsdBalance, String expectedBaseBalance,
-                                String expectedEquity) {
+                                String expectedEquity, SettlementModel settlementModel,
+                                InstrumentProductType productType) {
         UUID ownerId = UUID.randomUUID();
         BrokerAccount paperBrokerAccount = BrokerAccount.create(
                 ownerId, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "Paper Account", NOW);
@@ -137,6 +158,7 @@ class PaperExecutionVerticalRegressionTest {
                 .broker(BrokerProvider.KRAKEN.name())
                 .name("Paper Account")
                 .baseCurrency("USD")
+                .settlementModel(settlementModel)
                 .equity(decimal(initialEquity))
                 .peakEquity(decimal(initialEquity))
                 .build();
@@ -154,11 +176,13 @@ class PaperExecutionVerticalRegressionTest {
         UUID marketId = UUID.randomUUID();
         MarketDataClient marketData = mock(MarketDataClient.class);
         when(marketData.findAll()).thenReturn(List.of(MarketResponse.builder()
-                .marketId(marketId)
-                .symbol(instrument)
-                .baseAsset(baseAsset)
-                .quoteAsset("USD")
-                .build()));
+                 .marketId(marketId)
+                 .provider(MarketProvider.KRAKEN)
+                 .symbol(instrument)
+                 .baseAsset(baseAsset)
+                 .quoteAsset("USD")
+                 .productType(productType)
+                 .build()));
         when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class)))
                 .thenReturn(List.of(new MarketPriceSnapshotDto(
                         marketId, instrument, decimal(expectedFillPrice), decimal(bid), decimal(ask),
@@ -190,7 +214,7 @@ class PaperExecutionVerticalRegressionTest {
         var lifecycle = new ExecutionLifecycleService();
         PaperSettlementService settlement = spy(new PaperSettlementService(
                 brokerAccounts, accounts, new TradingCalculatorServiceImpl(),
-                tradePlans));
+                tradePlans, null, marketData));
         ExecutionTimeRiskRevalidationService t1 = mock(ExecutionTimeRiskRevalidationService.class);
         when(t1.evaluateAndPersist(any(), any())).thenReturn(
                 new ExecutionTimeRiskRevalidationService.T1Outcome(
@@ -235,7 +259,7 @@ class PaperExecutionVerticalRegressionTest {
         assertThat(simulated.acknowledgement.fillPrice())
                 .isEqualByComparingTo(expectedFillPrice);
         verifyNoInteractions(liveClient);
-        verify(marketData).findAll();
+        verify(marketData, times(2)).findAll();
         verify(marketData).findPriceSnapshots(any(MarketPriceSnapshotRequest.class));
 
         BrokerOrder order = orders.findByIntentId(intent.id()).orElseThrow();
