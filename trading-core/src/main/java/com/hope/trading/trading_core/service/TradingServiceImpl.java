@@ -104,9 +104,9 @@ public class TradingServiceImpl implements TradingService {
         // 5. update account equity
         Account account = trade.getAccount();
 
-        account.setEquity(
-                account.getEquity().add(pnl)
-        );
+        if (account.getSettlementModel() != com.hope.trading.trading_core.shared.domain.model.SettlementModel.CASH) {
+            account.setEquity(account.getEquity().add(pnl));
+        }
 
         accountService.updateEquity(account.getAccountId(), pnl, account.getUser().getUsername());
 
@@ -154,7 +154,9 @@ public class TradingServiceImpl implements TradingService {
 
         // Update account equity
         Account account = trade.getAccount();
-        account.setEquity(account.getEquity().add(pnl));
+        if (account.getSettlementModel() != com.hope.trading.trading_core.shared.domain.model.SettlementModel.CASH) {
+            account.setEquity(account.getEquity().add(pnl));
+        }
         accountService.updateEquity(account.getAccountId(), pnl, account.getUser().getUsername());
 
         return tradeMapper.toDto(tradeRepository.save(trade));

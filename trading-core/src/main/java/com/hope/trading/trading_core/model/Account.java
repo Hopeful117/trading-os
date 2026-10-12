@@ -62,6 +62,19 @@ public class Account {
     @Column(nullable = false)
     private BigDecimal equity = BigDecimal.ZERO;
 
+    @Column(name = "realized_balance")
+    private BigDecimal realizedBalance;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "valuation_status", length = 32)
+    private AccountValuationStatus valuationStatus;
+
+    @Column(name = "valued_at")
+    private java.time.Instant valuedAt;
+
+    @Column(name = "market_data_timestamp")
+    private java.time.Instant marketDataTimestamp;
+
     @Column(name = "starting_balance")
     private BigDecimal startingBalance;
 

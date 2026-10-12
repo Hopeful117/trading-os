@@ -95,17 +95,24 @@ public class BrokerAccountService {
         // Get default rules (or create default if none exists)
         Rules rules = rulesRepository.findByName("Default Paper Trading Rules")
                 .orElseGet(() -> createDefaultRules());
+        SettlementModel settlementModel = requestedSettlementModel(requestedSettlementModel);
 
         Account account = Account.builder()
                  .broker(brokerAccount.provider().name())
                  .brokerAccountId(brokerAccount.id())
                 .name(brokerAccount.displayName())
                  .baseCurrency("USD") // PAPER accounts use USD as default base currency
-                 .settlementModel(requestedSettlementModel(requestedSettlementModel))
+                 .settlementModel(settlementModel)
                 .rules(rules)
-                .equity(initialCapital)
-                .peakEquity(initialCapital)
-                .user(userRepository.getReferenceById(ownerId))
+                 .equity(initialCapital)
+                 .peakEquity(initialCapital)
+                 .realizedBalance(settlementModel == SettlementModel.CASH
+                         ? initialCapital : null)
+                 .valuationStatus(settlementModel == SettlementModel.CASH
+                         ? com.hope.trading.trading_core.model.AccountValuationStatus.FRESH : null)
+                 .valuedAt(settlementModel == SettlementModel.CASH
+                         ? clock.instant() : null)
+                 .user(userRepository.getReferenceById(ownerId))
                 .build();
 
         // Add initial capital as balance

@@ -21,6 +21,7 @@ import com.hope.trading.trading_core.shared.domain.model.SettlementCompatibility
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
+import com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
@@ -42,24 +43,24 @@ public class PaperSettlementService {
     private final TradePlanRiskPort tradePlans;
     private final ChallengeReevaluationService challengeReevaluation;
     private final MarketDataClient marketDataClient;
+    private final PaperDerivativeAccountValuationService derivativeValuation;
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository) {
-        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null, null, null);
+        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null, null, null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository,
                                    TradingCalculatorService tradingCalculatorService) {
-        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null, null, null);
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null, null, null, null);
     }
 
-    @Autowired
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository,
                                    TradingCalculatorService tradingCalculatorService,
                                    TradePlanRiskPort tradePlans) {
-        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans, null, null);
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans, null, null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
@@ -68,21 +69,34 @@ public class PaperSettlementService {
                                    TradePlanRiskPort tradePlans,
                                    ChallengeReevaluationService challengeReevaluation) {
         this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
-                challengeReevaluation, null);
+                challengeReevaluation, null, null);
     }
 
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                  AccountRepository accountRepository,
+                                   TradingCalculatorService tradingCalculatorService,
+                                   TradePlanRiskPort tradePlans,
+                                   ChallengeReevaluationService challengeReevaluation,
+                                   MarketDataClient marketDataClient) {
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
+                challengeReevaluation, marketDataClient, null);
+    }
+
+    @Autowired
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                   AccountRepository accountRepository,
                                   TradingCalculatorService tradingCalculatorService,
                                   TradePlanRiskPort tradePlans,
                                   ChallengeReevaluationService challengeReevaluation,
-                                  MarketDataClient marketDataClient) {
+                                  MarketDataClient marketDataClient,
+                                  PaperDerivativeAccountValuationService derivativeValuation) {
         this.brokerAccountRepository = brokerAccountRepository;
         this.accountRepository = accountRepository;
         this.tradingCalculatorService = tradingCalculatorService;
         this.tradePlans = tradePlans;
         this.challengeReevaluation = challengeReevaluation;
         this.marketDataClient = marketDataClient;
+        this.derivativeValuation = derivativeValuation;
     }
 
     @Transactional
@@ -116,7 +130,9 @@ public class PaperSettlementService {
             settleExit(account, intent, fill, cashSettledDerivative);
         } else if (cashSettledDerivative) {
             updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
-            recalculateEquity(account, fill.fee());
+            ensureRealizedBalance(account);
+            account.setRealizedBalance(account.getRealizedBalance().subtract(fill.fee()));
+            recomputeCashEquity(account, fill.executedAt());
         } else {
             updateBalances(account, intent, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
             updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
@@ -193,9 +209,15 @@ public class PaperSettlementService {
         trade.setClosedAt(fill.executedAt());
         trade.setPnl(pnl);
         trade.setTradeStatus(TradeStatus.CLOSED);
-        account.setEquity(account.getEquity().add(pnl).subtract(fill.fee()));
-        if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
-            account.setPeakEquity(account.getEquity());
+        if (cashSettledDerivative) {
+            ensureRealizedBalance(account);
+            account.setRealizedBalance(account.getRealizedBalance().add(pnl).subtract(fill.fee()));
+            recomputeCashEquity(account, fill.executedAt());
+        } else {
+            account.setEquity(account.getEquity().add(pnl).subtract(fill.fee()));
+            if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
+                account.setPeakEquity(account.getEquity());
+            }
         }
     }
 
@@ -329,6 +351,32 @@ public class PaperSettlementService {
         if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
             account.setPeakEquity(account.getEquity());
         }
+    }
+
+    private void ensureRealizedBalance(Account account) {
+        if (account.getRealizedBalance() == null) {
+            account.setRealizedBalance(account.getEquity());
+        }
+    }
+
+    private void recomputeCashEquity(Account account, Instant valuedAt) {
+        if (derivativeValuation != null) {
+            derivativeValuation.recomputeKnownMarks(account, valuedAt);
+            return;
+        }
+        ensureRealizedBalance(account);
+        BigDecimal unrealized = account.getTrades().stream()
+                .filter(trade -> trade.getTradeStatus() == TradeStatus.OPEN)
+                .map(trade -> tradingCalculatorService.calculatePnL(trade.getType(), trade.getEntryPrice(),
+                        trade.getCurrentPrice() == null ? trade.getEntryPrice() : trade.getCurrentPrice(),
+                        trade.getQuantity()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        account.setEquity(account.getRealizedBalance().add(unrealized));
+        account.setValuationStatus(account.getTrades().stream()
+                .anyMatch(trade -> trade.getTradeStatus() == TradeStatus.OPEN)
+                ? com.hope.trading.trading_core.model.AccountValuationStatus.STALE
+                : com.hope.trading.trading_core.model.AccountValuationStatus.FRESH);
+        account.setValuedAt(valuedAt);
     }
 
     private void addBalance(Account account, String asset, BigDecimal amount) {
