@@ -6,12 +6,15 @@ import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.helper.TradeStatus;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.tradeplanning.application.TradePlanningProfileRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +24,6 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class AccountServiceImpl implements AccountService {
 
@@ -31,6 +33,38 @@ public class AccountServiceImpl implements AccountService {
     private final UserRepository userRepository;
     private final RiskPersistence riskPersistence;
     private final TradePlanningProfileRepository tradePlanningProfiles;
+    private final TradingCalculatorService tradingCalculatorService;
+    private final BrokerAccountRepository brokerAccounts;
+
+    public AccountServiceImpl(AccountRepository accountRepository, AccountMapper accountMapper,
+                              UserRepository userRepository, RiskPersistence riskPersistence,
+                              TradePlanningProfileRepository tradePlanningProfiles) {
+        this(accountRepository, accountMapper, userRepository, riskPersistence, tradePlanningProfiles,
+                new TradingCalculatorServiceImpl(), null);
+    }
+
+    public AccountServiceImpl(AccountRepository accountRepository, AccountMapper accountMapper,
+                              UserRepository userRepository, RiskPersistence riskPersistence,
+                              TradePlanningProfileRepository tradePlanningProfiles,
+                              TradingCalculatorService tradingCalculatorService) {
+        this(accountRepository, accountMapper, userRepository, riskPersistence, tradePlanningProfiles,
+                tradingCalculatorService, null);
+    }
+
+    @Autowired
+    public AccountServiceImpl(AccountRepository accountRepository, AccountMapper accountMapper,
+                              UserRepository userRepository, RiskPersistence riskPersistence,
+                              TradePlanningProfileRepository tradePlanningProfiles,
+                              TradingCalculatorService tradingCalculatorService,
+                              BrokerAccountRepository brokerAccounts) {
+        this.accountRepository = accountRepository;
+        this.accountMapper = accountMapper;
+        this.userRepository = userRepository;
+        this.riskPersistence = riskPersistence;
+        this.tradePlanningProfiles = tradePlanningProfiles;
+        this.tradingCalculatorService = tradingCalculatorService;
+        this.brokerAccounts = brokerAccounts;
+    }
 
 
     @Override
@@ -74,15 +108,31 @@ public class AccountServiceImpl implements AccountService {
         Account account = getAccountById(accountId,username);
 
 
-        BigDecimal newEquity =
-                account.getEquity()
-                        .add(pnl);
+        boolean cash = isPaperCash(account);
+        if (cash) {
+            if (account.getRealizedBalance() == null) {
+                account.setRealizedBalance(account.getEquity());
+            }
+            account.setRealizedBalance(account.getRealizedBalance().add(pnl));
+            BigDecimal unrealized = account.getTrades().stream()
+                    .filter(trade -> trade.getTradeStatus() == TradeStatus.OPEN)
+                    .map(trade -> tradingCalculatorService.calculatePnL(trade.getType(), trade.getEntryPrice(),
+                            trade.getCurrentPrice() == null ? trade.getEntryPrice() : trade.getCurrentPrice(),
+                            trade.getQuantity()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            account.setEquity(account.getRealizedBalance().add(unrealized));
+            account.setValuationStatus(account.getTrades().stream()
+                    .anyMatch(trade -> trade.getTradeStatus() == TradeStatus.OPEN)
+                    ? com.hope.trading.trading_core.model.AccountValuationStatus.STALE
+                    : com.hope.trading.trading_core.model.AccountValuationStatus.FRESH);
+        } else {
+            account.setEquity(account.getEquity().add(pnl));
+        }
+        BigDecimal newEquity = account.getEquity();
 
 
-        account.setEquity(newEquity);
-
-
-        if (newEquity.compareTo(account.getPeakEquity()) > 0) {
+        if ((!cash || account.getValuationStatus() == com.hope.trading.trading_core.model.AccountValuationStatus.FRESH)
+                && newEquity.compareTo(account.getPeakEquity()) > 0) {
 
             account.setPeakEquity(newEquity);
 
@@ -90,6 +140,15 @@ public class AccountServiceImpl implements AccountService {
 
 
         accountRepository.save(account);
+    }
+
+    private boolean isPaperCash(Account account) {
+        return account.getSettlementModel() == com.hope.trading.trading_core.shared.domain.model.SettlementModel.CASH
+                && brokerAccounts != null
+                && account.getBrokerAccountId() != null
+                && brokerAccounts.findById(account.getBrokerAccountId())
+                .map(value -> value.executionMode() == ExecutionMode.PAPER)
+                .orElse(false);
     }
 
 

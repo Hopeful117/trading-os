@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.challenge.domain.ChallengeDefinitionKey;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +36,10 @@ public class ChallengeProgressService {
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(challenge.definitionId(), challenge.definitionVersion()))
                 .orElseThrow(() -> new IllegalStateException("Challenge definition does not exist"));
-        BigDecimal current = account.getBalances().stream()
+        BigDecimal current = account.getSettlementModel() == SettlementModel.CASH
+                && account.getRealizedBalance() != null
+                ? account.getRealizedBalance()
+                : account.getBalances().stream()
                 .filter(value -> definition.capitalCurrency().equalsIgnoreCase(value.getAsset()))
                 .map(value -> value.getAmount()).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Challenge balance is unavailable"));

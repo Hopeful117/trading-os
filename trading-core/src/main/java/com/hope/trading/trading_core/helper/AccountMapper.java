@@ -25,6 +25,10 @@ public class AccountMapper {
                     .settlementModel(account.getSettlementModel())
                     .equity(account.getEquity())
                     .peakEquity(account.getPeakEquity())
+                    .realizedBalance(account.getRealizedBalance())
+                    .valuationStatus(account.getValuationStatus())
+                    .valuedAt(account.getValuedAt())
+                    .marketDataTimestamp(account.getMarketDataTimestamp())
                     .rulesId(
                             account.getRules() != null
                                     ? account.getRules().getRulesId()
@@ -89,4 +93,3 @@ public class AccountMapper {
                 .build();
     }
         }
-

@@ -17,6 +17,9 @@ import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
+import com.hope.trading.trading_core.model.AccountValuationStatus;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
+import com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -77,6 +80,30 @@ class ModeAwareRiskFactsProviderTest {
     }
 
     @Test
+    void paperCashRefreshesValuationBeforeRiskFacts() {
+        UUID brokerId = UUID.randomUUID();
+        Account account = Account.builder().accountId(UUID.randomUUID()).baseCurrency("USD")
+                .settlementModel(SettlementModel.CASH).realizedBalance(new BigDecimal("1000"))
+                .equity(new BigDecimal("900")).balances(List.of(
+                        AccountBalance.builder().asset("USD").amount(new BigDecimal("1000")).build()))
+                .build();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccount.id()).thenReturn(brokerId);
+        PaperDerivativeAccountValuationService valuation = mock(PaperDerivativeAccountValuationService.class);
+        when(valuation.refresh(account)).thenReturn(new PaperDerivativeAccountValuationService.ValuationResult(
+                new BigDecimal("1000"), new BigDecimal("-100"), new BigDecimal("900"),
+                AccountValuationStatus.FRESH, from, from, null));
+        ModeAwareRiskFactsProvider provider = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper(),
+                java.time.Clock.systemUTC(), valuation);
+
+        RiskFactsProvider.Snapshot snapshot = provider.load(account, brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.account().equity()).isEqualByComparingTo("900");
+        verify(valuation).refresh(account);
+    }
+
+    @Test
     void completeProtectiveStopOrdersOverrideMissingAggregateQuantity() {
         BigDecimal quantity = BigDecimal.TEN;
 
@@ -89,9 +116,11 @@ class ModeAwareRiskFactsProviderTest {
     void unavailableExecutionModeDoesNotFallBackToPaper() {
         when(brokerAccount.executionMode()).thenReturn(null);
         ModeAwareRiskFactsProvider provider = new ModeAwareRiskFactsProvider(liveFacts, new ObjectMapper());
+        Account account = mock(Account.class);
+        UUID sourceId = UUID.randomUUID();
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.load(
-                mock(Account.class), brokerAccount, UUID.randomUUID(), from, to))
+                account, brokerAccount, sourceId, from, to))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(liveFacts);
     }

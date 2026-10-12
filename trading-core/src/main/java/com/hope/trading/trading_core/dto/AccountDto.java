@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.dto;
 
 import com.hope.trading.trading_core.broker.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
+import com.hope.trading.trading_core.model.AccountValuationStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -30,6 +31,14 @@ public class AccountDto {
     private BigDecimal equity;
 
     private BigDecimal peakEquity;
+
+    private BigDecimal realizedBalance;
+
+    private AccountValuationStatus valuationStatus;
+
+    private java.time.Instant valuedAt;
+
+    private java.time.Instant marketDataTimestamp;
 
     private UUID rulesId;
 

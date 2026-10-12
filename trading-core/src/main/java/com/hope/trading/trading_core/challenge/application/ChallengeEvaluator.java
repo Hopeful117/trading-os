@@ -8,6 +8,7 @@ import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import com.hope.trading.trading_core.challenge.domain.ProgressionValueSource;
 import com.hope.trading.trading_core.model.Account;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -36,12 +37,7 @@ public final class ChallengeEvaluator {
             return ChallengeStatus.ACTIVE;
         }
         if (definition.progressionValueSource() == ProgressionValueSource.BALANCE) {
-            BigDecimal balance = account.getBalances().stream()
-                    .filter(value -> definition.capitalCurrency().equalsIgnoreCase(value.getAsset()))
-                    .map(value -> value.getAmount())
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("Challenge balance is unavailable"));
+            BigDecimal balance = progressionValue(account, definition);
             BigDecimal target = definition.startingCapital()
                     .add(definition.startingCapital().multiply(definition.profitTargetRatio()));
             if (balance.compareTo(target) >= 0) {
@@ -50,6 +46,18 @@ public final class ChallengeEvaluator {
             }
         }
         return ChallengeStatus.ACTIVE;
+    }
+
+    private BigDecimal progressionValue(Account account, ChallengeDefinition definition) {
+        if (account.getSettlementModel() == SettlementModel.CASH && account.getRealizedBalance() != null) {
+            return account.getRealizedBalance();
+        }
+        return account.getBalances().stream()
+                .filter(value -> definition.capitalCurrency().equalsIgnoreCase(value.getAsset()))
+                .map(value -> value.getAmount())
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Challenge balance is unavailable"));
     }
 
     private boolean terminalRiskViolation(ChallengeInstance challenge, RiskValidationResult risk) {

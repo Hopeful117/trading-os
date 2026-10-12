@@ -51,6 +51,7 @@ class PaperCashDerivativeSettlementTest {
 
         scenario.settleEntry(TradeType.BUY, "100", "1");
         assertThat(balances(scenario.account)).isEqualTo(balancesBefore);
+        assertThat(scenario.account.getRealizedBalance()).isEqualByComparingTo("9999");
         assertThat(scenario.account.getEquity()).isEqualByComparingTo("9999");
 
         Trade trade = scenario.account.getTrades().getFirst();
@@ -58,6 +59,7 @@ class PaperCashDerivativeSettlementTest {
         scenario.settleExit(trade, "110", "2");
 
         assertThat(balances(scenario.account)).isEqualTo(balancesBefore);
+        assertThat(scenario.account.getRealizedBalance()).isEqualByComparingTo("10017");
         assertThat(scenario.account.getEquity()).isEqualByComparingTo("10017");
         assertThat(trade.getPnl()).isEqualByComparingTo("20");
         assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);

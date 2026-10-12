@@ -8,6 +8,8 @@ import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
+import com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.Clock;
@@ -24,16 +26,23 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     private final BrokerRiskFactsPort liveFacts;
     private final ObjectMapper mapper;
     private final Clock clock;
+    private final PaperDerivativeAccountValuationService derivativeValuation;
 
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper) {
-        this(liveFacts, mapper, Clock.systemUTC());
+        this(liveFacts, mapper, Clock.systemUTC(), null);
+    }
+
+    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock) {
+        this(liveFacts, mapper, clock, null);
     }
 
     @Autowired
-    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock) {
+    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock,
+                                      PaperDerivativeAccountValuationService derivativeValuation) {
         this.liveFacts = liveFacts;
         this.mapper = mapper;
         this.clock = clock;
+        this.derivativeValuation = derivativeValuation;
     }
 
     @Override
@@ -50,8 +59,8 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     }
 
     private RiskFactsProvider.Snapshot paperSnapshot(com.hope.trading.trading_core.model.Account account,
-                                                       BrokerAccount brokerAccount,
-                                                         Instant from, Instant to) {
+                                                        BrokerAccount brokerAccount,
+                                                          Instant from, Instant to) {
         List<String> reasons = new java.util.ArrayList<>();
         if (account == null || account.getAccountId() == null || blank(account.getBaseCurrency())) {
             reasons.add("PAPER_ACCOUNT_FACTS_INVALID");
@@ -68,6 +77,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 || value.getAmount() == null)) {
             reasons.add("PAPER_BALANCE_FACTS_INVALID");
         }
+        refreshCashValuation(account, reasons);
         List<Trade> trades = account == null || account.getTrades() == null ? List.of() : account.getTrades();
         List<RiskFactsProvider.Position> positions = trades.stream()
                 .filter(trade -> trade != null && trade.getTradeStatus() == TradeStatus.OPEN)
@@ -84,7 +94,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
             reasons.add("PAPER_TRADE_FACTS_INVALID");
         }
         BigDecimal balance = valuationAsset == null ? null : balances.get(valuationAsset);
-        if (balance == null || account == null || account.getEquity() == null) {
+        if (balance == null || account.getEquity() == null) {
             reasons.add("PAPER_ACCOUNT_VALUATION_INCOMPLETE");
         }
         String payload = writePayload(account, balances, positions, closedTrades);
@@ -101,6 +111,22 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 closedTrades,
                 List.of(),
                 payload);
+    }
+
+    private void refreshCashValuation(com.hope.trading.trading_core.model.Account account,
+                                      List<String> reasons) {
+        if (account == null || account.getSettlementModel() != SettlementModel.CASH) return;
+        if (derivativeValuation == null) {
+            reasons.add("PAPER_CASH_VALUATION_UNAVAILABLE");
+            return;
+        }
+        try {
+            PaperDerivativeAccountValuationService.ValuationResult valuation =
+                    derivativeValuation.refresh(account);
+            if (!valuation.fresh()) reasons.add("PAPER_CASH_VALUATION_NOT_FRESH");
+        } catch (RuntimeException failure) {
+            reasons.add("PAPER_CASH_VALUATION_UNAVAILABLE");
+        }
     }
 
     private RiskFactsProvider.Position paperPosition(Trade trade) {

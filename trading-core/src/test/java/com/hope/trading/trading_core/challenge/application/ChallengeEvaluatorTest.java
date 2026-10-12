@@ -14,6 +14,7 @@ import com.hope.trading.trading_core.helper.Role;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -47,6 +48,16 @@ class ChallengeEvaluatorTest {
         assertThat(evaluator.evaluate(challenge, definition, account("11000"), risk(List.of()), UUID.randomUUID(), NOW))
                 .isEqualTo(ChallengeStatus.PASSED);
         assertThat(challenge.terminalReason()).isEqualTo("Challenge balance target reached");
+    }
+
+    @Test
+    void cashProgressionUsesRealizedBalanceInsteadOfUnrealizedEquity() {
+        ChallengeInstance challenge = challenge();
+        Account account = account("15000");
+        account.setSettlementModel(SettlementModel.CASH);
+        account.setRealizedBalance(new BigDecimal("10000"));
+        assertThat(evaluator.evaluate(challenge, definition, account, risk(List.of()), UUID.randomUUID(), NOW))
+                .isEqualTo(ChallengeStatus.ACTIVE);
     }
 
     @Test
