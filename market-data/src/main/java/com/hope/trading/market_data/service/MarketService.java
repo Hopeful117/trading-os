@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.model.Market;
 
 import java.util.List;
@@ -13,6 +14,10 @@ public interface MarketService {
     Optional<Market> findById(UUID marketId);
 
     Optional<Market> findByProviderAndSymbol(MarketProvider marketProvider ,String symbol);
+
+    Optional<Market> findByProviderAndSymbolAndProductType(MarketProvider marketProvider,
+                                                            String symbol,
+                                                            InstrumentProductType productType);
 
 
 

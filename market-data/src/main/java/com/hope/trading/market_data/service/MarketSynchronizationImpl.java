@@ -36,9 +36,10 @@ public class MarketSynchronizationImpl implements MarketSynchronization {
     private Market mergeMarket(Market market) {
 
         return marketRepository
-                .findByProviderAndSymbol(
+                .findByProviderAndSymbolAndProductType(
                         market.getProvider(),
-                        market.getSymbol()
+                        market.getSymbol(),
+                        market.getProductType()
                 )
                 .map(existing -> update(existing, market))
                 .orElse(market);
@@ -69,4 +70,3 @@ public class MarketSynchronizationImpl implements MarketSynchronization {
 
     }
 }
-

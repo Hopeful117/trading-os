@@ -22,12 +22,14 @@ import com.hope.trading.trading_core.execution.infrastructure.adapter.BrokerExec
 import com.hope.trading.trading_core.helper.*;
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
 import com.hope.trading.trading_core.market_data.dto.*;
+import com.hope.trading.trading_core.market_data.helper.MarketProvider;
 import com.hope.trading.trading_core.model.*;
 import com.hope.trading.trading_core.positionclose.application.service.PaperExitService;
 import com.hope.trading.trading_core.repository.*;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
@@ -108,7 +110,8 @@ class PaperExitAcceptanceIntegrationTest {
                 new EntryIntent(EntryIntent.OrderType.MARKET, null), decimal("90"), decimal("120"),
                 decimal("2"), decimal("200"), decimal("20"), "USD", "{}"));
         when(marketData.findAll()).thenReturn(List.of(MarketResponse.builder().marketId(MARKET_ID)
-                .symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD").build()));
+                .provider(MarketProvider.KRAKEN).symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD")
+                .productType(InstrumentProductType.SPOT).build()));
         when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class))).thenAnswer(invocation ->
                 List.of(new MarketPriceSnapshotDto(MARKET_ID, "BTC/USD", decimal("100"),
                         decimal("100"), decimal("100"), true, NOW, MarketPriceSnapshotStatus.FRESH)));

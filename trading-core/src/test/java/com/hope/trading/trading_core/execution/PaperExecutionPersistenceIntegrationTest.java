@@ -27,6 +27,8 @@ import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotDto;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotStatus;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.User;
@@ -162,6 +164,7 @@ class PaperExecutionPersistenceIntegrationTest {
         assertThat(amount(persistedAccount, "BTC")).isEqualByComparingTo("0.1");
         assertThat(persistedAccount.getEquity()).isEqualByComparingTo("10000");
         assertThat(persistedAccount.getPeakEquity()).isEqualByComparingTo("10000");
+        assertThat(persistedAccount.getSettlementModel()).isEqualTo(SettlementModel.INVENTORY);
         assertThat(persistedAccount.getTrades()).singleElement().satisfies(trade -> {
             assertThat(trade.getSymbol()).isEqualTo("BTC/USD");
             assertThat(trade.getType()).isEqualTo(TradeType.BUY);
@@ -189,7 +192,9 @@ class PaperExecutionPersistenceIntegrationTest {
 
     private void configureMarketData() {
         when(marketData.findAll()).thenReturn(List.of(MarketResponse.builder()
-                .marketId(MARKET_ID).symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD").build()));
+                .marketId(MARKET_ID).provider(com.hope.trading.trading_core.market_data.helper.MarketProvider.KRAKEN)
+                .symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD")
+                .productType(InstrumentProductType.SPOT).build()));
         when(marketData.findPriceSnapshots(any(MarketPriceSnapshotRequest.class))).thenReturn(List.of(
                 new MarketPriceSnapshotDto(MARKET_ID, "BTC/USD", decimal("50000"), decimal("49900"),
                         decimal("50100"), true, NOW, MarketPriceSnapshotStatus.FRESH)));

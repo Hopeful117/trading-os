@@ -3,6 +3,7 @@ package com.hope.trading.market_data.kraken.helper;
 import com.hope.trading.market_data.helper.MarketAvailability;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.helper.MarketStateBuilder;
+import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairDto;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketConstraints;
@@ -21,6 +22,7 @@ public class KrakenMarketMapper {
                 .symbol(dto.getWsname())
                 .baseAsset(assets[0])
                 .quoteAsset(assets[1])
+                .productType(InstrumentProductType.SPOT)
                 .marketState(marketStateBuilder.buildInitialState("online".equalsIgnoreCase(dto.getStatus()) ? MarketAvailability.AVAILABLE : MarketAvailability.UNAVAILABLE))
                 .marketConstraints(
                         MarketConstraints.builder()

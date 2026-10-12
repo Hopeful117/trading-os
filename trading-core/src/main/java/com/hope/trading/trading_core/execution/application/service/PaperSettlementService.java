@@ -16,6 +16,10 @@ import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.challenge.application.ChallengeReevaluationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
+import com.hope.trading.trading_core.shared.domain.model.SettlementCompatibilityPolicy;
+import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
+import com.hope.trading.trading_core.market_data.dto.MarketResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
@@ -23,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,16 +40,17 @@ public class PaperSettlementService {
     private final TradingCalculatorService tradingCalculatorService;
     private final TradePlanRiskPort tradePlans;
     private final ChallengeReevaluationService challengeReevaluation;
+    private final MarketDataClient marketDataClient;
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository) {
-        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null, null);
+        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null, null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository,
                                    TradingCalculatorService tradingCalculatorService) {
-        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null, null);
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null, null, null);
     }
 
     @Autowired
@@ -52,19 +58,30 @@ public class PaperSettlementService {
                                    AccountRepository accountRepository,
                                    TradingCalculatorService tradingCalculatorService,
                                    TradePlanRiskPort tradePlans) {
-        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans, null);
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans, null, null);
+    }
+
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                   AccountRepository accountRepository,
+                                   TradingCalculatorService tradingCalculatorService,
+                                   TradePlanRiskPort tradePlans,
+                                   ChallengeReevaluationService challengeReevaluation) {
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
+                challengeReevaluation, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                   AccountRepository accountRepository,
                                   TradingCalculatorService tradingCalculatorService,
                                   TradePlanRiskPort tradePlans,
-                                  ChallengeReevaluationService challengeReevaluation) {
+                                  ChallengeReevaluationService challengeReevaluation,
+                                  MarketDataClient marketDataClient) {
         this.brokerAccountRepository = brokerAccountRepository;
         this.accountRepository = accountRepository;
         this.tradingCalculatorService = tradingCalculatorService;
         this.tradePlans = tradePlans;
         this.challengeReevaluation = challengeReevaluation;
+        this.marketDataClient = marketDataClient;
     }
 
     @Transactional
@@ -84,11 +101,15 @@ public class PaperSettlementService {
             return;
         }
         Account account = accountOpt.get();
+        if (account.getSettlementModel() != com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY) {
+            throw new IllegalStateException("PAPER settlement model is not supported by inventory settlement");
+        }
         if (account.getUser() == null || !brokerAccount.ownerId().equals(account.getUser().getUserId())
                 || (account.getBroker() != null && !brokerAccount.provider().name().equals(account.getBroker()))) {
             throw new IllegalStateException("PAPER account identity is inconsistent");
         }
         ExecutionParameters params = intent.parameters();
+        requireCompatibleSettlement(account, brokerAccount, params.instrument());
         BrokerOrder.Fill fill = getFill(order);
 
         if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT) {
@@ -109,6 +130,36 @@ public class PaperSettlementService {
                         account.getAccountId(), monitoringFailure);
             }
         }
+    }
+
+    private void requireCompatibleSettlement(Account account,
+                                             com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
+                                             String symbol) {
+        InstrumentProductType productType = resolveProductType(brokerAccount, symbol);
+        try {
+            SettlementCompatibilityPolicy.requireCompatible(account.getSettlementModel(), productType);
+        } catch (IllegalArgumentException incompatible) {
+            throw new IllegalStateException("PAPER settlement model is incompatible with instrument product type",
+                    incompatible);
+        }
+    }
+
+    private InstrumentProductType resolveProductType(
+            com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
+            String symbol) {
+        if (marketDataClient == null) {
+            return InstrumentProductType.SPOT;
+        }
+        List<MarketResponse> matches = Optional.ofNullable(marketDataClient.findAll()).orElse(List.of()).stream()
+                .filter(market -> market != null
+                        && market.getProvider() != null
+                        && brokerAccount.provider().name().equals(market.getProvider().name())
+                        && symbol.equals(market.getSymbol()))
+                .toList();
+        if (matches.size() != 1 || matches.getFirst().getProductType() == null) {
+            throw new IllegalStateException("PAPER instrument product identity is unavailable or ambiguous");
+        }
+        return matches.getFirst().getProductType();
     }
 
     private void settleExit(Account account, ExecutionIntent intent, BrokerOrder.Fill fill) {

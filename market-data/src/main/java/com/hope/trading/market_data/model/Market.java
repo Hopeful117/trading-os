@@ -3,6 +3,7 @@ package com.hope.trading.market_data.model;
 
 
 import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.InstrumentProductType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -12,7 +13,7 @@ import java.util.UUID;
 @Table(
         name = "markets",
         uniqueConstraints = {
-                @UniqueConstraint(columnNames = {"provider", "symbol"})
+                @UniqueConstraint(columnNames = {"provider", "symbol", "product_type"})
         }
 )
 @Getter
@@ -39,6 +40,11 @@ public class Market {
     @Column(nullable = false)
     private String quoteAsset;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type", nullable = false, length = 32)
+    private InstrumentProductType productType = InstrumentProductType.SPOT;
+
     @Embedded
     @Column(nullable = false)
     private MarketConstraints marketConstraints;
@@ -48,7 +54,6 @@ public class Market {
     private MarketState marketState;
 
 }
-
 
 
 

@@ -7,6 +7,7 @@ import com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus
 import com.hope.trading.trading_core.brokeraccount.domain.CredentialReference;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.brokeraccount.api.RiskProfileReference;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
@@ -81,15 +82,16 @@ public class BrokerAccountService {
                 throw new IllegalArgumentException("initialCapital must be positive for PAPER accounts");
             }
             createPaperAccount(ownerId, savedAccount, request.initialCapital(), profileReference,
-                    effectiveRiskProfile);
+                    effectiveRiskProfile, request.settlementModel());
         }
 
         return map(savedAccount);
     }
 
     private void createPaperAccount(UUID ownerId, BrokerAccount brokerAccount, BigDecimal initialCapital,
-                                    RiskProfileReference profileReference,
-                                    EffectiveRiskRuleSet effectiveRiskProfile) {
+                                     RiskProfileReference profileReference,
+                                     EffectiveRiskRuleSet effectiveRiskProfile,
+                                     SettlementModel requestedSettlementModel) {
         // Get default rules (or create default if none exists)
         Rules rules = rulesRepository.findByName("Default Paper Trading Rules")
                 .orElseGet(() -> createDefaultRules());
@@ -98,7 +100,8 @@ public class BrokerAccountService {
                  .broker(brokerAccount.provider().name())
                  .brokerAccountId(brokerAccount.id())
                 .name(brokerAccount.displayName())
-                .baseCurrency("USD") // PAPER accounts use USD as default base currency
+                 .baseCurrency("USD") // PAPER accounts use USD as default base currency
+                 .settlementModel(requestedSettlementModel(requestedSettlementModel))
                 .rules(rules)
                 .equity(initialCapital)
                 .peakEquity(initialCapital)
@@ -139,6 +142,10 @@ public class BrokerAccountService {
                         TradePlanningProfile.PlanningHorizon.INTRADAY,
                         Duration.ofHours(1)));
         tradePlanningProfiles.assign(ownerId, savedAccount.getAccountId(), profile.id(), profile.version());
+    }
+
+    private SettlementModel requestedSettlementModel(SettlementModel requested) {
+        return requested == null ? SettlementModel.INVENTORY : requested;
     }
 
     static BigDecimal compatiblePaperRiskBudget(BigDecimal initialCapital,
