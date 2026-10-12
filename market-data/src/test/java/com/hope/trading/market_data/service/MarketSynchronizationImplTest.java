@@ -2,6 +2,7 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.brokerClient.MarketDataProvider;
 import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.repository.MarketRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,8 +52,8 @@ class MarketSynchronizationImplTest {
     void newMarketsAreInserted() {
         Market fresh = market("XBT/EUR", "XBT", "EUR");
         when(marketDataProvider.getMarkets()).thenReturn(List.of(fresh));
-        when(marketRepository.findByProviderAndSymbol(
-                MarketProvider.KRAKEN, "XBT/EUR")).thenReturn(Optional.empty());
+        when(marketRepository.findByProviderAndSymbolAndProductType(
+                MarketProvider.KRAKEN, "XBT/EUR", InstrumentProductType.SPOT)).thenReturn(Optional.empty());
 
         service.synchronizeMarkets();
 
@@ -64,8 +65,8 @@ class MarketSynchronizationImplTest {
         Market existing = market("XBT/EUR", "OLD", "OLD");
         Market incoming = market("XBT/EUR", "XBT", "EUR");
         when(marketDataProvider.getMarkets()).thenReturn(List.of(incoming));
-        when(marketRepository.findByProviderAndSymbol(
-                MarketProvider.KRAKEN, "XBT/EUR")).thenReturn(Optional.of(existing));
+        when(marketRepository.findByProviderAndSymbolAndProductType(
+                MarketProvider.KRAKEN, "XBT/EUR", InstrumentProductType.SPOT)).thenReturn(Optional.of(existing));
 
         service.synchronizeMarkets();
 
@@ -78,8 +79,8 @@ class MarketSynchronizationImplTest {
     void synchronizationIsRepeatableWithoutDuplication() {
         Market existing = market("XBT/EUR", "XBT", "EUR");
         when(marketDataProvider.getMarkets()).thenReturn(List.of(existing));
-        when(marketRepository.findByProviderAndSymbol(
-                MarketProvider.KRAKEN, "XBT/EUR")).thenReturn(Optional.of(existing));
+        when(marketRepository.findByProviderAndSymbolAndProductType(
+                MarketProvider.KRAKEN, "XBT/EUR", InstrumentProductType.SPOT)).thenReturn(Optional.of(existing));
 
         service.synchronizeMarkets();
         service.synchronizeMarkets();

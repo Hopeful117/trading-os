@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.model;
 
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -31,6 +32,10 @@ public class Account {
     @Column
     private String broker;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "settlement_model", nullable = false, length = 32)
+    private SettlementModel settlementModel = SettlementModel.INVENTORY;
 
     @Column(nullable = false)
     private String name;

@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.repository;
 
 import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.model.Market;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -12,6 +13,12 @@ public interface MarketRepository extends JpaRepository<Market, UUID> {
     Optional<Market> findByProviderAndSymbol(
             MarketProvider provider,
             String symbol
+    );
+
+    Optional<Market> findByProviderAndSymbolAndProductType(
+            MarketProvider provider,
+            String symbol,
+            InstrumentProductType productType
     );
 
     boolean existsBySymbol(String symbol);

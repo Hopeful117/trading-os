@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.market_data.dto;
 
 import com.hope.trading.trading_core.market_data.helper.MarketProvider;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import lombok.Builder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -22,6 +23,8 @@ public class MarketResponse {
     private String baseAsset;
 
     private String quoteAsset;
+
+    private InstrumentProductType productType;
 
     private MarketState marketState;
 

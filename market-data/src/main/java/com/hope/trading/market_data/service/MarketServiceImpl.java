@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.repository.MarketRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,14 @@ public class MarketServiceImpl implements  MarketService {
 
     @Override
     public Optional<Market> findByProviderAndSymbol(MarketProvider marketProvider, String symbol) {
-        return marketRepository.findByProviderAndSymbol(marketProvider,symbol);
+        return findByProviderAndSymbolAndProductType(marketProvider, symbol, InstrumentProductType.SPOT);
+    }
+
+    @Override
+    public Optional<Market> findByProviderAndSymbolAndProductType(MarketProvider marketProvider,
+                                                                  String symbol,
+                                                                  InstrumentProductType productType) {
+        return marketRepository.findByProviderAndSymbolAndProductType(marketProvider, symbol, productType);
     }
 
 

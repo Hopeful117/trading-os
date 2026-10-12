@@ -14,10 +14,15 @@ import com.hope.trading.trading_core.execution.domain.model.TradePlanReference;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
+import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
+import com.hope.trading.trading_core.market_data.dto.MarketResponse;
+import com.hope.trading.trading_core.market_data.helper.MarketProvider;
 import com.hope.trading.trading_core.model.*;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.service.TradingCalculatorServiceImpl;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -201,6 +206,77 @@ class PaperSettlementExitTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("PAPER short margin collateral insufficient");
         assertThat(amount(account, "USD")).isEqualByComparingTo("100");
+    }
+
+    @Test
+    void cashPaperAccountCannotUseLegacyInventorySettlement() {
+        UUID owner = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "cash", NOW);
+        Account account = Account.builder().accountId(UUID.randomUUID()).brokerAccountId(broker.id())
+                .broker("KRAKEN").name("cash").baseCurrency("USD").settlementModel(SettlementModel.CASH)
+                .equity(new BigDecimal("10000")).peakEquity(new BigDecimal("10000"))
+                .user(User.builder().userId(owner).build()).build();
+        account.addBalance(AccountBalance.builder().asset("USD").amount(new BigDecimal("10000")).build());
+
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
+
+        ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
+                new TradePlanReference(UUID.randomUUID(), 1),
+                new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
+                new IdempotencyKey("cash-paper-unsupported"), owner, broker.id(),
+                new ExecutionParameters("BTC/USD", ExecutionParameters.Side.BUY,
+                        ExecutionParameters.OrderType.MARKET, BigDecimal.ONE, null), NOW, NOW.plusSeconds(300));
+        ExecutionAttempt attempt = ExecutionAttempt.create(ExecutionAttemptId.newId(), intent.id(), 1, NOW, null);
+        BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(), attempt.id(), "SIM", NOW);
+        order.addFill(new BrokerOrder.Fill("fill", BigDecimal.ONE, new BigDecimal("100"), BigDecimal.ZERO, NOW), true, NOW);
+
+        assertThatThrownBy(() -> new PaperSettlementService(brokers, accounts,
+                new TradingCalculatorServiceImpl()).settle(intent, attempt, order))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER settlement model is not supported by inventory settlement");
+        assertThat(amount(account, "USD")).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void inventoryAccountCannotSettleLinearPerpetualThroughInventoryPath() {
+        UUID owner = UUID.randomUUID();
+        BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "perpetual", NOW);
+        Account account = Account.builder().accountId(UUID.randomUUID()).brokerAccountId(broker.id())
+                .broker("KRAKEN").name("perpetual").baseCurrency("USD").settlementModel(SettlementModel.INVENTORY)
+                .equity(new BigDecimal("10000")).peakEquity(new BigDecimal("10000"))
+                .user(User.builder().userId(owner).build()).build();
+        account.addBalance(AccountBalance.builder().asset("USD").amount(new BigDecimal("10000")).build());
+
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(accounts.findByBrokerAccountId(broker.id())).thenReturn(Optional.of(account));
+        when(marketData.findAll()).thenReturn(java.util.List.of(MarketResponse.builder()
+                .provider(MarketProvider.KRAKEN).symbol("BTC/USD")
+                .productType(InstrumentProductType.LINEAR_PERPETUAL).build()));
+
+        ExecutionIntent intent = ExecutionIntent.create(ExecutionIntentId.newId(),
+                new TradePlanReference(UUID.randomUUID(), 1),
+                new RiskApprovalReference(UUID.randomUUID(), RiskApprovalReference.Decision.APPROVED, NOW),
+                new IdempotencyKey("inventory-perpetual-unsupported"), owner, broker.id(),
+                new ExecutionParameters("BTC/USD", ExecutionParameters.Side.BUY,
+                        ExecutionParameters.OrderType.MARKET, BigDecimal.ONE, null), NOW, NOW.plusSeconds(300));
+        ExecutionAttempt attempt = ExecutionAttempt.create(ExecutionAttemptId.newId(), intent.id(), 1, NOW, null);
+        BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(), attempt.id(), "SIM", NOW);
+        order.addFill(new BrokerOrder.Fill("fill", BigDecimal.ONE, new BigDecimal("100"), BigDecimal.ZERO, NOW), true, NOW);
+
+        PaperSettlementService settlement = new PaperSettlementService(brokers, accounts,
+                new TradingCalculatorServiceImpl(), null, null, marketData);
+
+        assertThatThrownBy(() -> settlement.settle(intent, attempt, order))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("PAPER settlement model is incompatible with instrument product type");
+        assertThat(amount(account, "USD")).isEqualByComparingTo("10000");
+        assertThat(account.getTrades()).isEmpty();
     }
 
     private Scenario scenario(TradeType type, String initialBase, String entryFee) {

@@ -22,6 +22,7 @@ public class AccountMapper {
                     .brokerAccountId(account.getBrokerAccountId())
                     .name(account.getName())
                     .baseCurrency(account.getBaseCurrency())
+                    .settlementModel(account.getSettlementModel())
                     .equity(account.getEquity())
                     .peakEquity(account.getPeakEquity())
                     .rulesId(
@@ -54,6 +55,7 @@ public class AccountMapper {
             return Account.builder()
                     .broker(brokerAccountDto.getBroker())
                     .baseCurrency(brokerAccountDto.getBaseCurrency())
+                    .settlementModel(com.hope.trading.trading_core.shared.domain.model.SettlementModel.UNKNOWN)
                     .name(brokerAccountDto.getAccountName())
                     .balances(toAccountBalance(brokerAccountDto.getBalances()))
                     .build();
@@ -87,5 +89,4 @@ public class AccountMapper {
                 .build();
     }
         }
-
 
