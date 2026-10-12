@@ -30,6 +30,7 @@ import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
+import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
@@ -77,6 +78,7 @@ class PaperExitAcceptanceIntegrationTest {
     @Autowired private ExecutionIntentRepositoryPort intents;
     @Autowired private ExecuteTradeService execution;
     @Autowired private PaperExitService paperExit;
+    @Autowired private PaperSettlementService paperSettlement;
     @Autowired private EntityManager entityManager;
     @Autowired private MockMvc mvc;
     @Autowired private TransactionTemplate transactions;
@@ -251,6 +253,57 @@ class PaperExitAcceptanceIntegrationTest {
     }
 
     @Test
+    void twoIndependentCashDerivativeExitsApplyPnlAndFeesOnceWithoutChangingBalances() throws Exception {
+        Fixture fixture = fixture("cash-concurrent", new BigDecimal("10000"), BigDecimal.ZERO,
+                SettlementModel.CASH);
+        when(marketData.findAll()).thenReturn(List.of(MarketResponse.builder().marketId(MARKET_ID)
+                .provider(MarketProvider.KRAKEN).symbol("BTC/USD").baseAsset("BTC").quoteAsset("USD")
+                .productType(InstrumentProductType.LINEAR_PERPETUAL).build()));
+        Trade trade = openTrade(fixture, TradeType.BUY, "2", "100", "10000", "0");
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Callable<Object> close = () -> {
+            barrier.await(10, TimeUnit.SECONDS);
+            try {
+                return transactions.execute(status -> {
+                    Account account = accounts.findById(fixture.accountId).orElseThrow();
+                    ExecutionIntent intent = ExecutionIntent.createExit(ExecutionIntentId.newId(), fixture.ownerId,
+                            fixture.brokerAccountId, trade.getTradeId(), new ExecutionParameters("BTC/USD",
+                                    ExecutionParameters.Side.SELL, ExecutionParameters.OrderType.MARKET,
+                                    decimal("2"), null), new IdempotencyKey(UUID.randomUUID().toString()), NOW,
+                            NOW.plusSeconds(300));
+                    BrokerOrder order = BrokerOrder.acknowledged(BrokerOrderId.newId(), intent.id(),
+                            ExecutionAttemptId.newId(), "SIM", NOW);
+                    order.addFill(new BrokerOrder.Fill("cash-concurrent-" + UUID.randomUUID(), decimal("2"),
+                            decimal("110"), decimal("2"), NOW), true, NOW);
+                    paperSettlement.settle(intent, null, order);
+                    return account.getAccountId();
+                });
+            } catch (RuntimeException failure) {
+                return failure;
+            }
+        };
+        List<Future<Object>> results = pool.invokeAll(List.of(close, close));
+        pool.shutdown();
+
+        long successes = results.stream().map(this::futureValue)
+                .filter(UUID.class::isInstance).count();
+        assertThat(successes).isEqualTo(1);
+        entityManager.clear();
+        var state = transactions.execute(status -> {
+            Account reloaded = accounts.findById(fixture.accountId).orElseThrow();
+            Trade closed = trades.findById(trade.getTradeId()).orElseThrow();
+            return new Object[] {reloaded.getEquity(), amount(reloaded, "USD"), amount(reloaded, "BTC"),
+                    closed.getTradeStatus(), closed.getPnl()};
+        });
+        assertThat((BigDecimal) state[0]).isEqualByComparingTo("10018");
+        assertThat((BigDecimal) state[1]).isEqualByComparingTo("10000");
+        assertThat((BigDecimal) state[2]).isEqualByComparingTo("0");
+        assertThat(state[3]).isEqualTo(TradeStatus.CLOSED);
+        assertThat((BigDecimal) state[4]).isEqualByComparingTo("20");
+    }
+
+    @Test
     @Transactional
     void settlementFailureRollsBackAllFinancialState() {
         Fixture fixture = fixture("rollback", new BigDecimal("10000"), BigDecimal.ZERO);
@@ -265,7 +318,8 @@ class PaperExitAcceptanceIntegrationTest {
         var calculator = mock(com.hope.trading.trading_core.service.TradingCalculatorService.class);
         when(calculator.calculatePnL(any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("injected settlement failure"));
-        var failing = new PaperSettlementService(brokerAccounts, accounts, calculator);
+        var failing = new PaperSettlementService(brokerAccounts, accounts, calculator,
+                null, null, marketData);
         assertThatThrownBy(() -> transactions.executeWithoutResult(status -> failing.settle(intent, null, order)))
                 .isInstanceOf(IllegalStateException.class);
         entityManager.clear();
@@ -309,6 +363,11 @@ class PaperExitAcceptanceIntegrationTest {
     }
 
     private Fixture fixture(String suffix, BigDecimal equity, BigDecimal initialBase) {
+        return fixture(suffix, equity, initialBase, SettlementModel.INVENTORY);
+    }
+
+    private Fixture fixture(String suffix, BigDecimal equity, BigDecimal initialBase,
+                             SettlementModel settlementModel) {
         String username = "exit-" + suffix + "-" + UUID.randomUUID();
         User owner = users.saveAndFlush(User.builder().username(username).password("password")
                 .email(username + "@test.local").role(Role.ROLE_USER).build());
@@ -316,7 +375,8 @@ class PaperExitAcceptanceIntegrationTest {
                 ExecutionMode.PAPER, "Paper", NOW);
         brokerAccounts.saveAndFlush(broker);
         Account account = Account.builder().brokerAccountId(broker.id()).broker("KRAKEN").name("Paper")
-                .baseCurrency("USD").equity(equity).peakEquity(equity).user(owner).build();
+                .baseCurrency("USD").settlementModel(settlementModel).equity(equity).peakEquity(equity)
+                .user(owner).build();
         account.addBalance(AccountBalance.builder().asset("USD").amount(equity).build());
         account.addBalance(AccountBalance.builder().asset("BTC").amount(initialBase).build());
         accounts.saveAndFlush(account);

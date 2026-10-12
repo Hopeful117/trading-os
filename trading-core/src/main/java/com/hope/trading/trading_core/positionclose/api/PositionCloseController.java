@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 @RestController
 @RequestMapping("/api/v1/accounts/{accountId}/positions/close")
@@ -92,5 +93,13 @@ public class PositionCloseController {
             default -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
         return ResponseEntity.status(status).body(Map.of("code", code, "message", code));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, String>> concurrentPaperExit(
+            ObjectOptimisticLockingFailureException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "code", "POSITION_CLOSE_CONFLICT",
+                "message", "POSITION_CLOSE_CONFLICT"));
     }
 }

@@ -10,6 +10,7 @@ import com.hope.trading.trading_core.positionclose.domain.model.ReconciliationCl
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 
 import java.time.Instant;
@@ -93,6 +94,15 @@ class PositionCloseControllerTest {
                             .isInstanceOf(IllegalStateException.class)
                             .hasMessageContaining("Failed to extract command response");
                 });
+    }
+
+    @Test
+    void concurrentCloseIsMappedToConflictResponse() {
+        ResponseEntity<java.util.Map<String, String>> response = controller.concurrentPaperExit(
+                mock(ObjectOptimisticLockingFailureException.class));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).containsEntry("code", "POSITION_CLOSE_CONFLICT");
     }
 
     private Authentication authentication() {
