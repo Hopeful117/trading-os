@@ -51,8 +51,10 @@ public class ActiveChallengeMonitoringService {
 
         log.info("active_challenge_monitoring_cycle_started");
         while (true) {
-            var batch = challenges.findNextByStatus(ChallengeStatus.ACTIVE, afterStartedAt, afterId,
-                    PageRequest.of(0, properties.batchSize()));
+            var page = PageRequest.of(0, properties.batchSize());
+            var batch = afterStartedAt == null
+                    ? challenges.findFirstPageByStatus(ChallengeStatus.ACTIVE, page)
+                    : challenges.findNextPageByStatus(ChallengeStatus.ACTIVE, afterStartedAt, afterId, page);
             if (batch.isEmpty()) break;
             afterStartedAt = batch.getLast().startedAt();
             afterId = batch.getLast().id();
