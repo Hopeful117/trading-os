@@ -27,15 +27,16 @@ public class ChallengeProgressService {
 
     @Transactional(readOnly = true)
     public ChallengeProgress get(UUID accountId, UUID ownerId) {
-        Account account = accounts.findById(accountId).orElseThrow();
+        Account account = accounts.findById(accountId)
+                .orElseThrow(() -> new ChallengeNotFoundException("Account does not exist"));
         if (account.getUser() == null || !ownerId.equals(account.getUser().getUserId())) {
-            throw new IllegalArgumentException("Account is not owned by the caller");
+            throw new ChallengeOwnershipException("Account is not owned by the caller");
         }
         ChallengeInstance challenge = instances.findTopByAccountIdOrderByStartedAtDesc(accountId)
-                .orElseThrow(() -> new IllegalArgumentException("Account has no Challenge"));
+                .orElseThrow(() -> new ChallengeNotFoundException("Account has no Challenge"));
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(challenge.definitionId(), challenge.definitionVersion()))
-                .orElseThrow(() -> new IllegalStateException("Challenge definition does not exist"));
+                .orElseThrow(() -> new ChallengeConfigurationException("Challenge definition does not exist"));
         BigDecimal current = progressionValues.resolve(account, definition).orElse(null);
         BigDecimal target = definition.startingCapital()
                 .add(definition.startingCapital().multiply(definition.profitTargetRatio()));
