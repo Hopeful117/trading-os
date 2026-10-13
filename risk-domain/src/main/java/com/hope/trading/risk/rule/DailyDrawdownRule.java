@@ -10,7 +10,7 @@ public final class DailyDrawdownRule implements RiskRule {
     @Override public String id() { return ID; }
     @Override public RiskRuleResult evaluate(RiskRuleEvaluationContext context,
             RuleConfiguration configuration, Instant time) {
-        return ThresholdRuleSupport.maximum(configuration,
+        return ThresholdRuleSupport.maximumInclusiveBreach(configuration,
                 context.metrics().dailyDrawdownRatio().value(),
                 configuration.requiredParameter("maximumRatio"), time,
                 "daily-drawdown");
