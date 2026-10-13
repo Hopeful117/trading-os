@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -77,7 +78,8 @@ class ChallengePersistenceTest {
         assertThat(definitions.count()).isEqualTo(existingDefinitions + 2);
         assertThat(instance.definitionVersion()).isEqualTo("1.0.0");
         assertThat(secondInstance.definitionVersion()).isEqualTo("2.0.0");
-        assertThat(instances.findAll()).extracting(ChallengeInstance::status)
+        assertThat(instances.findAll().stream().filter(saved -> saved.accountId().equals(accountId)).toList())
+                .extracting(ChallengeInstance::status)
                 .containsExactlyInAnyOrder(ChallengeStatus.PASSED, ChallengeStatus.ACTIVE);
     }
 
@@ -111,6 +113,37 @@ class ChallengePersistenceTest {
 
         assertThatThrownBy(() -> instances.saveAndFlush(second))
                 .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+    }
+
+    @Test
+    void discoversActiveChallengesInStableBoundedPagesAndExcludesTerminalRows() {
+        UUID secondAccountId = UUID.randomUUID();
+        UUID thirdAccountId = UUID.randomUUID();
+        insertAccount(secondAccountId);
+        insertAccount(thirdAccountId);
+        ChallengeDefinition definition = definitions.save(definition(UUID.randomUUID(), "1.0.0"));
+        ChallengeInstance first = instances.save(ChallengeInstance.start(UUID.randomUUID(), accountId, definition,
+                definition.startingCapital(), NOW));
+        ChallengeInstance second = instances.save(ChallengeInstance.start(UUID.randomUUID(), secondAccountId, definition,
+                definition.startingCapital(), NOW));
+        ChallengeInstance terminal = ChallengeInstance.start(UUID.randomUUID(), thirdAccountId, definition,
+                definition.startingCapital(), NOW);
+        terminal.pass(NOW.plusSeconds(1), "PROFIT_TARGET_REACHED");
+        instances.save(terminal);
+
+        List<ChallengeInstance> firstPage = instances.findNextByStatus(ChallengeStatus.ACTIVE, null, null,
+                PageRequest.of(0, 1));
+        List<ChallengeInstance> secondPage = instances.findNextByStatus(ChallengeStatus.ACTIVE,
+                firstPage.getFirst().startedAt(), firstPage.getFirst().id(), PageRequest.of(0, 1));
+
+        assertThat(firstPage).hasSize(1);
+        assertThat(secondPage).hasSize(1);
+        assertThat(List.of(firstPage.getFirst().id(), secondPage.getFirst().id()))
+                .containsExactlyInAnyOrder(first.id(), second.id());
+        assertThat(List.of(firstPage.getFirst(), secondPage.getFirst()))
+                .allMatch(challenge -> challenge.status() == ChallengeStatus.ACTIVE);
+        assertThat(List.of(firstPage.getFirst().id(), secondPage.getFirst().id()))
+                .doesNotContain(terminal.id());
     }
 
     @Test
@@ -168,5 +201,14 @@ class ChallengePersistenceTest {
                 new BigDecimal("10000"), new BigDecimal("0.12"), ProgressionValueSource.BALANCE,
                 com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY, POLICY_ID,
                 "1.0.0", "https://example.test/definition", NOW, NOW, "source", NOW);
+    }
+
+    private void insertAccount(UUID newAccountId) {
+        UUID newOwnerId = UUID.randomUUID();
+        jdbc.update("insert into users(user_id,username,password,email,role) values(?,?,?,?,?)",
+                newOwnerId, "challenge-" + newAccountId, "x", newAccountId + "@test.local", "ROLE_USER");
+        jdbc.update("insert into accounts(account_id,name,base_currency,peak_equity,equity,starting_balance,user_id) "
+                        + "values(?,?,?,?,?,?,?)", newAccountId, "challenge-account", "USD", 10000, 10000, 10000,
+                newOwnerId);
     }
 }

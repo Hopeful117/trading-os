@@ -1,5 +1,7 @@
 package com.hope.trading.trading_core.challenge.application;
 
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinitionKey;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
@@ -17,6 +19,7 @@ import java.util.UUID;
 @Service
 public class ChallengeReevaluationService {
     private final AccountRepository accounts;
+    private final BrokerAccountRepository brokerAccounts;
     private final ChallengeDefinitionRepository definitions;
     private final ChallengeInstanceRepository instances;
     private final AccountRiskMonitoringService monitoring;
@@ -24,12 +27,14 @@ public class ChallengeReevaluationService {
     private final Clock clock;
 
     public ChallengeReevaluationService(AccountRepository accounts,
+                                        BrokerAccountRepository brokerAccounts,
                                         ChallengeDefinitionRepository definitions,
                                         ChallengeInstanceRepository instances,
                                         AccountRiskMonitoringService monitoring,
                                         ChallengeEvaluator evaluator,
                                         Clock clock) {
         this.accounts = accounts;
+        this.brokerAccounts = brokerAccounts;
         this.definitions = definitions;
         this.instances = instances;
         this.monitoring = monitoring;
@@ -42,6 +47,26 @@ public class ChallengeReevaluationService {
         ChallengeInstance challenge = instances.findByAccountIdAndStatus(account.getAccountId(), ChallengeStatus.ACTIVE)
                 .orElse(null);
         if (challenge == null) return;
+        reevaluateLoaded(challenge, account);
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public ChallengeStatus reevaluate(UUID challengeId) {
+        ChallengeInstance challenge = instances.findById(challengeId).orElse(null);
+        if (challenge == null || challenge.status() != ChallengeStatus.ACTIVE) {
+            return challenge == null ? null : challenge.status();
+        }
+        Account account = accounts.findById(challenge.accountId())
+                .orElseThrow(() -> new IllegalStateException("Challenge Account does not exist"));
+        if (account.getBrokerAccountId() == null
+                || brokerAccounts.findById(account.getBrokerAccountId())
+                .filter(broker -> broker.executionMode() == ExecutionMode.PAPER).isEmpty()) {
+            return null;
+        }
+        return reevaluateLoaded(challenge, account);
+    }
+
+    private ChallengeStatus reevaluateLoaded(ChallengeInstance challenge, Account account) {
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(challenge.definitionId(), challenge.definitionVersion()))
                 .orElseThrow(() -> new IllegalStateException("Challenge definition does not exist"));
@@ -50,5 +75,6 @@ public class ChallengeReevaluationService {
         evaluator.evaluate(challenge, definition, account, evaluation.result(), evaluation.evaluationId(),
                 evaluation.result().evaluatedAt());
         if (before != challenge.status()) instances.save(challenge);
+        return challenge.status();
     }
 }

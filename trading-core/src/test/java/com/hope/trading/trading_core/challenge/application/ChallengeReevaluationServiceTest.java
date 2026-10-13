@@ -8,6 +8,10 @@ import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import com.hope.trading.trading_core.challenge.domain.ProgressionValueSource;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
+import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.helper.Role;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
@@ -45,6 +49,7 @@ class ChallengeReevaluationServiceTest {
                 definition.startingCapital(), NOW);
 
         AccountRepository accounts = mock(AccountRepository.class);
+        BrokerAccountRepository brokerAccounts = mock(BrokerAccountRepository.class);
         ChallengeInstanceRepository instances = mock(ChallengeInstanceRepository.class);
         ChallengeDefinitionRepository definitions = mock(ChallengeDefinitionRepository.class);
         AccountRiskMonitoringService monitoring = mock(AccountRiskMonitoringService.class);
@@ -55,7 +60,7 @@ class ChallengeReevaluationServiceTest {
         when(monitoring.evaluate(same(challenge), same(account), any()))
                 .thenReturn(new AccountRiskMonitoringService.Evaluation(UUID.randomUUID(), risk, new BigDecimal("10000"), 1));
 
-        ChallengeReevaluationService service = new ChallengeReevaluationService(accounts, definitions, instances,
+        ChallengeReevaluationService service = new ChallengeReevaluationService(accounts, brokerAccounts, definitions, instances,
                 monitoring, new ChallengeEvaluator(), Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.reevaluate(account);
@@ -73,12 +78,82 @@ class ChallengeReevaluationServiceTest {
                 .thenReturn(Optional.empty());
 
         ChallengeReevaluationService service = new ChallengeReevaluationService(accounts,
+                mock(BrokerAccountRepository.class),
                 mock(ChallengeDefinitionRepository.class), instances,
                 mock(AccountRiskMonitoringService.class), new ChallengeEvaluator(), Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.reevaluate(account);
 
         verifyNoInteractions(accounts);
+        verify(instances, never()).save(any());
+    }
+
+    @Test
+    void identifierReevaluationReloadsChallengeAndAccountBeforeRiskEvaluation() {
+        UUID accountId = UUID.randomUUID();
+        UUID challengeId = UUID.randomUUID();
+        UUID policyId = UUID.randomUUID();
+        User user = User.builder().userId(UUID.randomUUID()).username("owner").role(Role.ROLE_USER).build();
+        BrokerAccount broker = BrokerAccount.create(user.getUserId(), BrokerProvider.KRAKEN, ExecutionMode.PAPER,
+                "paper", NOW);
+        Account account = Account.builder().accountId(accountId).baseCurrency("USD")
+                .startingBalance(new BigDecimal("10000")).equity(new BigDecimal("11000"))
+                .peakEquity(new BigDecimal("11000")).brokerAccountId(broker.id()).user(user).build();
+        account.addBalance(AccountBalance.builder().asset("USD").amount(new BigDecimal("11000")).build());
+        ChallengeDefinition definition = definition(policyId);
+        ChallengeInstance challenge = ChallengeInstance.start(challengeId, accountId, definition,
+                definition.startingCapital(), NOW);
+        AccountRepository accounts = mock(AccountRepository.class);
+        BrokerAccountRepository brokerAccounts = mock(BrokerAccountRepository.class);
+        ChallengeInstanceRepository instances = mock(ChallengeInstanceRepository.class);
+        ChallengeDefinitionRepository definitions = mock(ChallengeDefinitionRepository.class);
+        AccountRiskMonitoringService monitoring = mock(AccountRiskMonitoringService.class);
+        when(instances.findById(challengeId)).thenReturn(Optional.of(challenge));
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        when(brokerAccounts.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(definitions.findById(any())).thenReturn(Optional.of(definition));
+        RiskValidationResult risk = risk(policyId);
+        when(monitoring.evaluate(same(challenge), same(account), any()))
+                .thenReturn(new AccountRiskMonitoringService.Evaluation(UUID.randomUUID(), risk,
+                        new BigDecimal("10000"), 1));
+
+        ChallengeReevaluationService service = new ChallengeReevaluationService(accounts, brokerAccounts, definitions, instances,
+                monitoring, new ChallengeEvaluator(), Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(service.reevaluate(challengeId)).isEqualTo(ChallengeStatus.PASSED);
+        verify(instances).findById(challengeId);
+        verify(accounts).findById(accountId);
+        verify(monitoring).evaluate(same(challenge), same(account), any());
+        verify(instances).save(challenge);
+    }
+
+    @Test
+    void identifierReevaluationSkipsLiveAccountAfterAuthoritativeReload() {
+        UUID accountId = UUID.randomUUID();
+        UUID challengeId = UUID.randomUUID();
+        UUID brokerId = UUID.randomUUID();
+        UUID policyId = UUID.randomUUID();
+        User user = User.builder().userId(UUID.randomUUID()).username("live-owner").role(Role.ROLE_USER).build();
+        Account account = Account.builder().accountId(accountId).brokerAccountId(brokerId).user(user).build();
+        ChallengeDefinition definition = definition(policyId);
+        ChallengeInstance challenge = ChallengeInstance.start(challengeId, accountId, definition,
+                definition.startingCapital(), NOW);
+        AccountRepository accounts = mock(AccountRepository.class);
+        BrokerAccountRepository brokerAccounts = mock(BrokerAccountRepository.class);
+        ChallengeInstanceRepository instances = mock(ChallengeInstanceRepository.class);
+        AccountRiskMonitoringService monitoring = mock(AccountRiskMonitoringService.class);
+        when(instances.findById(challengeId)).thenReturn(Optional.of(challenge));
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        BrokerAccount liveBroker = BrokerAccount.create(user.getUserId(), BrokerProvider.KRAKEN,
+                ExecutionMode.LIVE, "live", NOW);
+        when(brokerAccounts.findById(brokerId)).thenReturn(Optional.of(liveBroker));
+
+        ChallengeReevaluationService service = new ChallengeReevaluationService(accounts, brokerAccounts,
+                mock(ChallengeDefinitionRepository.class), instances, monitoring, new ChallengeEvaluator(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(service.reevaluate(challengeId)).isNull();
+        verifyNoInteractions(monitoring);
         verify(instances, never()).save(any());
     }
 

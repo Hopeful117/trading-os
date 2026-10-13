@@ -3,9 +3,14 @@ package com.hope.trading.trading_core.challenge.application;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.Lock;
 import jakarta.persistence.LockModeType;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,6 +19,23 @@ public interface ChallengeInstanceRepository extends JpaRepository<ChallengeInst
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ChallengeInstance> findByAccountIdAndStatus(UUID accountId, ChallengeStatus status);
+
+    @Override
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<ChallengeInstance> findById(UUID id);
+
+    @Query("""
+            select c from ChallengeInstance c
+            where c.status = :status
+              and (:afterStartedAt is null
+                   or c.startedAt > :afterStartedAt
+                   or (c.startedAt = :afterStartedAt and c.id > :afterId))
+            order by c.startedAt asc, c.id asc
+            """)
+    List<ChallengeInstance> findNextByStatus(@Param("status") ChallengeStatus status,
+                                             @Param("afterStartedAt") Instant afterStartedAt,
+                                             @Param("afterId") UUID afterId,
+                                             Pageable pageable);
 
     Optional<ChallengeInstance> findTopByAccountIdOrderByStartedAtDesc(UUID accountId);
 
