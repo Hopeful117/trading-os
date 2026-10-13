@@ -131,9 +131,9 @@ class ChallengePersistenceTest {
         terminal.pass(NOW.plusSeconds(1), "PROFIT_TARGET_REACHED");
         instances.save(terminal);
 
-        List<ChallengeInstance> firstPage = instances.findNextByStatus(ChallengeStatus.ACTIVE, null, null,
+        List<ChallengeInstance> firstPage = instances.findFirstPageByStatus(ChallengeStatus.ACTIVE,
                 PageRequest.of(0, 1));
-        List<ChallengeInstance> secondPage = instances.findNextByStatus(ChallengeStatus.ACTIVE,
+        List<ChallengeInstance> secondPage = instances.findNextPageByStatus(ChallengeStatus.ACTIVE,
                 firstPage.getFirst().startedAt(), firstPage.getFirst().id(), PageRequest.of(0, 1));
 
         assertThat(firstPage).hasSize(1);

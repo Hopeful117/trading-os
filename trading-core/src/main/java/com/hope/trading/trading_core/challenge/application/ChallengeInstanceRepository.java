@@ -27,15 +27,22 @@ public interface ChallengeInstanceRepository extends JpaRepository<ChallengeInst
     @Query("""
             select c from ChallengeInstance c
             where c.status = :status
-              and (:afterStartedAt is null
-                   or c.startedAt > :afterStartedAt
+            order by c.startedAt asc, c.id asc
+            """)
+    List<ChallengeInstance> findFirstPageByStatus(@Param("status") ChallengeStatus status,
+                                                  Pageable pageable);
+
+    @Query("""
+            select c from ChallengeInstance c
+            where c.status = :status
+              and (c.startedAt > :afterStartedAt
                    or (c.startedAt = :afterStartedAt and c.id > :afterId))
             order by c.startedAt asc, c.id asc
             """)
-    List<ChallengeInstance> findNextByStatus(@Param("status") ChallengeStatus status,
-                                             @Param("afterStartedAt") Instant afterStartedAt,
-                                             @Param("afterId") UUID afterId,
-                                             Pageable pageable);
+    List<ChallengeInstance> findNextPageByStatus(@Param("status") ChallengeStatus status,
+                                                 @Param("afterStartedAt") Instant afterStartedAt,
+                                                 @Param("afterId") UUID afterId,
+                                                 Pageable pageable);
 
     Optional<ChallengeInstance> findTopByAccountIdOrderByStartedAtDesc(UUID accountId);
 

@@ -39,9 +39,9 @@ class ActiveChallengeMonitoringServiceTest {
         AccountRepository accounts = mock(AccountRepository.class);
         BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
         ChallengeReevaluationService reevaluation = mock(ChallengeReevaluationService.class);
-        when(challenges.findNextByStatus(eq(ChallengeStatus.ACTIVE), isNull(), isNull(), any()))
+        when(challenges.findFirstPageByStatus(eq(ChallengeStatus.ACTIVE), any()))
                 .thenReturn(List.of(paper.challenge, failed.challenge, live.challenge));
-        when(challenges.findNextByStatus(eq(ChallengeStatus.ACTIVE), eq(failed.challenge.startedAt()),
+        when(challenges.findNextPageByStatus(eq(ChallengeStatus.ACTIVE), eq(failed.challenge.startedAt()),
                 eq(live.challenge.id()), any())).thenReturn(List.of());
         when(accounts.findById(paper.account.getAccountId())).thenReturn(Optional.of(paper.account));
         when(accounts.findById(failed.account.getAccountId())).thenReturn(Optional.of(failed.account));
@@ -74,11 +74,11 @@ class ActiveChallengeMonitoringServiceTest {
         AccountRepository accounts = mock(AccountRepository.class);
         BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
         ChallengeReevaluationService reevaluation = mock(ChallengeReevaluationService.class);
-        when(challenges.findNextByStatus(eq(ChallengeStatus.ACTIVE), isNull(), isNull(), any()))
+        when(challenges.findFirstPageByStatus(eq(ChallengeStatus.ACTIVE), any()))
                 .thenReturn(List.of(first.challenge));
-        when(challenges.findNextByStatus(eq(ChallengeStatus.ACTIVE), eq(first.challenge.startedAt()),
+        when(challenges.findNextPageByStatus(eq(ChallengeStatus.ACTIVE), eq(first.challenge.startedAt()),
                 eq(first.challenge.id()), any())).thenReturn(List.of(second.challenge));
-        when(challenges.findNextByStatus(eq(ChallengeStatus.ACTIVE), eq(second.challenge.startedAt()),
+        when(challenges.findNextPageByStatus(eq(ChallengeStatus.ACTIVE), eq(second.challenge.startedAt()),
                 eq(second.challenge.id()), any())).thenReturn(List.of());
         for (Candidate candidate : List.of(first, second)) {
             when(accounts.findById(candidate.account.getAccountId())).thenReturn(Optional.of(candidate.account));
