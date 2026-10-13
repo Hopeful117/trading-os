@@ -63,6 +63,7 @@ class ChallengePersistenceTest {
     @Test
     void keepsDefinitionVersionsAndHistoricalInstancesSeparate() {
         UUID definitionId = UUID.randomUUID();
+        long existingDefinitions = definitions.count();
         ChallengeDefinition first = definitions.save(definition(definitionId, "1.0.0"));
         ChallengeDefinition second = definitions.save(definition(definitionId, "2.0.0"));
         ChallengeInstance instance = instances.save(ChallengeInstance.start(UUID.randomUUID(), accountId, first,
@@ -73,7 +74,7 @@ class ChallengePersistenceTest {
         ChallengeInstance secondInstance = instances.saveAndFlush(ChallengeInstance.start(
                 UUID.randomUUID(), accountId, second, second.startingCapital(), NOW.plusSeconds(2)));
 
-        assertThat(definitions.count()).isEqualTo(2);
+        assertThat(definitions.count()).isEqualTo(existingDefinitions + 2);
         assertThat(instance.definitionVersion()).isEqualTo("1.0.0");
         assertThat(secondInstance.definitionVersion()).isEqualTo("2.0.0");
         assertThat(instances.findAll()).extracting(ChallengeInstance::status)

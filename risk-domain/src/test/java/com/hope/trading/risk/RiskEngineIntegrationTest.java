@@ -141,6 +141,22 @@ class RiskEngineIntegrationTest {
         }
     }
 
+    @Test void krakenPropAdvanced50kUsesInclusiveDailyAndStaticTotalBoundaries() {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500"),
+                usd("0"), java.util.Optional.of(usd("50000")),
+                new DailyRiskBaseline(usd("50000"), NOW, "UTC/00:30", Map.of()), usd("0"));
+        var context = context(rules(
+                rule(DailyDrawdownRule.ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03"),
+                rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03")),
+                account, null);
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
+
+        assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
+        assertEquals(List.of(DailyDrawdownRule.ID, MaximumTotalDrawdownRule.RULE_ID),
+                result.violations().stream().map(RiskRuleResult::ruleId).toList());
+    }
+
     @Test void approvesWithWarningsWithoutHidingThem() {
         var context = context(rules(rule(MaximumPositionRiskRule.ID,
                 RuleCategory.POSITION, RuleSeverity.WARNING, "0.005")));
