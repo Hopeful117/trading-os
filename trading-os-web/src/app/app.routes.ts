@@ -16,6 +16,7 @@ import { Positions } from './features/positions/pages/positions/positions';
 import { ExecutionHistory } from './features/executions/pages/execution-history/execution-history';
 import { DecisionWorkspace } from './features/decision-workspace/decision-workspace';
 import { ManualTradePage } from './features/trade-planning/manual-trade-page/manual-trade-page';
+import { ChallengeDashboard } from './features/challenges/pages/challenge-dashboard/challenge-dashboard';
 
 export const routes: Routes = [
   {
@@ -32,6 +33,11 @@ export const routes: Routes = [
   {
     path: 'accounts',
     component: Accounts,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'challenges',
+    component: ChallengeDashboard,
     canActivate: [authGuard],
   },
 

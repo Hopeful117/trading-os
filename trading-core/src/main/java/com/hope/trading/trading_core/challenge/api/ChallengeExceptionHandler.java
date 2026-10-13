@@ -3,6 +3,7 @@ package com.hope.trading.trading_core.challenge.api;
 import com.hope.trading.trading_core.challenge.application.ChallengeConfigurationException;
 import com.hope.trading.trading_core.challenge.application.ChallengeConflictException;
 import com.hope.trading.trading_core.challenge.application.ChallengeNotFoundException;
+import com.hope.trading.trading_core.challenge.application.ChallengeNotStartedException;
 import com.hope.trading.trading_core.challenge.application.ChallengeOwnershipException;
 import com.hope.trading.trading_core.challenge.application.ChallengeValidationException;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,14 @@ public class ChallengeExceptionHandler {
     @ExceptionHandler({ChallengeNotFoundException.class, ChallengeOwnershipException.class})
     ResponseEntity<ProblemDetail> notFound(RuntimeException exception) {
         return response(HttpStatus.NOT_FOUND, "Challenge resource was not found");
+    }
+
+    @ExceptionHandler(ChallengeNotStartedException.class)
+    ResponseEntity<ProblemDetail> notStarted(ChallengeNotStartedException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
+                "No Challenge is active for this account");
+        problem.setProperty("code", "CHALLENGE_NOT_STARTED");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
     }
 
     @ExceptionHandler(ChallengeConflictException.class)
