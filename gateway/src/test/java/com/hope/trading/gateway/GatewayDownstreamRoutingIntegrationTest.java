@@ -57,6 +57,8 @@ class GatewayDownstreamRoutingIntegrationTest {
     private final HttpClient client = HttpClient.newHttpClient();
     private static final UUID AUTHENTICATED_USER_ID =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID FOREIGN_ACCOUNT_ID =
+            UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     @BeforeEach
     void startStubsAndGateway() throws Exception {
@@ -143,6 +145,73 @@ class GatewayDownstreamRoutingIntegrationTest {
                 .as("historical WRONG_SERVICE regression: intelligence must not "
                         + "receive public trade-plan creation")
                 .isEmpty();
+    }
+
+    @Test
+    void challengeCatalogRoutesToTradingCoreAndPreservesAuthorization()
+            throws Exception {
+        HttpResponse<String> response = send("GET", "/api/v1/challenges");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(tradingCoreRequests).containsExactly("GET /api/v1/challenges");
+        assertThat(tradingCoreAuthorizationHeaders).hasSize(1);
+        assertThat(tradingCoreAuthorizationHeaders.get(0)).startsWith("Bearer ");
+    }
+
+    @Test
+    void challengeStartRoutesToTradingCore() throws Exception {
+        String path = "/api/v1/accounts/11111111-1111-1111-1111-111111111111/challenge";
+        String body = "{\"definitionId\":\"00890000-0000-4000-8000-000000000050\","
+                + "\"definitionVersion\":\"1.0.0\"}";
+
+        HttpResponse<String> response = send("POST", path, java.util.Map.of(), body);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(tradingCoreRequests).containsExactly("POST " + path);
+        assertThat(tradingCoreAuthorizationHeaders).hasSize(1);
+        assertThat(tradingCoreAuthorizationHeaders.get(0)).startsWith("Bearer ");
+        assertThat(tradingCoreBodies).containsExactly(body);
+    }
+
+    @Test
+    void challengeProgressRoutesToTradingCore() throws Exception {
+        String path = "/api/v1/accounts/11111111-1111-1111-1111-111111111111/challenge";
+
+        HttpResponse<String> response = send("GET", path);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(tradingCoreRequests).containsExactly("GET " + path);
+        assertThat(tradingCoreAuthorizationHeaders).hasSize(1);
+        assertThat(tradingCoreAuthorizationHeaders.get(0)).startsWith("Bearer ");
+    }
+
+    @Test
+    void unauthenticatedChallengeRequestIsRejectedBeforeDownstreamRouting()
+            throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + gatewayPort
+                        + "/api/v1/challenges"))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isIn(401, 403);
+        assertThat(tradingCoreRequests).isEmpty();
+    }
+
+    @Test
+    void foreignChallengeAccountIsRejectedByTradingCoreThroughGateway()
+            throws Exception {
+        String path = "/api/v1/accounts/" + FOREIGN_ACCOUNT_ID + "/challenge";
+
+        HttpResponse<String> response = send("GET", path);
+
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(tradingCoreRequests).containsExactly("GET " + path);
+        assertThat(tradingCoreAuthorizationHeaders).hasSize(1);
+        assertThat(tradingCoreAuthorizationHeaders.get(0)).startsWith("Bearer ");
     }
 
     @Test
@@ -269,6 +338,10 @@ class GatewayDownstreamRoutingIntegrationTest {
                 status = complete ? 201 : 400;
                 response = complete ? "{\"id\":\"execution-0075\"}"
                         : "{\"error\":\"invalid execution request\"}";
+            } else if ("trading-core".equals(service)
+                    && path.equals("/api/v1/accounts/22222222-2222-2222-2222-222222222222/challenge")) {
+                status = 403;
+                response = "{\"error\":\"account does not belong to user\"}";
             } else if ("news".equals(service) && path.equals("/api/v1/news/events")) {
                 response = "{\"status\":\"AVAILABLE\",\"items\":[],"
                         + "\"fetchedAt\":\"2026-10-05T00:00:00Z\","
