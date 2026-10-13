@@ -53,6 +53,10 @@ jobs:
 
       # market-intelligence and risk-domain have no wrapper; reuse the
       # trading-core wrapper as scripts/test-all.sh does.
+      - name: Verify Docker for PostgreSQL migration tests
+        if: matrix.module == 'trading-core'
+        run: docker info
+
       - name: Build and verify (${{ matrix.module }})
         working-directory: ${{ matrix.module }}
         run: |
