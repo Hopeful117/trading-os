@@ -12,6 +12,7 @@ import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountServ
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.challenge.application.ChallengeDefinitionRepository;
+import com.hope.trading.trading_core.challenge.application.ChallengeCatalogService;
 import com.hope.trading.trading_core.challenge.application.ChallengeEvaluator;
 import com.hope.trading.trading_core.challenge.application.ChallengeInstanceRepository;
 import com.hope.trading.trading_core.challenge.application.ChallengeInstrumentCompatibilityException;
@@ -65,6 +66,7 @@ class KrakenPropAdvanced50kBenchmarkTest {
     @Autowired private BrokerAccountService brokerAccounts;
     @Autowired private RiskPersistence riskPersistence;
     @Autowired private ChallengeDefinitionRepository definitions;
+    @Autowired private ChallengeCatalogService catalog;
     @Autowired private ChallengeInstanceRepository instances;
     @Autowired private StartChallengeService startChallenge;
     @Autowired private ChallengeInstrumentCompatibilityService compatibility;
@@ -103,6 +105,16 @@ class KrakenPropAdvanced50kBenchmarkTest {
         assertThat(definition.provenance())
                 .contains("https://support.kraken.com/articles/kraken-prop-faq")
                 .contains("https://blog.kraken.com/product/prop/introducing-kraken-prop");
+    }
+
+    @Test
+    void genericCatalogExposesTheKrakenBenchmark() {
+        assertThat(catalog.selectable())
+                .anySatisfy(definition -> {
+                    assertThat(definition.id()).isEqualTo(DEFINITION_ID);
+                    assertThat(definition.definitionVersion()).isEqualTo(VERSION);
+                    assertThat(definition.provider()).isEqualTo("KRAKEN_PROP");
+                });
     }
 
     @Test

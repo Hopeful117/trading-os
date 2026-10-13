@@ -37,34 +37,34 @@ public class StartChallengeService {
     public ChallengeInstance start(StartChallengeCommand command) {
         Objects.requireNonNull(command, "command");
         Account account = accounts.findById(command.accountId())
-                .orElseThrow(() -> new IllegalArgumentException("Account does not exist"));
+                .orElseThrow(() -> new ChallengeNotFoundException("Account does not exist"));
         if (account.getUser() == null || !command.ownerId().equals(account.getUser().getUserId())) {
-            throw new IllegalArgumentException("Account is not owned by the caller");
+            throw new ChallengeOwnershipException("Account is not owned by the caller");
         }
         if (instances.existsByAccountIdAndStatus(account.getAccountId(), ChallengeStatus.ACTIVE)) {
-            throw new IllegalStateException("Account already has an ACTIVE Challenge");
+            throw new ChallengeConflictException("Account already has an ACTIVE Challenge");
         }
 
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(command.definitionId(), command.definitionVersion()))
-                .orElseThrow(() -> new IllegalArgumentException("Challenge definition does not exist"));
+                .orElseThrow(() -> new ChallengeNotFoundException("Challenge definition does not exist"));
         if (definition.requiredSettlementModel() != null
                 && definition.requiredSettlementModel() != account.getSettlementModel()) {
-            throw new IllegalArgumentException("Account settlement model does not match Challenge requirement");
+            throw new ChallengeValidationException("Account settlement model does not match Challenge requirement");
         }
         if (riskPersistence.profile(definition.riskPolicyId(), definition.riskPolicyVersion()).isEmpty()) {
-            throw new IllegalArgumentException("Challenge Risk Policy does not exist");
+            throw new ChallengeConfigurationException("Challenge Risk Policy does not exist");
         }
 
         BigDecimal accountStartingBalance = account.getStartingBalance();
         if (accountStartingBalance == null || accountStartingBalance.signum() <= 0) {
-            throw new IllegalArgumentException("Account starting balance must be positive");
+            throw new ChallengeValidationException("Account starting balance must be positive");
         }
         if (!definition.capitalCurrency().equalsIgnoreCase(account.getBaseCurrency())) {
-            throw new IllegalArgumentException("Challenge capital currency does not match Account currency");
+            throw new ChallengeValidationException("Challenge capital currency does not match Account currency");
         }
         if (accountStartingBalance.compareTo(definition.startingCapital()) != 0) {
-            throw new IllegalArgumentException("Account starting balance does not match Challenge capital");
+            throw new ChallengeValidationException("Account starting balance does not match Challenge capital");
         }
 
         return instances.save(ChallengeInstance.start(UUID.randomUUID(), account.getAccountId(), definition,
