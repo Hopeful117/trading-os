@@ -19,5 +19,9 @@ public record ChallengeProgress(
         BigDecimal dailyReferenceBalance,
         BigDecimal dailyLossRemaining,
         BigDecimal totalDrawdownRemaining,
-        Instant evaluatedAt
+        Instant evaluatedAt,
+        Instant passedAt,
+        Instant breachedAt,
+        String terminalReason,
+        UUID terminalRiskEvaluationId
 ) { }

@@ -1,0 +1,295 @@
+<div class="challenge-page">
+  @if (viewModel$ | async; as vm) {
+    <header class="challenge-header">
+      <div>
+        <p class="eyebrow">Deterministic Challenge projection</p>
+        <h1>Challenges</h1>
+        <p class="subtitle">
+          Sélectionnez un compte, démarrez une évaluation et suivez l’état fourni par Trading Core.
+        </p>
+      </div>
+
+      @if (vm.accountsState.accounts.length > 0) {
+        <label class="account-selector">
+          <span>Compte de trading</span>
+          <select
+            [value]="vm.selectedAccountId"
+            (change)="selectAccount($any($event.target).value)"
+          >
+            @for (account of vm.accountsState.accounts; track account.accountId) {
+              <option [value]="account.accountId">
+                {{ account.name }} · {{ account.baseCurrency }}
+              </option>
+            }
+          </select>
+        </label>
+      }
+    </header>
+
+    @if (vm.accountsState.loading) {
+      <section class="state-panel">Chargement des comptes…</section>
+    } @else if (vm.accountsState.error) {
+      <section class="state-panel error" role="alert">
+        Les comptes sont temporairement indisponibles.
+      </section>
+    } @else if (vm.accountsState.accounts.length === 0) {
+      <section class="state-panel empty-state">
+        <strong>Aucun compte disponible</strong>
+        <span
+          >Créez ou synchronisez un compte depuis la section Accounts avant de démarrer un
+          Challenge.</span
+        >
+        <a routerLink="/accounts" class="secondary-link">Ouvrir Accounts</a>
+      </section>
+    } @else if (vm.progress.kind === 'loading' || vm.progress.kind === 'idle') {
+      <section class="state-panel">Chargement de l’état Challenge…</section>
+    } @else if (vm.progress.kind === 'error') {
+      <section class="state-panel error" role="alert">
+        <strong>État Challenge indisponible</strong>
+        <span>{{ vm.progress.message }}</span>
+      </section>
+    } @else if (vm.progress.kind === 'none') {
+      <section class="start-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Aucun Challenge démarré</p>
+            <h2>Choisir une évaluation</h2>
+          </div>
+          <span class="muted">Le compte sélectionné reste inchangé.</span>
+        </div>
+
+        @if (vm.catalog.loading) {
+          <p class="state-panel compact">Chargement du catalogue…</p>
+        } @else if (vm.catalog.error) {
+          <p class="state-panel compact error" role="alert">
+            Le catalogue Challenge est temporairement indisponible.
+          </p>
+        } @else if (vm.catalog.definitions.length === 0) {
+          <p class="state-panel compact">
+            Aucune définition Challenge n’est actuellement disponible.
+          </p>
+        } @else {
+          <div class="catalog-grid">
+            @for (definition of vm.catalog.definitions; track definitionKey(definition)) {
+              <label
+                class="catalog-card"
+                [class.selected]="vm.selectedDefinitionKey === definitionKey(definition)"
+              >
+                <input
+                  type="radio"
+                  name="challenge-definition"
+                  [checked]="vm.selectedDefinitionKey === definitionKey(definition)"
+                  (change)="selectDefinition(definition)"
+                />
+                <span class="catalog-card-header">
+                  <strong>{{ definition.product }} · {{ definition.planCode }}</strong>
+                  <span>{{ definition.provider }}</span>
+                </span>
+                <span class="catalog-metadata"
+                  >Version {{ definition.definitionVersion }} ·
+                  {{ definition.capitalCurrency }}</span
+                >
+                <span class="catalog-capital">{{
+                  definition.startingCapital | currency: definition.capitalCurrency
+                }}</span>
+                <span class="catalog-target"
+                  >Objectif {{ definition.profitTargetRatio * 100 | number: '1.0-2' }}%</span
+                >
+                <span class="catalog-requirements">
+                  {{ definition.requiredSettlementModel ?? 'Settlement non spécifié' }}
+                  · {{ definition.requiredInstrumentProductType ?? 'Produit non spécifié' }}
+                </span>
+              </label>
+            }
+          </div>
+
+          @if (vm.start.kind === 'error') {
+            <p class="feedback error" role="alert">{{ vm.start.message }}</p>
+          }
+          @if (vm.start.kind === 'starting') {
+            <p class="feedback" role="status">Démarrage du Challenge…</p>
+          }
+          <button
+            type="button"
+            class="primary-action"
+            [disabled]="vm.start.kind === 'starting' || !vm.selectedDefinition"
+            (click)="startSelectedChallenge()"
+          >
+            {{ vm.start.kind === 'starting' ? 'Démarrage…' : 'Démarrer ce Challenge' }}
+          </button>
+        }
+      </section>
+    } @else {
+      @if (vm.catalog.error) {
+        <section class="state-panel error" role="status">
+          Les informations du catalogue sont temporairement indisponibles.
+        </section>
+      }
+      @if (vm.start.kind === 'success') {
+        <section class="state-panel success" role="status">
+          Challenge démarré. La progression est maintenant suivie par le backend.
+        </section>
+      }
+      @if (vm.progress.kind === 'available') {
+        @let progress = vm.progress.progress;
+        <section class="status-banner" [class]="statusClass(progress.status)" role="status">
+          <div>
+            <span class="eyebrow">État backend</span>
+            <strong>{{ progress.status }}</strong>
+          </div>
+          <span>
+            Dernière évaluation :
+            {{ progress.evaluatedAt ? (progress.evaluatedAt | date: 'medium') : 'Indisponible' }}
+          </span>
+        </section>
+
+        <section class="challenge-grid">
+          <article class="hero-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">{{ vm.selectedDefinition?.provider ?? 'Challenge' }}</p>
+                <h2>
+                  {{ vm.selectedDefinition?.product ?? 'Challenge' }} ·
+                  {{ vm.selectedDefinition?.planCode ?? progress.challengeId }}
+                </h2>
+              </div>
+              <span class="version">{{
+                vm.selectedDefinition?.definitionVersion ?? 'Version historique'
+              }}</span>
+            </div>
+            <div class="hero-values">
+              <div>
+                <span>Valeur actuelle</span>
+                <strong>
+                  @if (progress.currentValue !== null) {
+                    {{
+                      progress.currentValue
+                        | currency: vm.selectedDefinition?.capitalCurrency ?? undefined
+                    }}
+                  } @else {
+                    Indisponible
+                  }
+                </strong>
+              </div>
+              <div>
+                <span>Objectif</span>
+                <strong>{{
+                  progress.targetValue
+                    | currency: vm.selectedDefinition?.capitalCurrency ?? undefined
+                }}</strong>
+              </div>
+              <div>
+                <span>Profit courant</span>
+                <strong
+                  [class]="
+                    progress.currentProfit !== null && progress.currentProfit < 0
+                      ? 'negative'
+                      : 'positive'
+                  "
+                >
+                  @if (progress.currentProfit !== null) {
+                    {{
+                      progress.currentProfit
+                        | currency: vm.selectedDefinition?.capitalCurrency ?? undefined
+                    }}
+                  } @else {
+                    Indisponible
+                  }
+                </strong>
+              </div>
+            </div>
+            <div class="progress-block">
+              <div class="progress-label">
+                <span>Progression vers l’objectif</span>
+                @if (progress.targetProgress !== null) {
+                  @let percent = progressPercent(progress);
+                  <strong>{{ percent | number: '1.0-2' }}%</strong>
+                } @else {
+                  <strong>Indisponible</strong>
+                }
+              </div>
+              <div
+                class="progress-track"
+                role="progressbar"
+                [attr.aria-valuenow]="progressPercent(progress)"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-label="Progression vers l’objectif"
+              >
+                <span [style.width.%]="progressPercent(progress) ?? 0"></span>
+              </div>
+            </div>
+          </article>
+
+          <article class="risk-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Sécurité</p>
+                <h2>Marges de risque</h2>
+              </div>
+              <span class="muted">Autorité backend</span>
+            </div>
+            <div class="risk-row">
+              <div>
+                <span>Perte journalière restante</span
+                ><strong>{{
+                  progress.dailyLossRemaining !== null
+                    ? (progress.dailyLossRemaining
+                      | currency: vm.selectedDefinition?.capitalCurrency ?? undefined)
+                    : 'Indisponible'
+                }}</strong>
+              </div>
+              <span
+                class="risk-indicator"
+                [class.available]="progress.dailyLossRemaining !== null"
+              ></span>
+            </div>
+            <div class="risk-row">
+              <div>
+                <span>Drawdown total restant</span
+                ><strong>{{
+                  progress.totalDrawdownRemaining !== null
+                    ? (progress.totalDrawdownRemaining
+                      | currency: vm.selectedDefinition?.capitalCurrency ?? undefined)
+                    : 'Indisponible'
+                }}</strong>
+              </div>
+              <span
+                class="risk-indicator"
+                [class.available]="progress.totalDrawdownRemaining !== null"
+              ></span>
+            </div>
+            @if (progress.dailyLossRemaining === null || progress.totalDrawdownRemaining === null) {
+              <p class="muted note">
+                Les marges détaillées ne sont pas exposées par la projection actuelle.
+              </p>
+            }
+          </article>
+        </section>
+
+        @if (isTerminal(progress.status)) {
+          <section class="terminal-panel" [class]="statusClass(progress.status)" role="status">
+            <strong>{{
+              progress.status === 'PASSED' ? 'Challenge réussi' : 'Challenge breached'
+            }}</strong>
+            @if (progress.terminalReason) {
+              <span>Motif : {{ progress.terminalReason }}</span>
+            }
+            @if (progress.passedAt || progress.breachedAt) {
+              <span
+                >Décision : {{ progress.passedAt ?? progress.breachedAt | date: 'medium' }}</span
+              >
+            }
+            @if (progress.terminalRiskEvaluationId) {
+              <span>Évaluation Risk : {{ progress.terminalRiskEvaluationId }}</span>
+            }
+            <span
+              >Ce statut est déterminé par Trading Core. Aucune action de transition n’est
+              disponible dans l’interface.</span
+            >
+          </section>
+        }
+      }
+    }
+  }
+</div>

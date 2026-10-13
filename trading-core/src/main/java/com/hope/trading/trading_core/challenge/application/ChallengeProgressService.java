@@ -33,7 +33,7 @@ public class ChallengeProgressService {
             throw new ChallengeOwnershipException("Account is not owned by the caller");
         }
         ChallengeInstance challenge = instances.findTopByAccountIdOrderByStartedAtDesc(accountId)
-                .orElseThrow(() -> new ChallengeNotFoundException("Account has no Challenge"));
+                .orElseThrow(() -> new ChallengeNotStartedException("Account has no Challenge"));
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(challenge.definitionId(), challenge.definitionVersion()))
                 .orElseThrow(() -> new ChallengeConfigurationException("Challenge definition does not exist"));
@@ -47,6 +47,8 @@ public class ChallengeProgressService {
         return new ChallengeProgress(challenge.id(), accountId, challenge.status(), challenge.startingCapital(),
                 current, target, profit, progress, null, null, null,
                 challenge.status() == com.hope.trading.trading_core.challenge.domain.ChallengeStatus.PASSED
-                        ? challenge.passedAt() : challenge.breachedAt());
+                        ? challenge.passedAt() : challenge.breachedAt(),
+                challenge.passedAt(), challenge.breachedAt(), challenge.terminalReason(),
+                challenge.terminalRiskEvaluationId());
     }
 }
