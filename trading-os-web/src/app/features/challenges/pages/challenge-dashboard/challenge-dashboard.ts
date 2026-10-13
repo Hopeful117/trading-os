@@ -85,31 +85,41 @@ export class ChallengeDashboard {
   private accountsSnapshot: Account[] = [];
   private catalogSnapshot: ChallengeDefinition[] = [];
 
-  private readonly accountsState$: Observable<AccountsState> = this.accountService.getAccounts().pipe(
-    tap((accounts) => {
-      this.accountsSnapshot = accounts;
-      if (!accounts.some((account) => account.accountId === this.selectedAccountId.value)) {
-        this.selectedAccountId.next(accounts[0]?.accountId ?? null);
-      }
-    }),
-    map((accounts) => ({ accounts, loading: false, error: false })),
-    catchError(() => of({ accounts: [], loading: false, error: true })),
-    startWith({ accounts: [], loading: true, error: false }),
-    shareReplay({ bufferSize: 1, refCount: true }),
-  );
+  private readonly accountsState$: Observable<AccountsState> = this.accountService
+    .getAccounts()
+    .pipe(
+      tap((accounts) => {
+        this.accountsSnapshot = accounts;
+        if (!accounts.some((account) => account.accountId === this.selectedAccountId.value)) {
+          this.selectedAccountId.next(accounts[0]?.accountId ?? null);
+        }
+      }),
+      map((accounts) => ({ accounts, loading: false, error: false })),
+      catchError(() => of({ accounts: [], loading: false, error: true })),
+      startWith({ accounts: [], loading: true, error: false }),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
 
-  private readonly catalogState$: Observable<CatalogState> = this.challengeService.findCatalog().pipe(
-    tap((definitions) => {
-      this.catalogSnapshot = definitions;
-      if (!definitions.some((definition) => this.definitionKey(definition) === this.selectedDefinitionKey.value)) {
-        this.selectedDefinitionKey.next(definitions[0] ? this.definitionKey(definitions[0]) : null);
-      }
-    }),
-    map((definitions) => ({ definitions, loading: false, error: false })),
-    catchError(() => of({ definitions: [], loading: false, error: true })),
-    startWith({ definitions: [], loading: true, error: false }),
-    shareReplay({ bufferSize: 1, refCount: true }),
-  );
+  private readonly catalogState$: Observable<CatalogState> = this.challengeService
+    .findCatalog()
+    .pipe(
+      tap((definitions) => {
+        this.catalogSnapshot = definitions;
+        if (
+          !definitions.some(
+            (definition) => this.definitionKey(definition) === this.selectedDefinitionKey.value,
+          )
+        ) {
+          this.selectedDefinitionKey.next(
+            definitions[0] ? this.definitionKey(definitions[0]) : null,
+          );
+        }
+      }),
+      map((definitions) => ({ definitions, loading: false, error: false })),
+      catchError(() => of({ definitions: [], loading: false, error: true })),
+      startWith({ definitions: [], loading: true, error: false }),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
 
   private readonly effectiveAccountId$ = combineLatest([
     this.accountsState$,
@@ -153,7 +163,9 @@ export class ChallengeDashboard {
         ),
         startWith<ProgressState>({ kind: 'loading' }),
         takeWhile(
-          (state) => state.kind === 'loading' || (state.kind === 'available' && state.progress.status === 'ACTIVE'),
+          (state) =>
+            state.kind === 'loading' ||
+            (state.kind === 'available' && state.progress.status === 'ACTIVE'),
           true,
         ),
       );
@@ -195,20 +207,25 @@ export class ChallengeDashboard {
     progress: this.progressState$,
     start: this.startState$,
   }).pipe(
-    map(({ accountsState, selectedAccountId, catalog, selectedDefinitionKey, progress, start }) => ({
-      accountsState,
-      selectedAccountId,
-      catalog,
-      selectedDefinition:
-        catalog.definitions.find((definition) => this.definitionKey(definition) === selectedDefinitionKey) ??
-        catalog.definitions[0] ??
-        null,
-      selectedDefinitionKey,
-      progress,
-      start: start.accountId === selectedAccountId || start.kind === 'idle'
-        ? start
-        : ({ kind: 'idle', accountId: selectedAccountId } as StartState),
-    })),
+    map(
+      ({ accountsState, selectedAccountId, catalog, selectedDefinitionKey, progress, start }) => ({
+        accountsState,
+        selectedAccountId,
+        catalog,
+        selectedDefinition:
+          catalog.definitions.find(
+            (definition) => this.definitionKey(definition) === selectedDefinitionKey,
+          ) ??
+          catalog.definitions[0] ??
+          null,
+        selectedDefinitionKey,
+        progress,
+        start:
+          start.accountId === selectedAccountId || start.kind === 'idle'
+            ? start
+            : ({ kind: 'idle', accountId: selectedAccountId } as StartState),
+      }),
+    ),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
 
@@ -222,9 +239,10 @@ export class ChallengeDashboard {
 
   startSelectedChallenge(): void {
     const accountId = this.selectedAccountId.value ?? this.accountsSnapshot[0]?.accountId;
-    const definition = this.catalogSnapshot.find(
-      (candidate) => this.definitionKey(candidate) === this.selectedDefinitionKey.value,
-    ) ?? this.catalogSnapshot[0];
+    const definition =
+      this.catalogSnapshot.find(
+        (candidate) => this.definitionKey(candidate) === this.selectedDefinitionKey.value,
+      ) ?? this.catalogSnapshot[0];
     if (!accountId || !definition) {
       return;
     }
@@ -244,6 +262,8 @@ export class ChallengeDashboard {
   }
 
   progressPercent(progress: ChallengeProgress): number | null {
-    return progress.targetProgress === null ? null : Math.max(0, Math.min(100, progress.targetProgress * 100));
+    return progress.targetProgress === null
+      ? null
+      : Math.max(0, Math.min(100, progress.targetProgress * 100));
   }
 }

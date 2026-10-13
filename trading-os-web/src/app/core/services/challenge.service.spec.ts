@@ -62,9 +62,7 @@ describe('ChallengeService', () => {
     let received: unknown;
     service.findProgress('account-1').subscribe({ error: (error) => (received = error) });
 
-    const request = httpMock.expectOne(
-      `${environment.gatewayUrl}v1/accounts/account-1/challenge`,
-    );
+    const request = httpMock.expectOne(`${environment.gatewayUrl}v1/accounts/account-1/challenge`);
     expect(request.request.method).toBe('GET');
     request.flush(
       { code: 'CHALLENGE_NOT_STARTED', detail: 'No Challenge is active for this account' },

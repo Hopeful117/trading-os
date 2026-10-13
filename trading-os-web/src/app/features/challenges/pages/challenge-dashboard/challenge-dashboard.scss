@@ -158,7 +158,10 @@ select {
   border: 1px solid #334155;
   border-radius: 0.8rem;
   background: rgba(15, 23, 42, 0.7);
-  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .catalog-card:hover,

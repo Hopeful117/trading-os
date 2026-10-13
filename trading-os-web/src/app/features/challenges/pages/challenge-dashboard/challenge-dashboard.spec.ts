@@ -256,12 +256,16 @@ describe('ChallengeDashboard', () => {
       evaluatedAt: '2026-10-13T12:00:00Z',
       passedAt: status === 'PASSED' ? '2026-10-14T12:00:00Z' : null,
       breachedAt: status === 'BREACHED' ? '2026-10-14T12:00:00Z' : null,
-      terminalReason: status === 'ACTIVE' ? null : status === 'PASSED' ? 'Target reached' : 'Daily loss limit',
+      terminalReason:
+        status === 'ACTIVE' ? null : status === 'PASSED' ? 'Target reached' : 'Daily loss limit',
       terminalRiskEvaluationId: status === 'ACTIVE' ? null : 'terminal-risk-evaluation',
     };
   }
 
-  function challengeInstance(accountId: string, status: ChallengeInstance['status']): ChallengeInstance {
+  function challengeInstance(
+    accountId: string,
+    status: ChallengeInstance['status'],
+  ): ChallengeInstance {
     return {
       id: 'challenge-1',
       accountId,
