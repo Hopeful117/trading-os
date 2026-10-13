@@ -1,6 +1,7 @@
 package com.hope.trading.risk;
 
 import com.hope.trading.risk.audit.*;
+import com.hope.trading.risk.domain.RiskValidationResult;
 import com.hope.trading.risk.engine.*;
 import com.hope.trading.risk.explain.DecisionExplainer;
 import com.hope.trading.risk.rule.*;
@@ -80,8 +81,64 @@ class RiskEngineIntegrationTest {
 
         assertEquals(ValidationMode.ACCOUNT_MONITORING, result.evaluationMode());
         assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
-        assertEquals(1, result.violations().size());
-        assertEquals(MaximumTotalDrawdownRule.RULE_ID, result.violations().getFirst().ruleId());
+        assertEquals(2, result.violations().size());
+        assertEquals(DailyDrawdownRule.ID, result.violations().getFirst().ruleId());
+        assertEquals(MaximumTotalDrawdownRule.RULE_ID, result.violations().get(1).ruleId());
+    }
+
+    @Test void dailyDrawdownBelowLimitPassesThroughTheFullRiskPipeline() {
+        var result = evaluateDailyDrawdown("48500.01");
+
+        assertEquals(RiskDecision.APPROVED, result.decision().orElseThrow());
+        assertEquals(RuleStatus.PASS, result.ruleResults().getFirst().status());
+        assertEquals(new BigDecimal("0.0299998"),
+                result.globalMetrics().dailyDrawdownRatio().value());
+    }
+
+    @Test void dailyDrawdownAtLimitIsAnInclusiveBreach() {
+        var result = evaluateDailyDrawdown("48500.00");
+
+        assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
+        assertEquals(RuleStatus.FAILURE, result.ruleResults().getFirst().status());
+        assertEquals(new BigDecimal("0.03"),
+                result.globalMetrics().dailyDrawdownRatio().value());
+    }
+
+    @Test void dailyDrawdownAboveLimitIsAnInclusiveBreach() {
+        var result = evaluateDailyDrawdown("48499.99");
+
+        assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
+        assertEquals(RuleStatus.FAILURE, result.ruleResults().getFirst().status());
+        assertEquals(new BigDecimal("0.0300002"),
+                result.globalMetrics().dailyDrawdownRatio().value());
+    }
+
+    @Test void totalDrawdownRetainsItsInclusiveBreachBoundary() {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500.01"),
+                usd("0"), java.util.Optional.of(usd("50000")),
+                new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0"));
+        var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
+                RuleSeverity.BLOCKING, "0.03")), account, null);
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
+
+        assertEquals(RiskDecision.APPROVED, result.decision().orElseThrow());
+        assertEquals(RuleStatus.PASS, result.ruleResults().getFirst().status());
+    }
+
+    @Test void totalDrawdownAtAndAboveItsBoundaryStillBreaches() {
+        for (String equity : List.of("48500.00", "48499.99")) {
+            var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd(equity),
+                    usd("0"), java.util.Optional.of(usd("50000")),
+                    new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0"));
+            var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
+                    RuleSeverity.BLOCKING, "0.03")), account, null);
+
+            var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
+
+            assertEquals(RiskDecision.REJECTED, result.decision().orElseThrow());
+            assertEquals(RuleStatus.FAILURE, result.ruleResults().getFirst().status());
+        }
     }
 
     @Test void approvesWithWarningsWithoutHidingThem() {
@@ -152,5 +209,14 @@ class RiskEngineIntegrationTest {
                         RuleSeverity.BLOCKING, "0.50")));
         var engine = new DeterministicRiskEngine("28.1", registry, clock);
         assertEquals(engine.evaluate(context), engine.evaluate(context));
+    }
+
+    private RiskValidationResult evaluateDailyDrawdown(String equity) {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd(equity),
+                usd("0"), java.util.Optional.of(usd("50000")),
+                new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0"));
+        var context = context(rules(rule(DailyDrawdownRule.ID, RuleCategory.ACCOUNT,
+                RuleSeverity.BLOCKING, "0.03")), account, null);
+        return new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
     }
 }
