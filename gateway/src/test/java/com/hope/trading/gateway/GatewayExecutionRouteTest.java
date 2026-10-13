@@ -57,6 +57,8 @@ class GatewayExecutionRouteTest {
         List<String> ids = Flux.from(routeLocator.getRoutes()).map(Route::getId).collectList().block();
         assertThat(ids).contains(
                 "authentication",
+                "challenge-lifecycle",
+                "challenge-account",
                 "accounts",
                 "trades",
                 "broker-credential-commands",
@@ -67,6 +69,69 @@ class GatewayExecutionRouteTest {
                 "executions",
                 "risk-profile-catalog"
         );
+    }
+
+    @Test
+    void challengeCatalogRouteForwardsToTradingCore() {
+        Route route = route("challenge-lifecycle");
+
+        assertThat(route).isNotNull();
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://trading-core"));
+        assertThat(matches(route, HttpMethod.GET, "/api/v1/challenges"))
+                .as("challenge catalog must match the Trading Core route").isTrue();
+        assertThat(matches(route, HttpMethod.GET, "/api/v1/challenges/"))
+                .as("challenge catalog subpaths must match the route").isTrue();
+    }
+
+    @Test
+    void accountChallengeRouteMatchesStartAndProgress() {
+        Route route = route("challenge-account");
+
+        assertThat(route).isNotNull();
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://trading-core"));
+        String path = "/api/v1/accounts/11111111-1111-1111-1111-111111111111/challenge";
+        assertThat(matches(route, HttpMethod.POST, path))
+                .as("challenge start must match the Trading Core route").isTrue();
+        assertThat(matches(route, HttpMethod.GET, path))
+                .as("challenge progress must match the Trading Core route").isTrue();
+    }
+
+    @Test
+    void accountChallengeRouteDoesNotCatchUnrelatedAccountPaths() {
+        Route route = route("challenge-account");
+
+        assertThat(route).isNotNull();
+        assertThat(matches(route, HttpMethod.GET,
+                "/api/v1/accounts/11111111-1111-1111-1111-111111111111"))
+                .as("plain account paths must use the account route instead").isFalse();
+        assertThat(matches(route, HttpMethod.GET,
+                "/api/v1/accounts/11111111-1111-1111-1111-111111111111/challenges"))
+                .as("unrelated account paths must not match the challenge route").isFalse();
+    }
+
+    @Test
+    void accountChallengeRouteWinsOverBroadAccountRoute() {
+        String path = "/api/v1/accounts/11111111-1111-1111-1111-111111111111/challenge";
+        MockServerHttpRequest request = MockServerHttpRequest.post(path).build();
+        ServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        String selectedRoute = Flux.from(routeLocator.getRoutes())
+                .filter(route -> Boolean.TRUE.equals(Flux.from(route.getPredicate()
+                        .apply(exchange)).blockLast()))
+                .map(Route::getId)
+                .next()
+                .block();
+
+        assertThat(selectedRoute).isEqualTo("challenge-account");
+    }
+
+    @Test
+    void challengeLifecycleRouteDoesNotCatchInternalPaths() {
+        Route route = route("challenge-lifecycle");
+
+        assertThat(route).isNotNull();
+        assertThat(matches(route, HttpMethod.GET, "/internal/v1/challenges"))
+                .as("internal challenge paths must not match a public route").isFalse();
     }
 
     @Test

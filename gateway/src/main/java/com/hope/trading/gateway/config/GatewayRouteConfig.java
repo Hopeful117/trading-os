@@ -47,6 +47,14 @@ public class GatewayRouteConfig {
                         .path("/api/v1/users/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))
                 )
+                .route("challenge-lifecycle", r -> r
+                        .path("/api/v1/challenges/**")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                )
+                .route("challenge-account", r -> r
+                        .path("/api/v1/accounts/*/challenge/**")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                )
                 .route("accounts", r -> r
                         .path("/api/v1/accounts/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))
