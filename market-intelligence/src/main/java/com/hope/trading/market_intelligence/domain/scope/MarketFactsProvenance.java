@@ -8,6 +8,7 @@ public record MarketFactsProvenance(
         Instant generatedAt,
         Instant activityObservationBoundary,
         Instant readinessObservationBoundary,
+        String activityCalculationBasis,
         String calculationVersion
 ) {
 }

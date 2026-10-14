@@ -36,7 +36,9 @@ public class MarketEligibilityPolicy {
                 facts.generatedAt(),
                 facts.activity().observationBoundary(),
                 readiness.observationBoundary(),
-                readiness.calculationVersion());
+                facts.activity().calculationBasis() == null
+                        ? null : facts.activity().calculationBasis().name(),
+                facts.activity().calculationVersion());
         List<MarketEligibilityReason> reasons = new ArrayList<>();
         if (facts.activity().status() != MarketFactStatus.AVAILABLE) {
             addReason(reasons, reasonFor(facts.activity().status()));

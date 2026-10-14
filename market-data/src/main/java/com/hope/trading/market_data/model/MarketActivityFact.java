@@ -19,6 +19,7 @@ public record MarketActivityFact(
         Instant observationBoundary,
         Instant latestEligibleEvidenceTime,
         Duration maxObservationAge,
+        MarketActivityCalculationBasis calculationBasis,
         BigDecimal quoteNotional,
         int expectedCandleCount,
         int observedCandleCount,
