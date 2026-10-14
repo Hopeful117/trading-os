@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.controller;
 
 import com.hope.trading.market_data.dto.MarketResponse;
+import com.hope.trading.market_data.exception.MarketDataExceptionHandler;
 import com.hope.trading.market_data.helper.MarketMapper;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,8 +56,9 @@ class MarketControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(new MarketController(
-                        synchronization, marketService, new MarketMapper(),
+                synchronization, marketService, new MarketMapper(),
                         subscriptionService, historyService))
+                .setControllerAdvice(new MarketDataExceptionHandler())
                 .build();
     }
 
@@ -124,6 +127,19 @@ class MarketControllerTest {
         verify(subscriptionService).unsubscribe(
                 org.mockito.ArgumentMatchers.eq(marketId),
                 org.mockito.ArgumentMatchers.any(MarketStreamRequest.class));
+    }
+
+    @Test
+    void unsupportedSubscriptionReturnsNotImplemented() throws Exception {
+        doThrow(new UnsupportedOperationException("Futures OHLC feed is unsupported"))
+                .when(subscriptionService).subscribe(any(), any());
+
+        mockMvc.perform(post("/api/v1/markets/" + marketId + "/subscriptions")
+                        .contentType("application/json")
+                        .content("""
+                            {"type":"OHLC","parameters":{"interval":60,"depth":null}}
+                            """))
+                .andExpect(status().isNotImplemented());
     }
 
     @Test
