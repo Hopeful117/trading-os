@@ -33,6 +33,7 @@ export class MarketToolbarComponent {
   readonly resetRequested = output<void>();
 
   readonly providers = input<readonly string[]>([]);
+  readonly productTypes = input<readonly string[]>([]);
   readonly baseAssets = input<readonly string[]>([]);
   readonly quoteAssets = input<readonly string[]>([]);
   readonly statuses = input<readonly string[]>([]);
@@ -41,6 +42,7 @@ export class MarketToolbarComponent {
     nonNullable: true,
   });
   readonly providerControl = new FormControl('', { nonNullable: true });
+  readonly productTypeControl = new FormControl('', { nonNullable: true });
   readonly baseAssetControl = new FormControl('', { nonNullable: true });
   readonly quoteAssetControl = new FormControl('', { nonNullable: true });
   readonly statusControl = new FormControl('', { nonNullable: true });
@@ -63,6 +65,10 @@ export class MarketToolbarComponent {
       startWith(this.providerControl.value),
       distinctUntilChanged(),
     );
+    const productType$ = this.productTypeControl.valueChanges.pipe(
+      startWith(this.productTypeControl.value),
+      distinctUntilChanged(),
+    );
     const baseAsset$ = this.baseAssetControl.valueChanges.pipe(
       startWith(this.baseAssetControl.value),
       distinctUntilChanged(),
@@ -80,12 +86,13 @@ export class MarketToolbarComponent {
       distinctUntilChanged(),
     );
 
-    combineLatest([search$, provider$, baseAsset$, quoteAsset$, status$, tradable$])
+    combineLatest([search$, provider$, productType$, baseAsset$, quoteAsset$, status$, tradable$])
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(([search, provider, baseAsset, quoteAsset, status, tradable]) => {
+      .subscribe(([search, provider, productType, baseAsset, quoteAsset, status, tradable]) => {
         this.filterChange.emit({
           search: search.trim(),
           ...(provider ? { provider } : {}),
+          ...(productType ? { productType } : {}),
           ...(baseAsset ? { baseAsset } : {}),
           ...(quoteAsset ? { quoteAsset } : {}),
           ...(status ? { tradingStatus: status } : {}),
@@ -112,6 +119,7 @@ export class MarketToolbarComponent {
   reset(): void {
     this.searchControl.setValue('');
     this.providerControl.setValue('');
+    this.productTypeControl.setValue('');
     this.baseAssetControl.setValue('');
     this.quoteAssetControl.setValue('');
     this.statusControl.setValue('');

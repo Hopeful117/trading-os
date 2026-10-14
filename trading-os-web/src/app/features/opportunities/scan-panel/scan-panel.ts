@@ -27,6 +27,7 @@ import {
   isActiveScanTerminal,
 } from '../../../core/models/active-scan.model';
 import { MarketResponse } from '../../../core/models/market-response';
+import { marketProductTypeLabel } from '../../../core/models/market-response';
 import { OpportunityResponse } from '../../../core/models/opportunity.model';
 import { TradePreparationFailure } from '../../../core/utils/trade-flow-error';
 import { AccountService } from '../../../core/services/account.service';
@@ -223,6 +224,10 @@ export class ScanPanel {
 
   marketProvider(marketId: string): string | null {
     return this.marketById.get(marketId)?.provider ?? null;
+  }
+
+  marketProductType(marketId: string): string {
+    return marketProductTypeLabel(this.marketById.get(marketId)?.productType);
   }
 
   selectableMarkets(markets: MarketResponse[]): MarketResponse[] {

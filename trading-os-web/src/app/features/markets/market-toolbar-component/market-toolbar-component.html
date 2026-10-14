@@ -36,6 +36,18 @@
     </label>
 
     <label>
+      <span class="sr-only">Product type</span>
+      <select [formControl]="productTypeControl">
+        <option value="">All products</option>
+        @for (productType of productTypes(); track productType) {
+          <option [value]="productType">
+            {{ productType === 'LINEAR_PERPETUAL' ? 'Futures' : 'Spot' }}
+          </option>
+        }
+      </select>
+    </label>
+
+    <label>
       <span class="sr-only">Base asset</span>
       <select [formControl]="baseAssetControl">
         <option value="">All base assets</option>
@@ -81,6 +93,7 @@
       <select [formControl]="sortFieldControl">
         <option value="SYMBOL">Symbol</option>
         <option value="PROVIDER">Provider</option>
+        <option value="PRODUCT_TYPE">Product type</option>
         <option value="BASE_ASSET">Base asset</option>
         <option value="QUOTE_ASSET">Quote asset</option>
         <option value="STATUS">Status</option>

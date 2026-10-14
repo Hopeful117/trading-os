@@ -9,6 +9,7 @@
         <h1>{{ market.symbol }}</h1>
 
         <p>{{ market.baseAsset }} / {{ market.quoteAsset }}</p>
+        <span class="product-type-badge">{{ productTypeLabel(market.productType) }}</span>
       </div>
 
       <div class="market-header-status">

@@ -42,6 +42,7 @@ describe('MarketsDetails', () => {
     symbol: 'BTC/USD',
     baseAsset: 'BTC',
     quoteAsset: 'USD',
+    productType: 'SPOT',
     marketState: {
       tradingStatus: 'OPEN',
       tradable: true,

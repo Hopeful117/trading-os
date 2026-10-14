@@ -6,6 +6,7 @@ import { Observable, of, throwError } from 'rxjs';
 import { OpportunityDetail, OpportunityDetailView } from './opportunity-details';
 import { OpportunityService } from '../../../core/services/opportunity.service';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
+import { MarketService } from '../../../core/services/market.service';
 import { OpportunityResponse, OpportunitySetup } from '../../../core/models/opportunity.model';
 
 describe('OpportunityDetail', () => {
@@ -58,6 +59,12 @@ describe('OpportunityDetail', () => {
       providers: [
         { provide: OpportunityService, useValue: opportunityServiceMock },
         { provide: TradePlanService, useValue: tradePlanServiceMock },
+        {
+          provide: MarketService,
+          useValue: {
+            findById: vi.fn().mockReturnValue(of({ marketId: 'market-1', productType: 'SPOT' })),
+          },
+        },
         { provide: Router, useValue: routerMock },
         {
           provide: ActivatedRoute,
@@ -155,13 +162,10 @@ describe('OpportunityDetail', () => {
         'account-1',
         expect.any(String),
       );
-      expect(routerMock.navigate).toHaveBeenCalledWith([
-        '/trade-planning',
-        'plans',
-        'tp-1',
-        'versions',
-        1,
-      ]);
+      expect(routerMock.navigate).toHaveBeenCalledWith(
+        ['/trade-planning', 'plans', 'tp-1', 'versions', 1],
+        { queryParams: { marketId: 'market-1' } },
+      );
     });
 
     it('keeps the Decision Workspace as a secondary account-scoped action', async () => {

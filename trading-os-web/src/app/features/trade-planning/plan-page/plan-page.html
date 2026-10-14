@@ -107,7 +107,11 @@
             <div class="market-context-header">
               <div>
                 <h2>Market context</h2>
-                <p>{{ view.market?.symbol }} · {{ view.market?.marketState?.tradingStatus }}</p>
+                <p>
+                  {{ view.market?.symbol }} ·
+                  {{ view.market?.productType === 'LINEAR_PERPETUAL' ? 'Futures' : 'Spot' }} ·
+                  {{ view.market?.marketState?.tradingStatus }}
+                </p>
               </div>
               <span class="market-updated"
                 >Updated {{ view.market?.marketState?.lastUpdated | date: 'MMM d, HH:mm' }}</span

@@ -31,94 +31,103 @@
         </div>
       }
       @case ('loaded') {
-        @if (view.opportunities.length > 0) {
-          <div class="opportunities-card">
-            <table>
-              <thead>
-                <tr>
-                  <th>Instrument</th>
-                  <th>Direction</th>
-                  <th>Type</th>
-                  <th>Timeframe</th>
-                  <th>Score</th>
-                  <th>Ref. price</th>
-                  <th>Valid until</th>
-                  <th>Rationale</th>
-                </tr>
-              </thead>
+        @if (marketsById$ | async; as marketsById) {
+          @if (view.opportunities.length > 0) {
+            <div class="opportunities-card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Instrument</th>
+                    <th>Market</th>
+                    <th>Direction</th>
+                    <th>Type</th>
+                    <th>Timeframe</th>
+                    <th>Score</th>
+                    <th>Ref. price</th>
+                    <th>Valid until</th>
+                    <th>Rationale</th>
+                  </tr>
+                </thead>
 
-              <tbody>
-                @for (opportunity of view.opportunities; track opportunity.id) {
-                  <tr
-                    class="opportunity-row"
-                    [class.opening]="openingOpportunityId === opportunity.id"
-                    tabindex="0"
-                    (click)="openOpportunity(opportunity)"
-                    (keydown.enter)="openOpportunity(opportunity)"
-                  >
-                    <td class="instrument">
-                      {{ opportunity.instrument }}
-                      @if (openingOpportunityId === opportunity.id) {
-                        <span class="opening-label">Opening plan…</span>
-                      }
-                      @if (preparationErrors[opportunity.id]; as failure) {
-                        <span class="opening-label risk-failure">
-                          {{ failure.code }}
-                          @if (failure.reasons.length > 0) {
-                            · {{ failure.reasons[0].code }}
-                          }
-                          @for (metric of metricEntries(failure); track metric[0]) {
-                            · {{ metric[0] }}={{ metric[1] }}
-                          }
+                <tbody>
+                  @for (opportunity of view.opportunities; track opportunity.id) {
+                    <tr
+                      class="opportunity-row"
+                      [class.opening]="openingOpportunityId === opportunity.id"
+                      tabindex="0"
+                      (click)="openOpportunity(opportunity)"
+                      (keydown.enter)="openOpportunity(opportunity)"
+                    >
+                      <td class="instrument">
+                        {{ opportunity.instrument }}
+                        @if (openingOpportunityId === opportunity.id) {
+                          <span class="opening-label">Opening plan…</span>
+                        }
+                        @if (preparationErrors[opportunity.id]; as failure) {
+                          <span class="opening-label risk-failure">
+                            {{ failure.code }}
+                            @if (failure.reasons.length > 0) {
+                              · {{ failure.reasons[0].code }}
+                            }
+                            @for (metric of metricEntries(failure); track metric[0]) {
+                              · {{ metric[0] }}={{ metric[1] }}
+                            }
+                          </span>
+                        }
+                      </td>
+
+                      <td>
+                        <span class="market-type">{{
+                          marketProductType(opportunity.marketId, marketsById)
+                        }}</span>
+                      </td>
+
+                      <td>
+                        <span class="direction" [class.long]="opportunity.direction === 'LONG'">
+                          {{ opportunity.direction }}
                         </span>
-                      }
-                    </td>
+                      </td>
 
-                    <td>
-                      <span class="direction" [class.long]="opportunity.direction === 'LONG'">
-                        {{ opportunity.direction }}
-                      </span>
-                    </td>
+                      <td>{{ opportunity.type }}</td>
 
-                    <td>{{ opportunity.type }}</td>
+                      <td>{{ opportunity.timeframe }}</td>
 
-                    <td>{{ opportunity.timeframe }}</td>
+                      <td>{{ opportunity.score }}</td>
 
-                    <td>{{ opportunity.score }}</td>
-
-                    <td class="reference-price">
-                      @if (opportunity.setup; as setup) {
-                        @if (setup.referencePrice !== null) {
-                          {{ setup.referencePrice | number: '1.2-4' }}
+                      <td class="reference-price">
+                        @if (opportunity.setup; as setup) {
+                          @if (setup.referencePrice !== null) {
+                            {{ setup.referencePrice | number: '1.2-4' }}
+                          } @else {
+                            —
+                          }
                         } @else {
                           —
                         }
-                      } @else {
-                        —
-                      }
-                    </td>
+                      </td>
 
-                    <td>
-                      @if (opportunity.validUntil; as validUntil) {
-                        {{ validUntil | date: 'MMM d, HH:mm' }}
-                      } @else {
-                        —
-                      }
-                    </td>
+                      <td>
+                        @if (opportunity.validUntil; as validUntil) {
+                          {{ validUntil | date: 'MMM d, HH:mm' }}
+                        } @else {
+                          —
+                        }
+                      </td>
 
-                    <td class="rationale" [title]="opportunity.explanation">
-                      {{ opportunity.explanation }}
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        } @else {
-          <section class="state-card" data-testid="empty-state">
-            <h2>No active trading opportunities right now</h2>
-            <p>Market Intelligence has not produced any active opportunity yet.</p>
-          </section>
+                      <td class="rationale" [title]="opportunity.explanation">
+                        {{ opportunity.explanation }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <section class="state-card" data-testid="empty-state">
+              <h2>No active trading opportunities right now</h2>
+              <p>Market Intelligence has not produced any active opportunity yet.</p>
+            </section>
+          }
         }
       }
     }

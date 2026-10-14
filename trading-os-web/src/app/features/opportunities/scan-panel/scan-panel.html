@@ -89,7 +89,9 @@
           data-testid="market-select"
         >
           @for (market of selectableMarkets(catalogue.markets); track market.marketId) {
-            <option [value]="market.marketId">{{ market.symbol }} · {{ market.provider }}</option>
+            <option [value]="market.marketId">
+              {{ market.symbol }} · {{ marketProductType(market.marketId) }} · {{ market.provider }}
+            </option>
           }
         </select>
         <small
@@ -280,6 +282,7 @@
                     @if (marketProvider(market.marketId); as provider) {
                       <small>{{ provider }}</small>
                     }
+                    <small>{{ marketProductType(market.marketId) }}</small>
                     <code>{{ market.marketId }}</code>
                   </td>
                   <td data-label="Eligibility">

@@ -74,6 +74,21 @@ table {
   font-weight: 600;
 }
 
+.product-type {
+  display: inline-flex;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+  font-size: 0.8rem;
+  font-weight: 600;
+
+  &.futures {
+    background: rgba(192, 132, 252, 0.15);
+    color: #d8b4fe;
+  }
+}
+
 .status {
   display: inline-flex;
 

@@ -9,6 +9,7 @@ import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { AccountService } from '../../core/services/account.service';
 import { ActiveScanService } from '../../core/services/active-scan.service';
 import { TradePlanService } from '../../core/services/trade-plan.service';
+import { MarketService } from '../../core/services/market.service';
 import { SCAN_POLL_INTERVAL_MS } from './scan-panel/scan-poll-interval';
 
 describe('Opportunities', () => {
@@ -44,6 +45,7 @@ describe('Opportunities', () => {
       validUntil: '2026-08-24T10:30:00Z',
       createdAt: '2026-08-24T09:55:00Z',
       strategyMatchId: 'match-1',
+      marketId: 'market-1',
       setup: {
         referencePrice: 64120.5,
         referencePriceAt: '2026-08-24T09:59:00Z',
@@ -96,6 +98,20 @@ describe('Opportunities', () => {
         { provide: Router, useValue: routerMock },
         { provide: AccountService, useValue: accountServiceMock },
         { provide: TradePlanService, useValue: tradePlanServiceMock },
+        {
+          provide: MarketService,
+          useValue: {
+            findAll: vi.fn().mockReturnValue(
+              of([
+                {
+                  marketId: 'market-1',
+                  productType: 'SPOT',
+                  marketState: { tradable: true },
+                },
+              ]),
+            ),
+          },
+        },
         { provide: ActiveScanService, useValue: activeScanServiceMock },
         { provide: SCAN_POLL_INTERVAL_MS, useValue: 25 },
       ],
@@ -148,6 +164,7 @@ describe('Opportunities', () => {
       expect(rows.length).toBe(2);
       expect(fixture.nativeElement.textContent).toContain('BTC/EUR');
       expect(fixture.nativeElement.textContent).toContain('ETH/EUR');
+      expect(fixture.nativeElement.textContent).toContain('Spot');
     });
 
     it('renders the setup reference price with an honest fallback for legacy rows', () => {
@@ -186,13 +203,10 @@ describe('Opportunities', () => {
       component.openOpportunity(mockOpportunities[0]);
 
       expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith('o1', 'a1', 'o1:a1');
-      expect(routerMock.navigate).toHaveBeenCalledWith([
-        '/trade-planning',
-        'plans',
-        'plan-1',
-        'versions',
-        1,
-      ]);
+      expect(routerMock.navigate).toHaveBeenCalledWith(
+        ['/trade-planning', 'plans', 'plan-1', 'versions', 1],
+        { queryParams: { marketId: 'market-1' } },
+      );
     });
 
     it('uses the opportunity account when no account has been selected in the scan panel', () => {
