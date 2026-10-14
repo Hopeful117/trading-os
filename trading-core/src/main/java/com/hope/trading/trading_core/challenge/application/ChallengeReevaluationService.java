@@ -51,6 +51,21 @@ public class ChallengeReevaluationService {
     }
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void reevaluateAccount(UUID accountId) {
+        ChallengeInstance challenge = instances.findByAccountIdAndStatus(accountId, ChallengeStatus.ACTIVE)
+                .orElse(null);
+        if (challenge == null) return;
+        Account account = accounts.findById(accountId).orElse(null);
+        if (account == null) return;
+        if (account.getBrokerAccountId() == null
+                || brokerAccounts.findById(account.getBrokerAccountId())
+                .filter(broker -> broker.executionMode() == ExecutionMode.PAPER).isEmpty()) {
+            return;
+        }
+        reevaluateLoaded(challenge, account);
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public ChallengeStatus reevaluate(UUID challengeId) {
         ChallengeInstance challenge = instances.findById(challengeId).orElse(null);
         if (challenge == null || challenge.status() != ChallengeStatus.ACTIVE) {

@@ -7,6 +7,7 @@ import com.hope.trading.trading_core.brokeraccount.api.RiskProfileReference;
 import com.hope.trading.trading_core.brokeraccount.domain.*;
 import com.hope.trading.trading_core.challenge.application.ChallengeDefinitionRepository;
 import com.hope.trading.trading_core.challenge.application.ChallengeInstanceRepository;
+import com.hope.trading.trading_core.challenge.application.ChallengeReevaluationDeliveryService;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
@@ -79,6 +80,7 @@ class PaperExitAcceptanceIntegrationTest {
     @Autowired private ExecuteTradeService execution;
     @Autowired private PaperExitService paperExit;
     @Autowired private PaperSettlementService paperSettlement;
+    @Autowired private ChallengeReevaluationDeliveryService challengeReevaluationDelivery;
     @Autowired private EntityManager entityManager;
     @Autowired private MockMvc mvc;
     @Autowired private TransactionTemplate transactions;
@@ -191,6 +193,7 @@ class PaperExitAcceptanceIntegrationTest {
                         ExecutionParameters.OrderType.MARKET, decimal("2"), null),
                 new IdempotencyKey("challenge-e2e-exit"), NOW, NOW.plusSeconds(300)));
         execution.execute(exit.id());
+        challengeReevaluationDelivery.deliver(exit.id().value());
 
         entityManager.clear();
         ChallengeInstance completed = challengeInstances.findById(challenge.id()).orElseThrow();

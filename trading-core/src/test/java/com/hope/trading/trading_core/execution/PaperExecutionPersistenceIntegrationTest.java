@@ -50,7 +50,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -62,11 +67,27 @@ import static org.mockito.Mockito.when;
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
+@Testcontainers
 class PaperExecutionPersistenceIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-15T10:00:00Z");
     private static final UUID MARKET_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private static final UUID PLAN_ID = UUID.fromString("20000000-0000-0000-0000-000000000001");
     private static final UUID RISK_EVALUATION_ID = UUID.fromString("40000000-0000-0000-0000-000000000001");
+
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("trading_os")
+            .withUsername("postgres")
+            .withPassword("postgres");
+
+    @DynamicPropertySource
+    static void postgresProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+        registry.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.PostgreSQLDialect");
+    }
 
     @Autowired private UserRepository users;
     @Autowired private AccountRepository accounts;
@@ -157,6 +178,8 @@ class PaperExecutionPersistenceIntegrationTest {
                 Integer.class, intent.id().value())).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from execution_broker_fill where broker_order_id = ?",
                 Integer.class, persistedOrder.id().value())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select status from challenge_reevaluation_outbox where execution_intent_id = ?",
+                String.class, intent.id().value())).isEqualTo("PENDING");
 
         entityManager.clear();
         Account persistedAccount = accounts.findById(accountId).orElseThrow();
