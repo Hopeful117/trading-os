@@ -12,6 +12,7 @@ import com.hope.trading.market_data.kraken.helper.KrakenProviderSymbolResolver;
 import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestTickerMapper;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.service.OhlcHistoryNormalizer;
 import org.junit.jupiter.api.Test;
@@ -57,6 +58,9 @@ class KrakenFuturesOhlcRoutingTest {
         var snapshot = provider.findOhlcHistorySnapshot(market, OhlcInterval.ONE_HOUR, 5);
 
         assertThat(snapshot.observedEvents()).hasSize(1);
+        assertThat(snapshot.activityCalculationBasis())
+                .isEqualTo(MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK);
+        assertThat(snapshot.observedEvents().getFirst().vwap()).isNull();
         assertThat(snapshot.observedEvents().getFirst().openTime())
                 .isEqualTo(Instant.parse("2026-10-14T11:00:00Z"));
         verify(charts).getCandles("trade", "PF_XBTUSD", "1h", 5, null, null);

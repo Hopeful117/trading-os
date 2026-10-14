@@ -25,6 +25,7 @@ import com.hope.trading.market_data.kraken.helper.KrakenFuturesTickerMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestTickerMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import com.hope.trading.market_data.model.MarketHistorySnapshot;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
@@ -284,7 +285,15 @@ public class KrakenMarketData implements MarketDataProvider {
                 .sorted(java.util.Comparator.comparing(OhlcEvent::openTime))
                 .toList();
         List<OhlcEvent> normalized = historyNormalizer.fillMissingIntervals(events, interval);
-        return new MarketHistorySnapshot(takeLastEvents(events, limit), takeLastEvents(normalized, limit));
+        return new MarketHistorySnapshot(
+                takeLastEvents(events, limit), takeLastEvents(normalized, limit),
+                activityCalculationBasis(events));
+    }
+
+    private MarketActivityCalculationBasis activityCalculationBasis(List<OhlcEvent> events) {
+        return events.stream().allMatch(event -> event.vwap() == null)
+                ? MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK
+                : MarketActivityCalculationBasis.VWAP;
     }
 
     private String futuresResolution(OhlcInterval interval) {

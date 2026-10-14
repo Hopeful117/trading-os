@@ -2,6 +2,7 @@ package com.hope.trading.market_data.brokerClient;
 
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import com.hope.trading.market_data.model.MarketHistorySnapshot;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
@@ -27,7 +28,7 @@ public interface MarketDataProvider {
             int limit
     ) {
         List<OhlcEvent> events = findOhlcHistory(market, interval, limit);
-        return new MarketHistorySnapshot(events, events);
+        return new MarketHistorySnapshot(events, events, MarketActivityCalculationBasis.VWAP);
     }
 
 }

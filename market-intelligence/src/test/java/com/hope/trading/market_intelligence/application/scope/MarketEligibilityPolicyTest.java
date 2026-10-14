@@ -44,7 +44,8 @@ class MarketEligibilityPolicyTest {
         assertThat(result.provenance().activityStatus()).isEqualTo("AVAILABLE");
         assertThat(result.provenance().readinessStatus()).isEqualTo("AVAILABLE");
         assertThat(result.provenance().generatedAt()).isEqualTo(NOW);
-        assertThat(result.provenance().calculationVersion()).isEqualTo("market-facts-v1");
+        assertThat(result.provenance().activityCalculationBasis()).isEqualTo("VWAP");
+        assertThat(result.provenance().calculationVersion()).isEqualTo("activity-version");
     }
 
     @Test
@@ -79,11 +80,12 @@ class MarketEligibilityPolicyTest {
                 new MarketFactsResponse.MarketActivityResponse(
                         marketId, "KRAKEN", "BTC/EUR", "BTC", "EUR", OhlcInterval.ONE_HOUR,
                         Duration.ofHours(24), NOW.minus(Duration.ofHours(24)), NOW, NOW,
-                        Duration.ofMinutes(5), BigDecimal.ONE, 24, 24, 24, 0, 0, 0,
-                        activityStatus, null, "market-facts-v1"),
+                         Duration.ofMinutes(5), MarketFactsResponse.MarketActivityCalculationBasis.VWAP,
+                         BigDecimal.ONE, 24, 24, 24, 0, 0, 0,
+                         activityStatus, null, "activity-version"),
                 new MarketFactsResponse.MarketReadinessResponse(
                         marketId, OhlcInterval.ONE_HOUR, 24, 24, 12, observedCandles,
                         24, syntheticCandles, 0, 0, 0, 0, NOW, NOW, NOW,
-                        Duration.ofMinutes(5), readinessStatus, null, "market-facts-v1"));
+                         Duration.ofMinutes(5), readinessStatus, null, "readiness-version"));
     }
 }

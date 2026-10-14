@@ -2,6 +2,7 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import com.hope.trading.market_data.model.MarketFactStatus;
 import com.hope.trading.market_data.model.MarketFactsRequest;
 import com.hope.trading.market_data.model.MarketFactsResponse;
@@ -63,8 +64,27 @@ class MarketFactsServiceTest {
 
         assertThat(response.activity().quoteNotional()).isEqualByComparingTo("900");
         assertThat(response.activity().status()).isEqualTo(MarketFactStatus.AVAILABLE);
+        assertThat(response.activity().calculationBasis()).isEqualTo(MarketActivityCalculationBasis.VWAP);
         assertThat(response.activity().observedCandleCount()).isEqualTo(3);
         assertThat(response.readiness().status()).isEqualTo(MarketFactStatus.AVAILABLE);
+    }
+
+    @Test
+    void calculatesFuturesActivityFromCloseWhenProviderVwapIsUnavailable() {
+        List<OhlcEvent> events = List.of(
+                eventWithoutVwap("2026-10-03T11:57:00Z", "2"),
+                eventWithoutVwap("2026-10-03T11:58:00Z", "3"),
+                eventWithoutVwap("2026-10-03T11:59:00Z", "4"));
+        when(historyService.findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4))
+                .thenReturn(new MarketHistorySnapshot(
+                        events, events, MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK));
+
+        MarketFactsResponse response = service.find(request(3));
+
+        assertThat(response.activity().quoteNotional()).isEqualByComparingTo("900");
+        assertThat(response.activity().calculationBasis())
+                .isEqualTo(MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK);
+        assertThat(response.activity().status()).isEqualTo(MarketFactStatus.AVAILABLE);
     }
 
     @Test
@@ -220,6 +240,8 @@ class MarketFactsServiceTest {
         MarketFactsResponse response = service.find(request(3));
 
         assertThat(response.activity().status()).isEqualTo(MarketFactStatus.UNAVAILABLE);
+        assertThat(response.activity().calculationBasis())
+                .isEqualTo(MarketActivityCalculationBasis.NOT_EVALUATED);
         assertThat(response.readiness().status()).isEqualTo(MarketFactStatus.UNAVAILABLE);
         verify(historyService).findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4);
     }
@@ -232,7 +254,25 @@ class MarketFactsServiceTest {
         MarketFactsResponse response = service.find(request(3));
 
         assertThat(response.activity().status()).isEqualTo(MarketFactStatus.UNSUPPORTED);
+        assertThat(response.activity().calculationBasis())
+                .isEqualTo(MarketActivityCalculationBasis.NOT_EVALUATED);
         assertThat(response.readiness().status()).isEqualTo(MarketFactStatus.UNSUPPORTED);
+    }
+
+    @Test
+    void negativeCloseIsIncompleteEvenWhenVolumeIsZeroUnderFallback() {
+        List<OhlcEvent> events = List.of(
+                eventWithClose("2026-10-03T11:57:00Z", "0", "-1"),
+                eventWithoutVwap("2026-10-03T11:58:00Z", "1"),
+                eventWithoutVwap("2026-10-03T11:59:00Z", "1"));
+        when(historyService.findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4))
+                .thenReturn(new MarketHistorySnapshot(
+                        events, events, MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK));
+
+        MarketFactsResponse response = service.find(request(3));
+
+        assertThat(response.activity().status()).isEqualTo(MarketFactStatus.INSUFFICIENT_DATA);
+        assertThat(response.activity().incompleteCandleCount()).isEqualTo(1);
     }
 
     @Test
@@ -427,6 +467,19 @@ class MarketFactsServiceTest {
                 new BigDecimal("99"), new BigDecimal("100"), new BigDecimal(volume),
                 new BigDecimal(vwap), 10, closed, open, false,
                 "source-" + openTime, BOUNDARY);
+    }
+
+    private OhlcEvent eventWithoutVwap(String openTime, String volume) {
+        return eventWithClose(openTime, volume, "100");
+    }
+
+    private OhlcEvent eventWithClose(String openTime, String volume, String close) {
+        Instant open = Instant.parse(openTime);
+        return new OhlcEvent(
+                MARKET_ID, MarketProvider.KRAKEN, "XBT/EUR", OhlcInterval.ONE_MINUTE,
+                open, open.plusSeconds(60), new BigDecimal("100"), new BigDecimal("101"),
+                new BigDecimal("99"), new BigDecimal(close), new BigDecimal(volume), null,
+                10, true, open, false, "source-" + openTime, BOUNDARY);
     }
 
     private static final class MutableClock extends Clock {

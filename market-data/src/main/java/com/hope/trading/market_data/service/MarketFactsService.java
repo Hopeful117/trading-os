@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import com.hope.trading.market_data.model.MarketActivityFact;
 import com.hope.trading.market_data.model.MarketDataReadiness;
 import com.hope.trading.market_data.model.MarketFactStatus;
@@ -33,7 +34,7 @@ public class MarketFactsService {
     private static final Logger log = LoggerFactory.getLogger(MarketFactsService.class);
     private static final int MAX_HISTORY_LIMIT = 720;
     private static final int MAX_CACHE_ENTRIES = 256;
-    private static final String CALCULATION_VERSION = "market-facts-v1";
+    private static final String CALCULATION_VERSION = "market-facts-v2";
 
     private final MarketService marketService;
     private final MarketHistoryService marketHistoryService;
@@ -79,7 +80,7 @@ public class MarketFactsService {
         MarketFactsResponse response = new MarketFactsResponse(
                 market.getMarketId(), market.getSymbol(), market.getBaseAsset(),
                 market.getQuoteAsset(), boundary,
-                calculateActivity(market, request, evidence, boundary),
+                calculateActivity(market, request, snapshot.activityCalculationBasis(), evidence, boundary),
                 calculateReadiness(request, snapshot, evidence, boundary)
         );
         if (response.activity().status() == MarketFactStatus.AVAILABLE
@@ -90,7 +91,8 @@ public class MarketFactsService {
     }
 
     private MarketActivityFact calculateActivity(
-            Market market, MarketFactsRequest request, PreparedEvidence evidence, Instant boundary) {
+            Market market, MarketFactsRequest request, MarketActivityCalculationBasis calculationBasis,
+            PreparedEvidence evidence, Instant boundary) {
         Instant windowStart = boundary.minus(request.activityWindow());
         Set<Instant> expectedTimes = expectedOpenTimes(
                 boundary, request.interval(), request.activityWindow());
@@ -105,11 +107,11 @@ public class MarketFactsService {
         int incomplete = 0;
         Instant latestEligible = null;
         for (OhlcEvent event : completed) {
-            if (!usableActivityValue(event)) {
+            if (!usableActivityValue(event, calculationBasis)) {
                 incomplete++;
                 continue;
             }
-            total = total.add(event.volume().multiply(event.vwap()));
+            total = total.add(event.volume().multiply(activityPrice(event, calculationBasis)));
             eligible++;
             if (latestEligible == null || event.closeTime().isAfter(latestEligible)) {
                 latestEligible = event.closeTime();
@@ -140,7 +142,7 @@ public class MarketFactsService {
                 market.getMarketId(), market.getProvider(), market.getSymbol(),
                 market.getBaseAsset(), market.getQuoteAsset(), request.interval(),
                 request.activityWindow(), windowStart, boundary, latestEligible,
-                request.maxObservationAge(), total, expected, completed.size(), eligible,
+                request.maxObservationAge(), calculationBasis, total, expected, completed.size(), eligible,
                 incomplete, evidence.duplicateCount(), conflicting, status, reason,
                 CALCULATION_VERSION);
     }
@@ -223,6 +225,7 @@ public class MarketFactsService {
                 market.getMarketId(), market.getProvider(), market.getSymbol(),
                 market.getBaseAsset(), market.getQuoteAsset(), request.interval(),
                 request.activityWindow(), start, boundary, null, request.maxObservationAge(),
+                MarketActivityCalculationBasis.NOT_EVALUATED,
                 BigDecimal.ZERO, 0, 0, 0, 0, 0, 0, status, reason, CALCULATION_VERSION);
         MarketDataReadiness readiness = new MarketDataReadiness(
                 request.marketId(), request.interval(), request.readinessLookbackCandles(),
@@ -287,12 +290,19 @@ public class MarketFactsService {
         return result;
     }
 
-    private boolean usableActivityValue(OhlcEvent event) {
-        return event.volume() != null && event.vwap() != null
+    private boolean usableActivityValue(OhlcEvent event, MarketActivityCalculationBasis calculationBasis) {
+        BigDecimal price = activityPrice(event, calculationBasis);
+        return event.volume() != null && price != null
                 && event.volume().signum() >= 0
-                // A zero-volume candle is valid no-trade evidence; a zero VWAP
+                // A zero-volume candle is valid no-trade evidence; a zero price
                 // is valid only when it contributes no volume.
-                && (event.volume().signum() == 0 || event.vwap().signum() > 0);
+                && price.signum() >= 0
+                && (event.volume().signum() == 0 || price.signum() > 0);
+    }
+
+    private BigDecimal activityPrice(OhlcEvent event, MarketActivityCalculationBasis calculationBasis) {
+        return calculationBasis == MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK
+                ? event.close() : event.vwap();
     }
 
     private boolean isExpired(Instant now, Instant evidence, Duration maxAge) {
