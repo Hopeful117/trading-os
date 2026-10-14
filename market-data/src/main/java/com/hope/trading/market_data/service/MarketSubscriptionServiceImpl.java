@@ -42,6 +42,11 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             UUID marketId,
             MarketStreamRequest request
     ) {
+        subscribe(marketId, request, java.time.Duration.ofSeconds(10));
+    }
+
+    @Override
+    public void subscribe(UUID marketId, MarketStreamRequest request, java.time.Duration timeout) {
         validateRequest(request);
 
 
@@ -77,7 +82,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                                 List.of(market),
                                 request
                         )
-                        .block(java.time.Duration.ofSeconds(10));
+                        .block(timeout);
 
                 log.info(
                         "Started {} subscription for market {}, count {}",
@@ -96,6 +101,11 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
 
     @Override
     public void unsubscribe(UUID marketId, MarketStreamRequest request) {
+        unsubscribe(marketId, request, java.time.Duration.ofSeconds(10));
+    }
+
+    @Override
+    public void unsubscribe(UUID marketId, MarketStreamRequest request, java.time.Duration timeout) {
 
         validateRequest(request);
 
@@ -144,7 +154,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             marketDataStreamProvider.unsubscribe(
                     List.of(market),
                     request
-            ).block(java.time.Duration.ofSeconds(10));
+            ).block(timeout);
 
             activeSubscriptions.remove(key, subscriberCount);
             clearStreamState(marketId, request);

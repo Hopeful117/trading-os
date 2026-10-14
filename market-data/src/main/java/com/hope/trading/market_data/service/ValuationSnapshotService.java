@@ -60,24 +60,30 @@ public class ValuationSnapshotService {
     @Transactional
     public ValuationSnapshotBatchResponse create(ValuationSnapshotBatchRequest request) {
         String reportingCurrency = normalize(request.reportingCurrency());
+        Duration requestedMaxAge = request.maxObservationAge() == null
+                ? maxObservationAge : request.maxObservationAge();
+        if (requestedMaxAge.isNegative() || requestedMaxAge.isZero()) {
+            throw new IllegalArgumentException("Valuation maximum observation age must be positive");
+        }
         List<ValuationFact> facts = new ArrayList<>();
         request.instruments().forEach(instrument -> facts.add(instrumentFact(
-                instrument, reportingCurrency, request.valuationTimestamp())));
+                instrument, reportingCurrency, request.valuationTimestamp(), requestedMaxAge)));
         request.assets().forEach(asset -> facts.add(assetFact(
-                asset, reportingCurrency, request.valuationTimestamp())));
+                asset, reportingCurrency, request.valuationTimestamp(), requestedMaxAge)));
 
         SnapshotStatus status = facts.stream().allMatch(fact -> fact.getStatus() == FactStatus.AVAILABLE)
                 ? SnapshotStatus.COMPLETE : SnapshotStatus.INCOMPLETE;
         ValuationSnapshot snapshot = new ValuationSnapshot(
                 UUID.randomUUID(), reportingCurrency, request.valuationTimestamp(), Instant.now(clock),
-                POLICY_VERSION, maxObservationAge.toString(), status);
+                POLICY_VERSION, requestedMaxAge.toString(), status);
         facts.forEach(snapshot::addFact);
         snapshot = snapshotRepository.saveAndFlush(snapshot);
-        return response(snapshot);
+        return response(snapshot, request.acquisitionOutcomes());
     }
 
     private ValuationFact instrumentFact(ValuationSnapshotBatchRequest.Instrument request,
-                                         String reportingCurrency, Instant valuationTimestamp) {
+                                         String reportingCurrency, Instant valuationTimestamp,
+                                         Duration freshness) {
         Market market = marketRepository.findById(request.marketId()).orElse(null);
         if (market == null) {
             return new ValuationFact("INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(),
@@ -92,7 +98,7 @@ public class ValuationSnapshotService {
         }
         BigDecimal marketPrice = price(observation, request.priceUse());
         String observationAge = observationAge(observation, valuationTimestamp);
-        if (isStale(observation, valuationTimestamp)) {
+        if (isStale(observation, valuationTimestamp, freshness)) {
             return new ValuationFact("INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(),
                     observation, sourcePriceType(request.priceUse()), marketPrice, observationAge,
                     null, FactStatus.STALE);
@@ -103,7 +109,7 @@ public class ValuationSnapshotService {
                     null, FactStatus.PRICE_UNAVAILABLE);
         }
 
-        Conversion conversion = conversion(normalize(market.getQuoteAsset()), reportingCurrency, valuationTimestamp);
+        Conversion conversion = conversion(normalize(market.getQuoteAsset()), reportingCurrency, valuationTimestamp, freshness);
         FactStatus conversionStatus = conversion.status();
         BigDecimal value = conversionStatus == FactStatus.AVAILABLE
                 ? marketPrice.multiply(conversion.rate()) : null;
@@ -115,9 +121,9 @@ public class ValuationSnapshotService {
     }
 
     private ValuationFact assetFact(ValuationSnapshotBatchRequest.Asset request,
-                                    String reportingCurrency, Instant valuationTimestamp) {
+                                    String reportingCurrency, Instant valuationTimestamp, Duration freshness) {
         String asset = normalize(request.currency());
-        Conversion conversion = conversion(asset, reportingCurrency, valuationTimestamp);
+        Conversion conversion = conversion(asset, reportingCurrency, valuationTimestamp, freshness);
         ValuationFact fact = new ValuationFact(
                 "ASSET", request.id(), null, asset, null, null, null, null,
                 null, conversion.status() == FactStatus.AVAILABLE ? conversion.rate() : null, conversion.status());
@@ -125,20 +131,20 @@ public class ValuationSnapshotService {
         return fact;
     }
 
-    private Conversion conversion(String from, String to, Instant valuationTimestamp) {
+    private Conversion conversion(String from, String to, Instant valuationTimestamp, Duration freshness) {
         if (from.equals(to)) {
             return new Conversion(FactStatus.AVAILABLE, BigDecimal.ONE,
                     List.of(new ValuationConversionLeg(from, to, BigDecimal.ONE, null, "IDENTITY", BigDecimal.ONE, null)));
         }
 
-        Conversion direct = singleHop(from, to, valuationTimestamp);
+        Conversion direct = singleHop(from, to, valuationTimestamp, freshness);
         if (direct.hasProvenance()) return direct;
 
-        Conversion multiHop = multiHop(from, to, valuationTimestamp);
+        Conversion multiHop = multiHop(from, to, valuationTimestamp, freshness);
         return multiHop.status() != FactStatus.CONVERSION_UNAVAILABLE ? multiHop : direct;
     }
 
-    private Conversion singleHop(String from, String to, Instant valuationTimestamp) {
+    private Conversion singleHop(String from, String to, Instant valuationTimestamp, Duration freshness) {
         Optional<PriceObservation> direct = observationRepository
                 .findTopByBaseAssetIgnoreCaseAndQuoteAssetIgnoreCaseAndEffectiveAtLessThanEqualAndCapturedAtLessThanEqualOrderByEffectiveAtDescCapturedAtDescObservationIdDesc(
                         from, to, valuationTimestamp, valuationTimestamp);
@@ -147,9 +153,9 @@ public class ValuationSnapshotService {
             String age = observationAge(source, valuationTimestamp);
             ValuationConversionLeg leg = new ValuationConversionLeg(from, to, null, source, "BID",
                     source.getBid(), age);
-            if (isStale(source, valuationTimestamp) || source.getBid() == null
+            if (isStale(source, valuationTimestamp, freshness) || source.getBid() == null
                     || source.getBid().signum() <= 0) {
-                return new Conversion(isStale(source, valuationTimestamp) ? FactStatus.STALE : FactStatus.CONVERSION_UNAVAILABLE,
+                return new Conversion(isStale(source, valuationTimestamp, freshness) ? FactStatus.STALE : FactStatus.CONVERSION_UNAVAILABLE,
                         null, List.of(leg));
             }
             return new Conversion(FactStatus.AVAILABLE, source.getBid(),
@@ -165,8 +171,8 @@ public class ValuationSnapshotService {
         String age = observationAge(source, valuationTimestamp);
         ValuationConversionLeg leg = new ValuationConversionLeg(from, to, null, source, "INVERSE_ASK",
                 source.getAsk(), age);
-        if (isStale(source, valuationTimestamp) || source.getAsk() == null || source.getAsk().signum() <= 0) {
-            return new Conversion(isStale(source, valuationTimestamp) ? FactStatus.STALE : FactStatus.CONVERSION_UNAVAILABLE,
+        if (isStale(source, valuationTimestamp, freshness) || source.getAsk() == null || source.getAsk().signum() <= 0) {
+            return new Conversion(isStale(source, valuationTimestamp, freshness) ? FactStatus.STALE : FactStatus.CONVERSION_UNAVAILABLE,
                     null, List.of(leg));
         }
         BigDecimal rate = BigDecimal.ONE.divide(source.getAsk(), DIVISION_CONTEXT);
@@ -174,7 +180,7 @@ public class ValuationSnapshotService {
                 List.of(new ValuationConversionLeg(from, to, rate, source, "INVERSE_ASK", source.getAsk(), age)));
     }
 
-    private Conversion multiHop(String from, String to, Instant valuationTimestamp) {
+    private Conversion multiHop(String from, String to, Instant valuationTimestamp, Duration freshness) {
         List<Market> markets = marketRepository.findAll();
         Set<String> fromNeighbors = neighbors(from, markets);
         Set<String> toNeighbors = neighbors(to, markets);
@@ -185,8 +191,8 @@ public class ValuationSnapshotService {
                 .toList();
 
         for (String intermediate : intermediates) {
-            Conversion first = singleHop(from, intermediate, valuationTimestamp);
-            Conversion second = singleHop(intermediate, to, valuationTimestamp);
+            Conversion first = singleHop(from, intermediate, valuationTimestamp, freshness);
+            Conversion second = singleHop(intermediate, to, valuationTimestamp, freshness);
             if (first.status() == FactStatus.AVAILABLE && second.status() == FactStatus.AVAILABLE) {
                 List<ValuationConversionLeg> legs = new ArrayList<>(first.legs());
                 legs.addAll(second.legs());
@@ -208,12 +214,12 @@ public class ValuationSnapshotService {
                 .collect(Collectors.toSet());
     }
 
-    private boolean isStale(PriceObservation observation, Instant valuationTimestamp) {
-        return observation.getEffectiveAt().isBefore(valuationTimestamp.minus(maxObservationAge));
-    }
-
     private String observationAge(PriceObservation observation, Instant valuationTimestamp) {
         return Duration.between(observation.getEffectiveAt(), valuationTimestamp).toString();
+    }
+
+    private boolean isStale(PriceObservation observation, Instant valuationTimestamp, Duration freshness) {
+        return observation.getEffectiveAt().isBefore(valuationTimestamp.minus(freshness));
     }
 
     private BigDecimal price(PriceObservation observation, PriceUse priceUse) {
@@ -232,12 +238,17 @@ public class ValuationSnapshotService {
         };
     }
 
-    private ValuationSnapshotBatchResponse response(ValuationSnapshot snapshot) {
+    private ValuationSnapshotBatchResponse response(ValuationSnapshot snapshot,
+                                                     List<ValuationSnapshotBatchRequest.AcquisitionOutcome> acquisitionOutcomes) {
         return new ValuationSnapshotBatchResponse(
                 snapshot.getSnapshotId(), snapshot.getVersion(), snapshot.getReportingCurrency(),
                 snapshot.getValuationTimestamp(), snapshot.getCapturedAt(), snapshot.getPolicyVersion(),
                 snapshot.getMaxObservationAge(), snapshot.getStatus(),
-                snapshot.getFacts().stream().map(this::responseFact).toList());
+                snapshot.getFacts().stream().map(this::responseFact).toList(),
+                acquisitionOutcomes.stream()
+                        .map(outcome -> new ValuationSnapshotBatchResponse.AcquisitionOutcome(
+                                outcome.marketId(), outcome.status()))
+                        .toList());
     }
 
     private Fact responseFact(ValuationFact fact) {

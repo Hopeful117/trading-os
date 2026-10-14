@@ -207,6 +207,90 @@ class MarketPriceSnapshotServiceTest {
     }
 
     @Test
+    void confirmOrAcquireDoesNotReuseAUsableCachedObservation() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "ETH/USD", true);
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        publisher.publish(ticker(marketId, "ETH/USD", "100", "102", "101", "2026-08-01T12:00:00Z"));
+        provider.next = Optional.of(ticker(marketId, "ETH/USD", "109", "111", "110", "2026-08-01T12:00:00Z"));
+
+        var result = service.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofSeconds(1), "CONFIRM_OR_ACQUIRE"));
+
+        assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.FRESH);
+        assertThat(result.getFirst().bid()).isEqualByComparingTo("109");
+        assertThat(provider.calls).hasValue(1);
+    }
+
+    @Test
+    void structuredStaleProviderOutcomeDoesNotBecomeFreshFromCaptureTime() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "ETH/USD", true);
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        provider.next = Optional.of(ticker(marketId, "ETH/USD", "109", "111", "110", "2026-08-01T11:00:00Z"));
+
+        var result = service.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofMillis(10), "REUSE_OR_ACQUIRE"));
+
+        assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.STALE_PROVIDER);
+        assertThat(result.getFirst().capturedAt()).isEqualTo(clock.instant());
+        assertThat(result.getFirst().occurredAt()).isBefore(clock.instant().minusSeconds(30));
+    }
+
+    @Test
+    void staleRestObservationCanBeReplacedByBoundedTickerAlternate() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "ETH/USD", true);
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        provider.next = Optional.of(ticker(marketId, "ETH/USD", "109", "111", "110", "2026-08-01T11:00:00Z"));
+        MarketSubscriptionService subscription = new MarketSubscriptionService() {
+            @Override
+            public void subscribe(UUID ignored, com.hope.trading.market_data.model.MarketStreamRequest request) {
+                Thread.startVirtualThread(() -> {
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                    publisher.publish(ticker(marketId, "ETH/USD", "119", "121", "120",
+                            "2026-08-01T11:59:50Z"));
+                });
+            }
+
+            @Override
+            public void unsubscribe(UUID ignored, com.hope.trading.market_data.model.MarketStreamRequest request) {
+            }
+        };
+        MarketPriceSnapshotService bounded = new MarketPriceSnapshotService(
+                repository, publisher, List.of(provider), clock, Duration.ofSeconds(30), subscription);
+
+        var result = bounded.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofSeconds(1), "REUSE_OR_ACQUIRE"));
+
+        assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.FRESH);
+        assertThat(result.getFirst().ask()).isEqualByComparingTo("121");
+    }
+
+    @Test
+    void providerAcquisitionIsBoundedByTheRequestedDeadline() throws Exception {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "ETH/USD", true);
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        provider.blocking = true;
+        provider.release = new CountDownLatch(1);
+
+        try {
+            var result = service.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                    List.of(marketId), Duration.ofSeconds(30), Duration.ofMillis(10), "CONFIRM_OR_ACQUIRE"));
+
+            assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.TIMEOUT);
+            assertThat(provider.calls).hasValue(1);
+        } finally {
+            provider.release.countDown();
+        }
+    }
+
+    @Test
     void successfulAcquisitionRemainsCachedWhenObservationPersistenceFails() {
         UUID marketId = UUID.randomUUID();
         Market market = market(marketId, "ETH/USD", true);

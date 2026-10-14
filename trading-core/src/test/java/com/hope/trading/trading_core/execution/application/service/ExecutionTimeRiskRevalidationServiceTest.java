@@ -233,7 +233,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
                 Map.of("USD", new BigDecimal("10000"), "ETH", BigDecimal.ZERO),
                  new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO, null),
                 List.of(), List.of(), List.of(), "paper-facts"));
-        when(market.value(any(), any(), any(), any())).thenAnswer(invocation -> {
+         when(market.value(any(), any(), any(), any())).thenAnswer(invocation -> {
             List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
             List<MarketValuationPort.Asset> assets = invocation.getArgument(3);
             List<MarketValuationPort.Fact> valuationFacts = new ArrayList<>();
@@ -251,9 +251,12 @@ class ExecutionTimeRiskRevalidationServiceTest {
                     "INSTRUMENT", instrument.id(), UUID.randomUUID(), null, instrument.priceUse(),
                     new BigDecimal("50000"), new BigDecimal("50000"), BigDecimal.ONE,
                     "AVAILABLE", "paper-market")));
-            return new MarketValuationPort.Snapshot(UUID.randomUUID(), 1, "USD", invocation.getArgument(1), now,
-                    "policy", "PT5M", true, valuationFacts, "valuation");
-        });
+             return new MarketValuationPort.Snapshot(UUID.randomUUID(), 1, "USD", invocation.getArgument(1), now,
+                     "policy", "PT5M", true, valuationFacts, "valuation");
+         });
+         doAnswer(invocation -> market.value(invocation.getArgument(0), invocation.getArgument(1),
+                 invocation.getArgument(2), invocation.getArgument(3)))
+                 .when(market).value(any(), any(), any(), any(), any());
         when(requiredMargins.resolve(any())).thenReturn(Optional.of(
                 new RequiredMarginPort.Fact(BigDecimal.ONE, "EUR", "paper-margin", 1, now)));
         when(persistence.baseline(any(), any(), any(), any(), any(), any(), any())).thenReturn(

@@ -51,8 +51,11 @@ jobs:
           chmod +x ../trading-core/mvnw
           ../trading-core/mvnw -B -DskipTests install
 
-      # market-intelligence and risk-domain have no wrapper; reuse the
-      # trading-core wrapper as scripts/test-all.sh does.
+      # market-intelligence, news-service, and risk-domain may not have a
+      # module-local wrapper. Prefer the Maven installation already provided
+      # by the runner before falling back to the shared wrapper, so a transient
+      # Maven Central wrapper-download failure cannot fail an otherwise valid
+      # backend job.
       - name: Verify Docker for PostgreSQL migration tests
         if: matrix.module == 'trading-core'
         run: docker info
@@ -62,8 +65,12 @@ jobs:
         run: |
           MVN="./mvnw"
           if [ ! -x "$MVN" ]; then
-            chmod +x ../trading-core/mvnw
-            MVN="../trading-core/mvnw"
+            if command -v mvn >/dev/null 2>&1; then
+              MVN="mvn"
+            else
+              chmod +x ../trading-core/mvnw
+              MVN="../trading-core/mvnw"
+            fi
           fi
           $MVN -B clean verify
 

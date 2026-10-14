@@ -200,7 +200,8 @@ public class TradePlanRiskEvaluationService {
         String currency = configuration.reportingCurrency();
         Map<String, BigDecimal> startBalances = reconstructStartBalances(brokerSnapshot, riskDay);
         MarketValuationPort.Snapshot startValuation = market.value(currency, riskDay.startsAt(), List.of(),
-                startBalances.keySet().stream().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList());
+                startBalances.keySet().stream().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList(),
+                MarketValuationPort.FreshnessRequirement.t0());
         requireComplete(startValuation, "RISK_DAY_START_VALUATION_UNAVAILABLE");
         BigDecimal reconstructedDailyStart = valueAssets(startBalances, startValuation);
         if (reconstructedDailyStart.signum() <= 0) throw unavailable("RISK_DAY_START_BALANCE_INVALID");
@@ -222,7 +223,8 @@ public class TradePlanRiskEvaluationService {
         currentAssets.add(brokerSnapshot.account().valuationAsset());
         currentAssets.add(plan.sizingCurrency());
         MarketValuationPort.Snapshot current = market.value(currency, brokerSnapshot.observedAt(), instruments,
-                currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList());
+                currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList(),
+                MarketValuationPort.FreshnessRequirement.t0());
         requireComplete(current, "CURRENT_MARKET_VALUATION_UNAVAILABLE");
 
         BigDecimal balance = valueAssets(brokerSnapshot.assetBalances(), current);
@@ -266,8 +268,9 @@ public class TradePlanRiskEvaluationService {
          if (!currency.equalsIgnoreCase(marginFact.currency())
                  && currentAssets.stream().noneMatch(asset -> asset.equalsIgnoreCase(marginFact.currency()))) {
              currentAssets.add(marginFact.currency());
-             current = market.value(currency, brokerSnapshot.observedAt(), instruments,
-                     currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList());
+               current = market.value(currency, brokerSnapshot.observedAt(), instruments,
+                       currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList(),
+                       MarketValuationPort.FreshnessRequirement.t0());
              requireComplete(current, "CURRENT_MARKET_VALUATION_UNAVAILABLE");
          }
          BigDecimal requiredMargin = RequiredMarginCurrencyNormalizer.normalize(marginFact, currency, current, clock.instant())
@@ -484,7 +487,8 @@ public class TradePlanRiskEvaluationService {
                 throw unavailable("CLOSED_TRADE_FACT_INCOMPLETE");
             MarketValuationPort.Snapshot valuation = market.value(currency, trade.closedAt(), List.of(),
                     List.of(new MarketValuationPort.Asset("pnl", trade.settlementAsset()),
-                            new MarketValuationPort.Asset("fee", trade.settlementAsset())));
+                            new MarketValuationPort.Asset("fee", trade.settlementAsset())),
+                    MarketValuationPort.FreshnessRequirement.t0());
             requireComplete(valuation, "CLOSED_TRADE_CONVERSION_UNAVAILABLE");
             payloads.add(valuation.sourcePayload());
             total = total.add(trade.realizedPnl().multiply(fact(valuation, "pnl").value()))

@@ -4,6 +4,7 @@ import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
 
 import java.util.UUID;
+import java.time.Duration;
 
 public interface MarketSubscriptionService {
     void subscribe(
@@ -15,4 +16,12 @@ public interface MarketSubscriptionService {
             UUID marketId,
             MarketStreamRequest request
     );
+
+    default void subscribe(UUID marketId, MarketStreamRequest request, Duration timeout) {
+        subscribe(marketId, request);
+    }
+
+    default void unsubscribe(UUID marketId, MarketStreamRequest request, Duration timeout) {
+        unsubscribe(marketId, request);
+    }
 }
