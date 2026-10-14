@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Validates an authorized Trade Plan against authoritative persisted data
@@ -32,7 +33,7 @@ import java.util.UUID;
  * <p>Execution parameters that cannot be derived from the authoritative Trade Plan
  * are reported as gaps rather than invented.
  */
-public final class ValidateAndCreateService {
+public class ValidateAndCreateService {
     private final RiskPersistence riskPersistence;
     private final TradePlanRiskPort tradePlans;
     private final BrokerAccountRepository brokerAccounts;
@@ -74,6 +75,7 @@ public final class ValidateAndCreateService {
         this(riskPersistence, tradePlans, brokerAccounts, intentCreation, intents, lifecycle, events, clock, null);
     }
 
+    @Transactional
     public ExecutionIntent validateAndCreate(ValidateAndCreateCommand command) {
         Objects.requireNonNull(command, "command is required");
 
