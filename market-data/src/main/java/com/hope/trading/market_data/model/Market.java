@@ -34,6 +34,9 @@ public class Market {
     @Column(nullable = false)
     private String symbol;
 
+    @Column(name = "provider_symbol")
+    private String providerSymbol;
+
     @Column(nullable = false)
     private String baseAsset;
 
@@ -54,7 +57,6 @@ public class Market {
     private MarketState marketState;
 
 }
-
 
 
 
