@@ -49,16 +49,17 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(31);
+        assertMigrationHistory(32);
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                String.class)).isEqualTo("31");
+                String.class)).isEqualTo("32");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
         assertThat(tableExists("risk_evaluation_t1")).isTrue();
         assertThat(tableExists("challenge_definition")).isTrue();
         assertThat(tableExists("challenge_instance")).isTrue();
+        assertThat(tableExists("challenge_reevaluation_outbox")).isTrue();
         assertThat(jdbc.queryForObject(
                 "select count(*) from pg_indexes where schemaname = current_schema() "
                         + "and indexname in ('idx_risk_evaluation_t1_intent', 'idx_risk_evaluation_t1_account')",
@@ -88,7 +89,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                Integer.class)).isEqualTo(31);
+                Integer.class)).isEqualTo(32);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -107,7 +108,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(31);
+        assertMigrationHistory(32);
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
         assertThat(jdbc.queryForObject(
                 "select count(*) from challenge_definition where id = ? and definition_version = '1.0.0'",

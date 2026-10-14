@@ -55,14 +55,14 @@ public class ExecutionConfiguration {
         return new RoutingBrokerExecutionAdapter(liveAdapter, paperAdapter, brokerAccountRepository);
     }
     @Bean PaperSettlementService paperSettlementService(BrokerAccountRepository brokerAccountRepository,
-             AccountRepository accountRepository,
-             com.hope.trading.trading_core.service.TradingCalculatorService calculator,
-             com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort tradePlans,
-             com.hope.trading.trading_core.challenge.application.ChallengeReevaluationService challengeReevaluation,
+              AccountRepository accountRepository,
+              com.hope.trading.trading_core.service.TradingCalculatorService calculator,
+              com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort tradePlans,
+              com.hope.trading.trading_core.challenge.infrastructure.persistence.ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox,
               com.hope.trading.trading_core.market_data.apiClient.MarketDataClient marketDataClient,
               com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService derivativeValuation){
          return new PaperSettlementService(brokerAccountRepository, accountRepository, calculator, tradePlans,
-                 challengeReevaluation, marketDataClient, derivativeValuation);
+                 challengeReevaluationOutbox, marketDataClient, derivativeValuation);
     }
     @Bean ExecutionFinalizationStep executionFinalizationStep(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts, BrokerOrderRepositoryPort orders,

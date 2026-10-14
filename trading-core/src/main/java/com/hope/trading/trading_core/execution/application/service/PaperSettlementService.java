@@ -14,6 +14,7 @@ import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.challenge.application.ChallengeReevaluationService;
+import com.hope.trading.trading_core.challenge.infrastructure.persistence.ChallengeReevaluationOutboxPersistence;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
@@ -24,8 +25,6 @@ import com.hope.trading.trading_core.market_data.dto.MarketResponse;
 import com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -35,32 +34,34 @@ import java.util.UUID;
 
 @Service
 public class PaperSettlementService {
-    private static final Logger log = LoggerFactory.getLogger(PaperSettlementService.class);
-
     private final BrokerAccountRepository brokerAccountRepository;
     private final AccountRepository accountRepository;
     private final TradingCalculatorService tradingCalculatorService;
     private final TradePlanRiskPort tradePlans;
-    private final ChallengeReevaluationService challengeReevaluation;
+    private final ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox;
     private final MarketDataClient marketDataClient;
     private final PaperDerivativeAccountValuationService derivativeValuation;
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository) {
-        this(brokerAccountRepository, accountRepository, new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null, null, null, null);
+        this(brokerAccountRepository, accountRepository,
+                new com.hope.trading.trading_core.service.TradingCalculatorServiceImpl(), null,
+                (ChallengeReevaluationOutboxPersistence) null, null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository,
                                    TradingCalculatorService tradingCalculatorService) {
-        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null, null, null, null);
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, null,
+                (ChallengeReevaluationOutboxPersistence) null, null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository,
                                    TradingCalculatorService tradingCalculatorService,
                                    TradePlanRiskPort tradePlans) {
-        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans, null, null, null);
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
+                (ChallengeReevaluationOutboxPersistence) null, null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
@@ -69,7 +70,7 @@ public class PaperSettlementService {
                                    TradePlanRiskPort tradePlans,
                                    ChallengeReevaluationService challengeReevaluation) {
         this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
-                challengeReevaluation, null, null);
+                (ChallengeReevaluationOutboxPersistence) null, null, null);
     }
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
@@ -79,7 +80,18 @@ public class PaperSettlementService {
                                    ChallengeReevaluationService challengeReevaluation,
                                    MarketDataClient marketDataClient) {
         this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
-                challengeReevaluation, marketDataClient, null);
+                (ChallengeReevaluationOutboxPersistence) null, marketDataClient, null);
+    }
+
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                   AccountRepository accountRepository,
+                                   TradingCalculatorService tradingCalculatorService,
+                                   TradePlanRiskPort tradePlans,
+                                   ChallengeReevaluationService challengeReevaluation,
+                                   MarketDataClient marketDataClient,
+                                   PaperDerivativeAccountValuationService derivativeValuation) {
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
+                (ChallengeReevaluationOutboxPersistence) null, marketDataClient, derivativeValuation);
     }
 
     @Autowired
@@ -87,14 +99,14 @@ public class PaperSettlementService {
                                   AccountRepository accountRepository,
                                   TradingCalculatorService tradingCalculatorService,
                                   TradePlanRiskPort tradePlans,
-                                  ChallengeReevaluationService challengeReevaluation,
+                                  ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox,
                                   MarketDataClient marketDataClient,
                                   PaperDerivativeAccountValuationService derivativeValuation) {
         this.brokerAccountRepository = brokerAccountRepository;
         this.accountRepository = accountRepository;
         this.tradingCalculatorService = tradingCalculatorService;
         this.tradePlans = tradePlans;
-        this.challengeReevaluation = challengeReevaluation;
+        this.challengeReevaluationOutbox = challengeReevaluationOutbox;
         this.marketDataClient = marketDataClient;
         this.derivativeValuation = derivativeValuation;
     }
@@ -140,14 +152,9 @@ public class PaperSettlementService {
         }
 
         accountRepository.save(account);
-        if (challengeReevaluation != null) {
+        if (challengeReevaluationOutbox != null) {
             accountRepository.flush();
-            try {
-                challengeReevaluation.reevaluate(account);
-            } catch (RuntimeException monitoringFailure) {
-                log.error("PAPER settlement completed but Challenge Risk reevaluation failed for account {}",
-                        account.getAccountId(), monitoringFailure);
-            }
+            challengeReevaluationOutbox.enqueue(intent.id().value(), account.getAccountId(), fill.executedAt());
         }
     }
 
