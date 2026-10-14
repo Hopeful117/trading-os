@@ -15,7 +15,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,7 +62,9 @@ class MarketSynchronizationImplTest {
     @Test
     void existingMarketIsUpdatedInPlaceWithoutIdentityChange() {
         Market existing = market("XBT/EUR", "OLD", "OLD");
+        existing.setProviderSymbol("OLD_SYMBOL");
         Market incoming = market("XBT/EUR", "XBT", "EUR");
+        incoming.setProviderSymbol("NEW_SYMBOL");
         when(marketDataProvider.getMarkets()).thenReturn(List.of(incoming));
         when(marketRepository.findByProviderAndSymbolAndProductType(
                 MarketProvider.KRAKEN, "XBT/EUR", InstrumentProductType.SPOT)).thenReturn(Optional.of(existing));
@@ -73,6 +74,7 @@ class MarketSynchronizationImplTest {
         verify(marketRepository).saveAll(List.of(existing));
         assertThat(existing.getBaseAsset()).isEqualTo("XBT");
         assertThat(existing.getQuoteAsset()).isEqualTo("EUR");
+        assertThat(existing.getProviderSymbol()).isEqualTo("NEW_SYMBOL");
     }
 
     @Test

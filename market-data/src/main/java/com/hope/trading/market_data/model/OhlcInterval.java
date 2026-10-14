@@ -12,7 +12,9 @@ public enum OhlcInterval {
     THIRTY_MINUTES(30, Duration.ofMinutes(30)),
     ONE_HOUR(60, Duration.ofHours(1)),
     FOUR_HOURS(240, Duration.ofHours(4)),
-    ONE_DAY(1440, Duration.ofDays(1));
+    TWELVE_HOURS(720, Duration.ofHours(12)),
+    ONE_DAY(1440, Duration.ofDays(1)),
+    ONE_WEEK(10080, Duration.ofDays(7));
 
     private final int minutes;
     private final Duration duration;

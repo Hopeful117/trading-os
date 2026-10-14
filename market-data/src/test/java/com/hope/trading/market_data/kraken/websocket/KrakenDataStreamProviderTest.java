@@ -171,6 +171,46 @@ class KrakenDataStreamProviderTest {
     }
 
     @Test
+    void duplicateUnsubscribeOnlyEmitsRemoteCommandForLastConsumer() {
+        establishConnection();
+        subscribeTicker();
+        subscribeTicker();
+
+        provider.unsubscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TICKER,
+                new MarketStreamParameters(null, null))).block();
+
+        assertThat(outboundTexts.stream()
+                .filter(payload -> payload.contains("\"method\":\"unsubscribe\"")))
+                .isEmpty();
+
+        provider.unsubscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TICKER,
+                new MarketStreamParameters(null, null))).block();
+
+        assertThat(outboundTexts.stream()
+                .filter(payload -> payload.contains("\"method\":\"unsubscribe\"")))
+                .hasSize(1);
+    }
+
+    @Test
+    void reconnectReplaysActiveSubscriptions() {
+        establishConnection();
+        subscribeTicker();
+
+        long subscribeCommandsBeforeReconnect = outboundTexts.stream()
+                .filter(payload -> payload.contains("\"method\":\"subscribe\""))
+                .count();
+
+        inbound.tryEmitComplete();
+        establishConnection();
+
+        assertThat(outboundTexts.stream()
+                .filter(payload -> payload.contains("\"method\":\"subscribe\"")))
+                .hasSizeGreaterThan((int) subscribeCommandsBeforeReconnect);
+    }
+
+    @Test
     void tickerMessageIsMappedAndDispatchedToSubscribedMarket() {
         establishConnection();
         subscribeTicker();

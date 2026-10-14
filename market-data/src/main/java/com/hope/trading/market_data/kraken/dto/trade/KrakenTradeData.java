@@ -14,7 +14,7 @@ public record KrakenTradeData(
         @JsonProperty("ord_type")
         String orderType,
         @JsonProperty("trade_id")
-        Long tradeId,
+        String tradeId,
         Instant timestamp
 ) {
 }

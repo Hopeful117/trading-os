@@ -3,10 +3,13 @@ package com.hope.trading.market_data.service;
 import com.hope.trading.market_data.brokerClient.MarketDataProvider;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.kraken.brokerClient.KrakenHttpClient;
+import com.hope.trading.market_data.kraken.brokerClient.KrakenFuturesHttpClient;
 import com.hope.trading.market_data.kraken.brokerClient.KrakenMarketData;
 import com.hope.trading.market_data.kraken.dto.ohlc.KrakenOhlcResponse;
 import com.hope.trading.market_data.kraken.helper.KrakenMarketMapper;
+import com.hope.trading.market_data.kraken.helper.KrakenFuturesMarketMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenProviderSymbolResolver;
+import com.hope.trading.market_data.kraken.helper.KrakenFuturesTickerMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestTickerMapper;
 import com.hope.trading.market_data.model.Market;
@@ -55,10 +58,13 @@ class MarketFactsKrakenIntegrationTest {
         Clock clock = Clock.fixed(BOUNDARY, ZoneOffset.UTC);
         KrakenMarketData provider = new KrakenMarketData(
                 client,
+                mock(KrakenFuturesHttpClient.class),
                 mock(KrakenMarketMapper.class),
+                mock(KrakenFuturesMarketMapper.class),
                 new KrakenProviderSymbolResolver(),
                 new KrakenRestOhlcMapper(),
                 mock(KrakenRestTickerMapper.class),
+                mock(KrakenFuturesTickerMapper.class),
                 new OhlcHistoryNormalizer(),
                 clock);
         MarketHistoryService historyService = new MarketHistoryService(

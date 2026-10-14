@@ -13,6 +13,14 @@ public class KrakenTickerMapper {
             KrakenTickerData data,
             Market market
     ) {
+        return toEvent(data, market, Instant.now());
+    }
+
+    public TickerEvent toEvent(
+            KrakenTickerData data,
+            Market market,
+            Instant occurredAt
+    ) {
         return new TickerEvent(
                 market.getMarketId(),
                 market.getProvider(),
@@ -21,7 +29,7 @@ public class KrakenTickerMapper {
                 data.getAsk(),
                 data.getLast(),
                 data.getVolume(),
-                Instant.now()
+                occurredAt
         );
     }
 }

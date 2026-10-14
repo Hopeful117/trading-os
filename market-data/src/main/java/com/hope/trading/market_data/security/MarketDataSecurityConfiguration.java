@@ -36,6 +36,7 @@ public class MarketDataSecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/markets/synchronize").hasAuthority(ROLE_SERVICE)
                         .requestMatchers(HttpMethod.POST, "/api/v1/markets/*/subscriptions").hasAuthority(ROLE_SERVICE)
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/markets/*/subscriptions").hasAuthority(ROLE_SERVICE)
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/markets/**").permitAll()
                         .anyRequest().denyAll())
                 .addFilterBefore(serviceJwtFilter, UsernamePasswordAuthenticationFilter.class)

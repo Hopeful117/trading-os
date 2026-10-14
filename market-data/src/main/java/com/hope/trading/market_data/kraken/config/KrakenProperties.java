@@ -11,7 +11,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class KrakenProperties {
 
     private String baseUrl;
+    private String futuresBaseUrl;
+    private String futuresChartsBaseUrl;
     private String websocket;
+    private String futuresWebsocket;
 
 
 }

@@ -8,8 +8,16 @@ import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairDto;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenAssetPairsResponse;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenRestTickerData;
 import com.hope.trading.market_data.kraken.dto.ticker.KrakenTickerResponse;
+import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentResponse;
+import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentDto;
+import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentStatusDto;
+import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentStatusResponse;
+import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesTickerDto;
+import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesTickerResponse;
 import com.hope.trading.market_data.kraken.helper.KrakenMarketMapper;
+import com.hope.trading.market_data.kraken.helper.KrakenFuturesMarketMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenProviderSymbolResolver;
+import com.hope.trading.market_data.kraken.helper.KrakenFuturesTickerMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestTickerMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenRestOhlcMapper;
 import com.hope.trading.market_data.model.Market;
@@ -35,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,9 +52,15 @@ class KrakenMarketDataTest {
     @Mock
     private KrakenHttpClient client;
     @Mock
+    private KrakenFuturesHttpClient futuresClient;
+    @Mock
     private KrakenMarketMapper marketMapper;
     @Mock
+    private KrakenFuturesMarketMapper futuresMarketMapper;
+    @Mock
     private KrakenRestTickerMapper restTickerMapper;
+    @Mock
+    private KrakenFuturesTickerMapper futuresTickerMapper;
     @Mock
     private KrakenRestOhlcMapper restOhlcMapper;
     @Mock
@@ -57,10 +72,13 @@ class KrakenMarketDataTest {
     void setUp() {
         provider = new KrakenMarketData(
                 client,
+                futuresClient,
                 marketMapper,
+                futuresMarketMapper,
                 new KrakenProviderSymbolResolver(),
                 restOhlcMapper,
                 restTickerMapper,
+                futuresTickerMapper,
                 historyNormalizer,
                 Clock.fixed(Instant.parse("2026-07-28T10:04:00Z"), java.time.ZoneOffset.UTC)
         );
@@ -78,12 +96,168 @@ class KrakenMarketDataTest {
         Market firstMarket = market("XBT/EUR");
         Market secondMarket = market("ETH/EUR");
         when(client.getAssetPairs()).thenReturn(response);
+        KrakenFuturesInstrumentResponse instruments = new KrakenFuturesInstrumentResponse();
+        instruments.setResult("success");
+        KrakenFuturesInstrumentStatusResponse statuses = new KrakenFuturesInstrumentStatusResponse();
+        statuses.setResult("success");
+        KrakenFuturesTickerResponse tickers = new KrakenFuturesTickerResponse();
+        tickers.setResult("success");
+        when(futuresClient.getInstruments()).thenReturn(instruments);
+        when(futuresClient.getInstrumentStatus()).thenReturn(statuses);
+        when(futuresClient.getTickers()).thenReturn(tickers);
         when(marketMapper.toDomain(firstDto)).thenReturn(firstMarket);
         when(marketMapper.toDomain(secondDto)).thenReturn(secondMarket);
 
         assertThat(provider.getMarkets())
                 .containsExactlyInAnyOrder(firstMarket, secondMarket);
         assertThat(provider.getName()).isEqualTo(MarketProvider.KRAKEN);
+    }
+
+    @Test
+    void combinesSpotAndOnlyPerpetualFuturesMarkets() {
+        KrakenFuturesInstrumentDto perpetual = new KrakenFuturesInstrumentDto();
+        perpetual.setSymbol("PF_XBTUSD");
+        perpetual.setType("flexible_futures");
+        perpetual.setPair("BTC:USD");
+        perpetual.setBase("BTC");
+        perpetual.setQuote("USD");
+        perpetual.setIsExpired(false);
+
+        KrakenFuturesInstrumentDto dated = new KrakenFuturesInstrumentDto();
+        dated.setSymbol("FF_XBTUSD_261225");
+        dated.setType("futures_vanilla");
+        dated.setPair("BTC:USD");
+        dated.setBase("BTC");
+        dated.setQuote("USD");
+        dated.setIsExpired(false);
+
+        KrakenFuturesInstrumentStatusDto status = new KrakenFuturesInstrumentStatusDto();
+        status.setTradeable("PF_XBTUSD");
+        KrakenFuturesTickerDto ticker = new KrakenFuturesTickerDto();
+        ticker.setSymbol("PF_XBTUSD");
+        ticker.setTag("perpetual");
+
+        KrakenFuturesInstrumentResponse instruments = new KrakenFuturesInstrumentResponse();
+        instruments.setResult("success");
+        instruments.setInstruments(List.of(perpetual, dated));
+        KrakenFuturesInstrumentStatusResponse statuses = new KrakenFuturesInstrumentStatusResponse();
+        statuses.setResult("success");
+        statuses.setInstrumentStatus(List.of(status));
+        KrakenFuturesTickerResponse tickers = new KrakenFuturesTickerResponse();
+        tickers.setResult("success");
+        tickers.setTickers(List.of(ticker));
+        when(futuresClient.getInstruments()).thenReturn(instruments);
+        when(futuresClient.getInstrumentStatus()).thenReturn(statuses);
+        when(futuresClient.getTickers()).thenReturn(tickers);
+        Market mapped = Market.builder()
+                .provider(MarketProvider.KRAKEN)
+                .symbol("BTC/USD")
+                .providerSymbol("PF_XBTUSD")
+                .productType(com.hope.trading.market_data.helper.InstrumentProductType.LINEAR_PERPETUAL)
+                .build();
+        when(futuresMarketMapper.toDomain(perpetual, true)).thenReturn(mapped);
+
+        assertThat(provider.getMarkets()).containsExactly(mapped);
+    }
+
+    @Test
+    void preservesSpotMarketsWhenFuturesDiscoveryFails() {
+        KrakenAssetPairDto spotDto = new KrakenAssetPairDto();
+        spotDto.setWsname("XBT/EUR");
+        KrakenAssetPairsResponse spotResponse = new KrakenAssetPairsResponse();
+        spotResponse.setResult(Map.of("XXBTZEUR", spotDto));
+        Market spotMarket = market("XBT/EUR");
+
+        when(client.getAssetPairs()).thenReturn(spotResponse);
+        when(marketMapper.toDomain(spotDto)).thenReturn(spotMarket);
+        when(futuresClient.getInstruments()).thenThrow(new IllegalStateException("provider unavailable"));
+
+        assertThat(provider.getMarkets()).containsExactly(spotMarket);
+    }
+
+    @Test
+    void treatsFuturesErrorResponseAsUnavailableWithoutDroppingSpot() {
+        KrakenAssetPairDto spotDto = new KrakenAssetPairDto();
+        spotDto.setWsname("XBT/EUR");
+        KrakenAssetPairsResponse spotResponse = new KrakenAssetPairsResponse();
+        spotResponse.setResult(Map.of("XXBTZEUR", spotDto));
+        Market spotMarket = market("XBT/EUR");
+        KrakenFuturesInstrumentResponse futuresError = new KrakenFuturesInstrumentResponse();
+        futuresError.setResult("error");
+
+        when(client.getAssetPairs()).thenReturn(spotResponse);
+        when(marketMapper.toDomain(spotDto)).thenReturn(spotMarket);
+        when(futuresClient.getInstruments()).thenReturn(futuresError);
+
+        assertThat(provider.getMarkets()).containsExactly(spotMarket);
+    }
+
+    @Test
+    void routesPerpetualSnapshotToFuturesTickerSource() {
+        Market market = Market.builder()
+                .marketId(UUID.randomUUID())
+                .provider(MarketProvider.KRAKEN)
+                .symbol("BTC/USD")
+                .providerSymbol("PF_XBTUSD")
+                .productType(com.hope.trading.market_data.helper.InstrumentProductType.LINEAR_PERPETUAL)
+                .build();
+        KrakenFuturesTickerDto ticker = new KrakenFuturesTickerDto();
+        ticker.setSymbol("PF_XBTUSD");
+        ticker.setTag("perpetual");
+        ticker.setBid(new BigDecimal("83367"));
+        ticker.setAsk(new BigDecimal("83368"));
+        ticker.setLast(new BigDecimal("83369"));
+        ticker.setLastTime(Instant.parse("2026-10-13T22:03:13Z"));
+        KrakenFuturesTickerResponse response = new KrakenFuturesTickerResponse();
+        response.setResult("success");
+        response.setTickers(List.of(ticker));
+        TickerEvent event = new TickerEvent(
+                market.getMarketId(), MarketProvider.KRAKEN, market.getSymbol(),
+                ticker.getBid(), ticker.getAsk(), ticker.getLast(), null, ticker.getLastTime());
+        when(futuresClient.getTickers()).thenReturn(response);
+        when(futuresTickerMapper.toEvent(ticker, market)).thenReturn(event);
+
+        assertThat(provider.acquireCurrentSnapshot(market)).contains(event);
+        verify(futuresClient).getTickers();
+        verify(client, never()).findTicker(any());
+    }
+
+    @Test
+    void rejectsFuturesMarketWithoutProviderSymbol() {
+        Market market = Market.builder()
+                .marketId(UUID.randomUUID())
+                .provider(MarketProvider.KRAKEN)
+                .symbol("BTC/USD")
+                .productType(com.hope.trading.market_data.helper.InstrumentProductType.LINEAR_PERPETUAL)
+                .build();
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> provider.acquireCurrentSnapshot(market))
+                .withMessage("Futures market provider symbol is required");
+
+        verifyNoInteractions(futuresClient, client);
+    }
+
+    @Test
+    void rejectsPerpetualTickerWithoutReferencePriceOrSourceTimestamp() {
+        Market market = Market.builder()
+                .marketId(UUID.randomUUID())
+                .provider(MarketProvider.KRAKEN)
+                .symbol("BTC/USD")
+                .providerSymbol("PF_XBTUSD")
+                .productType(com.hope.trading.market_data.helper.InstrumentProductType.LINEAR_PERPETUAL)
+                .build();
+        KrakenFuturesTickerDto incomplete = new KrakenFuturesTickerDto();
+        incomplete.setSymbol("PF_XBTUSD");
+        incomplete.setTag("perpetual");
+        incomplete.setBid(new BigDecimal("83367"));
+        incomplete.setAsk(new BigDecimal("83368"));
+        KrakenFuturesTickerResponse response = new KrakenFuturesTickerResponse();
+        response.setResult("success");
+        response.setTickers(List.of(incomplete));
+        when(futuresClient.getTickers()).thenReturn(response);
+
+        assertThat(provider.acquireCurrentSnapshot(market)).isEmpty();
     }
 
     @Test

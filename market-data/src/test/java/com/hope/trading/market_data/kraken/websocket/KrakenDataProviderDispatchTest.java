@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.kraken.websocket;
 
 import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.kraken.config.KrakenProperties;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamParameters;
@@ -41,6 +42,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * STORY-0020A-3B: completes the offline behavioral coverage of the Kraken
@@ -53,6 +55,7 @@ class KrakenDataProviderDispatchTest {
     private KrakenDataStreamProvider provider;
     private WebSocketSession session;
     private Sinks.Many<String> inbound;
+    private KrakenProperties properties;
 
     private final TickerEventPublisher tickerPublisher = mock(TickerEventPublisher.class);
     private final OhlcEventPublisher ohlcPublisher = mock(OhlcEventPublisher.class);
@@ -79,7 +82,7 @@ class KrakenDataProviderDispatchTest {
     @BeforeEach
     void setUp() {
         connector = new CapturingConnector();
-        var properties = new KrakenProperties();
+        properties = new KrakenProperties();
         properties.setWebsocket("wss://ws.kraken.com/v2");
 
         provider = new KrakenDataStreamProvider(
@@ -97,18 +100,20 @@ class KrakenDataProviderDispatchTest {
     private static class CapturingConnector implements KrakenStreamConnector {
         Function<WebSocketSession, Mono<Void>> handler;
         WebSocketSession session;
-        Sinks.Many<String> inbound = Sinks.many().unicast().onBackpressureBuffer();
+        URI lastUri;
+        Sinks.Many<String> inbound = Sinks.many().multicast().onBackpressureBuffer();
 
         @Override
         public Mono<Void> connect(
                 URI uri, Function<WebSocketSession, Mono<Void>> sessionHandler) {
+            this.lastUri = uri;
             this.handler = sessionHandler;
             return sessionHandler.apply(session);
         }
     }
 
     private void establishConnectionAndSubscribeTicker() {
-        inbound = Sinks.many().unicast().onBackpressureBuffer();
+        inbound = Sinks.many().multicast().onBackpressureBuffer();
         session = mock(WebSocketSession.class);
         when(session.isOpen()).thenReturn(true);
         when(session.textMessage(anyString())).thenAnswer(inv -> {
@@ -205,6 +210,25 @@ class KrakenDataProviderDispatchTest {
         Mockito.verifyNoInteractions(orderBookStateService, orderBookPublisher);
     }
 
+    @Test
+    void duplicateOrderBookSubscriptionKeepsDepthAfterPartialUnsubscribe() {
+        establishConnectionAndSubscribeOrderBook(10);
+        provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK, new MarketStreamParameters(null, 10))).block();
+        provider.unsubscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK, new MarketStreamParameters(null, 10))).block();
+
+        emit("""
+            {"channel":"book","type":"snapshot","data":[{
+               "symbol":"XBT/EUR",
+               "bids":[{"price":"50000","qty":"1.5"}],
+               "asks":[{"price":"50010","qty":"0.8"}],
+               "checksum":123,"timestamp":"2026-08-23T10:00:00Z"}]}
+            """);
+
+        verify(orderBookStateService).initialize(any());
+    }
+
     // ---- TRADES ------------------------------------------------------------
 
     @Test
@@ -221,6 +245,31 @@ class KrakenDataProviderDispatchTest {
                "ord_type":"market","trade_id":1,"timestamp":"2026-08-23T10:00:00Z"},
               {"symbol":"XBT/EUR","side":"sell","qty":"0.2","price":"49990",
                "ord_type":"market","trade_id":2,"timestamp":"2026-08-23T10:00:01Z"}
+            ]}
+            """);
+
+        verify(recentTradesStateService).addBatch(any());
+        verify(tradesPublisher).publish(snapshot);
+    }
+
+    @Test
+    void duplicateTradeSubscriptionKeepsSymbolAfterPartialUnsubscribe() {
+        establishConnectionAndSubscribeTicker();
+        subscribeTicker();
+        provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TRADES, new MarketStreamParameters(null, null))).block();
+        provider.unsubscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TRADES, new MarketStreamParameters(null, null))).block();
+
+        var snapshot = mock(com.hope.trading.market_data.model.RecentTradesSnapshot.class);
+        when(tradeMapper.toEvent(any(), any()))
+                .thenReturn(mock(com.hope.trading.market_data.model.TradeEvent.class));
+        when(recentTradesStateService.addBatch(any())).thenReturn(snapshot);
+
+        emit("""
+            {"channel":"trade","type":"update","data":[
+              {"symbol":"XBT/EUR","side":"buy","qty":"0.5","price":"50000",
+               "ord_type":"market","trade_id":1,"timestamp":"2026-08-23T10:00:00Z"}
             ]}
             """);
 
@@ -259,6 +308,107 @@ class KrakenDataProviderDispatchTest {
             """);
 
         Mockito.verifyNoInteractions(recentTradesStateService);
+    }
+
+    @Test
+    void futuresTickerUsesFuturesEndpointAndProviderSymbol() {
+        propertiesForFutures();
+        market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        market.setProviderSymbol("PF_XBTUSD");
+        establishConnectionAndSubscribeTicker();
+
+        provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TICKER, new MarketStreamParameters(null, null))).block();
+
+        assertThat(connector.lastUri.toString()).isEqualTo("wss://futures.kraken.com/ws/v1");
+        emit("""
+            {"feed":"ticker","product_id":"PF_XBTUSD","time":1720000000000,
+             "bid":50000,"ask":50001,"last":50000.5}
+            """);
+
+        verify(tickerPublisher).publish(any());
+    }
+
+    @Test
+    void futuresOrderBookSnapshotAcceptsObjectLevels() {
+        propertiesForFutures();
+        market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        market.setProviderSymbol("PF_XBTUSD");
+        establishConnectionAndSubscribeTicker();
+
+        provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK, new MarketStreamParameters(null, 10))).block();
+
+        var snapshot = mock(OrderBookSnapshot.class);
+        when(orderBookStateService.initialize(any())).thenReturn(snapshot);
+
+        emit("""
+            {"feed":"book_snapshot","product_id":"PF_XBTUSD","timestamp":1720000000000,
+             "bids":[{"price":50000,"qty":1.5}],"asks":[{"price":50001,"qty":0.8}]}
+            """);
+
+        verify(orderBookStateService).initialize(any());
+        verify(orderBookPublisher).publish(snapshot);
+    }
+
+    @Test
+    void futuresTradeUsesUidWhenTradeIdIsAbsent() {
+        propertiesForFutures();
+        market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        market.setProviderSymbol("PF_XBTUSD");
+        establishConnectionAndSubscribeTicker();
+
+        provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TRADES, new MarketStreamParameters(null, null))).block();
+
+        var snapshot = mock(com.hope.trading.market_data.model.RecentTradesSnapshot.class);
+        when(recentTradesStateService.addBatch(any())).thenReturn(snapshot);
+
+        emit("""
+            {"feed":"trade","product_id":"PF_XBTUSD","uid":"trade-1",
+             "side":"buy","time":1720000000000,"qty":0.5,"price":50000}
+            """);
+
+        verify(recentTradesStateService).addBatch(any());
+        verify(tradesPublisher).publish(snapshot);
+    }
+
+    @Test
+    void futuresOhlcWebsocketIsRejectedInsteadOfUsingSpotFeed() {
+        propertiesForFutures();
+        market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        market.setProviderSymbol("PF_XBTUSD");
+
+        assertThatThrownBy(() -> provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.OHLC, new MarketStreamParameters(60, null))).block())
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("Futures OHLC");
+    }
+
+    @Test
+    void futuresSubscriptionWithoutProviderSymbolIsRejected() {
+        propertiesForFutures();
+        market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+
+        assertThatThrownBy(() -> provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TICKER, new MarketStreamParameters(null, null))).block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("providerSymbol");
+    }
+
+    @Test
+    void futuresUnsubscriptionWithoutProviderSymbolIsRejected() {
+        propertiesForFutures();
+        market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+
+        assertThatThrownBy(() -> provider.unsubscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TICKER, new MarketStreamParameters(null, null))).block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("providerSymbol");
+    }
+
+    private void propertiesForFutures() {
+        properties.setFuturesWebsocket("wss://futures.kraken.com/ws/v1");
     }
 
     @Test

@@ -26,10 +26,14 @@ class MarketProductMigrationTest {
         try (var connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection,
                     new ClassPathResource("db/migration/V3__market_product_identity.sql"));
+            ScriptUtils.executeSqlScript(connection,
+                    new ClassPathResource("db/migration/V4__market_provider_symbol.sql"));
         }
 
         assertThat(jdbc.queryForObject("select product_type from markets where provider = 'KRAKEN' and symbol = 'BTC/USD'",
                 String.class)).isEqualTo("SPOT");
+        assertThat(jdbc.queryForObject("select provider_symbol from markets where provider = 'KRAKEN' and symbol = 'BTC/USD'",
+                String.class)).isEqualTo("BTCUSD");
         jdbc.update("insert into markets(market_id, provider, symbol, product_type) values (?, 'KRAKEN', 'BTC/USD', 'LINEAR_PERPETUAL')",
                 UUID.randomUUID());
         assertThat(jdbc.queryForObject("select count(*) from markets where provider = 'KRAKEN' and symbol = 'BTC/USD'",

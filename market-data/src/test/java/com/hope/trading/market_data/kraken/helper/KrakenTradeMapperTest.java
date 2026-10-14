@@ -29,7 +29,7 @@ class KrakenTradeMapperTest {
     @Test
     void mapsBuyTakerSideAndCalculatesNotional() {
         TradeEvent event = mapper.toEvent(
-                trade("buy", "101.25", "2.5", 42L),
+                trade("buy", "101.25", "2.5", "42"),
                 market
         );
 
@@ -44,7 +44,7 @@ class KrakenTradeMapperTest {
     @Test
     void mapsSellTakerSide() {
         TradeEvent event = mapper.toEvent(
-                trade("SELL", "99", "3", 43L),
+                trade("SELL", "99", "3", "43"),
                 market
         );
 
@@ -56,14 +56,14 @@ class KrakenTradeMapperTest {
     void rejectsInvalidTradeWithoutProducingDomainEvent() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> mapper.toEvent(
-                        trade("unknown", "100", "1", 44L),
+                         trade("unknown", "100", "1", "44"),
                         market
                 ))
                 .withMessage("Unsupported Kraken trade side: unknown");
 
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> mapper.toEvent(
-                        trade("buy", "100", "0", 45L),
+                         trade("buy", "100", "0", "45"),
                         market
                 ))
                 .withMessage("Kraken trade quantity must be positive");
@@ -73,7 +73,7 @@ class KrakenTradeMapperTest {
             String side,
             String price,
             String quantity,
-            Long tradeId
+            String tradeId
     ) {
         return new KrakenTradeData(
                 "BTC/EUR",

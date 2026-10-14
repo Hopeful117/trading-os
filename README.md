@@ -54,10 +54,19 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Comptes PAPER : provisioning persistant, simulation d'entrée, mise à jour locale des balances/equity et persistance des trades ouverts disponibles.
 - Positions PAPER : `GET /api/v1/accounts/{accountId}/positions` lit les `Trade` locaux `OPEN` après rechargement de la persistance, sans dépendre de Broker Service. La valorisation utilise Market Data, avec bid pour les positions BUY, ask pour les positions SELL et un statut explicite en cas de prix indisponible.
 - Référentiel et affichage des marchés Kraken : disponible.
+- Marchés Kraken Linear Perpetual : catalogue provider-aware avec `providerSymbol`,
+  OHLC Futures via Charts REST, ticker/carnet d'ordres/trades via WebSocket Futures,
+  parsing provider-specific isolé et reconnexion avec replay des abonnements actifs.
 - Règles et moteur de risque : première version implémentée ; les profils configurables complets restent à construire.
 - Cycle de vie local des trades et statistiques : API implémentée, positions PAPER observables dans l'interface ; fermeture PAPER et intégration Analytics complète restent à construire.
 - Exécution broker : intentions, tentatives, idempotence, soumission Kraken, annulation, récupération et réconciliation implémentées. La validation contractuelle contre le sandbox Kraken et le parcours déployé de bout en bout restent à exécuter.
 - Flux temps réel : ticker, OHLC, carnet d'ordres et transactions récentes avec abonnements dynamiques.
+
+Les flux Kraken Spot et Linear Perpetual utilisent des endpoints et des payloads
+distincts. Le symbole canonique Trading OS reste exposé au domaine ; le symbole
+provider Kraken Futures est persisté séparément et est obligatoire pour toute
+souscription Futures. Les abonnements WebSocket sont comptés par flux, profondeur
+et symbole afin de préserver les consommateurs lors d'un désabonnement partiel.
 - Dashboard : orchestration dans Trading Core, valorisation des positions, risque, fraîcheur et états dégradés.
 - Fondation Market Intelligence ADR-020 : contexte modulaire, modes passif/actif, analyses déterministes, provenance et consolidation partielle.
 - Gouvernance ADR-021 : `AnalysisExecution` asynchrone, idempotence, politique d'exécution, annulation, classification du contexte et contrat AI Engine désactivé.
