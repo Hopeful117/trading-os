@@ -14,7 +14,8 @@ public record ValuationSnapshotBatchResponse(
         String policyVersion,
         String maxObservationAge,
         SnapshotStatus status,
-        List<Fact> facts
+        List<Fact> facts,
+        List<AcquisitionOutcome> acquisitionOutcomes
 ) {
     public record Fact(
             String type,
@@ -59,5 +60,8 @@ public record ValuationSnapshotBatchResponse(
         STALE,
         PRICE_UNAVAILABLE,
         CONVERSION_UNAVAILABLE
+    }
+
+    public record AcquisitionOutcome(UUID marketId, String status) {
     }
 }

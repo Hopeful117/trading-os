@@ -23,7 +23,7 @@ public class InternalMarketController {
             @RequestBody MarketPriceSnapshotRequest request
     ) {
         return ResponseEntity.ok(
-                marketPriceSnapshotService.findSnapshots(request.marketIds())
+                marketPriceSnapshotService.findSnapshots(request)
         );
     }
 }

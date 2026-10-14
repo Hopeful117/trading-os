@@ -7,6 +7,7 @@ import com.hope.trading.trading_core.config.MarketDataFeignConfiguration;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,17 +27,29 @@ interface MarketValuationFeignClient {
     @PostMapping("/internal/v1/valuation-snapshots/batch")
     ValuationTransport value(@RequestBody ValuationRequest request);
     @PostMapping("/internal/markets/prices/snapshot")
-    void refresh(@RequestBody MarketPriceSnapshotRequest request);
+    List<PriceSnapshotTransport> refresh(@RequestBody MarketPriceSnapshotRequest request);
 }
 
 record CatalogueMarket(UUID marketId, String provider, String symbol, String baseAsset, String quoteAsset) { }
 record ValuationRequest(String reportingCurrency, Instant valuationTimestamp,
-                        List<InstrumentRequest> instruments, List<AssetRequest> assets) { }
+                        List<InstrumentRequest> instruments, List<AssetRequest> assets,
+                        String decisionBoundary, String acquisitionMode,
+                        Duration maxObservationAge, Duration acquisitionDeadline,
+                        List<AcquisitionOutcomeRequest> acquisitionOutcomes) { }
 record InstrumentRequest(String id, UUID marketId, String priceUse) { }
 record AssetRequest(String id, String currency) { }
+record PriceSnapshotTransport(UUID marketId, String status) { }
+record AcquisitionOutcomeRequest(UUID marketId, String status) { }
 record ValuationTransport(UUID snapshotId, long version, String reportingCurrency,
                           Instant valuationTimestamp, Instant capturedAt, String policyVersion,
-                          String maxObservationAge, String status, List<Fact> facts) {
+                          String maxObservationAge, String status, List<Fact> facts,
+                          List<AcquisitionOutcomeRequest> acquisitionOutcomes) {
+    ValuationTransport(UUID snapshotId, long version, String reportingCurrency,
+                       Instant valuationTimestamp, Instant capturedAt, String policyVersion,
+                       String maxObservationAge, String status, List<Fact> facts) {
+        this(snapshotId, version, reportingCurrency, valuationTimestamp, capturedAt, policyVersion,
+                maxObservationAge, status, facts, List.of());
+    }
     record Fact(String type, String id, UUID marketId, String asset, String priceUse,
                 BigDecimal value, String status, Source source, List<ConversionLeg> conversionLegs) { }
     record Source(UUID observationId, UUID marketId, String provider, String symbol,
@@ -60,6 +73,13 @@ public final class MarketValuationClient implements MarketValuationPort {
     @Override
     public Snapshot value(String reportingCurrency, Instant at,
                           List<Instrument> instruments, List<Asset> assets) {
+        return value(reportingCurrency, at, instruments, assets, FreshnessRequirement.t0());
+    }
+
+    @Override
+    public Snapshot value(String reportingCurrency, Instant at,
+                          List<Instrument> instruments, List<Asset> assets,
+                          FreshnessRequirement requirement) {
         List<CatalogueMarket> catalogue = client.markets();
         List<InstrumentRequest> instrumentRequests = instruments.stream().map(item -> {
             List<CatalogueMarket> matches = catalogue.stream()
@@ -73,21 +93,33 @@ public final class MarketValuationClient implements MarketValuationPort {
         }
         Instant valuationAt = at;
         List<UUID> refreshMarketIds = refreshMarketIds(catalogue, instrumentRequests, assets, reportingCurrency);
+        List<AcquisitionOutcomeRequest> acquisitionOutcomes = List.of();
         if (!refreshMarketIds.isEmpty()) {
-            client.refresh(new MarketPriceSnapshotRequest(refreshMarketIds));
+            acquisitionOutcomes = client.refresh(new MarketPriceSnapshotRequest(refreshMarketIds,
+                    requirement.maxObservationAge(), requirement.acquisitionDeadline(),
+                    requirement.acquisitionMode().name())).stream()
+                    .map(snapshot -> new AcquisitionOutcomeRequest(snapshot.marketId(), snapshot.status()))
+                    .toList();
             valuationAt = clock.instant();
         }
         ValuationTransport value = client.value(new ValuationRequest(reportingCurrency, valuationAt,
-                instrumentRequests, assets.stream().map(a -> new AssetRequest(a.id(), a.currency())).toList()));
+                instrumentRequests, assets.stream().map(a -> new AssetRequest(a.id(), a.currency())).toList(),
+                requirement.boundary().name(), requirement.acquisitionMode().name(),
+                requirement.maxObservationAge(), requirement.acquisitionDeadline(), acquisitionOutcomes));
         try {
             List<Fact> facts = value.facts().stream().map(f -> new Fact(f.type(), f.id(), f.marketId(),
                     f.asset(), f.priceUse() == null ? null : PriceUse.valueOf(f.priceUse()), f.value(),
                     f.source() == null ? null : f.source().price(), conversionRate(f.conversionLegs()), f.status(),
                     preserve(f.source(), f.conversionLegs()))).toList();
+            boolean complete = "COMPLETE".equals(value.status()) && value.acquisitionOutcomes().stream()
+                    .allMatch(outcome -> "FRESH".equalsIgnoreCase(outcome.status()));
             return new Snapshot(value.snapshotId(), value.version(), value.reportingCurrency(),
                     value.valuationTimestamp(), value.capturedAt(), value.policyVersion(),
-                    value.maxObservationAge(), "COMPLETE".equals(value.status()), facts,
-                    mapper.writeValueAsString(value));
+                    value.maxObservationAge(), complete, facts,
+                    mapper.writeValueAsString(value), value.acquisitionOutcomes().stream()
+                            .map(outcome -> new MarketValuationPort.AcquisitionOutcome(
+                                    outcome.marketId(), outcome.status()))
+                            .toList());
         } catch (Exception failure) {
             throw new IllegalStateException("Market valuation cannot be preserved", failure);
         }

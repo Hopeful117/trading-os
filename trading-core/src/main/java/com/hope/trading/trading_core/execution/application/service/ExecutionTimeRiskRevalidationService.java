@@ -209,8 +209,9 @@ public class ExecutionTimeRiskRevalidationService {
         List<String> currentAssets = new ArrayList<>(brokerSnapshot.assetBalances().keySet());
         currentAssets.add(brokerSnapshot.account().valuationAsset());
         currentAssets.add(plan.sizingCurrency());
-        MarketValuationPort.Snapshot current = market.value(currency, brokerSnapshot.observedAt(), instruments,
-                currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList());
+         MarketValuationPort.Snapshot current = market.value(currency, brokerSnapshot.observedAt(), instruments,
+                 currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList(),
+                 MarketValuationPort.FreshnessRequirement.t1());
         requireComplete(current, "CURRENT_MARKET_VALUATION_UNAVAILABLE");
 
         BigDecimal balance = valueAssets(brokerSnapshot.assetBalances(), current);
@@ -254,8 +255,9 @@ public class ExecutionTimeRiskRevalidationService {
          if (!currency.equalsIgnoreCase(marginFact.currency())
                  && currentAssets.stream().noneMatch(asset -> asset.equalsIgnoreCase(marginFact.currency()))) {
              currentAssets.add(marginFact.currency());
-             current = market.value(currency, brokerSnapshot.observedAt(), instruments,
-                     currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList());
+              current = market.value(currency, brokerSnapshot.observedAt(), instruments,
+                      currentAssets.stream().distinct().map(asset -> new MarketValuationPort.Asset(asset, asset)).toList(),
+                      MarketValuationPort.FreshnessRequirement.t1());
              requireComplete(current, "CURRENT_MARKET_VALUATION_UNAVAILABLE");
          }
          BigDecimal requiredMargin = RequiredMarginCurrencyNormalizer.normalize(marginFact, currency, current, clock.instant())

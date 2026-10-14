@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,8 @@ class MarketValuationClientTest {
         assertThat(result.facts().getFirst().sourceProvenance())
                 .contains("observationAge", "PT10S", "capturedAt");
         assertThat(result.sourcePayload()).contains("maxObservationAge", "PT30S");
-        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId, conversionMarketId)));
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId, conversionMarketId),
+                Duration.ofMinutes(5), Duration.ofSeconds(18), "REUSE_OR_ACQUIRE"));
     }
 
     @Test
@@ -66,7 +68,8 @@ class MarketValuationClientTest {
         client.value("USD", valuationAt, List.of(),
                 List.of(new MarketValuationPort.Asset("EUR", "EUR")));
 
-        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(conversionMarketId)));
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(conversionMarketId),
+                Duration.ofMinutes(5), Duration.ofSeconds(18), "REUSE_OR_ACQUIRE"));
     }
 
     @Test
@@ -87,6 +90,29 @@ class MarketValuationClientTest {
         client.value("EUR", valuationAt, List.of(),
                 List.of(new MarketValuationPort.Asset("USDG", "USDG")));
 
-        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(assetUsdMarketId, eurUsdMarketId)));
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(assetUsdMarketId, eurUsdMarketId),
+                Duration.ofMinutes(5), Duration.ofSeconds(18), "REUSE_OR_ACQUIRE"));
+    }
+
+    @Test
+    void sendsExecutionTimeConfirmationPolicyToMarketData() {
+        MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
+        UUID marketId = UUID.randomUUID();
+        Instant valuationAt = Instant.parse("2026-08-01T12:00:00Z");
+        when(feign.markets()).thenReturn(List.of(
+                new CatalogueMarket(marketId, "KRAKEN", "PF_ETHUSD", "ETH", "USD")));
+        when(feign.value(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(
+                UUID.randomUUID(), 1, "USD", valuationAt, valuationAt,
+                "conservative-v3", "PT30S", "COMPLETE", List.of()));
+        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules(),
+                Clock.fixed(valuationAt, ZoneOffset.UTC));
+
+        client.value("USD", valuationAt,
+                List.of(new MarketValuationPort.Instrument("proposed", "PF_ETHUSD",
+                        MarketValuationPort.PriceUse.CONSERVATIVE_BUY)), List.of(),
+                MarketValuationPort.FreshnessRequirement.t1());
+
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId),
+                Duration.ofSeconds(30), Duration.ofSeconds(18), "CONFIRM_OR_ACQUIRE"));
     }
 }

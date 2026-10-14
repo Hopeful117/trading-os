@@ -239,7 +239,7 @@ class TradePlanRiskEvaluationServiceTest {
         assertThat(response.approved()).isTrue();
 
         ArgumentCaptor<List> valuationAssets = ArgumentCaptor.forClass(List.class);
-        verify(market, atLeastOnce()).value(any(), any(), any(), valuationAssets.capture());
+        verify(market, atLeastOnce()).value(any(), any(), any(), valuationAssets.capture(), any());
         assertThat(valuationAssets.getAllValues()).anyMatch(assets -> assets.stream()
                 .anyMatch(asset -> "EUR".equals(((MarketValuationPort.Asset) asset).currency())));
 
@@ -305,7 +305,7 @@ class TradePlanRiskEvaluationServiceTest {
         verify(market).value(org.mockito.ArgumentMatchers.eq("USD"),
                 org.mockito.ArgumentMatchers.eq(trade.closedAt()), org.mockito.ArgumentMatchers.eq(List.of()),
                 org.mockito.ArgumentMatchers.argThat(assets -> assets.size() == 2
-                        && assets.stream().allMatch(asset -> "EUR".equals(asset.currency()))));
+                        && assets.stream().allMatch(asset -> "EUR".equals(asset.currency()))), any());
     }
 
     @Test
@@ -320,7 +320,7 @@ class TradePlanRiskEvaluationServiceTest {
                 return snapshot(invocation.getArgument(1), false, List.of());
             }
             return valuation(invocation);
-        }).when(market).value(any(), any(), any(), any());
+        }).when(market).value(any(), any(), any(), any(), any());
 
         Response response = service.evaluate(command("key", 3));
 
@@ -367,7 +367,7 @@ class TradePlanRiskEvaluationServiceTest {
         assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
                 .containsExactly("TRADE_PLAN_ACCOUNT_CURRENCY_MISMATCH");
         verify(broker, never()).load(any(), any(), any());
-        verify(market, never()).value(any(), any(), any(), any());
+        verify(market, never()).value(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -432,7 +432,7 @@ class TradePlanRiskEvaluationServiceTest {
                     now, "v1", "PT30S", true, assets.stream().map(asset -> new MarketValuationPort.Fact("ASSET",
                     asset.id(), null, asset.currency(), null, BigDecimal.ONE, null, null,
                     "AVAILABLE", "identity")).toList(), "{}");
-        }).when(market).value(any(), any(), any(), any());
+        }).when(market).value(any(), any(), any(), any(), any());
 
         Response response = service.evaluate(command("key", 3));
 
@@ -454,7 +454,7 @@ class TradePlanRiskEvaluationServiceTest {
                     instrument.id(), UUID.randomUUID(), null, instrument.priceUse(), new BigDecimal("100"),
                     null, BigDecimal.ONE, "AVAILABLE", "observation")));
             return snapshot(invocation.getArgument(1), true, facts);
-        }).when(market).value(any(), any(), any(), any());
+        }).when(market).value(any(), any(), any(), any(), any());
 
         Response response = service.evaluate(command("key", 3));
 
@@ -525,7 +525,7 @@ class TradePlanRiskEvaluationServiceTest {
         when(persistence.assignedProfile(accountId)).thenReturn(Optional.of(profile()));
         when(plans.load(planId, 3)).thenReturn(plan("USD", "USD"));
         when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(positions, List.of()));
-        when(market.value(any(), any(), any(), any())).thenAnswer(this::valuation);
+        when(market.value(any(), any(), any(), any(), any())).thenAnswer(this::valuation);
         when(requiredMargins.resolve(any())).thenReturn(Optional.of(new RequiredMarginPort.Fact(
                 new BigDecimal("100"), "USD", "broker-margin-quote", 7, now)));
     }
