@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -89,6 +90,14 @@ class ValidateAndCreateServiceTest {
         verify(lifecycle).validate(intent, now);
         verify(intents).save(intent);
         verify(events).publish(any());
+    }
+
+    @Test
+    void validationEntryPointDefinesTransactionBoundary() throws NoSuchMethodException {
+        assertThat(ValidateAndCreateService.class
+                .getMethod("validateAndCreate", ValidateAndCreateCommand.class)
+                .isAnnotationPresent(Transactional.class))
+                .isTrue();
     }
 
     @Test
