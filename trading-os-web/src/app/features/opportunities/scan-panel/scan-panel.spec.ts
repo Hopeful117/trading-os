@@ -12,6 +12,7 @@ import {
   ActiveScanResponse,
 } from '../../../core/models/active-scan.model';
 import { MarketService } from '../../../core/services/market.service';
+import { MarketResponse } from '../../../core/models/market-response';
 import { OpportunityResponse } from '../../../core/models/opportunity.model';
 
 describe('ScanPanel', () => {
@@ -28,11 +29,12 @@ describe('ScanPanel', () => {
     { accountId: 'a1', name: 'Main account' },
     { accountId: 'a2', name: 'Challenge account' },
   ];
-  const markets = [
+  const markets: MarketResponse[] = [
     {
       marketId: 'm1',
-      provider: 'KRAKEN',
-      symbol: 'BTC/EUR',
+       provider: 'KRAKEN',
+       symbol: 'BTC/EUR',
+       productType: 'SPOT',
       baseAsset: 'BTC',
       quoteAsset: 'EUR',
       marketState: {
@@ -51,8 +53,9 @@ describe('ScanPanel', () => {
     },
     {
       marketId: 'm2',
-      provider: 'KRAKEN',
-      symbol: 'ETH/EUR',
+       provider: 'KRAKEN',
+       symbol: 'ETH/EUR',
+       productType: 'LINEAR_PERPETUAL',
       baseAsset: 'ETH',
       quoteAsset: 'EUR',
       marketState: {
@@ -372,8 +375,8 @@ describe('ScanPanel', () => {
         fixture.nativeElement.querySelectorAll('[data-testid="market-select"] option'),
       ) as HTMLOptionElement[];
       expect(options.map((option) => option.textContent?.trim())).toEqual([
-        'BTC/EUR · KRAKEN',
-        'ETH/EUR · KRAKEN',
+        'BTC/EUR · Spot · KRAKEN',
+        'ETH/EUR · Futures · KRAKEN',
       ]);
 
       fixture.componentInstance.accountId = 'a1';

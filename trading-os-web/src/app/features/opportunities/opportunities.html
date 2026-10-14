@@ -31,12 +31,14 @@
         </div>
       }
       @case ('loaded') {
-        @if (view.opportunities.length > 0) {
+        @if (marketsById$ | async; as marketsById) {
+          @if (view.opportunities.length > 0) {
           <div class="opportunities-card">
             <table>
               <thead>
                 <tr>
                   <th>Instrument</th>
+                  <th>Market</th>
                   <th>Direction</th>
                   <th>Type</th>
                   <th>Timeframe</th>
@@ -72,6 +74,10 @@
                           }
                         </span>
                       }
+                    </td>
+
+                    <td>
+                      <span class="market-type">{{ marketProductType(opportunity.marketId, marketsById) }}</span>
                     </td>
 
                     <td>
@@ -114,11 +120,12 @@
               </tbody>
             </table>
           </div>
-        } @else {
+          } @else {
           <section class="state-card" data-testid="empty-state">
             <h2>No active trading opportunities right now</h2>
             <p>Market Intelligence has not produced any active opportunity yet.</p>
           </section>
+          }
         }
       }
     }

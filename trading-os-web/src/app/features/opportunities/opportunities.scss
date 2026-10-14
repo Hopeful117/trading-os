@@ -197,6 +197,23 @@ table {
   }
 }
 
+.market-type {
+  display: inline-flex;
+
+  padding: 0.35rem 0.65rem;
+
+  border: 1px solid rgba(96, 165, 250, 0.25);
+
+  border-radius: 999px;
+
+  background: rgba(96, 165, 250, 0.1);
+
+  color: #bfdbfe;
+
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 .rationale {
   max-width: 22rem;
 

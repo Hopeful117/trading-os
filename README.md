@@ -57,6 +57,8 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Marchés Kraken Linear Perpetual : catalogue provider-aware avec `providerSymbol`,
   OHLC Futures via Charts REST, ticker/carnet d'ordres/trades via WebSocket Futures,
   parsing provider-specific isolé et reconnexion avec replay des abonnements actifs.
+- Interface Marchés : filtres et tri par produit (`Spot` ou `Futures`) avec
+  contexte produit propagé vers les opportunités et les Trade Plans.
 - Règles et moteur de risque : première version implémentée ; les profils configurables complets restent à construire.
 - Cycle de vie local des trades et statistiques : API implémentée, positions PAPER observables dans l'interface ; fermeture PAPER et intégration Analytics complète restent à construire.
 - Exécution broker : intentions, tentatives, idempotence, soumission Kraken, annulation, récupération et réconciliation implémentées. La validation contractuelle contre le sandbox Kraken et le parcours déployé de bout en bout restent à exécuter.

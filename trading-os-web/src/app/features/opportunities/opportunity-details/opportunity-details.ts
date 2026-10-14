@@ -7,6 +7,8 @@ import { catchError, combineLatest, map, of, shareReplay, startWith, switchMap }
 import { OpportunityResponse } from '../../../core/models/opportunity.model';
 import { OpportunityService } from '../../../core/services/opportunity.service';
 import { TradePlanService } from '../../../core/services/trade-plan.service';
+import { MarketService } from '../../../core/services/market.service';
+import { MarketResponse, marketProductTypeLabel } from '../../../core/models/market-response';
 import {
   tradeFlowErrorMessage,
   tradePreparationFailure,
@@ -17,7 +19,12 @@ export type OpportunityDetailView =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'notFound' }
-  | { status: 'loaded'; opportunity: OpportunityResponse; accountId: string | null };
+   | {
+       status: 'loaded';
+       opportunity: OpportunityResponse;
+       accountId: string | null;
+       market: MarketResponse | null;
+     };
 
 @Component({
   selector: 'app-opportunity-details',
@@ -30,6 +37,9 @@ export class OpportunityDetail {
   private readonly router = inject(Router);
   private readonly opportunityService = inject(OpportunityService);
   private readonly tradePlanService = inject(TradePlanService);
+  private readonly marketService = inject(MarketService);
+
+  readonly productTypeLabel = marketProductTypeLabel;
 
   preparing = false;
   preparationError = false;
@@ -46,12 +56,24 @@ export class OpportunityDetail {
         return of<OpportunityDetailView>({ status: 'notFound' });
       }
 
-      return this.opportunityService.findById(opportunityId).pipe(
-        map((opportunity) => ({
-          status: 'loaded' as const,
-          opportunity,
-          accountId: opportunity.accountId ?? accountId,
-        })),
+       return this.opportunityService.findById(opportunityId).pipe(
+         switchMap((opportunity) =>
+           opportunity.marketId
+             ? this.marketService.findById(opportunity.marketId).pipe(
+                 map((market) => ({
+                   status: 'loaded' as const,
+                   opportunity,
+                   accountId: opportunity.accountId ?? accountId,
+                   market,
+                 })),
+               )
+             : of({
+                 status: 'loaded' as const,
+                 opportunity,
+                 accountId: opportunity.accountId ?? accountId,
+                 market: null,
+               }),
+         ),
         catchError((error: unknown) =>
           of<OpportunityDetailView>(
             error instanceof HttpErrorResponse && error.status === 404
@@ -68,7 +90,7 @@ export class OpportunityDetail {
     }),
   );
 
-  prepareTradePlan(opportunityId: string, accountId: string): void {
+  prepareTradePlan(opportunityId: string, accountId: string, marketId: string | null = null): void {
     if (this.preparing || !accountId) {
       return;
     }
@@ -82,13 +104,15 @@ export class OpportunityDetail {
       .subscribe({
         next: (created) => {
           this.preparing = false;
-          void this.router.navigate([
-            '/trade-planning',
-            'plans',
-            created.tradePlanId,
-            'versions',
-            created.tradePlanVersion,
-          ]);
+           const commands = [
+             '/trade-planning',
+             'plans',
+             created.tradePlanId,
+             'versions',
+             created.tradePlanVersion,
+            ];
+            const navigation = marketId ? { queryParams: { marketId } } : undefined;
+            void (navigation ? this.router.navigate(commands, navigation) : this.router.navigate(commands));
         },
         error: (error: unknown) => {
           this.preparing = false;

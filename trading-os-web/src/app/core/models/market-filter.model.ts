@@ -3,12 +3,19 @@ export interface MarketFilter {
   provider?: string;
   baseAsset?: string;
   quoteAsset?: string;
+  productType?: string;
   tradingStatus?: string;
   tradable?: boolean;
 }
 
 export type MarketSortField =
-  'SYMBOL' | 'PROVIDER' | 'BASE_ASSET' | 'QUOTE_ASSET' | 'STATUS' | 'TRADABILITY';
+  | 'SYMBOL'
+  | 'PROVIDER'
+  | 'PRODUCT_TYPE'
+  | 'BASE_ASSET'
+  | 'QUOTE_ASSET'
+  | 'STATUS'
+  | 'TRADABILITY';
 
 export type MarketSortDirection = 'ASC' | 'DESC';
 

@@ -22,6 +22,7 @@ import { MarketChartComponent } from '../market-chart-component/market-chart-com
 import { OhlcInterval } from '../../../core/models/ohlc-interval';
 import { OrderBookComponent } from '../order-book-component/order-book-component';
 import { RecentTradesComponent } from '../recent-trades-component/recent-trades-component';
+import { marketProductTypeLabel } from '../../../core/models/market-response';
 
 @Component({
   selector: 'app-market-details',
@@ -37,6 +38,7 @@ import { RecentTradesComponent } from '../recent-trades-component/recent-trades-
   styleUrl: './markets-details.scss',
 })
 export class MarketDetail {
+  readonly productTypeLabel = marketProductTypeLabel;
   private readonly route = inject(ActivatedRoute);
   private readonly marketService = inject(MarketService);
   private readonly destroyRef = inject(DestroyRef);

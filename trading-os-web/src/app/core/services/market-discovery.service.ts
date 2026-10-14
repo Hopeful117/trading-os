@@ -13,6 +13,7 @@ export interface MarketDiscoveryIdentity {
   baseAsset?: string | null;
   quoteAsset?: string | null;
   provider?: string | null;
+  productType?: string | null;
 }
 
 @Injectable({
@@ -42,7 +43,7 @@ export class MarketDiscoveryService {
       return true;
     }
 
-    return [market.symbol, market.baseAsset, market.quoteAsset, market.provider].some((value) =>
+    return [market.symbol, market.baseAsset, market.quoteAsset, market.provider, market.productType].some((value) =>
       value?.toLowerCase().includes(query),
     );
   }
@@ -53,6 +54,7 @@ export class MarketDiscoveryService {
       this.matchesExact(market.provider, filter.provider) &&
       this.matchesExact(market.baseAsset, filter.baseAsset) &&
       this.matchesExact(market.quoteAsset, filter.quoteAsset) &&
+      this.matchesExact(market.productType, filter.productType) &&
       this.matchesExact(market.marketState?.tradingStatus, filter.tradingStatus) &&
       (filter.tradable === undefined || market.marketState?.tradable === filter.tradable)
     );
@@ -81,6 +83,8 @@ export class MarketDiscoveryService {
         return this.compareText(left.provider, right.provider);
       case 'BASE_ASSET':
         return this.compareText(left.baseAsset, right.baseAsset);
+      case 'PRODUCT_TYPE':
+        return this.compareText(left.productType, right.productType);
       case 'QUOTE_ASSET':
         return this.compareText(left.quoteAsset, right.quoteAsset);
       case 'STATUS':

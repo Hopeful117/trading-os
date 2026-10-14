@@ -7,6 +7,7 @@
   </div>
   <app-market-toolbar-component
     [providers]="(marketOptions$ | async)?.providers ?? []"
+    [productTypes]="(marketOptions$ | async)?.productTypes ?? []"
     [baseAssets]="(marketOptions$ | async)?.baseAssets ?? []"
     [quoteAssets]="(marketOptions$ | async)?.quoteAssets ?? []"
     [statuses]="(marketOptions$ | async)?.statuses ?? []"
@@ -21,6 +22,7 @@
         <tr>
           <th>Symbol</th>
           <th>Provider</th>
+          <th>Product</th>
           <th>Base</th>
           <th>Quote</th>
           <th>Status</th>
@@ -43,6 +45,12 @@
 
                 <td>
                   {{ market.provider }}
+                </td>
+
+                <td>
+                  <span class="product-type" [class.futures]="market.productType === 'LINEAR_PERPETUAL'">
+                    {{ productTypeLabel(market.productType) }}
+                  </span>
                 </td>
 
                 <td>

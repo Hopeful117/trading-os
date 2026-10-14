@@ -19,6 +19,7 @@ describe('Markets', () => {
       symbol: 'BTC/USD',
       baseAsset: 'BTC',
       quoteAsset: 'USD',
+      productType: 'SPOT',
       marketState: {
         tradingStatus: 'OPEN',
         tradable: true,
@@ -39,6 +40,7 @@ describe('Markets', () => {
       symbol: 'ETH/USD',
       baseAsset: 'ETH',
       quoteAsset: 'USD',
+      productType: 'LINEAR_PERPETUAL',
       marketState: {
         tradingStatus: 'OPEN',
         tradable: true,
@@ -59,6 +61,7 @@ describe('Markets', () => {
       symbol: 'SOL/BTC',
       baseAsset: 'SOL',
       quoteAsset: 'BTC',
+      productType: 'SPOT',
       marketState: {
         tradingStatus: 'CLOSED',
         tradable: false,
@@ -206,6 +209,15 @@ describe('Markets', () => {
       component.filteredMarkets$.subscribe((m) => (markets = m));
 
       expect(markets.map((market) => market.marketId)).toEqual(['m3']);
+    });
+
+    it('should filter by product type', () => {
+      component.applyFilter({ search: '', productType: 'LINEAR_PERPETUAL' });
+
+      let markets: MarketResponse[] = [];
+      component.filteredMarkets$.subscribe((m) => (markets = m));
+
+      expect(markets.map((market) => market.marketId)).toEqual(['m2']);
     });
 
     it('should apply stable sorting without changing the catalogue source', () => {

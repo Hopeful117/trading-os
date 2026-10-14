@@ -17,6 +17,7 @@ import {
   MarketFilter,
   MarketSort,
 } from '../../core/models/market-filter.model';
+import { marketProductTypeLabel } from '../../core/models/market-response';
 import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
 import { MarketService } from '../../core/services/market.service';
 import { MarketToolbarComponent } from './market-toolbar-component/market-toolbar-component';
@@ -63,12 +64,15 @@ export class Markets {
   readonly marketOptions$ = this.markets$.pipe(
     map((markets) => ({
       providers: this.uniqueValues(markets.map((market) => market.provider)),
+      productTypes: this.uniqueValues(markets.map((market) => market.productType)),
       baseAssets: this.uniqueValues(markets.map((market) => market.baseAsset)),
       quoteAssets: this.uniqueValues(markets.map((market) => market.quoteAsset)),
       statuses: this.uniqueValues(markets.map((market) => market.marketState?.tradingStatus)),
     })),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
+
+  readonly productTypeLabel = marketProductTypeLabel;
 
   openMarket(marketId: string): void {
     void this.router.navigate(['/markets', marketId]);

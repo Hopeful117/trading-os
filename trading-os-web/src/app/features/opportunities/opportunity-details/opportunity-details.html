@@ -34,6 +34,7 @@
                 {{ view.opportunity.direction }}
               </span>
               <span class="status-badge">{{ view.opportunity.status }}</span>
+              <span class="status-badge">{{ productTypeLabel(view.market?.productType) }}</span>
             </div>
           </header>
 
@@ -56,6 +57,11 @@
             <div class="fact">
               <span class="label">Origin</span>
               <span class="value">{{ view.opportunity.origin }}</span>
+            </div>
+
+            <div class="fact">
+              <span class="label">Market type</span>
+              <span class="value">{{ productTypeLabel(view.market?.productType) }}</span>
             </div>
 
             <div class="fact">
@@ -193,7 +199,7 @@
                 <button
                   type="button"
                   class="btn-create-plan"
-                  (click)="prepareTradePlan(view.opportunity.id, accountId)"
+                  (click)="prepareTradePlan(view.opportunity.id, accountId, view.opportunity.marketId ?? null)"
                   [disabled]="preparing"
                   data-testid="create-trade-plan-button"
                 >

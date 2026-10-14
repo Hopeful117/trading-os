@@ -1,3 +1,5 @@
+export type MarketProductType = 'SPOT' | 'LINEAR_PERPETUAL';
+
 export interface MarketResponse {
   marketId: string;
 
@@ -8,6 +10,8 @@ export interface MarketResponse {
   baseAsset: string;
 
   quoteAsset: string;
+
+  productType?: MarketProductType | null;
 
   marketState: {
     tradingStatus: string;
@@ -23,4 +27,15 @@ export interface MarketResponse {
     quantityPrecision: number;
     pricePrecision: number;
   };
+}
+
+export function marketProductTypeLabel(productType: MarketProductType | null | undefined): string {
+  switch (productType) {
+    case 'SPOT':
+      return 'Spot';
+    case 'LINEAR_PERPETUAL':
+      return 'Futures';
+    default:
+      return 'Unknown';
+  }
 }
