@@ -32,9 +32,9 @@ describe('ScanPanel', () => {
   const markets: MarketResponse[] = [
     {
       marketId: 'm1',
-       provider: 'KRAKEN',
-       symbol: 'BTC/EUR',
-       productType: 'SPOT',
+      provider: 'KRAKEN',
+      symbol: 'BTC/EUR',
+      productType: 'SPOT',
       baseAsset: 'BTC',
       quoteAsset: 'EUR',
       marketState: {
@@ -53,9 +53,9 @@ describe('ScanPanel', () => {
     },
     {
       marketId: 'm2',
-       provider: 'KRAKEN',
-       symbol: 'ETH/EUR',
-       productType: 'LINEAR_PERPETUAL',
+      provider: 'KRAKEN',
+      symbol: 'ETH/EUR',
+      productType: 'LINEAR_PERPETUAL',
       baseAsset: 'ETH',
       quoteAsset: 'EUR',
       marketState: {

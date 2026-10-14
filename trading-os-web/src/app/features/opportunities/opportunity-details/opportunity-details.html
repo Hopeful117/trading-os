@@ -199,7 +199,13 @@
                 <button
                   type="button"
                   class="btn-create-plan"
-                  (click)="prepareTradePlan(view.opportunity.id, accountId, view.opportunity.marketId ?? null)"
+                  (click)="
+                    prepareTradePlan(
+                      view.opportunity.id,
+                      accountId,
+                      view.opportunity.marketId ?? null
+                    )
+                  "
                   [disabled]="preparing"
                   data-testid="create-trade-plan-button"
                 >

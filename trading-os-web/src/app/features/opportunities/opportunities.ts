@@ -38,12 +38,14 @@ export class Opportunities {
   private readonly refreshSubject = new Subject<void>();
   private readonly refresh$ = this.refreshSubject.pipe(startWith(undefined));
 
-  readonly marketsById$: Observable<Map<string, MarketResponse>> = this.marketService.findAll().pipe(
-    map((markets) => new Map(markets.map((market) => [market.marketId, market]))),
-    catchError(() => of(new Map<string, MarketResponse>())),
-    startWith(new Map<string, MarketResponse>()),
-    shareReplay({ bufferSize: 1, refCount: true }),
-  );
+  readonly marketsById$: Observable<Map<string, MarketResponse>> = this.marketService
+    .findAll()
+    .pipe(
+      map((markets) => new Map(markets.map((market) => [market.marketId, market]))),
+      catchError(() => of(new Map<string, MarketResponse>())),
+      startWith(new Map<string, MarketResponse>()),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
 
   readonly view$ = this.refresh$.pipe(
     switchMap(() =>
@@ -75,17 +77,19 @@ export class Opportunities {
           const remainingErrors = { ...this.preparationErrors };
           delete remainingErrors[opportunity.id];
           this.preparationErrors = remainingErrors;
-           const commands = [
-             '/trade-planning',
-             'plans',
-             created.tradePlanId,
-             'versions',
-             created.tradePlanVersion,
-           ];
-           const navigation = opportunity.marketId
-             ? { queryParams: { marketId: opportunity.marketId } }
-             : undefined;
-           void (navigation ? this.router.navigate(commands, navigation) : this.router.navigate(commands));
+          const commands = [
+            '/trade-planning',
+            'plans',
+            created.tradePlanId,
+            'versions',
+            created.tradePlanVersion,
+          ];
+          const navigation = opportunity.marketId
+            ? { queryParams: { marketId: opportunity.marketId } }
+            : undefined;
+          void (navigation
+            ? this.router.navigate(commands, navigation)
+            : this.router.navigate(commands));
         },
         error: (error: unknown) => {
           this.openingOpportunityId = null;
@@ -112,7 +116,10 @@ export class Opportunities {
     return Object.entries(failure.metrics) as [string, number][];
   }
 
-  marketProductType(marketId: string | null | undefined, marketsById: Map<string, MarketResponse>): string {
+  marketProductType(
+    marketId: string | null | undefined,
+    marketsById: Map<string, MarketResponse>,
+  ): string {
     return marketProductTypeLabel(marketId ? marketsById.get(marketId)?.productType : undefined);
   }
 }

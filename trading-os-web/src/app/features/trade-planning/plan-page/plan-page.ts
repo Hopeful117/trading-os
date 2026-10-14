@@ -170,13 +170,13 @@ export class PlanPage implements OnDestroy {
                 retryable: false,
               });
             }
-               return this.tradePlanService.getPlan(planId, version).pipe(
-               switchMap((plan) =>
-                 (this.route.queryParamMap ?? of(null)).pipe(
-                   take(1),
-                   switchMap((query) => this.loadPlanView(plan, query?.get('marketId') ?? null)),
-                 ),
-               ),
+            return this.tradePlanService.getPlan(planId, version).pipe(
+              switchMap((plan) =>
+                (this.route.queryParamMap ?? of(null)).pipe(
+                  take(1),
+                  switchMap((query) => this.loadPlanView(plan, query?.get('marketId') ?? null)),
+                ),
+              ),
               catchError((error: unknown) =>
                 of<PlanView>({
                   status: 'error',
@@ -658,7 +658,10 @@ export class PlanPage implements OnDestroy {
     }
   }
 
-  private loadPlanView(plan: TradePlanResponse, marketId: string | null = null): Observable<PlanView> {
+  private loadPlanView(
+    plan: TradePlanResponse,
+    marketId: string | null = null,
+  ): Observable<PlanView> {
     if (plan.status === 'EXECUTED') return this.loadExecutedPlanView(plan);
     if (plan.status === 'PROPOSED' || plan.status === 'DRAFT') {
       return this.loadProposalView(plan, marketId);
@@ -694,11 +697,11 @@ export class PlanPage implements OnDestroy {
   private loadProposalView(plan: TradePlanResponse, marketId: string | null): Observable<PlanView> {
     return this.marketService.findAll().pipe(
       map((markets) => {
-         const market = marketId
-           ? markets.find((candidate) => candidate.marketId === marketId)
-           : markets.find(
-               (candidate) => candidate.symbol.toUpperCase() === plan.instrument.toUpperCase(),
-             );
+        const market = marketId
+          ? markets.find((candidate) => candidate.marketId === marketId)
+          : markets.find(
+              (candidate) => candidate.symbol.toUpperCase() === plan.instrument.toUpperCase(),
+            );
         if (!market) throw new Error(`Market data is unavailable for ${plan.instrument}.`);
         return market;
       }),

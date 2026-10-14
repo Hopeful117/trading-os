@@ -43,9 +43,13 @@ export class MarketDiscoveryService {
       return true;
     }
 
-    return [market.symbol, market.baseAsset, market.quoteAsset, market.provider, market.productType].some((value) =>
-      value?.toLowerCase().includes(query),
-    );
+    return [
+      market.symbol,
+      market.baseAsset,
+      market.quoteAsset,
+      market.provider,
+      market.productType,
+    ].some((value) => value?.toLowerCase().includes(query));
   }
 
   private matchesFilter(market: MarketResponse, filter: MarketFilter): boolean {

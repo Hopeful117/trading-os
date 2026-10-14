@@ -44,8 +44,8 @@ describe('Opportunities', () => {
       validFrom: '2026-08-24T10:00:00Z',
       validUntil: '2026-08-24T10:30:00Z',
       createdAt: '2026-08-24T09:55:00Z',
-       strategyMatchId: 'match-1',
-       marketId: 'market-1',
+      strategyMatchId: 'match-1',
+      marketId: 'market-1',
       setup: {
         referencePrice: 64120.5,
         referencePriceAt: '2026-08-24T09:59:00Z',
@@ -101,13 +101,15 @@ describe('Opportunities', () => {
         {
           provide: MarketService,
           useValue: {
-            findAll: vi.fn().mockReturnValue(of([
-              {
-                marketId: 'market-1',
-                productType: 'SPOT',
-                marketState: { tradable: true },
-              },
-            ])),
+            findAll: vi.fn().mockReturnValue(
+              of([
+                {
+                  marketId: 'market-1',
+                  productType: 'SPOT',
+                  marketState: { tradable: true },
+                },
+              ]),
+            ),
           },
         },
         { provide: ActiveScanService, useValue: activeScanServiceMock },
@@ -201,13 +203,10 @@ describe('Opportunities', () => {
       component.openOpportunity(mockOpportunities[0]);
 
       expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith('o1', 'a1', 'o1:a1');
-      expect(routerMock.navigate).toHaveBeenCalledWith([
-        '/trade-planning',
-        'plans',
-        'plan-1',
-         'versions',
-         1,
-       ], { queryParams: { marketId: 'market-1' } });
+      expect(routerMock.navigate).toHaveBeenCalledWith(
+        ['/trade-planning', 'plans', 'plan-1', 'versions', 1],
+        { queryParams: { marketId: 'market-1' } },
+      );
     });
 
     it('uses the opportunity account when no account has been selected in the scan panel', () => {

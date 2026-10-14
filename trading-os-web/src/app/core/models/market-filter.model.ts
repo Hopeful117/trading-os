@@ -9,13 +9,7 @@ export interface MarketFilter {
 }
 
 export type MarketSortField =
-  | 'SYMBOL'
-  | 'PROVIDER'
-  | 'PRODUCT_TYPE'
-  | 'BASE_ASSET'
-  | 'QUOTE_ASSET'
-  | 'STATUS'
-  | 'TRADABILITY';
+  'SYMBOL' | 'PROVIDER' | 'PRODUCT_TYPE' | 'BASE_ASSET' | 'QUOTE_ASSET' | 'STATUS' | 'TRADABILITY';
 
 export type MarketSortDirection = 'ASC' | 'DESC';
 

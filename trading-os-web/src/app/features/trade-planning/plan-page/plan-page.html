@@ -108,7 +108,8 @@
               <div>
                 <h2>Market context</h2>
                 <p>
-                  {{ view.market?.symbol }} · {{ view.market?.productType === 'LINEAR_PERPETUAL' ? 'Futures' : 'Spot' }} ·
+                  {{ view.market?.symbol }} ·
+                  {{ view.market?.productType === 'LINEAR_PERPETUAL' ? 'Futures' : 'Spot' }} ·
                   {{ view.market?.marketState?.tradingStatus }}
                 </p>
               </div>

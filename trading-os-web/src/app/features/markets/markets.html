@@ -48,7 +48,10 @@
                 </td>
 
                 <td>
-                  <span class="product-type" [class.futures]="market.productType === 'LINEAR_PERPETUAL'">
+                  <span
+                    class="product-type"
+                    [class.futures]="market.productType === 'LINEAR_PERPETUAL'"
+                  >
                     {{ productTypeLabel(market.productType) }}
                   </span>
                 </td>

@@ -19,12 +19,12 @@ export type OpportunityDetailView =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'notFound' }
-   | {
-       status: 'loaded';
-       opportunity: OpportunityResponse;
-       accountId: string | null;
-       market: MarketResponse | null;
-     };
+  | {
+      status: 'loaded';
+      opportunity: OpportunityResponse;
+      accountId: string | null;
+      market: MarketResponse | null;
+    };
 
 @Component({
   selector: 'app-opportunity-details',
@@ -56,24 +56,24 @@ export class OpportunityDetail {
         return of<OpportunityDetailView>({ status: 'notFound' });
       }
 
-       return this.opportunityService.findById(opportunityId).pipe(
-         switchMap((opportunity) =>
-           opportunity.marketId
-             ? this.marketService.findById(opportunity.marketId).pipe(
-                 map((market) => ({
-                   status: 'loaded' as const,
-                   opportunity,
-                   accountId: opportunity.accountId ?? accountId,
-                   market,
-                 })),
-               )
-             : of({
-                 status: 'loaded' as const,
-                 opportunity,
-                 accountId: opportunity.accountId ?? accountId,
-                 market: null,
-               }),
-         ),
+      return this.opportunityService.findById(opportunityId).pipe(
+        switchMap((opportunity) =>
+          opportunity.marketId
+            ? this.marketService.findById(opportunity.marketId).pipe(
+                map((market) => ({
+                  status: 'loaded' as const,
+                  opportunity,
+                  accountId: opportunity.accountId ?? accountId,
+                  market,
+                })),
+              )
+            : of({
+                status: 'loaded' as const,
+                opportunity,
+                accountId: opportunity.accountId ?? accountId,
+                market: null,
+              }),
+        ),
         catchError((error: unknown) =>
           of<OpportunityDetailView>(
             error instanceof HttpErrorResponse && error.status === 404
@@ -104,15 +104,17 @@ export class OpportunityDetail {
       .subscribe({
         next: (created) => {
           this.preparing = false;
-           const commands = [
-             '/trade-planning',
-             'plans',
-             created.tradePlanId,
-             'versions',
-             created.tradePlanVersion,
-            ];
-            const navigation = marketId ? { queryParams: { marketId } } : undefined;
-            void (navigation ? this.router.navigate(commands, navigation) : this.router.navigate(commands));
+          const commands = [
+            '/trade-planning',
+            'plans',
+            created.tradePlanId,
+            'versions',
+            created.tradePlanVersion,
+          ];
+          const navigation = marketId ? { queryParams: { marketId } } : undefined;
+          void (navigation
+            ? this.router.navigate(commands, navigation)
+            : this.router.navigate(commands));
         },
         error: (error: unknown) => {
           this.preparing = false;
