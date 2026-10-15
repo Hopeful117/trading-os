@@ -1,0 +1,157 @@
+<div class="financial-news-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Market context</p>
+      <h1>Financial news</h1>
+      <p>Inspect normalized source facts before future intelligence layers interpret them.</p>
+    </div>
+    <button class="refresh-button" type="button" (click)="refresh()">Refresh news</button>
+  </header>
+
+  <section class="filters-panel" aria-labelledby="filters-heading">
+    <h2 id="filters-heading">News window</h2>
+    <div class="filters-grid">
+      <label>
+        Recent period
+        <select [ngModel]="(filters$ | async)?.window" (ngModelChange)="updateWindow($event)">
+          @for (window of windows; track window.value) {
+            <option [value]="window.value">{{ window.label }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Currency
+        <input
+          type="text"
+          maxlength="8"
+          placeholder="All currencies"
+          [ngModel]="(filters$ | async)?.currency"
+          (ngModelChange)="updateCurrency($event)"
+        />
+      </label>
+    </div>
+    <p class="timezone-note">Publication times are shown in UTC.</p>
+  </section>
+
+  @if (viewModel$ | async; as viewModel) {
+    @switch (viewModel.kind) {
+      @case ('loading') {
+        <section class="state-panel" aria-live="polite">
+          <span class="loading-orb" aria-hidden="true"></span>
+          <div>
+            <h2>Loading financial news</h2>
+            <p>Fetching normalized articles from the Trading OS catalog.</p>
+          </div>
+        </section>
+      }
+      @case ('error') {
+        <section class="state-panel state-error" role="alert">
+          <h2>Financial news unavailable</h2>
+          <p>{{ viewModel.message }}</p>
+          <button type="button" (click)="refresh()">Try again</button>
+        </section>
+      }
+      @case ('unavailable') {
+        <output class="state-panel state-warning" aria-live="polite">
+          <h2>Financial news is {{ viewModel.response.status.toLowerCase() }}</h2>
+          <p>
+            {{ availabilityMessage(viewModel.response) }}
+          </p>
+          @if (viewModel.response.fetchedAt) {
+            <small>
+              Last catalog fetch:
+              {{ viewModel.response.fetchedAt | date: 'medium' : 'UTC' }} UTC
+            </small>
+          }
+        </output>
+      }
+      @case ('incomplete') {
+        <output class="state-panel state-warning" aria-live="polite">
+          <h2>Financial news is incomplete</h2>
+          <p>
+            {{ availabilityMessage(viewModel.response) }}
+          </p>
+        </output>
+      }
+      @case ('empty') {
+        <output class="state-panel" aria-live="polite">
+          <h2>No financial news matches this window</h2>
+          <p>Try a wider recent period or remove the currency filter.</p>
+        </output>
+      }
+      @case ('ready') {
+        @if (viewModel.response.status === 'STALE') {
+          <output class="freshness-warning" aria-live="polite">
+            <strong>News data may be stale.</strong>
+            <span>
+              {{ availabilityMessage(viewModel.response) }}
+            </span>
+          </output>
+        }
+        @if (viewModel.response.status === 'INCOMPLETE') {
+          <output class="freshness-warning incomplete-warning" aria-live="polite">
+            <strong>News data is incomplete.</strong>
+            <span>Some source facts may be missing from this result.</span>
+          </output>
+        }
+        <section class="news-panel" aria-labelledby="news-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">{{ viewModel.items.length }} normalized articles</p>
+              <h2 id="news-heading">Latest market context</h2>
+            </div>
+            @if (viewModel.response.fetchedAt) {
+              <small>Fetched {{ viewModel.response.fetchedAt | date: 'medium' : 'UTC' }} UTC</small>
+            }
+          </div>
+
+          <div class="news-list">
+            @for (item of viewModel.items; track trackItem($index, item)) {
+              <article class="news-card">
+                <div class="news-card-header">
+                  <div class="provenance">
+                    @if (item.publisher) {
+                      <span>{{ item.publisher }}</span>
+                    }
+                    <time [dateTime]="item.publishedAt"
+                      >{{ item.publishedAt | date: 'medium' : 'UTC' }} UTC</time
+                    >
+                  </div>
+                </div>
+
+                <h3>{{ item.title }}</h3>
+
+                @if (item.summary) {
+                  <p class="summary">{{ item.summary }}</p>
+                }
+
+                <div class="news-meta">
+                  @if (item.categories.length) {
+                    <span>{{ item.categories.join(', ') }}</span>
+                  }
+                  @if (item.currencies.length) {
+                    <span>{{ item.currencies.join(', ') }}</span>
+                  }
+                  @if (item.marketIds.length) {
+                    <span>Markets: {{ item.marketIds.join(', ') }}</span>
+                  }
+                </div>
+
+                @if (item.canonicalUrl) {
+                  <a
+                    class="source-link"
+                    [href]="item.canonicalUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open source <span aria-hidden="true">↗</span>
+                  </a>
+                }
+              </article>
+            }
+          </div>
+        </section>
+      }
+    }
+  }
+</div>

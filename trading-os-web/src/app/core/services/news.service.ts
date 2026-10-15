@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { EconomicEventQuery, EconomicEventResponse } from '../models/economic-event.model';
+import { FinancialNewsQuery, FinancialNewsResponse } from '../models/financial-news.model';
 
 @Injectable({
   providedIn: 'root',
@@ -25,6 +26,33 @@ export class NewsService {
     }
 
     return this.http.get<EconomicEventResponse>(`${environment.gatewayUrl}v1/news/events`, {
+      params,
+    });
+  }
+
+  findFinancialNews(query: FinancialNewsQuery): Observable<FinancialNewsResponse> {
+    let params = new HttpParams();
+
+    if (query.from) {
+      params = params.set('from', query.from);
+    }
+    if (query.to) {
+      params = params.set('to', query.to);
+    }
+    if (query.marketId) {
+      params = params.set('marketId', query.marketId);
+    }
+    if (query.currency) {
+      params = params.set('currency', query.currency);
+    }
+    if (query.impact) {
+      params = params.set('impact', query.impact);
+    }
+    if (query.limit !== undefined) {
+      params = params.set('limit', query.limit);
+    }
+
+    return this.http.get<FinancialNewsResponse>(`${environment.gatewayUrl}v1/news/items`, {
       params,
     });
   }
