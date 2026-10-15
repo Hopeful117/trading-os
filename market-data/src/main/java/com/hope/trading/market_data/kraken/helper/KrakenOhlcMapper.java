@@ -50,7 +50,8 @@ public class KrakenOhlcMapper {
                         interval,
                         entry.intervalBegin()
                 ),
-                clock.instant()
+                 clock.instant(),
+                 market.getProviderSymbol()
         );
     }
 }

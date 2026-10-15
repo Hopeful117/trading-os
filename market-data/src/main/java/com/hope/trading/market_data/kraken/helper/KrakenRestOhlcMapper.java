@@ -148,7 +148,7 @@ public class KrakenRestOhlcMapper {
             boolean closed,
             Instant occurredAt
     ) {
-        return toEvent(entry, market, interval, closed, occurredAt, occurredAt);
+        return toEvent(entry, market, interval, closed, occurredAt, occurredAt, market.getProviderSymbol());
     }
 
     public OhlcEvent toEvent(
@@ -158,6 +158,18 @@ public class KrakenRestOhlcMapper {
             boolean closed,
             Instant occurredAt,
             Instant fetchedAt
+    ) {
+        return toEvent(entry, market, interval, closed, occurredAt, fetchedAt, market.getProviderSymbol());
+    }
+
+    public OhlcEvent toEvent(
+            KrakenRestOhlcEntry entry,
+            Market market,
+            OhlcInterval interval,
+            boolean closed,
+            Instant occurredAt,
+            Instant fetchedAt,
+            String providerSymbol
     ) {
         Instant closeTime =
                 entry.openTime()
@@ -187,7 +199,8 @@ public class KrakenRestOhlcMapper {
                         interval,
                         entry.openTime()
                 ),
-                fetchedAt
+                 fetchedAt,
+                 providerSymbol
         );
     }
 }

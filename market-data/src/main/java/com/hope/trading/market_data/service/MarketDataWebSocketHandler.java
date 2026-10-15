@@ -34,6 +34,7 @@ public class MarketDataWebSocketHandler
 
     private static final int MAX_SYMBOL_LENGTH = 64;
     private static final Set<Integer> ALLOWED_ORDER_BOOK_DEPTHS = Set.of(10, 25);
+    private static final String MARKET_ID_PARAMETER = "marketId";
 
     private final TickerEventPublisher tickerEventPublisher;
     private final OhlcEventPublisher ohlcEventPublisher;
@@ -73,7 +74,7 @@ public class MarketDataWebSocketHandler
                         UUID.fromString(
                                 extractRequiredParameter(
                                         uri,
-                                        "marketId"
+                                         MARKET_ID_PARAMETER
                                 )
                         );
                 int intervalMinutes =
@@ -92,7 +93,7 @@ public class MarketDataWebSocketHandler
             }
             case ORDER_BOOK -> {
                 UUID marketId = UUID.fromString(
-                        extractRequiredParameter(uri, "marketId")
+                         extractRequiredParameter(uri, MARKET_ID_PARAMETER)
                 );
                 int depth = parseIntegerParameter(uri, "depth");
                 if (!ALLOWED_ORDER_BOOK_DEPTHS.contains(depth)) {
@@ -105,7 +106,7 @@ public class MarketDataWebSocketHandler
             }
             case TRADES -> {
                 UUID marketId = UUID.fromString(
-                        extractRequiredParameter(uri, "marketId")
+                         extractRequiredParameter(uri, MARKET_ID_PARAMETER)
                 );
                 yield recentTradesEventPublisher
                         .streamByMarket(marketId);
@@ -172,7 +173,7 @@ public class MarketDataWebSocketHandler
                             event
                     );
 
-            synchronized (session) {
+            synchronized (this) {
                 session.sendMessage(
                         new TextMessage(payload)
                 );

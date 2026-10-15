@@ -40,9 +40,10 @@ class RecentTradesStateServiceTest {
         assertThat(snapshot.trades())
                 .containsExactly(trade(FIRST_MARKET, "1", 10));
         assertThat(snapshot.generatedAt()).isEqualTo(GENERATED_AT);
-        assertThatThrownBy(() ->
-                snapshot.trades().add(trade(FIRST_MARKET, "2", 11))
-        ).isInstanceOf(UnsupportedOperationException.class);
+        TradeEvent secondTrade = trade(FIRST_MARKET, "2", 11);
+        List<TradeEvent> trades = snapshot.trades();
+        assertThatThrownBy(() -> trades.add(secondTrade))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

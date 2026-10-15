@@ -10,7 +10,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -77,7 +76,8 @@ class KrakenRestOhlcMapperTest {
         ObjectNode result = json.createObjectNode();
         result.put("last", 1755900000L);
         result.put("XBT/EUR", "not-an-array");
-        assertThatThrownBy(() -> mapper.extract(response(result)))
+        var payload = response(result);
+        assertThatThrownBy(() -> mapper.extract(payload))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("entries are missing");
     }
@@ -86,7 +86,8 @@ class KrakenRestOhlcMapperTest {
     void malformedEntryFailsInsteadOfSilentlyTruncating() {
         ObjectNode result = validResult();
         result.set("XBT/EUR", json.createObjectNode()); // entries not an array
-        assertThatThrownBy(() -> mapper.extract(response(result)))
+        var payload = response(result);
+        assertThatThrownBy(() -> mapper.extract(payload))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -99,7 +100,8 @@ class KrakenRestOhlcMapperTest {
         // Only 7 of the 8 mandatory values: trades count missing.
         entry.add("1755899400").add("100").add("110").add("95")
                 .add("105").add("102").add("12.5");
-        assertThatThrownBy(() -> mapper.extract(response(result)))
+        var payload = response(result);
+        assertThatThrownBy(() -> mapper.extract(payload))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid Kraken OHLC entry");
     }
@@ -110,6 +112,7 @@ class KrakenRestOhlcMapperTest {
         market.setMarketId(UUID.randomUUID());
         market.setProvider(com.hope.trading.market_data.helper.MarketProvider.KRAKEN);
         market.setSymbol("BTC/EUR");
+        market.setProviderSymbol("XBT/EUR");
 
         KrakenOhlcResult extracted = mapper.extract(response(validResult()));
         OhlcEvent event = mapper.toEvent(extracted.entries().getFirst(), market,
@@ -118,6 +121,7 @@ class KrakenRestOhlcMapperTest {
         assertThat(event.marketId()).isEqualTo(market.getMarketId());
         assertThat(event.provider()).isEqualTo(com.hope.trading.market_data.helper.MarketProvider.KRAKEN);
         assertThat(event.symbol()).isEqualTo("BTC/EUR");
+        assertThat(event.providerSymbol()).isEqualTo("XBT/EUR");
         assertThat(event.interval()).isEqualTo(OhlcInterval.FIFTEEN_MINUTES);
         assertThat(event.openTime()).isEqualTo(Instant.ofEpochSecond(1755899400));
         assertThat(event.closeTime())

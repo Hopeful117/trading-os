@@ -1,4 +1,4 @@
-package com.hope.trading.market_data.kraken.brokerClient;
+package com.hope.trading.market_data.kraken.brokerclient;
 
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.kraken.dto.ohlc.KrakenOhlcResponse;
@@ -281,15 +281,15 @@ class KrakenMarketDataTest {
         when(restOhlcMapper.extract(response)).thenReturn(result);
         when(restOhlcMapper.toEvent(
                 entries.get(0), market, interval, true, responseTimestamp,
-                Instant.parse("2026-07-28T10:04:00Z")
+                Instant.parse("2026-07-28T10:04:00Z"), "XXBTZEUR"
         )).thenReturn(first);
         when(restOhlcMapper.toEvent(
                 entries.get(1), market, interval, true, responseTimestamp,
-                Instant.parse("2026-07-28T10:04:00Z")
+                Instant.parse("2026-07-28T10:04:00Z"), "XXBTZEUR"
         )).thenReturn(second);
         when(restOhlcMapper.toEvent(
                 entries.get(2), market, interval, false, responseTimestamp,
-                Instant.parse("2026-07-28T10:04:00Z")
+                Instant.parse("2026-07-28T10:04:00Z"), "XXBTZEUR"
         )).thenReturn(current);
         when(historyNormalizer.fillMissingIntervals(
                 List.of(first, second, current), interval

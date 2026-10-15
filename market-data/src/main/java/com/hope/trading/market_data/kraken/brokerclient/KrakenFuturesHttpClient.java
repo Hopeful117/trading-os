@@ -1,4 +1,4 @@
-package com.hope.trading.market_data.kraken.brokerClient;
+package com.hope.trading.market_data.kraken.brokerclient;
 
 import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentResponse;
 import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentStatusResponse;

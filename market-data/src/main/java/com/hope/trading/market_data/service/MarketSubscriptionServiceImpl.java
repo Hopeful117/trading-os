@@ -1,10 +1,11 @@
 package com.hope.trading.market_data.service;
 
-import com.hope.trading.market_data.brokerClient.MarketDataStreamProvider;
+import com.hope.trading.market_data.brokerclient.MarketDataStreamProvider;
 import com.hope.trading.market_data.exception.EntityNotFoundException;
 import com.hope.trading.market_data.helper.MarketSubscriptionKey;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamRequest;
+import com.hope.trading.market_data.model.MarketStreamParameters;
 import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.model.OrderBookKey;
@@ -209,7 +210,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
         }
         switch (request.type()) {
             case TICKER -> {
-
+                // Ticker subscriptions intentionally accept the optional parameter object.
             }
 
             case OHLC -> {
@@ -244,16 +245,15 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                 }
             }
             case TRADES -> {
-                if (request.parameters() != null
-                        && (request.parameters().interval() != null
-                        || request.parameters().depth() != null)) {
-                    throw new IllegalArgumentException(
-                            "Trades subscription does not accept parameters"
-                    );
+                MarketStreamParameters parameters = request.parameters();
+                if (parameters != null
+                        && (parameters.interval() != null || parameters.depth() != null)) {
+                    throw new IllegalArgumentException("Trades subscription does not accept parameters");
                 }
             }
         }
     }
+
 
     private void clearStreamState(
             UUID marketId,

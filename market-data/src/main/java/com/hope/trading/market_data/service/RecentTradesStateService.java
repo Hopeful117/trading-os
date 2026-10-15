@@ -3,6 +3,7 @@ package com.hope.trading.market_data.service;
 import com.hope.trading.market_data.model.RecentTradesSnapshot;
 import com.hope.trading.market_data.model.TradeEvent;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ public class RecentTradesStateService {
         this(Clock.systemUTC());
     }
 
+    @Autowired
     RecentTradesStateService(Clock clock) {
         this.clock = clock;
     }

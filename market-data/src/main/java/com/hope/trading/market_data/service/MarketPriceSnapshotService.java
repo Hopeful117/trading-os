@@ -2,7 +2,7 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.dto.MarketPriceSnapshot;
 import com.hope.trading.market_data.dto.MarketPriceSnapshotStatus;
-import com.hope.trading.market_data.brokerClient.MarketDataProvider;
+import com.hope.trading.market_data.brokerclient.MarketDataProvider;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.TickerEvent;
@@ -35,6 +35,8 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 public class MarketPriceSnapshotService {
     private static final Duration MAX_ACQUISITION_TIMEOUT = Duration.ofSeconds(18);
+    private static final String ACQUISITION_FAILURE_MESSAGE =
+            "Current snapshot acquisition failed marketId={} provider={} message={}";
     private final MarketRepository marketRepository;
     private final TickerEventPublisher tickerEventPublisher;
     private final Map<MarketProvider, MarketDataProvider> providers;
@@ -116,49 +118,53 @@ public class MarketPriceSnapshotService {
 
         Acquisition acquisition = acquireCurrentState(market, freshness, timeout, confirm, ticker);
         Optional<TickerEvent> refreshed = acquisition.event();
-        if (refreshed.isPresent() && isFresh(refreshed.get(), freshness)) {
-            return toSnapshot(
-                    marketId,
-                    market,
-                    tradable,
-                    refreshed.get(),
-                    MarketPriceSnapshotStatus.FRESH
-            );
-        }
+        return resolveAcquiredSnapshot(marketId, market, tradable,
+                new SnapshotResolution(ticker, refreshed, structured, acquisition, freshness));
+    }
 
+    private MarketPriceSnapshot resolveAcquiredSnapshot(
+            UUID marketId,
+            Market market,
+            boolean tradable,
+            SnapshotResolution resolution) {
+        TickerEvent ticker = resolution.previous();
+        Optional<TickerEvent> refreshed = resolution.refreshed();
+        boolean structured = resolution.structured();
+        Acquisition acquisition = resolution.acquisition();
+        Duration freshness = resolution.freshness();
+        if (refreshed.isPresent() && isFresh(refreshed.get(), freshness)) {
+            return toSnapshot(marketId, market, tradable, refreshed.get(), MarketPriceSnapshotStatus.FRESH);
+        }
         if (structured && acquisition.timedOut()) {
             return new MarketPriceSnapshot(
                     marketId, market.getSymbol(), null, null, null, tradable, null,
-                    MarketPriceSnapshotStatus.TIMEOUT, null, null, clock.instant()
-            );
+                    MarketPriceSnapshotStatus.TIMEOUT, null, null, clock.instant());
         }
-
         if (ticker != null && hasUsablePrice(ticker)) {
-            return toSnapshot(marketId, market, tradable, ticker,
-                    structured && acquisition.timedOut() ? MarketPriceSnapshotStatus.TIMEOUT
-                            : structured && acquisition.providerResponded()
-                            ? MarketPriceSnapshotStatus.STALE_PROVIDER : MarketPriceSnapshotStatus.STALE);
+            return toSnapshot(marketId, market, tradable, ticker, fallbackStatus(structured, acquisition));
         }
-
         if (refreshed.isPresent() && hasUsablePrice(refreshed.get())) {
-            return toSnapshot(
-                    marketId,
-                    market,
-                    tradable,
-                    refreshed.get(),
-                    structured && acquisition.timedOut() ? MarketPriceSnapshotStatus.TIMEOUT
-                            : structured ? MarketPriceSnapshotStatus.STALE_PROVIDER : MarketPriceSnapshotStatus.STALE
-            );
+            return toSnapshot(marketId, market, tradable, refreshed.get(), fallbackStatus(structured, acquisition));
         }
-
         if (ticker == null || !hasUsablePrice(ticker)) {
             return new MarketPriceSnapshot(
                     marketId, market.getSymbol(), null, null, null, tradable, null,
-                    structured && acquisition.timedOut() ? MarketPriceSnapshotStatus.TIMEOUT
-                            : MarketPriceSnapshotStatus.UNAVAILABLE, null, null, clock.instant()
-            );
+                    structured && acquisition.timedOut()
+                            ? MarketPriceSnapshotStatus.TIMEOUT
+                            : MarketPriceSnapshotStatus.UNAVAILABLE,
+                    null, null, clock.instant());
         }
         return toSnapshot(marketId, market, tradable, ticker, MarketPriceSnapshotStatus.STALE);
+    }
+
+    private MarketPriceSnapshotStatus fallbackStatus(boolean structured, Acquisition acquisition) {
+        if (structured && acquisition.timedOut()) {
+            return MarketPriceSnapshotStatus.TIMEOUT;
+        }
+        if (structured && acquisition.providerResponded()) {
+            return MarketPriceSnapshotStatus.STALE_PROVIDER;
+        }
+        return MarketPriceSnapshotStatus.STALE;
     }
 
     private MarketPriceSnapshot toSnapshot(
@@ -222,34 +228,35 @@ public class MarketPriceSnapshotService {
                     claim.complete(result);
                     return result;
                 } catch (RuntimeException exception) {
-                    log.warn(
-                            "Current snapshot acquisition failed marketId={} provider={} message={}",
-                            market.getMarketId(),
-                            market.getProvider(),
-                            exception.getMessage()
-                    );
-                    claim.complete(new Acquisition(Optional.empty(), false, false));
-                    return new Acquisition(Optional.empty(), false, false);
+                    log.warn(ACQUISITION_FAILURE_MESSAGE, market.getMarketId(), market.getProvider(),
+                            exception.getMessage());
+                    return completeFailedAcquisition(claim);
                 } finally {
                     inFlightAcquisitions.remove(key, claim);
                 }
             }
-            try {
-                return existing.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                return new Acquisition(Optional.empty(), true, false);
-            } catch (TimeoutException exception) {
-                return new Acquisition(Optional.empty(), true, false);
-            } catch (ExecutionException | CompletionException exception) {
-                log.warn(
-                        "Waiting snapshot acquisition failed marketId={} provider={} message={}",
-                        market.getMarketId(),
-                        market.getProvider(),
-                        exception.getMessage()
-                );
-                return new Acquisition(Optional.empty(), false, false);
-            }
+            return awaitExisting(existing, timeout, market);
+        }
+    }
+
+    private Acquisition completeFailedAcquisition(CompletableFuture<Acquisition> claim) {
+        Acquisition result = new Acquisition(Optional.empty(), false, false);
+        claim.complete(result);
+        return result;
+    }
+
+    private Acquisition awaitExisting(CompletableFuture<Acquisition> existing, Duration timeout, Market market) {
+        try {
+            return existing.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return new Acquisition(Optional.empty(), true, false);
+        } catch (TimeoutException exception) {
+            return new Acquisition(Optional.empty(), true, false);
+        } catch (ExecutionException | CompletionException exception) {
+            log.warn("Waiting snapshot acquisition failed marketId={} provider={} message={}",
+                    market.getMarketId(), market.getProvider(), exception.getMessage());
+            return new Acquisition(Optional.empty(), false, false);
         }
     }
 
@@ -289,12 +296,16 @@ public class MarketPriceSnapshotService {
                     market.getMarketId(), exception.getMessage());
             return new Acquisition(acquired, true, acquired.isPresent());
         } finally {
-            try {
-                subscriptionService.unsubscribe(market.getMarketId(), request, remaining(deadlineNanos));
-            } catch (RuntimeException cleanupFailure) {
-                log.warn("Unable to release temporary ticker subscription marketId={} message={}",
-                        market.getMarketId(), cleanupFailure.getMessage());
-            }
+            releaseTemporarySubscription(market, request, deadlineNanos);
+        }
+    }
+
+    private void releaseTemporarySubscription(Market market, MarketStreamRequest request, long deadlineNanos) {
+        try {
+            subscriptionService.unsubscribe(market.getMarketId(), request, remaining(deadlineNanos));
+        } catch (RuntimeException cleanupFailure) {
+            log.warn("Unable to release temporary ticker subscription marketId={} message={}",
+                    market.getMarketId(), cleanupFailure.getMessage());
         }
     }
 
@@ -306,13 +317,7 @@ public class MarketPriceSnapshotService {
         try {
             CompletableFuture<Optional<TickerEvent>> future = CompletableFuture
                     .supplyAsync(() -> provider.acquireCurrentSnapshot(market));
-            Optional<TickerEvent> event;
-            try {
-                event = future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            } catch (InterruptedException | TimeoutException exception) {
-                future.cancel(true);
-                throw exception;
-            }
+            Optional<TickerEvent> event = awaitProvider(future, timeout);
             return new ProviderAcquisition(event, false);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -320,21 +325,24 @@ public class MarketPriceSnapshotService {
         } catch (TimeoutException exception) {
             return new ProviderAcquisition(Optional.empty(), true);
         } catch (ExecutionException | CompletionException exception) {
-            log.warn(
-                    "Current snapshot acquisition failed marketId={} provider={} message={}",
-                    market.getMarketId(),
-                    market.getProvider(),
-                    exception.getMessage()
-            );
+            log.warn(ACQUISITION_FAILURE_MESSAGE, market.getMarketId(), market.getProvider(),
+                    exception.getMessage());
             return new ProviderAcquisition(Optional.empty(), false);
         } catch (RuntimeException exception) {
-            log.warn(
-                    "Current snapshot acquisition failed marketId={} provider={} message={}",
-                    market.getMarketId(),
-                    market.getProvider(),
-                    exception.getMessage()
-            );
+            log.warn(ACQUISITION_FAILURE_MESSAGE, market.getMarketId(), market.getProvider(),
+                    exception.getMessage());
             return new ProviderAcquisition(Optional.empty(), false);
+        }
+    }
+
+    private Optional<TickerEvent> awaitProvider(
+            CompletableFuture<Optional<TickerEvent>> future,
+            Duration timeout) throws InterruptedException, TimeoutException, ExecutionException {
+        try {
+            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException | TimeoutException exception) {
+            future.cancel(true);
+            throw exception;
         }
     }
 
@@ -357,6 +365,13 @@ public class MarketPriceSnapshotService {
     }
 
     private record Acquisition(Optional<TickerEvent> event, boolean timedOut, boolean providerResponded) { }
+
+    private record SnapshotResolution(
+            TickerEvent previous,
+            Optional<TickerEvent> refreshed,
+            boolean structured,
+            Acquisition acquisition,
+            Duration freshness) { }
 
     private record ProviderAcquisition(Optional<TickerEvent> event, boolean timedOut) { }
 

@@ -1,6 +1,6 @@
 package com.hope.trading.market_data.kraken.websocket;
 
-import com.hope.trading.market_data.brokerClient.MarketDataStreamProvider;
+import com.hope.trading.market_data.brokerclient.MarketDataStreamProvider;
 import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.kraken.config.KrakenProperties;
 import com.hope.trading.market_data.kraken.dto.*;
@@ -58,6 +58,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @Component
@@ -83,10 +84,10 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             ConcurrentHashMap.newKeySet();
     private final ConcurrentMap<String, AtomicInteger> tradeSubscriptionCounts =
             new ConcurrentHashMap<>();
-    private volatile WebSocketSession session;
-    private volatile Disposable connectionSubscription;
-    private volatile WebSocketSession futuresSession;
-    private volatile Disposable futuresConnectionSubscription;
+    private final AtomicReference<WebSocketSession> session = new AtomicReference<>();
+    private final AtomicReference<Disposable> connectionSubscription = new AtomicReference<>();
+    private final AtomicReference<WebSocketSession> futuresSession = new AtomicReference<>();
+    private final AtomicReference<Disposable> futuresConnectionSubscription = new AtomicReference<>();
     private final Sinks.Many<String> outboundMessages =
             Sinks.many()
                     .multicast()
@@ -97,6 +98,12 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final Sinks.Many<String> futuresOutboundMessages =
             Sinks.many().multicast().onBackpressureBuffer(OUTBOUND_BUFFER_SIZE, false);
     private static final int OUTBOUND_BUFFER_SIZE = 256;
+    private static final String TICKER_FEED = "ticker";
+    private static final String BOOK_SNAPSHOT_FEED = "book_snapshot";
+    private static final String TRADE_FEED = "trade";
+    private static final String QTY_FIELD = "qty";
+    private static final String PRODUCT_ID_FIELD = "product_id";
+    private static final String PRICE_FIELD = "price";
 
     private final TickerEventPublisher tickerEventPublisher;
     private final OhlcEventPublisher ohlcEventPublisher;
@@ -168,7 +175,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
     @Override
     public Mono<Void> disconnect() {
-            WebSocketSession currentSession = this.session;
+            WebSocketSession currentSession = this.session.get();
             Mono<Void> closeSpot = currentSession == null || !currentSession.isOpen()
                     ? Mono.empty()
                     : currentSession.close()
@@ -181,13 +188,11 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                                     error
                             )
                     )
-                    .doFinally(signal -> {
-                        this.session = null;
-                    });
-            WebSocketSession currentFuturesSession = this.futuresSession;
+                    .doFinally(signal -> this.session.set(null));
+            WebSocketSession currentFuturesSession = this.futuresSession.get();
             Mono<Void> closeFutures = currentFuturesSession == null || !currentFuturesSession.isOpen()
                     ? Mono.empty()
-                    : currentFuturesSession.close().doFinally(signal -> this.futuresSession = null);
+                     : currentFuturesSession.close().doFinally(signal -> this.futuresSession.set(null));
             return Mono.when(closeSpot, closeFutures).then();
         }
 
@@ -264,10 +269,10 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
             if (product == Product.FUTURES && root.has("feed")) {
                 switch (root.path("feed").asText().toLowerCase(Locale.ROOT)) {
-                    case "ticker" -> handleFuturesTicker(root);
-                    case "book", "book_snapshot" -> handleFuturesBook(root);
-                    case "trade" -> handleFuturesTrades(root);
-                    default -> { }
+                    case TICKER_FEED -> handleFuturesTicker(root);
+                    case "book", BOOK_SNAPSHOT_FEED -> handleFuturesBook(root);
+                    case TRADE_FEED -> handleFuturesTrades(root);
+                    default -> log.debug("Ignoring Kraken Futures feed={}", root.path("feed").asText());
                 }
                 return;
             }
@@ -282,15 +287,13 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     .toLowerCase();
 
             switch (channel) {
-                case "ticker" -> handleTickerMessage(root, product);
+                case TICKER_FEED -> handleTickerMessage(root, product);
                 case "ohlc" -> handleOhlcMessage(root, product);
-                case "book", "book_snapshot" -> handleOrderBookMessage(root, product);
-                case "trade" -> handleTradeMessage(root, product);
+                case "book", BOOK_SNAPSHOT_FEED -> handleOrderBookMessage(root, product);
+                case TRADE_FEED -> handleTradeMessage(root, product);
 
-                case "heartbeat" -> {
-                }
-                default -> {
-                }
+                case "heartbeat" -> log.trace("Received Kraken heartbeat");
+                default -> log.debug("Ignoring Kraken channel={}", channel);
             }
 
         } catch (Exception exception) {
@@ -462,7 +465,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         }
 
         if (product == Product.FUTURES) {
-            root.get("data").forEach(data -> handleFuturesTicker(data));
+            root.get("data").forEach(this::handleFuturesTicker);
             return;
         }
         KrakenTickerMessage tickerMessage =
@@ -703,58 +706,64 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             MarketStreamRequest request
     ) {
         if (markets == null) return;
-        markets.stream()
-                .filter(Objects::nonNull)
-                .forEach(market -> {
-                    Product product = product(market);
-                    String symbol = subscriptionKey(market, product);
-                    String streamKey = streamSubscriptionKey(market, request);
-                    AtomicInteger streamCount = streamSubscriptionCounts.get(streamKey);
-                    if (streamCount != null && streamCount.decrementAndGet() <= 0) {
-                        streamSubscriptionCounts.remove(streamKey, streamCount);
-                        activeSubscriptions.remove(streamKey);
-                    }
+        markets.stream().filter(Objects::nonNull)
+                .forEach(market -> unregisterMarket(market, request));
+    }
 
-                    if (request.type()
-                            == MarketStreamType.ORDER_BOOK) {
-                        Set<Integer> depths =
-                                orderBookDepthsBySymbol.get(symbol);
-                        ConcurrentMap<Integer, AtomicInteger> depthCounts =
-                                orderBookDepthSubscriptionCounts.get(symbol);
-                        if (depths != null && depthCounts != null) {
-                            Integer depth = request.parameters().depth();
-                            AtomicInteger count = depthCounts.get(depth);
-                            if (count != null && count.decrementAndGet() <= 0) {
-                                depthCounts.remove(depth, count);
-                                depths.remove(depth);
-                            }
-                            if (depths.isEmpty()) {
-                                orderBookDepthsBySymbol.remove(symbol, depths);
-                            }
-                            if (depthCounts.isEmpty()) {
-                                orderBookDepthSubscriptionCounts.remove(symbol, depthCounts);
-                            }
-                        }
-                    }
-                    if (request.type() == MarketStreamType.TRADES) {
-                        AtomicInteger count = tradeSubscriptionCounts.get(symbol);
-                        if (count != null && count.decrementAndGet() <= 0) {
-                            tradeSubscriptionCounts.remove(symbol, count);
-                            tradeSymbols.remove(symbol);
-                        }
-                    }
+    private void unregisterMarket(Market market, MarketStreamRequest request) {
+        Product product = product(market);
+        String symbol = subscriptionKey(market, product);
+        String streamKey = streamSubscriptionKey(market, request);
+        decrement(streamSubscriptionCounts, streamKey, activeSubscriptions);
+        if (request.type() == MarketStreamType.ORDER_BOOK) {
+            unregisterOrderBookDepth(symbol, request.parameters().depth());
+        }
+        if (request.type() == MarketStreamType.TRADES) {
+            decrementTradeSubscription(symbol);
+        }
+        marketSubscriptionCounts.computeIfPresent(symbol, (ignored, count) -> {
+            if (count.decrementAndGet() <= 0) {
+                subscribedMarkets.remove(symbol, market);
+                return null;
+            }
+            return count;
+        });
+    }
 
-                    marketSubscriptionCounts.computeIfPresent(
-                            symbol,
-                            (ignored, count) -> {
-                                if (count.decrementAndGet() <= 0) {
-                                    subscribedMarkets.remove(symbol, market);
-                                    return null;
-                                }
-                                return count;
-                            }
-                    );
-                });
+    private void decrement(ConcurrentMap<String, AtomicInteger> counts, String key,
+                           ConcurrentMap<String, ActiveSubscription> subscriptions) {
+        AtomicInteger count = counts.get(key);
+        if (count != null && count.decrementAndGet() <= 0) {
+            counts.remove(key, count);
+            subscriptions.remove(key);
+        }
+    }
+
+    private void unregisterOrderBookDepth(String symbol, Integer depth) {
+        Set<Integer> depths = orderBookDepthsBySymbol.get(symbol);
+        ConcurrentMap<Integer, AtomicInteger> counts = orderBookDepthSubscriptionCounts.get(symbol);
+        if (depths == null || counts == null) {
+            return;
+        }
+        AtomicInteger count = counts.get(depth);
+        if (count != null && count.decrementAndGet() <= 0) {
+            counts.remove(depth, count);
+            depths.remove(depth);
+        }
+        if (depths.isEmpty()) {
+            orderBookDepthsBySymbol.remove(symbol, depths);
+        }
+        if (counts.isEmpty()) {
+            orderBookDepthSubscriptionCounts.remove(symbol, counts);
+        }
+    }
+
+    private void decrementTradeSubscription(String symbol) {
+        AtomicInteger count = tradeSubscriptionCounts.get(symbol);
+        if (count != null && count.decrementAndGet() <= 0) {
+            tradeSubscriptionCounts.remove(symbol, count);
+            tradeSymbols.remove(symbol);
+        }
     }
 
     private void clearRealtimeStates(Product product) {
@@ -801,10 +810,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                         root.path("error").asString()
                 );
             }
-
-            return;
         }
-
     }
     private Mono<Void> emitOutboundMessage(String payload, Product product) {
         Sinks.EmitResult result;
@@ -826,7 +832,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     }
 
     private void handleFuturesTicker(JsonNode data) {
-        String symbol = data.path("product_id").asText(null);
+         String symbol = data.path(PRODUCT_ID_FIELD).asText(null);
         Market market = findSubscribedMarket(symbol, Product.FUTURES);
         if (market == null) return;
         com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesTickerDto ticker =
@@ -850,14 +856,14 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         JsonNode values = root.has("data") && root.get("data").isArray()
                 ? root.get("data") : objectMapper.createArrayNode().add(root);
         values.forEach(data -> {
-            String symbol = data.path("product_id").asText(null);
+             String symbol = data.path(PRODUCT_ID_FIELD).asText(null);
             Market market = findSubscribedMarket(symbol, Product.FUTURES);
             if (market == null) return;
             Set<Integer> depths = orderBookDepthsBySymbol.get(subscriptionKey(symbol, Product.FUTURES));
             if (depths == null) return;
             List<com.hope.trading.market_data.kraken.dto.orderbook.KrakenOrderBookLevel> bids = levels(data.get("bids"));
             List<com.hope.trading.market_data.kraken.dto.orderbook.KrakenOrderBookLevel> asks = levels(data.get("asks"));
-            KrakenMessageType type = "book_snapshot".equalsIgnoreCase(root.path("feed").asText())
+            KrakenMessageType type = BOOK_SNAPSHOT_FEED.equalsIgnoreCase(root.path("feed").asText())
                     ? KrakenMessageType.SNAPSHOT : KrakenMessageType.UPDATE;
             var book = new KrakenOrderBookData(symbol, bids, asks,
                     data.has("checksum") ? data.get("checksum").asLong() : null, timestamp(data, "timestamp"));
@@ -874,7 +880,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         JsonNode values = root.has("data") && root.get("data").isArray()
                 ? root.get("data") : objectMapper.createArrayNode().add(root);
         values.forEach(data -> {
-            String symbol = data.path("product_id").asText(null);
+            String symbol = data.path(PRODUCT_ID_FIELD).asText(null);
             Market market = findSubscribedMarket(symbol, Product.FUTURES);
             if (market == null) return;
             try {
@@ -882,8 +888,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                         ? data.get("trade_id").asText()
                         : data.path("uid").asText(null);
                 var trade = new com.hope.trading.market_data.kraken.dto.trade.KrakenTradeData(
-                        symbol, data.path("side").asText(null), decimal(data, "qty"),
-                        decimal(data, "price"), data.path("ord_type").asText(null),
+                        symbol, data.path("side").asText(null), decimal(data, QTY_FIELD),
+                         decimal(data, PRICE_FIELD), data.path("ord_type").asText(null),
                         tradeId, timestamp(data, "time"));
                 byMarket.computeIfAbsent(market.getMarketId(), ignored -> new ArrayList<>())
                         .add(tradeMapper.toEvent(trade, market));
@@ -899,16 +905,16 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         if (node == null || !node.isArray()) return List.of();
         return java.util.stream.StreamSupport.stream(node.spliterator(), false).map(level ->
                 new com.hope.trading.market_data.kraken.dto.orderbook.KrakenOrderBookLevel(
-                        level.isObject() ? decimal(level, "price") : decimal(level, "price", 0),
-                        level.isObject() ? decimal(level, "qty") : decimal(level, "qty", 1))).toList();
+                        level.isObject() ? decimal(level, PRICE_FIELD) : decimal(level, 0),
+                        level.isObject() ? decimal(level, QTY_FIELD) : decimal(level, 1))).toList();
     }
 
-    private java.math.BigDecimal decimal(JsonNode node, String name) {
-        return node != null && node.has(name) && !node.get(name).isNull()
-                ? new java.math.BigDecimal(node.get(name).asString()) : null;
+    private java.math.BigDecimal decimal(JsonNode node, String field) {
+        return node != null && node.has(field) && !node.get(field).isNull()
+                ? new java.math.BigDecimal(node.get(field).asString()) : null;
     }
 
-    private java.math.BigDecimal decimal(JsonNode node, String name, int index) {
+    private java.math.BigDecimal decimal(JsonNode node, int index) {
         return node != null && node.isArray() && node.size() > index
                 ? new java.math.BigDecimal(node.get(index).asString()) : null;
     }
@@ -965,9 +971,9 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
     private String futuresFeed(MarketStreamType type) {
         return switch (type) {
-            case TICKER -> "ticker";
+            case TICKER -> TICKER_FEED;
             case ORDER_BOOK -> "book";
-            case TRADES -> "trade";
+            case TRADES -> TRADE_FEED;
             case OHLC -> throw new UnsupportedOperationException("Kraken Futures OHLC WebSocket feed is unsupported");
         };
     }
@@ -978,22 +984,23 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     }
 
     private WebSocketSession session(Product product) {
-        return product == Product.FUTURES ? futuresSession : session;
+        return product == Product.FUTURES ? futuresSession.get() : session.get();
     }
 
     private void setSession(Product product, WebSocketSession value) {
-        if (product == Product.FUTURES) futuresSession = value; else session = value;
+        if (product == Product.FUTURES) futuresSession.set(value); else session.set(value);
     }
 
     private Disposable subscription(Product product) {
-        return product == Product.FUTURES ? futuresConnectionSubscription : connectionSubscription;
+        return product == Product.FUTURES ? futuresConnectionSubscription.get() : connectionSubscription.get();
     }
 
     private void setSubscription(Product product, Disposable value) {
-        if (product == Product.FUTURES) futuresConnectionSubscription = value; else connectionSubscription = value;
+        if (product == Product.FUTURES) futuresConnectionSubscription.set(value); else connectionSubscription.set(value);
     }
 
     private record ActiveSubscription(Market market, MarketStreamRequest request) {
+        // State-only record; no additional behavior is required.
     }
 
     private Sinks.Many<String> outbound(Product product) {

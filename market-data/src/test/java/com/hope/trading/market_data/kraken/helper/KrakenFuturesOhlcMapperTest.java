@@ -38,6 +38,7 @@ class KrakenFuturesOhlcMapperTest {
 
         assertThat(event.marketId()).isEqualTo(market.getMarketId());
         assertThat(event.symbol()).isEqualTo("BTC/USD");
+        assertThat(event.providerSymbol()).isEqualTo("PF_XBTUSD");
         assertThat(event.openTime()).isEqualTo(Instant.parse("2026-10-14T11:00:00Z"));
         assertThat(event.close()).isEqualByComparingTo("105");
         assertThat(event.volume()).isEqualByComparingTo("12");

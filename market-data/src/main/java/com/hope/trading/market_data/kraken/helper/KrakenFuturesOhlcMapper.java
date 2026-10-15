@@ -34,7 +34,7 @@ public class KrakenFuturesOhlcMapper {
                 openTime, closeTime, candle.getOpen(), candle.getHigh(), candle.getLow(),
                 candle.getClose(), candle.getVolume(), candle.getVwap(), candle.getTrades(),
                 closed, fetchedAt, false,
-                OhlcEvent.defaultSourceId(market.getMarketId(), market.getProvider(),
-                        market.getSymbol(), interval, openTime), fetchedAt);
+                 OhlcEvent.defaultSourceId(market.getMarketId(), market.getProvider(),
+                         market.getSymbol(), interval, openTime), fetchedAt, market.getProviderSymbol());
     }
 }

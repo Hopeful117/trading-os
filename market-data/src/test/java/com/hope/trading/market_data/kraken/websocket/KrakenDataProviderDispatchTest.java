@@ -19,25 +19,19 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
-import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import tools.jackson.databind.ObjectMapper;
 
-import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -118,7 +112,7 @@ class KrakenDataProviderDispatchTest {
         when(session.isOpen()).thenReturn(true);
         when(session.textMessage(anyString())).thenAnswer(inv -> {
             var message = mock(WebSocketMessage.class);
-            Mockito.when(message.getPayloadAsText()).thenReturn(inv.getArgument(0));
+            when(message.getPayloadAsText()).thenReturn(inv.getArgument(0));
             return message;
         });
         when(session.send(any())).thenReturn(Mono.empty());
@@ -126,7 +120,7 @@ class KrakenDataProviderDispatchTest {
                 .thenReturn(inbound.asFlux()
                         .map(text -> {
                             var message = mock(WebSocketMessage.class);
-                            Mockito.when(message.getPayloadAsText()).thenReturn(text);
+                            when(message.getPayloadAsText()).thenReturn(text);
                             return message;
                         }));
         when(session.close()).thenReturn(Mono.empty());
@@ -320,7 +314,7 @@ class KrakenDataProviderDispatchTest {
         provider.subscribe(List.of(market), new MarketStreamRequest(
                 MarketStreamType.TICKER, new MarketStreamParameters(null, null))).block();
 
-        assertThat(connector.lastUri.toString()).isEqualTo("wss://futures.kraken.com/ws/v1");
+        assertThat(connector.lastUri).hasToString("wss://futures.kraken.com/ws/v1");
         emit("""
             {"feed":"ticker","product_id":"PF_XBTUSD","time":1720000000000,
              "bid":50000,"ask":50001,"last":50000.5}
@@ -379,8 +373,8 @@ class KrakenDataProviderDispatchTest {
         market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
         market.setProviderSymbol("PF_XBTUSD");
 
-        assertThatThrownBy(() -> provider.subscribe(List.of(market), new MarketStreamRequest(
-                MarketStreamType.OHLC, new MarketStreamParameters(60, null))).block())
+        var request = new MarketStreamRequest(MarketStreamType.OHLC, new MarketStreamParameters(60, null));
+        assertThatThrownBy(() -> subscribeAndBlock(request))
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessageContaining("Futures OHLC");
     }
@@ -390,8 +384,8 @@ class KrakenDataProviderDispatchTest {
         propertiesForFutures();
         market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
 
-        assertThatThrownBy(() -> provider.subscribe(List.of(market), new MarketStreamRequest(
-                MarketStreamType.TICKER, new MarketStreamParameters(null, null))).block())
+        var request = new MarketStreamRequest(MarketStreamType.TICKER, new MarketStreamParameters(null, null));
+        assertThatThrownBy(() -> subscribeAndBlock(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("providerSymbol");
     }
@@ -401,14 +395,22 @@ class KrakenDataProviderDispatchTest {
         propertiesForFutures();
         market.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
 
-        assertThatThrownBy(() -> provider.unsubscribe(List.of(market), new MarketStreamRequest(
-                MarketStreamType.TICKER, new MarketStreamParameters(null, null))).block())
+        var request = new MarketStreamRequest(MarketStreamType.TICKER, new MarketStreamParameters(null, null));
+        assertThatThrownBy(() -> unsubscribeAndBlock(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("providerSymbol");
     }
 
     private void propertiesForFutures() {
         properties.setFuturesWebsocket("wss://futures.kraken.com/ws/v1");
+    }
+
+    private void subscribeAndBlock(MarketStreamRequest request) {
+        provider.subscribe(List.of(market), request).block();
+    }
+
+    private void unsubscribeAndBlock(MarketStreamRequest request) {
+        provider.unsubscribe(List.of(market), request).block();
     }
 
     @Test

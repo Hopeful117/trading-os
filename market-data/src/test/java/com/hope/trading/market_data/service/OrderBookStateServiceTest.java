@@ -58,9 +58,10 @@ class OrderBookStateServiceTest {
         assertThat(snapshot.askVolume()).isEqualByComparingTo("5");
         assertThat(snapshot.imbalance())
                 .isEqualByComparingTo("0.4444444444");
-        assertThatThrownBy(() ->
-                snapshot.bids().add(level("99", "1"))
-        ).isInstanceOf(UnsupportedOperationException.class);
+        OrderBookLevel extraLevel = level("99", "1");
+        List<OrderBookLevel> bids = snapshot.bids();
+        assertThatThrownBy(() -> bids.add(extraLevel))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

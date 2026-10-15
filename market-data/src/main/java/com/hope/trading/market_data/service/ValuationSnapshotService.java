@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 @Service
 public class ValuationSnapshotService {
     static final String POLICY_VERSION = "CONSERVATIVE_MULTI_HOP_FX_NO_LOOKAHEAD_V3";
+    private static final String INSTRUMENT_REQUEST_TYPE = "INSTRUMENT";
     private static final MathContext DIVISION_CONTEXT = MathContext.DECIMAL128;
 
     private final MarketRepository marketRepository;
@@ -86,36 +87,36 @@ public class ValuationSnapshotService {
                                          Duration freshness) {
         Market market = marketRepository.findById(request.marketId()).orElse(null);
         if (market == null) {
-            return new ValuationFact("INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(),
-                    null, null, null, null, null, FactStatus.MARKET_UNAVAILABLE);
+            return new ValuationFact(new ValuationFact.Data(INSTRUMENT_REQUEST_TYPE, request.id(), request.marketId(), null,
+                    request.priceUse(), null, null, null, null, null, FactStatus.MARKET_UNAVAILABLE));
         }
         PriceObservation observation = observationRepository
                 .findTopByMarketIdAndEffectiveAtLessThanEqualAndCapturedAtLessThanEqualOrderByEffectiveAtDescCapturedAtDescObservationIdDesc(
                         request.marketId(), valuationTimestamp, valuationTimestamp).orElse(null);
         if (observation == null) {
-            return new ValuationFact("INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(),
-                    null, null, null, null, null, FactStatus.OBSERVATION_UNAVAILABLE);
+            return new ValuationFact(new ValuationFact.Data(INSTRUMENT_REQUEST_TYPE, request.id(), request.marketId(), null,
+                    request.priceUse(), null, null, null, null, null, FactStatus.OBSERVATION_UNAVAILABLE));
         }
         BigDecimal marketPrice = price(observation, request.priceUse());
         String observationAge = observationAge(observation, valuationTimestamp);
         if (isStale(observation, valuationTimestamp, freshness)) {
-            return new ValuationFact("INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(),
-                    observation, sourcePriceType(request.priceUse()), marketPrice, observationAge,
-                    null, FactStatus.STALE);
+            return new ValuationFact(new ValuationFact.Data(INSTRUMENT_REQUEST_TYPE, request.id(), request.marketId(), null,
+                    request.priceUse(), observation, sourcePriceType(request.priceUse()), marketPrice, observationAge,
+                    null, FactStatus.STALE));
         }
         if (marketPrice == null) {
-            return new ValuationFact("INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(),
-                    observation, sourcePriceType(request.priceUse()), null, observationAge,
-                    null, FactStatus.PRICE_UNAVAILABLE);
+            return new ValuationFact(new ValuationFact.Data(INSTRUMENT_REQUEST_TYPE, request.id(), request.marketId(), null,
+                    request.priceUse(), observation, sourcePriceType(request.priceUse()), null, observationAge,
+                    null, FactStatus.PRICE_UNAVAILABLE));
         }
 
         Conversion conversion = conversion(normalize(market.getQuoteAsset()), reportingCurrency, valuationTimestamp, freshness);
         FactStatus conversionStatus = conversion.status();
         BigDecimal value = conversionStatus == FactStatus.AVAILABLE
                 ? marketPrice.multiply(conversion.rate()) : null;
-        ValuationFact fact = new ValuationFact(
-                "INSTRUMENT", request.id(), request.marketId(), null, request.priceUse(), observation,
-                sourcePriceType(request.priceUse()), marketPrice, observationAge, value, conversionStatus);
+        ValuationFact fact = new ValuationFact(new ValuationFact.Data(
+                INSTRUMENT_REQUEST_TYPE, request.id(), request.marketId(), null, request.priceUse(), observation,
+                sourcePriceType(request.priceUse()), marketPrice, observationAge, value, conversionStatus));
         conversion.legs().forEach(fact::addConversionLeg);
         return fact;
     }
@@ -124,9 +125,9 @@ public class ValuationSnapshotService {
                                     String reportingCurrency, Instant valuationTimestamp, Duration freshness) {
         String asset = normalize(request.currency());
         Conversion conversion = conversion(asset, reportingCurrency, valuationTimestamp, freshness);
-        ValuationFact fact = new ValuationFact(
+        ValuationFact fact = new ValuationFact(new ValuationFact.Data(
                 "ASSET", request.id(), null, asset, null, null, null, null,
-                null, conversion.status() == FactStatus.AVAILABLE ? conversion.rate() : null, conversion.status());
+                null, conversion.status() == FactStatus.AVAILABLE ? conversion.rate() : null, conversion.status()));
         conversion.legs().forEach(fact::addConversionLeg);
         return fact;
     }

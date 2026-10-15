@@ -1,6 +1,6 @@
-package com.hope.trading.market_data.kraken.brokerClient;
+package com.hope.trading.market_data.kraken.brokerclient;
 
-import com.hope.trading.market_data.brokerClient.MarketDataProvider;
+import com.hope.trading.market_data.brokerclient.MarketDataProvider;
 import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.kraken.dto.ohlc.KrakenRestOhlcEntry;
@@ -15,7 +15,6 @@ import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesTickerDto;
 import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentResponse;
 import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesInstrumentStatusResponse;
 import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesTickerResponse;
-import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesChartCandle;
 import com.hope.trading.market_data.kraken.dto.futures.KrakenFuturesChartResponse;
 import com.hope.trading.market_data.kraken.helper.KrakenFuturesOhlcMapper;
 import com.hope.trading.market_data.kraken.helper.KrakenMarketMapper;
@@ -259,7 +258,8 @@ public class KrakenMarketData implements MarketDataProvider {
                 result.entries(),
                 market,
                 interval,
-                result.last()
+                result.last(),
+                result.providerSymbol()
         );
 
         List<OhlcEvent> normalizedEvents =
@@ -314,7 +314,8 @@ public class KrakenMarketData implements MarketDataProvider {
             List<KrakenRestOhlcEntry> entries,
             Market market,
             OhlcInterval interval,
-            Instant occurredAt
+            Instant occurredAt,
+            String providerSymbol
     ) {
         if (entries == null || entries.isEmpty()) {
             return List.of();
@@ -330,8 +331,9 @@ public class KrakenMarketData implements MarketDataProvider {
                             market,
                 interval,
                 closed,
-                occurredAt,
-                clock.instant()
+                             occurredAt,
+                             clock.instant(),
+                             providerSymbol
         );
                 })
                 .toList();
@@ -390,15 +392,12 @@ public class KrakenMarketData implements MarketDataProvider {
             throw new IllegalStateException("Kraken Futures " + endpoint + " response is empty");
         }
         String result;
-        if (response instanceof KrakenFuturesInstrumentResponse instruments) {
-            result = instruments.getResult();
-        } else if (response instanceof KrakenFuturesInstrumentStatusResponse statuses) {
-            result = statuses.getResult();
-        } else if (response instanceof KrakenFuturesTickerResponse tickers) {
-            result = tickers.getResult();
-        } else {
-            throw new IllegalArgumentException("Unsupported Kraken Futures response");
-        }
+        result = switch (response) {
+            case KrakenFuturesInstrumentResponse instruments -> instruments.getResult();
+            case KrakenFuturesInstrumentStatusResponse statuses -> statuses.getResult();
+            case KrakenFuturesTickerResponse tickers -> tickers.getResult();
+            default -> throw new IllegalArgumentException("Unsupported Kraken Futures response");
+        };
         if (!"success".equalsIgnoreCase(result)) {
             throw new IllegalStateException("Kraken Futures " + endpoint + " returned " + result);
         }

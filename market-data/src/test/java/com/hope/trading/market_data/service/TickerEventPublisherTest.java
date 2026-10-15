@@ -21,7 +21,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -98,8 +100,8 @@ class TickerEventPublisherTest {
 
     @Test
     void eventsWithoutSymbolAreIgnored() {
-        TickerEvent event = Mockito.spy(ticker("BTC/EUR", "1"));
-        Mockito.doReturn(null).when(event).symbol();
+        TickerEvent event = spy(ticker("BTC/EUR", "1"));
+        doReturn(null).when(event).symbol();
 
         publisher.publish(event);
 
@@ -117,7 +119,7 @@ class TickerEventPublisherTest {
                 BigDecimal.ONE, Instant.now());
         publisher.publish(unknownMarketEvent);
 
-        Mockito.verify(priceObservationRepository, Mockito.times(1)).save(any());
+        verify(priceObservationRepository, times(1)).save(any());
     }
 
     @Test

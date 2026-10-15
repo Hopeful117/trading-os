@@ -51,7 +51,7 @@ public class KrakenTradeMapper {
                 market.getMarketId(),
                 market.getProvider(),
                 market.getSymbol(),
-                data.tradeId().toString(),
+                data.tradeId(),
                 mapSide(data.side()),
                 data.price(),
                 data.quantity(),
