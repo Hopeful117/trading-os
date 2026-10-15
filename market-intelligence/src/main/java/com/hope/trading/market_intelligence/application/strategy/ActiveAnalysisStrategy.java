@@ -28,6 +28,21 @@ public class ActiveAnalysisStrategy implements AnalysisExecutionStrategy {
 
     @Override
     public AnalysisExecutionPlan plan(IntelligenceAnalysisRequest request) {
+        if (request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED) {
+            return new AnalysisExecutionPlan(
+                    List.of(
+                            TrendContextAnalysisCapability.CAPABILITY_ID,
+                            OhlcRangeAnalysisCapability.CAPABILITY_ID
+                    ),
+                    List.of(
+                            ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
+                            ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
+                            ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT)
+                    ),
+                    3,
+                    timeout
+            );
+        }
         return new AnalysisExecutionPlan(
                 List.of(
                         TrendContextAnalysisCapability.CAPABILITY_ID,

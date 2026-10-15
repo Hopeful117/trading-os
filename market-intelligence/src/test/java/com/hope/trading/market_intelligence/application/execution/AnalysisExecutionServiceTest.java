@@ -71,6 +71,32 @@ class AnalysisExecutionServiceTest {
         assertThat(dispatcher.dispatches).hasValue(1);
     }
 
+    @Test
+    void redispatchPreservesStrictCutoffAndEvidencePolicy() {
+        Instant now = Instant.parse("2026-07-29T10:00:00Z");
+        Instant cutoff = Instant.parse("2026-07-28T10:00:00Z");
+        InMemoryAnalysisExecutionRepository repository = new InMemoryAnalysisExecutionRepository();
+        CapturingDispatcher dispatcher = new CapturingDispatcher();
+        AnalysisExecutionService service = new AnalysisExecutionService(
+                repository, dispatcher, new AnalysisStrategyRegistry(List.of(strategy())),
+                new AnalysisExecutionPolicyFactory(), Clock.fixed(now, ZoneOffset.UTC));
+        AnalysisExecution execution = service.register(
+                new IntelligenceAnalysisRequest(UUID.randomUUID(), UUID.randomUUID(),
+                        AnalysisExecutionMode.PASSIVE, "replay", null, null, null, cutoff,
+                        EvidenceAcquisitionPolicy.STRICT_OBSERVED),
+                new IdempotencyKey("replay-key"), "request", "trace");
+
+        assertThat(execution.provenance().evaluationCutoff()).isEqualTo(cutoff);
+        assertThat(execution.provenance().evidencePolicy())
+                .isEqualTo(EvidenceAcquisitionPolicy.STRICT_OBSERVED);
+        service.claimForDispatch(execution.executionId());
+        service.dispatchRegistered(execution.executionId());
+
+        assertThat(dispatcher.request.evaluationCutoff()).isEqualTo(cutoff);
+        assertThat(dispatcher.request.evidencePolicy())
+                .isEqualTo(EvidenceAcquisitionPolicy.STRICT_OBSERVED);
+    }
+
     private AnalysisExecutionStrategy strategy() {
         return new AnalysisExecutionStrategy() {
             @Override
@@ -110,6 +136,19 @@ class AnalysisExecutionServiceTest {
         @Override
         public void cancel(UUID executionId) {
             // Cancellation is outside the scope of these service tests.
+        }
+    }
+
+    private static final class CapturingDispatcher implements AnalysisExecutionDispatcher {
+        private IntelligenceAnalysisRequest request;
+
+        @Override
+        public void dispatch(UUID executionId, IntelligenceAnalysisRequest request) {
+            this.request = request;
+        }
+
+        @Override
+        public void cancel(UUID executionId) {
         }
     }
 }

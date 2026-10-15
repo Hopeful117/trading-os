@@ -26,16 +26,27 @@ public class PassiveAnalysisStrategy implements AnalysisExecutionStrategy {
 
     @Override
     public AnalysisExecutionPlan plan(IntelligenceAnalysisRequest request) {
-        return new AnalysisExecutionPlan(
-                List.of(
-                        TrendContextAnalysisCapability.CAPABILITY_ID,
-                        SpreadAnalysisCapability.CAPABILITY_ID
-                ),
-                List.of(
+        boolean strictObserved = request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED;
+        List<ContextRequirement> baselineContext = strictObserved
+                ? List.of(
+                        ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
+                        ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
+                        ContextRequirement.requiredPublic(ContextSectionType.TREND_CONTEXT)
+                )
+                : List.of(
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY),
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT)
-                ),
-                2,
+                );
+        List<String> capabilities = strictObserved
+                ? List.of(TrendContextAnalysisCapability.CAPABILITY_ID)
+                : List.of(
+                        TrendContextAnalysisCapability.CAPABILITY_ID,
+                        SpreadAnalysisCapability.CAPABILITY_ID
+                );
+        return new AnalysisExecutionPlan(
+                capabilities,
+                baselineContext,
+                capabilities.size(),
                 timeout
         );
     }

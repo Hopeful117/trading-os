@@ -1,9 +1,12 @@
 package com.hope.trading.market_intelligence.application.strategy;
 
+import com.hope.trading.market_intelligence.application.capability.OhlcRangeAnalysisCapability;
+import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
 import com.hope.trading.market_intelligence.domain.*;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +49,48 @@ class AnalysisExecutionStrategyTest {
                 )
                 .doesNotContain(ContextSectionType.ACCOUNT);
         assertThat(plan.timeout()).isEqualTo(Duration.ofSeconds(3));
+    }
+
+    @Test
+    void strictObservedActivePlanDoesNotRequireCurrentSnapshot() {
+        IntelligenceAnalysisRequest request = new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), UUID.randomUUID(), AnalysisExecutionMode.ACTIVE, "replay",
+                null, null, null, Instant.parse("2026-10-15T12:00:00Z"),
+                EvidenceAcquisitionPolicy.STRICT_OBSERVED);
+
+        AnalysisExecutionPlan plan = new ActiveAnalysisStrategy(Duration.ofSeconds(3)).plan(request);
+
+        assertThat(plan.baselineContext()).extracting(ContextRequirement::sectionType)
+                .contains(ContextSectionType.HISTORICAL_OHLC, ContextSectionType.TREND_CONTEXT)
+                .doesNotContain(ContextSectionType.MARKET_SNAPSHOT);
+        assertThat(plan.capabilityIds()).containsExactlyInAnyOrder(
+                TrendContextAnalysisCapability.CAPABILITY_ID,
+                OhlcRangeAnalysisCapability.CAPABILITY_ID);
+    }
+
+    @Test
+    void strictObservedPassivePlanDoesNotRequireCurrentSnapshot() {
+        IntelligenceAnalysisRequest request = new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), UUID.randomUUID(), AnalysisExecutionMode.PASSIVE, "replay",
+                null, null, null, Instant.parse("2026-10-15T12:00:00Z"),
+                EvidenceAcquisitionPolicy.STRICT_OBSERVED);
+
+        AnalysisExecutionPlan plan = new PassiveAnalysisStrategy(Duration.ofMillis(750)).plan(request);
+
+        assertThat(plan.baselineContext()).extracting(ContextRequirement::sectionType)
+                .containsExactlyInAnyOrder(
+                        ContextSectionType.MARKET_IDENTITY,
+                        ContextSectionType.HISTORICAL_OHLC,
+                        ContextSectionType.TREND_CONTEXT
+                )
+                .doesNotContain(ContextSectionType.MARKET_SNAPSHOT);
+        assertThat(plan.baselineContext())
+                .filteredOn(requirement -> requirement.sectionType() == ContextSectionType.MARKET_IDENTITY)
+                .singleElement()
+                .extracting(ContextRequirement::required)
+                .isEqualTo(false);
+        assertThat(plan.capabilityIds())
+                .containsExactly(TrendContextAnalysisCapability.CAPABILITY_ID);
     }
 
     private IntelligenceAnalysisRequest request(AnalysisExecutionMode mode) {
