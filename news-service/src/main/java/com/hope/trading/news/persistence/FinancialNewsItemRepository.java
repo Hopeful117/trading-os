@@ -12,8 +12,8 @@ import java.util.UUID;
 public interface FinancialNewsItemRepository extends JpaRepository<FinancialNewsItemEntity, UUID> {
     @Query("select n from FinancialNewsItemEntity n "
             + "where n.publishedAt between :from and :to "
-            + "and (:marketId is null or concat(',', n.marketIds, ',') like concat('%,', :marketId, ',%')) "
-            + "and (:currency is null or lower(concat(',', n.currencies, ',')) like lower(concat('%,', :currency, ',%'))) "
+            + "and (cast(:marketId as string) is null or concat(',', n.marketIds, ',') like concat('%,', cast(:marketId as string), ',%')) "
+            + "and (cast(:currency as string) is null or lower(concat(',', n.currencies, ',')) like lower(concat('%,', cast(:currency as string), ',%'))) "
             + "and (:impact is null or n.impact = :impact) "
             + "order by n.publishedAt desc")
     List<FinancialNewsItemEntity> findByPublishedAtBetweenOrderByPublishedAtDesc(

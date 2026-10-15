@@ -14,6 +14,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
@@ -22,6 +24,7 @@ import java.util.UUID;
 
 @Component
 public final class NewsJwtAuthenticationFilter extends OncePerRequestFilter {
+    private static final Logger log = LoggerFactory.getLogger(NewsJwtAuthenticationFilter.class);
     private final NewsJwtProperties properties;
 
     public NewsJwtAuthenticationFilter(NewsJwtProperties properties) {
@@ -49,11 +52,13 @@ public final class NewsJwtAuthenticationFilter extends OncePerRequestFilter {
                     : List.of(new SimpleGrantedAuthority(role));
             SecurityContextHolder.getContext().setAuthentication(
                     new UsernamePasswordAuthenticationToken(principal, null, authorities));
-            chain.doFilter(request, response);
         } catch (Exception invalidToken) {
             SecurityContextHolder.clearContext();
+            log.warn("Rejected user JWT: {}", invalidToken.getMessage());
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
+        chain.doFilter(request, response);
     }
 
     private SecretKey signingKey() {
