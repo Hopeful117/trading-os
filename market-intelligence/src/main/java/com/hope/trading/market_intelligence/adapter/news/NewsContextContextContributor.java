@@ -55,9 +55,9 @@ public class NewsContextContextContributor implements ContextContributor {
             List<NewsItemContext> items = response.news() == null ? List.of()
                     : response.news().stream().map(item -> new NewsItemContext(
                             item.id(), item.sourceName(), item.sourceItemId(), item.title(), item.summary(),
-                            item.canonicalUrl(), item.publishedAt(), item.publisher(), item.categories(),
-                            item.currencies(), item.impact(), item.sourceUpdatedAt(), item.fetchedAt(),
-                            item.normalizationVersion())).toList();
+                             item.canonicalUrl(), item.publishedAt(), item.publisher(), item.categories(),
+                             item.currencies(), item.marketIds(), item.impact(), item.sourceUpdatedAt(), item.fetchedAt(),
+                             item.normalizationVersion())).toList();
             return new ContextSection(sectionType(), status, ContextSensitivity.PUBLIC,
                     new NewsContext(request.marketId(), events, items, response.sourceOccurredAt(),
                             response.fetchedAt()),

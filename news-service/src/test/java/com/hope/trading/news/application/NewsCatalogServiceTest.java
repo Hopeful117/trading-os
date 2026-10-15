@@ -49,8 +49,8 @@ class NewsCatalogServiceTest {
         NewsProviderProperties properties = new NewsProviderProperties();
         properties.setEnabled(true);
         properties.setMaxAge(java.time.Duration.ofMinutes(15));
-        NewsSourcePort source = mock(NewsSourcePort.class);
-        ObjectProvider<NewsSourcePort> sourceProvider = mock(ObjectProvider.class);
+        FinancialNewsSourcePort source = mock(FinancialNewsSourcePort.class);
+        ObjectProvider<FinancialNewsSourcePort> sourceProvider = mock(ObjectProvider.class);
         when(sourceProvider.getIfAvailable()).thenReturn(source);
         Instant fetchedAt = Instant.now().minusSeconds(3600);
         EconomicEvent event = new EconomicEvent(
@@ -72,6 +72,23 @@ class NewsCatalogServiceTest {
         assertThat(result.status()).isEqualTo(com.hope.trading.news.domain.NewsAvailability.STALE);
         assertThat(result.items()).hasSize(1);
         assertThat(result.message()).contains("freshness policy");
+    }
+
+    @Test
+    void keepsFinancialNewsUnavailableWhenTheGlobalProviderSwitchIsDisabled() {
+        NewsProviderProperties properties = new NewsProviderProperties();
+        properties.setEnabled(false);
+        FinancialNewsSourcePort source = mock(FinancialNewsSourcePort.class);
+
+        NewsCatalogService service = new NewsCatalogService(
+                mock(EconomicEventRepository.class), mock(FinancialNewsItemRepository.class), properties,
+                providerFor(source), mock(org.springframework.beans.factory.ObjectProvider.class));
+
+        NewsReadResult<com.hope.trading.news.domain.FinancialNewsItem> result = service.findNews(
+                new NewsQuery(null, null, null, null, null, 10));
+
+        assertThat(result.status()).isEqualTo(NewsAvailability.UNAVAILABLE);
+        assertThat(result.message()).contains("No production news provider");
     }
 
     @Test
@@ -126,14 +143,10 @@ class NewsCatalogServiceTest {
 
     @Test
     void exposesIncompleteNewsProviderState() {
-        NewsSourcePort source = new NewsSourcePort() {
+        FinancialNewsSourcePort source = new FinancialNewsSourcePort() {
             @Override
-            public java.util.List<EconomicEvent> economicEvents() {
-                return java.util.List.of();
-            }
-
-            @Override
-            public java.util.List<com.hope.trading.news.domain.FinancialNewsItem> financialNews() {
+            public java.util.List<com.hope.trading.news.domain.FinancialNewsItem> financialNews(
+                    Instant from, Instant to) {
                 return java.util.List.of();
             }
 
@@ -153,6 +166,39 @@ class NewsCatalogServiceTest {
 
         assertThat(result.status()).isEqualTo(NewsAvailability.INCOMPLETE);
         assertThat(result.message()).contains("incomplete");
+    }
+
+    @Test
+    void exposesTheProviderAvailabilityReasonWhenNewsIsUnavailable() {
+        FinancialNewsSourcePort source = new FinancialNewsSourcePort() {
+            @Override
+            public java.util.List<com.hope.trading.news.domain.FinancialNewsItem> financialNews(
+                    Instant from, Instant to) {
+                return java.util.List.of();
+            }
+
+            @Override
+            public NewsAvailability availability() {
+                return NewsAvailability.UNAVAILABLE;
+            }
+
+            @Override
+            public String availabilityMessage() {
+                return "Alpha Vantage quota or rate limit response";
+            }
+        };
+        NewsProviderProperties properties = new NewsProviderProperties();
+        properties.setEnabled(true);
+
+        NewsCatalogService service = new NewsCatalogService(mock(EconomicEventRepository.class),
+                mock(FinancialNewsItemRepository.class), properties, providerFor(source),
+                mock(org.springframework.beans.factory.ObjectProvider.class));
+
+        NewsReadResult<com.hope.trading.news.domain.FinancialNewsItem> result = service.findNews(
+                new NewsQuery(null, null, null, null, null, 10));
+
+        assertThat(result.status()).isEqualTo(NewsAvailability.UNAVAILABLE);
+        assertThat(result.message()).isEqualTo("Alpha Vantage quota or rate limit response");
     }
 
     @SuppressWarnings("unchecked")
