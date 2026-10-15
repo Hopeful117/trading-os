@@ -72,7 +72,16 @@ jobs:
               MVN="../trading-core/mvnw"
             fi
           fi
-          $MVN -B clean verify
+          for attempt in 1 2 3; do
+            if $MVN -B -Dmaven.wagon.http.retryHandler.count=5 clean verify; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Maven verification failed on attempt $attempt; retrying after a transient dependency or repository failure."
+              sleep 10
+            fi
+          done
+          exit 1
 
       - name: Upload test results (${{ matrix.module }})
         if: always()
