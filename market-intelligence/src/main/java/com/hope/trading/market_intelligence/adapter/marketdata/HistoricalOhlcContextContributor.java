@@ -39,7 +39,29 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                     "OHLC history is unavailable"
             );
         }
-        List<OhlcPoint> candles = response.stream()
+        List<OhlcResponse> accepted = response.stream()
+                .filter(candle -> hasTemporalMetadata(candle)
+                        && (request.evaluationCutoff() == null
+                        || (!isAfter(candle.occurredAt(), request.evaluationCutoff())
+                        && !isAfter(candle.fetchedAt(), request.evaluationCutoff()))))
+                .sorted(Comparator.comparing(OhlcResponse::closeTime,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(OhlcResponse::openTime,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(OhlcResponse::sourceId,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+        if (accepted.isEmpty()) {
+            return new ContextSection(
+                    sectionType(), ContextSectionStatus.INCOMPLETE,
+                    ContextSensitivity.PUBLIC, null,
+                    new ContextProvenance("market-data", null, request.evaluationCutoff()),
+                    response.stream().anyMatch(candle -> !hasTemporalMetadata(candle))
+                            ? "OHLC temporal metadata is incomplete"
+                            : "OHLC history is newer than the evaluation cut-off"
+            );
+        }
+        List<OhlcPoint> candles = accepted.stream()
                 .map(candle -> new OhlcPoint(
                         candle.openTime(),
                         candle.closeTime(),
@@ -50,17 +72,47 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                         candle.volume()
                 ))
                 .toList();
-        Instant occurredAt = response.stream()
+        Instant occurredAt = accepted.stream()
                 .map(OhlcResponse::occurredAt)
                 .filter(java.util.Objects::nonNull)
                 .max(Comparator.naturalOrder())
                 .orElse(null);
-        return sectionFactory.available(
+        ContextSection section = sectionFactory.availableAt(
                 sectionType(),
                 new HistoricalOhlcContext(
                         request.marketId(), ACTIVE_INTERVAL, candles
                 ),
-                occurredAt
+                occurredAt,
+                accepted.stream().map(OhlcResponse::fetchedAt)
+                        .filter(java.util.Objects::nonNull)
+                        .max(Comparator.naturalOrder()).orElse(request.evaluationCutoff()),
+                request.evaluationCutoff()
         );
+        String sourceReference = accepted.stream()
+                .map(OhlcResponse::sourceId)
+                .filter(java.util.Objects::nonNull)
+                .sorted()
+                .reduce((left, right) -> left + "," + right)
+                .orElse(null);
+        String sourceVersion = accepted.stream()
+                .map(OhlcResponse::provider)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .reduce((left, right) -> left + "," + right)
+                .orElse(null);
+        return new ContextSection(
+                section.type(), section.status(), section.sensitivity(), section.payload(),
+                new ContextProvenance("market-data", section.provenance().sourceOccurredAt(),
+                        section.provenance().fetchedAt(), sourceReference, sourceVersion, null),
+                section.message());
+    }
+
+    private boolean isAfter(Instant value, Instant cutoff) {
+        return value != null && value.isAfter(cutoff);
+    }
+
+    private boolean hasTemporalMetadata(OhlcResponse candle) {
+        return candle.occurredAt() != null && candle.fetchedAt() != null;
     }
 }

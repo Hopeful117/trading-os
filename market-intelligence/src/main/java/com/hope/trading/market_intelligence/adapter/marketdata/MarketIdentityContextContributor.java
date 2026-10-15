@@ -34,10 +34,12 @@ public class MarketIdentityContextContributor implements ContextContributor {
                 market.quoteAsset(),
                 tradable
         );
-        return sectionFactory.available(
+        return sectionFactory.availableAt(
                 sectionType(),
                 payload,
-                market.marketState() == null ? null : market.marketState().lastUpdated()
+                market.marketState() == null ? null : market.marketState().lastUpdated(),
+                null,
+                request.evaluationCutoff()
         );
     }
 }
