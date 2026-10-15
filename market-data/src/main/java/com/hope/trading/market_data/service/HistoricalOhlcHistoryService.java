@@ -3,6 +3,7 @@ package com.hope.trading.market_data.service;
 import com.hope.trading.market_data.adapter.persistence.JpaHistoricalOhlcEvidenceRepository;
 import com.hope.trading.market_data.model.HistoricalOhlcEvidencePolicy;
 import com.hope.trading.market_data.model.HistoricalOhlcSeries;
+import com.hope.trading.market_data.model.HistoricalOhlcRange;
 import com.hope.trading.market_data.model.OhlcInterval;
 import org.springframework.stereotype.Service;
 
@@ -21,5 +22,16 @@ public class HistoricalOhlcHistoryService {
             UUID marketId, OhlcInterval interval, Instant asOf, int limit) {
         return repository.findAsOf(
                 marketId, interval, asOf, limit, HistoricalOhlcEvidencePolicy.STRICT_OBSERVED);
+    }
+
+    public HistoricalOhlcRange findCapturedRange(
+            UUID marketId,
+            OhlcInterval interval,
+            Instant fromExclusive,
+            Instant toInclusive,
+            HistoricalOhlcEvidencePolicy evidencePolicy
+    ) {
+        return repository.findRange(
+                marketId, interval, fromExclusive, toInclusive, evidencePolicy);
     }
 }

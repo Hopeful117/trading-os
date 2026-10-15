@@ -113,6 +113,82 @@ class HistoricalOhlcEvidencePersistenceTest {
                 .containsExactly("captured");
     }
 
+    @Test
+    void capturedRangeReportsCoverageAndMissingIntervals() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        evidenceRepository.append(evidence(marketId, Instant.parse("2026-10-15T10:00:00Z"),
+                "100", "2026-10-15T10:15:02Z", "range-1"));
+        evidenceRepository.append(evidence(marketId, Instant.parse("2026-10-15T10:15:00Z"),
+                "101", "2026-10-15T10:30:02Z", "range-2"));
+        evidenceRepository.append(evidence(marketId, Instant.parse("2026-10-15T10:45:00Z"),
+                "103", "2026-10-15T11:00:02Z", "range-4"));
+
+        HistoricalOhlcRange result = evidenceRepository.findRange(
+                marketId, OhlcInterval.FIFTEEN_MINUTES,
+                Instant.parse("2026-10-15T10:00:00Z"),
+                Instant.parse("2026-10-15T11:00:00Z"),
+                HistoricalOhlcEvidencePolicy.CAPTURED);
+
+        assertThat(result.status()).isEqualTo(HistoricalOhlcRangeStatus.INCOMPLETE);
+        assertThat(result.expectedObservationCount()).isEqualTo(4);
+        assertThat(result.observedObservationCount()).isEqualTo(3);
+        assertThat(result.coverageStart()).isEqualTo(Instant.parse("2026-10-15T10:00:00Z"));
+        assertThat(result.coverageEnd()).isEqualTo(Instant.parse("2026-10-15T11:00:00Z"));
+        assertThat(result.gaps()).extracting(HistoricalOhlcGap::openTime)
+                .containsExactly(Instant.parse("2026-10-15T10:30:00Z"));
+    }
+
+    @Test
+    void capturedRangeExcludesBackfillAndKeepsCorrectionSelectionDeterministic() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        evidenceRepository.append(evidence(marketId, Instant.parse("2026-10-15T10:00:00Z"),
+                "100", "2026-10-15T10:15:02Z", "captured-old"));
+        evidenceRepository.append(evidence(marketId, Instant.parse("2026-10-15T10:00:00Z"),
+                "101", "2026-10-15T10:30:02Z", "captured-new"));
+        evidenceRepository.append(evidence(marketId, Instant.parse("2026-10-15T10:15:00Z"),
+                "102", "2026-10-15T10:30:03Z", "backfill",
+                HistoricalOhlcEvidenceOrigin.HISTORICAL_BACKFILL));
+
+        HistoricalOhlcRange result = evidenceRepository.findRange(
+                marketId, OhlcInterval.FIFTEEN_MINUTES,
+                Instant.parse("2026-10-15T10:00:00Z"),
+                Instant.parse("2026-10-15T10:30:00Z"),
+                HistoricalOhlcEvidencePolicy.CAPTURED);
+
+        assertThat(result.observations()).extracting(HistoricalOhlcEvidence::sourceId)
+                .containsExactly("captured-new");
+        assertThat(result.gaps()).extracting(HistoricalOhlcGap::openTime)
+                .containsExactly(Instant.parse("2026-10-15T10:15:00Z"));
+    }
+
+    @Test
+    void capturedRangeIsolatesMarketAndIntervalAndFiltersInvalidEvidence() {
+        UUID firstMarket = markets.saveAndFlush(market("BTC/USD", "BTC", "USD")).getMarketId();
+        UUID secondMarket = markets.saveAndFlush(market("ETH/USD", "ETH", "USD")).getMarketId();
+        evidenceRepository.append(evidence(firstMarket, Instant.parse("2026-10-15T10:00:00Z"),
+                "100", "2026-10-15T10:15:02Z", "valid"));
+        evidenceRepository.append(evidence(secondMarket, Instant.parse("2026-10-15T10:00:00Z"),
+                "100", "2026-10-15T10:15:02Z", "other-market"));
+        evidenceRepository.append(evidence(firstMarket, Instant.parse("2026-10-15T10:15:00Z"),
+                "101", "2026-10-15T10:30:02Z", "synthetic", HistoricalOhlcEvidenceOrigin.CAPTURED,
+                true, true));
+        evidenceRepository.append(evidence(firstMarket, Instant.parse("2026-10-15T10:30:00Z"),
+                "102", "2026-10-15T10:45:02Z", "open", HistoricalOhlcEvidenceOrigin.CAPTURED,
+                false, false));
+        evidenceRepository.append(evidence(firstMarket, OhlcInterval.ONE_HOUR,
+                Instant.parse("2026-10-15T10:00:00Z"), "103", "2026-10-15T11:00:02Z", "other-interval"));
+
+        HistoricalOhlcRange result = evidenceRepository.findRange(
+                firstMarket, OhlcInterval.FIFTEEN_MINUTES,
+                Instant.parse("2026-10-15T10:00:00Z"),
+                Instant.parse("2026-10-15T11:00:00Z"),
+                HistoricalOhlcEvidencePolicy.CAPTURED);
+
+        assertThat(result.observations()).extracting(HistoricalOhlcEvidence::sourceId)
+                .containsExactly("valid");
+        assertThat(result.gaps()).hasSize(3);
+    }
+
     private HistoricalOhlcEvidence evidence(UUID marketId, Instant openTime, String open,
                                              String knownAtText, String sourceId) {
         return evidence(marketId, openTime, open, knownAtText, sourceId,
@@ -120,15 +196,36 @@ class HistoricalOhlcEvidencePersistenceTest {
     }
 
     private HistoricalOhlcEvidence evidence(UUID marketId, Instant openTime, String open,
+                                              String knownAtText, String sourceId,
+                                              HistoricalOhlcEvidenceOrigin origin) {
+        return evidence(marketId, openTime, open, knownAtText, sourceId, origin, true, false);
+    }
+
+    private HistoricalOhlcEvidence evidence(UUID marketId, Instant openTime, String open,
                                              String knownAtText, String sourceId,
-                                             HistoricalOhlcEvidenceOrigin origin) {
+                                             HistoricalOhlcEvidenceOrigin origin,
+                                             boolean closed, boolean synthetic) {
         return new HistoricalOhlcEvidence(
                 UUID.randomUUID(), marketId, OhlcInterval.FIFTEEN_MINUTES, openTime,
                 openTime.plusSeconds(900), new BigDecimal(open), new BigDecimal("105"),
                 new BigDecimal("95"), new BigDecimal("102"), new BigDecimal("10"),
-                new BigDecimal("101"), 2, true, false, MarketProvider.KRAKEN, "BTC/USD", sourceId,
+                new BigDecimal("101"), 2, closed, synthetic, MarketProvider.KRAKEN, "BTC/USD", sourceId,
                 null, Instant.parse(knownAtText), Instant.parse(knownAtText), Instant.parse(knownAtText),
                  origin,
+                HistoricalOhlcEvidenceFingerprint.NORMALIZATION_VERSION,
+                String.format("%064x", sourceId.hashCode()));
+    }
+
+    private HistoricalOhlcEvidence evidence(UUID marketId, OhlcInterval interval, Instant openTime,
+                                             String open, String knownAtText, String sourceId) {
+        Instant knownAt = Instant.parse(knownAtText);
+        return new HistoricalOhlcEvidence(
+                UUID.randomUUID(), marketId, interval, openTime,
+                openTime.plus(interval.getDuration()), new BigDecimal(open), new BigDecimal("105"),
+                new BigDecimal("95"), new BigDecimal("102"), new BigDecimal("10"),
+                new BigDecimal("101"), 2, true, false, MarketProvider.KRAKEN, "BTC/USD", sourceId,
+                null, knownAt, knownAt, knownAt,
+                HistoricalOhlcEvidenceOrigin.CAPTURED,
                 HistoricalOhlcEvidenceFingerprint.NORMALIZATION_VERSION,
                 String.format("%064x", sourceId.hashCode()));
     }

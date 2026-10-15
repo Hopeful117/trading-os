@@ -44,4 +44,33 @@ interface SpringDataHistoricalOhlcEvidenceRepository
             @Param("asOf") Instant asOf,
             Pageable pageable
     );
+
+    @Query(value = """
+            SELECT observation_id, market_id, interval_name, open_time, close_time,
+                   open, high, low, close, volume, vwap, trade_count, closed, synthetic,
+                   provider, provider_symbol, source_id, source_updated_at, fetched_at,
+                   captured_at, known_at, origin, normalization_version, observation_fingerprint
+            FROM (
+                SELECT e.*, ROW_NUMBER() OVER (
+                    PARTITION BY market_id, interval_name, open_time
+                    ORDER BY known_at DESC, captured_at DESC, observation_id DESC
+                ) AS version_rank
+                FROM historical_ohlc_evidence e
+                WHERE market_id = :marketId
+                  AND interval_name = :interval
+                  AND open_time >= CAST(:fromExclusive AS TIMESTAMP WITH TIME ZONE)
+                  AND close_time <= CAST(:toInclusive AS TIMESTAMP WITH TIME ZONE)
+                  AND closed = true
+                  AND synthetic = false
+                  AND origin = 'CAPTURED'
+            ) eligible
+            WHERE version_rank = 1
+            ORDER BY open_time ASC, observation_id ASC
+            """, nativeQuery = true)
+    List<JpaHistoricalOhlcEvidenceEntity> findCapturedRange(
+            @Param("marketId") UUID marketId,
+            @Param("interval") String interval,
+            @Param("fromExclusive") Instant fromExclusive,
+            @Param("toInclusive") Instant toInclusive
+    );
 }

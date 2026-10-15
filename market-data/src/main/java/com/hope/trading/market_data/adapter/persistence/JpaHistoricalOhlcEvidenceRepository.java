@@ -4,6 +4,8 @@ import com.hope.trading.market_data.model.HistoricalOhlcEvidence;
 import com.hope.trading.market_data.model.HistoricalOhlcEvidencePolicy;
 import com.hope.trading.market_data.model.HistoricalOhlcSeries;
 import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.model.HistoricalOhlcRange;
+import com.hope.trading.market_data.service.HistoricalOhlcRangeCalculator;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,5 +63,23 @@ public class JpaHistoricalOhlcEvidenceRepository {
                         : HistoricalOhlcSeries.HistoricalOhlcSeriesStatus.AVAILABLE,
                 observations.isEmpty() ? "No strict observed evidence is available at the requested cutoff" : null
         );
+    }
+
+    @Transactional(readOnly = true)
+    public HistoricalOhlcRange findRange(
+            UUID marketId,
+            OhlcInterval interval,
+            java.time.Instant fromExclusive,
+            java.time.Instant toInclusive,
+            HistoricalOhlcEvidencePolicy policy
+    ) {
+        HistoricalOhlcRangeCalculator.validateRequest(
+                marketId, interval, fromExclusive, toInclusive, policy);
+        List<HistoricalOhlcEvidence> candidates = repository.findCapturedRange(
+                        marketId, interval.name(), fromExclusive, toInclusive).stream()
+                .map(JpaHistoricalOhlcEvidenceEntity::toDomain)
+                .toList();
+        return HistoricalOhlcRangeCalculator.calculate(
+                marketId, interval, fromExclusive, toInclusive, policy, candidates);
     }
 }
