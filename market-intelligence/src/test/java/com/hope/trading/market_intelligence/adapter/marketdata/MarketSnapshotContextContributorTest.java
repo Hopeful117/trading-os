@@ -48,6 +48,31 @@ class MarketSnapshotContextContributorTest {
     }
 
     @Test
+    void emptySnapshotResponseProducesUnavailableContext() {
+        UUID marketId = UUID.randomUUID();
+        when(marketDataClient.findPriceSnapshots(any())).thenReturn(List.of());
+
+        ContextSection section = contributor.contribute(request(marketId));
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.UNAVAILABLE);
+        assertThat(section.message()).isEqualTo("Current market snapshot is unavailable");
+    }
+
+    @Test
+    void unknownMarketSnapshotProducesUnavailableContext() {
+        UUID marketId = UUID.randomUUID();
+        when(marketDataClient.findPriceSnapshots(any())).thenReturn(List.of(
+                new MarketPriceSnapshotResponse(
+                        marketId, "ETH/USD", null, null, null, false, null,
+                        "UNKNOWN_MARKET", null, null, null)));
+
+        ContextSection section = contributor.contribute(request(marketId));
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.UNAVAILABLE);
+        assertThat(section.message()).isEqualTo("Requested market is unknown to Market Data");
+    }
+
+    @Test
     void staleSnapshotProducesStaleContextWithoutDroppingPayload() {
         UUID marketId = UUID.randomUUID();
         when(marketDataClient.findPriceSnapshots(any())).thenReturn(List.of(
@@ -59,6 +84,22 @@ class MarketSnapshotContextContributorTest {
         assertThat(section.status()).isEqualTo(ContextSectionStatus.STALE);
         assertThat(section.payload()).isInstanceOf(MarketSnapshotContext.class);
         assertThat(section.message()).isEqualTo("Current market snapshot is stale");
+    }
+
+    @Test
+    void rejectsSnapshotCapturedAfterEvaluationCutoff() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-08-01T12:00:00Z");
+        when(marketDataClient.findPriceSnapshots(any())).thenReturn(List.of(
+                snapshot(marketId, "FRESH", "2026-08-01T11:59:00Z", "2026-08-01T12:00:01Z")
+        ));
+
+        ContextSection section = contributor.contribute(new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE, "objective",
+                null, null, null, cutoff));
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
+        assertThat(section.payload()).isNull();
     }
 
     private IntelligenceAnalysisRequest request(UUID marketId) {

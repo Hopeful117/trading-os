@@ -49,11 +49,23 @@ public class MarketSnapshotContextContributor implements ContextContributor {
                 snapshot.tradable(),
                 snapshot.occurredAt()
         );
-        return sectionFactory.snapshot(
+        ContextSection section = sectionFactory.snapshotAt(
                 payload,
                 snapshot.status(),
                 snapshot.occurredAt(),
-                snapshot.capturedAt()
+                snapshot.capturedAt(),
+                request.evaluationCutoff()
         );
+        if (section.provenance() == null) {
+            return section;
+        }
+        return new ContextSection(
+                section.type(), section.status(), section.sensitivity(), section.payload(),
+                new ContextProvenance(
+                        section.provenance().source(), section.provenance().sourceOccurredAt(),
+                        section.provenance().fetchedAt(), snapshot.sourceSnapshotId(),
+                        snapshot.sourceSnapshotVersion() == null
+                                ? null : snapshot.sourceSnapshotVersion().toString(), null),
+                section.message());
     }
 }

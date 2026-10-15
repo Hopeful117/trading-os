@@ -52,4 +52,57 @@ class MarketDataSectionFactoryTest {
         assertThat(section.message()).isEqualTo("Current market snapshot is stale");
         assertThat(section.provenance().fetchedAt()).isEqualTo("2026-08-01T12:00:02Z");
     }
+
+    @Test
+    void excludesMarketDataNewerThanEvaluationCutoff() {
+        MarketDataSectionFactory factory =
+                new MarketDataSectionFactory(Duration.ofSeconds(30));
+        Instant cutoff = Instant.parse("2026-08-01T12:00:00Z");
+
+        ContextSection section = factory.availableAt(
+                ContextSectionType.HISTORICAL_OHLC, null,
+                cutoff.plusSeconds(1), cutoff.plusSeconds(2), cutoff);
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
+        assertThat(section.payload()).isNull();
+        assertThat(section.message()).contains("evaluation cut-off");
+    }
+
+    @Test
+    void excludesMarketSnapshotsNewerThanEvaluationCutoff() {
+        MarketDataSectionFactory factory =
+                new MarketDataSectionFactory(Duration.ofSeconds(30));
+        Instant cutoff = Instant.parse("2026-08-01T12:00:00Z");
+
+        ContextSection section = factory.snapshotAt(
+                null, "AVAILABLE", cutoff.plusSeconds(1), cutoff.plusSeconds(2), cutoff);
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
+        assertThat(section.type()).isEqualTo(ContextSectionType.MARKET_SNAPSHOT);
+        assertThat(section.message()).contains("evaluation cut-off");
+    }
+
+    @Test
+    void usesClockWhenMarketDataOccurredAtIsUnknown() {
+        MarketDataSectionFactory factory =
+                new MarketDataSectionFactory(Duration.ofSeconds(30));
+
+        ContextSection section = factory.available(
+                ContextSectionType.HISTORICAL_OHLC, null, null);
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.AVAILABLE);
+        assertThat(section.provenance().sourceOccurredAt()).isNull();
+    }
+
+    @Test
+    void usesClockWhenSnapshotFetchTimeIsUnknown() {
+        MarketDataSectionFactory factory =
+                new MarketDataSectionFactory(Duration.ofSeconds(30));
+        Instant occurredAt = Instant.now();
+
+        ContextSection section = factory.snapshot(null, "AVAILABLE", occurredAt, null);
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.AVAILABLE);
+        assertThat(section.provenance().fetchedAt()).isNotNull();
+    }
 }

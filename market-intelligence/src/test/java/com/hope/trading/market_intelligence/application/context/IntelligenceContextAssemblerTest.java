@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.domain.*;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -66,6 +67,92 @@ class IntelligenceContextAssemblerTest {
         assertThat(section.message()).isEqualTo("Contributor failed for TREND_CONTEXT");
     }
 
+    @Test
+    void establishesOneEvaluationCutoffAndStableFingerprint() {
+        Instant cutoff = Instant.parse("2026-10-15T12:00:00Z");
+        UUID analysisId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+        IntelligenceContextAssembler assembler = new IntelligenceContextAssembler(
+                List.of(contributor(ContextSectionType.MARKET_IDENTITY, new AtomicInteger())),
+                Clock.fixed(cutoff, java.time.ZoneOffset.UTC));
+
+        IntelligenceContext first = assembler.assemble(
+                requestWith(analysisId, marketId, null),
+                List.of(ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY)));
+        IntelligenceContext second = assembler.assemble(
+                requestWith(analysisId, marketId, cutoff),
+                List.of(ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY)));
+
+        assertThat(first.evaluationCutoff()).contains(cutoff);
+        assertThat(first.quality()).isEqualTo(ContextQuality.COMPLETE);
+        assertThat(first.fingerprint()).isEqualTo(second.fingerprint());
+    }
+
+    @Test
+    void classifiesStaleContributionAsPartial() {
+        ContextSectionType type = ContextSectionType.NEWS;
+        ContextContributor stale = new ContextContributor() {
+            @Override
+            public ContextSectionType sectionType() {
+                return type;
+            }
+
+            @Override
+            public ContextSection contribute(IntelligenceAnalysisRequest request) {
+                return new ContextSection(type, ContextSectionStatus.STALE,
+                        ContextSensitivity.PUBLIC, null, null, "stale");
+            }
+        };
+
+        IntelligenceContext context = new IntelligenceContextAssembler(List.of(stale))
+                .assemble(request(), List.of(ContextRequirement.optionalPublic(type)));
+
+        assertThat(context.quality()).isEqualTo(ContextQuality.PARTIAL);
+    }
+
+    @Test
+    void optionalUnavailableContributionDoesNotDegradeContext() {
+        ContextSectionType type = ContextSectionType.NEWS;
+        IntelligenceContext context = new IntelligenceContextAssembler(List.of(
+                new ContextContributor() {
+                    @Override
+                    public ContextSectionType sectionType() {
+                        return type;
+                    }
+
+                    @Override
+                    public ContextSection contribute(IntelligenceAnalysisRequest request) {
+                        return new ContextSection(type, ContextSectionStatus.UNAVAILABLE,
+                                ContextSensitivity.PUBLIC, null, null, "unavailable");
+                    }
+                }
+        )).assemble(request(), List.of(ContextRequirement.optionalPublic(type)));
+
+        assertThat(context.quality()).isEqualTo(ContextQuality.PARTIAL);
+    }
+
+    @Test
+    void requiredUnavailableContributionDegradesContext() {
+        ContextSectionType type = ContextSectionType.MARKET_SNAPSHOT;
+        IntelligenceContext context = new IntelligenceContextAssembler(List.of(
+                new ContextContributor() {
+                    @Override
+                    public ContextSectionType sectionType() {
+                        return type;
+                    }
+
+                    @Override
+                    public ContextSection contribute(IntelligenceAnalysisRequest request) {
+                        return new ContextSection(type, ContextSectionStatus.UNAVAILABLE,
+                                ContextSensitivity.PUBLIC, null, null, "unavailable");
+                    }
+                }
+        ))
+                .assemble(request(), List.of(ContextRequirement.requiredPublic(type)));
+
+        assertThat(context.quality()).isEqualTo(ContextQuality.DEGRADED);
+    }
+
     private ContextContributor contributor(
             ContextSectionType type,
             AtomicInteger calls
@@ -86,7 +173,10 @@ class IntelligenceContextAssemblerTest {
                                 ? ContextSensitivity.USER_PRIVATE
                                 : ContextSensitivity.PUBLIC,
                         null,
-                        new ContextProvenance("test", Instant.now(), Instant.now()),
+                        new ContextProvenance(
+                                "test",
+                                Instant.parse("2026-10-15T11:59:00Z"),
+                                Instant.parse("2026-10-15T11:59:30Z")),
                         null
                 );
             }
@@ -100,5 +190,11 @@ class IntelligenceContextAssemblerTest {
                 AnalysisExecutionMode.PASSIVE,
                 null
         );
+    }
+
+    private IntelligenceAnalysisRequest requestWith(UUID analysisId, UUID marketId, Instant cutoff) {
+        return new IntelligenceAnalysisRequest(
+                analysisId, marketId, AnalysisExecutionMode.PASSIVE,
+                null, null, null, null, cutoff);
     }
 }
