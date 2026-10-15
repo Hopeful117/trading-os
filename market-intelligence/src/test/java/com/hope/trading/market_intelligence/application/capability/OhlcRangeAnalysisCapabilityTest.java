@@ -49,6 +49,7 @@ class OhlcRangeAnalysisCapabilityTest {
         assertThat(finding.metrics().get("highestPrice")).isEqualByComparingTo("120");
         assertThat(finding.metrics().get("lowestPrice")).isEqualByComparingTo("90");
         assertThat(finding.metrics().get("range")).isEqualByComparingTo("30");
+        assertThat(finding.metrics().get("simpleReturn")).isEqualByComparingTo("0.15");
     }
 
     private OhlcPoint candle(String open, String high, String low, String close) {

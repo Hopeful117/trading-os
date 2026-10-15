@@ -43,6 +43,65 @@ class TrendContextRoleHistoryContextContributorTest {
         verify(client).findOhlc(MARKET_ID, "FIFTEEN_MINUTES", 1);
     }
 
+    @Test
+    void usesRequestCutoffAndExcludesFutureEvidenceFromContextHistory() {
+        Instant cutoff = BOUNDARY.minus(Duration.ofMinutes(5));
+        MarketDataClient client = mock(MarketDataClient.class);
+        OhlcResponse futureBias = response("FOUR_HOURS", cutoff.plusSeconds(1), "future-bias");
+        OhlcResponse pastBias = responseAt("FOUR_HOURS", cutoff.minus(Duration.ofHours(5)), "past-bias", cutoff);
+        OhlcResponse pastSetup = responseAt("ONE_HOUR", cutoff.minus(Duration.ofHours(2)), "past-setup", cutoff);
+        OhlcResponse pastTrigger = responseAt("FIFTEEN_MINUTES", cutoff.minus(Duration.ofMinutes(30)), "past-trigger", cutoff);
+        when(client.findOhlc(MARKET_ID, "FOUR_HOURS", 1)).thenReturn(List.of(pastBias, futureBias));
+        when(client.findOhlc(MARKET_ID, "ONE_HOUR", 1)).thenReturn(List.of(pastSetup));
+        when(client.findOhlc(MARKET_ID, "FIFTEEN_MINUTES", 1)).thenReturn(List.of(pastTrigger));
+
+        TrendContextRoleHistoryContextContributor contributor =
+                new TrendContextRoleHistoryContextContributor(
+                        client, new TrendContextInputMapper(), profile(),
+                        Clock.fixed(BOUNDARY, ZoneOffset.UTC));
+
+        ContextSection section = contributor.contribute(new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), MARKET_ID, AnalysisExecutionMode.ACTIVE, "trend-context",
+                null, null, null, cutoff));
+        TrendContextRoleHistory history = (TrendContextRoleHistory) section.payload();
+
+        assertThat(history.cutOffAt()).isEqualTo(cutoff);
+        assertThat(history.assessmentAt()).isEqualTo(cutoff);
+        assertThat(history.responsesByRole().get(TrendContextRole.BIAS))
+                .extracting(OhlcResponse::sourceId)
+                .containsExactly("past-bias");
+        assertThat(history.responsesByRole().values().stream()
+                .flatMap(Collection::stream)
+                .map(OhlcResponse::sourceId))
+                .doesNotContain("future-bias");
+
+        TrendContextAssessmentInput input = new TrendContextInputMapper().map(
+                history.responsesByRole(), profile(), cutoff, cutoff, "trend-context-rules-v1");
+        TrendContextAssessment assessment = new TrendContextEngine().assess(input, Map.of());
+        assertThat(assessment.cutOffAt()).isEqualTo(cutoff);
+        assertThat(assessment.inputFingerprint()).isEqualTo(input.fingerprint());
+    }
+
+    @Test
+    void classifiesHistoryWithNoEvidenceAtCutoffAsIncomplete() {
+        Instant cutoff = BOUNDARY.minus(Duration.ofDays(1));
+        MarketDataClient client = mock(MarketDataClient.class);
+        OhlcResponse future = response("FOUR_HOURS", cutoff.plusSeconds(1), "future");
+        when(client.findOhlc(any(), any(), anyInt())).thenReturn(List.of(future));
+
+        TrendContextRoleHistoryContextContributor contributor =
+                new TrendContextRoleHistoryContextContributor(
+                        client, new TrendContextInputMapper(), profile(),
+                        Clock.fixed(BOUNDARY, ZoneOffset.UTC));
+
+        ContextSection section = contributor.contribute(new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), MARKET_ID, AnalysisExecutionMode.ACTIVE, "trend-context",
+                null, null, null, cutoff));
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
+        assertThat(section.message()).contains("incomplete");
+    }
+
     private TrendContextProfile profile() {
         EnumMap<TrendContextRole, TrendContextRoleDefinition> roles =
                 new EnumMap<>(TrendContextRole.class);
@@ -56,12 +115,16 @@ class TrendContextRoleHistoryContextContributorTest {
     }
 
     private OhlcResponse response(String interval, Instant openTime, String sourceId) {
+        return responseAt(interval, openTime, sourceId, BOUNDARY);
+    }
+
+    private OhlcResponse responseAt(String interval, Instant openTime, String sourceId, Instant fetchedAt) {
         return new OhlcResponse(
                 MARKET_ID, "KRAKEN", "BTC/EUR", interval, openTime,
                 openTime.plus(Duration.ofMinutes(interval.equals("FOUR_HOURS") ? 240
                         : interval.equals("ONE_HOUR") ? 60 : 15)),
                 new BigDecimal("100"), new BigDecimal("105"), new BigDecimal("95"),
                 new BigDecimal("102"), BigDecimal.TEN, new BigDecimal("101"), 2,
-                true, openTime, false, sourceId, BOUNDARY);
+                true, openTime, false, sourceId, fetchedAt);
     }
 }
