@@ -12,8 +12,8 @@ import java.util.UUID;
 public interface EconomicEventRepository extends JpaRepository<EconomicEventEntity, UUID> {
     @Query("select e from EconomicEventEntity e "
             + "where e.scheduledAt between :from and :to "
-            + "and (:marketId is null or concat(',', e.marketIds, ',') like concat('%,', :marketId, ',%')) "
-            + "and (:currency is null or lower(concat(',', e.currencies, ',')) like lower(concat('%,', :currency, ',%'))) "
+            + "and (cast(:marketId as string) is null or concat(',', e.marketIds, ',') like concat('%,', cast(:marketId as string), ',%')) "
+            + "and (cast(:currency as string) is null or lower(concat(',', e.currencies, ',')) like lower(concat('%,', cast(:currency as string), ',%'))) "
             + "and (:impact is null or e.impact = :impact) "
             + "order by e.scheduledAt asc")
     List<EconomicEventEntity> findByScheduledAtBetweenOrderByScheduledAtAsc(

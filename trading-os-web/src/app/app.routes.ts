@@ -17,6 +17,7 @@ import { ExecutionHistory } from './features/executions/pages/execution-history/
 import { DecisionWorkspace } from './features/decision-workspace/decision-workspace';
 import { ManualTradePage } from './features/trade-planning/manual-trade-page/manual-trade-page';
 import { ChallengeDashboard } from './features/challenges/pages/challenge-dashboard/challenge-dashboard';
+import { EconomicContext } from './features/economic-context/economic-context';
 
 export const routes: Routes = [
   {
@@ -98,6 +99,11 @@ export const routes: Routes = [
   {
     path: 'analytics',
     component: ExecutionHistory,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'economic-context',
+    component: EconomicContext,
     canActivate: [authGuard],
   },
 ];

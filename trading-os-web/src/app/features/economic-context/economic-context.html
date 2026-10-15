@@ -1,0 +1,174 @@
+<div class="economic-context-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Decision context</p>
+      <h1>Economic calendar</h1>
+      <p>Inspect normalized macro events before accepting a trading decision.</p>
+    </div>
+    <button class="refresh-button" type="button" (click)="refresh()">Refresh context</button>
+  </header>
+
+  <section class="filters-panel" aria-labelledby="filters-heading">
+    <h2 id="filters-heading">Calendar window</h2>
+    <div class="filters-grid">
+      <label>
+        From
+        <input
+          type="date"
+          [ngModel]="(filters$ | async)?.from"
+          (ngModelChange)="updateFrom($event)"
+        />
+      </label>
+      <label>
+        To
+        <input type="date" [ngModel]="(filters$ | async)?.to" (ngModelChange)="updateTo($event)" />
+      </label>
+      <label>
+        Currency
+        <input
+          type="text"
+          maxlength="8"
+          placeholder="All currencies"
+          [ngModel]="(filters$ | async)?.currency"
+          (ngModelChange)="updateCurrency($event)"
+        />
+      </label>
+      <label>
+        Importance
+        <select [ngModel]="(filters$ | async)?.impact" (ngModelChange)="updateImpact($event)">
+          <option value="">All levels</option>
+          @for (impact of impacts; track impact) {
+            <option [value]="impact">{{ impact }}</option>
+          }
+        </select>
+      </label>
+    </div>
+    <p class="timezone-note">Times are shown in UTC to preserve the source calendar semantics.</p>
+  </section>
+
+  @if (viewModel$ | async; as viewModel) {
+    @switch (viewModel.kind) {
+      @case ('loading') {
+        <section class="state-panel" aria-live="polite">
+          <span class="loading-orb" aria-hidden="true"></span>
+          <div>
+            <h2>Loading economic context</h2>
+            <p>Fetching the selected calendar window.</p>
+          </div>
+        </section>
+      }
+      @case ('error') {
+        <section class="state-panel state-error" role="alert">
+          <h2>Context unavailable</h2>
+          <p>{{ viewModel.message }}</p>
+          <button type="button" (click)="refresh()">Try again</button>
+        </section>
+      }
+      @case ('unavailable') {
+        <section class="state-panel state-warning" role="status">
+          <h2>Economic context is {{ viewModel.response.status.toLowerCase() }}</h2>
+          <p>
+            {{
+              viewModel.response.message || 'The provider did not return current calendar context.'
+            }}
+          </p>
+          @if (viewModel.response.fetchedAt) {
+            <small
+              >Last catalog fetch:
+              {{ viewModel.response.fetchedAt | date: 'medium' : 'UTC' }} UTC</small
+            >
+          }
+        </section>
+      }
+      @case ('ready') {
+        @if (viewModel.response.status === 'STALE') {
+          <section class="freshness-warning" role="status">
+            <strong>Calendar data may be stale.</strong>
+            <span>{{
+              viewModel.response.message ||
+                'The latest provider refresh is unavailable; review timestamps before relying on these events.'
+            }}</span>
+          </section>
+        }
+        @if (viewModel.events.length === 0) {
+          <section class="state-panel" role="status">
+            <h2>No economic events in this window</h2>
+            <p>Try a wider date range or remove one of the filters.</p>
+          </section>
+        } @else {
+          <section class="calendar-panel" aria-labelledby="events-heading">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">{{ viewModel.events.length }} normalized events</p>
+                <h2 id="events-heading">Upcoming and released context</h2>
+              </div>
+              @if (viewModel.response.fetchedAt) {
+                <small
+                  >Fetched {{ viewModel.response.fetchedAt | date: 'medium' : 'UTC' }} UTC</small
+                >
+              }
+            </div>
+            <div class="event-list">
+              @for (event of viewModel.events; track trackEvent($index, event)) {
+                <article class="event-card" [class.high-impact]="event.impact === 'HIGH'">
+                  <div class="event-time">
+                    <time [dateTime]="event.scheduledAt">{{
+                      event.scheduledAt | date: 'EEE, MMM d' : 'UTC'
+                    }}</time>
+                    <strong>{{ event.scheduledAt | date: 'HH:mm' : 'UTC' }} UTC</strong>
+                  </div>
+                  <div class="event-main">
+                    <div class="event-heading">
+                      <div>
+                        <h3>{{ event.title }}</h3>
+                        <p>{{ event.category || 'Economic release' }}</p>
+                      </div>
+                      <span class="impact" [class]="event.impact.toLowerCase()">{{
+                        event.impact
+                      }}</span>
+                    </div>
+                    <div class="event-meta">
+                      <span>{{
+                        event.currencies.length
+                          ? event.currencies.join(', ')
+                          : 'Economy not specified'
+                      }}</span>
+                      <span class="status" [class.released]="event.status === 'RELEASED'">{{
+                        event.status
+                      }}</span>
+                    </div>
+                    <dl class="event-values">
+                      @if (event.previousValue !== null) {
+                        <div>
+                          <dt>Previous</dt>
+                          <dd>{{ event.previousValue }}{{ event.unit ? ' ' + event.unit : '' }}</dd>
+                        </div>
+                      }
+                      @if (event.consensusValue !== null) {
+                        <div>
+                          <dt>Forecast</dt>
+                          <dd>
+                            {{ event.consensusValue }}{{ event.unit ? ' ' + event.unit : '' }}
+                          </dd>
+                        </div>
+                      }
+                      @if (event.actualValue !== null) {
+                        <div class="actual">
+                          <dt>Actual</dt>
+                          <dd>{{ event.actualValue }}{{ event.unit ? ' ' + event.unit : '' }}</dd>
+                        </div>
+                      }
+                    </dl>
+                  </div>
+                </article>
+              }
+            </div>
+            @if (viewModel.response.attribution) {
+              <p class="attribution">Source attribution: {{ viewModel.response.attribution }}</p>
+            }
+          </section>
+        }
+      }
+    }
+  }
+</div>

@@ -92,6 +92,56 @@ class XoomarEconomicCalendarSourceTest {
     }
 
     @Test
+    void derivesStableFallbackIdentityWhenProviderOmitsEventIdentifiers() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://xoomar.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        RestClient client = builder.build();
+        String payload = """
+                {
+                  "data": [{
+                    "eventName": "PPI",
+                    "source": "bls",
+                    "periodLabel": "September 2026",
+                    "scheduledAt": "2026-10-08T12:30:00Z",
+                    "importance": "high"
+                  }]
+                }
+                """;
+        server.expect(requestTo("https://xoomar.test/api/markets/calendar?from=2026-10-05&to=2026-10-12"))
+                .andRespond(withSuccess(payload, MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://xoomar.test/api/markets/calendar?from=2026-10-05&to=2026-10-12"))
+                .andRespond(withSuccess(payload, MediaType.APPLICATION_JSON));
+
+        XoomarEconomicCalendarSource source = new XoomarEconomicCalendarSource(client);
+
+        String firstIdentity = source.economicEvents(FROM, TO).getFirst().sourceEventId();
+        String secondIdentity = source.economicEvents(FROM, TO).getFirst().sourceEventId();
+
+        assertThat(firstIdentity).isEqualTo(secondIdentity);
+        assertThat(firstIdentity).startsWith("fallback:");
+    }
+
+    @Test
+    void keepsFallbackIdentitiesDistinctForDifferentProviderDimensions() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://xoomar.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        RestClient client = builder.build();
+        server.expect(requestTo("https://xoomar.test/api/markets/calendar?from=2026-10-05&to=2026-10-12"))
+                .andRespond(withSuccess("""
+                        {"data": [
+                          {"eventName":"CPI","source":"bls","countryCode":"US","currency":"USD","scheduledAt":"2026-10-08T12:30:00Z"},
+                          {"eventName":"CPI","source":"bls","countryCode":"CA","currency":"CAD","scheduledAt":"2026-10-08T12:30:00Z"}
+                        ]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var events = new XoomarEconomicCalendarSource(client).economicEvents(FROM, TO);
+
+        assertThat(events).hasSize(2);
+        assertThat(events.get(0).sourceEventId()).isNotEqualTo(events.get(1).sourceEventId());
+        assertThat(events.get(0).sourceEventId()).hasSize(73);
+    }
+
+    @Test
     void classifiesRateLimitAsProviderFailure() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://xoomar.test");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

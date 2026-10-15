@@ -19,6 +19,9 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.Duration;
 import java.time.ZoneOffset;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
 
@@ -68,7 +71,7 @@ public class XoomarEconomicCalendarSource implements EconomicCalendarSourcePort 
             Instant fetchedAt = Instant.now();
             Instant sourceUpdatedAt = parseInstant(response.updatedAt());
             return response.data().stream()
-                    .filter(event -> event != null && hasText(event.sourceEventId()) && hasText(event.eventName()))
+                    .filter(event -> event != null && hasText(event.eventName()))
                     .map(event -> toDomain(event, sourceUpdatedAt, fetchedAt))
                     .filter(Objects::nonNull)
                     .toList();
@@ -184,13 +187,49 @@ public class XoomarEconomicCalendarSource implements EconomicCalendarSourcePort 
             String type,
             String sector,
             String scheduledAt,
+            String periodLabel,
             String unit,
             JsonNode previous,
             JsonNode forecast,
             JsonNode actual
     ) {
         String sourceEventId() {
-            return hasText(id) ? id : eventId;
+            if (hasText(id)) {
+                return id;
+            }
+            if (hasText(eventId)) {
+                return eventId;
+            }
+            return fallbackSourceEventId();
+        }
+
+        private String fallbackSourceEventId() {
+            String identity = encode(source)
+                    + encode(countryCode)
+                    + encode(currency)
+                    + encode(eventName)
+                    + encode(scheduledAt)
+                    + encode(periodLabel);
+            return "fallback:" + sha256(identity);
+        }
+
+        private static String encode(String value) {
+            String normalized = value == null ? "" : value;
+            return normalized.length() + ":" + normalized;
+        }
+
+        private static String sha256(String value) {
+            try {
+                byte[] digest = MessageDigest.getInstance("SHA-256")
+                        .digest(value.getBytes(StandardCharsets.UTF_8));
+                StringBuilder result = new StringBuilder(digest.length * 2);
+                for (byte part : digest) {
+                    result.append(String.format("%02x", part));
+                }
+                return result.toString();
+            } catch (NoSuchAlgorithmException exception) {
+                throw new IllegalStateException("SHA-256 is not available", exception);
+            }
         }
     }
 }
