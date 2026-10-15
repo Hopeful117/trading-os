@@ -1,6 +1,9 @@
+import type { NewsAvailability } from './news-availability.model';
+
 export type EconomicEventImpact = 'LOW' | 'MEDIUM' | 'HIGH' | 'UNKNOWN';
 export type EconomicEventStatus = 'SCHEDULED' | 'RELEASED' | 'CANCELLED' | 'UNKNOWN';
-export type NewsAvailability = 'AVAILABLE' | 'STALE' | 'UNAVAILABLE' | 'UNSUPPORTED' | 'INCOMPLETE';
+
+export type { NewsAvailability } from './news-availability.model';
 
 export interface EconomicEvent {
   id: string;

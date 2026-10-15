@@ -18,6 +18,7 @@ import { DecisionWorkspace } from './features/decision-workspace/decision-worksp
 import { ManualTradePage } from './features/trade-planning/manual-trade-page/manual-trade-page';
 import { ChallengeDashboard } from './features/challenges/pages/challenge-dashboard/challenge-dashboard';
 import { EconomicContext } from './features/economic-context/economic-context';
+import { FinancialNews } from './features/financial-news/financial-news';
 
 export const routes: Routes = [
   {
@@ -104,6 +105,11 @@ export const routes: Routes = [
   {
     path: 'economic-context',
     component: EconomicContext,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'financial-news',
+    component: FinancialNews,
     canActivate: [authGuard],
   },
 ];

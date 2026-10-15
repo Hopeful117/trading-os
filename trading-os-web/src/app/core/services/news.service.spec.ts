@@ -46,4 +46,33 @@ describe('NewsService', () => {
       attribution: null,
     });
   });
+
+  it('requests provider-neutral financial news through the Gateway', () => {
+    service
+      .findFinancialNews({
+        from: '2026-10-15T00:00:00.000Z',
+        to: '2026-10-16T00:00:00.000Z',
+        currency: 'BTC',
+        limit: 100,
+      })
+      .subscribe();
+
+    const request = httpMock.expectOne(
+      (candidate) => candidate.url === `${environment.gatewayUrl}v1/news/items`,
+    );
+
+    expect(request.request.method).toBe('GET');
+    expect(request.request.params.get('from')).toBe('2026-10-15T00:00:00.000Z');
+    expect(request.request.params.get('to')).toBe('2026-10-16T00:00:00.000Z');
+    expect(request.request.params.get('currency')).toBe('BTC');
+    expect(request.request.params.get('limit')).toBe('100');
+    expect(request.request.params.has('impact')).toBe(false);
+    request.flush({
+      status: 'AVAILABLE',
+      items: [],
+      fetchedAt: null,
+      message: null,
+      attribution: null,
+    });
+  });
 });
