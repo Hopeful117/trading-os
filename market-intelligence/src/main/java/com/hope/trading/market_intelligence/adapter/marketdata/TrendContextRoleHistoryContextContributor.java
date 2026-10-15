@@ -43,15 +43,24 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
 
     @Override
     public ContextSection contribute(IntelligenceAnalysisRequest request) {
-        Instant boundary = clock.instant();
+        Instant boundary = request.evaluationCutoff() == null
+                ? clock.instant() : request.evaluationCutoff();
         EnumMap<TrendContextRole, Integer> limits = new EnumMap<>(TrendContextRole.class);
         profile.roles().forEach((role, definition) ->
                 limits.put(role, Math.min(definition.requestedCandles(), MAX_OHLC_LIMIT)));
 
         Map<TrendContextRole, List<OhlcResponse>> responses = Map.of();
         TrendContextAssessmentInput mapped = null;
+        boolean evidenceExcludedByCutoff = false;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            responses = acquire(request, limits);
+            Map<TrendContextRole, List<OhlcResponse>> acquired = acquire(request, limits);
+            evidenceExcludedByCutoff |= acquired.values().stream()
+                    .flatMap(Collection::stream)
+                    .anyMatch(value -> after(value.openTime(), boundary)
+                            || after(value.closeTime(), boundary)
+                            || after(value.occurredAt(), boundary)
+                            || after(value.fetchedAt(), boundary));
+            responses = filterToCutoff(acquired, boundary);
             boolean retry = false;
             try {
                 mapped = inputMapper.map(
@@ -62,7 +71,9 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                         exception.getClass().getSimpleName(), exception.getMessage());
                 retry = increaseMissingRequiredRole(responses, limits);
                 if (!retry) {
-                    throw exception;
+                    return ContextSection.incomplete(
+                            ContextRequirement.optionalPublic(sectionType()),
+                            "Trend Context history is incomplete at the evaluation cutoff");
                 }
             }
             if (!retry && !increaseForInsufficientHistory(mapped, limits)) {
@@ -71,7 +82,11 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
         }
 
         if (responses.values().stream().allMatch(List::isEmpty)) {
-            return ContextSection.missing(
+            return evidenceExcludedByCutoff
+                    ? ContextSection.incomplete(
+                    ContextRequirement.optionalPublic(sectionType()),
+                    "Trend Context history is incomplete at the evaluation cutoff")
+                    : ContextSection.missing(
                     ContextRequirement.optionalPublic(sectionType()),
                     "Trend Context history is unavailable");
         }
@@ -93,6 +108,25 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 new ContextProvenance("market-data", occurredAt, boundary),
                 occurredAt == null ? "Trend Context history is unavailable" : null
         );
+    }
+
+    private Map<TrendContextRole, List<OhlcResponse>> filterToCutoff(
+            Map<TrendContextRole, List<OhlcResponse>> responses,
+            Instant cutoff
+    ) {
+        EnumMap<TrendContextRole, List<OhlcResponse>> filtered =
+                new EnumMap<>(TrendContextRole.class);
+        responses.forEach((role, values) -> filtered.put(role, values.stream()
+                .filter(value -> !after(value.openTime(), cutoff)
+                        && !after(value.closeTime(), cutoff)
+                        && !after(value.occurredAt(), cutoff)
+                        && !after(value.fetchedAt(), cutoff))
+                .toList()));
+        return Map.copyOf(filtered);
+    }
+
+    private boolean after(Instant value, Instant cutoff) {
+        return value != null && value.isAfter(cutoff);
     }
 
     private Map<TrendContextRole, List<OhlcResponse>> acquire(

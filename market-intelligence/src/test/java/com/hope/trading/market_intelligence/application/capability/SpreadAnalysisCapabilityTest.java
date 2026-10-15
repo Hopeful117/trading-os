@@ -31,6 +31,9 @@ class SpreadAnalysisCapabilityTest {
         assertThat(first.metrics()).isEqualTo(second.metrics());
         assertThat(first.metrics().get("spread")).isEqualByComparingTo("2");
         assertThat(first.metrics().get("spreadPercentage")).isEqualByComparingTo("2");
+        assertThat(first.metrics().get("midpoint")).isEqualByComparingTo("100");
+        assertThat(first.metrics().get("relativeSpread")).isEqualByComparingTo("0.02");
+        assertThat(first.metrics().get("spreadBps")).isEqualByComparingTo("200");
         assertThat(first.origin()).isEqualTo(AnalysisOrigin.DETERMINISTIC);
         assertThat(first.contextSectionsUsed())
                 .containsExactly(ContextSectionType.MARKET_SNAPSHOT);

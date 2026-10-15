@@ -18,9 +18,14 @@ public record CapabilityResult(
         Objects.requireNonNull(completeness);
     }
     public static CapabilityResult noOpportunity(List<String> diagnostics) {
+        return noOpportunity(diagnostics, CapabilityCompleteness.COMPLETE);
+    }
+
+    public static CapabilityResult noOpportunity(
+            List<String> diagnostics, CapabilityCompleteness completeness) {
         return new CapabilityResult(
                 List.of(), List.of(), Map.of(), diagnostics,
-                CapabilityCompleteness.COMPLETE
+                completeness
         );
     }
 }

@@ -30,6 +30,9 @@ class ProductionCapabilityContractTest {
                 capability.metadata().requirements().getFirst(), input, executionId));
 
         assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.COMPLETE);
+        assertThat(result.artifacts()).singleElement().satisfies(produced ->
+                assertThat(produced.artifact().key().identity().producerVersion())
+                        .isEqualTo(SpreadAnalysisCapability.CAPABILITY_VERSION));
         assertThat(result.metrics().get("spread")).isEqualByComparingTo("2");
         assertThat(result.artifacts()).singleElement().satisfies(produced ->
                 assertThat(produced.artifact().provenance().producingExecutionId())
@@ -55,7 +58,13 @@ class ProductionCapabilityContractTest {
                 UUID.randomUUID()));
 
         assertThat(result.metrics().get("priceChange")).isEqualByComparingTo("10");
-        assertThat(empty.completeness()).isEqualTo(CapabilityCompleteness.COMPLETE);
+        assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.PARTIAL);
+        assertThat(result.diagnostics()).containsExactly("SIMPLE_RETURN_INSUFFICIENT_DATA");
+        assertThat(result.artifacts()).singleElement().satisfies(produced ->
+                assertThat(produced.artifact().quality())
+                        .isEqualTo(AnalysisResultQuality.PARTIAL));
+        assertThat(empty.completeness()).isEqualTo(CapabilityCompleteness.PARTIAL);
+        assertThat(empty.diagnostics()).containsExactly("INSUFFICIENT_DATA");
         assertThat(empty.artifacts()).isEmpty();
     }
 

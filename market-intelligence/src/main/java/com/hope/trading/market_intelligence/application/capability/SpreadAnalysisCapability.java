@@ -15,9 +15,21 @@ import java.util.Set;
 @Component
 public class SpreadAnalysisCapability implements DeterministicAnalysisCapability, Capability {
     public static final String CAPABILITY_ID = "spread-analysis";
-    public static final String CAPABILITY_VERSION = "1.0.0";
+    public static final String CAPABILITY_VERSION = "1.1.0";
     private static final String SPREAD = "spread";
     private static final String SPREAD_PERCENTAGE = "spreadPercentage";
+    private static final String MIDPOINT = "midpoint";
+    private static final String RELATIVE_SPREAD = "relativeSpread";
+    private static final String SPREAD_BPS = "spreadBps";
+    private final QuoteQualityCalculator calculator;
+
+    public SpreadAnalysisCapability() {
+        this(new QuoteQualityCalculator());
+    }
+
+    SpreadAnalysisCapability(QuoteQualityCalculator calculator) {
+        this.calculator = calculator;
+    }
 
     @Override
     public CapabilityMetadata metadata() {
@@ -31,8 +43,11 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
                         new ProducedContribution.ArtifactContribution(
                                 ProductionArtifactTypes.SPREAD_ANALYSIS,
                                 ProductionArtifactTypes.V1, Set.of()),
+                        new ProducedContribution.MetricContribution(MIDPOINT),
                         new ProducedContribution.MetricContribution(SPREAD),
-                        new ProducedContribution.MetricContribution(SPREAD_PERCENTAGE)),
+                        new ProducedContribution.MetricContribution(SPREAD_PERCENTAGE),
+                        new ProducedContribution.MetricContribution(RELATIVE_SPREAD),
+                        new ProducedContribution.MetricContribution(SPREAD_BPS)),
                 java.time.Duration.ofSeconds(1), null);
     }
 
@@ -41,10 +56,14 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
         StoredArtifact input = context.resolvedArtifacts().values().stream()
                 .flatMap(List::stream).findFirst().orElseThrow();
         MarketSnapshotContext snapshot = (MarketSnapshotContext) input.content();
-        if (snapshot.bid() == null || snapshot.ask() == null) {
-            return CapabilityResult.noOpportunity(List.of("Bid or ask unavailable"));
+        QuoteQualityAnalysis analysis = calculator.calculate(
+                snapshot.marketId(), snapshot.bid(), snapshot.ask(), snapshot.occurredAt());
+        if (analysis.status() != DeterministicAnalysisStatus.AVAILABLE) {
+            return CapabilityResult.noOpportunity(List.of(analysis.status().name()),
+                    analysis.status() == DeterministicAnalysisStatus.INSUFFICIENT_DATA
+                            ? CapabilityCompleteness.PARTIAL : CapabilityCompleteness.DEGRADED);
         }
-        Map<String, BigDecimal> measurements = calculate(snapshot.bid(), snapshot.ask());
+        Map<String, BigDecimal> measurements = measurements(analysis);
         Instant observedAt = snapshot.occurredAt();
         StoredArtifact output = outputArtifact(
                 context, input, ProductionArtifactTypes.SPREAD_ANALYSIS,
@@ -87,14 +106,17 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
             IntelligenceAnalysisRequest request,
             IntelligenceContext context
     ) {
-        ContextSection section = context.section(ContextSectionType.MARKET_SNAPSHOT)
-                .orElseThrow();
-        MarketSnapshotContext snapshot = (MarketSnapshotContext) section.payload();
-        if (snapshot.bid() == null || snapshot.ask() == null) {
-            return CapabilityAnalysisResult.empty("Bid or ask unavailable");
+        ContextSection section = context.section(ContextSectionType.MARKET_SNAPSHOT).orElseThrow();
+        if (section.status() != ContextSectionStatus.AVAILABLE) {
+            return CapabilityAnalysisResult.empty("Quote input is " + section.status());
         }
-
-        Map<String, BigDecimal> measurements = calculate(snapshot.bid(), snapshot.ask());
+        MarketSnapshotContext snapshot = (MarketSnapshotContext) section.payload();
+        QuoteQualityAnalysis analysis = calculator.calculate(
+                snapshot.marketId(), snapshot.bid(), snapshot.ask(), snapshot.occurredAt());
+        if (analysis.status() != DeterministicAnalysisStatus.AVAILABLE) {
+            return CapabilityAnalysisResult.empty("Quote input is " + analysis.status());
+        }
+        Map<String, BigDecimal> measurements = measurements(analysis);
         Instant generatedAt = Instant.now();
 
         IntelligenceFinding finding = new IntelligenceFinding(
@@ -105,8 +127,11 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
                 "Market spread",
                 "Objective bid/ask spread calculated from the normalized market snapshot.",
                 Map.of(
+                         MIDPOINT, measurements.get(MIDPOINT),
                          SPREAD, measurements.get(SPREAD),
-                         SPREAD_PERCENTAGE, measurements.get(SPREAD_PERCENTAGE)
+                         SPREAD_PERCENTAGE, measurements.get(SPREAD_PERCENTAGE),
+                         RELATIVE_SPREAD, measurements.get(RELATIVE_SPREAD),
+                         SPREAD_BPS, measurements.get(SPREAD_BPS)
                 ),
                 BigDecimal.ONE,
                 Set.of(ContextSectionType.MARKET_SNAPSHOT),
@@ -115,14 +140,14 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
         return new CapabilityAnalysisResult(List.of(finding), List.of());
     }
 
-    private Map<String, BigDecimal> calculate(BigDecimal bid, BigDecimal ask) {
-        BigDecimal spread = ask.subtract(bid);
-        BigDecimal midpoint = ask.add(bid)
-                .divide(BigDecimal.valueOf(2), 12, RoundingMode.HALF_UP);
-        BigDecimal percentage = midpoint.signum() == 0 ? BigDecimal.ZERO
-                : spread.multiply(BigDecimal.valueOf(100))
-                .divide(midpoint, 8, RoundingMode.HALF_UP);
-        return Map.of(SPREAD, spread, SPREAD_PERCENTAGE, percentage);
+    private Map<String, BigDecimal> measurements(QuoteQualityAnalysis analysis) {
+        return Map.of(
+                MIDPOINT, analysis.midpoint(),
+                SPREAD, analysis.absoluteSpread(),
+                RELATIVE_SPREAD, analysis.relativeSpread(),
+                SPREAD_BPS, analysis.spreadBps(),
+                SPREAD_PERCENTAGE, analysis.relativeSpread().multiply(BigDecimal.valueOf(100))
+                        .setScale(8, RoundingMode.HALF_UP));
     }
 
     private StoredArtifact outputArtifact(
