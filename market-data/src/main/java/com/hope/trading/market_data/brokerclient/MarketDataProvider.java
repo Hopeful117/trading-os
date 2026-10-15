@@ -1,4 +1,4 @@
-package com.hope.trading.market_data.brokerClient;
+package com.hope.trading.market_data.brokerclient;
 
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;

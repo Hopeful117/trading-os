@@ -64,16 +64,14 @@ public class ValuationFact {
     @OneToMany(mappedBy = "fact", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<ValuationConversionLeg> conversionLegs = new ArrayList<>();
 
-    public ValuationFact(String requestType, String requestId, UUID marketId, String asset, PriceUse priceUse,
-                         PriceObservation source, String sourcePriceType, BigDecimal sourcePrice,
-                         String observationAge,
-                         BigDecimal value, FactStatus status) {
+    public ValuationFact(Data data) {
         this.factId = UUID.randomUUID();
-        this.requestType = requestType;
-        this.requestId = requestId;
-        this.marketId = marketId;
-        this.asset = asset;
-        this.priceUse = priceUse;
+        this.requestType = data.requestType();
+        this.requestId = data.requestId();
+        this.marketId = data.marketId();
+        this.asset = data.asset();
+        this.priceUse = data.priceUse();
+        PriceObservation source = data.source();
         if (source != null) {
             this.sourceObservationId = source.getObservationId();
             this.sourceMarketId = source.getMarketId();
@@ -82,11 +80,16 @@ public class ValuationFact {
             this.sourceEffectiveAt = source.getEffectiveAt();
             this.sourceCapturedAt = source.getCapturedAt();
         }
-        this.sourcePriceType = sourcePriceType;
-        this.sourcePrice = sourcePrice;
-        this.observationAge = observationAge;
-        this.value = value;
-        this.status = status;
+        this.sourcePriceType = data.sourcePriceType();
+        this.sourcePrice = data.sourcePrice();
+        this.observationAge = data.observationAge();
+        this.value = data.value();
+        this.status = data.status();
+    }
+
+    public record Data(String requestType, String requestId, UUID marketId, String asset, PriceUse priceUse,
+                       PriceObservation source, String sourcePriceType, BigDecimal sourcePrice,
+                       String observationAge, BigDecimal value, FactStatus status) {
     }
 
     void attachTo(ValuationSnapshot snapshot) {

@@ -1,7 +1,7 @@
 package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.dto.MarketPriceSnapshotStatus;
-import com.hope.trading.market_data.brokerClient.MarketDataProvider;
+import com.hope.trading.market_data.brokerclient.MarketDataProvider;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketState;
@@ -169,9 +169,8 @@ class MarketPriceSnapshotServiceTest {
 
         int callers = 5;
         ExecutorService executor = Executors.newFixedThreadPool(callers);
-        CountDownLatch started = new CountDownLatch(callers);
+            CountDownLatch started = new CountDownLatch(callers);
         CountDownLatch release = new CountDownLatch(1);
-        provider.started = started;
         provider.release = release;
         try {
             var futures = java.util.stream.IntStream.range(0, callers)
@@ -246,19 +245,13 @@ class MarketPriceSnapshotServiceTest {
         MarketSubscriptionService subscription = new MarketSubscriptionService() {
             @Override
             public void subscribe(UUID ignored, com.hope.trading.market_data.model.MarketStreamRequest request) {
-                Thread.startVirtualThread(() -> {
-                    try {
-                        Thread.sleep(10);
-                    } catch (InterruptedException exception) {
-                        Thread.currentThread().interrupt();
-                    }
-                    publisher.publish(ticker(marketId, "ETH/USD", "119", "121", "120",
-                            "2026-08-01T11:59:50Z"));
-                });
+                Thread.startVirtualThread(() -> publisher.publish(ticker(marketId, "ETH/USD", "119", "121", "120",
+                        "2026-08-01T11:59:50Z")));
             }
 
             @Override
             public void unsubscribe(UUID ignored, com.hope.trading.market_data.model.MarketStreamRequest request) {
+                // The temporary subscription is released by the service under test.
             }
         };
         MarketPriceSnapshotService bounded = new MarketPriceSnapshotService(
@@ -272,7 +265,7 @@ class MarketPriceSnapshotServiceTest {
     }
 
     @Test
-    void providerAcquisitionIsBoundedByTheRequestedDeadline() throws Exception {
+    void providerAcquisitionIsBoundedByTheRequestedDeadline() {
         UUID marketId = UUID.randomUUID();
         Market market = market(marketId, "ETH/USD", true);
         when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
@@ -365,7 +358,6 @@ class MarketPriceSnapshotServiceTest {
         private volatile Optional<TickerEvent> next = Optional.empty();
         private volatile RuntimeException failure;
         private volatile boolean blocking;
-        private volatile CountDownLatch started;
         private volatile CountDownLatch release;
 
         @Override

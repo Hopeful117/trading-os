@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
-import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -50,12 +49,10 @@ class KrakenDataStreamProviderTest {
     static class CapturingConnector implements KrakenStreamConnector {
         Function<WebSocketSession, Mono<Void>> handler;
         final List<String> sent = new CopyOnWriteArrayList<>();
-        private Sinks.Many<String> inbound = Sinks.many().unicast().onBackpressureBuffer();
         private WebSocketSession session;
 
-        void scriptSession(WebSocketSession session, Sinks.Many<String> inbound) {
+        void scriptSession(WebSocketSession session) {
             this.session = session;
-            this.inbound = inbound;
         }
 
         @Override
@@ -137,7 +134,7 @@ class KrakenDataStreamProviderTest {
                 }));
         when(session.close()).thenReturn(Mono.empty());
 
-        connector.scriptSession(session, inbound);
+        connector.scriptSession(session);
 
         // Trigger the connection lifecycle synchronously.
         provider.connect().block(java.time.Duration.ofSeconds(2));
@@ -229,10 +226,9 @@ class KrakenDataStreamProviderTest {
             ]}
             """);
 
-        Mockito.verify(tickerPublisher)
-                .publish(Mockito.argThat(event ->
-                        "BTC/EUR".equals(event.symbol())
-                                && event.bid().compareTo(new BigDecimal("50000")) == 0));
+        verify(tickerPublisher).publish(Mockito.argThat(event ->
+                "BTC/EUR".equals(event.symbol())
+                        && event.bid().compareTo(new BigDecimal("50000")) == 0));
     }
 
     @Test
@@ -269,7 +265,7 @@ class KrakenDataStreamProviderTest {
             ]}
             """);
 
-        Mockito.verify(tickerPublisher, never()).publish(any());
+        verify(tickerPublisher, never()).publish(any());
     }
 
     @Test

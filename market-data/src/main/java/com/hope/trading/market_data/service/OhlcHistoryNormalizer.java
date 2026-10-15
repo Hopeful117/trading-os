@@ -156,7 +156,8 @@ public class OhlcHistoryNormalizer {
                         interval,
                         openTime
                 ),
-                previous.fetchedAt()
+                 previous.fetchedAt(),
+                 previous.providerSymbol()
         );
     }
 }

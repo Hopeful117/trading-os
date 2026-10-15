@@ -1,6 +1,5 @@
 package com.hope.trading.market_data.model;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 
 import java.math.BigDecimal;

@@ -1,13 +1,10 @@
 package com.hope.trading.market_data.controller;
 
-import com.hope.trading.market_data.dto.MarketResponse;
 import com.hope.trading.market_data.exception.MarketDataExceptionHandler;
 import com.hope.trading.market_data.helper.MarketMapper;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
-import com.hope.trading.market_data.model.MarketStreamParameters;
 import com.hope.trading.market_data.model.MarketStreamRequest;
-import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.service.MarketHistoryService;
@@ -82,7 +79,7 @@ class MarketControllerTest {
     }
 
     @Test
-    void unknownMarketFailsExplicitly() throws Exception {
+    void unknownMarketFailsExplicitly() {
         when(marketService.findById(marketId)).thenReturn(Optional.empty());
 
         // Current contract: unknown market surfaces a raw RuntimeException
@@ -103,9 +100,6 @@ class MarketControllerTest {
 
     @Test
     void subscriptionLifecycleDelegatesToSubscriptionService() throws Exception {
-        var request = new MarketStreamRequest(
-                MarketStreamType.TICKER, new MarketStreamParameters(null, null));
-
         mockMvc.perform(post("/api/v1/markets/" + marketId + "/subscriptions")
                         .contentType("application/json")
                         .content("""

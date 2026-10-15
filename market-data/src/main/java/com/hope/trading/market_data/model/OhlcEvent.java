@@ -25,7 +25,8 @@ public record OhlcEvent(
         Instant occurredAt,
         boolean synthetic,
         String sourceId,
-        Instant fetchedAt
+        Instant fetchedAt,
+        String providerSymbol
 ) implements MarketEvent {
     public OhlcEvent(
             UUID marketId,
@@ -62,8 +63,19 @@ public record OhlcEvent(
                 occurredAt,
                 false,
                 defaultSourceId(marketId, provider, symbol, interval, openTime),
-                occurredAt
+                occurredAt,
+                null
         );
+    }
+
+    public OhlcEvent(
+            UUID marketId, MarketProvider provider, String symbol, OhlcInterval interval,
+            Instant openTime, Instant closeTime, BigDecimal open, BigDecimal high, BigDecimal low,
+            BigDecimal close, BigDecimal volume, BigDecimal vwap, Integer trades, boolean closed,
+            Instant occurredAt, boolean synthetic, String sourceId, Instant fetchedAt
+    ) {
+        this(marketId, provider, symbol, interval, openTime, closeTime, open, high, low, close,
+                volume, vwap, trades, closed, occurredAt, synthetic, sourceId, fetchedAt, null);
     }
 
     public OhlcEvent {

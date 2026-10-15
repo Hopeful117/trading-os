@@ -1,6 +1,6 @@
 package com.hope.trading.market_data.service;
 
-import com.hope.trading.market_data.brokerClient.MarketDataProvider;
+import com.hope.trading.market_data.brokerclient.MarketDataProvider;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.model.Market;
