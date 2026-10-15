@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRe
 import com.hope.trading.market_intelligence.application.strategy.AnalysisExecutionPlan;
 import com.hope.trading.market_intelligence.application.strategy.AnalysisStrategyRegistry;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
+import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.execution.*;
 import com.hope.trading.market_intelligence.domain.security.*;
@@ -60,6 +61,11 @@ public class AnalysisExecutionService {
             String requestId,
             String traceId
     ) {
+        if (request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                && request.evaluationCutoff() == null) {
+            throw new IllegalArgumentException(
+                    "Strict observed analysis requires an explicit evaluation cutoff");
+        }
         Instant now = clock.instant();
         return repository.findReusable(idempotencyKey, now).orElseGet(() -> {
             AnalysisExecutionPlan plan = strategies.strategy(request.mode()).plan(request);
@@ -80,7 +86,8 @@ public class AnalysisExecutionService {
                     plan.capabilityIds(),
                     new AnalysisExecutionProvenance(
                             request.marketId(), request.mode(), request.objective(), "v1",
-                            request.accountId(), request.scanId(), request.scanMarketId()
+                            request.accountId(), request.scanId(), request.scanMarketId(),
+                            request.evaluationCutoff(), request.evidencePolicy()
                     ),
                     new AnalysisTraceMetadata(List.of(trace))
             );
@@ -116,7 +123,9 @@ public class AnalysisExecutionService {
                 execution.provenance().objective(),
                 execution.provenance().accountId(),
                 execution.provenance().scanId(),
-                execution.provenance().scanMarketId()
+                execution.provenance().scanMarketId(),
+                execution.provenance().evaluationCutoff(),
+                execution.provenance().evidencePolicy()
         ));
     }
 

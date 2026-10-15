@@ -66,7 +66,8 @@ public class MarketIntelligenceController {
                 executionId,
                 request.marketId(),
                 request.mode(),
-                request.objective()
+                request.objective(),
+                null, null, null, request.evaluationCutoff(), request.evidencePolicy()
         );
         AnalysisExecution execution = executions.create(
                 command,

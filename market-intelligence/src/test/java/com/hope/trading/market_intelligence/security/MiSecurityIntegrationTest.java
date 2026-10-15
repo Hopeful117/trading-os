@@ -109,6 +109,27 @@ class MiSecurityIntegrationTest {
     }
 
     @Test
+    void internalAnalysisCreationRequiresCoreServiceAuthentication() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/internal/v1/intelligence/analyses")
+                        .header("Idempotency-Key", "runtime-check")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void userJwtCannotCreateInternalAnalysis() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/internal/v1/intelligence/analyses")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID()))
+                        .header("Idempotency-Key", "runtime-check")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void wrongAudienceServiceTokenIsRejected() throws Exception {
         mvc.perform(get("/internal/v1/not-a-public-route")
                         .header("X-Service-Authorization",

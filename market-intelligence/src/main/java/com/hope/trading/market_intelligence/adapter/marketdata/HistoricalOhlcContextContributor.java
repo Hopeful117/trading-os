@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.adapter.marketdata;
 
 import com.hope.trading.market_intelligence.application.context.ContextContributor;
 import com.hope.trading.market_intelligence.domain.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -12,14 +13,36 @@ import java.util.List;
 public class HistoricalOhlcContextContributor implements ContextContributor {
     private static final String ACTIVE_INTERVAL = "FIFTEEN_MINUTES";
     private static final int ACTIVE_LIMIT = 200;
-    private final MarketDataClient marketDataClient;
+    private final OhlcEvidenceSource liveSource;
+    private final OhlcEvidenceSource historicalSource;
     private final MarketDataSectionFactory sectionFactory;
+
+    @Autowired
+    public HistoricalOhlcContextContributor(
+            LiveOhlcEvidenceSource liveSource,
+            HistoricalOhlcEvidenceSource historicalSource,
+            MarketDataSectionFactory sectionFactory
+    ) {
+        this.liveSource = liveSource;
+        this.historicalSource = historicalSource;
+        this.sectionFactory = sectionFactory;
+    }
 
     public HistoricalOhlcContextContributor(
             MarketDataClient marketDataClient,
             MarketDataSectionFactory sectionFactory
     ) {
-        this.marketDataClient = marketDataClient;
+        this(new LiveOhlcEvidenceSource(marketDataClient),
+                new UnavailableHistoricalOhlcEvidenceSource(), sectionFactory);
+    }
+
+    HistoricalOhlcContextContributor(
+            OhlcEvidenceSource liveSource,
+            OhlcEvidenceSource historicalSource,
+            MarketDataSectionFactory sectionFactory
+    ) {
+        this.liveSource = liveSource;
+        this.historicalSource = historicalSource;
         this.sectionFactory = sectionFactory;
     }
 
@@ -30,9 +53,9 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
 
     @Override
     public ContextSection contribute(IntelligenceAnalysisRequest request) {
-        List<OhlcResponse> response = marketDataClient.findOhlc(
-                request.marketId(), ACTIVE_INTERVAL, ACTIVE_LIMIT
-        );
+        OhlcEvidenceSource.OhlcEvidenceBatch batch = source(request).acquire(
+                request.marketId(), ACTIVE_INTERVAL, ACTIVE_LIMIT, request.evaluationCutoff());
+        List<OhlcResponse> response = batch.observations();
         if (response.isEmpty()) {
             return ContextSection.missing(
                     ContextRequirement.optionalPublic(sectionType()),
@@ -94,7 +117,7 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                 .sorted()
                 .reduce((left, right) -> left + "," + right)
                 .orElse(null);
-        String sourceVersion = accepted.stream()
+        String provider = accepted.stream()
                 .map(OhlcResponse::provider)
                 .filter(java.util.Objects::nonNull)
                 .distinct()
@@ -104,8 +127,15 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
         return new ContextSection(
                 section.type(), section.status(), section.sensitivity(), section.payload(),
                 new ContextProvenance("market-data", section.provenance().sourceOccurredAt(),
-                        section.provenance().fetchedAt(), sourceReference, sourceVersion, null),
+                        section.provenance().fetchedAt(), sourceReference, provider,
+                        batch.normalizationVersion(), request.evidencePolicy(),
+                        batch.evidenceFingerprint(), batch.observationCount()),
                 section.message());
+    }
+
+    private OhlcEvidenceSource source(IntelligenceAnalysisRequest request) {
+        return request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                ? historicalSource : liveSource;
     }
 
     private boolean isAfter(Instant value, Instant cutoff) {
@@ -114,5 +144,14 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
 
     private boolean hasTemporalMetadata(OhlcResponse candle) {
         return candle.occurredAt() != null && candle.fetchedAt() != null;
+    }
+
+    static final class UnavailableHistoricalOhlcEvidenceSource
+            implements OhlcEvidenceSource {
+        @Override
+        public OhlcEvidenceBatch acquire(java.util.UUID marketId, String interval, int limit,
+                                         Instant cutoff) {
+            throw new IllegalStateException("Strict historical OHLC source is unavailable");
+        }
     }
 }

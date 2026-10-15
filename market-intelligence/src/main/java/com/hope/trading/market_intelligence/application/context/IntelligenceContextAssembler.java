@@ -37,6 +37,11 @@ public class IntelligenceContextAssembler {
             IntelligenceAnalysisRequest request,
             List<ContextRequirement> requirements
     ) {
+        if (request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                && request.evaluationCutoff() == null) {
+            throw new IllegalArgumentException(
+                    "Strict observed analysis requires an explicit evaluation cutoff");
+        }
         Instant cutoff = request.evaluationCutoff() == null
                 ? clock.instant()
                 : request.evaluationCutoff();

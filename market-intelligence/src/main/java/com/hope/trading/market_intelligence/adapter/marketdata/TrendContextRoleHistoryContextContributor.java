@@ -2,9 +2,11 @@ package com.hope.trading.market_intelligence.adapter.marketdata;
 
 import com.hope.trading.market_intelligence.application.context.ContextContributor;
 import com.hope.trading.market_intelligence.domain.*;
+import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -19,10 +21,26 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
     private static final int MAX_OHLC_LIMIT = 720;
     private static final int MAX_ATTEMPTS = 5;
 
-    private final MarketDataClient marketDataClient;
+    private final OhlcEvidenceSource liveSource;
+    private final OhlcEvidenceSource historicalSource;
     private final TrendContextInputMapper inputMapper;
     private final TrendContextProfile profile;
     private final Clock clock;
+
+    @Autowired
+    public TrendContextRoleHistoryContextContributor(
+            LiveOhlcEvidenceSource liveSource,
+            HistoricalOhlcEvidenceSource historicalSource,
+            TrendContextInputMapper inputMapper,
+            TrendContextProfile profile,
+            Clock clock
+    ) {
+        this.liveSource = liveSource;
+        this.historicalSource = historicalSource;
+        this.inputMapper = inputMapper;
+        this.profile = profile;
+        this.clock = clock;
+    }
 
     public TrendContextRoleHistoryContextContributor(
             MarketDataClient marketDataClient,
@@ -30,7 +48,20 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
             TrendContextProfile profile,
             Clock clock
     ) {
-        this.marketDataClient = marketDataClient;
+        this(new LiveOhlcEvidenceSource(marketDataClient),
+                new HistoricalOhlcContextContributor.UnavailableHistoricalOhlcEvidenceSource(),
+                inputMapper, profile, clock);
+    }
+
+    TrendContextRoleHistoryContextContributor(
+            OhlcEvidenceSource liveSource,
+            OhlcEvidenceSource historicalSource,
+            TrendContextInputMapper inputMapper,
+            TrendContextProfile profile,
+            Clock clock
+    ) {
+        this.liveSource = liveSource;
+        this.historicalSource = historicalSource;
         this.inputMapper = inputMapper;
         this.profile = profile;
         this.clock = clock;
@@ -50,17 +81,20 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 limits.put(role, Math.min(definition.requestedCandles(), MAX_OHLC_LIMIT)));
 
         Map<TrendContextRole, List<OhlcResponse>> responses = Map.of();
+        AcquisitionMetadata metadata = AcquisitionMetadata.empty();
         TrendContextAssessmentInput mapped = null;
         boolean evidenceExcludedByCutoff = false;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            Map<TrendContextRole, List<OhlcResponse>> acquired = acquire(request, limits);
-            evidenceExcludedByCutoff |= acquired.values().stream()
+            AcquisitionResult acquired = acquire(request, limits);
+            Map<TrendContextRole, List<OhlcResponse>> acquiredResponses = acquired.responses();
+            metadata = acquired.metadata();
+            evidenceExcludedByCutoff |= acquiredResponses.values().stream()
                     .flatMap(Collection::stream)
                     .anyMatch(value -> after(value.openTime(), boundary)
                             || after(value.closeTime(), boundary)
                             || after(value.occurredAt(), boundary)
                             || after(value.fetchedAt(), boundary));
-            responses = filterToCutoff(acquired, boundary);
+            responses = filterToCutoff(acquiredResponses, boundary);
             boolean retry = false;
             try {
                 mapped = inputMapper.map(
@@ -105,7 +139,9 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 occurredAt == null ? ContextSectionStatus.MISSING : ContextSectionStatus.AVAILABLE,
                 ContextSensitivity.PUBLIC,
                 history,
-                new ContextProvenance("market-data", occurredAt, boundary),
+                new ContextProvenance("market-data", occurredAt, boundary,
+                        null, null, metadata.normalizationVersion(), request.evidencePolicy(),
+                        metadata.evidenceFingerprint(), metadata.observationCount()),
                 occurredAt == null ? "Trend Context history is unavailable" : null
         );
     }
@@ -129,17 +165,29 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
         return value != null && value.isAfter(cutoff);
     }
 
-    private Map<TrendContextRole, List<OhlcResponse>> acquire(
+    private AcquisitionResult acquire(
             IntelligenceAnalysisRequest request, Map<TrendContextRole, Integer> limits) {
         EnumMap<TrendContextRole, List<OhlcResponse>> responses =
                 new EnumMap<>(TrendContextRole.class);
+        List<String> fingerprints = new ArrayList<>();
+        List<String> normalizations = new ArrayList<>();
+        int observationCount = 0;
         for (TrendContextRole role : TrendContextRole.values()) {
             TrendContextRoleDefinition definition = profile.roles().get(role);
             if (definition == null) continue;
             List<OhlcResponse> values;
             try {
-                values = marketDataClient.findOhlc(
-                        request.marketId(), definition.interval(), limits.get(role));
+                OhlcEvidenceSource.OhlcEvidenceBatch batch = source(request).acquire(
+                        request.marketId(), definition.interval(), limits.get(role),
+                        request.evaluationCutoff());
+                values = batch.observations();
+                if (batch.evidenceFingerprint() != null) {
+                    fingerprints.add(batch.evidenceFingerprint());
+                }
+                if (batch.normalizationVersion() != null) {
+                    normalizations.add(batch.normalizationVersion());
+                }
+                observationCount += batch.observationCount();
             } catch (RuntimeException exception) {
                 log.warn("Trend Context OHLC acquisition failed analysis={} market={} role={} interval={} limit={} errorType={} message={}",
                         request.analysisId(), request.marketId(), role, definition.interval(),
@@ -149,7 +197,33 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
             }
             if (!values.isEmpty() || definition.required()) responses.put(role, List.copyOf(values));
         }
-        return Map.copyOf(responses);
+        String normalizationVersion = normalizations.stream().distinct().sorted()
+                .reduce((left, right) -> left + "," + right).orElse(null);
+        AcquisitionMetadata metadata = new AcquisitionMetadata(
+                fingerprints.isEmpty() ? null
+                        : ArtifactFingerprint.ofInputs(fingerprints.stream().sorted().toList()).value(),
+                normalizationVersion, observationCount);
+        return new AcquisitionResult(Map.copyOf(responses), metadata);
+    }
+
+    private record AcquisitionResult(
+            Map<TrendContextRole, List<OhlcResponse>> responses,
+            AcquisitionMetadata metadata
+    ) { }
+
+    private record AcquisitionMetadata(
+            String evidenceFingerprint,
+            String normalizationVersion,
+            int observationCount
+    ) {
+        private static AcquisitionMetadata empty() {
+            return new AcquisitionMetadata(null, null, 0);
+        }
+    }
+
+    private OhlcEvidenceSource source(IntelligenceAnalysisRequest request) {
+        return request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                ? historicalSource : liveSource;
     }
 
     private boolean increaseMissingRequiredRole(

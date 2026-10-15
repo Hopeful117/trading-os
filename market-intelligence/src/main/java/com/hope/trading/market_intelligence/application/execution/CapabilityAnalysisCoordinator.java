@@ -234,7 +234,12 @@ public class CapabilityAnalysisCoordinator {
         ContextProvenance provenance = section.provenance();
         Instant sourceAt = provenance.sourceOccurredAt() == null
                 ? provenance.fetchedAt() : provenance.sourceOccurredAt();
-        return provenance.source() + ":" + sourceAt;
+        return String.join(":",
+                String.valueOf(provenance.source()),
+                String.valueOf(sourceAt),
+                String.valueOf(provenance.evidencePolicy()),
+                String.valueOf(provenance.evidenceFingerprint()),
+                String.valueOf(provenance.normalizationVersion()));
     }
 
     private String timeframe(ContextSection section) {
