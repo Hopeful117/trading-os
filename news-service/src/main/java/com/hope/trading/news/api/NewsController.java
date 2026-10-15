@@ -52,7 +52,8 @@ public class NewsController {
 
     private String attribution(List<?> items) {
         return items.stream()
-                .map(item -> item instanceof EconomicEvent event ? event.sourceName() : null)
+                .map(item -> item instanceof EconomicEvent event ? event.sourceName()
+                        : item instanceof FinancialNewsItem newsItem ? newsItem.sourceName() : null)
                 .filter(java.util.Objects::nonNull)
                 .map(providerProperties.attributions()::get)
                 .filter(java.util.Objects::nonNull)

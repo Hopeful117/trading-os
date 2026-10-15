@@ -20,18 +20,55 @@ import static org.mockito.Mockito.*;
 
 class NewsSynchronizationTest {
     @Test
-    void fixtureSourceCanPopulateBothNormalizedCatalogs() {
-        EconomicEventRepository events = mock(EconomicEventRepository.class);
+    void fixtureSourceCanPopulateTheFinancialNewsCatalog() {
         FinancialNewsItemRepository news = mock(FinancialNewsItemRepository.class);
         NewsProviderProperties properties = new NewsProviderProperties();
-        NewsCatalogService service = new NewsCatalogService(events, news, properties,
+        NewsCatalogService service = new NewsCatalogService(mock(EconomicEventRepository.class), news, properties,
                 mock(org.springframework.beans.factory.ObjectProvider.class),
                 mock(org.springframework.beans.factory.ObjectProvider.class));
 
-        service.synchronize(new FixtureNewsSource(Instant.parse("2026-01-01T12:00:00Z")));
+        Instant now = Instant.parse("2026-01-01T12:00:00Z");
+        service.synchronizeFinancialNews(new FixtureNewsSource(now), now.minusSeconds(3600), now);
 
-        verify(events).save(any(EconomicEventEntity.class));
         verify(news).save(any(FinancialNewsItemEntity.class));
+    }
+
+    @Test
+    void repeatedFinancialNewsSynchronizationKeepsProviderIdentity() {
+        FinancialNewsItemRepository news = mock(FinancialNewsItemRepository.class);
+        FinancialNewsSourcePort source = mock(FinancialNewsSourcePort.class);
+        Instant now = Instant.parse("2026-01-01T12:00:00Z");
+        when(source.financialNews(any(), any())).thenReturn(
+                new FixtureNewsSource(now).financialNews(now.minusSeconds(3600), now),
+                new FixtureNewsSource(now.plusSeconds(60))
+                        .financialNews(now.minusSeconds(3600), now.plusSeconds(60)));
+        NewsCatalogService service = new NewsCatalogService(mock(EconomicEventRepository.class), news,
+                new NewsProviderProperties(), mock(org.springframework.beans.factory.ObjectProvider.class),
+                mock(org.springframework.beans.factory.ObjectProvider.class));
+
+        service.synchronizeFinancialNews(source, now.minusSeconds(3600), now);
+        service.synchronizeFinancialNews(source, now.minusSeconds(3600), now);
+
+        var saved = org.mockito.ArgumentCaptor.forClass(FinancialNewsItemEntity.class);
+        verify(news, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues().get(0).toDomain().id())
+                .isEqualTo(saved.getAllValues().get(1).toDomain().id());
+    }
+
+    @Test
+    void doesNotPersistFinancialNewsWhenTheProviderFailsBeforeReturningData() {
+        FinancialNewsItemRepository news = mock(FinancialNewsItemRepository.class);
+        FinancialNewsSourcePort source = mock(FinancialNewsSourcePort.class);
+        when(source.financialNews(any(), any())).thenThrow(new RuntimeException("quota exhausted"));
+        NewsCatalogService service = new NewsCatalogService(mock(EconomicEventRepository.class), news,
+                new NewsProviderProperties(), mock(org.springframework.beans.factory.ObjectProvider.class),
+                mock(org.springframework.beans.factory.ObjectProvider.class));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.synchronizeFinancialNews(
+                        source, Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T01:00:00Z")))
+                .isInstanceOf(RuntimeException.class);
+
+        verifyNoInteractions(news);
     }
 
     @Test

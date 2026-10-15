@@ -15,6 +15,7 @@ public record NewsItemContext(
         String publisher,
         List<String> categories,
         List<String> currencies,
+        List<UUID> marketIds,
         String impact,
         Instant sourceUpdatedAt,
         Instant fetchedAt,
@@ -23,5 +24,6 @@ public record NewsItemContext(
     public NewsItemContext {
         categories = categories == null ? List.of() : List.copyOf(categories);
         currencies = currencies == null ? List.of() : List.copyOf(currencies);
+        marketIds = marketIds == null ? List.of() : List.copyOf(marketIds);
     }
 }

@@ -23,13 +23,13 @@ public class NewsCatalogService {
     private final EconomicEventRepository events;
     private final FinancialNewsItemRepository news;
     private final NewsProviderProperties providerProperties;
-    private final ObjectProvider<NewsSourcePort> source;
+    private final ObjectProvider<FinancialNewsSourcePort> source;
     private final ObjectProvider<EconomicCalendarSourcePort> economicCalendarSource;
 
     public NewsCatalogService(EconomicEventRepository events,
                               FinancialNewsItemRepository news,
                               NewsProviderProperties providerProperties,
-                              ObjectProvider<NewsSourcePort> source,
+                              ObjectProvider<FinancialNewsSourcePort> source,
                               ObjectProvider<EconomicCalendarSourcePort> economicCalendarSource) {
         this.events = events;
         this.news = news;
@@ -62,13 +62,13 @@ public class NewsCatalogService {
 
     @Transactional(readOnly = true)
     public NewsReadResult<FinancialNewsItem> findNews(NewsQuery query) {
-        NewsSourcePort provider = isProviderAvailable() ? source.getIfAvailable() : null;
+        FinancialNewsSourcePort provider = isProviderAvailable() ? source.getIfAvailable() : null;
         if (provider == null) {
             return unavailable();
         }
         NewsAvailability providerStatus = provider.availability();
         if (providerStatus != null && providerStatus != NewsAvailability.AVAILABLE) {
-            return unavailable(providerStatus);
+            return unavailable(providerStatus, provider.availabilityMessage());
         }
         Instant from = query.from() == null ? Instant.now().minusSeconds(172800) : query.from();
         Instant to = query.to() == null ? Instant.now() : query.to();
@@ -83,14 +83,13 @@ public class NewsCatalogService {
     }
 
     @Transactional
-    public void synchronize(NewsSourcePort source) {
-        source.economicEvents().forEach(event -> events.save(EconomicEventEntity.from(event)));
-        source.financialNews().forEach(item -> news.save(FinancialNewsItemEntity.from(item)));
+    public void synchronizeEconomicEvents(EconomicCalendarSourcePort source, Instant from, Instant to) {
+        source.economicEvents(from, to).forEach(event -> events.save(EconomicEventEntity.from(event)));
     }
 
     @Transactional
-    public void synchronizeEconomicEvents(EconomicCalendarSourcePort source, Instant from, Instant to) {
-        source.economicEvents(from, to).forEach(event -> events.save(EconomicEventEntity.from(event)));
+    public void synchronizeFinancialNews(FinancialNewsSourcePort source, Instant from, Instant to) {
+        source.financialNews(from, to).forEach(item -> news.save(FinancialNewsItemEntity.from(item)));
     }
 
     public NewsContextSnapshot context(UUID marketId, Instant now) {
@@ -143,8 +142,12 @@ public class NewsCatalogService {
     }
 
     private <T> NewsReadResult<T> unavailable(NewsAvailability status) {
+        return unavailable(status, null);
+    }
+
+    private <T> NewsReadResult<T> unavailable(NewsAvailability status, String providerMessage) {
         return new NewsReadResult<>(status, List.of(), Instant.now(),
-                statusMessage(status));
+                providerMessage == null ? statusMessage(status) : providerMessage);
     }
 
     private String statusMessage(NewsAvailability status) {

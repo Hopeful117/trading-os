@@ -43,7 +43,7 @@ class NewsContextContextContributorTest {
                         "3.0", "3.1", null, "%", now, now, "v1")),
                 List.of(new NewsClient.NewsItemResponse(UUID.randomUUID(), "wire", "item-1", "Headline", "Summary",
                         "https://example.test/news", now, "Publisher", List.of("macro"),
-                        List.of("EUR"), "MEDIUM", now, now, "v1")),
+                        List.of("EUR"), List.of(), "MEDIUM", now, now, "v1")),
                 now, now, null));
 
         ContextSection section = new NewsContextContextContributor(client).contribute(

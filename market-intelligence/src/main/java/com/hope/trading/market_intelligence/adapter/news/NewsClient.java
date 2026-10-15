@@ -27,9 +27,9 @@ public interface NewsClient {
     }
 
     record NewsItemResponse(UUID id, String sourceName, String sourceItemId, String title,
-                            String summary, String canonicalUrl,
-                            Instant publishedAt, String publisher, List<String> categories,
-                            List<String> currencies, String impact,
-                            Instant sourceUpdatedAt, Instant fetchedAt, String normalizationVersion) {
+                             String summary, String canonicalUrl,
+                             Instant publishedAt, String publisher, List<String> categories,
+                             List<String> currencies, List<UUID> marketIds, String impact,
+                             Instant sourceUpdatedAt, Instant fetchedAt, String normalizationVersion) {
     }
 }
