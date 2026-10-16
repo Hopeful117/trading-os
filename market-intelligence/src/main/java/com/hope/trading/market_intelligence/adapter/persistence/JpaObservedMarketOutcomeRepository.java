@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Repository
@@ -40,6 +41,17 @@ public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcome
             UUID marketId, Instant evaluationCutoff, long horizonSeconds) {
         return repository.findByMarketIdAndEvaluationCutoffAndHorizonSeconds(
                         marketId, evaluationCutoff, horizonSeconds).stream()
+                .map(JpaObservedMarketOutcomeEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ObservedMarketOutcome> findByMarkets(Set<UUID> marketIds) {
+        if (marketIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByMarketIdIn(marketIds).stream()
                 .map(JpaObservedMarketOutcomeEntity::toDomain)
                 .toList();
     }

@@ -23,7 +23,7 @@ public record ResearchPopulationSpec(
     public static final String FUTURE_INTERVAL = "FIFTEEN_MINUTES";
 
     public ResearchPopulationSpec {
-        populationPolicyVersion = required(populationPolicyVersion, "population policy version");
+        required(populationPolicyVersion, "population policy version");
         Objects.requireNonNull(marketIds, "market IDs");
         marketIds = Set.copyOf(marketIds);
         Objects.requireNonNull(startCutoffInclusive, "start cutoff");
@@ -31,12 +31,12 @@ public record ResearchPopulationSpec(
         if (!startCutoffInclusive.isBefore(endCutoffExclusive)) {
             throw new IllegalArgumentException("start cutoff must precede end cutoff");
         }
-        featureProjectionVersion = required(featureProjectionVersion, "feature projection version");
+        required(featureProjectionVersion, "feature projection version");
         Objects.requireNonNull(featureEvidencePolicy, "feature evidence policy");
         if (featureEvidencePolicy != EvidenceAcquisitionPolicy.STRICT_OBSERVED) {
             throw new IllegalArgumentException("research features require STRICT_OBSERVED evidence");
         }
-        outcomeDefinitionVersion = required(outcomeDefinitionVersion, "outcome definition version");
+        required(outcomeDefinitionVersion, "outcome definition version");
         Objects.requireNonNull(horizons, "horizons");
         if (horizons.isEmpty()) throw new IllegalArgumentException("at least one horizon is required");
         horizons = Set.copyOf(horizons);

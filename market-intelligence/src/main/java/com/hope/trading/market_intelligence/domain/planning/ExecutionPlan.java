@@ -18,6 +18,8 @@ public final class ExecutionPlan {
     private final List<PlanningDecision> exclusions;
     private final String contextFingerprint;
 
+    /** Constructor retained for persisted plan rehydration compatibility. */
+    @SuppressWarnings("java:S107")
     public ExecutionPlan(
             UUID id, UUID analysisExecutionId, Collection<ExecutionNode> nodes,
             Set<PlanEdge> edges, Map<RequirementBinding, Set<UUID>> selectedProducers,
@@ -40,6 +42,7 @@ public final class ExecutionPlan {
         validate();
     }
 
+    @SuppressWarnings("java:S107")
     public ExecutionPlan(
             UUID id, UUID analysisExecutionId, Collection<ExecutionNode> nodes,
             Set<PlanEdge> edges, Map<RequirementBinding, Set<UUID>> selectedProducers,

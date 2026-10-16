@@ -17,5 +17,7 @@ class JpaAnalysisExecutionEntity {
     @Column(name = "completed_at") Instant completedAt;
     @Column(name = "market_id", nullable = false) UUID marketId;
     @Column(name = "mode", nullable = false, length = 20) String mode;
+    @Column(name = "evaluation_cutoff") Instant evaluationCutoff;
+    @Column(name = "evidence_policy", length = 40) String evidencePolicy;
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT") String payload;
 }

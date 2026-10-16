@@ -12,6 +12,8 @@ import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructu
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapabilityContent;
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextTestFixtures;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -74,7 +77,56 @@ class FeatureProjectionV1Test {
                     assertThat(value).isInstanceOf(NumericFeatureValue.class);
                     assertThat(value.status()).isEqualTo(FeatureMissingness.INSUFFICIENT_DATA);
                     assertThat(((NumericFeatureValue) value).value()).isNull();
+        });
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = MarketStructureAvailability.class, names = {"STALE", "INSUFFICIENT", "INVALID", "UNAVAILABLE"})
+    void mapsNonAvailableStructureStatusToTheFeatureGroup(MarketStructureAvailability availability) {
+        FeatureProjectionV1.ProjectionResult result = project(
+                ohlc(java.util.Map.of("rangePercentage", new BigDecimal("12.5"))),
+                List.of(structure("FOUR_HOURS", availability), structure("ONE_HOUR")));
+
+        assertThat(result.groups()).filteredOn(group -> group.group() == FeatureGroup.STRUCTURE)
+                .first().extracting(FeatureGroupStatus::status)
+                .isEqualTo(switch (availability) {
+                    case STALE -> FeatureMissingness.STALE_INPUT;
+                    case INSUFFICIENT -> FeatureMissingness.INSUFFICIENT_DATA;
+                    case INVALID -> FeatureMissingness.INVALID_INPUT;
+                    case UNAVAILABLE -> FeatureMissingness.UNAVAILABLE;
+                    case AVAILABLE -> FeatureMissingness.PRESENT;
                 });
+    }
+
+    @Test
+    void marksMissingAnalyzerGroupsAsUnavailable() {
+        FeatureProjectionV1.ProjectionResult result = FeatureProjectionV1.project(
+                ANALYSIS_ID, MARKET_ID, CUTOFF, EvidenceAcquisitionPolicy.STRICT_OBSERVED,
+                "context", List.of(), List.of(), List.of(), CUTOFF);
+
+        assertThat(result.groups()).extracting(FeatureGroupStatus::status)
+                .containsExactly(FeatureMissingness.UNAVAILABLE,
+                        FeatureMissingness.UNAVAILABLE, FeatureMissingness.UNAVAILABLE);
+        assertThat(result.values()).allSatisfy(value ->
+                assertThat(value.status()).isIn(FeatureMissingness.UNAVAILABLE,
+                FeatureMissingness.INSUFFICIENT_DATA));
+    }
+
+    @Test
+    void rejectsMultipleArtifactsOfTheSameContentType() {
+        ProducedArtifact first = ohlc(java.util.Map.of("rangePercentage", new BigDecimal("12.5")));
+        ProducedArtifact second = ohlc(java.util.Map.of("rangePercentage", new BigDecimal("15.0")));
+
+        assertThatThrownBy(() -> projectWithDuplicateOhlc(first, second))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Multiple artifacts for DeterministicMeasurements");
+    }
+
+    private FeatureProjectionV1.ProjectionResult projectWithDuplicateOhlc(
+            ProducedArtifact first, ProducedArtifact second) {
+        return FeatureProjectionV1.project(
+                ANALYSIS_ID, MARKET_ID, CUTOFF, EvidenceAcquisitionPolicy.STRICT_OBSERVED,
+                "context", List.of(first, second), List.of(), List.of(), CUTOFF);
     }
 
     private FeatureProjectionV1.ProjectionResult projection() {
@@ -88,6 +140,11 @@ class FeatureProjectionV1Test {
     }
 
     private FeatureProjectionV1.ProjectionResult project(ProducedArtifact ohlc) {
+        return project(ohlc, List.of(structure("FOUR_HOURS"), structure("ONE_HOUR")));
+    }
+
+    private FeatureProjectionV1.ProjectionResult project(
+            ProducedArtifact ohlc, List<ProducedArtifact> structures) {
         var assessment = TrendContextTestFixtures.assessment();
         var trendContent = new TrendContextCapabilityContent(
                 assessment, "AVAILABLE", List.of(), java.util.Map.of(),
@@ -95,10 +152,10 @@ class FeatureProjectionV1Test {
                 assessment.inputFingerprint(), assessment.assessmentFingerprint());
         return FeatureProjectionV1.project(
                 ANALYSIS_ID, MARKET_ID, CUTOFF, EvidenceAcquisitionPolicy.STRICT_OBSERVED,
-                ArtifactFingerprint.ofInputs(List.of("context")).value(),
-                List.of(ohlc), List.of(structure("FOUR_HOURS"), structure("ONE_HOUR")),
-                List.of(artifact(ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT,
-                        ProductionArtifactTypes.V1, trendContent, "TREND_CONTEXT")), CUTOFF);
+                 ArtifactFingerprint.ofInputs(List.of("context")).value(),
+                 List.of(ohlc), structures,
+                 List.of(artifact(ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT,
+                         ProductionArtifactTypes.V1, trendContent, "TREND_CONTEXT")), CUTOFF);
     }
 
     private ProducedArtifact ohlc(java.util.Map<String, BigDecimal> values) {
@@ -107,9 +164,13 @@ class FeatureProjectionV1Test {
     }
 
     private ProducedArtifact structure(String interval) {
+        return structure(interval, MarketStructureAvailability.AVAILABLE);
+    }
+
+    private ProducedArtifact structure(String interval, MarketStructureAvailability availability) {
         MarketStructureResult result = mock(MarketStructureResult.class);
         when(result.interval()).thenReturn(interval);
-        when(result.availability()).thenReturn(MarketStructureAvailability.AVAILABLE);
+        when(result.availability()).thenReturn(availability);
         when(result.cutOffAt()).thenReturn(CUTOFF);
         when(result.retained()).thenReturn(List.of());
         when(result.suppressed()).thenReturn(List.of());

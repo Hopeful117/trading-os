@@ -29,9 +29,9 @@ public record FeatureSnapshot(
         Objects.requireNonNull(marketId);
         Objects.requireNonNull(evaluationCutoff);
         Objects.requireNonNull(evidencePolicy);
-        featureProjectionVersion = required(featureProjectionVersion, "featureProjectionVersion");
-        contextFingerprint = required(contextFingerprint, "contextFingerprint");
-        fingerprint = required(fingerprint, "fingerprint");
+        required(featureProjectionVersion, "featureProjectionVersion");
+        required(contextFingerprint, "contextFingerprint");
+        required(fingerprint, "fingerprint");
         Objects.requireNonNull(createdAt);
         values = List.copyOf(values);
         groups = List.copyOf(groups);

@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +20,8 @@ public interface ObservedMarketOutcomeRepository {
 
     List<ObservedMarketOutcome> findByMarketAndCutoffAndHorizon(
             UUID marketId, Instant evaluationCutoff, long horizonSeconds);
+
+    List<ObservedMarketOutcome> findByMarkets(Set<UUID> marketIds);
 
     ObservedMarketOutcome saveIfAbsent(ObservedMarketOutcome outcome);
 }

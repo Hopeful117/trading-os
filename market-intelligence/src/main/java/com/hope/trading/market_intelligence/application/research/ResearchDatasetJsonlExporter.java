@@ -8,6 +8,7 @@ import com.hope.trading.market_intelligence.domain.research.ResearchSample;
 import java.util.*;
 
 public final class ResearchDatasetJsonlExporter {
+    private static final String STATUS = "status";
     private final ObjectMapper mapper;
 
     public ResearchDatasetJsonlExporter(ObjectMapper mapper) {
@@ -30,7 +31,7 @@ public final class ResearchDatasetJsonlExporter {
         document.put("featureProjectionVersion", sample.featureProjectionVersion());
         document.put("evidencePolicy", sample.featureSnapshot().evidencePolicy().name());
         document.put("featureSnapshotCreatedAt", sample.featureSnapshot().createdAt().toString());
-        document.put("status", sample.status().name());
+        document.put(STATUS, sample.status().name());
         document.put("exclusionReason", sample.exclusionReason() == null ? null : sample.exclusionReason().name());
         document.put("features", features(schema, sample));
         document.put("outcome", outcome(sample));
@@ -65,7 +66,7 @@ public final class ResearchDatasetJsonlExporter {
             }
             Map<String, Object> projected = new LinkedHashMap<>();
             projected.put("type", type(value));
-            projected.put("status", value.status().name());
+            projected.put(STATUS, value.status().name());
             projected.put("value", value(value));
             result.put(value.name(), projected);
         }
@@ -75,11 +76,11 @@ public final class ResearchDatasetJsonlExporter {
     private Map<String, Object> outcome(ResearchSample sample) {
         Map<String, Object> result = new LinkedHashMap<>();
         if (sample.outcome() == null) {
-            result.put("status", null);
+            result.put(STATUS, null);
             return result;
         }
         var outcome = sample.outcome();
-        result.put("status", outcome.status().name());
+        result.put(STATUS, outcome.status().name());
         result.put("maturityAt", outcome.maturityAt().toString());
         result.put("computedAt", outcome.computedAt().toString());
         result.put("outcomeDefinitionVersion", outcome.outcomeDefinitionVersion());

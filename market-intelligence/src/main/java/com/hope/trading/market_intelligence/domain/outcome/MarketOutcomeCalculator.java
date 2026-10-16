@@ -12,6 +12,8 @@ public final class MarketOutcomeCalculator {
     private static final int SCALE = 18;
     private static final RoundingMode ROUNDING = RoundingMode.HALF_UP;
 
+    /** Public calculation contract retained for deterministic replay callers. */
+    @SuppressWarnings("java:S107")
     public CalculatedOutcome calculate(
             OutcomeReferenceEvidence reference,
             List<OutcomeFutureObservation> futureObservations,

@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -23,6 +24,7 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
     private static final String SPREAD_BPS = "spreadBps";
     private final QuoteQualityCalculator calculator;
 
+    @Autowired
     public SpreadAnalysisCapability() {
         this(new QuoteQualityCalculator());
     }

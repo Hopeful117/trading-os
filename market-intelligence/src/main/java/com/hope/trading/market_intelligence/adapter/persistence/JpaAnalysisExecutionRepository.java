@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
+import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.execution.*;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,7 +22,7 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
         this.repository = repository; this.mapper = mapper;
     }
 
-    @Override @Transactional
+    @Override
     public AnalysisExecution save(AnalysisExecution value) {
         JpaAnalysisExecutionEntity entity = new JpaAnalysisExecutionEntity();
         entity.executionId = value.executionId(); entity.idempotencyKey = value.idempotencyKey().value();
@@ -28,7 +30,18 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
         entity.updatedAt = value.updatedAt(); entity.expiresAt = value.expiresAt();
         entity.completedAt = value.completedAt().orElse(null);
         entity.marketId = value.provenance().marketId(); entity.mode = value.provenance().mode().name();
-        entity.payload = write(snapshot(value)); repository.saveAndFlush(entity); return value;
+        entity.evaluationCutoff = value.provenance().evaluationCutoff();
+        entity.evidencePolicy = value.provenance().evidencePolicy().name();
+        entity.payload = write(snapshot(value));
+        try {
+            repository.saveAndFlush(entity);
+            return value;
+        } catch (DataIntegrityViolationException race) {
+            return repository.findByIdempotencyKey(value.idempotencyKey().value())
+                    .map(this::domain)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Concurrent execution insert has no durable idempotent result", race));
+        }
     }
     @Override @Transactional(readOnly = true)
     public Optional<AnalysisExecution> findById(UUID id) { return repository.findById(id).map(this::domain); }
@@ -48,6 +61,29 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
     public Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now) {
         return repository.findByIdempotencyKey(key.value()).map(this::domain)
                 .filter(value -> !value.isExpiredAt(now));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AnalysisExecution> findByIdempotencyKey(IdempotencyKey key) {
+        return repository.findByIdempotencyKey(key.value()).map(this::domain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AnalysisExecution> findByResearchScope(
+            Collection<UUID> marketIds,
+            Instant startCutoffInclusive,
+            Instant endCutoffExclusive,
+            EvidenceAcquisitionPolicy evidencePolicy
+    ) {
+        if (marketIds.isEmpty()) {
+            return List.of();
+        }
+        return repository
+                .findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndEvidencePolicy(
+                        marketIds, startCutoffInclusive, endCutoffExclusive, evidencePolicy.name())
+                .stream().map(this::domain).toList();
     }
 
     @Override

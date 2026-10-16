@@ -31,15 +31,12 @@ public record AnalyzerProvenance(
             throw new IllegalArgumentException("sourceVersion is required");
         }
         normalizationVersions = List.copyOf(normalizationVersions == null ? List.of() : normalizationVersions);
-        sourceArtifactType = required(sourceArtifactType, "sourceArtifactType");
-        sourceArtifactProducerId = required(sourceArtifactProducerId, "sourceArtifactProducerId");
-        sourceArtifactProducerVersion = required(sourceArtifactProducerVersion, "sourceArtifactProducerVersion");
-        sourceArtifactParametersFingerprint = required(
-                sourceArtifactParametersFingerprint, "sourceArtifactParametersFingerprint");
-        sourceArtifactInputFingerprint = required(
-                sourceArtifactInputFingerprint, "sourceArtifactInputFingerprint");
-        sourceArtifactContractVersion = required(
-                sourceArtifactContractVersion, "sourceArtifactContractVersion");
+        required(sourceArtifactType, "sourceArtifactType");
+        required(sourceArtifactProducerId, "sourceArtifactProducerId");
+        required(sourceArtifactProducerVersion, "sourceArtifactProducerVersion");
+        required(sourceArtifactParametersFingerprint, "sourceArtifactParametersFingerprint");
+        required(sourceArtifactInputFingerprint, "sourceArtifactInputFingerprint");
+        required(sourceArtifactContractVersion, "sourceArtifactContractVersion");
     }
 
     private static String required(String value, String field) {

@@ -41,8 +41,8 @@ class HistoricalOhlcEvidenceSourceTest {
                 .thenReturn(series(evidence(CUTOFF.minusSeconds(900), CUTOFF.plusSeconds(1),
                         "late", "late-fingerprint")));
 
-        assertThatThrownBy(() -> new HistoricalOhlcEvidenceSource(client).acquire(
-                MARKET_ID, "FIFTEEN_MINUTES", 200, CUTOFF))
+        HistoricalOhlcEvidenceSource source = new HistoricalOhlcEvidenceSource(client);
+        assertThatThrownBy(() -> source.acquire(MARKET_ID, "FIFTEEN_MINUTES", 200, CUTOFF))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("strict observed contract");
     }
@@ -54,8 +54,8 @@ class HistoricalOhlcEvidenceSourceTest {
                 .thenReturn(series(evidence(CUTOFF.minusSeconds(900), CUTOFF.minusSeconds(60),
                         "obs-1", "fp-1", "provider-normalized-v2")));
 
-        assertThatThrownBy(() -> new HistoricalOhlcEvidenceSource(client).acquire(
-                MARKET_ID, "FIFTEEN_MINUTES", 200, CUTOFF))
+        HistoricalOhlcEvidenceSource source = new HistoricalOhlcEvidenceSource(client);
+        assertThatThrownBy(() -> source.acquire(MARKET_ID, "FIFTEEN_MINUTES", 200, CUTOFF))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("unsupported normalization version");
     }

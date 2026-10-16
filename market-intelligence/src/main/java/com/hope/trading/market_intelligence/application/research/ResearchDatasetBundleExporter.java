@@ -43,19 +43,24 @@ public final class ResearchDatasetBundleExporter {
         try {
             Files.createDirectories(parent);
             Path temporary = Files.createTempDirectory(parent, outputDirectory.getFileName() + ".tmp-");
-            try {
-                String samples = samplesExporter.export(dataset);
-                write(temporary.resolve(SAMPLES_FILE), samples);
-                String samplesFingerprint = sha256(samples.getBytes(StandardCharsets.UTF_8));
-                write(temporary.resolve(MANIFEST_FILE), manifest(dataset.manifest(), samplesFingerprint));
-                write(temporary.resolve(README_FILE), readme(dataset.manifest()));
-                Files.move(temporary, outputDirectory, StandardCopyOption.ATOMIC_MOVE);
-            } catch (Exception exception) {
-                deleteRecursively(temporary);
-                throw exception;
-            }
+            exportTemporary(dataset, outputDirectory, temporary);
         } catch (IOException exception) {
             throw new IllegalStateException("Cannot export research dataset bundle", exception);
+        }
+    }
+
+    private void exportTemporary(DatasetBuildResult dataset, Path outputDirectory, Path temporary)
+            throws IOException {
+        try {
+            String samples = samplesExporter.export(dataset);
+            write(temporary.resolve(SAMPLES_FILE), samples);
+            String samplesFingerprint = sha256(samples.getBytes(StandardCharsets.UTF_8));
+            write(temporary.resolve(MANIFEST_FILE), manifest(dataset.manifest(), samplesFingerprint));
+            write(temporary.resolve(README_FILE), readme(dataset.manifest()));
+            Files.move(temporary, outputDirectory, StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception exception) {
+            deleteRecursively(temporary);
+            throw exception;
         }
     }
 

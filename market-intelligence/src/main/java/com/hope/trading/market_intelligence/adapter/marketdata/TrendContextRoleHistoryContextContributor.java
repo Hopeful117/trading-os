@@ -88,12 +88,7 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
             AcquisitionResult acquired = acquire(request, limits);
             Map<TrendContextRole, List<OhlcResponse>> acquiredResponses = acquired.responses();
             metadata = acquired.metadata();
-            evidenceExcludedByCutoff |= acquiredResponses.values().stream()
-                    .flatMap(Collection::stream)
-                    .anyMatch(value -> after(value.openTime(), boundary)
-                            || after(value.closeTime(), boundary)
-                            || after(value.occurredAt(), boundary)
-                            || after(value.fetchedAt(), boundary));
+            evidenceExcludedByCutoff |= containsEvidenceAfterCutoff(acquiredResponses, boundary);
             responses = filterToCutoff(acquiredResponses, boundary);
             boolean retry = false;
             try {
@@ -159,6 +154,15 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                         && !after(value.fetchedAt(), cutoff))
                 .toList()));
         return Map.copyOf(filtered);
+    }
+
+    private boolean containsEvidenceAfterCutoff(
+            Map<TrendContextRole, List<OhlcResponse>> responses, Instant cutoff) {
+        return responses.values().stream().flatMap(Collection::stream)
+                .anyMatch(value -> after(value.openTime(), cutoff)
+                        || after(value.closeTime(), cutoff)
+                        || after(value.occurredAt(), cutoff)
+                        || after(value.fetchedAt(), cutoff));
     }
 
     private boolean after(Instant value, Instant cutoff) {

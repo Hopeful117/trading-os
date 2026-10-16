@@ -149,6 +149,7 @@ class AnalysisExecutionServiceTest {
 
         @Override
         public void cancel(UUID executionId) {
+            // Cancellation is intentionally a no-op; these tests only verify dispatch semantics.
         }
     }
 }

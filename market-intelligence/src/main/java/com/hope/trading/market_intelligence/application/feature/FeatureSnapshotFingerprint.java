@@ -12,16 +12,15 @@ final class FeatureSnapshotFingerprint {
     private FeatureSnapshotFingerprint() {
     }
 
-    static String fingerprint(
-            FeatureSchema schema,
-            UUID marketId,
-            Instant cutoff,
-            EvidenceAcquisitionPolicy policy,
-            String contextFingerprint,
-            List<FeatureValue> values,
-            List<FeatureGroupStatus> groups,
-            List<AnalyzerProvenance> provenance
-    ) {
+    static String fingerprint(FingerprintInput input) {
+        FeatureSchema schema = input.schema();
+        UUID marketId = input.marketId();
+        Instant cutoff = input.cutoff();
+        EvidenceAcquisitionPolicy policy = input.policy();
+        String contextFingerprint = input.contextFingerprint();
+        List<FeatureValue> values = input.values();
+        List<FeatureGroupStatus> groups = input.groups();
+        List<AnalyzerProvenance> provenance = input.provenance();
         List<String> material = new ArrayList<>();
         material.add("projection=" + schema.version());
         material.add("market=" + marketId);
@@ -40,6 +39,17 @@ final class FeatureSnapshotFingerprint {
         provenance.forEach(value -> material.add("provenance=" + value));
         return ArtifactFingerprint.ofInputs(material).value();
     }
+
+    record FingerprintInput(
+            FeatureSchema schema,
+            UUID marketId,
+            Instant cutoff,
+            EvidenceAcquisitionPolicy policy,
+            String contextFingerprint,
+            List<FeatureValue> values,
+            List<FeatureGroupStatus> groups,
+            List<AnalyzerProvenance> provenance
+    ) { }
 
     private static String canonical(FeatureValue value) {
         String content = switch (value) {

@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collection;
 
 interface SpringDataObservedMarketOutcomeRepository
         extends JpaRepository<JpaObservedMarketOutcomeEntity, UUID> {
@@ -13,4 +14,6 @@ interface SpringDataObservedMarketOutcomeRepository
 
     List<JpaObservedMarketOutcomeEntity> findByMarketIdAndEvaluationCutoffAndHorizonSeconds(
             UUID marketId, Instant evaluationCutoff, long horizonSeconds);
+
+    List<JpaObservedMarketOutcomeEntity> findByMarketIdIn(Collection<UUID> marketIds);
 }

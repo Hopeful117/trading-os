@@ -16,6 +16,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -51,7 +52,7 @@ public final class ResearchDatasetExportCommand implements ApplicationRunner {
         SpringApplication.exit(context, () -> 0);
     }
 
-    private ResearchPopulationSpec readPopulation(Path path) throws Exception {
+    private ResearchPopulationSpec readPopulation(Path path) throws IOException {
         JsonNode root = mapper.readTree(path.toFile());
         JsonNode marketIds = requiredArray(root, "marketIds");
         Set<UUID> markets = new HashSet<>();

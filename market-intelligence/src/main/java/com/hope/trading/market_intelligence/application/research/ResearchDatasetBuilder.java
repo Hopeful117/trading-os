@@ -5,7 +5,6 @@ import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 import com.hope.trading.market_intelligence.domain.feature.FeatureMissingness;
 import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
-import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
 import com.hope.trading.market_intelligence.domain.research.*;
 import com.hope.trading.market_intelligence.application.feature.FeatureProjectionV1;
 
@@ -48,7 +47,7 @@ public final class ResearchDatasetBuilder {
             if (duplicate && !previous.fingerprint().equals(snapshot.fingerprint())) {
                 throw new IllegalArgumentException("conflicting feature snapshots share one semantic identity");
             }
-            for (var horizon : population.horizons().stream().sorted(Comparator.comparing(value -> value.value())).toList()) {
+                for (var horizon : population.horizons().stream().sorted(Comparator.comparing(com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon::value)).toList()) {
                 if (duplicate) {
                     samples.add(ResearchSample.excluded(DATASET_DEFINITION_VERSION, snapshot, horizon,
                             ResearchExclusionReason.DUPLICATE_FEATURE_SNAPSHOT));
