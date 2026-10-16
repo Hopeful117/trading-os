@@ -11,6 +11,8 @@ public final class MarketOutcomeFingerprint {
     private MarketOutcomeFingerprint() {
     }
 
+    /** Public fingerprint contract is serialized into research lineage. */
+    @SuppressWarnings("java:S107")
     public static String fingerprint(
             String definitionVersion,
             UUID marketId,

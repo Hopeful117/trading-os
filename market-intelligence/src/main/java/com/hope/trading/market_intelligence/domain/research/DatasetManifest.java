@@ -20,7 +20,7 @@ public record DatasetManifest(
         List<String> fingerprintMaterial
 ) {
     public DatasetManifest {
-        datasetDefinitionVersion = required(datasetDefinitionVersion, "dataset definition version");
+        required(datasetDefinitionVersion, "dataset definition version");
         Objects.requireNonNull(population, "population");
         Objects.requireNonNull(featureSchema, "feature schema");
         outcomeSchema = List.copyOf(outcomeSchema);
@@ -29,7 +29,7 @@ public record DatasetManifest(
         }
         exclusionCounts = Map.copyOf(exclusionCounts);
         Objects.requireNonNull(createdAt, "created at");
-        datasetFingerprint = required(datasetFingerprint, "dataset fingerprint");
+        required(datasetFingerprint, "dataset fingerprint");
         fingerprintMaterial = List.copyOf(fingerprintMaterial);
         if (fingerprintMaterial.isEmpty()) {
             throw new IllegalArgumentException("fingerprint material must not be empty");

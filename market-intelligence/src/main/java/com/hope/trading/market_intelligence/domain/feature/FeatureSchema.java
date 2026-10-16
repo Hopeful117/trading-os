@@ -7,7 +7,7 @@ import java.util.Set;
 
 public record FeatureSchema(String version, List<FeatureDefinition> definitions) {
     public FeatureSchema {
-        version = Objects.requireNonNull(version, "version");
+        Objects.requireNonNull(version, "version");
         if (version.isBlank()) throw new IllegalArgumentException("version must not be blank");
         definitions = definitions.stream().sorted(java.util.Comparator.comparingInt(FeatureDefinition::order)).toList();
         Set<String> names = new HashSet<>();

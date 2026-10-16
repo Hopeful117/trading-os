@@ -6,7 +6,7 @@ import java.util.Objects;
 public record NumericFeatureValue(String name, FeatureMissingness status, BigDecimal value)
         implements FeatureValue {
     public NumericFeatureValue {
-        name = required(name);
+        required(name);
         Objects.requireNonNull(status, "status");
         validateValue(status, value);
     }

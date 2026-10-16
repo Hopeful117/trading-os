@@ -38,14 +38,17 @@ class MarketOutcomeCalculatorTest {
     void rejectsIncompleteFutureEvidenceInsteadOfUsingZeroValues() {
         var calculator = new MarketOutcomeCalculator();
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> calculator.calculate(
-                        new OutcomeReferenceEvidence(new BigDecimal("100"), T0, T0,
-                                "reference-fingerprint", "historical-ohlc-v1"),
-                        List.of(observation("10:00:00Z", "10:15:00Z", "103", "99", "102", "future-1")),
-                        4, 1, List.of("10:15:00Z..10:30:00Z"), "range-fingerprint", T0,
-                        OutcomeHorizon.oneHour()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("complete future evidence");
+         OutcomeReferenceEvidence reference = new OutcomeReferenceEvidence(new BigDecimal("100"), T0, T0,
+                 "reference-fingerprint", "historical-ohlc-v1");
+         List<OutcomeFutureObservation> observations = List.of(
+                 observation("10:00:00Z", "10:15:00Z", "103", "99", "102", "future-1"));
+         Throwable incomplete = org.assertj.core.api.Assertions.catchThrowable(() -> calculator.calculate(
+                         reference, observations,
+                         4, 1, List.of("10:15:00Z..10:30:00Z"), "range-fingerprint", T0,
+                         OutcomeHorizon.oneHour()));
+         org.assertj.core.api.Assertions.assertThat(incomplete)
+                 .isInstanceOf(IllegalArgumentException.class)
+                 .hasMessageContaining("complete future evidence");
     }
 
     @Test

@@ -12,6 +12,10 @@ interface SpringDataAnalysisExecutionRepository
         extends JpaRepository<JpaAnalysisExecutionEntity, UUID> {
     Optional<JpaAnalysisExecutionEntity> findByIdempotencyKey(String idempotencyKey);
 
+    List<JpaAnalysisExecutionEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndEvidencePolicy(
+            Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
+            String evidencePolicy);
+
     List<JpaAnalysisExecutionEntity> findByExecutionIdIn(Collection<UUID> executionIds);
 
     Optional<JpaAnalysisExecutionEntity> findFirstByMarketIdOrderByUpdatedAtDesc(UUID marketId);

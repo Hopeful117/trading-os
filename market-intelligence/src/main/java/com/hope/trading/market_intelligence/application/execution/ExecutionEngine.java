@@ -229,7 +229,10 @@ public class ExecutionEngine {
                 .orElse(requirement.expectedVersion());
         return artifacts.find(plan.analysisExecutionId(), requirement.artifactType(), sourceVersion)
                 .stream().map(ProducedArtifact::artifact)
-                .peek(artifact -> validateContext(plan, artifact))
+                .map(artifact -> {
+                    validateContext(plan, artifact);
+                    return artifact;
+                })
                 .map(value -> adapter.map(item -> item.adapt(value)).orElse(value)).toList();
     }
 

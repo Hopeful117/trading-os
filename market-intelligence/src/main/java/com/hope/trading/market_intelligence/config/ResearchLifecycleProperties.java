@@ -1,0 +1,82 @@
+package com.hope.trading.market_intelligence.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+@ConfigurationProperties(prefix = "research.lifecycle")
+public class ResearchLifecycleProperties {
+    private boolean enabled;
+    private List<UUID> marketIds = new ArrayList<>();
+    private Duration observationCadence = Duration.ofHours(1);
+    private List<Duration> outcomeHorizons = new ArrayList<>(List.of(
+            Duration.ofHours(1), Duration.ofHours(4), Duration.ofHours(24)));
+    private Duration fixedDelay = Duration.ofMinutes(1);
+
+    public void validate() {
+        if (!enabled) {
+            return;
+        }
+        if (marketIds.isEmpty()) {
+            throw new IllegalStateException("Research lifecycle requires at least one market ID when enabled");
+        }
+        if (observationCadence.isZero() || observationCadence.isNegative()) {
+            throw new IllegalStateException("Research observation cadence must be positive");
+        }
+        if (fixedDelay.isZero() || fixedDelay.isNegative()) {
+            throw new IllegalStateException("Research lifecycle fixed delay must be positive");
+        }
+        if (outcomeHorizons.isEmpty() || outcomeHorizons.stream().anyMatch(Duration::isNegative)
+                || outcomeHorizons.stream().anyMatch(Duration::isZero)) {
+            throw new IllegalStateException("Research outcome horizons must be positive");
+        }
+        if (new LinkedHashSet<>(outcomeHorizons).size() != outcomeHorizons.size()) {
+            throw new IllegalStateException("Research outcome horizons must be unique");
+        }
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public Set<UUID> getMarketIds() {
+        return Set.copyOf(new LinkedHashSet<>(marketIds));
+    }
+
+    public void setMarketIds(List<UUID> marketIds) {
+        this.marketIds = marketIds == null ? new ArrayList<>() : new ArrayList<>(marketIds);
+    }
+
+    public Duration getObservationCadence() {
+        return observationCadence;
+    }
+
+    public void setObservationCadence(Duration observationCadence) {
+        this.observationCadence = observationCadence;
+    }
+
+    public List<Duration> getOutcomeHorizons() {
+        return List.copyOf(outcomeHorizons);
+    }
+
+    public void setOutcomeHorizons(List<Duration> outcomeHorizons) {
+        this.outcomeHorizons = outcomeHorizons == null ? new ArrayList<>() : new ArrayList<>(outcomeHorizons);
+    }
+
+    public Duration getFixedDelay() {
+        return fixedDelay;
+    }
+
+    public void setFixedDelay(Duration fixedDelay) {
+        this.fixedDelay = fixedDelay;
+    }
+}

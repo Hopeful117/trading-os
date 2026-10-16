@@ -5,7 +5,7 @@ import java.util.Objects;
 public record CategoricalFeatureValue(String name, FeatureMissingness status, String value)
         implements FeatureValue {
     public CategoricalFeatureValue {
-        name = required(name);
+        required(name);
         Objects.requireNonNull(status, "status");
         if (status == FeatureMissingness.PRESENT && (value == null || value.isBlank())) {
             throw new IllegalArgumentException("Present feature requires a category");

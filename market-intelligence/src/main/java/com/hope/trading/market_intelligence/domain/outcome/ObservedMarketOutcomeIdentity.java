@@ -16,8 +16,8 @@ public record ObservedMarketOutcomeIdentity(
         Objects.requireNonNull(marketId, "market ID is required");
         Objects.requireNonNull(evaluationCutoff, "evaluation cutoff is required");
         Objects.requireNonNull(horizon, "horizon is required");
-        outcomeDefinitionVersion = required(outcomeDefinitionVersion, "outcome definition version");
-        outcomeFingerprint = required(outcomeFingerprint, "outcome fingerprint");
+        required(outcomeDefinitionVersion, "outcome definition version");
+        required(outcomeFingerprint, "outcome fingerprint");
     }
 
     public static ObservedMarketOutcomeIdentity of(ObservedMarketOutcome outcome) {

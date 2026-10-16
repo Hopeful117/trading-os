@@ -42,8 +42,7 @@ public class MarketOutcomeEvaluationService {
         if (computedAt.isBefore(maturityAt)) {
             return create(
                     request, maturityAt, computedAt, ObservedMarketOutcomeStatus.PENDING,
-                    "HORIZON_NOT_MATURED", null, null, null, null, null, null,
-                    null, null, null, 0, 0, null, null, List.of());
+                    "HORIZON_NOT_MATURED", OutcomeValues.empty());
         }
 
         OutcomeReferenceEvidence reference = referenceSource
@@ -51,8 +50,7 @@ public class MarketOutcomeEvaluationService {
         if (reference == null) {
             return persist(create(
                     request, maturityAt, computedAt, ObservedMarketOutcomeStatus.UNAVAILABLE,
-                    "REFERENCE_EVIDENCE_UNAVAILABLE", null, null, null, null, null, null,
-                    null, null, null, 0, 0, null, null, List.of()));
+                    "REFERENCE_EVIDENCE_UNAVAILABLE", OutcomeValues.empty()));
         }
         HistoricalOhlcFutureEvidenceSource.HistoricalOhlcRangeSnapshot future = futureSource.find(
                 request.marketId(), request.evaluationCutoff(), maturityAt);
@@ -64,10 +62,9 @@ public class MarketOutcomeEvaluationService {
             return persist(create(
                     request, maturityAt, computedAt, status,
                     future.reason() == null ? "FUTURE_EVIDENCE_INCOMPLETE" : future.reason(),
-                    reference.close(), reference.observationFingerprint(), null, null, null, null,
-                    null, null, null, future.expectedObservationCount(),
-                    future.observedObservationCount(), future.evidenceFingerprint(),
-                    reference.normalizationVersion(), future.normalizationVersions()));
+                    new OutcomeValues(reference.close(), reference.observationFingerprint(), null, null, null,
+                            null, null, null, null, future.expectedObservationCount(), future.observedObservationCount(),
+                            future.evidenceFingerprint(), reference.normalizationVersion(), future.normalizationVersions())));
         }
 
         MarketOutcomeCalculator.CalculatedOutcome calculated = calculator.calculate(
@@ -81,13 +78,11 @@ public class MarketOutcomeEvaluationService {
                 request.horizon());
         return persist(create(
                 request, maturityAt, computedAt, ObservedMarketOutcomeStatus.AVAILABLE,
-                null, reference.close(), reference.observationFingerprint(),
-                calculated.finalPrice(), calculated.futureHigh(), calculated.futureLow(),
-                calculated.forwardReturn(), calculated.futureHighReturn(),
-                calculated.futureLowReturn(), calculated.futureRange(),
-                future.expectedObservationCount(), future.observedObservationCount(),
-                 future.evidenceFingerprint(), reference.normalizationVersion(),
-                 future.normalizationVersions(), calculated));
+                null, new OutcomeValues(reference.close(), reference.observationFingerprint(), calculated.finalPrice(),
+                        calculated.futureHigh(), calculated.futureLow(), calculated.forwardReturn(),
+                        calculated.futureHighReturn(), calculated.futureLowReturn(), calculated.futureRange(),
+                        future.expectedObservationCount(), future.observedObservationCount(),
+                        future.evidenceFingerprint(), reference.normalizationVersion(), future.normalizationVersions())));
     }
 
     private ObservedMarketOutcome persist(ObservedMarketOutcome outcome) {
@@ -100,6 +95,25 @@ public class MarketOutcomeEvaluationService {
             Instant computedAt,
             ObservedMarketOutcomeStatus status,
             String reason,
+            OutcomeValues values
+    ) {
+        String definition = MarketOutcomeCalculator.DEFINITION_VERSION;
+        String fingerprint = MarketOutcomeFingerprint.fingerprint(
+                definition, request.marketId(), request.evaluationCutoff(), request.horizon(),
+                values.referenceFingerprint(), values.futureFingerprint(), status, values.referencePrice(), values.finalPrice(),
+                values.futureHigh(), values.futureLow(), values.forwardReturn(), values.futureHighReturn(),
+                values.futureLowReturn(), values.futureRange(), values.referenceNormalizationVersion(),
+                values.futureNormalizationVersions());
+        return new ObservedMarketOutcome(
+                request.marketId(), request.evaluationCutoff(), request.horizon(), maturityAt,
+                 status, reason, values.referencePrice(), values.referenceFingerprint(), values.finalPrice(), values.futureHigh(),
+                 values.futureLow(), values.forwardReturn(), values.futureHighReturn(), values.futureLowReturn(), values.futureRange(),
+                  values.expectedCount(), values.observedCount(), values.referenceNormalizationVersion(), values.futureNormalizationVersions(),
+                  values.futureFingerprint(), definition, fingerprint,
+                 computedAt, request.analysisExecutionId());
+    }
+
+    private record OutcomeValues(
             java.math.BigDecimal referencePrice,
             String referenceFingerprint,
             java.math.BigDecimal finalPrice,
@@ -115,47 +129,9 @@ public class MarketOutcomeEvaluationService {
             String referenceNormalizationVersion,
             List<String> futureNormalizationVersions
     ) {
-        return create(request, maturityAt, computedAt, status, reason, referencePrice,
-                referenceFingerprint, finalPrice, futureHigh, futureLow, forwardReturn,
-                futureHighReturn, futureLowReturn, futureRange, expectedCount,
-                observedCount, futureFingerprint, referenceNormalizationVersion,
-                futureNormalizationVersions, null);
-    }
-
-    private ObservedMarketOutcome create(
-            MarketOutcomeEvaluationRequest request,
-            Instant maturityAt,
-            Instant computedAt,
-            ObservedMarketOutcomeStatus status,
-            String reason,
-            java.math.BigDecimal referencePrice,
-            String referenceFingerprint,
-            java.math.BigDecimal finalPrice,
-            java.math.BigDecimal futureHigh,
-            java.math.BigDecimal futureLow,
-            java.math.BigDecimal forwardReturn,
-            java.math.BigDecimal futureHighReturn,
-            java.math.BigDecimal futureLowReturn,
-            java.math.BigDecimal futureRange,
-            int expectedCount,
-            int observedCount,
-            String futureFingerprint,
-            String referenceNormalizationVersion,
-            List<String> futureNormalizationVersions,
-            MarketOutcomeCalculator.CalculatedOutcome calculated
-    ) {
-        String definition = MarketOutcomeCalculator.DEFINITION_VERSION;
-        String fingerprint = MarketOutcomeFingerprint.fingerprint(
-                definition, request.marketId(), request.evaluationCutoff(), request.horizon(),
-                referenceFingerprint, futureFingerprint, status, referencePrice, finalPrice,
-                futureHigh, futureLow, forwardReturn, futureHighReturn, futureLowReturn, futureRange,
-                referenceNormalizationVersion, futureNormalizationVersions);
-        return new ObservedMarketOutcome(
-                request.marketId(), request.evaluationCutoff(), request.horizon(), maturityAt,
-                status, reason, referencePrice, referenceFingerprint, finalPrice, futureHigh,
-                futureLow, forwardReturn, futureHighReturn, futureLowReturn, futureRange,
-                 expectedCount, observedCount, referenceNormalizationVersion, futureNormalizationVersions,
-                 futureFingerprint, definition, fingerprint,
-                computedAt, request.analysisExecutionId());
+        private static OutcomeValues empty() {
+            return new OutcomeValues(null, null, null, null, null, null, null, null, null,
+                    0, 0, null, null, List.of());
+        }
     }
 }

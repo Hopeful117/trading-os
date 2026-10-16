@@ -10,14 +10,22 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 class OutcomeHorizonTest {
     @Test
     void rejectsNonPositiveAndUnboundedValues() {
-        assertThatThrownBy(() -> new OutcomeHorizon(Duration.ZERO))
+        Duration zero = Duration.ZERO;
+        Duration negative = Duration.ofMinutes(-1);
+        Duration overThirtyDays = Duration.ofDays(31);
+        assertThatThrownBy(() -> invalid(zero))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new OutcomeHorizon(Duration.ofMinutes(-1)))
+        assertThatThrownBy(() -> invalid(negative))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new OutcomeHorizon(Duration.ofDays(31)))
+        assertThatThrownBy(() -> invalid(overThirtyDays))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatCode(() -> new OutcomeHorizon(OutcomeHorizon.MAXIMUM)).doesNotThrowAnyException();
-        assertThatThrownBy(() -> new OutcomeHorizon(OutcomeHorizon.MAXIMUM.plusMinutes(15)))
+        Duration overMaximum = OutcomeHorizon.MAXIMUM.plusMinutes(15);
+        assertThatThrownBy(() -> new OutcomeHorizon(overMaximum))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private OutcomeHorizon invalid(Duration duration) {
+        return new OutcomeHorizon(duration);
     }
 }

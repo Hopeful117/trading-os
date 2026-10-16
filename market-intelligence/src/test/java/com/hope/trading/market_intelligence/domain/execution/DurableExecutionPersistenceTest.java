@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.domain.execution;
 import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
 import com.hope.trading.market_intelligence.application.port.*;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
+import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.MarketSnapshotContext;
 import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
@@ -16,6 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -74,7 +79,80 @@ class DurableExecutionPersistenceTest {
                     assertThat(value.state()).isEqualTo(CapabilityExecutionState.COMPLETED);
                     assertThat(value.result()).get().extracting(CapabilityResult::completeness)
                             .isEqualTo(CapabilityCompleteness.COMPLETE);
+                 });
+    }
+
+    @Test
+    void rehydratesStrictResearchScopeAfterPersistenceRestartBoundary() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-08-01T10:00:00Z");
+        AnalysisExecution requested = AnalysisExecution.requested(
+                UUID.randomUUID(), new IdempotencyKey("research-restart-" + UUID.randomUUID()),
+                ExecutionTestFixtures.policy(), cutoff,
+                List.of("spread-analysis"),
+                new AnalysisExecutionProvenance(
+                        marketId, AnalysisExecutionMode.PASSIVE, "research-feature-snapshot-v1", "v1",
+                        null, null, null, cutoff, EvidenceAcquisitionPolicy.STRICT_OBSERVED),
+                AnalysisTraceMetadata.empty());
+        AnalysisExecution completed = requested
+                .transitionTo(AnalysisExecutionStatus.ACCEPTED, cutoff)
+                .transitionTo(AnalysisExecutionStatus.CONTEXT_BUILDING, cutoff)
+                .transitionTo(AnalysisExecutionStatus.RUNNING, cutoff)
+                .complete(
+                ExecutionTestFixtures.result(requested.executionId(), marketId, cutoff),
+                AnalysisResultQuality.COMPLETE, cutoff.plusSeconds(1));
+
+        analyses.save(completed);
+
+        assertThat(analyses.findByResearchScope(
+                List.of(marketId), cutoff.minusSeconds(1), cutoff.plusSeconds(1),
+                EvidenceAcquisitionPolicy.STRICT_OBSERVED))
+                .singleElement()
+                .satisfies(value -> {
+                    assertThat(value.executionId()).isEqualTo(completed.executionId());
+                    assertThat(value.provenance().evaluationCutoff()).isEqualTo(cutoff);
+                    assertThat(value.provenance().evidencePolicy())
+                            .isEqualTo(EvidenceAcquisitionPolicy.STRICT_OBSERVED);
+                    assertThat(value.result()).isPresent();
                 });
+    }
+
+    @Test
+    void concurrentSameIdempotencyExecutionInsertReturnsDurableExistingExecution() throws Exception {
+        Instant cutoff = Instant.parse("2026-08-01T10:00:00Z");
+        String key = "research-concurrent-" + UUID.randomUUID();
+        AnalysisExecution first = strictRequested(key, cutoff);
+        AnalysisExecution second = strictRequested(key, cutoff);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<AnalysisExecution> firstResult = executor.submit(() -> saveAfterStart(first, start));
+            Future<AnalysisExecution> secondResult = executor.submit(() -> saveAfterStart(second, start));
+            start.countDown();
+
+            assertThat(firstResult.get().idempotencyKey().value()).isEqualTo(key);
+            assertThat(secondResult.get().idempotencyKey().value()).isEqualTo(key);
+            assertThat(analyses.findByIdempotencyKey(new IdempotencyKey(key))).isPresent();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private AnalysisExecution saveAfterStart(AnalysisExecution execution, CountDownLatch start)
+            throws InterruptedException {
+        start.await();
+        return analyses.save(execution);
+    }
+
+    private AnalysisExecution strictRequested(String idempotencyKey, Instant cutoff) {
+        UUID marketId = UUID.randomUUID();
+        return AnalysisExecution.requested(
+                UUID.randomUUID(), new IdempotencyKey(idempotencyKey), ExecutionTestFixtures.policy(), cutoff,
+                List.of("spread-analysis"),
+                new AnalysisExecutionProvenance(
+                        marketId, AnalysisExecutionMode.PASSIVE, "research-feature-snapshot-v1", "v1",
+                        null, null, null, cutoff, EvidenceAcquisitionPolicy.STRICT_OBSERVED),
+                AnalysisTraceMetadata.empty());
     }
 
     private StoredArtifact artifact(UUID marketId) {

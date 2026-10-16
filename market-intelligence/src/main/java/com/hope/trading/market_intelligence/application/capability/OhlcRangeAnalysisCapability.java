@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -20,6 +21,7 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
     public static final String CAPABILITY_VERSION = "1.1.0";
     private final OhlcTemporalCalculator calculator;
 
+    @Autowired
     public OhlcRangeAnalysisCapability() {
         this(new OhlcTemporalCalculator());
     }

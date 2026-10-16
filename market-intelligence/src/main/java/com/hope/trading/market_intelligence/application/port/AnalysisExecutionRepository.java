@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.port;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
+import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -24,6 +25,15 @@ public interface AnalysisExecutionRepository {
     Optional<AnalysisExecution> findLatestByMarketId(UUID marketId);
 
     Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now);
+
+    Optional<AnalysisExecution> findByIdempotencyKey(IdempotencyKey key);
+
+    List<AnalysisExecution> findByResearchScope(
+            Collection<UUID> marketIds,
+            Instant startCutoffInclusive,
+            Instant endCutoffExclusive,
+            EvidenceAcquisitionPolicy evidencePolicy
+    );
 
     boolean transitionStatus(
             UUID executionId,

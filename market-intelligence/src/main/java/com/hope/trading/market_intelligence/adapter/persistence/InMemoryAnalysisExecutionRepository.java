@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
+import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
@@ -55,6 +56,29 @@ public class InMemoryAnalysisExecutionRepository implements AnalysisExecutionRep
                 .filter(execution -> execution.status() != AnalysisExecutionStatus.CANCELLED)
                 .filter(execution -> execution.status() != AnalysisExecutionStatus.EXPIRED)
                 .findFirst();
+    }
+
+    @Override
+    public Optional<AnalysisExecution> findByIdempotencyKey(IdempotencyKey key) {
+        return executions.values().stream()
+                .filter(execution -> execution.idempotencyKey().equals(key))
+                .findFirst();
+    }
+
+    @Override
+    public List<AnalysisExecution> findByResearchScope(
+            Collection<UUID> marketIds,
+            Instant startCutoffInclusive,
+            Instant endCutoffExclusive,
+            EvidenceAcquisitionPolicy evidencePolicy
+    ) {
+        return executions.values().stream()
+                .filter(execution -> marketIds.contains(execution.provenance().marketId()))
+                .filter(execution -> execution.provenance().evidencePolicy() == evidencePolicy)
+                .filter(execution -> execution.provenance().evaluationCutoff() != null)
+                .filter(execution -> !execution.provenance().evaluationCutoff().isBefore(startCutoffInclusive))
+                .filter(execution -> execution.provenance().evaluationCutoff().isBefore(endCutoffExclusive))
+                .toList();
     }
 
     @Override

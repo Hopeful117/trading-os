@@ -16,9 +16,9 @@ import java.time.ZoneOffset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ResearchDatasetBuilderTest {
     private static final UUID MARKET_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -165,6 +165,30 @@ class ResearchDatasetBuilderTest {
     }
 
     @Test
+    void datasetManifestValidatesCountsAndFingerprintMaterial() {
+        List<String> material = List.of("material");
+        assertThatThrownBy(() -> manifest(-1, 0, 0, material))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("invalid dataset counts");
+        assertThatThrownBy(() -> manifest(1, 0, 0, material))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("invalid dataset counts");
+        assertThatThrownBy(() -> manifest(1, 1, 1, material))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("invalid dataset counts");
+        assertThatThrownBy(() -> manifest(0, 0, 0, List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("fingerprint material must not be empty");
+    }
+
+    @Test
+    void datasetManifestExposesConfiguredHorizons() {
+        DatasetManifest manifest = manifest(0, 0, 0, List.of("material"));
+
+        assertThat(manifest.horizons()).containsExactly(OutcomeHorizon.oneHour());
+    }
+
+    @Test
     void correctedOutcomeChangesSampleAndDatasetFingerprintWithoutChangingFeatureSnapshot() {
         FeatureSnapshot snapshot = snapshot("snapshot-correction");
         ObservedMarketOutcome original = outcome(OutcomeHorizon.oneHour(), "outcome-original", ObservedMarketOutcomeStatus.AVAILABLE);
@@ -236,7 +260,9 @@ class ResearchDatasetBuilderTest {
         ObservedMarketOutcome first = outcomeWithFinalPrice("outcome-conflict", new BigDecimal("102"));
         ObservedMarketOutcome second = outcomeWithFinalPrice("outcome-conflict", new BigDecimal("103"));
 
-        assertThatThrownBy(() -> builder().build(population, List.of(snapshot), List.of(first, second)))
+        ResearchDatasetBuilder builder = builder();
+        Throwable conflict = catchThrowable(() -> builder.build(population, List.of(snapshot), List.of(first, second)));
+        assertThat(conflict)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("conflicting outcomes");
     }
@@ -249,13 +275,107 @@ class ResearchDatasetBuilderTest {
                 "market-outcome-v1", Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
                 Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
 
-        assertThatThrownBy(() -> builder().build(population, List.of(snapshot), List.of()))
+        ResearchDatasetBuilder builder = builder();
+        Throwable unsupported = catchThrowable(() -> builder.build(population, List.of(snapshot), List.of()));
+        assertThat(unsupported)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("unsupported feature projection version");
     }
 
+    @Test
+    void excludesSnapshotWithMismatchedProjectionVersion() {
+        FeatureSnapshot base = snapshot("snapshot-version-mismatch");
+        FeatureSnapshot mismatched = new FeatureSnapshot(base.snapshotId(), base.analysisExecutionId(), base.marketId(),
+                base.evaluationCutoff(), base.evidencePolicy(), "feature-projection-v2", base.contextFingerprint(),
+                base.values(), base.groups(), base.provenance(), base.fingerprint(), base.createdAt());
+        ResearchPopulationSpec population = population(Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-version-mismatch"),
+                Set.of(OutcomeHorizon.oneHour()));
+
+        DatasetBuildResult result = builder().build(population, List.of(mismatched),
+                List.of(outcome(OutcomeHorizon.oneHour(), "outcome-version-mismatch", ObservedMarketOutcomeStatus.AVAILABLE)));
+
+        assertThat(result.samples().getFirst().exclusionReason()).isEqualTo(ResearchExclusionReason.VERSION_MISMATCH);
+    }
+
+    @Test
+    void excludesSnapshotWithFeatureMissingnessThatPopulationDoesNotAccept() {
+        FeatureSnapshot snapshot = snapshot("snapshot-required-feature");
+        ResearchPopulationSpec population = new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1),
+                T0.plusSeconds(1), "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED,
+                "market-outcome-v1", Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                Set.of(), Map.of(new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-required-feature"));
+
+        DatasetBuildResult result = builder().build(population, List.of(snapshot),
+                List.of(outcome(OutcomeHorizon.oneHour(), "outcome-required-feature", ObservedMarketOutcomeStatus.AVAILABLE)));
+
+        assertThat(result.samples().getFirst().exclusionReason())
+                .isEqualTo(ResearchExclusionReason.FEATURE_MISSING_REQUIRED_VALUE);
+    }
+
+    @Test
+    void excludesPendingAndUnavailableOutcomesWithoutTreatingThemAsEligible() {
+        FeatureSnapshot snapshot = snapshot("snapshot-outcome-status");
+        ResearchPopulationSpec pendingPopulation = population(Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-pending"),
+                Set.of(OutcomeHorizon.oneHour()));
+        ResearchPopulationSpec unavailablePopulation = population(Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-unavailable"),
+                Set.of(OutcomeHorizon.oneHour()));
+
+        DatasetBuildResult pending = builder().build(pendingPopulation, List.of(snapshot),
+                List.of(outcome(OutcomeHorizon.oneHour(), "outcome-pending", ObservedMarketOutcomeStatus.PENDING)));
+        DatasetBuildResult unavailable = builder().build(unavailablePopulation, List.of(snapshot),
+                List.of(outcome(OutcomeHorizon.oneHour(), "outcome-unavailable", ObservedMarketOutcomeStatus.UNAVAILABLE)));
+
+        assertThat(pending.samples().getFirst().exclusionReason()).isEqualTo(ResearchExclusionReason.OUTCOME_NOT_MATURE);
+        assertThat(unavailable.samples().getFirst().exclusionReason()).isEqualTo(ResearchExclusionReason.OUTCOME_UNAVAILABLE);
+    }
+
+    @Test
+    void validatesPopulationTemporalAndEvidenceConstraints() {
+        assertThatThrownBy(this::populationWithInvalidInterval)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("start cutoff must precede end cutoff");
+        assertThatThrownBy(this::populationWithLiveEvidence)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("research features require STRICT_OBSERVED evidence");
+        assertThatThrownBy(this::populationWithoutHorizons)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("at least one horizon is required");
+        assertThat(population(Map.of(), Set.of(OutcomeHorizon.oneHour())).interval())
+                .isEqualTo(ResearchPopulationSpec.FUTURE_INTERVAL);
+    }
+
     private ResearchDatasetBuilder builder() {
         return new ResearchDatasetBuilder(Clock.fixed(Instant.parse("2026-10-16T00:00:00Z"), ZoneOffset.UTC));
+    }
+
+    private ResearchPopulationSpec populationWithInvalidInterval() {
+        return new ResearchPopulationSpec("population-v1", Set.of(), T0, T0,
+                "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED, "market-outcome-v1",
+                Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
+    }
+
+    private ResearchPopulationSpec populationWithLiveEvidence() {
+        return new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1), T0.plusSeconds(1),
+                "feature-projection-v1", EvidenceAcquisitionPolicy.LIVE_CURRENT, "market-outcome-v1",
+                Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
+    }
+
+    private ResearchPopulationSpec populationWithoutHorizons() {
+        return new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1), T0.plusSeconds(1),
+                "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED, "market-outcome-v1",
+                Set.of(), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
+    }
+
+    private DatasetManifest manifest(int samples, int eligible, int excluded, List<String> material) {
+        return new DatasetManifest("dataset-v1", population(Map.of(), Set.of(OutcomeHorizon.oneHour())),
+                FeatureProjectionV1.schema(), List.of("forwardReturn"), samples, eligible, excluded,
+                Map.of(), T0, "dataset-fingerprint", material);
     }
 
     private ResearchPopulationSpec population(Map<ResearchOutcomeKey, String> selected, Set<OutcomeHorizon> horizons) {
@@ -299,7 +419,8 @@ class ResearchDatasetBuilderTest {
                 available ? new BigDecimal("0.02") : null, available ? new BigDecimal("0.05") : null,
                 available ? new BigDecimal("-0.02") : null, available ? new BigDecimal("0.07") : null,
                 4, status == ObservedMarketOutcomeStatus.INCOMPLETE ? 3 : 4, "ohlc-v1", List.of("ohlc-v1"),
-                "future-" + fingerprint, "market-outcome-v1", fingerprint, T0.plus(horizon.value()), null);
+                 "future-" + fingerprint, "market-outcome-v1", fingerprint,
+                 status == ObservedMarketOutcomeStatus.PENDING ? T0 : T0.plus(horizon.value()), null);
     }
 
     private ObservedMarketOutcome outcomeWithFinalPrice(String fingerprint, BigDecimal finalPrice) {
