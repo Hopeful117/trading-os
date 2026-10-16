@@ -20,6 +20,15 @@ public interface HistoricalOhlcClient {
             @RequestParam int limit
     );
 
+    @GetMapping("/internal/v1/historical-ohlc/{marketId}/range")
+    HistoricalOhlcRangeResponse findHistoricalOhlcRange(
+            @PathVariable UUID marketId,
+            @RequestParam String interval,
+            @RequestParam Instant fromExclusive,
+            @RequestParam Instant toInclusive,
+            @RequestParam(defaultValue = "CAPTURED") String evidencePolicy
+    );
+
     record HistoricalOhlcSeriesResponse(
             UUID marketId,
             String interval,
@@ -59,4 +68,31 @@ public interface HistoricalOhlcClient {
             String normalizationVersion,
             String observationFingerprint
     ) { }
+
+    record HistoricalOhlcRangeResponse(
+            UUID marketId,
+            String interval,
+            Instant fromExclusive,
+            Instant toInclusive,
+            String evidencePolicy,
+            List<HistoricalOhlcEvidenceResponse> observations,
+            String status,
+            String reason,
+            int expectedObservationCount,
+            int observedObservationCount,
+            Instant coverageStart,
+            Instant coverageEnd,
+            List<HistoricalOhlcGapResponse> gaps,
+            String evidenceFingerprint,
+            List<String> normalizationVersions
+    ) {
+        public HistoricalOhlcRangeResponse {
+            observations = observations == null ? List.of() : List.copyOf(observations);
+            gaps = gaps == null ? List.of() : List.copyOf(gaps);
+            normalizationVersions = normalizationVersions == null
+                    ? List.of() : List.copyOf(normalizationVersions);
+        }
+    }
+
+    record HistoricalOhlcGapResponse(Instant openTime, Instant closeTime) { }
 }
