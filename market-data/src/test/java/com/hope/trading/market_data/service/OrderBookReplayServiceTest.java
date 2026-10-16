@@ -36,6 +36,10 @@ class OrderBookReplayServiceTest {
         OrderBookReplayResult result = new OrderBookReplayService(repository).replay(MARKET_ID, 25, CUTOFF);
 
         assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.AVAILABLE);
+        assertThat(result.sequenceId()).isEqualTo(SEQUENCE_ID);
+        assertThat(result.sourceStartOrdinal()).isZero();
+        assertThat(result.sourceEndOrdinal()).isEqualTo(1L);
+        assertThat(result.sourceEvidenceFingerprint()).isNotBlank();
         assertThat(result.bids()).containsExactly(level("100", "2"));
         assertThat(result.asks()).containsExactly(level("101", "1"));
     }
@@ -57,6 +61,38 @@ class OrderBookReplayServiceTest {
 
         assertThatThrownBy(() -> service.replay(null, 25, CUTOFF))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void marksNonContiguousReplayAsInvalid() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of(
+                evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(10),
+                        List.of(level("100", "1")), List.of(level("101", "1"))),
+                evidence(OrderBookEvidenceType.DELTA, 2, CUTOFF.minusSeconds(1),
+                        List.of(level("100", "2")), List.of())
+        ));
+
+        OrderBookReplayResult result = new OrderBookReplayService(repository).replay(MARKET_ID, 25, CUTOFF);
+
+        assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.INVALID);
+        assertThat(result.reason()).contains("not contiguous");
+    }
+
+    @Test
+    void rejectsUnexpectedSnapshotAfterReplayStart() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of(
+                evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(1),
+                        List.of(level("100", "1")), List.of(level("101", "1"))),
+                evidence(OrderBookEvidenceType.SNAPSHOT, 1, CUTOFF.minusSeconds(10),
+                        List.of(level("100", "2")), List.of(level("101", "1")))
+        ));
+
+        OrderBookReplayResult result = new OrderBookReplayService(repository).replay(MARKET_ID, 25, CUTOFF);
+
+        assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.INVALID);
+        assertThat(result.reason()).contains("Unexpected non-delta");
     }
 
     private OrderBookEvidence evidence(OrderBookEvidenceType type, long ordinal, Instant knownAt,

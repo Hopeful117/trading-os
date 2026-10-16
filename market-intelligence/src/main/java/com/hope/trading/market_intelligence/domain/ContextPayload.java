@@ -9,7 +9,8 @@ import com.hope.trading.market_intelligence.domain.artifact.ArtifactContent;
         @JsonSubTypes.Type(value = HistoricalOhlcContext.class, name = "historical-ohlc"),
         @JsonSubTypes.Type(value = NewsContext.class, name = "news"),
         @JsonSubTypes.Type(value = MarketSnapshotContext.class, name = "market-snapshot"),
-        @JsonSubTypes.Type(value = MarketIdentityContext.class, name = "market-identity")
+        @JsonSubTypes.Type(value = MarketIdentityContext.class, name = "market-identity"),
+        @JsonSubTypes.Type(value = OrderBookContext.class, name = "order-book")
 })
 public interface ContextPayload extends ArtifactContent {
 }

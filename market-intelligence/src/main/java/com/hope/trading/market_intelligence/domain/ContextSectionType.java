@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.domain;
 public enum ContextSectionType {
     MARKET_IDENTITY,
     MARKET_SNAPSHOT,
+    ORDER_BOOK,
     HISTORICAL_OHLC,
     TREND_CONTEXT,
     ORDER_FLOW,

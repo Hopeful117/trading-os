@@ -6,6 +6,7 @@ public enum FeatureUnit {
     PERCENTAGE,
     BASIS_POINTS,
     PRICE,
+    QUANTITY,
     COUNT,
     SECONDS,
     RATIO
