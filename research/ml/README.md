@@ -68,3 +68,43 @@ be reported as runtime data.
 When ready, the output contains `experiment-manifest.json`, `metrics.json`, and
 test-only `predictions.jsonl`. Predictive improvement is not a tradable edge
 or a profitability claim.
+
+## Interactive Research Workflow
+
+Story 0110 establishes the research-layer boundary:
+
+```text
+Java = canonical deterministic market/research truth
+Python = validated, reusable, tested research logic
+Jupyter = interactive exploration and hypothesis discovery
+```
+
+Jupyter does not replace the Java truth boundary or the validated Python
+package. When exploratory code becomes reusable or important to correctness,
+extract it into the structured Python package and test it there. Notebook 01
+does not train a model; the 0109B structured experiment remains the location
+for formal baselines and reproducible metrics.
+
+### Start JupyterLab
+
+From the repository root:
+
+```text
+python3 -m venv research/ml/.venv
+research/ml/.venv/bin/pip install -e research/ml
+research/ml/.venv/bin/jupyter lab
+```
+
+Open `research/notebooks/01_dataset_exploration.ipynb`. The notebook defaults
+to the repository fixture for a deterministic smoke run. Set `DATASET_DIR` in
+the first code cell to a Java export directory containing exactly
+`dataset-manifest.json` and `samples.jsonl` before exploring runtime data.
+The bundle is always loaded through `load_validated_bundle`; direct pandas
+JSONL loading is intentionally not supported.
+
+Use **Kernel -> Restart Kernel and Run All Cells** for a clean execution. The
+notebook supports an empty eligible population and reports data readiness
+without attempting plots that require observations.
+
+Notebook outputs are exploratory and should be cleared before commit. Do not
+commit large tables, plots, machine-specific paths, or sensitive runtime data.

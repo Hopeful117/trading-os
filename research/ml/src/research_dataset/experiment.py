@@ -133,6 +133,24 @@ def run_from_paths(manifest: str | Path, samples: str | Path, market: str, horiz
                           market_id=market_id)
 
 
+def readiness_population(dataset: ValidatedResearchDataset, horizon: str = HORIZON,
+                         market_id: str | None = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Return the exact validated population shape used by the readiness gate."""
+    rows = list(dataset.rows)
+    if market_id is not None:
+        rows = [row for row in rows if row.get("marketId") == market_id]
+    counts = {"validatedRows": len(dataset.rows), "marketRows": len(rows)}
+    rows = [row for row in rows if row.get("horizon") == horizon]
+    counts["horizonRows"] = len(rows)
+    rows = [row for row in rows if row.get("status") == "ELIGIBLE"]
+    counts["eligibleRows"] = len(rows)
+    rows = [row for row in rows if (row.get("outcome") or {}).get("status") == "AVAILABLE"]
+    counts["availableOutcomeRows"] = len(rows)
+    rows = [row for row in rows if row.get("featureProjectionVersion") == "feature-projection-v1"]
+    counts["experimentRows"] = len(rows)
+    return rows, counts
+
+
 def _select_rows(dataset: ValidatedResearchDataset, market: str, horizon: str,
                  market_id: str | None) -> tuple[list[dict[str, Any]], dict[str, int], str]:
     if market != MARKET_LABEL:
@@ -146,17 +164,7 @@ def _select_rows(dataset: ValidatedResearchDataset, market: str, horizon: str,
     declared_markets = dataset.manifest.get("population", {}).get("marketIds", [])
     if not declared_markets or selected_market not in declared_markets:
         raise ValueError("market-id must be the declared BTC/USD market identity")
-    counts = {"validatedRows": len(dataset.rows)}
-    rows = [row for row in dataset.rows if row.get("marketId") == selected_market]
-    counts["marketRows"] = len(rows)
-    rows = [row for row in rows if row.get("horizon") == horizon]
-    counts["horizonRows"] = len(rows)
-    rows = [row for row in rows if row.get("status") == "ELIGIBLE"]
-    counts["eligibleRows"] = len(rows)
-    rows = [row for row in rows if (row.get("outcome") or {}).get("status") == "AVAILABLE"]
-    counts["availableOutcomeRows"] = len(rows)
-    rows = [row for row in rows if row.get("featureProjectionVersion") == "feature-projection-v1"]
-    counts["experimentRows"] = len(rows)
+    rows, counts = readiness_population(dataset, horizon=horizon, market_id=selected_market)
     return rows, counts, selected_market
 
 
