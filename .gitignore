@@ -40,6 +40,9 @@ build/
 **/.sonar/
 **/coverage/
 
+### Python ###
+**/__pycache__/
+
 ### Local browser artifacts ###
 .playwright-mcp/
 *.png

@@ -12,6 +12,7 @@ import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.planning.ArtifactDescriptor;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
+import com.hope.trading.market_intelligence.domain.orderbook.OrderBookLiquidityFeatureSet;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -121,6 +122,7 @@ public class CapabilityAnalysisCoordinator {
                 .forEach(section -> {
                     ArtifactType type = switch (section.type()) {
                         case MARKET_SNAPSHOT -> ProductionArtifactTypes.MARKET_SNAPSHOT;
+                        case ORDER_BOOK -> ProductionArtifactTypes.ORDER_BOOK_REPLAY;
                         case HISTORICAL_OHLC -> ProductionArtifactTypes.OHLC_HISTORY;
                         case TREND_CONTEXT -> ProductionArtifactTypes.TREND_CONTEXT_HISTORY;
                         default -> null;
@@ -208,11 +210,19 @@ public class CapabilityAnalysisCoordinator {
 
     private IntelligenceFinding finding(
             IntelligenceAnalysisRequest request, CapabilityResult result, Instant generatedAt) {
-        DeterministicMeasurements details = result.artifacts().stream()
+        ArtifactContent content = result.artifacts().stream()
                 .map(ProducedArtifact::artifact).map(StoredArtifact::content)
-                .filter(DeterministicMeasurements.class::isInstance)
-                .map(DeterministicMeasurements.class::cast).findFirst().orElseThrow();
+                .findFirst().orElseThrow();
         String capabilityId = result.artifacts().getFirst().artifact().provenance().producerId();
+        if (content instanceof OrderBookLiquidityFeatureSet details) {
+            return new IntelligenceFinding(
+                    capabilityId + ":" + request.marketId() + ":" + details.evaluationCutoff(),
+                    capabilityId, AnalysisOrigin.DETERMINISTIC,
+                    FindingType.DETERMINISTIC_FINDING, "Order Book liquidity",
+                    "Deterministic liquidity measurements from a strict Order Book replay.",
+                    result.metrics(), BigDecimal.ONE, Set.of(ContextSectionType.ORDER_BOOK), generatedAt);
+        }
+        DeterministicMeasurements details = (DeterministicMeasurements) content;
         return new IntelligenceFinding(
                 capabilityId + ":" + request.marketId() + ":" + details.observedAt(),
                 capabilityId, AnalysisOrigin.DETERMINISTIC,
@@ -224,7 +234,8 @@ public class CapabilityAnalysisCoordinator {
         return result.artifacts().stream()
                 .map(ProducedArtifact::artifact)
                 .map(StoredArtifact::content)
-                .anyMatch(DeterministicMeasurements.class::isInstance);
+                .anyMatch(value -> value instanceof DeterministicMeasurements
+                        || value instanceof OrderBookLiquidityFeatureSet);
     }
 
     private ContextSectionSummary summary(ContextSection section) {
@@ -248,9 +259,10 @@ public class CapabilityAnalysisCoordinator {
     }
 
     private String timeframe(ContextSection section) {
-        return section.payload() instanceof HistoricalOhlcContext ohlc
-                ? ohlc.interval() : null;
+        if (section.type() == ContextSectionType.ORDER_BOOK) return "ORDER_BOOK";
+        return section.payload() instanceof HistoricalOhlcContext ohlc ? ohlc.interval() : null;
     }
+
 
     private CapabilityExecutionStatus legacyState(CapabilityExecutionState state) {
         return switch (state) {

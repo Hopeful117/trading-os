@@ -7,6 +7,9 @@ import com.hope.trading.market_data.model.OrderBookReplayResult;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,7 +43,8 @@ public class OrderBookReplayService {
                         .thenComparingLong(OrderBookEvidence::sequenceOrdinal))
                 .orElse(null);
         if (startingPoint == null) {
-            return OrderBookReplayResult.unavailable(cutoff, "No trusted snapshot is known at the cutoff");
+            return OrderBookReplayResult.unavailable(marketId, depth, cutoff,
+                    "No trusted snapshot is known at the cutoff");
         }
 
         NavigableMap<BigDecimal, BigDecimal> bids = new TreeMap<>(Comparator.reverseOrder());
@@ -54,21 +58,45 @@ public class OrderBookReplayService {
                 .toList();
         for (OrderBookEvidence item : sequence) {
             if (item.evidenceType() != OrderBookEvidenceType.DELTA) {
-                continue;
+                return OrderBookReplayResult.invalid(marketId, depth, cutoff, startingPoint.sequenceId(),
+                        "Unexpected non-delta evidence after replay snapshot");
             }
             if (item.sequenceOrdinal() != expectedOrdinal + 1) {
-                return OrderBookReplayResult.unavailable(cutoff, "Sequence is not contiguous at replay cutoff");
+                return OrderBookReplayResult.invalid(marketId, depth, cutoff, startingPoint.sequenceId(),
+                        "Sequence is not contiguous at replay cutoff");
             }
             apply(bids, item.bids());
             apply(asks, item.asks());
             expectedOrdinal = item.sequenceOrdinal();
         }
 
+        OrderBookEvidence lastEvidence = sequence.isEmpty() ? startingPoint : sequence.getLast();
         return new OrderBookReplayResult(
-                OrderBookReplayResult.ReplayStatus.AVAILABLE,
+                OrderBookReplayResult.ReplayStatus.AVAILABLE, marketId, depth,
                 startingPoint.sequenceId(), cutoff,
-                sequence.isEmpty() ? startingPoint.knownAt() : sequence.getLast().knownAt(),
+                lastEvidence.occurredAt(), lastEvidence.knownAt(),
+                startingPoint.sequenceOrdinal(), lastEvidence.sequenceOrdinal(),
+                startingPoint.provider().name(), startingPoint.providerSymbol(),
+                startingPoint.normalizationVersion(), fingerprint(startingPoint, sequence),
                 limit(bids, depth), limit(asks, depth), null);
+    }
+
+    private String fingerprint(OrderBookEvidence startingPoint, List<OrderBookEvidence> sequence) {
+        String material = java.util.stream.Stream.concat(java.util.stream.Stream.of(startingPoint), sequence.stream())
+                .map(OrderBookEvidence::contentFingerprint)
+                .reduce((left, right) -> left + "|" + right)
+                .orElse("");
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder(64);
+            for (byte item : digest) {
+                result.append(String.format("%02x", item));
+            }
+            return result.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is required", exception);
+        }
     }
 
     private void apply(NavigableMap<BigDecimal, BigDecimal> book, List<OrderBookLevel> levels) {
