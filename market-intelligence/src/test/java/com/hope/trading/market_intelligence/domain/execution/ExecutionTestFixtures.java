@@ -58,7 +58,8 @@ public final class ExecutionTestFixtures {
                         now,
                         Duration.ZERO,
                         Duration.ofSeconds(10),
-                        List.of()
+                        List.of(),
+                        "0000000000000000000000000000000000000000000000000000000000000000"
                 )
         );
     }

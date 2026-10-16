@@ -69,10 +69,12 @@ public final class MarketStructureAnalysisCapability implements Capability {
                             result.cutOffAt().plus(Duration.ofMinutes(15)), result.inputFingerprint()),
                     new ArtifactProvenance(CAPABILITY_ID, CAPABILITY_VERSION,
                             context.capabilityExecutionId(), result.cutOffAt(),
-                            Set.of(input.get().key().identity()), Set.of()),
-                    result.availability() == MarketStructureAvailability.AVAILABLE
-                            ? com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE
-                            : com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.DEGRADED);
+                            Set.of(input.get().key().identity()), Set.of())
+                            .withEvidenceFingerprint(input.get().provenance().evidenceFingerprint()),
+                     result.availability() == MarketStructureAvailability.AVAILABLE
+                             ? com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE
+                             : com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.DEGRADED,
+                     ProductionArtifactTypes.MARKET_STRUCTURE_V2);
             outputs.add(new ProducedArtifact(ProductionArtifactTypes.MARKET_STRUCTURE,
                     ProductionArtifactTypes.MARKET_STRUCTURE_V2, artifact));
         }

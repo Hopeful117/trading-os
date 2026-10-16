@@ -64,7 +64,8 @@ public class CapabilityAnalysisCoordinator {
         try {
             ExecutionSummary summary = engine.execute(
                     planner.plan(new PlanningRequest(
-                            analysisExecutionId, selected, Set.of(), descriptors)), control);
+                            analysisExecutionId, selected, Set.of(), descriptors,
+                            context.fingerprint().value())), control);
             return consolidate(request, context, summary, startedAt, strategy.timeout());
         } finally {
             controls.remove(analysisExecutionId);
@@ -141,10 +142,13 @@ public class CapabilityAnalysisCoordinator {
                             ArtifactFreshness.validUntil(
                                     producedAt, producedAt.plus(Duration.ofMinutes(15)), sourceVersion),
                             new ArtifactProvenance(
-                                    "market-data", sourceVersion, null, producedAt, Set.of(), Set.of()),
+                                     "market-data", sourceVersion, null, producedAt, Set.of(), Set.of())
+                                              .withContextFingerprint(context.fingerprint().value())
+                                              .withEvidenceFingerprint(section.provenance().evidenceFingerprint()),
                             section.status() == ContextSectionStatus.STALE
                                     ? AnalysisResultQuality.DEGRADED
-                                    : AnalysisResultQuality.COMPLETE);
+                                     : AnalysisResultQuality.COMPLETE,
+                             ProductionArtifactTypes.V1);
                     artifacts.save(executionId, new ProducedArtifact(
                             type, ProductionArtifactTypes.V1, stored));
                     result.add(new ArtifactDescriptor(type, ProductionArtifactTypes.V1));
@@ -198,7 +202,8 @@ public class CapabilityAnalysisCoordinator {
                 sections, findings, warnings,
                 new AnalysisExecutionMetadata(
                         request.analysisId(), request.mode(), startedAt, completedAt,
-                        Duration.between(startedAt, completedAt), timeout, executions));
+                        Duration.between(startedAt, completedAt), timeout, executions,
+                        context.fingerprint().value()));
     }
 
     private IntelligenceFinding finding(

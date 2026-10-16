@@ -9,8 +9,18 @@ public record PlanningRequest(
         UUID analysisExecutionId,
         Set<CapabilityId> explicitlySelected,
         Set<String> satisfiedConditions,
-        Set<ArtifactDescriptor> initialArtifacts
+        Set<ArtifactDescriptor> initialArtifacts,
+        String contextFingerprint
 ) {
+    public PlanningRequest(
+            UUID analysisExecutionId,
+            Set<CapabilityId> explicitlySelected,
+            Set<String> satisfiedConditions,
+            Set<ArtifactDescriptor> initialArtifacts
+    ) {
+        this(analysisExecutionId, explicitlySelected, satisfiedConditions, initialArtifacts, null);
+    }
+
     public PlanningRequest {
         explicitlySelected = Set.copyOf(explicitlySelected);
         satisfiedConditions = Set.copyOf(satisfiedConditions);

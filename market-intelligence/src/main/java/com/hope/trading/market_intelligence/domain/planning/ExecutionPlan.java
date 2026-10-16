@@ -16,12 +16,14 @@ public final class ExecutionPlan {
     private final List<String> constraints;
     private final List<PlanningDecision> decisions;
     private final List<PlanningDecision> exclusions;
+    private final String contextFingerprint;
 
     public ExecutionPlan(
             UUID id, UUID analysisExecutionId, Collection<ExecutionNode> nodes,
             Set<PlanEdge> edges, Map<RequirementBinding, Set<UUID>> selectedProducers,
             List<AdapterBinding> adapters, List<String> constraints,
-            List<PlanningDecision> decisions, List<PlanningDecision> exclusions) {
+            List<PlanningDecision> decisions, List<PlanningDecision> exclusions,
+            String contextFingerprint) {
         this.id = Objects.requireNonNull(id);
         this.analysisExecutionId = Objects.requireNonNull(analysisExecutionId);
         this.nodes = nodes.stream().collect(Collectors.toUnmodifiableMap(
@@ -34,7 +36,18 @@ public final class ExecutionPlan {
         this.constraints = List.copyOf(constraints);
         this.decisions = List.copyOf(decisions);
         this.exclusions = List.copyOf(exclusions);
+        this.contextFingerprint = contextFingerprint;
         validate();
+    }
+
+    public ExecutionPlan(
+            UUID id, UUID analysisExecutionId, Collection<ExecutionNode> nodes,
+            Set<PlanEdge> edges, Map<RequirementBinding, Set<UUID>> selectedProducers,
+            List<AdapterBinding> adapters, List<String> constraints,
+            List<PlanningDecision> decisions, List<PlanningDecision> exclusions
+    ) {
+        this(id, analysisExecutionId, nodes, edges, selectedProducers, adapters,
+                constraints, decisions, exclusions, null);
     }
 
     private void validate() {
@@ -79,5 +92,6 @@ public final class ExecutionPlan {
     public List<String> constraints() { return constraints; }
     public List<PlanningDecision> decisions() { return decisions; }
     public List<PlanningDecision> exclusions() { return exclusions; }
+    public String contextFingerprint() { return contextFingerprint; }
     public record PlanEdge(UUID from, UUID to, ArtifactRequirement requirement) {}
 }

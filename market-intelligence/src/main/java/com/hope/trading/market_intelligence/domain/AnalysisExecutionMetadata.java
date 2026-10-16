@@ -12,7 +12,8 @@ public record AnalysisExecutionMetadata(
         Instant completedAt,
         Duration duration,
         Duration timeoutBudget,
-        List<CapabilityExecution> capabilityExecutions
+        List<CapabilityExecution> capabilityExecutions,
+        String contextFingerprint
 ) {
     public AnalysisExecutionMetadata {
         capabilityExecutions = List.copyOf(capabilityExecutions);

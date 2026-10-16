@@ -78,9 +78,11 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
                 ArtifactFreshness.validUntil(
                         observedAt, observedAt.plusSeconds(900), input.freshness().sourceVersion()),
                 new ArtifactProvenance(
-                        CAPABILITY_ID, CAPABILITY_VERSION, context.capabilityExecutionId(),
-                        observedAt, Set.of(input.key().identity()), Set.of()),
-                partial ? AnalysisResultQuality.PARTIAL : AnalysisResultQuality.COMPLETE);
+                         CAPABILITY_ID, CAPABILITY_VERSION, context.capabilityExecutionId(),
+                         observedAt, Set.of(input.key().identity()), Set.of())
+                         .withEvidenceFingerprint(input.provenance().evidenceFingerprint()),
+                 partial ? AnalysisResultQuality.PARTIAL : AnalysisResultQuality.COMPLETE,
+                 ProductionArtifactTypes.V1);
         return new CapabilityResult(
                 metadata().producedContributions(),
                 List.of(new ProducedArtifact(
