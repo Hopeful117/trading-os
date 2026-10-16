@@ -1,5 +1,7 @@
 import json
+import hashlib
 import importlib.util
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -19,6 +21,7 @@ from research_dataset.experiment import (
     _rank,
     _frame,
     _residual_diagnostics,
+    readiness_population,
     _split,
     run_experiment,
 )
@@ -150,6 +153,80 @@ class ExperimentTest(unittest.TestCase):
             self.assertFalse((output / "metrics.json").exists())
             self.assertFalse((output / "predictions.jsonl").exists())
             self.assertFalse((output / "experiment-manifest.json").exists())
+
+    def test_readiness_population_filters_market_and_horizon_before_readiness(self):
+        base_dataset = self.dataset(6)
+        rows = [dict(row) for row in base_dataset.rows]
+        rows[1]["horizon"] = "PT1H"
+        rows[2]["marketId"] = "22222222-2222-2222-2222-222222222222"
+        rows[3]["status"] = "EXCLUDED"
+        rows[4]["outcome"] = {"status": "PENDING"}
+        rows[5]["featureProjectionVersion"] = "feature-projection-v2"
+        dataset = ValidatedResearchDataset(base_dataset.manifest, tuple(rows), ValidationResult((), {}))
+        selected, counts = readiness_population(dataset, horizon="PT4H", market_id=MARKET_ID)
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(counts["validatedRows"], 6)
+        self.assertEqual(counts["marketRows"], 5)
+        self.assertEqual(counts["horizonRows"], 4)
+        self.assertEqual(counts["eligibleRows"], 3)
+        self.assertEqual(counts["availableOutcomeRows"], 2)
+        self.assertEqual(counts["experimentRows"], 1)
+
+    def test_notebook_uses_validated_loader_without_model_training(self):
+        notebook = Path(__file__).parents[2] / "notebooks" / "01_dataset_exploration.ipynb"
+        cells = json.loads(notebook.read_text(encoding="utf-8"))["cells"]
+        source = "\n".join("".join(cell.get("source", [])) for cell in cells)
+        self.assertIn("load_validated_bundle(", source)
+        self.assertIn("readiness_population(", source)
+        self.assertIn("explicit single market identity", source)
+        self.assertIn("must be declared in population.marketIds", source)
+        self.assertNotIn("Ridge", source)
+        self.assertNotIn(".fit(", source)
+        self.assertNotIn("pd.read_json(", source)
+
+    @unittest.skipUnless(
+        all(importlib.util.find_spec(name) for name in ("numpy", "pandas", "matplotlib", "nbclient", "nbformat")),
+        "Notebook execution dependencies are installed by the research project environment",
+    )
+    def test_notebook_runs_with_populated_and_empty_validated_bundles(self):
+        import nbformat
+        from nbclient import NotebookClient
+
+        notebook_path = Path(__file__).parents[2] / "notebooks" / "01_dataset_exploration.ipynb"
+        fixture = Path(__file__).parent / "fixtures" / "java-generated"
+
+        def execute(dataset_dir):
+            notebook = nbformat.read(notebook_path, as_version=4)
+            client = NotebookClient(notebook, timeout=120, kernel_name="python3",
+                                    resources={"metadata": {"path": str(notebook_path.parents[2])}})
+            previous = os.environ.get("TRADING_OS_DATASET_DIR")
+            os.environ["TRADING_OS_DATASET_DIR"] = str(dataset_dir)
+            try:
+                client.execute()
+            finally:
+                if previous is None:
+                    os.environ.pop("TRADING_OS_DATASET_DIR", None)
+                else:
+                    os.environ["TRADING_OS_DATASET_DIR"] = previous
+            return notebook
+
+        execute(fixture)
+        with tempfile.TemporaryDirectory() as directory:
+            empty_bundle = Path(directory)
+            manifest = json.loads((fixture / "dataset-manifest.json").read_text(encoding="utf-8"))
+            manifest["sampleCount"] = 0
+            manifest["eligibleCount"] = 0
+            manifest["excludedCount"] = 0
+            manifest["exclusionCounts"] = {}
+            manifest["samplesSha256"] = hashlib.sha256(b"").hexdigest()
+            material = [value for value in manifest["fingerprintMaterial"] if not value.startswith("sample=")]
+            manifest["fingerprintMaterial"] = material
+            manifest["datasetFingerprint"] = hashlib.sha256("\x1f".join(sorted(material)).encode("utf-8")).hexdigest()
+            (empty_bundle / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (empty_bundle / "samples.jsonl").write_bytes(b"")
+            executed = execute(empty_bundle)
+            output_text = json.dumps(executed)
+            self.assertIn("insufficient strictly observed data", output_text)
 
     def test_unacceptable_residual_diagnostics_force_inconclusive(self):
         available = {"available": True, "value": 0.1}
