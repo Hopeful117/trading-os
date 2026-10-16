@@ -29,6 +29,8 @@ import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.model.TradeEvent;
 import com.hope.trading.market_data.service.OhlcEventPublisher;
 import com.hope.trading.market_data.service.OrderBookEventPublisher;
+import com.hope.trading.market_data.service.OrderBookEvidenceCaptureService;
+import com.hope.trading.market_data.config.OrderBookEvidenceCaptureProperties;
 import com.hope.trading.market_data.service.OrderBookStateService;
 import com.hope.trading.market_data.service.RecentTradesEventPublisher;
 import com.hope.trading.market_data.service.RecentTradesStateService;
@@ -37,6 +39,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
@@ -111,11 +114,48 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final KrakenOrderBookMapper orderBookMapper;
     private final OrderBookStateService orderBookStateService;
     private final OrderBookEventPublisher orderBookEventPublisher;
+    private final OrderBookEvidenceCaptureService orderBookEvidenceCaptureService;
+    private final OrderBookEvidenceCaptureProperties orderBookEvidenceCaptureProperties;
     private final KrakenTradeMapper tradeMapper;
     private final RecentTradesStateService recentTradesStateService;
     private final RecentTradesEventPublisher recentTradesEventPublisher;
     private final Object outboundEmissionLock =
             new Object();
+
+    @Autowired
+    public KrakenDataStreamProvider(
+            KrakenStreamConnector connector,
+            KrakenProperties krakenProperties,
+            ObjectMapper objectMapper,
+            KrakenTickerMapper tickerMapper,
+            TickerEventPublisher tickerEventPublisher,
+            OhlcEventPublisher ohlcEventPublisher,
+            KrakenOhlcMapper ohlcMapper,
+            KrakenOrderBookMapper orderBookMapper,
+            OrderBookStateService orderBookStateService,
+            OrderBookEventPublisher orderBookEventPublisher,
+            OrderBookEvidenceCaptureService orderBookEvidenceCaptureService,
+            OrderBookEvidenceCaptureProperties orderBookEvidenceCaptureProperties,
+            KrakenTradeMapper tradeMapper,
+            RecentTradesStateService recentTradesStateService,
+            RecentTradesEventPublisher recentTradesEventPublisher
+    ) {
+        this.objectMapper = objectMapper;
+        this.tickerMapper = tickerMapper;
+        this.tickerEventPublisher = tickerEventPublisher;
+        this.ohlcEventPublisher = ohlcEventPublisher;
+        this.ohlcMapper = ohlcMapper;
+        this.orderBookMapper = orderBookMapper;
+        this.orderBookStateService = orderBookStateService;
+        this.orderBookEventPublisher = orderBookEventPublisher;
+        this.orderBookEvidenceCaptureService = orderBookEvidenceCaptureService;
+        this.orderBookEvidenceCaptureProperties = orderBookEvidenceCaptureProperties;
+        this.tradeMapper = tradeMapper;
+        this.recentTradesStateService = recentTradesStateService;
+        this.recentTradesEventPublisher = recentTradesEventPublisher;
+        this.connector = connector;
+        this.krakenProperties = krakenProperties;
+    }
 
     public KrakenDataStreamProvider(
             KrakenStreamConnector connector,
@@ -132,19 +172,10 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             RecentTradesStateService recentTradesStateService,
             RecentTradesEventPublisher recentTradesEventPublisher
     ) {
-        this.objectMapper = objectMapper;
-        this.tickerMapper = tickerMapper;
-        this.tickerEventPublisher = tickerEventPublisher;
-        this.ohlcEventPublisher = ohlcEventPublisher;
-        this.ohlcMapper = ohlcMapper;
-        this.orderBookMapper = orderBookMapper;
-        this.orderBookStateService = orderBookStateService;
-        this.orderBookEventPublisher = orderBookEventPublisher;
-        this.tradeMapper = tradeMapper;
-        this.recentTradesStateService = recentTradesStateService;
-        this.recentTradesEventPublisher = recentTradesEventPublisher;
-        this.connector = connector;
-        this.krakenProperties = krakenProperties;
+        this(connector, krakenProperties, objectMapper, tickerMapper, tickerEventPublisher,
+                ohlcEventPublisher, ohlcMapper, orderBookMapper, orderBookStateService,
+                orderBookEventPublisher, null, new OrderBookEvidenceCaptureProperties(), tradeMapper,
+                recentTradesStateService, recentTradesEventPublisher);
     }
 
 
@@ -564,48 +595,53 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                         KrakenOrderBookMessage.class
                 );
 
-        message.data().forEach(data -> {
-            Market market = findSubscribedMarket(data.symbol(), product);
+        message.data().forEach(data -> handleSpotOrderBookData(data, message, product));
+    }
 
-            if (market == null) {
-                log.warn(
-                        "Ignoring Kraken order-book data without subscribed market symbol={}",
-                        data.symbol()
-                );
-                return;
+    private void handleSpotOrderBookData(KrakenOrderBookData data, KrakenOrderBookMessage message,
+                                         Product product) {
+        Market market = findSubscribedMarket(data.symbol(), product);
+        if (market == null) {
+            log.warn("Ignoring Kraken order-book data without subscribed market symbol={}", data.symbol());
+            return;
+        }
+        Set<Integer> depths = orderBookDepthsBySymbol.get(subscriptionKey(data.symbol(), product));
+        if (depths == null || depths.isEmpty()) {
+            log.warn("Ignoring Kraken order-book data without active depth symbol={}", data.symbol());
+            return;
+        }
+        List.copyOf(depths).forEach(depth -> handleOrderBookDelta(
+                orderBookMapper.toDelta(data, message.type(), market, depth), message.type(), product, market, depth));
+    }
+
+    private void handleOrderBookDelta(OrderBookDelta delta, KrakenMessageType messageType,
+                                      Product product, Market market, int depth) {
+        boolean capture = shouldCaptureEvidence(product, market, depth);
+        if (messageType == KrakenMessageType.SNAPSHOT) {
+            if (!capture || orderBookEvidenceCaptureService.acceptSnapshot(delta)) {
+                orderBookEventPublisher.publish(orderBookStateService.initialize(delta));
             }
-
-            Set<Integer> depths = orderBookDepthsBySymbol.get(
-                    subscriptionKey(data.symbol(), product)
-            );
-
-            if (depths == null || depths.isEmpty()) {
-                log.warn(
-                        "Ignoring Kraken order-book data without active depth symbol={}",
-                        data.symbol()
-                );
-                return;
+            return;
+        }
+        if (capture && !orderBookEvidenceCaptureService.acceptUpdate(delta)) {
+            clearOrderBook(market, depth, true);
+            return;
+        }
+        orderBookStateService.update(delta).ifPresent(snapshot -> {
+            if (capture) {
+                orderBookEvidenceCaptureService.checkpoint(delta, snapshot);
             }
-
-            List.copyOf(depths).forEach(depth -> {
-                OrderBookDelta delta = orderBookMapper.toDelta(
-                        data,
-                        message.type(),
-                        market,
-                        depth
-                );
-
-                if (message.type() == KrakenMessageType.SNAPSHOT) {
-                    OrderBookSnapshot snapshot =
-                            orderBookStateService.initialize(delta);
-                    orderBookEventPublisher.publish(snapshot);
-                    return;
-                }
-
-                orderBookStateService.update(delta)
-                        .ifPresent(orderBookEventPublisher::publish);
-            });
+            orderBookEventPublisher.publish(snapshot);
         });
+    }
+
+    private void clearOrderBook(Market market, int depth, boolean invalidateEvidence) {
+        OrderBookKey key = new OrderBookKey(market.getMarketId(), depth);
+        orderBookStateService.clear(key);
+        orderBookEventPublisher.clear(key);
+        if (invalidateEvidence) {
+            orderBookEvidenceCaptureService.invalidate(key);
+        }
     }
 
     private void handleTradeMessage(JsonNode root, Product product) {
@@ -780,6 +816,9 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                         new OrderBookKey(market.getMarketId(), depth);
                 orderBookStateService.clear(key);
                 orderBookEventPublisher.clear(key);
+                if (orderBookEvidenceCaptureService != null) {
+                    orderBookEvidenceCaptureService.invalidate(key);
+                }
             });
         });
         tradeSymbols.forEach(symbol -> {
@@ -855,24 +894,30 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private void handleFuturesBook(JsonNode root) {
         JsonNode values = root.has("data") && root.get("data").isArray()
                 ? root.get("data") : objectMapper.createArrayNode().add(root);
-        values.forEach(data -> {
-             String symbol = data.path(PRODUCT_ID_FIELD).asText(null);
-            Market market = findSubscribedMarket(symbol, Product.FUTURES);
-            if (market == null) return;
-            Set<Integer> depths = orderBookDepthsBySymbol.get(subscriptionKey(symbol, Product.FUTURES));
-            if (depths == null) return;
-            List<com.hope.trading.market_data.kraken.dto.orderbook.KrakenOrderBookLevel> bids = levels(data.get("bids"));
-            List<com.hope.trading.market_data.kraken.dto.orderbook.KrakenOrderBookLevel> asks = levels(data.get("asks"));
-            KrakenMessageType type = BOOK_SNAPSHOT_FEED.equalsIgnoreCase(root.path("feed").asText())
-                    ? KrakenMessageType.SNAPSHOT : KrakenMessageType.UPDATE;
-            var book = new KrakenOrderBookData(symbol, bids, asks,
-                    data.has("checksum") ? data.get("checksum").asLong() : null, timestamp(data, "timestamp"));
-            depths.forEach(depth -> {
-                OrderBookDelta delta = orderBookMapper.toDelta(book, type, market, depth);
-                if (type == KrakenMessageType.SNAPSHOT) orderBookEventPublisher.publish(orderBookStateService.initialize(delta));
-                else orderBookStateService.update(delta).ifPresent(orderBookEventPublisher::publish);
-            });
-        });
+        KrakenMessageType type = BOOK_SNAPSHOT_FEED.equalsIgnoreCase(root.path("feed").asText())
+                ? KrakenMessageType.SNAPSHOT : KrakenMessageType.UPDATE;
+        values.forEach(data -> handleFuturesBookData(data, type));
+    }
+
+    private void handleFuturesBookData(JsonNode data, KrakenMessageType type) {
+        String symbol = data.path(PRODUCT_ID_FIELD).asText(null);
+        Market market = findSubscribedMarket(symbol, Product.FUTURES);
+        if (market == null) return;
+        Set<Integer> depths = orderBookDepthsBySymbol.get(subscriptionKey(symbol, Product.FUTURES));
+        if (depths == null) return;
+        var book = new KrakenOrderBookData(symbol, levels(data.get("bids")), levels(data.get("asks")),
+                data.has("checksum") ? data.get("checksum").asLong() : null,
+                timestamp(data, "timestamp"), data.has("seq") ? data.get("seq").asLong() : null);
+        depths.forEach(depth -> handleOrderBookDelta(
+                orderBookMapper.toDelta(book, type, market, depth), type, Product.FUTURES, market, depth));
+    }
+
+    private boolean shouldCaptureEvidence(Product product, Market market, int depth) {
+        return orderBookEvidenceCaptureService != null
+                && orderBookEvidenceCaptureProperties.isEnabled()
+                && product == Product.FUTURES
+                && depth == orderBookEvidenceCaptureProperties.getDepth()
+                && orderBookEvidenceCaptureProperties.getProviderSymbol().equals(market.getProviderSymbol());
     }
 
     private void handleFuturesTrades(JsonNode root) {

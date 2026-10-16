@@ -8,6 +8,16 @@ public record KrakenOrderBookData(
         List<KrakenOrderBookLevel> bids,
         List<KrakenOrderBookLevel> asks,
         Long checksum,
-        Instant timestamp
+        Instant timestamp,
+        Long sequence
 ) {
+    public KrakenOrderBookData(
+            String symbol,
+            List<KrakenOrderBookLevel> bids,
+            List<KrakenOrderBookLevel> asks,
+            Long checksum,
+            Instant timestamp
+    ) {
+        this(symbol, bids, asks, checksum, timestamp, null);
+    }
 }
