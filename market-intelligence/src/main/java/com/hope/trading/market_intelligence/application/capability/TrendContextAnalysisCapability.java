@@ -101,8 +101,10 @@ public class TrendContextAnalysisCapability implements DeterministicAnalysisCapa
                         assessment.inputFingerprint()),
                 new ArtifactProvenance(CAPABILITY_ID, CAPABILITY_VERSION,
                         context.capabilityExecutionId(), observedAt,
-                        Set.of(input.get().key().identity()), Set.of()),
-                com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE);
+                        Set.of(input.get().key().identity()), Set.of())
+                        .withEvidenceFingerprint(input.get().provenance().evidenceFingerprint()),
+                 com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE,
+                 ProductionArtifactTypes.V1);
         return new CapabilityResult(
                 metadata().producedContributions(),
                 List.of(new ProducedArtifact(

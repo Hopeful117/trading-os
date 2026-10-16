@@ -50,7 +50,8 @@ public class IntelligenceConsolidator {
                 completedAt,
                 Duration.between(startedAt, completedAt),
                 timeout,
-                executions
+                executions,
+                context.fingerprint().value()
         );
 
         return new ConsolidatedIntelligence(

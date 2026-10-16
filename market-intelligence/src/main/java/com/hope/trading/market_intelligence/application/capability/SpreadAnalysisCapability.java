@@ -165,6 +165,7 @@ public class SpreadAnalysisCapability implements DeterministicAnalysisCapability
                 new ArtifactProvenance(
                         CAPABILITY_ID, CAPABILITY_VERSION, context.capabilityExecutionId(),
                         observedAt, Set.of(input.key().identity()), Set.of()),
-                com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE);
+                 com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality.COMPLETE,
+                 ProductionArtifactTypes.V1);
     }
 }

@@ -78,7 +78,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
                 artifact.provenance().reusedBy(execution.executionId());
         StoredArtifact traced = new StoredArtifact(
                 artifact.key(), artifact.content(), artifact.freshness(),
-                provenance, artifact.quality()
+                provenance, artifact.quality(), artifact.version()
         );
         store.save(traced);
         boolean warning = assessment.warning();

@@ -91,7 +91,7 @@ public class ExecutionPlanner {
         return new ExecutionPlan(
                 UUID.randomUUID(), request.analysisExecutionId(), nodes, edges,
                 producers, adapterBindings, List.of("DIRECT_ADAPTERS_ONLY"),
-                decisions, exclusions);
+                decisions, exclusions, request.contextFingerprint());
     }
 
     private void resolveArtifactDependencies(List<Capability> selected, PlanningRequest request,
