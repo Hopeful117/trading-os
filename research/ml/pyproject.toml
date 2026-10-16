@@ -7,6 +7,11 @@ name = "trading-os-research-dataset"
 version = "0.1.0"
 description = "Offline validation for Trading OS research dataset bundles"
 requires-python = ">=3.11"
+dependencies = [
+    "numpy==1.26.4",
+    "pandas==2.2.3",
+    "scikit-learn==1.7.1",
+]
 
 [project.scripts]
 research-dataset = "research_dataset.__main__:main"
