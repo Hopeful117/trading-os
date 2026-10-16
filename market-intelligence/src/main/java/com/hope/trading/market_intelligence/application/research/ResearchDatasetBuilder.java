@@ -65,14 +65,15 @@ public final class ResearchDatasetBuilder {
                 .filter(value -> value.status() == ResearchSampleStatus.EXCLUDED)
                 .map(ResearchSample::exclusionReason)
                 .collect(Collectors.groupingBy(Function.identity(), () -> new EnumMap<>(ResearchExclusionReason.class), Collectors.summingInt(value -> 1)));
-        String datasetFingerprint = ArtifactFingerprint.ofInputs(datasetMaterial(population, samples, exclusions)).value();
+        List<String> fingerprintMaterial = datasetMaterial(population, samples, exclusions);
+        String datasetFingerprint = ArtifactFingerprint.ofInputs(fingerprintMaterial).value();
         DatasetManifest manifest = new DatasetManifest(
                 DATASET_DEFINITION_VERSION, population, schema,
                 List.of("referencePrice", "finalPrice", "futureHigh", "futureLow", "forwardReturn",
                         "futureHighReturn", "futureLowReturn", "futureRange"), samples.size(),
                 (int) samples.stream().filter(value -> value.status() == ResearchSampleStatus.ELIGIBLE).count(),
                 (int) samples.stream().filter(value -> value.status() == ResearchSampleStatus.EXCLUDED).count(),
-                exclusions, clock.instant(), datasetFingerprint);
+                 exclusions, clock.instant(), datasetFingerprint, fingerprintMaterial);
         return new DatasetBuildResult(manifest, samples);
     }
 

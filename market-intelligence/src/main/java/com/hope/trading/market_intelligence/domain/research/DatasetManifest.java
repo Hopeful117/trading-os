@@ -16,7 +16,8 @@ public record DatasetManifest(
         int excludedCount,
         Map<ResearchExclusionReason, Integer> exclusionCounts,
         Instant createdAt,
-        String datasetFingerprint
+        String datasetFingerprint,
+        List<String> fingerprintMaterial
 ) {
     public DatasetManifest {
         datasetDefinitionVersion = required(datasetDefinitionVersion, "dataset definition version");
@@ -29,6 +30,10 @@ public record DatasetManifest(
         exclusionCounts = Map.copyOf(exclusionCounts);
         Objects.requireNonNull(createdAt, "created at");
         datasetFingerprint = required(datasetFingerprint, "dataset fingerprint");
+        fingerprintMaterial = List.copyOf(fingerprintMaterial);
+        if (fingerprintMaterial.isEmpty()) {
+            throw new IllegalArgumentException("fingerprint material must not be empty");
+        }
     }
 
     public Set<OutcomeHorizon> horizons() {

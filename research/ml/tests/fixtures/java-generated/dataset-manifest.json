@@ -1,0 +1,464 @@
+{
+  "exportSchemaVersion" : "research-dataset-bundle-v1",
+  "datasetDefinitionVersion" : "research-dataset-v1",
+  "population" : {
+    "populationPolicyVersion" : "population-v1",
+    "marketIds" : [ ],
+    "startCutoffInclusive" : "2026-10-15T09:59:59Z",
+    "endCutoffExclusive" : "2026-10-15T10:00:01Z",
+    "featureProjectionVersion" : "feature-projection-v1",
+    "featureEvidencePolicy" : "STRICT_OBSERVED",
+    "outcomeDefinitionVersion" : "market-outcome-v1",
+    "horizons" : [ "PT1H" ],
+    "samplingCadence" : "ONE_PER_FEATURE_SNAPSHOT",
+    "acceptedFeatureMissingness" : [ "INSUFFICIENT_DATA" ],
+    "selectedOutcomeFingerprints" : [ {
+      "marketId" : "11111111-1111-1111-1111-111111111111",
+      "evaluationCutoff" : "2026-10-15T10:00:00Z",
+      "horizon" : "PT1H",
+      "outcomeFingerprint" : "outcome-cross-language"
+    } ]
+  },
+  "featureSchema" : {
+    "version" : "feature-projection-v1",
+    "definitions" : [ {
+      "name" : "ohlc.range_fraction",
+      "group" : "OHLC",
+      "dataType" : "NUMERIC",
+      "unit" : "DECIMAL_FRACTION",
+      "sourceCapability" : "ohlc-range-analysis",
+      "sourceSemantic" : "rangePercentage / 100",
+      "order" : 0,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Bounded OHLC range percentage converted to a decimal fraction."
+    }, {
+      "name" : "ohlc.simple_return",
+      "group" : "OHLC",
+      "dataType" : "NUMERIC",
+      "unit" : "DECIMAL_FRACTION",
+      "sourceCapability" : "ohlc-range-analysis",
+      "sourceSemantic" : "simpleReturn",
+      "order" : 1,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Simple return over the replayed OHLC evidence window."
+    }, {
+      "name" : "structure.bias.high_relation",
+      "group" : "STRUCTURE",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "bias.latestHighRelation",
+      "order" : 2,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Latest confirmed high relation for the context role."
+    }, {
+      "name" : "structure.bias.low_relation",
+      "group" : "STRUCTURE",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "bias.latestLowRelation",
+      "order" : 3,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Latest confirmed low relation for the context role."
+    }, {
+      "name" : "structure.bias.confirmed_high_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "bias.retainedHighCount",
+      "order" : 4,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of retained confirmed high swings."
+    }, {
+      "name" : "structure.bias.confirmed_low_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "bias.retainedLowCount",
+      "order" : 5,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of retained confirmed low swings."
+    }, {
+      "name" : "structure.bias.suppressed_swing_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "bias.suppressedSwingCount",
+      "order" : 6,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of structurally suppressed swings."
+    }, {
+      "name" : "structure.setup.high_relation",
+      "group" : "STRUCTURE",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "setup.latestHighRelation",
+      "order" : 7,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Latest confirmed high relation for the context role."
+    }, {
+      "name" : "structure.setup.low_relation",
+      "group" : "STRUCTURE",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "setup.latestLowRelation",
+      "order" : 8,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Latest confirmed low relation for the context role."
+    }, {
+      "name" : "structure.setup.confirmed_high_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "setup.retainedHighCount",
+      "order" : 9,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of retained confirmed high swings."
+    }, {
+      "name" : "structure.setup.confirmed_low_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "setup.retainedLowCount",
+      "order" : 10,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of retained confirmed low swings."
+    }, {
+      "name" : "structure.setup.suppressed_swing_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "setup.suppressedSwingCount",
+      "order" : 11,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of structurally suppressed swings."
+    }, {
+      "name" : "structure.trigger.high_relation",
+      "group" : "STRUCTURE",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "trigger.latestHighRelation",
+      "order" : 12,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Latest confirmed high relation for the context role."
+    }, {
+      "name" : "structure.trigger.low_relation",
+      "group" : "STRUCTURE",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "trigger.latestLowRelation",
+      "order" : 13,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Latest confirmed low relation for the context role."
+    }, {
+      "name" : "structure.trigger.confirmed_high_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "trigger.retainedHighCount",
+      "order" : 14,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of retained confirmed high swings."
+    }, {
+      "name" : "structure.trigger.confirmed_low_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "trigger.retainedLowCount",
+      "order" : 15,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of retained confirmed low swings."
+    }, {
+      "name" : "structure.trigger.suppressed_swing_count",
+      "group" : "STRUCTURE",
+      "dataType" : "NUMERIC",
+      "unit" : "COUNT",
+      "sourceCapability" : "market-structure-analysis",
+      "sourceSemantic" : "trigger.suppressedSwingCount",
+      "order" : 16,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Count of structurally suppressed swings."
+    }, {
+      "name" : "trend.alignment",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "alignment",
+      "order" : 17,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Multi-timeframe trend alignment."
+    }, {
+      "name" : "trend.attention",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "attention",
+      "order" : 18,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend Context attention state."
+    }, {
+      "name" : "trend.bias.direction",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.direction",
+      "order" : 19,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend direction for the context role."
+    }, {
+      "name" : "trend.bias.regime",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.regime",
+      "order" : 20,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend regime for the context role."
+    }, {
+      "name" : "trend.bias.phase",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.phase",
+      "order" : 21,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend phase for the context role."
+    }, {
+      "name" : "trend.bias.ema_slope",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.ema.slopeClassification",
+      "order" : 22,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "EMA slope classification for the context role."
+    }, {
+      "name" : "trend.bias.atr_ratio",
+      "group" : "TREND",
+      "dataType" : "NUMERIC",
+      "unit" : "RATIO",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.atr.ratio",
+      "order" : 23,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Current ATR relative to its baseline when available."
+    }, {
+      "name" : "trend.bias.pullback_qualified",
+      "group" : "TREND",
+      "dataType" : "BOOLEAN",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.pullback.qualified",
+      "order" : 24,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Whether the deterministic pullback rule qualified."
+    }, {
+      "name" : "trend.bias.extension_state",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.extension",
+      "order" : 25,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Extension state when extension evidence is available."
+    }, {
+      "name" : "trend.bias.break_status",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "bias.structuralBreak.status",
+      "order" : 26,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Structural break status for the context role."
+    }, {
+      "name" : "trend.setup.direction",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.direction",
+      "order" : 27,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend direction for the context role."
+    }, {
+      "name" : "trend.setup.regime",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.regime",
+      "order" : 28,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend regime for the context role."
+    }, {
+      "name" : "trend.setup.phase",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.phase",
+      "order" : 29,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend phase for the context role."
+    }, {
+      "name" : "trend.setup.ema_slope",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.ema.slopeClassification",
+      "order" : 30,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "EMA slope classification for the context role."
+    }, {
+      "name" : "trend.setup.atr_ratio",
+      "group" : "TREND",
+      "dataType" : "NUMERIC",
+      "unit" : "RATIO",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.atr.ratio",
+      "order" : 31,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Current ATR relative to its baseline when available."
+    }, {
+      "name" : "trend.setup.pullback_qualified",
+      "group" : "TREND",
+      "dataType" : "BOOLEAN",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.pullback.qualified",
+      "order" : 32,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Whether the deterministic pullback rule qualified."
+    }, {
+      "name" : "trend.setup.extension_state",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.extension",
+      "order" : 33,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Extension state when extension evidence is available."
+    }, {
+      "name" : "trend.setup.break_status",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "setup.structuralBreak.status",
+      "order" : 34,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Structural break status for the context role."
+    }, {
+      "name" : "trend.trigger.direction",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.direction",
+      "order" : 35,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend direction for the context role."
+    }, {
+      "name" : "trend.trigger.regime",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.regime",
+      "order" : 36,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend regime for the context role."
+    }, {
+      "name" : "trend.trigger.phase",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.phase",
+      "order" : 37,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Trend phase for the context role."
+    }, {
+      "name" : "trend.trigger.ema_slope",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.ema.slopeClassification",
+      "order" : 38,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "EMA slope classification for the context role."
+    }, {
+      "name" : "trend.trigger.atr_ratio",
+      "group" : "TREND",
+      "dataType" : "NUMERIC",
+      "unit" : "RATIO",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.atr.ratio",
+      "order" : 39,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Current ATR relative to its baseline when available."
+    }, {
+      "name" : "trend.trigger.pullback_qualified",
+      "group" : "TREND",
+      "dataType" : "BOOLEAN",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.pullback.qualified",
+      "order" : 40,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Whether the deterministic pullback rule qualified."
+    }, {
+      "name" : "trend.trigger.extension_state",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.extension",
+      "order" : 41,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Extension state when extension evidence is available."
+    }, {
+      "name" : "trend.trigger.break_status",
+      "group" : "TREND",
+      "dataType" : "CATEGORICAL",
+      "unit" : "NONE",
+      "sourceCapability" : "trend-context-analysis",
+      "sourceSemantic" : "trigger.structuralBreak.status",
+      "order" : 42,
+      "missingnessPolicy" : "NULL_WHEN_UNAVAILABLE",
+      "description" : "Structural break status for the context role."
+    } ]
+  },
+  "outcomeSchema" : [ "referencePrice", "finalPrice", "futureHigh", "futureLow", "forwardReturn", "futureHighReturn", "futureLowReturn", "futureRange" ],
+  "sampleCount" : 1,
+  "eligibleCount" : 1,
+  "excludedCount" : 0,
+  "exclusionCounts" : { },
+  "datasetFingerprint" : "8688bc6a33e02bedca58979ca7c8c2613313ef291df367b0326e2d541c3e167e",
+  "fingerprintMaterial" : [ "definition=research-dataset-v1", "populationPolicyVersion=population-v1", "startCutoff=2026-10-15T09:59:59Z", "endCutoff=2026-10-15T10:00:01Z", "featureProjection=feature-projection-v1", "featurePolicy=STRICT_OBSERVED", "outcomeDefinition=market-outcome-v1", "horizon=PT1H", "cadence=ONE_PER_FEATURE_SNAPSHOT", "acceptedMissingness=INSUFFICIENT_DATA", "selectedOutcome=ResearchOutcomeKey[marketId=11111111-1111-1111-1111-111111111111, evaluationCutoff=2026-10-15T10:00:00Z, horizon=OutcomeHorizon[value=PT1H]]|outcome-cross-language", "sample=f741ea6d2ccfcc8549dfd642a43f81da0d2989cb04718da380e929936cc07011" ],
+  "samplesSha256" : "80414b7a23f6bb112ed85820eeaff94512e0b449628b52dd6ed66a9a446cec19"
+}
