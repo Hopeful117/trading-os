@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.application.port.ObservedMarketOutcomeRepository;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
+import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeIdentity;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,14 @@ public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcome
     @Transactional(readOnly = true)
     public Optional<ObservedMarketOutcome> findByFingerprint(String fingerprint) {
         return repository.findByOutcomeFingerprint(fingerprint).map(JpaObservedMarketOutcomeEntity::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ObservedMarketOutcome> findByIdentity(ObservedMarketOutcomeIdentity identity) {
+        return repository.findByOutcomeFingerprint(identity.outcomeFingerprint())
+                .map(JpaObservedMarketOutcomeEntity::toDomain)
+                .filter(identity::matches);
     }
 
     @Override
