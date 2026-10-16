@@ -7,11 +7,14 @@ import com.hope.trading.market_intelligence.domain.feature.*;
 import com.hope.trading.market_intelligence.domain.outcome.*;
 import com.hope.trading.market_intelligence.domain.research.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -20,6 +23,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ResearchDatasetBuilderTest {
     private static final UUID MARKET_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final Instant T0 = Instant.parse("2026-10-15T10:00:00Z");
+
+    @TempDir
+    Path temporaryDirectory;
 
     @Test
     void buildsOneDeterministicSamplePerSnapshotAndHorizon() {
@@ -94,6 +100,68 @@ class ResearchDatasetBuilderTest {
         assertThat(right.manifest().datasetFingerprint()).isEqualTo(left.manifest().datasetFingerprint());
         assertThat(right.samples()).extracting(ResearchSample::sampleFingerprint)
                 .containsExactlyElementsOf(left.samples().stream().map(ResearchSample::sampleFingerprint).toList());
+    }
+
+    @Test
+    void exportsAtomicBundleWithManifestAndSampleChecksum() throws Exception {
+        FeatureSnapshot snapshot = snapshot("snapshot-bundle");
+        ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-bundle", ObservedMarketOutcomeStatus.AVAILABLE);
+        ResearchPopulationSpec population = population(Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-bundle"),
+                Set.of(OutcomeHorizon.oneHour()));
+        DatasetBuildResult result = builder().build(population, List.of(snapshot), List.of(outcome));
+        Path output = temporaryDirectory.resolve("bundle");
+
+        new ResearchDatasetBundleExporter(new ObjectMapper()).export(result, output);
+
+        assertThat(Files.exists(output.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE))).isTrue();
+        assertThat(Files.exists(output.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE))).isTrue();
+        assertThat(Files.exists(output.resolve(ResearchDatasetBundleExporter.README_FILE))).isTrue();
+        String samples = Files.readString(output.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE));
+        var manifest = new ObjectMapper().readTree(Files.readString(output.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)));
+        assertThat(manifest.get("datasetFingerprint").asText()).isEqualTo(result.manifest().datasetFingerprint());
+        assertThat(manifest.get("fingerprintMaterial")).hasSize(result.manifest().fingerprintMaterial().size());
+        assertThat(manifest.get("samplesSha256").asText()).isEqualTo(
+                java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(samples.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    }
+
+    @Test
+    void repeatedExportsProduceIdenticalBundleBytesAndZeroSamplesAreRepresentable() throws Exception {
+        ResearchPopulationSpec population = population(Map.of(), Set.of(OutcomeHorizon.oneHour()));
+        DatasetBuildResult result = builder().build(population, List.of(), List.of());
+        Path first = temporaryDirectory.resolve("first");
+        Path second = temporaryDirectory.resolve("second");
+        ResearchDatasetBundleExporter exporter = new ResearchDatasetBundleExporter(new ObjectMapper());
+
+        exporter.export(result, first);
+        exporter.export(result, second);
+
+        assertThat(Files.readAllBytes(first.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)))
+                .isEqualTo(Files.readAllBytes(second.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)));
+        assertThat(Files.readAllBytes(first.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE)))
+                .isEqualTo(Files.readAllBytes(second.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE)));
+        assertThat(Files.size(first.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE))).isZero();
+    }
+
+    @Test
+    void currentExporterMatchesCommittedCrossLanguageFixture() throws Exception {
+        FeatureSnapshot snapshot = snapshot("snapshot-cross-language");
+        ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-cross-language", ObservedMarketOutcomeStatus.AVAILABLE);
+        ResearchPopulationSpec population = population(Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-cross-language"),
+                Set.of(OutcomeHorizon.oneHour()));
+        DatasetBuildResult result = builder().build(population, List.of(snapshot), List.of(outcome));
+        Path fixture = Path.of(System.getProperty("project.basedir", "."))
+                .resolve("../research/ml/tests/fixtures/java-generated").normalize();
+        Path generated = temporaryDirectory.resolve("cross-language");
+
+        new ResearchDatasetBundleExporter(new ObjectMapper()).export(result, generated);
+
+        assertThat(Files.readAllBytes(generated.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)))
+                .isEqualTo(Files.readAllBytes(fixture.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)));
+        assertThat(Files.readAllBytes(generated.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE)))
+                .isEqualTo(Files.readAllBytes(fixture.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE)));
     }
 
     @Test

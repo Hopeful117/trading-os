@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
 
 @Repository
 public class JpaFeatureSnapshotRepository implements FeatureSnapshotRepository {
@@ -37,6 +38,20 @@ public class JpaFeatureSnapshotRepository implements FeatureSnapshotRepository {
     @Override
     public Optional<FeatureSnapshot> findByFingerprint(String fingerprint) {
         return repository.findBySnapshotFingerprint(fingerprint).map(this::toDomain);
+    }
+
+    @Override
+    public List<FeatureSnapshot> findByPopulation(Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
+                                                  String featureProjectionVersion, String evidencePolicy) {
+        var entities = marketIds.isEmpty()
+                ? repository.findByEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicy(
+                        startCutoffInclusive, endCutoffExclusive, featureProjectionVersion, evidencePolicy)
+                : repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicy(
+                        marketIds, startCutoffInclusive, endCutoffExclusive, featureProjectionVersion, evidencePolicy);
+        return entities
+                .stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

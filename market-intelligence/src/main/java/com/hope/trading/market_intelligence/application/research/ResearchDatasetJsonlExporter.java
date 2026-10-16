@@ -27,16 +27,21 @@ public final class ResearchDatasetJsonlExporter {
         document.put("marketId", sample.marketId().toString());
         document.put("evaluationCutoff", sample.evaluationCutoff().toString());
         document.put("horizon", sample.horizon().value().toString());
+        document.put("featureProjectionVersion", sample.featureProjectionVersion());
+        document.put("evidencePolicy", sample.featureSnapshot().evidencePolicy().name());
+        document.put("featureSnapshotCreatedAt", sample.featureSnapshot().createdAt().toString());
         document.put("status", sample.status().name());
         document.put("exclusionReason", sample.exclusionReason() == null ? null : sample.exclusionReason().name());
         document.put("features", features(schema, sample));
         document.put("outcome", outcome(sample));
-        Map<String, String> lineage = new LinkedHashMap<>();
+        document.put("featureProvenance", sample.featureSnapshot().provenance());
+        Map<String, Object> lineage = new LinkedHashMap<>();
         lineage.put("featureSnapshotFingerprint", sample.featureSnapshot().fingerprint());
         lineage.put("featureIdentityFingerprint", sample.featureSnapshot().identityFingerprint());
         lineage.put("contextFingerprint", sample.featureSnapshot().contextFingerprint());
         lineage.put("outcomeFingerprint", sample.outcome() == null ? null : sample.outcome().outcomeFingerprint());
         lineage.put("sampleFingerprint", sample.sampleFingerprint());
+        lineage.put("sampleFingerprintMaterial", sampleFingerprintMaterial(sample));
         document.put("lineage", lineage);
         try {
             return mapper.writeValueAsString(document);
@@ -75,6 +80,11 @@ public final class ResearchDatasetJsonlExporter {
         }
         var outcome = sample.outcome();
         result.put("status", outcome.status().name());
+        result.put("maturityAt", outcome.maturityAt().toString());
+        result.put("computedAt", outcome.computedAt().toString());
+        result.put("outcomeDefinitionVersion", outcome.outcomeDefinitionVersion());
+        result.put("referenceObservationFingerprint", outcome.referenceObservationFingerprint());
+        result.put("futureEvidenceFingerprint", outcome.futureEvidenceFingerprint());
         result.put("referencePrice", outcome.referencePrice());
         result.put("finalPrice", outcome.finalPrice());
         result.put("futureHigh", outcome.futureHigh());
@@ -92,6 +102,28 @@ public final class ResearchDatasetJsonlExporter {
             case CategoricalFeatureValue ignored -> "CATEGORICAL";
             case BooleanFeatureValue ignored -> "BOOLEAN";
         };
+    }
+
+    private List<String> sampleFingerprintMaterial(ResearchSample sample) {
+        if (sample.outcome() == null) {
+            return List.of(
+                    "definition=" + ResearchDatasetBuilder.DATASET_DEFINITION_VERSION,
+                    "market=" + sample.marketId(),
+                    "cutoff=" + sample.evaluationCutoff(),
+                    "horizon=" + sample.horizon().value(),
+                    "feature=" + sample.featureSnapshot().fingerprint(),
+                    "reason=" + sample.exclusionReason());
+        }
+        return List.of(
+                "definition=" + ResearchDatasetBuilder.DATASET_DEFINITION_VERSION,
+                "market=" + sample.marketId(),
+                "cutoff=" + sample.evaluationCutoff(),
+                "horizon=" + sample.horizon().value(),
+                "projection=" + sample.featureProjectionVersion(),
+                "feature=" + sample.featureSnapshot().fingerprint(),
+                "outcome=" + sample.outcome().outcomeFingerprint(),
+                "status=" + sample.status(),
+                "reason=" + java.util.Objects.toString(sample.exclusionReason(), "null"));
     }
 
     private Object value(FeatureValue value) {
