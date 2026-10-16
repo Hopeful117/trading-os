@@ -10,6 +10,7 @@ import com.hope.trading.market_data.model.OrderBookLevel;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Comparator;
 
 @Component
 public class KrakenOrderBookMapper {
@@ -40,24 +41,31 @@ public class KrakenOrderBookMapper {
                 market.getMarketId(),
                 market.getProvider(),
                 market.getSymbol(),
+                market.getProviderSymbol(),
                 depth,
                 messageType == KrakenMessageType.SNAPSHOT
                         ? OrderBookDeltaType.SNAPSHOT
                         : OrderBookDeltaType.UPDATE,
-                mapLevels(data.bids()),
-                mapLevels(data.asks()),
+                mapLevels(data.bids(), true),
+                mapLevels(data.asks(), false),
                 data.timestamp(),
-                data.checksum()
+                data.checksum(),
+                data.sequence()
         );
     }
 
     private List<OrderBookLevel> mapLevels(
-            List<KrakenOrderBookLevel> levels
+            List<KrakenOrderBookLevel> levels,
+            boolean descending
     ) {
         if (levels == null) {
             return List.of();
         }
 
+        Comparator<OrderBookLevel> comparator = Comparator.comparing(OrderBookLevel::price);
+        if (descending) {
+            comparator = comparator.reversed();
+        }
         return levels.stream()
                 .map(level ->
                         new OrderBookLevel(
@@ -65,6 +73,7 @@ public class KrakenOrderBookMapper {
                                 level.quantity()
                         )
                 )
+                .sorted(comparator)
                 .toList();
     }
 }

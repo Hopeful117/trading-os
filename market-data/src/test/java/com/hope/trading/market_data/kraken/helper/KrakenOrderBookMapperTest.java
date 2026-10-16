@@ -71,4 +71,24 @@ class KrakenOrderBookMapperTest {
         assertThat(delta.checksum()).isEqualTo(123456L);
         assertThat(delta.occurredAt()).isEqualTo(timestamp);
     }
+
+    @Test
+    void normalizesBidAndAskOrdering() {
+        Market market = Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.KRAKEN)
+                .symbol("BTC/EUR").build();
+        KrakenOrderBookData data = new KrakenOrderBookData("BTC/EUR",
+                List.of(level("100"), level("102")), List.of(level("103"), level("101")),
+                null, Instant.parse("2026-07-28T12:00:00Z"));
+
+        OrderBookDelta delta = mapper.toDelta(data, KrakenMessageType.SNAPSHOT, market, 25);
+
+        assertThat(delta.bids()).extracting(OrderBookLevel::price)
+                .containsExactly(new BigDecimal("102"), new BigDecimal("100"));
+        assertThat(delta.asks()).extracting(OrderBookLevel::price)
+                .containsExactly(new BigDecimal("101"), new BigDecimal("103"));
+    }
+
+    private KrakenOrderBookLevel level(String price) {
+        return new KrakenOrderBookLevel(new BigDecimal(price), BigDecimal.ONE);
+    }
 }
