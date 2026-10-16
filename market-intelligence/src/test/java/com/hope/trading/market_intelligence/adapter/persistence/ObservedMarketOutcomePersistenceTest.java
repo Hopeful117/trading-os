@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.application.port.ObservedMarketOutcomeRepository;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
+import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeIdentity;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
 import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,37 @@ class ObservedMarketOutcomePersistenceTest {
                 marketId, first.evaluationCutoff(), first.horizon().value().toSeconds()))
                 .extracting(ObservedMarketOutcome::futureEvidenceFingerprint)
                 .containsExactlyInAnyOrder("future-fingerprint-b1", "future-fingerprint-b2");
+    }
+
+    @Test
+    void resolvesOnlyTheExplicitlySelectedImmutableVersion() {
+        UUID marketId = UUID.randomUUID();
+        ObservedMarketOutcome first = available(marketId, "outcome-fingerprint-d1", "future-fingerprint-d1");
+        ObservedMarketOutcome corrected = available(marketId, "outcome-fingerprint-d2", "future-fingerprint-d2");
+        repository.saveIfAbsent(first);
+        repository.saveIfAbsent(corrected);
+
+        assertThat(repository.findByIdentity(ObservedMarketOutcomeIdentity.of(first))).get()
+                .extracting(ObservedMarketOutcome::outcomeFingerprint,
+                        ObservedMarketOutcome::futureEvidenceFingerprint)
+                .containsExactly("outcome-fingerprint-d1", "future-fingerprint-d1");
+        assertThat(repository.findByIdentity(ObservedMarketOutcomeIdentity.of(corrected))).get()
+                .extracting(ObservedMarketOutcome::outcomeFingerprint,
+                        ObservedMarketOutcome::futureEvidenceFingerprint)
+                .containsExactly("outcome-fingerprint-d2", "future-fingerprint-d2");
+
+        assertThat(repository.findByIdentity(new ObservedMarketOutcomeIdentity(
+                UUID.randomUUID(), first.evaluationCutoff(), first.horizon(),
+                first.outcomeDefinitionVersion(), first.outcomeFingerprint()))).isEmpty();
+        assertThat(repository.findByIdentity(new ObservedMarketOutcomeIdentity(
+                first.marketId(), first.evaluationCutoff().plusSeconds(60), first.horizon(),
+                first.outcomeDefinitionVersion(), first.outcomeFingerprint()))).isEmpty();
+        assertThat(repository.findByIdentity(new ObservedMarketOutcomeIdentity(
+                first.marketId(), first.evaluationCutoff(), OutcomeHorizon.fourHours(),
+                first.outcomeDefinitionVersion(), first.outcomeFingerprint()))).isEmpty();
+        assertThat(repository.findByIdentity(new ObservedMarketOutcomeIdentity(
+                first.marketId(), first.evaluationCutoff(), first.horizon(),
+                "market-outcome-v2", first.outcomeFingerprint()))).isEmpty();
     }
 
     @Test
