@@ -66,6 +66,9 @@ class OrderBookEvidenceCaptureServiceTest {
                 evidence.origin() == com.hope.trading.market_data.model.OrderBookEvidenceOrigin.CHECKPOINT
                         && evidence.sourceStartOrdinal() == 0L
                 && evidence.sourceEndOrdinal() == 1L));
+        var context = service.diagnosticSnapshot(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25));
+        assertThat(context.lastOccurredAt()).isEqualTo(NOW);
+        assertThat(context.lastKnownAt()).isEqualTo(NOW);
     }
 
     @Test
@@ -102,6 +105,29 @@ class OrderBookEvidenceCaptureServiceTest {
         assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isTrue();
         service.invalidate(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25));
         assertThat(service.acceptUpdate(delta(OrderBookDeltaType.UPDATE, 11))).isFalse();
+    }
+
+    @Test
+    void exposesActiveSequenceContextBeforeInvalidation() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        when(repository.append(any())).thenReturn(true);
+        OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
+                repository, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isTrue();
+        assertThat(service.acceptUpdate(delta(OrderBookDeltaType.UPDATE, 11))).isTrue();
+
+        var context = service.diagnosticSnapshot(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25));
+        assertThat(context).isNotNull();
+        assertThat(context.localOrdinal()).isEqualTo(1L);
+        assertThat(context.providerSequence()).isEqualTo(11L);
+        assertThat(context.lastOccurredAt()).isEqualTo(NOW.minusSeconds(1));
+        assertThat(context.lastKnownAt()).isEqualTo(NOW);
+
+        service.invalidate(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25));
+
+        assertThat(service.diagnosticSnapshot(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25)))
+                .isNull();
     }
 
     private OrderBookDelta delta(OrderBookDeltaType type, long sequence) {
