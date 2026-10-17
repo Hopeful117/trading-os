@@ -46,6 +46,8 @@ class EconomicLifecycleEvaluatorTest {
         assertThat(result.executionAdjustedPnl()).isEqualByComparingTo("16");
         assertThat(result.netPnl()).isEqualByComparingTo("15.8");
         assertThat(result.netReturn()).isNull();
+        assertThat(result.closedQuantity()).isEqualByComparingTo("2");
+        assertThat(result.residualExposure()).isZero();
         assertThat(result.calculationFingerprint()).hasSize(64);
     }
 
@@ -71,6 +73,34 @@ class EconomicLifecycleEvaluatorTest {
         assertThat(entry.unfilledQuantity()).isEqualByComparingTo("0.3");
         assertThat(result.netPnl()).isNull();
         assertThat(result.costs().fundingStatus()).isEqualTo(com.hope.trading.trading_core.execution.domain.economic.CostComponentStatus.UNAVAILABLE);
+        assertThat(result.closedQuantity()).isEqualByComparingTo("1.7");
+        assertThat(result.residualExposure()).isZero();
+    }
+
+    @Test
+    void distinguishesAvailableZeroCommissionFromUnavailableCommission() {
+        StrategyIntent intent = intent("1");
+        SimulatedExecution entry = filled(StrategyIntent.Side.BUY, "1", "101", ENTRY_TIME);
+        SimulatedExecution exit = filled(StrategyIntent.Side.SELL, "1", "109", EXIT_TIME);
+        var entryState = state(EconomicProductType.SPOT, "100", "99", "101", ENTRY_TIME);
+        var exitState = state(EconomicProductType.SPOT, "110", "109", "111", EXIT_TIME);
+
+        TransactionCosts availableZero = new TransactionCosts(BigDecimal.ZERO,
+                ExplicitCost.available(BigDecimal.ZERO, null, "cost-v1"),
+                ExplicitCost.notApplicable(), ExplicitCost.notApplicable(), BigDecimal.ZERO, "cost-v1");
+        TransactionCosts unavailable = new TransactionCosts(BigDecimal.ZERO,
+                ExplicitCost.unavailable(), ExplicitCost.notApplicable(), ExplicitCost.notApplicable(), null, "cost-v1");
+
+        var available = evaluator.evaluate(intent, entryState, exitState, entry, exit, availableZero,
+                "market-execution-v1", "cost-v1");
+        var missing = evaluator.evaluate(intent, entryState, exitState, entry, exit, unavailable,
+                "market-execution-v1", "cost-v1");
+
+        assertThat(available.completeness()).isEqualTo(CostCompleteness.FULLY_COSTED);
+        assertThat(available.netPnl()).isEqualByComparingTo("8");
+        assertThat(missing.completeness()).isEqualTo(CostCompleteness.PARTIALLY_COSTED);
+        assertThat(missing.netPnl()).isNull();
+        assertThat(available.calculationFingerprint()).isNotEqualTo(missing.calculationFingerprint());
     }
 
     @Test
@@ -124,6 +154,17 @@ class EconomicLifecycleEvaluatorTest {
 
         assertThat(result.status()).isEqualTo(EconomicResultStatus.STALE);
         assertThat(result.netPnl()).isNull();
+
+        CostEvidence differentFutureEvidence = new CostEvidence("future-fee-2", "fixture",
+                ENTRY_TIME.minusSeconds(60), EXIT_TIME.plusSeconds(60), EXIT_TIME.plusSeconds(1));
+        TransactionCosts differentCosts = new TransactionCosts(BigDecimal.ZERO,
+                ExplicitCost.available(new BigDecimal("0.2"), differentFutureEvidence, "cost-v1"),
+                ExplicitCost.notApplicable(), ExplicitCost.notApplicable(), new BigDecimal("0.2"), "cost-v1");
+        var different = evaluator.evaluate(intent,
+                state(EconomicProductType.SPOT, "100", "99", "101", ENTRY_TIME),
+                state(EconomicProductType.SPOT, "110", "109", "111", EXIT_TIME), entry, exit,
+                differentCosts, "market-execution-v1", "cost-v1");
+        assertThat(different.calculationFingerprint()).isNotEqualTo(result.calculationFingerprint());
     }
 
     @Test

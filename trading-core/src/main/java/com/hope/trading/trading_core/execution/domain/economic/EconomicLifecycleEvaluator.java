@@ -21,54 +21,90 @@ public final class EconomicLifecycleEvaluator {
             String executionModelVersion,
             String transactionCostModelVersion
     ) {
-        if (intent == null || entryState == null || exitState == null || entry == null || exit == null || costs == null) {
+        return evaluate(intent, entryState, exitState, entry, exit, costs, executionModelVersion,
+                transactionCostModelVersion, exit == null ? null : exit.executedAt());
+    }
+
+    public EconomicResult evaluate(
+            StrategyIntent intent,
+            ReferenceMarketState entryState,
+            ReferenceMarketState exitState,
+            SimulatedExecution entry,
+            SimulatedExecution exit,
+            TransactionCosts costs,
+            String executionModelVersion,
+            String transactionCostModelVersion,
+            Instant researchCutoff
+    ) {
+        if (intent == null || entryState == null || exitState == null || entry == null || exit == null
+                || costs == null || researchCutoff == null) {
             return EconomicResult.unavailable(EconomicResultStatus.INSUFFICIENT_DATA,
-                    "intent, market states, executions and costs are required");
+                    "intent, market states, executions, costs and research cutoff are required");
         }
         if (!intent.instrument().equals(entryState.instrument())
                 || !intent.instrument().equals(exitState.instrument())
                 || entryState.productType() != exitState.productType()
                 || !entryState.marketId().equals(exitState.marketId())) {
-            return EconomicResult.unavailable(EconomicResultStatus.INVALID_INPUT,
-                    "lifecycle inputs must refer to the same instrument, market and product");
+            return unavailableLifecycle(EconomicResultStatus.INVALID_INPUT,
+                    "lifecycle inputs must refer to the same instrument, market and product", intent,
+                    entryState, exitState, entry, exit, costs, executionModelVersion,
+                    transactionCostModelVersion, researchCutoff);
         }
         if (entry.side() != intent.side()
                 || exit.side() != opposite(intent.side())
                 || exit.executedAt().isBefore(entry.executedAt())) {
-            return EconomicResult.unavailable(EconomicResultStatus.INVALID_INPUT,
-                    "entry and exit sides or timestamps are inconsistent");
+            return unavailableLifecycle(EconomicResultStatus.INVALID_INPUT,
+                    "entry and exit sides or timestamps are inconsistent", intent,
+                    entryState, exitState, entry, exit, costs, executionModelVersion,
+                    transactionCostModelVersion, researchCutoff);
         }
         if (entryState.knownAt().isAfter(entry.executedAt())
                 || exitState.knownAt().isAfter(exit.executedAt())
                 || entryState.knownAt().isAfter(intent.decisionAt())
                 || intent.decisionAt().isAfter(entry.executedAt())) {
-            return EconomicResult.unavailable(EconomicResultStatus.STALE,
-                    "a lifecycle input was known after its applicable execution time");
+            return unavailableLifecycle(EconomicResultStatus.STALE,
+                    "a lifecycle input was known after its applicable execution time", intent,
+                    entryState, exitState, entry, exit, costs, executionModelVersion,
+                    transactionCostModelVersion, researchCutoff);
         }
-        if (!eligible(costs.commissionComponent(), entry.executedAt(), exit.executedAt())
-                || !eligible(costs.fundingComponent(), entry.executedAt(), exit.executedAt())
-                || !eligible(costs.otherExplicitCosts(), entry.executedAt(), exit.executedAt())) {
-            return EconomicResult.unavailable(EconomicResultStatus.STALE,
-                    "cost evidence was not eligible at the lifecycle execution times");
+        if (!eligible(costs.commissionComponent(), entry.executedAt(), exit.executedAt(), researchCutoff)
+                || !eligible(costs.fundingComponent(), entry.executedAt(), exit.executedAt(), researchCutoff)
+                || !eligible(costs.otherExplicitCosts(), entry.executedAt(), exit.executedAt(), researchCutoff)) {
+            return unavailableLifecycle(EconomicResultStatus.STALE,
+                    "cost evidence was not eligible at the lifecycle execution times", intent,
+                    entryState, exitState, entry, exit, costs, executionModelVersion,
+                    transactionCostModelVersion, researchCutoff);
         }
         if (executionModelVersion == null || executionModelVersion.isBlank()
                 || transactionCostModelVersion == null || transactionCostModelVersion.isBlank()) {
-            return EconomicResult.unavailable(EconomicResultStatus.INVALID_INPUT,
-                    "execution and transaction-cost policy versions are required");
+            return unavailableLifecycle(EconomicResultStatus.INVALID_INPUT,
+                    "execution and transaction-cost policy versions are required", intent,
+                    entryState, exitState, entry, exit, costs, executionModelVersion,
+                    transactionCostModelVersion, researchCutoff);
         }
         if (!executionModelVersion.equals(entry.executionModelVersion())
                 || !executionModelVersion.equals(exit.executionModelVersion())
                 || !transactionCostModelVersion.equals(costs.transactionCostModelVersion())) {
-            return EconomicResult.unavailable(EconomicResultStatus.INVALID_INPUT,
-                    "lifecycle policy versions do not match the supplied inputs");
+            return unavailableLifecycle(EconomicResultStatus.INVALID_INPUT,
+                    "lifecycle policy versions do not match the supplied inputs", intent,
+                    entryState, exitState, entry, exit, costs, executionModelVersion,
+                    transactionCostModelVersion, researchCutoff);
         }
         if (exit.filledQuantity().compareTo(entry.filledQuantity()) > 0) {
-            return EconomicResult.unavailable(EconomicResultStatus.INVALID_INPUT,
-                    "exit cannot exceed entry exposure");
+            return unavailableLifecycle(EconomicResultStatus.INVALID_INPUT,
+                    "exit cannot exceed entry exposure", intent, entryState, exitState, entry, exit,
+                    costs, executionModelVersion, transactionCostModelVersion, researchCutoff);
         }
         if (entry.filledQuantity().signum() == 0 || exit.filledQuantity().signum() == 0) {
-            return EconomicResult.unavailable(EconomicResultStatus.EXECUTION_UNAVAILABLE,
-                    costs.completeness(), "lifecycle contains no filled quantity");
+            SimulatedExecutionStatus executionStatus = aggregateStatus(entry, exit);
+            String fingerprint = fingerprint(intent, entryState, exitState, entry, exit, costs,
+                    executionModelVersion, transactionCostModelVersion, researchCutoff,
+                    costs.completeness(), executionStatus);
+            return new EconomicResult(EconomicResultStatus.EXECUTION_UNAVAILABLE, costs.completeness(), null, null,
+                    entry, costs, intent, entryState, exitState, entry, exit, executionStatus,
+                    null, null, null, null, null, executionModelVersion, transactionCostModelVersion,
+                    fingerprint, "lifecycle contains no filled quantity", exit.filledQuantity(),
+                    entry.filledQuantity().subtract(exit.filledQuantity()));
         }
 
         BigDecimal closedQuantity = exit.filledQuantity();
@@ -92,13 +128,36 @@ public final class EconomicLifecycleEvaluator {
         }
 
         String fingerprint = fingerprint(intent, entryState, exitState, entry, exit, costs,
-                executionModelVersion, transactionCostModelVersion, completeness, executionStatus);
+                executionModelVersion, transactionCostModelVersion, researchCutoff, completeness, executionStatus);
         return new EconomicResult(resultStatus, completeness, referenceNotional,
-                entry.averageExecutionPrice().multiply(entry.filledQuantity(), CALCULATION_CONTEXT),
+                entry.averageExecutionPrice().multiply(closedQuantity, CALCULATION_CONTEXT),
                 entry, costs, intent, entryState, exitState, entry, exit, executionStatus,
                 referenceMarketReturn, grossStrategyPnl, executionAdjustedPnl, netPnl, null,
                 executionModelVersion, transactionCostModelVersion, fingerprint,
-                closed ? null : "lifecycle is not fully closed");
+                closed ? null : "lifecycle is not fully closed", closedQuantity,
+                entry.filledQuantity().subtract(exit.filledQuantity()));
+    }
+
+    private EconomicResult unavailableLifecycle(
+            EconomicResultStatus status,
+            String reason,
+            StrategyIntent intent,
+            ReferenceMarketState entryState,
+            ReferenceMarketState exitState,
+            SimulatedExecution entry,
+            SimulatedExecution exit,
+            TransactionCosts costs,
+            String executionModelVersion,
+            String transactionCostModelVersion,
+            Instant researchCutoff
+    ) {
+        SimulatedExecutionStatus executionStatus = aggregateStatus(entry, exit);
+        String fingerprint = fingerprint(intent, entryState, exitState, entry, exit, costs,
+                executionModelVersion, transactionCostModelVersion, researchCutoff,
+                costs.completeness(), executionStatus);
+        return new EconomicResult(status, costs.completeness(), null, null, entry, costs, intent,
+                entryState, exitState, entry, exit, executionStatus, null, null, null, null, null,
+                executionModelVersion, transactionCostModelVersion, fingerprint, reason, null, null);
     }
 
     private StrategyIntent.Side opposite(StrategyIntent.Side side) {
@@ -134,6 +193,7 @@ public final class EconomicLifecycleEvaluator {
             TransactionCosts costs,
             String executionModelVersion,
             String transactionCostModelVersion,
+            Instant researchCutoff,
             CostCompleteness completeness,
             SimulatedExecutionStatus executionStatus
     ) {
@@ -146,7 +206,7 @@ public final class EconomicLifecycleEvaluator {
                 executionMaterial(entry), executionMaterial(exit),
                 costs.executionImpact().toPlainString(), costMaterial(costs.commissionComponent()),
                 costMaterial(costs.fundingComponent()), costMaterial(costs.otherExplicitCosts()),
-                executionModelVersion, transactionCostModelVersion,
+                executionModelVersion, transactionCostModelVersion, researchCutoff.toString(),
                 completeness.name(), executionStatus.name()));
     }
 
@@ -182,8 +242,9 @@ public final class EconomicLifecycleEvaluator {
                 Objects.toString(cost.policyVersion(), ""));
     }
 
-    private boolean eligible(ExplicitCost cost, Instant entryTime, Instant exitTime) {
+    private boolean eligible(ExplicitCost cost, Instant entryTime, Instant exitTime, Instant researchCutoff) {
         if (cost.status() != CostComponentStatus.AVAILABLE || cost.evidence() == null) return true;
-        return cost.evidence().eligibleAt(entryTime) && cost.evidence().eligibleAt(exitTime);
+        return !cost.evidence().knownAt().isAfter(researchCutoff)
+                && cost.evidence().eligibleAt(entryTime) && cost.evidence().eligibleAt(exitTime);
     }
 }
