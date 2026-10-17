@@ -1,6 +1,9 @@
 package com.hope.trading.trading_core.execution.domain.economic;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
 
 public record EconomicResult(
@@ -24,11 +27,50 @@ public record EconomicResult(
         String executionModelVersion,
         String transactionCostModelVersion,
         String calculationFingerprint,
-        String reason
+        String reason,
+        BigDecimal closedQuantity,
+        BigDecimal residualExposure
 ) {
+    public EconomicResult(
+            EconomicResultStatus status,
+            CostCompleteness completeness,
+            BigDecimal referenceNotional,
+            BigDecimal executionNotional,
+            SimulatedExecution execution,
+            TransactionCosts costs,
+            StrategyIntent intent,
+            ReferenceMarketState entryMarketState,
+            ReferenceMarketState exitMarketState,
+            SimulatedExecution entryExecution,
+            SimulatedExecution exitExecution,
+            SimulatedExecutionStatus executionStatus,
+            BigDecimal referenceMarketReturn,
+            BigDecimal grossStrategyPnl,
+            BigDecimal executionAdjustedPnl,
+            BigDecimal netPnl,
+            BigDecimal netReturn,
+            String executionModelVersion,
+            String transactionCostModelVersion,
+            String calculationFingerprint,
+            String reason
+    ) {
+        this(status, completeness, referenceNotional, executionNotional, execution, costs, intent,
+                entryMarketState, exitMarketState, entryExecution, exitExecution, executionStatus,
+                referenceMarketReturn, grossStrategyPnl, executionAdjustedPnl, netPnl, netReturn,
+                executionModelVersion, transactionCostModelVersion, calculationFingerprint, reason,
+                deriveClosedQuantity(intent, entryExecution, exitExecution, entryMarketState),
+                deriveResidualExposure(intent, entryExecution, exitExecution, entryMarketState));
+    }
+
     public EconomicResult {
         Objects.requireNonNull(status, "status is required");
         Objects.requireNonNull(completeness, "completeness is required");
+        if (closedQuantity != null && closedQuantity.signum() < 0) {
+            throw new IllegalArgumentException("closedQuantity cannot be negative");
+        }
+        if (residualExposure != null && residualExposure.signum() < 0) {
+            throw new IllegalArgumentException("residualExposure cannot be negative");
+        }
         if (status == EconomicResultStatus.AVAILABLE) {
             Objects.requireNonNull(referenceNotional, "referenceNotional is required for available results");
             Objects.requireNonNull(executionNotional, "executionNotional is required for available results");
@@ -122,12 +164,38 @@ public record EconomicResult(
         }
         return new EconomicResult(status, completeness, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
-                null, null, null, reason);
+                null, null, digest(status.name() + "|" + completeness.name() + "|" + Objects.toString(reason, "")), reason);
     }
 
     private static String required(String value, String field) {
         String normalized = Objects.requireNonNull(value, field).trim();
         if (normalized.isEmpty()) throw new IllegalArgumentException(field + " is required");
         return normalized;
+    }
+
+    private static String digest(String material) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is required", exception);
+        }
+    }
+
+    private static BigDecimal deriveClosedQuantity(StrategyIntent intent,
+                                                   SimulatedExecution entry,
+                                                   SimulatedExecution exit,
+                                                   ReferenceMarketState entryState) {
+        if (exit != null) return exit.filledQuantity();
+        if (intent != null && entry != null && entryState != null) return BigDecimal.ZERO;
+        return entry == null ? null : entry.filledQuantity();
+    }
+
+    private static BigDecimal deriveResidualExposure(StrategyIntent intent,
+                                                     SimulatedExecution entry,
+                                                     SimulatedExecution exit,
+                                                     ReferenceMarketState entryState) {
+        if (intent == null || entry == null || entryState == null) return null;
+        return entry.filledQuantity().subtract(exit == null ? BigDecimal.ZERO : exit.filledQuantity());
     }
 }

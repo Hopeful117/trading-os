@@ -36,15 +36,19 @@ public final class HistoricalMarketExecutionService {
     }
 
     public SimulatedExecution execute(UUID marketId, StrategyIntent intent, Instant executionCutoff) {
+        return replay(marketId, intent, executionCutoff).execution();
+    }
+
+    public HistoricalExecution replay(UUID marketId, StrategyIntent intent, Instant executionCutoff) {
         if (marketId == null || intent == null || executionCutoff == null) {
             throw new IllegalArgumentException("marketId, intent and executionCutoff are required");
         }
         if (intent.orderType() != StrategyIntent.OrderType.MARKET) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.UNSUPPORTED_ORDER_TYPE,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.UNSUPPORTED_ORDER_TYPE,
                     "only MARKET orders are supported");
         }
         if (!intent.decisionAt().equals(executionCutoff)) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.INVALID_INPUT,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.INVALID_INPUT,
                     "zero-latency execution requires cutoff to equal decisionAt");
         }
 
@@ -52,11 +56,11 @@ public final class HistoricalMarketExecutionService {
         try {
             replay = orderBook.replay(marketId, BOUNDED_DEPTH, executionCutoff);
         } catch (RuntimeException exception) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.INSUFFICIENT_MARKET_EVIDENCE,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.INSUFFICIENT_MARKET_EVIDENCE,
                     "historical Order Book replay is unavailable");
         }
         if (replay == null || replay.status() != HistoricalOrderBookPort.Status.AVAILABLE) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.INSUFFICIENT_MARKET_EVIDENCE,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.INSUFFICIENT_MARKET_EVIDENCE,
                     replay == null || replay.reason() == null ? "historical Order Book replay is unavailable" : replay.reason());
         }
         if (!hasCompleteReplayIdentity(replay, marketId)
@@ -67,11 +71,11 @@ public final class HistoricalMarketExecutionService {
                 || replay.sourceEndOrdinal() < replay.sourceStartOrdinal()
                 || !hasText(replay.provider()) || !hasText(replay.providerSymbol())
                 || !hasText(replay.normalizationVersion()) || !hasText(replay.sourceEvidenceFingerprint())) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.INVALID_INPUT,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.INVALID_INPUT,
                     "historical replay provenance is incomplete");
         }
         if (replay.latestOccurredAt().isAfter(executionCutoff) || replay.latestKnownAt().isAfter(executionCutoff)) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.STALE_EVIDENCE,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.STALE_EVIDENCE,
                     "historical replay contains evidence known after the execution cutoff");
         }
 
@@ -82,13 +86,13 @@ public final class HistoricalMarketExecutionService {
         BigDecimal bid = bids.isEmpty() ? null : bids.get(0).price();
         BigDecimal ask = asks.isEmpty() ? null : asks.get(0).price();
         if (bid != null && ask != null && bid.compareTo(ask) > 0) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.INVALID_INPUT,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.INVALID_INPUT,
                     "historical replay has no valid non-crossed top of book");
         }
         BigDecimal referencePrice = bid != null && ask != null
                 ? bid.add(ask).divide(BigDecimal.valueOf(2)) : bid != null ? bid : ask;
         if (referencePrice == null) {
-            return unavailable(marketId, intent, executionCutoff, SimulatedExecutionStatus.UNFILLED,
+            return unavailableReplay(marketId, intent, executionCutoff, SimulatedExecutionStatus.UNFILLED,
                     "historical replay contains no executable visible liquidity");
         }
         ReferenceMarketState state = new ReferenceMarketState(marketId, intent.instrument(), executionCutoff,
@@ -96,7 +100,7 @@ public final class HistoricalMarketExecutionService {
                 replay.latestKnownAt(),
                 replay.sourceEvidenceFingerprint(), bids, asks, replay.sequenceId(), replay.sourceStartOrdinal(),
                 replay.sourceEndOrdinal(), replay.provider(), replay.providerSymbol(), replay.normalizationVersion());
-        return calculator.simulate(state, intent);
+        return new HistoricalExecution(state, calculator.simulate(state, intent));
     }
 
     private boolean hasCompleteReplayIdentity(HistoricalOrderBookPort.Replay replay, UUID requestedMarketId) {
@@ -107,14 +111,18 @@ public final class HistoricalMarketExecutionService {
         return value != null && !value.isBlank();
     }
 
-    private SimulatedExecution unavailable(UUID marketId, StrategyIntent intent, Instant cutoff,
-                                           SimulatedExecutionStatus status, String reason) {
+    private HistoricalExecution unavailableReplay(UUID marketId, StrategyIntent intent, Instant cutoff,
+                                                  SimulatedExecutionStatus status, String reason) {
         String source = "historical-order-book:" + status.name();
-        return new SimulatedExecution(intent.side(), intent.quantity(), BigDecimal.ZERO, null, cutoff, status,
+        SimulatedExecution execution = new SimulatedExecution(intent.side(), intent.quantity(), BigDecimal.ZERO, null, cutoff, status,
                 VisibleDepthMarketExecutionCalculator.MODEL_VERSION, source, List.of(), reason,
                 digest(source + "|marketId=" + marketId + "|instrument=" + intent.instrument()
                         + "|reason=" + reason + "|side=" + intent.side() + "|quantity=" + intent.quantity()
                         + "|cutoff=" + cutoff));
+        return new HistoricalExecution(null, execution);
+    }
+
+    public record HistoricalExecution(ReferenceMarketState marketState, SimulatedExecution execution) {
     }
 
     private String digest(String material) {
