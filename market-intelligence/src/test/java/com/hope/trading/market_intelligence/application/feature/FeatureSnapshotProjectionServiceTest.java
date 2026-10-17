@@ -80,6 +80,25 @@ class FeatureSnapshotProjectionServiceTest {
                 .hasMessageContaining("context");
     }
 
+    @Test
+    void acceptsCapabilityArtifactConsumedByTheParentAnalysisExecution() {
+        AnalysisExecutionRepository executions = mock(AnalysisExecutionRepository.class);
+        ArtifactPersistencePort artifacts = mock(ArtifactPersistencePort.class);
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(executions.findById(EXECUTION_ID)).thenReturn(java.util.Optional.of(execution()));
+        when(artifacts.find(any(), eq(ProductionArtifactTypes.OHLC_RANGE_ANALYSIS), any())).thenReturn(
+                List.of(artifact(UUID.randomUUID(), CUTOFF, CONTEXT_FINGERPRINT, true)));
+        when(artifacts.find(any(), eq(ProductionArtifactTypes.MARKET_STRUCTURE), any())).thenReturn(List.of());
+        when(artifacts.find(any(), eq(ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT), any())).thenReturn(List.of());
+
+        FeatureSnapshotProjectionService service = new FeatureSnapshotProjectionService(
+                executions, artifacts, snapshots, Clock.fixed(CUTOFF, ZoneOffset.UTC));
+
+        service.project(EXECUTION_ID);
+
+        verify(snapshots).saveIfAbsent(any());
+    }
+
     private AnalysisExecution execution() {
         return AnalysisExecution.restore(
                 EXECUTION_ID, new IdempotencyKey("feature-projection-test"), AnalysisExecutionStatus.COMPLETED,
@@ -96,16 +115,26 @@ class FeatureSnapshotProjectionServiceTest {
     }
 
     private ProducedArtifact artifact(UUID producingExecutionId, Instant cutoff, String contextFingerprint) {
+        return artifact(producingExecutionId, cutoff, contextFingerprint, false);
+    }
+
+    private ProducedArtifact artifact(
+            UUID producingExecutionId, Instant cutoff, String contextFingerprint, boolean consumedByParent) {
         DeterministicMeasurements content = new DeterministicMeasurements(
                 "OHLC", "test", java.util.Map.of("rangePercentage", new BigDecimal("12.5")), cutoff);
+        ArtifactProvenance provenance = new ArtifactProvenance(
+                "test-capability", "v1", producingExecutionId, cutoff, Set.of(), Set.of())
+                .withContextFingerprint(contextFingerprint);
+        if (consumedByParent) {
+            provenance = provenance.reusedBy(EXECUTION_ID);
+        }
         StoredArtifact stored = new StoredArtifact(
                 new ArtifactCacheKey(
                         new ArtifactIdentity(ProductionArtifactTypes.OHLC_RANGE_ANALYSIS.value(), "test-capability", "v1"),
                         ArtifactScope.publicMarket(MARKET_ID, "FIFTEEN_MINUTES", AnalysisExecutionMode.PASSIVE),
                         ArtifactFingerprint.empty(), ArtifactFingerprint.ofInputs(List.of("ohlc"))),
                 content, ArtifactFreshness.validUntil(cutoff, cutoff.plusSeconds(60), "test"),
-                new ArtifactProvenance("test-capability", "v1", producingExecutionId, cutoff, Set.of(), Set.of())
-                        .withContextFingerprint(contextFingerprint),
+                provenance,
                  AnalysisResultQuality.COMPLETE, ProductionArtifactTypes.V1);
         return new ProducedArtifact(ProductionArtifactTypes.OHLC_RANGE_ANALYSIS,
                 ProductionArtifactTypes.V1, stored);

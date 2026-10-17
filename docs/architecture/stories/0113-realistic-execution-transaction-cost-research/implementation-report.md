@@ -70,6 +70,31 @@ settlement integration.
 - Preserved spread accounting in execution prices and did not add a second
   spread-cost deduction.
 
+### Historical Fee Schedule Runtime Readiness Follow-up
+
+- Revalidated the runtime drift: the Broker Service container was running an
+  older artifact at Flyway V2 while the source contained V3/V4 fee-schedule
+  migrations. The primary classification was `STALE_CONTAINER_OR_IMAGE`, with
+  secondary source/runtime version drift.
+- Applied V3, V4, and additive V5 through normal Broker Service startup against
+  the existing `broker_service` PostgreSQL database. No reset, repair, or data
+  rewrite was used. The runtime is now at Flyway V5 and
+  `historical_fee_schedule` exists with zero rows.
+- Added the provider-neutral `HistoricalFeeScheduleReader` strict read port.
+  Lookup requires provider, account, product, instrument, execution time, and
+  research cutoff; it enforces effective interval and `knownAt` eligibility and
+  uses deterministic fingerprint ordering.
+- Repository persistence now recomputes and validates the canonical fingerprint
+  before idempotent lookup, rejecting conflicting payloads instead of silently
+  discarding them.
+- Made the canonical fee-rate unit explicit as `DECIMAL_FRACTION` and added an
+  additive V5 schema column and validation. Kraken's documented fee percentages
+  must be converted at the provider adapter boundary before persistence.
+- Kraken acquisition remains blocked. The official `TradeVolume` endpoint
+  exposes the current account/pair fee schedule and optional tiers, but does
+  not establish a trustworthy historical `effectiveFrom`. No current schedule
+  was backdated or persisted as historical evidence.
+
 ## Boundaries Preserved
 
 - Funding evidence remains owned by Market Data.
@@ -91,6 +116,10 @@ settlement integration.
 - `cd broker-service && ./mvnw verify` passed: 218 tests, coverage checks passed.
 - `cd trading-core && ./mvnw verify` passed, coverage checks passed.
 - `git diff --check` passed.
+- `cd broker-service && mvn -q -Dtest=HistoricalFeeScheduleRepositoryTest test` passed.
+- `cd broker-service && mvn -q verify` passed after the V5 model/migration changes.
+- Runtime Flyway validation passed for PostgreSQL 16.15, applying V3, V4, and V5
+  from the existing V2 database without checksum conflict.
 - `cd trading-core && mvn -q -Dtest=MarketOrderEconomicEvaluatorTest,EconomicLifecycleEvaluatorTest test`
   passed, including constructor invariants, decision-time eligibility, zero-fill
   status, missing-cost completeness, compatibility, and negative-cost tests.
@@ -122,6 +151,9 @@ fail validation.
   behavior is not silently changed by incomplete historical evidence.
 - Historical MARKET Order Book replay, fee/funding evidence adapters, economic
   dataset integration, and Python consumption remain deferred to later Stories.
+- Fee acquisition remains `PERSISTENCE_READY_ACQUISITION_BLOCKED` until a
+  provider path supplies defensible historical effective intervals. Funding
+  remains `PROVIDER_BLOCKED`.
 
 ## Documentation Outcome
 

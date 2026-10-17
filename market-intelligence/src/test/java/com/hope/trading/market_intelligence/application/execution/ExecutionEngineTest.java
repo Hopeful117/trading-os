@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.execution;
 
 import com.hope.trading.market_intelligence.adapter.persistence.*;
+import com.hope.trading.market_intelligence.application.port.ArtifactPersistencePort;
 import com.hope.trading.market_intelligence.application.planning.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.planning.ExecutionPlan;
@@ -12,6 +13,9 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class ExecutionEngineTest {
     private final Clock clock = Clock.fixed(CapabilityTestFixtures.NOW, ZoneOffset.UTC);
@@ -38,6 +42,32 @@ class ExecutionEngineTest {
         assertThat(summary.attempts())
                 .extracting(CapabilityExecution::state)
                 .containsOnly(CapabilityExecutionState.COMPLETED);
+    }
+
+    @Test
+    void recordsParentAnalysisExecutionAsArtifactConsumer() {
+        UUID analysisExecutionId = UUID.randomUUID();
+        ArtifactPersistencePort artifacts = mock(ArtifactPersistencePort.class);
+        Capability producer = cap("producer", List.of(), List.of(
+                        CapabilityTestFixtures.produces(
+                                CapabilityTestFixtures.INTERMEDIATE, CapabilityTestFixtures.V1)),
+                context -> CapabilityTestFixtures.result(
+                        CapabilityTestFixtures.INTERMEDIATE, CapabilityTestFixtures.V1));
+        CapabilityRegistry registry = new CapabilityRegistry();
+        registry.register(producer);
+        ExecutionPlan plan = new ExecutionPlanner(
+                registry, new ArtifactAdapterRegistry(), clock).plan(
+                new PlanningRequest(analysisExecutionId, Set.of(new CapabilityId("producer")), Set.of(), Set.of()));
+
+        try (LocalCapabilityExecutor executor = new LocalCapabilityExecutor(1)) {
+            new ExecutionEngine(
+                    executor, new InMemoryCapabilityExecutionRepository(), artifacts,
+                    new BackoffCalculator(), (duration, token) -> token.throwIfCancellationRequested(), clock)
+                    .execute(plan, new ExecutionControl());
+        }
+
+        verify(artifacts).save(any(UUID.class), org.mockito.ArgumentMatchers.argThat(value ->
+                value.artifact().provenance().reusedByExecutions().contains(analysisExecutionId)));
     }
 
     @Test

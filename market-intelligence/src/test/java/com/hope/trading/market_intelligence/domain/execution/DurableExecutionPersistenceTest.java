@@ -74,12 +74,38 @@ class DurableExecutionPersistenceTest {
                 ProductionArtifactTypes.MARKET_SNAPSHOT, ProductionArtifactTypes.V1))
                 .singleElement().satisfies(value -> assertThat(value.artifact().content())
                         .isInstanceOf(MarketSnapshotContext.class));
+        assertThat(artifacts.find(running.executionId(),
+                ProductionArtifactTypes.MARKET_SNAPSHOT, ProductionArtifactTypes.V1))
+                .singleElement().satisfies(value -> assertThat(value.artifact().provenance().reusedByExecutions())
+                        .contains(running.executionId()));
         assertThat(capabilities.findByAnalysisExecutionId(running.executionId()))
                 .singleElement().satisfies(value -> {
                     assertThat(value.state()).isEqualTo(CapabilityExecutionState.COMPLETED);
                     assertThat(value.result()).get().extracting(CapabilityResult::completeness)
                             .isEqualTo(CapabilityCompleteness.COMPLETE);
                  });
+    }
+
+    @Test
+    void mergesParentReuseIntoAnExistingArtifactPayload() {
+        UUID analysisId = UUID.randomUUID();
+        StoredArtifact initial = artifact(UUID.randomUUID());
+        ProducedArtifact produced = new ProducedArtifact(
+                ProductionArtifactTypes.MARKET_SNAPSHOT, ProductionArtifactTypes.V1, initial);
+        artifacts.save(analysisId, produced);
+
+        UUID parentExecutionId = UUID.randomUUID();
+        StoredArtifact reused = new StoredArtifact(
+                initial.key(), initial.content(), initial.freshness(),
+                initial.provenance().reusedBy(parentExecutionId), initial.quality(), initial.version());
+        artifacts.save(analysisId, new ProducedArtifact(
+                ProductionArtifactTypes.MARKET_SNAPSHOT, ProductionArtifactTypes.V1, reused));
+
+        assertThat(artifacts.find(analysisId,
+                ProductionArtifactTypes.MARKET_SNAPSHOT, ProductionArtifactTypes.V1))
+                .singleElement()
+                .satisfies(value -> assertThat(value.artifact().provenance().reusedByExecutions())
+                        .contains(parentExecutionId));
     }
 
     @Test

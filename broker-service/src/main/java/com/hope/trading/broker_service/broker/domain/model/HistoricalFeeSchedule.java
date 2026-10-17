@@ -17,6 +17,7 @@ public record HistoricalFeeSchedule(
         Instant effectiveTo,
         BigDecimal makerRate,
         BigDecimal takerRate,
+        FeeRateUnit rateUnit,
         String settlementAsset,
         String sourceId,
         Instant observedAt,
@@ -37,6 +38,10 @@ public record HistoricalFeeSchedule(
         }
         Objects.requireNonNull(makerRate, "makerRate is required");
         Objects.requireNonNull(takerRate, "takerRate is required");
+        Objects.requireNonNull(rateUnit, "rateUnit is required");
+        if (makerRate.signum() < 0 || takerRate.signum() < 0) {
+            throw new IllegalArgumentException("fee rates cannot be negative");
+        }
         settlementAsset = required(settlementAsset, "settlementAsset");
         sourceId = required(sourceId, "sourceId");
         Objects.requireNonNull(observedAt, "observedAt is required");
@@ -47,6 +52,29 @@ public record HistoricalFeeSchedule(
         if (knownAt.isBefore(observedAt)) {
             throw new IllegalArgumentException("knownAt cannot precede observedAt");
         }
+    }
+
+    public HistoricalFeeSchedule(
+            UUID scheduleId,
+            UUID brokerAccountId,
+            BrokerProviderId provider,
+            String instrument,
+            String productType,
+            Instant effectiveFrom,
+            Instant effectiveTo,
+            BigDecimal makerRate,
+            BigDecimal takerRate,
+            String settlementAsset,
+            String sourceId,
+            Instant observedAt,
+            Instant knownAt,
+            HistoricalFeeScheduleOrigin origin,
+            String normalizationVersion,
+            String scheduleFingerprint
+    ) {
+        this(scheduleId, brokerAccountId, provider, instrument, productType, effectiveFrom, effectiveTo,
+                makerRate, takerRate, FeeRateUnit.DECIMAL_FRACTION, settlementAsset, sourceId, observedAt, knownAt,
+                origin, normalizationVersion, scheduleFingerprint);
     }
 
     private static String required(String value, String field) {

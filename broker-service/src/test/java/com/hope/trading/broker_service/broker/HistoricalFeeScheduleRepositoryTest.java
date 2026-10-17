@@ -3,6 +3,7 @@ package com.hope.trading.broker_service.broker;
 import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeSchedule;
 import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeScheduleFingerprint;
 import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeScheduleOrigin;
+import com.hope.trading.broker_service.broker.domain.model.FeeRateUnit;
 import com.hope.trading.broker_service.broker.infrastructure.persistence.HistoricalFeeScheduleRepository;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import org.junit.jupiter.api.Test;
@@ -35,10 +36,11 @@ class HistoricalFeeScheduleRepositoryTest {
         schedules.append(schedule(accountId, "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z",
                 "2026-10-01T00:00:01Z", HistoricalFeeScheduleOrigin.HISTORICAL_BACKFILL, "backfill"));
 
-        assertThat(schedules.findStrictObserved(accountId, BrokerProviderId.KRAKEN, "PF_XBTUSD",
-                Instant.parse("2026-10-15T00:00:00Z")))
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "LINEAR_PERPETUAL", "PF_XBTUSD",
+                Instant.parse("2026-10-15T00:00:00Z"), Instant.parse("2026-10-16T00:00:00Z")))
+                .get()
                 .extracting(HistoricalFeeSchedule::sourceId)
-                .containsExactly("captured");
+                .isEqualTo("captured");
     }
 
     @Test
@@ -47,8 +49,8 @@ class HistoricalFeeScheduleRepositoryTest {
         schedules.append(schedule(accountId, "2026-10-01T00:00:00Z", null,
                 "2026-10-20T00:00:00Z", HistoricalFeeScheduleOrigin.CAPTURED, "not-known-yet"));
 
-        assertThat(schedules.findStrictObserved(accountId, BrokerProviderId.KRAKEN, "PF_XBTUSD",
-                Instant.parse("2026-10-15T00:00:00Z"))).isEmpty();
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "LINEAR_PERPETUAL", "PF_XBTUSD",
+                Instant.parse("2026-10-15T00:00:00Z"), Instant.parse("2026-10-15T00:00:00Z"))).isEmpty();
     }
 
     @Test
@@ -60,6 +62,51 @@ class HistoricalFeeScheduleRepositoryTest {
         assertThatThrownBy(() -> schedules.append(schedule(accountId, "2026-10-15T00:00:00Z", "2026-11-15T00:00:00Z",
                 "2026-10-15T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "overlap")))
                 .hasRootCauseInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void strictLookupRespectsExecutionAndCutoffBoundaries() {
+        UUID accountId = UUID.randomUUID();
+        schedules.append(schedule(accountId, "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z",
+                "2026-10-01T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "captured"));
+
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "LINEAR_PERPETUAL", "PF_XBTUSD",
+                Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-10-01T00:00:01Z"))).isPresent();
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "LINEAR_PERPETUAL", "PF_XBTUSD",
+                Instant.parse("2026-11-01T00:00:00Z"), Instant.parse("2026-11-01T00:00:00Z"))).isEmpty();
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "SPOT", "PF_XBTUSD",
+                Instant.parse("2026-10-15T00:00:00Z"), Instant.parse("2026-10-15T00:00:00Z"))).isEmpty();
+    }
+
+    @Test
+    void canonicalRateUnitAndChangedRatesProduceDistinctEvidenceIdentity() {
+        UUID accountId = UUID.randomUUID();
+        HistoricalFeeSchedule first = schedule(accountId, "2026-10-01T00:00:00Z", null,
+                "2026-10-01T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "first");
+        HistoricalFeeSchedule changed = new HistoricalFeeSchedule(UUID.randomUUID(), accountId,
+                BrokerProviderId.KRAKEN, "PF_XBTUSD", "LINEAR_PERPETUAL", first.effectiveFrom(), first.effectiveTo(),
+                new BigDecimal("0.0002"), first.takerRate(), FeeRateUnit.DECIMAL_FRACTION, first.settlementAsset(),
+                "first", first.observedAt(), first.knownAt(), first.origin(), first.normalizationVersion(), "pending");
+
+        assertThat(first.rateUnit()).isEqualTo(FeeRateUnit.DECIMAL_FRACTION);
+        assertThat(HistoricalFeeScheduleFingerprint.fingerprint(first))
+                .isNotEqualTo(HistoricalFeeScheduleFingerprint.fingerprint(changed));
+    }
+
+    @Test
+    void rejectsPayloadWithConflictingSuppliedFingerprint() {
+        UUID accountId = UUID.randomUUID();
+        HistoricalFeeSchedule first = schedule(accountId, "2026-10-01T00:00:00Z", null,
+                "2026-10-01T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "first");
+        HistoricalFeeSchedule conflicting = new HistoricalFeeSchedule(UUID.randomUUID(), accountId,
+                BrokerProviderId.KRAKEN, "PF_XBTUSD", "LINEAR_PERPETUAL", first.effectiveFrom(), first.effectiveTo(),
+                first.makerRate(), new BigDecimal("0.0005"), FeeRateUnit.DECIMAL_FRACTION, first.settlementAsset(),
+                first.sourceId(), first.observedAt(), first.knownAt(), first.origin(), first.normalizationVersion(),
+                first.scheduleFingerprint());
+
+        assertThatThrownBy(() -> schedules.append(conflicting))
+                .hasRootCauseInstanceOf(IllegalArgumentException.class)
+                .hasRootCauseMessage("schedule fingerprint does not match canonical evidence");
     }
 
     private HistoricalFeeSchedule schedule(UUID accountId, String from, String to, String knownAt,
