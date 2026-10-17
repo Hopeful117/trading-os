@@ -42,6 +42,9 @@ public record EconomicResearchCandidate(
                 || !featureSnapshot.evaluationCutoff().isBefore(datasetDefinition.endCutoffExclusive())) {
             throw new IllegalArgumentException("feature snapshot must belong to the dataset population");
         }
+        if (!intent.decisionAt().equals(featureSnapshot.evaluationCutoff())) {
+            throw new IllegalArgumentException("intent decisionAt must equal feature snapshot evaluationCutoff");
+        }
     }
 
     public String fingerprint() {

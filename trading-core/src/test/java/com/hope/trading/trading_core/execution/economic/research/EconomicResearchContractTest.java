@@ -273,7 +273,7 @@ class EconomicResearchContractTest {
                                                 String hypothesisVersion, String executionVersion,
                                                 String costVersion) {
         StrategyIntent intent = new StrategyIntent("BTC/USD", side, StrategyIntent.OrderType.MARKET,
-                new BigDecimal(quantity), CUTOFF.minusSeconds(1));
+                new BigDecimal(quantity), CUTOFF);
         return new EconomicResearchCandidate(candidateDefinition(quantity, hypothesisVersion,
                 executionVersion, costVersion),
                 featureReference(),
