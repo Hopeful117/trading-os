@@ -109,6 +109,54 @@ class HistoricalFeeScheduleRepositoryTest {
                 .hasRootCauseMessage("schedule fingerprint does not match canonical evidence");
     }
 
+    @Test
+    void forwardCaptureClosesPreviousOpenScheduleAtNewObservationBoundary() {
+        UUID accountId = UUID.randomUUID();
+        schedules.appendForwardCaptured(schedule(accountId, "2026-10-01T00:00:00Z", null,
+                "2026-10-01T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "first"));
+        schedules.appendForwardCaptured(schedule(accountId, "2026-10-02T00:00:00Z", null,
+                "2026-10-02T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "second"));
+
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "LINEAR_PERPETUAL", "PF_XBTUSD",
+                Instant.parse("2026-10-01T12:00:00Z"), Instant.parse("2026-10-01T12:00:00Z")))
+                .get().extracting(HistoricalFeeSchedule::sourceId).isEqualTo("first");
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "LINEAR_PERPETUAL", "PF_XBTUSD",
+                 Instant.parse("2026-10-02T00:00:00Z"), Instant.parse("2026-10-02T00:00:01Z")))
+                 .get().extracting(HistoricalFeeSchedule::sourceId).isEqualTo("second");
+    }
+
+    @Test
+    void repeatedForwardCaptureWithSameObservationKeepsExistingSchedule() {
+        UUID accountId = UUID.randomUUID();
+        HistoricalFeeSchedule first = schedule(accountId, "2026-10-01T00:00:00Z", null,
+                "2026-10-01T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "same");
+        HistoricalFeeSchedule repeated = schedule(accountId, "2026-10-02T00:00:00Z", null,
+                "2026-10-02T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "same");
+
+        HistoricalFeeSchedule persisted = schedules.appendForwardCaptured(first);
+
+        assertThat(schedules.appendForwardCaptured(repeated)).isEqualTo(persisted);
+        assertThat(schedules.findEligible(accountId, BrokerProviderId.KRAKEN, "LINEAR_PERPETUAL", "PF_XBTUSD",
+                Instant.parse("2026-10-02T00:00:00Z"), Instant.parse("2026-10-02T00:00:01Z")))
+                .get().extracting(HistoricalFeeSchedule::sourceId).isEqualTo("same");
+    }
+
+    @Test
+    void forwardCaptureValidatesFingerprintBeforeIdempotentLookup() {
+        UUID accountId = UUID.randomUUID();
+        HistoricalFeeSchedule first = schedule(accountId, "2026-10-01T00:00:00Z", null,
+                "2026-10-01T00:00:01Z", HistoricalFeeScheduleOrigin.CAPTURED, "same");
+        HistoricalFeeSchedule conflicting = new HistoricalFeeSchedule(UUID.randomUUID(), accountId,
+                BrokerProviderId.KRAKEN, "PF_XBTUSD", "LINEAR_PERPETUAL", first.effectiveFrom(), null,
+                new BigDecimal("0.0002"), first.takerRate(), FeeRateUnit.DECIMAL_FRACTION, first.settlementAsset(),
+                first.sourceId(), first.observedAt(), first.knownAt(), first.origin(), first.normalizationVersion(),
+                first.scheduleFingerprint());
+
+        assertThatThrownBy(() -> schedules.appendForwardCaptured(conflicting))
+                .hasRootCauseInstanceOf(IllegalArgumentException.class)
+                .hasRootCauseMessage("schedule fingerprint does not match canonical evidence");
+    }
+
     private HistoricalFeeSchedule schedule(UUID accountId, String from, String to, String knownAt,
                                             HistoricalFeeScheduleOrigin origin, String sourceId) {
         Instant observed = Instant.parse(from).plusSeconds(1);

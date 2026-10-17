@@ -12,6 +12,7 @@ import java.util.List;
 @ConfigurationProperties(prefix="kraken")
 public class KrakenProperties {
     private String baseUrl;
+    private String futuresBaseUrl;
     private String apiKey;
     private String apiSecret;
     private Duration connectTimeout;
