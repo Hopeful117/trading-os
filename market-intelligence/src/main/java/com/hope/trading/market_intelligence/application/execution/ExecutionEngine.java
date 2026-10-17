@@ -120,7 +120,8 @@ public class ExecutionEngine {
                 CapabilityExecution completed = persist(
                         attempt.complete(result, clock.instant()), history);
                 result.artifacts().forEach(artifact ->
-                        artifacts.save(plan.analysisExecutionId(), withContextFingerprint(artifact, plan.contextFingerprint())));
+                        artifacts.save(plan.analysisExecutionId(), withContextFingerprint(
+                                artifact, plan.analysisExecutionId(), plan.contextFingerprint())));
                 acceptedResults.put(invocation.node().id(), result);
                 return completed;
             } catch (TimeoutException exception) {
@@ -243,13 +244,14 @@ public class ExecutionEngine {
         }
     }
 
-    private ProducedArtifact withContextFingerprint(ProducedArtifact artifact, String contextFingerprint) {
-        if (contextFingerprint == null || contextFingerprint.isBlank()) return artifact;
+    private ProducedArtifact withContextFingerprint(
+            ProducedArtifact artifact, UUID analysisExecutionId, String contextFingerprint) {
         StoredArtifact stored = artifact.artifact();
         return new ProducedArtifact(
                 artifact.type(), artifact.version(),
                 new StoredArtifact(stored.key(), stored.content(), stored.freshness(),
-                        stored.provenance().withContextFingerprint(contextFingerprint), stored.quality(),
+                        stored.provenance().reusedBy(analysisExecutionId)
+                                .withContextFingerprint(contextFingerprint), stored.quality(),
                         artifact.version()));
     }
 

@@ -2,7 +2,6 @@ package com.hope.trading.market_data.service;
 
 
 import com.hope.trading.market_data.brokerclient.MarketDataProvider;
-import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.repository.MarketRepository;
 import lombok.RequiredArgsConstructor;

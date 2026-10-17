@@ -108,9 +108,10 @@ public class ResearchLifecycleService {
                 try {
                     projections.project(execution.executionId());
                 } catch (RuntimeException exception) {
-                    log.warn("Research feature projection failed execution={} market={} cutoff={} errorType={}",
+                    log.warn("Research feature projection failed execution={} market={} cutoff={} errorType={} message={}",
                             execution.executionId(), execution.provenance().marketId(),
-                            execution.provenance().evaluationCutoff(), exception.getClass().getSimpleName());
+                            execution.provenance().evaluationCutoff(), exception.getClass().getSimpleName(),
+                            exception.getMessage());
                 }
             }
         }

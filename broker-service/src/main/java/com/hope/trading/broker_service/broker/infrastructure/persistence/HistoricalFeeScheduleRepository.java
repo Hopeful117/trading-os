@@ -2,6 +2,9 @@ package com.hope.trading.broker_service.broker.infrastructure.persistence;
 
 import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeSchedule;
 import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeScheduleOrigin;
+import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeScheduleFingerprint;
+import com.hope.trading.broker_service.broker.domain.model.FeeRateUnit;
+import com.hope.trading.broker_service.broker.application.port.HistoricalFeeScheduleReader;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -10,10 +13,11 @@ import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public class HistoricalFeeScheduleRepository {
+public class HistoricalFeeScheduleRepository implements HistoricalFeeScheduleReader {
     private final JdbcTemplate jdbc;
     private final DataSource dataSource;
 
@@ -23,6 +27,10 @@ public class HistoricalFeeScheduleRepository {
     }
 
     public synchronized HistoricalFeeSchedule append(HistoricalFeeSchedule schedule) {
+        String expectedFingerprint = HistoricalFeeScheduleFingerprint.fingerprint(schedule);
+        if (!expectedFingerprint.equals(schedule.scheduleFingerprint())) {
+            throw new IllegalArgumentException("schedule fingerprint does not match canonical evidence");
+        }
         HistoricalFeeSchedule existing = findByFingerprint(schedule.scheduleFingerprint());
         if (existing != null) return existing;
         if (schedule.origin() == HistoricalFeeScheduleOrigin.CAPTURED && !findOverlapping(schedule).isEmpty()) {
@@ -31,32 +39,36 @@ public class HistoricalFeeScheduleRepository {
 
         jdbc.update(insertSql(), schedule.scheduleId(), schedule.brokerAccountId(), schedule.provider().name(),
                 schedule.instrument(), schedule.productType(), Timestamp.from(schedule.effectiveFrom()),
-                timestamp(schedule.effectiveTo()), schedule.makerRate(), schedule.takerRate(), schedule.settlementAsset(),
+                timestamp(schedule.effectiveTo()), schedule.makerRate(), schedule.takerRate(), schedule.rateUnit().name(),
+                schedule.settlementAsset(),
                 schedule.sourceId(), Timestamp.from(schedule.observedAt()), Timestamp.from(schedule.knownAt()),
                 schedule.origin().name(), schedule.normalizationVersion(), schedule.scheduleFingerprint());
         return findByFingerprint(schedule.scheduleFingerprint());
     }
 
-    public List<HistoricalFeeSchedule> findStrictObserved(UUID brokerAccountId, BrokerProviderId provider,
-                                                           String instrument, Instant asOf) {
+    @Override
+    public Optional<HistoricalFeeSchedule> findEligible(UUID brokerAccountId, BrokerProviderId provider,
+                                                         String productType, String instrument,
+                                                         Instant executionTime, Instant researchCutoff) {
         return jdbc.query("""
                         SELECT schedule_id, broker_account_id, provider, instrument, product_type,
-                               effective_from, effective_to, maker_rate, taker_rate, settlement_asset,
+                               effective_from, effective_to, maker_rate, taker_rate, rate_unit, settlement_asset,
                                source_id, observed_at, known_at, origin, normalization_version,
                                schedule_fingerprint
                         FROM historical_fee_schedule
-                        WHERE broker_account_id = ? AND provider = ? AND instrument = ?
+                        WHERE broker_account_id = ? AND provider = ? AND product_type = ? AND instrument = ?
                           AND effective_from <= ? AND (effective_to IS NULL OR effective_to > ?)
                           AND known_at <= ? AND origin = 'CAPTURED'
-                        ORDER BY effective_from DESC, known_at DESC, schedule_id DESC
-                        """, this::map, brokerAccountId, provider.name(), instrument,
-                Timestamp.from(asOf), Timestamp.from(asOf), Timestamp.from(asOf));
+                        ORDER BY effective_from DESC, known_at DESC, schedule_fingerprint ASC
+                        """, this::map, brokerAccountId, provider.name(), productType, instrument,
+                Timestamp.from(executionTime), Timestamp.from(executionTime),
+                Timestamp.from(researchCutoff)).stream().findFirst();
     }
 
     private HistoricalFeeSchedule findByFingerprint(String fingerprint) {
         List<HistoricalFeeSchedule> result = jdbc.query("""
                         SELECT schedule_id, broker_account_id, provider, instrument, product_type,
-                               effective_from, effective_to, maker_rate, taker_rate, settlement_asset,
+                               effective_from, effective_to, maker_rate, taker_rate, rate_unit, settlement_asset,
                                source_id, observed_at, known_at, origin, normalization_version,
                                schedule_fingerprint
                         FROM historical_fee_schedule WHERE schedule_fingerprint = ?
@@ -67,7 +79,7 @@ public class HistoricalFeeScheduleRepository {
     private List<HistoricalFeeSchedule> findOverlapping(HistoricalFeeSchedule schedule) {
         return jdbc.query("""
                         SELECT schedule_id, broker_account_id, provider, instrument, product_type,
-                               effective_from, effective_to, maker_rate, taker_rate, settlement_asset,
+                               effective_from, effective_to, maker_rate, taker_rate, rate_unit, settlement_asset,
                                source_id, observed_at, known_at, origin, normalization_version,
                                schedule_fingerprint
                         FROM historical_fee_schedule
@@ -86,7 +98,8 @@ public class HistoricalFeeScheduleRepository {
                 BrokerProviderId.valueOf(result.getString("provider")), result.getString("instrument"),
                 result.getString("product_type"), result.getTimestamp("effective_from").toInstant(),
                 timestamp(result, "effective_to"), result.getBigDecimal("maker_rate"),
-                result.getBigDecimal("taker_rate"), result.getString("settlement_asset"),
+                result.getBigDecimal("taker_rate"), FeeRateUnit.valueOf(result.getString("rate_unit")),
+                result.getString("settlement_asset"),
                 result.getString("source_id"), result.getTimestamp("observed_at").toInstant(),
                 result.getTimestamp("known_at").toInstant(),
                 HistoricalFeeScheduleOrigin.valueOf(result.getString("origin")),
@@ -95,9 +108,9 @@ public class HistoricalFeeScheduleRepository {
 
     private String insertSql() {
         String columns = "(schedule_id, broker_account_id, provider, instrument, product_type, effective_from, "
-                + "effective_to, maker_rate, taker_rate, settlement_asset, source_id, observed_at, known_at, "
+                + "effective_to, maker_rate, taker_rate, rate_unit, settlement_asset, source_id, observed_at, known_at, "
                 + "origin, normalization_version, schedule_fingerprint)";
-        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         if (isH2()) return "MERGE INTO historical_fee_schedule " + columns + " KEY(schedule_fingerprint) " + values;
         return "INSERT INTO historical_fee_schedule " + columns + " " + values
                 + " ON CONFLICT (schedule_fingerprint) DO NOTHING";

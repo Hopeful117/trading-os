@@ -2,6 +2,7 @@ package com.hope.trading.broker_service.broker.infrastructure.persistence;
 
 import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeSchedule;
 import com.hope.trading.broker_service.broker.domain.model.HistoricalFeeScheduleOrigin;
+import com.hope.trading.broker_service.broker.domain.model.FeeRateUnit;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,6 +40,9 @@ class HistoricalFeeScheduleEntity {
     BigDecimal makerRate;
     @Column(name = "taker_rate", nullable = false, precision = 38, scale = 18)
     BigDecimal takerRate;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rate_unit", nullable = false, length = 32)
+    FeeRateUnit rateUnit;
     @Column(name = "settlement_asset", nullable = false, length = 32)
     String settlementAsset;
     @Column(name = "source_id", nullable = false, length = 255)
@@ -69,6 +73,7 @@ class HistoricalFeeScheduleEntity {
         entity.effectiveTo = value.effectiveTo();
         entity.makerRate = value.makerRate();
         entity.takerRate = value.takerRate();
+        entity.rateUnit = value.rateUnit();
         entity.settlementAsset = value.settlementAsset();
         entity.sourceId = value.sourceId();
         entity.observedAt = value.observedAt();
@@ -81,7 +86,7 @@ class HistoricalFeeScheduleEntity {
 
     HistoricalFeeSchedule toDomain() {
         return new HistoricalFeeSchedule(scheduleId, brokerAccountId, provider, instrument, productType, effectiveFrom,
-                effectiveTo, makerRate, takerRate, settlementAsset, sourceId, observedAt, knownAt, origin,
+                effectiveTo, makerRate, takerRate, rateUnit, settlementAsset, sourceId, observedAt, knownAt, origin,
                 normalizationVersion, scheduleFingerprint);
     }
 }
