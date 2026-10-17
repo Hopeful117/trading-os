@@ -6,5 +6,6 @@ public enum EconomicResultStatus {
     INSUFFICIENT_DATA,
     STALE,
     UNSUPPORTED,
-    INVALID_INPUT
+    INVALID_INPUT,
+    EXECUTION_UNAVAILABLE
 }

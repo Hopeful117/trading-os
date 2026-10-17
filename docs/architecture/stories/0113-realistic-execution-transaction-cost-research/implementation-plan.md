@@ -4,6 +4,24 @@ This decomposition follows the repository investigation and was approved by
 the human engineer as planning input. It does not authorize production changes
 outside explicitly approved follow-up implementation Stories.
 
+## Status
+
+ADR-064 was accepted by the human engineer before implementation. The bounded
+provider-neutral economic contract tranche is present in the current worktree,
+but ADR acceptance alone does not replace the required explicit follow-up Story
+authorization before integration.
+
+Completed in this tranche:
+
+- lifecycle-capable economic domain contracts;
+- explicit execution status and cost-component status;
+- first-class cost completeness separate from execution status;
+- deterministic lifecycle accounting and fingerprints;
+- focused contract tests.
+
+Historical evidence adapters, replay, runtime fee/funding acquisition, PAPER
+integration, and research dataset integration remain deferred.
+
 ## Phase 1 - Evidence Foundation
 
 1. Define provider-neutral funding evidence with `occurredAt`, `knownAt`,
@@ -52,7 +70,7 @@ outside explicitly approved follow-up implementation Stories.
 - Queue-position modeling.
 - Latency-calibrated fills.
 - Provider-specific matching behavior.
-- Broad limit-order and partial-fill realism.
+- Broad limit-order and sophisticated partial-fill realism.
 - Catalog-wide or multi-provider rollout.
 - Python-owned economic calculations.
 - Any change to the meaning of `ObservedMarketOutcome`.

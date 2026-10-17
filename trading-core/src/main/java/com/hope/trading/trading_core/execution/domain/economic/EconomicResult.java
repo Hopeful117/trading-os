@@ -5,33 +5,124 @@ import java.util.Objects;
 
 public record EconomicResult(
         EconomicResultStatus status,
+        CostCompleteness completeness,
         BigDecimal referenceNotional,
         BigDecimal executionNotional,
         SimulatedExecution execution,
         TransactionCosts costs,
+        StrategyIntent intent,
+        ReferenceMarketState entryMarketState,
+        ReferenceMarketState exitMarketState,
+        SimulatedExecution entryExecution,
+        SimulatedExecution exitExecution,
+        SimulatedExecutionStatus executionStatus,
+        BigDecimal referenceMarketReturn,
+        BigDecimal grossStrategyPnl,
+        BigDecimal executionAdjustedPnl,
+        BigDecimal netPnl,
+        BigDecimal netReturn,
+        String executionModelVersion,
+        String transactionCostModelVersion,
         String calculationFingerprint,
         String reason
 ) {
     public EconomicResult {
         Objects.requireNonNull(status, "status is required");
+        Objects.requireNonNull(completeness, "completeness is required");
         if (status == EconomicResultStatus.AVAILABLE) {
-            Objects.requireNonNull(referenceNotional, "referenceNotional is required");
-            Objects.requireNonNull(executionNotional, "executionNotional is required");
-            Objects.requireNonNull(execution, "execution is required");
-            Objects.requireNonNull(costs, "costs are required");
+            Objects.requireNonNull(referenceNotional, "referenceNotional is required for available results");
+            Objects.requireNonNull(executionNotional, "executionNotional is required for available results");
+            Objects.requireNonNull(execution, "execution is required for available results");
+            Objects.requireNonNull(costs, "costs are required for available results");
+            Objects.requireNonNull(executionStatus, "executionStatus is required for available results");
+            Objects.requireNonNull(executionModelVersion, "executionModelVersion is required for available results");
+            Objects.requireNonNull(transactionCostModelVersion,
+                    "transactionCostModelVersion is required for available results");
             calculationFingerprint = required(calculationFingerprint, "calculationFingerprint");
-        } else if (referenceNotional != null || executionNotional != null || execution != null
-                || costs != null || calculationFingerprint != null) {
-            throw new IllegalArgumentException("non-AVAILABLE results cannot contain calculated values");
+            boolean lifecycle = intent != null || entryMarketState != null || exitMarketState != null
+                    || exitExecution != null;
+            if (lifecycle) {
+                Objects.requireNonNull(intent, "intent is required for available lifecycle results");
+                Objects.requireNonNull(entryMarketState, "entryMarketState is required for available lifecycle results");
+                Objects.requireNonNull(exitMarketState, "exitMarketState is required for available lifecycle results");
+                Objects.requireNonNull(entryExecution, "entryExecution is required for available lifecycle results");
+                Objects.requireNonNull(exitExecution, "exitExecution is required for available lifecycle results");
+                Objects.requireNonNull(referenceMarketReturn,
+                        "referenceMarketReturn is required for available lifecycle results");
+                Objects.requireNonNull(grossStrategyPnl,
+                        "grossStrategyPnl is required for available lifecycle results");
+                Objects.requireNonNull(executionAdjustedPnl,
+                        "executionAdjustedPnl is required for available lifecycle results");
+            } else {
+                if (!execution.equals(entryExecution) || exitExecution != null) {
+                    throw new IllegalArgumentException("available single-leg results must identify their entry execution");
+                }
+            }
+        }
+        if (status != EconomicResultStatus.AVAILABLE && netPnl != null) {
+            throw new IllegalArgumentException("non-available results cannot contain authoritative net PnL");
+        }
+        if (netPnl != null && (status != EconomicResultStatus.AVAILABLE
+                || completeness != CostCompleteness.FULLY_COSTED
+                || entryExecution == null || exitExecution == null
+                || !entryExecution.isFullyFilled() || !exitExecution.isFullyFilled())) {
+            throw new IllegalArgumentException("authoritative net PnL requires a fully costed closed lifecycle");
+        }
+        if (netReturn != null && netPnl == null) {
+            throw new IllegalArgumentException("net return requires net PnL");
         }
         if (reason != null && reason.isBlank()) reason = null;
     }
 
+    public static EconomicResult singleLeg(
+            BigDecimal referenceNotional,
+            BigDecimal executionNotional,
+            SimulatedExecution execution,
+            TransactionCosts costs,
+            String calculationFingerprint
+    ) {
+        Objects.requireNonNull(execution, "execution is required");
+        Objects.requireNonNull(costs, "costs are required");
+        return new EconomicResult(
+                EconomicResultStatus.AVAILABLE,
+                costs.completeness(),
+                referenceNotional,
+                executionNotional,
+                execution,
+                costs,
+                null,
+                null,
+                null,
+                execution,
+                null,
+                execution.status(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                execution.executionModelVersion(),
+                costs.transactionCostModelVersion(),
+                calculationFingerprint,
+                null
+        );
+    }
+
     public static EconomicResult unavailable(EconomicResultStatus status, String reason) {
+        return unavailable(status, CostCompleteness.INSUFFICIENT_EVIDENCE, reason);
+    }
+
+    public static EconomicResult unavailable(
+            EconomicResultStatus status,
+            CostCompleteness completeness,
+            String reason
+    ) {
         if (status == EconomicResultStatus.AVAILABLE) {
             throw new IllegalArgumentException("AVAILABLE requires calculated values");
         }
-        return new EconomicResult(status, null, null, null, null, null, reason);
+        return new EconomicResult(status, completeness, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
+                null, null, null, reason);
     }
 
     private static String required(String value, String field) {
