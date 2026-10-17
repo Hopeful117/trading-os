@@ -32,6 +32,8 @@ public final class EconomicResearchCanonicalSerializer {
 
     public String candidate(EconomicResearchCandidate candidate) {
         Map<String, Object> document = new LinkedHashMap<>();
+        document.put("schemaVersion", "economic-research-candidate-v1");
+        document.put("datasetDefinition", datasetDefinition(candidate.datasetDefinition()));
         document.put("datasetDefinitionFingerprint", candidate.datasetDefinition().fingerprint());
         document.put("featureSnapshot", featureSnapshot(candidate.featureSnapshot()));
         document.put("hypothesis", hypothesis(candidate.hypothesis()));
@@ -42,6 +44,28 @@ public final class EconomicResearchCanonicalSerializer {
         document.put(TRANSACTION_COST_MODEL_VERSION, candidate.transactionCostModelVersion());
         document.put("candidateFingerprint", candidate.fingerprint());
         return write(document, "economic research candidate");
+    }
+
+    private Map<String, Object> datasetDefinition(EconomicResearchDatasetDefinition value) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("definitionVersion", value.definitionVersion());
+        result.put("populationPolicyVersion", value.populationPolicyVersion());
+        result.put("marketIds", value.marketIds());
+        result.put("startCutoffInclusive", value.startCutoffInclusive().toString());
+        result.put("endCutoffExclusive", value.endCutoffExclusive().toString());
+        result.put("featureProjectionVersion", value.featureProjectionVersion());
+        result.put("evidencePolicyVersion", value.evidencePolicyVersion());
+        result.put("hypothesis", hypothesis(value.hypothesis()));
+        result.put("sizingPolicy", sizing(value.sizingPolicy()));
+        result.put("entryPolicyVersion", value.entryPolicyVersion());
+        result.put("exitPolicy", exit(value.exitPolicy()));
+        result.put(EXECUTION_MODEL_VERSION, value.executionModelVersion());
+        result.put(TRANSACTION_COST_MODEL_VERSION, value.transactionCostModelVersion());
+        result.put("researchCutoffPolicyVersion", value.researchCutoffPolicyVersion());
+        result.put("requiredCostCompleteness", value.requiredCostCompleteness().name());
+        result.put("acceptedExecutionStatuses", value.acceptedExecutionStatuses().stream().map(Enum::name).sorted().toList());
+        result.put("objectiveOutcomeJoinPolicyVersion", value.objectiveOutcomeJoinPolicyVersion());
+        return result;
     }
 
     public String result(EconomicResearchResult result) {
