@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -38,6 +39,8 @@ class MarketSubscriptionServiceImplTest {
     @Mock
     private OrderBookStateService stateService;
     @Mock
+    private OrderBookEvidenceCaptureService evidenceCaptureService;
+    @Mock
     private OrderBookEventPublisher eventPublisher;
     @Mock
     private RecentTradesStateService recentTradesStateService;
@@ -54,6 +57,7 @@ class MarketSubscriptionServiceImplTest {
                 streamProvider,
                 marketRepository,
                 stateService,
+                evidenceCaptureService,
                 eventPublisher,
                 recentTradesStateService,
                 recentTradesEventPublisher
@@ -96,6 +100,23 @@ class MarketSubscriptionServiceImplTest {
                 .unsubscribe(List.of(market), request);
         verify(stateService).clear(key);
         verify(eventPublisher).clear(key);
+        verify(evidenceCaptureService).invalidate(key);
+    }
+
+    @Test
+    void failedProviderActivationDoesNotPoisonTheNextSubscriptionAttempt() {
+        when(marketRepository.findById(MARKET_ID))
+                .thenReturn(Optional.of(market));
+        when(streamProvider.subscribe(List.of(market), request))
+                .thenThrow(new IllegalStateException("provider unavailable"))
+                .thenReturn(Mono.empty());
+
+        assertThatThrownBy(() -> service.subscribe(MARKET_ID, request))
+                .isInstanceOf(IllegalStateException.class);
+
+        service.subscribe(MARKET_ID, request);
+
+        verify(streamProvider, times(2)).subscribe(List.of(market), request);
     }
 
     @Test
