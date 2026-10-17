@@ -33,6 +33,7 @@ public final class MarketOrderEconomicEvaluator {
                     "strategy instrument does not match reference market state");
         }
         if (state.knownAt().isAfter(state.evaluationCutoff())
+                || state.knownAt().isAfter(intent.decisionAt())
                 || intent.decisionAt().isAfter(state.evaluationCutoff())
                 || !feeEvidence.eligibleAt(state.evaluationCutoff())
                 || !fundingEvidence.eligibleAt(state.evaluationCutoff())) {
@@ -60,13 +61,13 @@ public final class MarketOrderEconomicEvaluator {
                 executionImpact.add(fee).add(funding), feeEvidence, fundingEvidence);
         SimulatedExecution execution = new SimulatedExecution(intent.side(), intent.quantity(), fillPrice,
                 state.evaluationCutoff(), executionModelVersion, state.evidenceFingerprint());
-        return new EconomicResult(EconomicResultStatus.AVAILABLE, referenceNotional, executionNotional,
-                execution, costs, fingerprint(state, intent, execution, costs), null);
+        return EconomicResult.singleLeg(referenceNotional, executionNotional, execution, costs,
+                fingerprint(state, intent, execution, costs));
     }
 
     private String fingerprint(ReferenceMarketState state, StrategyIntent intent,
                                SimulatedExecution execution, TransactionCosts costs) {
-        String material = String.join("|", state.marketId().toString(), state.instrument(),
+        String material = canonicalMaterial(state.marketId().toString(), state.instrument(),
                 state.evaluationCutoff().toString(), state.evidenceFingerprint(), intent.side().name(),
                 intent.quantity().toPlainString(), intent.decisionAt().toString(), execution.fillPrice().toPlainString(),
                 execution.executionModelVersion(), costs.executionImpact().toPlainString(),
@@ -82,5 +83,13 @@ public final class MarketOrderEconomicEvaluator {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is required", exception);
         }
+    }
+
+    private String canonicalMaterial(String... values) {
+        StringBuilder material = new StringBuilder();
+        for (String value : values) {
+            material.append(value.length()).append(':').append(value);
+        }
+        return material.toString();
     }
 }

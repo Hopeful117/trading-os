@@ -62,6 +62,19 @@ class MarketOrderEconomicEvaluatorTest {
     }
 
     @Test
+    void rejectsMarketStateLearnedAfterDecisionTime() {
+        var state = new ReferenceMarketState(UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                "BTC/USD", CUTOFF, new BigDecimal("99"), new BigDecimal("101"), new BigDecimal("100"),
+                CUTOFF.minusMillis(500), "order-book-fingerprint");
+        var result = evaluator.evaluate(state,
+                new StrategyIntent("BTC/USD", StrategyIntent.Side.BUY, StrategyIntent.OrderType.MARKET,
+                        BigDecimal.ONE, CUTOFF.minusSeconds(1)),
+                BigDecimal.ZERO, BigDecimal.ZERO, evidence("fee"), evidence("funding"), "v1");
+
+        assertThat(result.status()).isEqualTo(EconomicResultStatus.STALE);
+    }
+
+    @Test
     void missingFundingIsNotConvertedToZero() {
         var result = evaluator.evaluate(state(),
                 new StrategyIntent("BTC/USD", StrategyIntent.Side.BUY, StrategyIntent.OrderType.MARKET,

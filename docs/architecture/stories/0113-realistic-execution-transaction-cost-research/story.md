@@ -11,7 +11,7 @@
 **Related Stories:** `0107A`, `0107C`, `0108A`, `0108B`, `0109B`, `0111`, `0112A`, `0112B`
 
 **Related ADRs:** `ADR-029`, `ADR-030`, `ADR-035`, `ADR-042`, `ADR-051`,
-`ADR-056`, `ADR-059`, `ADR-060`, `ADR-061`, `ADR-062`, `ADR-063`
+`ADR-056`, `ADR-059`, `ADR-060`, `ADR-061`, `ADR-062`, `ADR-063`, `ADR-064`
 
 This Story is generated from the repository investigation recorded in
 `repository-analysis.md`. It was approved by the human engineer for the
@@ -97,7 +97,9 @@ funding.
   current funding values.
 - Silent conversion of missing costs into zero, neutral, false, or NaN values.
 - Queue-position modeling, latency calibration, sophisticated partial-fill
-  behavior, or provider-specific matching simulation.
+  behavior, or provider-specific matching simulation. A bounded partial-fill
+  representation may preserve observed filled and unfilled quantities without
+  claiming matching realism.
 - Catalog-wide or multi-provider rollout.
 - Python-owned market facts, execution semantics, Risk, or transaction-cost
   calculations.
@@ -164,6 +166,7 @@ funding.
 - `docs/architecture/adr/ADR-060.md`
 - `docs/architecture/adr/ADR-062.md`
 - `docs/architecture/adr/ADR-063.md`
+- `docs/architecture/adr/ADR-064.md`
 
 ## Validation Expectations
 
@@ -188,7 +191,8 @@ funding.
 - [ ] Follow-up implementation Stories are identified and scoped.
 - [ ] Required ADR changes, if any, are identified before implementation.
 - [ ] Evidence and economic-result contracts are implemented only through
-      approved follow-up Stories.
+       explicitly approved follow-up Stories. The current worktree changes
+       require that follow-up authorization to be recorded before integration.
 - [ ] Relevant validation passes for each follow-up implementation.
 - [ ] Code review and engineering reporting are completed.
 - [ ] Human commit and integration decisions are completed.

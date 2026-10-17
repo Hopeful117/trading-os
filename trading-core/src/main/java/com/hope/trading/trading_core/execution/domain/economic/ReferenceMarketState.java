@@ -12,9 +12,24 @@ public record ReferenceMarketState(
         BigDecimal bid,
         BigDecimal ask,
         BigDecimal referencePrice,
+        EconomicProductType productType,
         Instant knownAt,
         String evidenceFingerprint
 ) {
+    public ReferenceMarketState(
+            UUID marketId,
+            String instrument,
+            Instant evaluationCutoff,
+            BigDecimal bid,
+            BigDecimal ask,
+            BigDecimal referencePrice,
+            Instant knownAt,
+            String evidenceFingerprint
+    ) {
+        this(marketId, instrument, evaluationCutoff, bid, ask, referencePrice,
+                EconomicProductType.SPOT, knownAt, evidenceFingerprint);
+    }
+
     public ReferenceMarketState {
         Objects.requireNonNull(marketId, "marketId is required");
         instrument = required(instrument, "instrument");
@@ -22,6 +37,7 @@ public record ReferenceMarketState(
         requirePositive(bid, "bid");
         requirePositive(ask, "ask");
         requirePositive(referencePrice, "referencePrice");
+        Objects.requireNonNull(productType, "productType is required");
         Objects.requireNonNull(knownAt, "knownAt is required");
         evidenceFingerprint = required(evidenceFingerprint, "evidenceFingerprint");
         if (bid.compareTo(ask) > 0) throw new IllegalArgumentException("bid cannot exceed ask");
