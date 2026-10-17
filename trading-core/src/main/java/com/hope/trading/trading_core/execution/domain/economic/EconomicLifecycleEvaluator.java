@@ -172,7 +172,8 @@ public final class EconomicLifecycleEvaluator {
         return canonicalMaterial(execution.side().name(), execution.requestedQuantity().toPlainString(),
                 execution.filledQuantity().toPlainString(),
                 Objects.toString(execution.averageExecutionPrice(), ""), execution.executedAt().toString(),
-                execution.status().name(), execution.executionModelVersion(), execution.sourceFingerprint());
+                execution.status().name(), execution.executionModelVersion(), execution.sourceFingerprint(),
+                execution.executionFingerprint(), Objects.toString(execution.reason(), ""));
     }
 
     private String costMaterial(ExplicitCost cost) {
