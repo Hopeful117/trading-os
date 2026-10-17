@@ -34,6 +34,30 @@ public class KrakenStreamLifecycleDiagnostics {
                 product, method, connectionId);
     }
 
+    public void desiredSubscriptionRestoreStarted(String provider, String product, String symbol,
+                                                   String providerSymbol, String depth) {
+        log.info("ORDER_BOOK_DESIRED_SUBSCRIPTION_RESTORE_STARTED provider={} product={} symbol={} "
+                        + "providerSymbol={} depth={}",
+                provider, product, symbol, providerSymbol, depth);
+    }
+
+    public void desiredSubscriptionRestored(String provider, String product, String symbol,
+                                             String providerSymbol, String depth) {
+        log.info("ORDER_BOOK_DESIRED_SUBSCRIPTION_RESTORED provider={} product={} symbol={} "
+                        + "providerSymbol={} depth={}",
+                provider, product, symbol, providerSymbol, depth);
+    }
+
+    public void desiredSubscriptionRestoreFailed(String provider, String product, String symbol,
+                                                  String providerSymbol, String depth, String phase,
+                                                  Throwable error) {
+        log.warn("ORDER_BOOK_DESIRED_SUBSCRIPTION_RESTORE_FAILED provider={} product={} symbol={} "
+                        + "providerSymbol={} depth={} phase={} exceptionClass={} exceptionMessage={}",
+                provider, product, symbol, providerSymbol, depth, phase,
+                error == null ? null : error.getClass().getName(),
+                error == null ? null : error.getMessage());
+    }
+
     public void snapshotAccepted(UUID connectionId, OrderBookEvidenceCaptureService.SequenceDiagnostics sequence) {
         if (sequence == null) return;
         log.info("ORDER_BOOK_SNAPSHOT_ACCEPTED provider=KRAKEN marketId={} depth={} sequenceId={} "

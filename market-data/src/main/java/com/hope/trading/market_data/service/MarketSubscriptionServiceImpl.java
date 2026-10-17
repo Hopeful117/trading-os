@@ -30,6 +30,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
     private final MarketDataStreamProvider marketDataStreamProvider;
     private final MarketRepository marketRepository;
     private final OrderBookStateService orderBookStateService;
+    private final OrderBookEvidenceCaptureService orderBookEvidenceCaptureService;
     private final OrderBookEventPublisher orderBookEventPublisher;
     private final RecentTradesStateService recentTradesStateService;
     private final RecentTradesEventPublisher recentTradesEventPublisher;
@@ -39,7 +40,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             > activeSubscriptions = new ConcurrentHashMap<>();
 
     @Override
-    public void subscribe(
+    public synchronized void subscribe(
             UUID marketId,
             MarketStreamRequest request
     ) {
@@ -47,7 +48,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
     }
 
     @Override
-    public void subscribe(UUID marketId, MarketStreamRequest request, java.time.Duration timeout) {
+    public synchronized void subscribe(UUID marketId, MarketStreamRequest request, java.time.Duration timeout) {
         validateRequest(request);
 
 
@@ -93,7 +94,9 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                 );
 
             } catch (RuntimeException exception) {
-                activeSubscriptions.remove(key);
+                if (subscriberCount.decrementAndGet() <= 0) {
+                    activeSubscriptions.remove(key, subscriberCount);
+                }
                 throw exception;
             }
         }
@@ -101,12 +104,12 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
     }
 
     @Override
-    public void unsubscribe(UUID marketId, MarketStreamRequest request) {
+    public synchronized void unsubscribe(UUID marketId, MarketStreamRequest request) {
         unsubscribe(marketId, request, java.time.Duration.ofSeconds(10));
     }
 
     @Override
-    public void unsubscribe(UUID marketId, MarketStreamRequest request, java.time.Duration timeout) {
+    public synchronized void unsubscribe(UUID marketId, MarketStreamRequest request, java.time.Duration timeout) {
 
         validateRequest(request);
 
@@ -266,6 +269,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             );
             orderBookStateService.clear(key);
             orderBookEventPublisher.clear(key);
+            orderBookEvidenceCaptureService.invalidate(key);
         }
 
         if (request.type() == MarketStreamType.TRADES) {
