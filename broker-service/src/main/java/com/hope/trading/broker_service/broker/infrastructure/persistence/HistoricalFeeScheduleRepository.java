@@ -7,6 +7,7 @@ import com.hope.trading.broker_service.broker.domain.model.FeeRateUnit;
 import com.hope.trading.broker_service.broker.application.port.HistoricalFeeScheduleReader;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Repository;
 
 import javax.sql.DataSource;
@@ -44,6 +45,44 @@ public class HistoricalFeeScheduleRepository implements HistoricalFeeScheduleRea
                 schedule.sourceId(), Timestamp.from(schedule.observedAt()), Timestamp.from(schedule.knownAt()),
                 schedule.origin().name(), schedule.normalizationVersion(), schedule.scheduleFingerprint());
         return findByFingerprint(schedule.scheduleFingerprint());
+    }
+
+    @Transactional
+    public synchronized HistoricalFeeSchedule appendForwardCaptured(HistoricalFeeSchedule schedule) {
+        String expectedFingerprint = HistoricalFeeScheduleFingerprint.fingerprint(schedule);
+        if (!expectedFingerprint.equals(schedule.scheduleFingerprint())) {
+            throw new IllegalArgumentException("schedule fingerprint does not match canonical evidence");
+        }
+        lockCaptureKey(schedule);
+        HistoricalFeeSchedule existing = findByFingerprint(schedule.scheduleFingerprint());
+        if (existing != null) return existing;
+        HistoricalFeeSchedule open = findOpenCaptured(schedule);
+        if (open != null) {
+            if (sameObservation(open, schedule)) return open;
+            if (open.effectiveFrom().equals(schedule.effectiveFrom())) {
+                throw new IllegalArgumentException("captured fee schedule boundary already exists");
+            }
+            if (schedule.effectiveFrom().isBefore(open.effectiveFrom())) {
+                throw new IllegalArgumentException("captured fee schedule cannot move backwards");
+            }
+            jdbc.update("UPDATE historical_fee_schedule SET effective_to = ? WHERE schedule_id = ?",
+                    Timestamp.from(schedule.effectiveFrom()), open.scheduleId());
+        }
+        return append(schedule);
+    }
+
+    private boolean sameObservation(HistoricalFeeSchedule left, HistoricalFeeSchedule right) {
+        return left.brokerAccountId().equals(right.brokerAccountId())
+                && left.provider() == right.provider()
+                && left.instrument().equals(right.instrument())
+                && left.productType().equals(right.productType())
+                && left.makerRate().compareTo(right.makerRate()) == 0
+                && left.takerRate().compareTo(right.takerRate()) == 0
+                && left.rateUnit() == right.rateUnit()
+                && left.settlementAsset().equals(right.settlementAsset())
+                && left.sourceId().equals(right.sourceId())
+                && left.origin() == right.origin()
+                && left.normalizationVersion().equals(right.normalizationVersion());
     }
 
     @Override
@@ -92,6 +131,20 @@ public class HistoricalFeeScheduleRepository implements HistoricalFeeScheduleRea
                 Timestamp.from(schedule.effectiveFrom()));
     }
 
+    private HistoricalFeeSchedule findOpenCaptured(HistoricalFeeSchedule schedule) {
+        return jdbc.query("""
+                        SELECT schedule_id, broker_account_id, provider, instrument, product_type,
+                               effective_from, effective_to, maker_rate, taker_rate, rate_unit, settlement_asset,
+                               source_id, observed_at, known_at, origin, normalization_version,
+                               schedule_fingerprint
+                        FROM historical_fee_schedule
+                        WHERE broker_account_id = ? AND provider = ? AND instrument = ? AND product_type = ?
+                          AND origin = 'CAPTURED' AND effective_to IS NULL
+                        ORDER BY effective_from DESC LIMIT 1
+                        """, this::map, schedule.brokerAccountId(), schedule.provider().name(),
+                schedule.instrument(), schedule.productType()).stream().findFirst().orElse(null);
+    }
+
     private HistoricalFeeSchedule map(java.sql.ResultSet result, int row) throws java.sql.SQLException {
         return new HistoricalFeeSchedule(result.getObject("schedule_id", UUID.class),
                 result.getObject("broker_account_id", UUID.class),
@@ -117,8 +170,22 @@ public class HistoricalFeeScheduleRepository implements HistoricalFeeScheduleRea
     }
 
     private boolean isH2() {
+        return databaseProductName().contains("H2");
+    }
+
+    private void lockCaptureKey(HistoricalFeeSchedule schedule) {
+        if (databaseProductName().contains("PostgreSQL")) {
+            long lockKey = schedule.brokerAccountId().getMostSignificantBits()
+                    ^ schedule.brokerAccountId().getLeastSignificantBits()
+                    ^ schedule.instrument().hashCode()
+                    ^ schedule.productType().hashCode();
+            jdbc.query("SELECT pg_advisory_xact_lock(?)", result -> { }, lockKey);
+        }
+    }
+
+    private String databaseProductName() {
         try (var connection = dataSource.getConnection()) {
-            return connection.getMetaData().getDatabaseProductName().contains("H2");
+            return connection.getMetaData().getDatabaseProductName();
         } catch (java.sql.SQLException exception) {
             throw new IllegalStateException("Unable to determine database product", exception);
         }

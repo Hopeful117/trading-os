@@ -2,6 +2,7 @@ package com.hope.trading.broker_service.connection.integration;
 
 import com.hope.trading.broker_service.connection.domain.BrokerConnectionStatus;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
+import com.hope.trading.broker_service.config.TradingCoreFeignConfiguration;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import java.time.Instant;
 import java.util.UUID;
 
-@FeignClient(name = "trading-core")
+@FeignClient(name = "trading-core", configuration = TradingCoreFeignConfiguration.class)
 public interface TradingCoreBrokerAccountClient {
     @GetMapping("/internal/v1/broker-accounts/{accountId}")
     BrokerAccountContract findOwned(@PathVariable UUID accountId,
