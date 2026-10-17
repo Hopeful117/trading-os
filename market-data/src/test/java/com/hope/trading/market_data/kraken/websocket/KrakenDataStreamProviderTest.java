@@ -2,12 +2,15 @@ package com.hope.trading.market_data.kraken.websocket;
 
 import com.hope.trading.market_data.kraken.config.KrakenProperties;
 import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.InstrumentProductType;
+import com.hope.trading.market_data.config.OrderBookEvidenceCaptureProperties;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamParameters;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.service.OhlcEventPublisher;
 import com.hope.trading.market_data.service.OrderBookEventPublisher;
+import com.hope.trading.market_data.service.OrderBookEvidenceCaptureService;
 import com.hope.trading.market_data.service.OrderBookStateService;
 import com.hope.trading.market_data.service.RecentTradesEventPublisher;
 import com.hope.trading.market_data.service.RecentTradesStateService;
@@ -24,19 +27,29 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.math.BigDecimal;
+import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.atLeastOnce;
+import org.mockito.InOrder;
+import org.reactivestreams.Subscription;
+import reactor.core.publisher.SignalType;
+import reactor.core.Disposable;
 
 /**
  * STORY-0020A-3: offline behavioral tests for the Kraken stream provider,
@@ -67,6 +80,7 @@ class KrakenDataStreamProviderTest {
     private KrakenDataStreamProvider provider;
     private WebSocketSession session;
     private Sinks.Many<String> inbound;
+    private final AtomicReference<Subscription> receiveSubscription = new AtomicReference<>();
     private final List<String> outboundTexts = new CopyOnWriteArrayList<>();
 
     private final TickerEventPublisher tickerPublisher = mock(TickerEventPublisher.class);
@@ -79,6 +93,10 @@ class KrakenDataStreamProviderTest {
             mock(RecentTradesEventPublisher.class);
     private final RecentTradesStateService recentTradesStateService =
             mock(RecentTradesStateService.class);
+    private final OrderBookEvidenceCaptureService evidenceCaptureService =
+            mock(OrderBookEvidenceCaptureService.class);
+    private final KrakenStreamLifecycleDiagnostics lifecycleDiagnostics =
+            mock(KrakenStreamLifecycleDiagnostics.class);
     private final com.hope.trading.market_data.kraken.helper.KrakenTickerMapper tickerMapper =
             mock(com.hope.trading.market_data.kraken.helper.KrakenTickerMapper.class);
     private final com.hope.trading.market_data.kraken.helper.KrakenOhlcMapper ohlcMapper =
@@ -96,11 +114,13 @@ class KrakenDataStreamProviderTest {
         connector = new CapturingConnector();
         var properties = new KrakenProperties();
         properties.setWebsocket("wss://ws.kraken.com/v2");
+        properties.setFuturesWebsocket("wss://futures.kraken.com/ws/v1");
 
         provider = new KrakenDataStreamProvider(
                 connector, properties, new ObjectMapper(),
                 tickerMapper, tickerPublisher, ohlcPublisher, ohlcMapper,
                 orderBookMapper, orderBookStateService, orderBookPublisher,
+                evidenceCaptureService, new OrderBookEvidenceCaptureProperties(), lifecycleDiagnostics,
                 tradeMapper, recentTradesStateService, tradesPublisher);
 
         market = new Market();
@@ -110,6 +130,13 @@ class KrakenDataStreamProviderTest {
     }
 
     private void establishConnection() {
+        prepareSession();
+
+        // Trigger the connection lifecycle synchronously.
+        provider.connect().block(java.time.Duration.ofSeconds(2));
+    }
+
+    private void prepareSession() {
         inbound = Sinks.many().unicast().onBackpressureBuffer();
         session = mock(WebSocketSession.class);
         when(session.isOpen()).thenReturn(true);
@@ -126,6 +153,7 @@ class KrakenDataStreamProviderTest {
             return Mono.empty();
         });
         when(session.receive()).thenReturn(inbound.asFlux()
+                .doOnSubscribe(receiveSubscription::set)
                 .map(text -> {
                     var message = mock(
                             org.springframework.web.reactive.socket.WebSocketMessage.class);
@@ -135,14 +163,17 @@ class KrakenDataStreamProviderTest {
         when(session.close()).thenReturn(Mono.empty());
 
         connector.scriptSession(session);
-
-        // Trigger the connection lifecycle synchronously.
-        provider.connect().block(java.time.Duration.ofSeconds(2));
     }
 
     private void subscribeTicker() {
         provider.subscribe(List.of(market), new MarketStreamRequest(
                 MarketStreamType.TICKER,
+                new MarketStreamParameters(null, null))).block();
+    }
+
+    private void subscribeTrades() {
+        provider.subscribe(List.of(market), new MarketStreamRequest(
+                MarketStreamType.TRADES,
                 new MarketStreamParameters(null, null))).block();
     }
 
@@ -165,6 +196,74 @@ class KrakenDataStreamProviderTest {
             assertThat(payload).contains("ticker");
             assertThat(payload).contains("XBT/EUR");
         });
+    }
+
+    @Test
+    void futuresSubscriptionIsIncludedInLifecycleDiagnostics() {
+        prepareSession();
+        Market futuresMarket = new Market();
+        futuresMarket.setMarketId(UUID.randomUUID());
+        futuresMarket.setProvider(MarketProvider.KRAKEN);
+        futuresMarket.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        futuresMarket.setProviderSymbol("PF_XBTUSD");
+
+        provider.subscribe(List.of(futuresMarket), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK,
+                new MarketStreamParameters(null, 25))).block();
+
+        verify(lifecycleDiagnostics, atLeastOnce()).subscriptionRequested(any(), eq("FUTURES"),
+                eq("book"), eq(List.of("PF_XBTUSD")), eq(25));
+        assertThat(outboundTexts).anySatisfy(payload -> assertThat(payload)
+                .contains("\"feed\":\"book\"")
+                .contains("PF_XBTUSD"));
+    }
+
+    @Test
+    void normalCompletionIsDiagnosedBeforeRealtimeCleanup() {
+        establishConnection();
+        subscribeTrades();
+
+        inbound.tryEmitComplete();
+
+        InOrder order = inOrder(lifecycleDiagnostics, recentTradesStateService);
+        order.verify(lifecycleDiagnostics).terminating(any(), eq("SPOT"), eq(SignalType.ON_COMPLETE),
+                isNull(), any());
+        order.verify(recentTradesStateService).clear(market.getMarketId());
+    }
+
+    @Test
+    void streamErrorIsDiagnosedBeforeRealtimeCleanup() {
+        establishConnection();
+        subscribeTrades();
+        IllegalStateException failure = new IllegalStateException("stream failed");
+
+        inbound.tryEmitError(failure);
+
+        InOrder order = inOrder(lifecycleDiagnostics, recentTradesStateService);
+        order.verify(lifecycleDiagnostics).terminating(any(), eq("SPOT"), eq(SignalType.ON_ERROR),
+                eq(failure), any());
+        order.verify(recentTradesStateService).clear(market.getMarketId());
+    }
+
+    @Test
+    void streamCancellationIsDiagnosedBeforeRealtimeCleanup() throws Exception {
+        establishConnection();
+        subscribeTrades();
+
+        cancelProviderConnection();
+
+        InOrder order = inOrder(lifecycleDiagnostics, recentTradesStateService);
+        order.verify(lifecycleDiagnostics).terminating(any(), eq("SPOT"), eq(SignalType.CANCEL),
+                isNull(), any());
+        order.verify(recentTradesStateService).clear(market.getMarketId());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void cancelProviderConnection() throws Exception {
+        Field field = KrakenDataStreamProvider.class.getDeclaredField("connectionSubscription");
+        field.setAccessible(true);
+        AtomicReference<Disposable> subscription = (AtomicReference<Disposable>) field.get(provider);
+        subscription.get().dispose();
     }
 
     @Test

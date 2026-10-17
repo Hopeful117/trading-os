@@ -38,11 +38,17 @@ public class OrderBookEvidenceCaptureService {
         }
         OrderBookKey key = new OrderBookKey(delta.marketId(), delta.depth());
         UUID sequenceId = UUID.randomUUID();
-        ActiveSequence sequence = new ActiveSequence(sequenceId, 0, delta.providerSequence(), null, null);
+        Instant knownAt = knownAt();
+        ActiveSequence sequence = new ActiveSequence(sequenceId, delta.marketId(), delta.depth(), 0,
+                delta.providerSequence(), null, null, delta.occurredAt(), knownAt);
         try {
-            repository.append(toEvidence(delta, sequence, OrderBookEvidenceType.SNAPSHOT,
+            repository.append(toEvidence(delta, sequence, knownAt, OrderBookEvidenceType.SNAPSHOT,
                     OrderBookEvidenceOrigin.PROVIDER, 0));
             sequences.put(key, sequence);
+            log.info("ORDER_BOOK_SEQUENCE_STARTED provider={} marketId={} depth={} sequenceId={} "
+                            + "providerSequence={} occurredAt={} knownAt={}",
+                    delta.provider(), delta.marketId(), delta.depth(), sequenceId, delta.providerSequence(),
+                    delta.occurredAt(), knownAt);
             return true;
         } catch (RuntimeException exception) {
             sequences.remove(key);
@@ -64,13 +70,16 @@ public class OrderBookEvidenceCaptureService {
             return false;
         }
         long ordinal = current.ordinal() + 1;
+        Instant knownAt = knownAt();
         try {
             repository.append(toEvidence(delta,
-                    new ActiveSequence(current.sequenceId(), ordinal, delta.providerSequence(), current.lastCheckpoint(),
-                            current.lastCheckpointOrdinal()),
+                    new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
+                            delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
+                            delta.occurredAt(), knownAt), knownAt,
                     OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER, ordinal));
-            sequences.put(key, new ActiveSequence(current.sequenceId(), ordinal,
-                    delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal()));
+            sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
+                    delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
+                    delta.occurredAt(), knownAt));
             return true;
         } catch (RuntimeException exception) {
             tryInvalidate(current.sequenceId(), "evidence persistence failure");
@@ -105,8 +114,8 @@ public class OrderBookEvidenceCaptureService {
             tryInvalidate(current.sequenceId(), "checkpoint persistence failure");
             return;
         }
-        sequences.put(key, new ActiveSequence(current.sequenceId(), current.ordinal(),
-                current.providerSequence(), knownAt, current.ordinal()));
+        sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), current.ordinal(),
+                current.providerSequence(), knownAt, current.ordinal(), snapshot.occurredAt(), knownAt));
     }
 
     public void invalidate(OrderBookKey key) {
@@ -114,6 +123,13 @@ public class OrderBookEvidenceCaptureService {
         if (current != null && tryInvalidate(current.sequenceId(), "order book state invalidated")) {
             sequences.remove(key, current);
         }
+    }
+
+    public SequenceDiagnostics diagnosticSnapshot(OrderBookKey key) {
+        ActiveSequence current = sequences.get(key);
+        return current == null ? null : new SequenceDiagnostics(current.sequenceId(), current.marketId(),
+                current.depth(), current.providerSequence(), current.ordinal(), current.lastOccurredAt(),
+                current.lastKnownAt());
     }
 
     private boolean tryInvalidate(UUID sequenceId, String reason) {
@@ -131,6 +147,7 @@ public class OrderBookEvidenceCaptureService {
     private OrderBookEvidence toEvidence(
             OrderBookDelta delta,
             ActiveSequence sequence,
+            Instant knownAt,
             OrderBookEvidenceType type,
             OrderBookEvidenceOrigin origin,
             long ordinal
@@ -138,7 +155,7 @@ public class OrderBookEvidenceCaptureService {
         OrderBookEvidence evidence = new OrderBookEvidence(
                 UUID.randomUUID(), delta.marketId(), delta.provider(), delta.symbol(),
                 delta.providerSymbol(), delta.depth(), type, origin, null, null, sequence.sequenceId(), ordinal,
-                delta.providerSequence(), delta.occurredAt(), knownAt(), delta.bids(),
+                delta.providerSequence(), delta.occurredAt(), knownAt, delta.bids(),
                 delta.asks(), delta.checksum(), OrderBookEvidenceFingerprint.NORMALIZATION_VERSION, "pending");
         return withFingerprint(evidence);
     }
@@ -173,10 +190,25 @@ public class OrderBookEvidenceCaptureService {
 
     private record ActiveSequence(
             UUID sequenceId,
+            UUID marketId,
+            int depth,
             long ordinal,
             Long providerSequence,
             Instant lastCheckpoint,
-            Long lastCheckpointOrdinal
+            Long lastCheckpointOrdinal,
+            Instant lastOccurredAt,
+            Instant lastKnownAt
+    ) {
+    }
+
+    public record SequenceDiagnostics(
+            UUID sequenceId,
+            UUID marketId,
+            int depth,
+            Long providerSequence,
+            long localOrdinal,
+            Instant lastOccurredAt,
+            Instant lastKnownAt
     ) {
     }
 }
