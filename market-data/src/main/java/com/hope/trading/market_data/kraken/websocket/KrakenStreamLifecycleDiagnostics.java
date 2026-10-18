@@ -14,6 +14,7 @@ import java.util.UUID;
 @Component
 public class KrakenStreamLifecycleDiagnostics {
     private static final Logger log = LoggerFactory.getLogger(KrakenStreamLifecycleDiagnostics.class);
+    private static final int MAX_EXCEPTION_MESSAGE_LENGTH = 256;
 
     public void connecting(UUID connectionId, String product) {
         log.info("STREAM_CONNECTING provider=KRAKEN product={} connectionId={}", product, connectionId);
@@ -55,7 +56,7 @@ public class KrakenStreamLifecycleDiagnostics {
                         + "providerSymbol={} depth={} phase={} exceptionClass={} exceptionMessage={}",
                 provider, product, symbol, providerSymbol, depth, phase,
                 error == null ? null : error.getClass().getName(),
-                error == null ? null : error.getMessage());
+                message(error));
     }
 
     public void snapshotAccepted(UUID connectionId, OrderBookEvidenceCaptureService.SequenceDiagnostics sequence) {
@@ -77,6 +78,33 @@ public class KrakenStreamLifecycleDiagnostics {
 
     public void cleanupCompleted(UUID connectionId, String product) {
         log.info("STREAM_CLEANUP_COMPLETED provider=KRAKEN product={} connectionId={}", product, connectionId);
+    }
+
+    public void recoveryScheduled(String product, int attempt, Duration delay) {
+        log.warn("STREAM_RECOVERY_SCHEDULED provider=KRAKEN product={} attempt={} delay={}ms",
+                product, attempt, delay.toMillis());
+    }
+
+    public void recoveryStarted(String product, int attempt) {
+        log.warn("STREAM_RECOVERY_STARTED provider=KRAKEN product={} attempt={}", product, attempt);
+    }
+
+    public void recoverySucceeded(String product, int attempt) {
+        log.info("STREAM_RECOVERY_SUCCEEDED provider=KRAKEN product={} attempt={}", product, attempt);
+    }
+
+    public void recoveryFailed(String product, int attempt, Throwable error) {
+        log.warn("STREAM_RECOVERY_FAILED provider=KRAKEN product={} attempt={} exceptionClass={} exceptionMessage={}",
+                product, attempt, error == null ? null : error.getClass().getName(),
+                message(error));
+    }
+
+    public void recoveryExhausted(String product, int attempts) {
+        log.error("STREAM_RECOVERY_EXHAUSTED provider=KRAKEN product={} attempts={}", product, attempts);
+    }
+
+    public void recoverySuppressed(String product, String reason) {
+        log.info("STREAM_RECOVERY_SUPPRESSED provider=KRAKEN product={} reason={}", product, reason);
     }
 
     private void logTermination(UUID connectionId, String product, SignalType signal, Throwable error,
@@ -115,7 +143,11 @@ public class KrakenStreamLifecycleDiagnostics {
     }
 
     private static String message(Throwable error) {
-        return error == null ? null : error.getMessage();
+        if (error == null || error.getMessage() == null) return null;
+        String sanitized = error.getMessage().replaceAll("[\\r\\n\\t]", " ");
+        return sanitized.length() <= MAX_EXCEPTION_MESSAGE_LENGTH
+                ? sanitized
+                : sanitized.substring(0, MAX_EXCEPTION_MESSAGE_LENGTH);
     }
 
     private static Throwable rootCause(Throwable error) {

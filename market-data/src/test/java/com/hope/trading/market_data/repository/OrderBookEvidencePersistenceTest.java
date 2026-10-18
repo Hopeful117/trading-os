@@ -65,12 +65,46 @@ class OrderBookEvidencePersistenceTest {
                 evidence.normalizationVersion(), evidence.contentFingerprint()))).isFalse();
     }
 
+    @Test
+    void freshSnapshotSupersedesPriorActiveSequenceWithoutRewritingEvidence() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID oldSequenceId = UUID.randomUUID();
+        UUID newSequenceId = UUID.randomUUID();
+        OrderBookEvidence oldEvidence = evidence(marketId, oldSequenceId, 0, KNOWN_AT.minusSeconds(10));
+        OrderBookEvidence newEvidence = evidence(marketId, newSequenceId, 0, KNOWN_AT);
+
+        assertThat(evidenceRepository.append(oldEvidence)).isTrue();
+        assertThat(evidenceRepository.appendSnapshotAsNewSequence(newEvidence, KNOWN_AT)).isTrue();
+
+        assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT.plusSeconds(1)))
+                .containsExactly(newEvidence);
+    }
+
+    @Test
+    void invalidatedLatestSequenceDoesNotFallBackToOlderActiveEvidence() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID oldSequenceId = UUID.randomUUID();
+        UUID newSequenceId = UUID.randomUUID();
+        OrderBookEvidence oldEvidence = evidence(marketId, oldSequenceId, 0, KNOWN_AT.minusSeconds(10));
+        OrderBookEvidence newEvidence = evidence(marketId, newSequenceId, 0, KNOWN_AT);
+
+        assertThat(evidenceRepository.append(oldEvidence)).isTrue();
+        assertThat(evidenceRepository.appendSnapshotAsNewSequence(newEvidence, KNOWN_AT)).isTrue();
+        evidenceRepository.invalidateActiveSequences(marketId, 25, "stream terminated", KNOWN_AT.plusSeconds(1));
+
+        assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT.plusSeconds(2))).isEmpty();
+    }
+
     private OrderBookEvidence evidence(UUID marketId, UUID sequenceId, long ordinal) {
+        return evidence(marketId, sequenceId, ordinal, KNOWN_AT);
+    }
+
+    private OrderBookEvidence evidence(UUID marketId, UUID sequenceId, long ordinal, Instant knownAt) {
         OrderBookEvidence value = new OrderBookEvidence(
                 UUID.randomUUID(), marketId, MarketProvider.KRAKEN, "BTC/USD", "PF_XBTUSD", 25,
                 OrderBookEvidenceType.SNAPSHOT, OrderBookEvidenceOrigin.PROVIDER, null, null,
                 sequenceId, ordinal,
-                100L, KNOWN_AT.minusSeconds(1), KNOWN_AT,
+                100L, knownAt.minusSeconds(1), knownAt,
                 List.of(level("100", "1")), List.of(level("101", "1")), null,
                 OrderBookEvidenceFingerprint.NORMALIZATION_VERSION, "pending");
         return new OrderBookEvidence(value.evidenceId(), value.marketId(), value.provider(), value.symbol(),

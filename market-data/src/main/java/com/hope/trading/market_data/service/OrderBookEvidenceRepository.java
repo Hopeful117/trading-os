@@ -27,6 +27,24 @@ public class OrderBookEvidenceRepository {
     @Transactional
     public boolean append(OrderBookEvidence evidence) {
         ensureSequence(evidence);
+        return insertEvidence(evidence);
+    }
+
+    @Transactional
+    public boolean appendSnapshotAsNewSequence(OrderBookEvidence evidence, Instant supersededAt) {
+        if (exists(evidence.contentFingerprint())) {
+            return false;
+        }
+        ensureSequence(evidence);
+        if (!insertEvidence(evidence)) {
+            throw new IllegalStateException("Unable to persist new order-book snapshot sequence");
+        }
+        invalidateOtherActiveSequences(evidence.marketId(), evidence.depth(), evidence.sequenceId(),
+                "superseded by fresh provider snapshot", supersededAt);
+        return true;
+    }
+
+    private boolean insertEvidence(OrderBookEvidence evidence) {
         if (isH2() && exists(evidence.contentFingerprint())) {
             return false;
         }
@@ -105,11 +123,38 @@ public class OrderBookEvidenceRepository {
     @Transactional
     public void invalidateSequence(UUID sequenceId, String reason, Instant invalidatedAt) {
         jdbc.update("""
-                        UPDATE historical_order_book_sequence
+                        UPDATE historical_order_book_sequence target
                         SET status = 'INVALIDATED', invalidated_at = ?, invalidation_reason = ?
-                        WHERE sequence_id = ? AND status = 'ACTIVE'
+                        WHERE target.status = 'ACTIVE'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM historical_order_book_sequence source
+                              WHERE source.sequence_id = ?
+                                AND source.market_id = target.market_id
+                                AND source.depth = target.depth
+                          )
                         """,
                 Timestamp.from(invalidatedAt), reason, sequenceId);
+    }
+
+    @Transactional
+    public void invalidateActiveSequences(UUID marketId, int depth, String reason, Instant invalidatedAt) {
+        jdbc.update("""
+                        UPDATE historical_order_book_sequence
+                        SET status = 'INVALIDATED', invalidated_at = ?, invalidation_reason = ?
+                        WHERE market_id = ? AND depth = ? AND status = 'ACTIVE'
+                        """,
+                Timestamp.from(invalidatedAt), reason, marketId, depth);
+    }
+
+    private void invalidateOtherActiveSequences(UUID marketId, int depth, UUID sequenceId,
+                                                String reason, Instant invalidatedAt) {
+        jdbc.update("""
+                        UPDATE historical_order_book_sequence
+                        SET status = 'INVALIDATED', invalidated_at = ?, invalidation_reason = ?
+                        WHERE market_id = ? AND depth = ? AND status = 'ACTIVE' AND sequence_id <> ?
+                        """,
+                Timestamp.from(invalidatedAt), reason, marketId, depth, sequenceId);
     }
 
     @Transactional(readOnly = true)
@@ -124,6 +169,24 @@ public class OrderBookEvidenceRepository {
     @Transactional(readOnly = true)
     public List<OrderBookEvidence> findTrusted(UUID marketId, int depth, Instant cutoff) {
         return jdbc.query("""
+                        WITH sequence_candidates AS (
+                            SELECT sequence.sequence_id, sequence.status, MAX(evidence.known_at) AS latest_known_at
+                            FROM historical_order_book_sequence sequence
+                            JOIN historical_order_book_evidence evidence
+                              ON sequence.sequence_id = evidence.sequence_id
+                            WHERE sequence.market_id = ? AND sequence.depth = ?
+                              AND evidence.trusted = true AND evidence.known_at <= ?
+                            GROUP BY sequence.sequence_id, sequence.status
+                        ), latest_sequences AS (
+                            SELECT sequence_id, status
+                            FROM sequence_candidates
+                            WHERE latest_known_at = (SELECT MAX(latest_known_at) FROM sequence_candidates)
+                        ), selected_sequence AS (
+                            SELECT sequence_id
+                            FROM latest_sequences
+                            WHERE (SELECT COUNT(*) FROM latest_sequences) = 1
+                              AND status = 'ACTIVE'
+                        )
                         SELECT evidence.evidence_id, evidence.market_id, evidence.provider, evidence.symbol,
                                evidence.provider_symbol, evidence.depth, evidence.evidence_type, evidence.origin,
                                evidence.source_start_ordinal, evidence.source_end_ordinal,
@@ -131,10 +194,10 @@ public class OrderBookEvidenceRepository {
                                evidence.occurred_at, evidence.known_at, evidence.bids_payload, evidence.asks_payload,
                                evidence.checksum, evidence.normalization_version, evidence.content_fingerprint
                         FROM historical_order_book_evidence evidence
-                        JOIN historical_order_book_sequence sequence
-                          ON sequence.sequence_id = evidence.sequence_id
+                        JOIN selected_sequence selected
+                          ON selected.sequence_id = evidence.sequence_id
                         WHERE evidence.market_id = ? AND evidence.depth = ?
-                          AND evidence.trusted = true AND sequence.status = 'ACTIVE'
+                          AND evidence.trusted = true
                           AND evidence.known_at <= ?
                         ORDER BY evidence.known_at, evidence.sequence_ordinal
                         """,
@@ -157,6 +220,6 @@ public class OrderBookEvidenceRepository {
                         result.getObject("checksum", Long.class),
                         result.getString("normalization_version"),
                         result.getString("content_fingerprint")),
-                marketId, depth, Timestamp.from(cutoff));
+                marketId, depth, Timestamp.from(cutoff), marketId, depth, Timestamp.from(cutoff));
     }
 }

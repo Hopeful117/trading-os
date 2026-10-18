@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.kraken.websocket;
 
 import com.hope.trading.market_data.kraken.config.KrakenProperties;
+import com.hope.trading.market_data.kraken.dto.KrakenMessageType;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.config.OrderBookEvidenceCaptureProperties;
@@ -8,6 +9,7 @@ import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamParameters;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
+import com.hope.trading.market_data.model.OrderBookDelta;
 import com.hope.trading.market_data.service.OhlcEventPublisher;
 import com.hope.trading.market_data.service.OrderBookEventPublisher;
 import com.hope.trading.market_data.service.OrderBookEvidenceCaptureService;
@@ -46,6 +48,8 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.after;
+import static org.mockito.Mockito.timeout;
 import org.mockito.InOrder;
 import org.reactivestreams.Subscription;
 import reactor.core.publisher.SignalType;
@@ -116,11 +120,13 @@ class KrakenDataStreamProviderTest {
         properties.setWebsocket("wss://ws.kraken.com/v2");
         properties.setFuturesWebsocket("wss://futures.kraken.com/ws/v1");
 
+        OrderBookEvidenceCaptureProperties captureProperties = new OrderBookEvidenceCaptureProperties();
+        captureProperties.setEnabled(true);
         provider = new KrakenDataStreamProvider(
                 connector, properties, new ObjectMapper(),
                 tickerMapper, tickerPublisher, ohlcPublisher, ohlcMapper,
                 orderBookMapper, orderBookStateService, orderBookPublisher,
-                evidenceCaptureService, new OrderBookEvidenceCaptureProperties(), lifecycleDiagnostics,
+                evidenceCaptureService, captureProperties, lifecycleDiagnostics,
                 tradeMapper, recentTradesStateService, tradesPublisher);
 
         market = new Market();
@@ -137,7 +143,7 @@ class KrakenDataStreamProviderTest {
     }
 
     private void prepareSession() {
-        inbound = Sinks.many().unicast().onBackpressureBuffer();
+        inbound = Sinks.many().multicast().onBackpressureBuffer();
         session = mock(WebSocketSession.class);
         when(session.isOpen()).thenReturn(true);
         when(session.textMessage(anyString())).thenAnswer(inv -> {
@@ -304,6 +310,98 @@ class KrakenDataStreamProviderTest {
         assertThat(outboundTexts.stream()
                 .filter(payload -> payload.contains("\"method\":\"subscribe\"")))
                 .hasSizeGreaterThan((int) subscribeCommandsBeforeReconnect);
+    }
+
+    @Test
+    void futuresTerminationSchedulesBoundedRecoveryForActiveSubscriptions() {
+        prepareSession();
+        Market futuresMarket = new Market();
+        futuresMarket.setMarketId(UUID.randomUUID());
+        futuresMarket.setProvider(MarketProvider.KRAKEN);
+        futuresMarket.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        futuresMarket.setProviderSymbol("PF_XBTUSD");
+
+        provider.subscribe(List.of(futuresMarket), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK,
+                new MarketStreamParameters(null, 25))).block();
+
+        inbound.tryEmitComplete();
+
+        verify(lifecycleDiagnostics, timeout(1500)).recoveryScheduled(
+                eq("FUTURES"), eq(1), eq(java.time.Duration.ofSeconds(1)));
+    }
+
+    @Test
+    void recoveryIsNotSuccessfulBeforeFreshSnapshotAcceptance() {
+        prepareSession();
+        Market futuresMarket = new Market();
+        futuresMarket.setMarketId(UUID.randomUUID());
+        futuresMarket.setProvider(MarketProvider.KRAKEN);
+        futuresMarket.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        futuresMarket.setProviderSymbol("PF_XBTUSD");
+
+        provider.subscribe(List.of(futuresMarket), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK,
+                new MarketStreamParameters(null, 25))).block();
+        inbound.tryEmitComplete();
+
+        verify(lifecycleDiagnostics, timeout(1500)).recoveryStarted(eq("FUTURES"), eq(1));
+        verify(lifecycleDiagnostics, after(200).never()).recoverySucceeded(eq("FUTURES"), eq(1));
+        provider.disconnect().block();
+    }
+
+    @Test
+    void recoverySucceedsOnlyAfterFreshSnapshotAcceptance() {
+        prepareSession();
+        Market futuresMarket = futuresMarket();
+        OrderBookDelta snapshot = new OrderBookDelta(
+                futuresMarket.getMarketId(), MarketProvider.KRAKEN, "BTC/USD", "PF_XBTUSD", 25,
+                com.hope.trading.market_data.model.OrderBookDeltaType.SNAPSHOT,
+                List.of(), List.of(), Instant.parse("2026-10-18T12:00:00Z"), null, 100L);
+        when(evidenceCaptureService.acceptSnapshot(snapshot)).thenReturn(true);
+        when(orderBookMapper.toDelta(any(), eq(KrakenMessageType.SNAPSHOT), eq(futuresMarket), eq(25)))
+                .thenReturn(snapshot);
+
+        provider.subscribe(List.of(futuresMarket), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK, new MarketStreamParameters(null, 25))).block();
+        inbound.tryEmitComplete();
+        prepareSession();
+
+        verify(lifecycleDiagnostics, timeout(1500)).recoveryStarted(eq("FUTURES"), eq(1));
+        inbound.tryEmitNext("""
+                {"feed":"book_snapshot","product_id":"PF_XBTUSD","bids":[],"asks":[],
+                 "timestamp":"2026-10-18T12:00:00Z","seq":100}
+                """);
+
+        verify(evidenceCaptureService, timeout(1000)).acceptSnapshot(snapshot);
+        verify(lifecycleDiagnostics, timeout(1000)).recoverySucceeded(eq("FUTURES"), eq(1));
+        provider.disconnect().block();
+    }
+
+    @Test
+    void pendingRecoveryRechecksSubscriptionsBeforeReconnect() {
+        prepareSession();
+        Market futuresMarket = futuresMarket();
+
+        provider.subscribe(List.of(futuresMarket), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK, new MarketStreamParameters(null, 25))).block();
+        inbound.tryEmitComplete();
+        verify(lifecycleDiagnostics, timeout(500)).recoveryScheduled(
+                eq("FUTURES"), eq(1), eq(java.time.Duration.ofSeconds(1)));
+
+        provider.unsubscribe(List.of(futuresMarket), new MarketStreamRequest(
+                MarketStreamType.ORDER_BOOK, new MarketStreamParameters(null, 25))).block();
+
+        verify(lifecycleDiagnostics, after(1300).times(1)).connecting(any(), eq("FUTURES"));
+    }
+
+    private Market futuresMarket() {
+        Market futuresMarket = new Market();
+        futuresMarket.setMarketId(UUID.randomUUID());
+        futuresMarket.setProvider(MarketProvider.KRAKEN);
+        futuresMarket.setProductType(InstrumentProductType.LINEAR_PERPETUAL);
+        futuresMarket.setProviderSymbol("PF_XBTUSD");
+        return futuresMarket;
     }
 
     @Test
