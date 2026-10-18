@@ -91,8 +91,8 @@ public class FeatureSnapshotProjectionService {
                 throw new IllegalStateException("Feature artifact is not linked to analysis execution");
             }
             java.time.Instant artifactCutoff = cutoffOf(artifact);
-            if (!cutoff.equals(artifactCutoff)) {
-                throw new IllegalStateException("Feature artifact cutoff does not match analysis execution");
+            if (artifactCutoff.isAfter(cutoff)) {
+                throw new IllegalStateException("Feature artifact cutoff is after analysis execution cutoff");
             }
         });
     }

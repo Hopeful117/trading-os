@@ -90,7 +90,9 @@ class AnalysisExecutionStrategyTest {
                 .extracting(ContextRequirement::required)
                 .isEqualTo(false);
         assertThat(plan.capabilityIds())
-                .containsExactly(TrendContextAnalysisCapability.CAPABILITY_ID);
+                .containsExactlyInAnyOrder(
+                        TrendContextAnalysisCapability.CAPABILITY_ID,
+                        OhlcRangeAnalysisCapability.CAPABILITY_ID);
     }
 
     private IntelligenceAnalysisRequest request(AnalysisExecutionMode mode) {
