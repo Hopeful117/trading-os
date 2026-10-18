@@ -74,6 +74,16 @@ export class BrokerAccountService {
     );
   }
 
+  connectExisting(
+    accountId: string,
+    credentials: { apiKey: string; apiSecret: string; passphrase?: string },
+  ): Observable<CredentialValidation> {
+    return this.http.post<CredentialValidation>(
+      `${this.baseUrl}/${accountId}/credentials`,
+      credentials,
+    );
+  }
+
   disconnect(accountId: string): Observable<BrokerAccount> {
     return this.http.post<BrokerAccount>(`${this.baseUrl}/${accountId}/disconnect`, {});
   }

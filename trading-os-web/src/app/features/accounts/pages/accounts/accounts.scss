@@ -137,6 +137,23 @@ button {
   }
 }
 
+.secondary-button {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: #bae6fd;
+  font-size: 0.8rem;
+  white-space: nowrap;
+
+  &:hover {
+    transform: none;
+    border-color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+    box-shadow: none;
+  }
+}
+
 .status,
 .eyebrow {
   color: #38bdf8;

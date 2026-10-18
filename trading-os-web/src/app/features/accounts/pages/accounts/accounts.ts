@@ -32,8 +32,11 @@ export class Accounts {
 
   readonly connecting = signal(false);
   readonly connectionFeedback = signal<ConnectionFeedback>(null);
+  readonly recoveryAccount = signal<BrokerAccount | null>(null);
   readonly revokingAccountId = signal<string | null>(null);
   readonly revokeFeedback = signal<ConnectionFeedback>(null);
+  readonly disconnectingAccountId = signal<string | null>(null);
+  readonly disconnectFeedback = signal<ConnectionFeedback>(null);
   readonly syncing = signal(false);
   readonly syncFeedback = signal<ConnectionFeedback>(null);
   readonly riskProfileSelection = new FormControl('', { nonNullable: true });
@@ -71,11 +74,26 @@ export class Accounts {
   }
 
   connectBroker(): void {
-    if (this.connecting()) {
+    if (this.lifecycleBusy()) {
       return;
     }
 
     const command = this.brokerForm.getRawValue();
+    const recovery = this.recoveryAccount();
+    if (recovery) {
+      if (this.brokerForm.invalid) {
+        this.brokerForm.markAllAsTouched();
+        return;
+      }
+      this.connecting.set(true);
+      this.connectionFeedback.set(null);
+      this.brokerAccountService.connectExisting(recovery.id, this.credentials(command)).subscribe({
+        next: (result) => this.handleCredentialResult(result, true),
+        error: () => this.handleCredentialError(),
+      });
+      return;
+    }
+
     if (command.executionMode === 'PAPER') {
       if (
         !command.displayName ||
@@ -99,52 +117,98 @@ export class Accounts {
     this.connecting.set(true);
     this.connectionFeedback.set(null);
     this.brokerAccountService.createAndConnect(command).subscribe({
-      next: (result) => {
-        this.connecting.set(false);
-        if (result.outcome === 'VALID') {
-          const detail = result.safeMessage || 'Credentials validés';
-          this.connectionFeedback.set({
-            kind: 'success',
-            message: `Connexion Kraken réussie — ${detail}. Vous pouvez maintenant synchroniser vos comptes.`,
-          });
-          this.brokerForm.reset({
-            provider: 'KRAKEN',
-            executionMode: 'LIVE',
-            displayName: '',
-            initialCapital: null,
-            apiKey: '',
-            apiSecret: '',
-            passphrase: '',
-          });
-          this.loadBrokerAccounts();
-        } else {
-          this.connectionFeedback.set({
-            kind: 'error',
-            message:
-              result.safeMessage ||
-              "La connexion broker n'a pas pu être validée. Vérifiez vos clés API puis réessayez.",
-          });
-          this.clearSensitiveFields();
-        }
+      next: (result) => this.handleCredentialResult(result, false),
+      error: () => this.handleCredentialError(),
+    });
+  }
+
+  startRecovery(account: BrokerAccount): void {
+    if (
+      this.lifecycleBusy() ||
+      this.recoveryAccount() !== null ||
+      account.connectionStatus === 'REVOKED' ||
+      account.connectionStatus === 'PENDING_VALIDATION' ||
+      account.executionMode !== 'LIVE'
+    ) {
+      return;
+    }
+
+    this.recoveryAccount.set(account);
+    this.connectionFeedback.set(null);
+    this.brokerForm.controls.displayName.disable();
+    this.brokerForm.controls.executionMode.disable();
+    this.brokerForm.controls.initialCapital.disable();
+    this.brokerForm.reset({
+      provider: account.provider,
+      executionMode: account.executionMode,
+      displayName: account.displayName,
+      initialCapital: null,
+      apiKey: '',
+      apiSecret: '',
+      passphrase: '',
+    });
+  }
+
+  cancelRecovery(): void {
+    if (this.connecting()) {
+      return;
+    }
+    this.resetBrokerForm();
+    this.connectionFeedback.set(null);
+  }
+
+  disconnectBrokerAccount(account: BrokerAccount): void {
+    if (this.lifecycleBusy() || account.connectionStatus !== 'CONNECTED') {
+      return;
+    }
+
+    if (!window.confirm(`Déconnecter le compte broker « ${account.displayName} » ?`)) {
+      return;
+    }
+
+    this.disconnectingAccountId.set(account.id);
+    this.disconnectFeedback.set(null);
+    this.brokerAccountService.disconnect(account.id).subscribe({
+      next: () => {
+        this.disconnectingAccountId.set(null);
+        this.disconnectFeedback.set({
+          kind: 'success',
+          message: `Le compte broker « ${account.displayName} » a été déconnecté.`,
+        });
+        this.loadBrokerAccounts();
       },
       error: () => {
-        this.connecting.set(false);
-        this.connectionFeedback.set({
+        this.disconnectingAccountId.set(null);
+        this.disconnectFeedback.set({
           kind: 'error',
-          message:
-            "La connexion broker n'a pas pu être validée. Vérifiez vos clés API puis réessayez.",
+          message: 'La déconnexion n’a pas pu être confirmée. Vérifiez l’état du compte.',
         });
-        this.clearSensitiveFields();
       },
     });
+  }
+
+  canRecover(account: BrokerAccount): boolean {
+    return (
+      account.executionMode === 'LIVE' &&
+      account.connectionStatus !== 'REVOKED' &&
+      account.connectionStatus !== 'PENDING_VALIDATION'
+    );
   }
 
   isPaper(): boolean {
     return this.brokerForm.controls.executionMode.value === 'PAPER';
   }
 
+  lifecycleBusy(): boolean {
+    return (
+      this.connecting() ||
+      this.revokingAccountId() !== null ||
+      this.disconnectingAccountId() !== null
+    );
+  }
+
   revokeBrokerAccount(account: BrokerAccount): void {
-    if (this.revokingAccountId() !== null || account.connectionStatus === 'REVOKED') {
+    if (this.lifecycleBusy() || account.connectionStatus === 'REVOKED') {
       return;
     }
 
@@ -199,15 +263,7 @@ export class Accounts {
             kind: 'success',
             message: 'Compte PAPER créé. Le capital initial est disponible pour le trading simulé.',
           });
-          this.brokerForm.reset({
-            provider: 'KRAKEN',
-            executionMode: 'LIVE',
-            displayName: '',
-            initialCapital: null,
-            apiKey: '',
-            apiSecret: '',
-            passphrase: '',
-          });
+          this.resetBrokerForm();
           this.riskProfileSelection.reset('');
           this.loadBrokerAccounts();
           this.loadAccounts();
@@ -271,6 +327,66 @@ export class Accounts {
     this.brokerForm.controls.apiKey.setValue('');
     this.brokerForm.controls.apiSecret.setValue('');
     this.brokerForm.controls.passphrase.setValue('');
+  }
+
+  private credentials(command: { apiKey: string; apiSecret: string; passphrase: string }): {
+    apiKey: string;
+    apiSecret: string;
+    passphrase?: string;
+  } {
+    return {
+      apiKey: command.apiKey,
+      apiSecret: command.apiSecret,
+      passphrase: command.passphrase || undefined,
+    };
+  }
+
+  private handleCredentialResult(
+    result: { outcome: string; safeMessage: string },
+    recovery: boolean,
+  ): void {
+    this.connecting.set(false);
+    if (result.outcome === 'VALID') {
+      this.connectionFeedback.set({
+        kind: 'success',
+        message: recovery
+          ? `Connexion Kraken rétablie — ${result.safeMessage || 'Credentials validés'}.`
+          : `Connexion Kraken réussie — ${result.safeMessage || 'Credentials validés'}. Vous pouvez maintenant synchroniser vos comptes.`,
+      });
+      this.resetBrokerForm();
+      this.loadBrokerAccounts();
+      return;
+    }
+    this.connectionFeedback.set({
+      kind: 'error',
+      message:
+        result.safeMessage ||
+        "La connexion broker n'a pas pu être validée. Vérifiez vos clés API puis réessayez.",
+    });
+    this.clearSensitiveFields();
+  }
+
+  private handleCredentialError(): void {
+    this.connecting.set(false);
+    this.connectionFeedback.set({
+      kind: 'error',
+      message: "La connexion broker n'a pas pu être validée. Vérifiez vos clés API puis réessayez.",
+    });
+    this.clearSensitiveFields();
+  }
+
+  private resetBrokerForm(): void {
+    this.recoveryAccount.set(null);
+    this.brokerForm.enable();
+    this.brokerForm.reset({
+      provider: 'KRAKEN',
+      executionMode: 'LIVE',
+      displayName: '',
+      initialCapital: null,
+      apiKey: '',
+      apiSecret: '',
+      passphrase: '',
+    });
   }
 
   private loadAccounts(): void {

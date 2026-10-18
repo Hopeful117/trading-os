@@ -2,23 +2,33 @@
 <section class="broker-connect">
   <div>
     <p class="eyebrow">Broker connection</p>
-    <h2>Connecter Kraken</h2>
-    <p>Les credentials sont transmis une seule fois et ne pourront pas être relus.</p>
+    <h2>{{ recoveryAccount() ? 'Récupérer la connexion Kraken' : 'Connecter Kraken' }}</h2>
+    @if (recoveryAccount(); as account) {
+      <p>
+        Mise à jour de la connexion « {{ account.displayName }} » ({{ account.connectionStatus }}).
+        Les credentials sont transmis une seule fois et ne pourront pas être relus.
+      </p>
+      <button type="button" class="secondary-button" (click)="cancelRecovery()">Annuler</button>
+    } @else {
+      <p>Les credentials sont transmis une seule fois et ne pourront pas être relus.</p>
+    }
   </div>
 
   <form [formGroup]="brokerForm" (ngSubmit)="connectBroker()" autocomplete="off">
-    <label>
-      Nom d’affichage
-      <input formControlName="displayName" maxlength="80" autocomplete="off" />
-    </label>
-    <label>
-      Mode d’exécution
-      <select formControlName="executionMode" data-testid="execution-mode-select">
-        <option value="LIVE">LIVE</option>
-        <option value="PAPER">PAPER</option>
-      </select>
-    </label>
-    @if (isPaper()) {
+    @if (!recoveryAccount()) {
+      <label>
+        Nom d’affichage
+        <input formControlName="displayName" maxlength="80" autocomplete="off" />
+      </label>
+      <label>
+        Mode d’exécution
+        <select formControlName="executionMode" data-testid="execution-mode-select">
+          <option value="LIVE">LIVE</option>
+          <option value="PAPER">PAPER</option>
+        </select>
+      </label>
+    }
+    @if (!recoveryAccount() && isPaper()) {
       <label>
         Capital initial (USD)
         <input
@@ -79,18 +89,26 @@
           autocomplete="new-password"
         />
       </label>
+      <label>
+        Passphrase (optionnelle)
+        <input formControlName="passphrase" type="password" maxlength="256" autocomplete="off" />
+      </label>
     }
     <button
       type="submit"
-      [disabled]="connecting() || (isPaper() && !riskProfileSelection.value)"
+      [disabled]="lifecycleBusy() || (isPaper() && !riskProfileSelection.value)"
       data-testid="create-account-button"
     >
       {{
         connecting()
-          ? 'Création…'
-          : isPaper()
-            ? 'Créer le compte PAPER'
-            : 'Connecter le compte LIVE'
+          ? recoveryAccount()
+            ? 'Connexion…'
+            : 'Création…'
+          : recoveryAccount()
+            ? 'Rétablir la connexion'
+            : isPaper()
+              ? 'Créer le compte PAPER'
+              : 'Connecter le compte LIVE'
       }}
     </button>
   </form>
@@ -120,6 +138,17 @@
       {{ feedback.message }}
     </p>
   }
+  @if (disconnectFeedback(); as feedback) {
+    <p
+      class="connection-message"
+      [class.success]="feedback.kind === 'success'"
+      [class.error]="feedback.kind === 'error'"
+      data-testid="disconnect-feedback"
+      role="status"
+    >
+      {{ feedback.message }}
+    </p>
+  }
   @if (accountState | async; as state) {
     @for (brokerAccount of state.brokerAccounts; track brokerAccount.id) {
       <article>
@@ -127,12 +156,34 @@
         <span>{{ brokerAccount.provider }}</span>
         <span data-testid="execution-mode">{{ brokerAccount.executionMode }}</span>
         <span class="status">{{ brokerAccount.connectionStatus }}</span>
+        @if (canRecover(brokerAccount)) {
+          <button
+            type="button"
+            class="secondary-button"
+            data-testid="recover-broker-account-button"
+            [disabled]="lifecycleBusy()"
+            (click)="startRecovery(brokerAccount)"
+          >
+            {{ brokerAccount.connectionStatus === 'CONNECTED' ? 'Mettre à jour' : 'Connecter' }}
+          </button>
+        }
+        @if (brokerAccount.connectionStatus === 'CONNECTED') {
+          <button
+            type="button"
+            class="secondary-button"
+            data-testid="disconnect-broker-account-button"
+            [disabled]="lifecycleBusy()"
+            (click)="disconnectBrokerAccount(brokerAccount)"
+          >
+            {{ disconnectingAccountId() === brokerAccount.id ? 'Déconnexion…' : 'Déconnecter' }}
+          </button>
+        }
         @if (brokerAccount.connectionStatus !== 'REVOKED') {
           <button
             type="button"
             class="revoke-button"
             data-testid="revoke-broker-account-button"
-            [disabled]="revokingAccountId() !== null"
+            [disabled]="lifecycleBusy()"
             (click)="revokeBrokerAccount(brokerAccount)"
           >
             {{ revokingAccountId() === brokerAccount.id ? 'Révocation…' : 'Révoquer' }}

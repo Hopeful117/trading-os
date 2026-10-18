@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -77,6 +78,103 @@ class BrokerCredentialConnectionServiceTest {
                     service.connect(owner, accountId, material, "Bearer fake").connectionStatus());
         }
         verify(writer).write(any(), any());
+    }
+
+    @Test
+    void validExistingCredentialsAreRotatedAfterValidation() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID active = UUID.randomUUID();
+        UUID replacement = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
+        connection.pending(NOW);
+        connection.connected(active, readPermissions(), null, "••••1234", NOW);
+        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
+        when(repository.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+        when(rotator.rotate(any(), any(), any())).thenReturn(new CredentialReference(replacement));
+
+        try (CredentialMaterial material = material()) {
+            assertEquals(BrokerConnectionStatus.CONNECTED,
+                    service(result(CredentialValidationOutcome.VALID))
+                            .connect(owner, accountId, material, "Bearer fake").connectionStatus());
+        }
+
+        verify(rotator).rotate(eq(new CredentialReference(active)), any(), any());
+        verify(writer, never()).write(any(), any());
+        assertEquals(replacement, connection.activeCredentialReference());
+    }
+
+    @Test
+    void invalidExistingCredentialsKeepTheActiveReferenceInTheFailureCallback() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID active = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
+        connection.pending(NOW);
+        connection.connected(active, readPermissions(), "external-1", "••••1234", NOW);
+        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
+        when(repository.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+
+        try (CredentialMaterial material = material()) {
+            assertEquals(BrokerConnectionStatus.INVALID_CREDENTIALS,
+                    service(result(CredentialValidationOutcome.INVALID_CREDENTIALS))
+                            .connect(owner, accountId, material, "Bearer fake").connectionStatus());
+        }
+
+        verify(tradingCore).updateStatus(eq(accountId), argThat(update ->
+                update.status() == BrokerConnectionStatus.INVALID_CREDENTIALS
+                        && active.equals(update.credentialReference())
+                        && "external-1".equals(update.externalAccountId())), eq("Bearer fake"));
+        verify(writer, never()).write(any(), any());
+        verify(rotator, never()).rotate(any(), any(), any());
+        assertEquals(active, connection.activeCredentialReference());
+    }
+
+    @Test
+    void revokedConnectionsRejectConnectRotateAndDisconnectBeforeMutation() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
+        connection.revoke(NOW);
+        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
+        when(repository.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
+        BrokerCredentialConnectionService service = service(result(CredentialValidationOutcome.VALID));
+
+        try (CredentialMaterial material = material()) {
+            assertThrows(BrokerConnectionRevokedException.class,
+                    () -> service.connect(owner, accountId, material, "Bearer fake"));
+            assertThrows(BrokerConnectionRevokedException.class,
+                    () -> service.rotate(owner, accountId, material, "Bearer fake"));
+        }
+        assertThrows(BrokerConnectionRevokedException.class,
+                () -> service.disconnect(owner, accountId, "Bearer fake"));
+        verify(writer, never()).write(any(), any());
+        verify(rotator, never()).rotate(any(), any(), any());
+        verify(tradingCore, never()).updateStatus(any(), any(), any());
+    }
+
+    @Test
+    void revokedTradingCoreAccountWithoutLocalConnectionRejectsBeforeSecretMutation() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        when(tradingCore.findOwned(accountId, "Bearer fake"))
+                .thenReturn(account(accountId, BrokerConnectionStatus.REVOKED));
+        BrokerCredentialConnectionService service = service(result(CredentialValidationOutcome.VALID));
+
+        try (CredentialMaterial material = material()) {
+            assertThrows(BrokerConnectionRevokedException.class,
+                    () -> service.connect(owner, accountId, material, "Bearer fake"));
+            assertThrows(BrokerConnectionRevokedException.class,
+                    () -> service.rotate(owner, accountId, material, "Bearer fake"));
+        }
+        assertThrows(BrokerConnectionRevokedException.class,
+                () -> service.disconnect(owner, accountId, "Bearer fake"));
+
+        verify(repository, never()).save(any());
+        verify(writer, never()).write(any(), any());
+        verify(rotator, never()).rotate(any(), any(), any());
+        verify(tradingCore, never()).updateStatus(any(), any(), any());
     }
 
     @Test
@@ -186,8 +284,13 @@ class BrokerCredentialConnectionServiceTest {
     }
 
     private TradingCoreBrokerAccountClient.BrokerAccountContract account(UUID id) {
+        return account(id, BrokerConnectionStatus.CREATED);
+    }
+
+    private TradingCoreBrokerAccountClient.BrokerAccountContract account(UUID id,
+                                                                          BrokerConnectionStatus status) {
         return new TradingCoreBrokerAccountClient.BrokerAccountContract(id, BrokerProviderId.KRAKEN,
-                "Kraken", null, BrokerConnectionStatus.CREATED, null);
+                "Kraken", null, status, null);
     }
 
     private CredentialValidationResult result(CredentialValidationOutcome outcome) {
