@@ -30,8 +30,8 @@ public final class KrakenFeeScheduleCapability implements HistoricalFeeScheduleA
     public FeeScheduleObservation acquire(UUID brokerAccountId, String instrument) {
         return sessions.withCredentials(brokerAccountId, credentials -> {
             JsonNode result = client.privatePost(PATH, Map.of(
-                    "pair", instrument,
-                    "aclass", "derivatives",
+                    "pair[0][asset]", instrument,
+                    "pair[0][aclass]", "derivatives",
                     "fee_schedule", "true"), credentials);
             JsonNode taker = fee(result.path("fees"), instrument);
             JsonNode maker = fee(result.path("fees_maker"), instrument);

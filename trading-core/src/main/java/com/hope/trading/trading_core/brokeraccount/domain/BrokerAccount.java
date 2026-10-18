@@ -126,7 +126,8 @@ public class BrokerAccount {
     private static Map<BrokerConnectionStatus, Set<BrokerConnectionStatus>> transitions() {
         Map<BrokerConnectionStatus, Set<BrokerConnectionStatus>> result =
                 new EnumMap<>(BrokerConnectionStatus.class);
-        result.put(BrokerConnectionStatus.CREATED, EnumSet.of(BrokerConnectionStatus.PENDING_VALIDATION));
+        result.put(BrokerConnectionStatus.CREATED, EnumSet.of(
+                BrokerConnectionStatus.PENDING_VALIDATION, BrokerConnectionStatus.REVOKED));
         result.put(BrokerConnectionStatus.PENDING_VALIDATION, EnumSet.of(
                 BrokerConnectionStatus.CONNECTED, BrokerConnectionStatus.INVALID_CREDENTIALS,
                 BrokerConnectionStatus.INSUFFICIENT_PERMISSIONS, BrokerConnectionStatus.TEMPORARILY_UNAVAILABLE));

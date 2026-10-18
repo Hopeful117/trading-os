@@ -304,11 +304,12 @@ class BrokerAccountLifecycleRegressionTest {
     }
 
     @Test
-    void invalidTransitionCreatedToRevokedThrows() {
+    void createdAccountCanBeRevokedWithoutBrokerCredentials() {
         BrokerAccount account = BrokerAccount.create(OWNER, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Test", NOW);
 
-        assertThrows(InvalidBrokerConnectionTransitionException.class,
-                () -> account.markRevoked(NOW));
+        account.markRevoked(NOW);
+
+        assertEquals(BrokerConnectionStatus.REVOKED, account.connectionStatus());
     }
 
     @Test

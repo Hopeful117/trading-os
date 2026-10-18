@@ -3,6 +3,7 @@ package com.hope.trading.trading_core.brokeraccount.api;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountService;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerConnectionCommandClient;
 import com.hope.trading.trading_core.dto.UserDto;
+import feign.FeignException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -57,7 +58,15 @@ public class BrokerAccountController {
 
     @DeleteMapping("/{accountId}")
     public ResponseEntity<Void> revoke(@PathVariable UUID accountId, Authentication authentication) {
-        brokerConnection.revoke(accountId);
+        UUID ownerId = principal(authentication).getUserId();
+        try {
+            brokerConnection.revoke(accountId);
+        } catch (FeignException.NotFound missingBrokerConnection) {
+            // A broker account can exist locally before credentials are connected.
+            // In that case Broker Service has nothing to revoke, so finalize the
+            // local logical lifecycle transition instead.
+            service.revoke(ownerId, accountId);
+        }
         return ResponseEntity.noContent().build();
     }
 
