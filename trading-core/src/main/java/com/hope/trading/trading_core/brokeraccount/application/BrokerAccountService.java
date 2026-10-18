@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus;
 import com.hope.trading.trading_core.brokeraccount.domain.CredentialReference;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
+import com.hope.trading.trading_core.brokeraccount.domain.InvalidBrokerConnectionTransitionException;
 import com.hope.trading.trading_core.brokeraccount.api.RiskProfileReference;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.helper.AccountMapper;
@@ -235,7 +236,17 @@ public class BrokerAccountService {
                 account.markTemporarilyUnavailable(validatedAt);
             }
             case DISCONNECTED -> account.disconnect(validatedAt);
-            case REVOKED -> account.markRevoked(validatedAt);
+            case REVOKED -> {
+                if (credentialReference != null) {
+                    throw new InvalidBrokerConnectionTransitionException(
+                            BrokerConnectionStatus.REVOKED, BrokerConnectionStatus.REVOKED);
+                }
+                if (account.connectionStatus() != BrokerConnectionStatus.REVOKED) {
+                    account.markRevoked(validatedAt);
+                } else {
+                    // Duplicate terminal callbacks are intentionally idempotent.
+                }
+            }
             default -> throw new IllegalArgumentException("Unsupported technical status callback");
         }
         return map(account);

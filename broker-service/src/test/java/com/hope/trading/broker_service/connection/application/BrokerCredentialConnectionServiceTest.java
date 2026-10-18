@@ -46,7 +46,8 @@ class BrokerCredentialConnectionServiceTest {
     @Mock TradingCoreBrokerAccountClient tradingCore;
     @Mock SecretWriter writer;
     @Mock SecretRotator rotator;
-    @Mock SecretRevoker revoker;
+    @Mock BrokerRevocationPersistenceService revocationPersistence;
+    @Mock BrokerRevocationNotificationDeliveryService revocationDelivery;
     @Mock BrokerCredentialSource source;
 
     @Test
@@ -198,80 +199,56 @@ class BrokerCredentialConnectionServiceTest {
     }
 
     @Test
-    void revokeRevokesSecretAndNotifiesTradingCore() {
+    void revokePersistsLocalTransitionAndDeliversNotification() {
         UUID owner = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
-        UUID active = UUID.randomUUID();
-        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
-        connection.pending(NOW);
-        connection.connected(active, readPermissions(), null, "••••1234", NOW);
-        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
-        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
+        UUID notificationId = UUID.randomUUID();
+        when(revocationPersistence.revokeLocally(owner, accountId, "Bearer fake")).thenReturn(notificationId);
 
         service(null).revoke(owner, accountId, "Bearer fake");
 
-        verify(revoker).revoke(new CredentialReference(active), "USER_REQUEST");
-        verify(tradingCore).updateStatus(eq(accountId), argThat(update ->
-                update.status() == BrokerConnectionStatus.REVOKED
-                        && update.credentialReference() == null), eq("Bearer fake"));
-        assertEquals(BrokerConnectionStatus.REVOKED, connection.technicalStatus());
-        assertNull(connection.activeCredentialReference());
+        verify(revocationPersistence).revokeLocally(owner, accountId, "Bearer fake");
+        verify(revocationDelivery).deliverImmediately(notificationId, "Bearer fake");
     }
 
     @Test
     void revokeWithoutCredentialStillNotifiesTradingCore() {
         UUID owner = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
-        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
-        connection.disconnect(NOW);
-        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
-        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
+        UUID notificationId = UUID.randomUUID();
+        when(revocationPersistence.revokeLocally(owner, accountId, "Bearer fake")).thenReturn(notificationId);
 
         service(null).revoke(owner, accountId, "Bearer fake");
 
-        verify(revoker, never()).revoke(any(), any());
-        verify(tradingCore).updateStatus(eq(accountId), argThat(update ->
-                update.status() == BrokerConnectionStatus.REVOKED), eq("Bearer fake"));
+        verify(revocationDelivery).deliverImmediately(notificationId, "Bearer fake");
     }
 
     @Test
-    void failedSecretRevocationDoesNotNotifyTradingCore() {
+    void failedLocalRevocationDoesNotDeliverNotification() {
         UUID owner = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
-        UUID active = UUID.randomUUID();
-        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
-        connection.pending(NOW);
-        connection.connected(active, readPermissions(), null, "••••1234", NOW);
-        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
-        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
-        doThrow(new IllegalStateException("secret revoke failed"))
-                .when(revoker).revoke(new CredentialReference(active), "USER_REQUEST");
+        doThrow(new IllegalStateException("local revoke failed"))
+                .when(revocationPersistence).revokeLocally(owner, accountId, "Bearer fake");
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
                 () -> service(null).revoke(owner, accountId, "Bearer fake"));
 
-        verify(tradingCore, never()).updateStatus(any(), any(), any());
-        assertEquals(BrokerConnectionStatus.CONNECTED, connection.technicalStatus());
+        verify(revocationDelivery, never()).deliverImmediately(any(), any());
     }
 
     @Test
-    void callbackFailureLeavesRemoteRevokeVisibleAsUnconfirmedLocalState() {
+    void callbackFailureIsPropagatedAsUnconfirmedRevoke() {
         UUID owner = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
-        UUID active = UUID.randomUUID();
-        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
-        connection.pending(NOW);
-        connection.connected(active, readPermissions(), null, "••••1234", NOW);
-        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
-        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
-        doThrow(new IllegalStateException("callback failed")).when(tradingCore).updateStatus(
-                eq(accountId), any(), eq("Bearer fake"));
+        UUID notificationId = UUID.randomUUID();
+        when(revocationPersistence.revokeLocally(owner, accountId, "Bearer fake")).thenReturn(notificationId);
+        doThrow(new IllegalStateException("callback failed")).when(revocationDelivery)
+                .deliverImmediately(notificationId, "Bearer fake");
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
                 () -> service(null).revoke(owner, accountId, "Bearer fake"));
 
-        verify(revoker).revoke(new CredentialReference(active), "USER_REQUEST");
-        assertEquals(BrokerConnectionStatus.REVOKED, connection.technicalStatus());
+        verify(revocationPersistence).revokeLocally(owner, accountId, "Bearer fake");
     }
 
     private BrokerCredentialConnectionService service(CredentialValidationResult result) {
@@ -280,7 +257,7 @@ class BrokerCredentialConnectionServiceTest {
             @Override public CredentialValidationResult validate(CredentialMaterial credentials) { return result; }
         };
         return new BrokerCredentialConnectionService(repository, tradingCore, List.of(validator), writer,
-                rotator, revoker, source, Clock.fixed(NOW, ZoneOffset.UTC));
+                rotator, revocationPersistence, revocationDelivery, source, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private TradingCoreBrokerAccountClient.BrokerAccountContract account(UUID id) {

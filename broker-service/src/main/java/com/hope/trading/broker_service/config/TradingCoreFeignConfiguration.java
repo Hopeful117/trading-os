@@ -25,8 +25,10 @@ public class TradingCoreFeignConfiguration {
             UUID actorId = authentication != null && authentication.getPrincipal() instanceof BrokerPrincipal principal
                     ? principal.userId()
                     : null;
-            template.header("X-Service-Authorization",
-                    "Bearer " + serviceJwtService.issue(TRADING_CORE_AUDIENCE, actorId));
+            if (!template.headers().containsKey("X-Service-Authorization")) {
+                template.header("X-Service-Authorization",
+                        "Bearer " + serviceJwtService.issue(TRADING_CORE_AUDIENCE, actorId));
+            }
         };
     }
 }
