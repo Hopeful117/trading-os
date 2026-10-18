@@ -295,6 +295,57 @@ class BrokerAccountServiceOwnershipTest {
     }
 
     @Test
+    void duplicateRevokedCallbackWithNoCredentialIsIdempotent() {
+        owned.markPendingValidation(now);
+        owned.markConnected(
+                new com.hope.trading.trading_core.brokeraccount.domain.CredentialReference(
+                        UUID.randomUUID()),
+                "ext-1", now);
+        owned.markRevoked(now);
+
+        var response = service.updateStatus(
+                ownerId, accountId,
+                com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus.REVOKED,
+                null, "ext-1", now);
+
+        assertThat(response.connectionStatus()).isEqualTo(
+                com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus.REVOKED);
+    }
+
+    @Test
+    void duplicateRevokedCallbackWithCredentialIsRejected() {
+        owned.markPendingValidation(now);
+        owned.markConnected(
+                new com.hope.trading.trading_core.brokeraccount.domain.CredentialReference(
+                        UUID.randomUUID()),
+                "ext-1", now);
+        owned.markRevoked(now);
+
+        assertThatThrownBy(() -> service.updateStatus(
+                ownerId, accountId,
+                com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus.REVOKED,
+                UUID.randomUUID(), "ext-1", now))
+                .isInstanceOf(com.hope.trading.trading_core.brokeraccount.domain
+                        .InvalidBrokerConnectionTransitionException.class);
+    }
+
+    @Test
+    void firstRevokedCallbackWithCredentialIsRejected() {
+        owned.markPendingValidation(now);
+        owned.markConnected(
+                new com.hope.trading.trading_core.brokeraccount.domain.CredentialReference(
+                        UUID.randomUUID()),
+                "ext-1", now);
+
+        assertThatThrownBy(() -> service.updateStatus(
+                ownerId, accountId,
+                com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus.REVOKED,
+                UUID.randomUUID(), "ext-1", now))
+                .isInstanceOf(com.hope.trading.trading_core.brokeraccount.domain
+                        .InvalidBrokerConnectionTransitionException.class);
+    }
+
+    @Test
     void updateStatusWithUnsupportedStatusThrows() {
         assertThatThrownBy(() -> service.updateStatus(
                 ownerId, accountId,

@@ -11,7 +11,6 @@ import com.hope.trading.broker_service.credential.application.BrokerCredentialVa
 import com.hope.trading.broker_service.credential.domain.CredentialMaterial;
 import com.hope.trading.broker_service.credential.domain.CredentialValidationOutcome;
 import com.hope.trading.broker_service.credential.domain.CredentialValidationResult;
-import com.hope.trading.broker_service.secret.application.SecretRevoker;
 import com.hope.trading.broker_service.secret.application.SecretRotator;
 import com.hope.trading.broker_service.secret.application.SecretRevokedException;
 import com.hope.trading.broker_service.secret.application.SecretWriter;
@@ -40,7 +39,8 @@ public class BrokerCredentialConnectionService {
     private final Map<BrokerProviderId, BrokerCredentialValidator> validators;
     private final SecretWriter secretWriter;
     private final SecretRotator secretRotator;
-    private final SecretRevoker secretRevoker;
+    private final BrokerRevocationPersistenceService revocationPersistence;
+    private final BrokerRevocationNotificationDeliveryService revocationDelivery;
     private final BrokerCredentialSource credentialSource;
     private final Clock clock;
 
@@ -49,7 +49,8 @@ public class BrokerCredentialConnectionService {
                                              List<BrokerCredentialValidator> validators,
                                              SecretWriter secretWriter,
                                              SecretRotator secretRotator,
-                                             SecretRevoker secretRevoker,
+                                             BrokerRevocationPersistenceService revocationPersistence,
+                                             BrokerRevocationNotificationDeliveryService revocationDelivery,
                                              BrokerCredentialSource credentialSource,
                                              Clock clock) {
         this.connectionRepository = connectionRepository;
@@ -58,7 +59,8 @@ public class BrokerCredentialConnectionService {
                 BrokerCredentialValidator::provider, Function.identity()));
         this.secretWriter = secretWriter;
         this.secretRotator = secretRotator;
-        this.secretRevoker = secretRevoker;
+        this.revocationPersistence = revocationPersistence;
+        this.revocationDelivery = revocationDelivery;
         this.credentialSource = credentialSource;
         this.clock = clock;
     }
@@ -157,16 +159,9 @@ public class BrokerCredentialConnectionService {
         return map(requireConnection(ownerId, accountId));
     }
 
-    @Transactional
     public void revoke(UUID ownerId, UUID accountId, String authorization) {
-        tradingCore.findOwned(accountId, authorization);
-        BrokerConnection connection = requireConnection(ownerId, accountId);
-        if (connection.activeCredentialReference() != null) {
-            secretRevoker.revoke(new CredentialReference(connection.activeCredentialReference()), "USER_REQUEST");
-        }
-        connection.revoke(clock.instant());
-        callback(connection, BrokerConnectionStatus.REVOKED, null, connection.externalAccountId(),
-                clock.instant(), authorization);
+        UUID notificationId = revocationPersistence.revokeLocally(ownerId, accountId, authorization);
+        revocationDelivery.deliverImmediately(notificationId, authorization);
     }
 
     @Transactional

@@ -25,6 +25,12 @@ public interface TradingCoreBrokerAccountClient {
                                        @RequestBody ConnectionStatusUpdate update,
                                        @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization);
 
+    @PostMapping("/internal/v1/broker-accounts/{accountId}/connection-status")
+    BrokerAccountContract updateStatusWithServiceAuthorization(
+            @PathVariable UUID accountId,
+            @RequestBody ConnectionStatusUpdate update,
+            @RequestHeader("X-Service-Authorization") String serviceAuthorization);
+
     record BrokerAccountContract(UUID id, BrokerProviderId provider, String displayName,
                                  String externalAccountId, BrokerConnectionStatus connectionStatus,
                                  Instant lastValidatedAt) {
