@@ -75,6 +75,39 @@ class NewsCatalogServiceTest {
     }
 
     @Test
+    void keepsTheNewestPersistedVersionWhenAnEventHasLegacyDuplicateIdentity() {
+        EconomicEventRepository events = mock(EconomicEventRepository.class);
+        NewsProviderProperties properties = new NewsProviderProperties();
+        properties.setEnabled(true);
+        properties.setMaxAge(java.time.Duration.ofMinutes(15));
+        Instant scheduledAt = Instant.now().plusSeconds(3600);
+        Instant freshFetchedAt = Instant.now();
+        EconomicEvent old = new EconomicEvent(
+                NewsIdentity.eventId("xoomar", "legacy-id"), "xoomar", "census", "legacy-id", "CPI",
+                "inflation", scheduledAt, null, List.of(), List.of(), ImpactLevel.MEDIUM,
+                EconomicEventStatus.SCHEDULED, null, null, null, null, freshFetchedAt.minusSeconds(3600),
+                freshFetchedAt.minusSeconds(3600), "xoomar-v1");
+        EconomicEvent fresh = new EconomicEvent(
+                NewsIdentity.eventId("xoomar", "current-id"), "xoomar", "census", "current-id", "CPI",
+                "inflation", scheduledAt, null, List.of(), List.of(), ImpactLevel.MEDIUM,
+                EconomicEventStatus.SCHEDULED, null, null, null, null, freshFetchedAt, freshFetchedAt,
+                "xoomar-v1");
+        when(events.findByScheduledAtBetweenOrderByScheduledAtAsc(
+                any(), any(), any(), any(), any(), any(PageRequest.class)))
+                .thenReturn(List.of(EconomicEventEntity.from(old), EconomicEventEntity.from(fresh)));
+
+        NewsReadResult<EconomicEvent> result = new NewsCatalogService(events,
+                mock(FinancialNewsItemRepository.class), properties,
+                mock(org.springframework.beans.factory.ObjectProvider.class),
+                providerFor(mock(EconomicCalendarSourcePort.class)))
+                .findEvents(new NewsQuery(Instant.now(), Instant.now().plusSeconds(7200), null, null, null, 10));
+
+        assertThat(result.status()).isEqualTo(NewsAvailability.AVAILABLE);
+        assertThat(result.items()).singleElement().extracting(EconomicEvent::sourceEventId)
+                .isEqualTo("current-id");
+    }
+
+    @Test
     void keepsFinancialNewsUnavailableWhenTheGlobalProviderSwitchIsDisabled() {
         NewsProviderProperties properties = new NewsProviderProperties();
         properties.setEnabled(false);

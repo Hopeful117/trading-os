@@ -32,6 +32,8 @@ export class Accounts {
 
   readonly connecting = signal(false);
   readonly connectionFeedback = signal<ConnectionFeedback>(null);
+  readonly revokingAccountId = signal<string | null>(null);
+  readonly revokeFeedback = signal<ConnectionFeedback>(null);
   readonly syncing = signal(false);
   readonly syncFeedback = signal<ConnectionFeedback>(null);
   readonly riskProfileSelection = new FormControl('', { nonNullable: true });
@@ -141,6 +143,36 @@ export class Accounts {
     return this.brokerForm.controls.executionMode.value === 'PAPER';
   }
 
+  revokeBrokerAccount(account: BrokerAccount): void {
+    if (this.revokingAccountId() !== null || account.connectionStatus === 'REVOKED') {
+      return;
+    }
+
+    if (!window.confirm(`Révoquer le compte broker « ${account.displayName} » ?`)) {
+      return;
+    }
+
+    this.revokingAccountId.set(account.id);
+    this.revokeFeedback.set(null);
+    this.brokerAccountService.revoke(account.id).subscribe({
+      next: () => {
+        this.revokingAccountId.set(null);
+        this.revokeFeedback.set({
+          kind: 'success',
+          message: `Le compte broker « ${account.displayName} » a été révoqué.`,
+        });
+        this.loadBrokerAccounts();
+      },
+      error: () => {
+        this.revokingAccountId.set(null);
+        this.revokeFeedback.set({
+          kind: 'error',
+          message: 'La révocation n’a pas pu être confirmée. Vérifiez l’état du compte.',
+        });
+      },
+    });
+  }
+
   private createPaperAccount(command: {
     provider: 'KRAKEN';
     executionMode: 'LIVE' | 'PAPER';
@@ -228,9 +260,10 @@ export class Accounts {
   }
 
   private loadBrokerAccounts(): void {
-    this.brokerAccounts = this.brokerAccountService
-      .list()
-      .pipe(shareReplay({ bufferSize: 1, refCount: true }));
+    this.brokerAccounts = this.brokerAccountService.list().pipe(
+      map((accounts) => accounts.filter((account) => account.connectionStatus !== 'REVOKED')),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
     this.refreshAccountState();
   }
 

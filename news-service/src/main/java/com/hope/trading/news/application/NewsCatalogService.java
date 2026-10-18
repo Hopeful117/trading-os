@@ -15,7 +15,9 @@ import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -55,7 +57,16 @@ public class NewsCatalogService {
                         query.currency(), query.impact(), PageRequest.of(0, query.limit())).stream()
                 .filter(entity -> entity.matches(query.marketId(), query.currency(), null))
                 .toList();
-        List<EconomicEvent> domainItems = entities.stream().map(EconomicEventEntity::toDomain).toList();
+        Map<EconomicEventKey, EconomicEvent> latestByEvent = new LinkedHashMap<>();
+        entities.stream()
+                .map(EconomicEventEntity::toDomain)
+                .forEach(event -> latestByEvent.merge(
+                        new EconomicEventKey(event.sourceName(), event.source(), event.title(), event.scheduledAt()),
+                        event,
+                        NewsCatalogService::newer));
+        List<EconomicEvent> domainItems = latestByEvent.values().stream()
+                .sorted(Comparator.comparing(EconomicEvent::scheduledAt))
+                .toList();
         NewsAvailability status = availability(domainItems);
         return new NewsReadResult<>(status, domainItems, Instant.now(), freshnessMessage(status));
     }
@@ -175,6 +186,12 @@ public class NewsCatalogService {
                 ? "News data exceeds the configured freshness policy" : null;
     }
 
+    private static EconomicEvent newer(EconomicEvent first, EconomicEvent second) {
+        Instant firstFetchedAt = first.fetchedAt() == null ? Instant.MIN : first.fetchedAt();
+        Instant secondFetchedAt = second.fetchedAt() == null ? Instant.MIN : second.fetchedAt();
+        return firstFetchedAt.compareTo(secondFetchedAt) >= 0 ? first : second;
+    }
+
     private Instant sourceOccurredAt(List<EconomicEvent> events, List<FinancialNewsItem> news) {
         return java.util.stream.Stream.concat(
                         events.stream().map(event -> event.sourceUpdatedAt() == null
@@ -192,5 +209,8 @@ public class NewsCatalogService {
                                       Instant sourceOccurredAt,
                                       Instant fetchedAt,
                                       String message) {
+    }
+
+    private record EconomicEventKey(String sourceName, String source, String title, Instant scheduledAt) {
     }
 }

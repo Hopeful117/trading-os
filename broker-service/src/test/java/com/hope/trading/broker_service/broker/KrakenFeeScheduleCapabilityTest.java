@@ -37,9 +37,9 @@ class KrakenFeeScheduleCapabilityTest {
         var capability = new KrakenFeeScheduleCapability(session, client, properties);
         server.expect(once(), requestTo("https://kraken.test/0/private/TradeVolume"))
                 .andExpect(content().string(org.hamcrest.Matchers.allOf(
-                        org.hamcrest.Matchers.containsString("pair=PF_XBTUSD"),
-                        org.hamcrest.Matchers.containsString("aclass=derivatives"),
-                        org.hamcrest.Matchers.containsString("fee_schedule=true"))))
+                         org.hamcrest.Matchers.containsString("pair%5B0%5D%5Basset%5D=PF_XBTUSD"),
+                         org.hamcrest.Matchers.containsString("pair%5B0%5D%5Baclass%5D=derivatives"),
+                         org.hamcrest.Matchers.containsString("fee_schedule=true"))))
                 .andRespond(withSuccess("""
                         {"error":[],"result":{"currency":"ZUSD","fees":{"PF_XBTUSD":{"fee":"0.2600"}},
                         "fees_maker":{"PF_XBTUSD":{"fee":"0.1000"}}}}

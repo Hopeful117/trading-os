@@ -4,6 +4,7 @@ import { AccountService } from '../../../../core/services/account.service';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 import { Account } from '../../../../core/models/account.model';
+import { BrokerAccount } from '../../../../core/models/broker-account.model';
 
 describe('Accounts', () => {
   let component: Accounts;
@@ -17,6 +18,7 @@ describe('Accounts', () => {
     eligibleRiskProfiles: ReturnType<typeof vi.fn>;
     createPaper: ReturnType<typeof vi.fn>;
     createAndConnect: ReturnType<typeof vi.fn>;
+    revoke: ReturnType<typeof vi.fn>;
   };
   let accounts: BehaviorSubject<Account[]>;
 
@@ -31,6 +33,7 @@ describe('Accounts', () => {
       eligibleRiskProfiles: vi.fn(() => of([])),
       createPaper: vi.fn(() => of({ executionMode: 'PAPER' })),
       createAndConnect: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
+      revoke: vi.fn(() => of(void 0)),
     };
     await TestBed.configureTestingModule({
       imports: [Accounts],
@@ -43,6 +46,10 @@ describe('Accounts', () => {
     fixture = TestBed.createComponent(Accounts);
     component = fixture.componentInstance;
     await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should create', () => {
@@ -241,6 +248,73 @@ describe('Accounts', () => {
     expect(feedback!.textContent).toContain('Erreur lors de la synchronisation.');
   });
 
+  it('does not revoke a broker account when confirmation is cancelled', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    component.revokeBrokerAccount(brokerAccount('account-1'));
+
+    expect(brokerAccountService.revoke).not.toHaveBeenCalled();
+    expect(component.revokingAccountId()).toBeNull();
+  });
+
+  it('revokes a confirmed broker account and reloads the list', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    component.revokeBrokerAccount(brokerAccount('account-1'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(brokerAccountService.revoke).toHaveBeenCalledWith('account-1');
+    expect(brokerAccountService.list).toHaveBeenCalledTimes(2);
+    expect(component.revokingAccountId()).toBeNull();
+    expect(component.revokeFeedback()).toEqual({
+      kind: 'success',
+      message: 'Le compte broker « Test account » a été révoqué.',
+    });
+  });
+
+  it('shows safe feedback when broker-account revocation fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    brokerAccountService.revoke.mockReturnValue(throwError(() => new Error('callback failed')));
+
+    component.revokeBrokerAccount(brokerAccount('account-1'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.revokingAccountId()).toBeNull();
+    expect(component.revokeFeedback()).toEqual({
+      kind: 'error',
+      message: 'La révocation n’a pas pu être confirmée. Vérifiez l’état du compte.',
+    });
+    expect(component.revokeFeedback()?.message).not.toContain('callback failed');
+  });
+
+  it('prevents concurrent broker-account revocations', () => {
+    const pending = new Subject<void>();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    brokerAccountService.revoke.mockReturnValue(pending);
+    const account = brokerAccount('account-1');
+
+    component.revokeBrokerAccount(account);
+    component.revokeBrokerAccount(account);
+
+    expect(brokerAccountService.revoke).toHaveBeenCalledTimes(1);
+    pending.next();
+    pending.complete();
+  });
+
+  it('does not render a revoke action for an already revoked account', async () => {
+    brokerAccountService.list.mockReturnValue(of([brokerAccount('account-1', 'REVOKED')]));
+    fixture.destroy();
+    fixture = TestBed.createComponent(Accounts);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="revoke-broker-account-button"]'),
+    ).toBeNull();
+  });
+
   it('disables the sync button and shows progress label while syncing', async () => {
     accountService.synchronize.mockReturnValue(new Subject<string>());
 
@@ -295,6 +369,24 @@ describe('Accounts', () => {
     expect(brokerAccountService.createAndConnect).not.toHaveBeenCalled();
     expect(component.connectionFeedback()?.kind).toBe('success');
   });
+
+  function brokerAccount(
+    id: string,
+    connectionStatus: BrokerAccount['connectionStatus'] = 'CONNECTED',
+  ): BrokerAccount {
+    return {
+      id,
+      provider: 'KRAKEN',
+      executionMode: 'LIVE',
+      displayName: 'Test account',
+      externalAccountId: null,
+      connectionStatus,
+      lastValidatedAt: null,
+      lastSynchronizedAt: null,
+      createdAt: '2026-07-29T10:00:00Z',
+      updatedAt: '2026-07-29T10:00:00Z',
+    };
+  }
 
   it('requires explicit risk profile selection for PAPER accounts', () => {
     component.brokerForm.setValue({

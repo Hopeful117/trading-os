@@ -109,6 +109,17 @@
 
 <section class="broker-list">
   <h2>Connexions broker</h2>
+  @if (revokeFeedback(); as feedback) {
+    <p
+      class="connection-message"
+      [class.success]="feedback.kind === 'success'"
+      [class.error]="feedback.kind === 'error'"
+      data-testid="revoke-feedback"
+      role="status"
+    >
+      {{ feedback.message }}
+    </p>
+  }
   @if (accountState | async; as state) {
     @for (brokerAccount of state.brokerAccounts; track brokerAccount.id) {
       <article>
@@ -116,6 +127,17 @@
         <span>{{ brokerAccount.provider }}</span>
         <span data-testid="execution-mode">{{ brokerAccount.executionMode }}</span>
         <span class="status">{{ brokerAccount.connectionStatus }}</span>
+        @if (brokerAccount.connectionStatus !== 'REVOKED') {
+          <button
+            type="button"
+            class="revoke-button"
+            data-testid="revoke-broker-account-button"
+            [disabled]="revokingAccountId() !== null"
+            (click)="revokeBrokerAccount(brokerAccount)"
+          >
+            {{ revokingAccountId() === brokerAccount.id ? 'Révocation…' : 'Révoquer' }}
+          </button>
+        }
       </article>
     } @empty {
       @if (state.accounts.length > 0) {

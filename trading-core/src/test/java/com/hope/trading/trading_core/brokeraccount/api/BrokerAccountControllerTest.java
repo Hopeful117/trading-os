@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.dto.UserDto;
+import feign.FeignException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -19,6 +20,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -124,5 +126,17 @@ class BrokerAccountControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(brokerConnection).revoke(accountId);
+    }
+
+    @Test
+    void revokeFinalizesLocallyWhenBrokerConnectionDoesNotExist() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        doThrow(mock(FeignException.NotFound.class)).when(brokerConnection).revoke(accountId);
+
+        mvc.perform(delete("/api/v1/broker-accounts/{accountId}", accountId).principal(auth(userId)))
+                .andExpect(status().isNoContent());
+
+        verify(service).revoke(userId, accountId);
     }
 }

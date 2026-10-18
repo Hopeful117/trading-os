@@ -29,8 +29,12 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -93,6 +97,83 @@ class BrokerCredentialConnectionServiceTest {
         assertEquals(active, connection.activeCredentialReference());
         assertEquals(BrokerConnectionStatus.CONNECTED, connection.technicalStatus());
         verify(rotator, never()).rotate(any(), any(), any());
+    }
+
+    @Test
+    void revokeRevokesSecretAndNotifiesTradingCore() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID active = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
+        connection.pending(NOW);
+        connection.connected(active, readPermissions(), null, "••••1234", NOW);
+        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
+        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
+
+        service(null).revoke(owner, accountId, "Bearer fake");
+
+        verify(revoker).revoke(new CredentialReference(active), "USER_REQUEST");
+        verify(tradingCore).updateStatus(eq(accountId), argThat(update ->
+                update.status() == BrokerConnectionStatus.REVOKED
+                        && update.credentialReference() == null), eq("Bearer fake"));
+        assertEquals(BrokerConnectionStatus.REVOKED, connection.technicalStatus());
+        assertNull(connection.activeCredentialReference());
+    }
+
+    @Test
+    void revokeWithoutCredentialStillNotifiesTradingCore() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
+        connection.disconnect(NOW);
+        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
+        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
+
+        service(null).revoke(owner, accountId, "Bearer fake");
+
+        verify(revoker, never()).revoke(any(), any());
+        verify(tradingCore).updateStatus(eq(accountId), argThat(update ->
+                update.status() == BrokerConnectionStatus.REVOKED), eq("Bearer fake"));
+    }
+
+    @Test
+    void failedSecretRevocationDoesNotNotifyTradingCore() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID active = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
+        connection.pending(NOW);
+        connection.connected(active, readPermissions(), null, "••••1234", NOW);
+        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
+        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
+        doThrow(new IllegalStateException("secret revoke failed"))
+                .when(revoker).revoke(new CredentialReference(active), "USER_REQUEST");
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> service(null).revoke(owner, accountId, "Bearer fake"));
+
+        verify(tradingCore, never()).updateStatus(any(), any(), any());
+        assertEquals(BrokerConnectionStatus.CONNECTED, connection.technicalStatus());
+    }
+
+    @Test
+    void callbackFailureLeavesRemoteRevokeVisibleAsUnconfirmedLocalState() {
+        UUID owner = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID active = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, owner, BrokerProviderId.KRAKEN, NOW);
+        connection.pending(NOW);
+        connection.connected(active, readPermissions(), null, "••••1234", NOW);
+        when(tradingCore.findOwned(accountId, "Bearer fake")).thenReturn(account(accountId));
+        when(repository.findByBrokerAccountIdAndOwnerId(accountId, owner)).thenReturn(Optional.of(connection));
+        doThrow(new IllegalStateException("callback failed")).when(tradingCore).updateStatus(
+                eq(accountId), any(), eq("Bearer fake"));
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> service(null).revoke(owner, accountId, "Bearer fake"));
+
+        verify(revoker).revoke(new CredentialReference(active), "USER_REQUEST");
+        assertEquals(BrokerConnectionStatus.REVOKED, connection.technicalStatus());
     }
 
     private BrokerCredentialConnectionService service(CredentialValidationResult result) {
