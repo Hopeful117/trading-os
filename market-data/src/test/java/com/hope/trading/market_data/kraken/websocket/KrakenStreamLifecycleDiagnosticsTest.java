@@ -42,4 +42,14 @@ class KrakenStreamLifecycleDiagnosticsTest {
         assertThat(cancel.signalType()).isEqualTo(SignalType.CANCEL);
         assertThat(cancel.exceptionMessage()).isNull();
     }
+
+    @Test
+    void boundsAndSanitizesExceptionMessages() {
+        String message = "line-one\nline-two\t" + "x".repeat(400);
+        var context = KrakenStreamLifecycleDiagnostics.terminationContext(
+                SignalType.ON_ERROR, new IllegalStateException(message), null);
+
+        assertThat(context.exceptionMessage()).hasSize(256);
+        assertThat(context.exceptionMessage()).doesNotContain("\n", "\r", "\t");
+    }
 }

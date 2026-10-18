@@ -13,9 +13,15 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -29,12 +35,13 @@ class OrderBookEvidenceCaptureServiceTest {
     void startsASequenceAndRejectsAProviderGap() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
         when(repository.append(any())).thenReturn(true);
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenReturn(true);
         OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
                 repository, Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isTrue();
         assertThat(service.acceptUpdate(delta(OrderBookDeltaType.UPDATE, 12))).isFalse();
-        verify(repository).invalidateSequence(any(), any(), any());
+        verify(repository).invalidateActiveSequences(any(), anyInt(), any(), any());
     }
 
     @Test
@@ -51,6 +58,7 @@ class OrderBookEvidenceCaptureServiceTest {
     void persistsCheckpointWithSourceRange() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
         when(repository.append(any())).thenReturn(true);
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenReturn(true);
         OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
                 repository, Clock.fixed(NOW, ZoneOffset.UTC));
         OrderBookDelta snapshot = delta(OrderBookDeltaType.SNAPSHOT, 10);
@@ -74,7 +82,8 @@ class OrderBookEvidenceCaptureServiceTest {
     @Test
     void rejectsSnapshotWhenPersistenceFails() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
-        when(repository.append(any())).thenThrow(new IllegalStateException("database unavailable"));
+        when(repository.appendSnapshotAsNewSequence(any(), any()))
+                .thenThrow(new IllegalStateException("database unavailable"));
 
         assertThat(new OrderBookEvidenceCaptureService(repository, Clock.fixed(NOW, ZoneOffset.UTC))
                 .acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isFalse();
@@ -83,22 +92,26 @@ class OrderBookEvidenceCaptureServiceTest {
     @Test
     void invalidatesSequenceAndStopsAfterPersistenceFailure() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
-        when(repository.append(any())).thenReturn(true).thenThrow(new IllegalStateException("database unavailable"));
+        when(repository.appendSnapshotAsNewSequence(any(), any()))
+                .thenReturn(true)
+                .thenThrow(new IllegalStateException("database unavailable"));
+        when(repository.append(any())).thenThrow(new IllegalStateException("database unavailable"));
         OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
                 repository, Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isTrue();
         assertThat(service.acceptUpdate(delta(OrderBookDeltaType.UPDATE, 11))).isFalse();
         assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 12))).isFalse();
-        verify(repository).invalidateSequence(any(), any(), any());
+        verify(repository).invalidateActiveSequences(any(), anyInt(), any(), any());
     }
 
     @Test
     void failsClosedWhenSequenceInvalidationCannotBePersisted() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
         when(repository.append(any())).thenReturn(true);
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenReturn(true);
         doThrow(new IllegalStateException("database unavailable"))
-                .when(repository).invalidateSequence(any(), any(), any());
+                .when(repository).invalidateActiveSequences(any(), anyInt(), any(), any());
         OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
                 repository, Clock.fixed(NOW, ZoneOffset.UTC));
 
@@ -111,6 +124,7 @@ class OrderBookEvidenceCaptureServiceTest {
     void exposesActiveSequenceContextBeforeInvalidation() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
         when(repository.append(any())).thenReturn(true);
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenReturn(true);
         OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
                 repository, Clock.fixed(NOW, ZoneOffset.UTC));
 
@@ -128,6 +142,39 @@ class OrderBookEvidenceCaptureServiceTest {
 
         assertThat(service.diagnosticSnapshot(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25)))
                 .isNull();
+    }
+
+    @Test
+    void serializesConcurrentSnapshotAcceptancePerMarketAndDepth() throws Exception {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger activeCalls = new AtomicInteger();
+        AtomicInteger maxActiveCalls = new AtomicInteger();
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenAnswer(invocation -> {
+            int active = activeCalls.incrementAndGet();
+            maxActiveCalls.accumulateAndGet(active, Math::max);
+            entered.countDown();
+            release.await();
+            activeCalls.decrementAndGet();
+            return true;
+        });
+        OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
+                repository, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<Boolean> first = executor.submit(() -> service.acceptSnapshot(
+                    delta(OrderBookDeltaType.SNAPSHOT, 10)));
+            assertThat(entered.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            Future<Boolean> second = executor.submit(() -> service.acceptSnapshot(
+                    delta(OrderBookDeltaType.SNAPSHOT, 11)));
+            release.countDown();
+
+            assertThat(first.get()).isTrue();
+            assertThat(second.get()).isTrue();
+        }
+
+        assertThat(maxActiveCalls).hasValue(1);
     }
 
     private OrderBookDelta delta(OrderBookDeltaType type, long sequence) {

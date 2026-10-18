@@ -24,6 +24,7 @@ public class OrderBookEvidenceCaptureService {
     private final OrderBookEvidenceRepository repository;
     private final Clock clock;
     private final ConcurrentMap<OrderBookKey, ActiveSequence> sequences = new ConcurrentHashMap<>();
+    private final ConcurrentMap<OrderBookKey, Object> sequenceLocks = new ConcurrentHashMap<>();
     private final Logger log = LoggerFactory.getLogger(getClass());
     private volatile boolean durabilityCompromised;
 
@@ -37,22 +38,29 @@ public class OrderBookEvidenceCaptureService {
             return false;
         }
         OrderBookKey key = new OrderBookKey(delta.marketId(), delta.depth());
-        UUID sequenceId = UUID.randomUUID();
-        Instant knownAt = knownAt();
-        ActiveSequence sequence = new ActiveSequence(sequenceId, delta.marketId(), delta.depth(), 0,
-                delta.providerSequence(), null, null, delta.occurredAt(), knownAt);
-        try {
-            repository.append(toEvidence(delta, sequence, knownAt, OrderBookEvidenceType.SNAPSHOT,
-                    OrderBookEvidenceOrigin.PROVIDER, 0));
-            sequences.put(key, sequence);
-            log.info("ORDER_BOOK_SEQUENCE_STARTED provider={} marketId={} depth={} sequenceId={} "
-                            + "providerSequence={} occurredAt={} knownAt={}",
-                    delta.provider(), delta.marketId(), delta.depth(), sequenceId, delta.providerSequence(),
-                    delta.occurredAt(), knownAt);
-            return true;
-        } catch (RuntimeException exception) {
-            sequences.remove(key);
-            return false;
+        synchronized (sequenceLocks.computeIfAbsent(key, ignored -> new Object())) {
+            UUID sequenceId = UUID.randomUUID();
+            Instant knownAt = knownAt();
+            ActiveSequence sequence = new ActiveSequence(sequenceId, delta.marketId(), delta.depth(), 0,
+                    delta.providerSequence(), null, null, delta.occurredAt(), knownAt);
+            try {
+                boolean persisted = repository.appendSnapshotAsNewSequence(
+                        toEvidence(delta, sequence, knownAt, OrderBookEvidenceType.SNAPSHOT,
+                                OrderBookEvidenceOrigin.PROVIDER, 0), knownAt);
+                if (!persisted) {
+                    sequences.remove(key);
+                    return false;
+                }
+                sequences.put(key, sequence);
+                log.info("ORDER_BOOK_SEQUENCE_STARTED provider={} marketId={} depth={} sequenceId={} "
+                                + "providerSequence={} occurredAt={} knownAt={}",
+                        delta.provider(), delta.marketId(), delta.depth(), sequenceId, delta.providerSequence(),
+                        delta.occurredAt(), knownAt);
+                return true;
+            } catch (RuntimeException exception) {
+                sequences.remove(key);
+                return false;
+            }
         }
     }
 
@@ -61,67 +69,77 @@ public class OrderBookEvidenceCaptureService {
             return false;
         }
         OrderBookKey key = new OrderBookKey(delta.marketId(), delta.depth());
-        ActiveSequence current = sequences.get(key);
-        if (current == null || !isContinuous(current.providerSequence(), delta.providerSequence())) {
-            if (current != null && !tryInvalidate(current.sequenceId(), "provider sequence gap")) {
+        synchronized (sequenceLocks.computeIfAbsent(key, ignored -> new Object())) {
+            ActiveSequence current = sequences.get(key);
+            if (current == null || !isContinuous(current.providerSequence(), delta.providerSequence())) {
+                if (current != null && !tryInvalidate(key, "provider sequence gap")) {
+                    return false;
+                }
+                sequences.remove(key);
                 return false;
             }
-            sequences.remove(key);
-            return false;
-        }
-        long ordinal = current.ordinal() + 1;
-        Instant knownAt = knownAt();
-        try {
-            repository.append(toEvidence(delta,
-                    new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
-                            delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
-                            delta.occurredAt(), knownAt), knownAt,
-                    OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER, ordinal));
-            sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
-                    delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
-                    delta.occurredAt(), knownAt));
-            return true;
-        } catch (RuntimeException exception) {
-            tryInvalidate(current.sequenceId(), "evidence persistence failure");
-            sequences.remove(key);
-            return false;
+            long ordinal = current.ordinal() + 1;
+            Instant knownAt = knownAt();
+            try {
+                repository.append(toEvidence(delta,
+                        new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
+                                delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
+                                delta.occurredAt(), knownAt), knownAt,
+                        OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER, ordinal));
+                sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
+                        delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
+                        delta.occurredAt(), knownAt));
+                return true;
+            } catch (RuntimeException exception) {
+                tryInvalidate(key, "evidence persistence failure");
+                sequences.remove(key);
+                return false;
+            }
         }
     }
 
     public void checkpoint(OrderBookDelta delta, OrderBookSnapshot snapshot) {
         OrderBookKey key = new OrderBookKey(delta.marketId(), delta.depth());
-        ActiveSequence current = sequences.get(key);
-        if (current == null || !shouldCheckpoint(current.lastCheckpoint())) {
-            return;
-        }
-        Instant knownAt = knownAt();
-        OrderBookEvidence checkpoint = new OrderBookEvidence(
-                UUID.randomUUID(), delta.marketId(), delta.provider(), snapshot.symbol(),
-                delta.providerSymbol(), delta.depth(), OrderBookEvidenceType.SNAPSHOT,
-                OrderBookEvidenceOrigin.CHECKPOINT,
-                current.lastCheckpointOrdinal() == null ? 0L : current.lastCheckpointOrdinal(),
-                current.ordinal(), current.sequenceId(), current.ordinal(),
-                current.providerSequence(), snapshot.occurredAt(), knownAt, snapshot.bids(),
-                snapshot.asks(), delta.checksum(), OrderBookEvidenceFingerprint.NORMALIZATION_VERSION, "pending");
-        OrderBookEvidence persistedCheckpoint = withFingerprint(checkpoint);
-        try {
-            boolean inserted = repository.append(persistedCheckpoint);
-            if (!inserted && !repository.containsTrusted(persistedCheckpoint.contentFingerprint())) {
-                tryInvalidate(current.sequenceId(), "checkpoint persistence was not confirmed");
+        synchronized (sequenceLocks.computeIfAbsent(key, ignored -> new Object())) {
+            ActiveSequence current = sequences.get(key);
+            if (current == null || !shouldCheckpoint(current.lastCheckpoint())) {
                 return;
             }
-        } catch (RuntimeException exception) {
-            tryInvalidate(current.sequenceId(), "checkpoint persistence failure");
-            return;
+            Instant knownAt = knownAt();
+            OrderBookEvidence checkpoint = new OrderBookEvidence(
+                    UUID.randomUUID(), delta.marketId(), delta.provider(), snapshot.symbol(),
+                    delta.providerSymbol(), delta.depth(), OrderBookEvidenceType.SNAPSHOT,
+                    OrderBookEvidenceOrigin.CHECKPOINT,
+                    current.lastCheckpointOrdinal() == null ? 0L : current.lastCheckpointOrdinal(),
+                    current.ordinal(), current.sequenceId(), current.ordinal(),
+                    current.providerSequence(), snapshot.occurredAt(), knownAt, snapshot.bids(),
+                    snapshot.asks(), delta.checksum(), OrderBookEvidenceFingerprint.NORMALIZATION_VERSION, "pending");
+            OrderBookEvidence persistedCheckpoint = withFingerprint(checkpoint);
+            try {
+                boolean inserted = repository.append(persistedCheckpoint);
+                if (!inserted && !repository.containsTrusted(persistedCheckpoint.contentFingerprint())) {
+                    tryInvalidate(key, "checkpoint persistence was not confirmed");
+                    return;
+                }
+            } catch (RuntimeException exception) {
+                tryInvalidate(key, "checkpoint persistence failure");
+                return;
+            }
+            sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), current.ordinal(),
+                    current.providerSequence(), knownAt, current.ordinal(), snapshot.occurredAt(), knownAt));
         }
-        sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), current.ordinal(),
-                current.providerSequence(), knownAt, current.ordinal(), snapshot.occurredAt(), knownAt));
     }
 
     public void invalidate(OrderBookKey key) {
-        ActiveSequence current = sequences.get(key);
-        if (current != null && tryInvalidate(current.sequenceId(), "order book state invalidated")) {
-            sequences.remove(key, current);
+        synchronized (sequenceLocks.computeIfAbsent(key, ignored -> new Object())) {
+            ActiveSequence current = sequences.get(key);
+            if (tryInvalidate(key, "order book state invalidated")) {
+                if (current == null) {
+                    sequences.remove(key);
+                } else {
+                    sequences.remove(key, current);
+                }
+            }
         }
     }
 
@@ -132,14 +150,14 @@ public class OrderBookEvidenceCaptureService {
                 current.lastKnownAt());
     }
 
-    private boolean tryInvalidate(UUID sequenceId, String reason) {
+    private boolean tryInvalidate(OrderBookKey key, String reason) {
         try {
-            repository.invalidateSequence(sequenceId, reason, clock.instant());
+            repository.invalidateActiveSequences(key.marketId(), key.depth(), reason, clock.instant());
             return true;
         } catch (RuntimeException ignored) {
             durabilityCompromised = true;
-            log.error("Unable to persist order-book sequence invalidation sequenceId={} reason={}",
-                    sequenceId, reason, ignored);
+            log.error("Unable to persist order-book sequence invalidation key={} reason={}",
+                    key, reason, ignored);
             return false;
         }
     }

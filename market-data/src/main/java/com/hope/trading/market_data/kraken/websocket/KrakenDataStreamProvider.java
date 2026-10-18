@@ -83,6 +83,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ConcurrentMap<Integer, AtomicInteger>>
             orderBookDepthSubscriptionCounts = new ConcurrentHashMap<>();
+    private final ConcurrentMap<OrderBookKey, Object> orderBookLifecycleLocks =
+            new ConcurrentHashMap<>();
     private final Set<String> tradeSymbols =
             ConcurrentHashMap.newKeySet();
     private final ConcurrentMap<String, AtomicInteger> tradeSubscriptionCounts =
@@ -92,6 +94,15 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final AtomicReference<WebSocketSession> futuresSession = new AtomicReference<>();
     private final AtomicReference<Disposable> futuresConnectionSubscription = new AtomicReference<>();
     private final ConcurrentMap<Product, UUID> connectionIds = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Product, AtomicInteger> recoveryAttempts = new ConcurrentHashMap<>();
+    private final Set<Product> recoveryInFlight = ConcurrentHashMap.newKeySet();
+    private final Set<Product> intentionalDisconnects = ConcurrentHashMap.newKeySet();
+    private final Set<Product> unsubscribeInFlight = ConcurrentHashMap.newKeySet();
+    private final Set<Product> recoveryPending = ConcurrentHashMap.newKeySet();
+    private final ConcurrentMap<Product, Sinks.One<Void>> recoverySnapshotSignals =
+            new ConcurrentHashMap<>();
+    private final ConcurrentMap<Product, Disposable> recoverySubscriptions =
+            new ConcurrentHashMap<>();
     private final Sinks.Many<String> outboundMessages =
             Sinks.many()
                     .multicast()
@@ -102,12 +113,18 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final Sinks.Many<String> futuresOutboundMessages =
             Sinks.many().multicast().onBackpressureBuffer(OUTBOUND_BUFFER_SIZE, false);
     private static final int OUTBOUND_BUFFER_SIZE = 256;
+    private static final int MAX_RECOVERY_ATTEMPTS = 3;
+    private static final Duration RECOVERY_SNAPSHOT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration[] RECOVERY_DELAYS = {
+            Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofSeconds(15)
+    };
     private static final String TICKER_FEED = "ticker";
     private static final String BOOK_SNAPSHOT_FEED = "book_snapshot";
     private static final String TRADE_FEED = "trade";
     private static final String QTY_FIELD = "qty";
     private static final String PRODUCT_ID_FIELD = "product_id";
     private static final String PRICE_FIELD = "price";
+    private static final String METHOD_FIELD = "method";
 
     private final TickerEventPublisher tickerEventPublisher;
     private final OhlcEventPublisher ohlcEventPublisher;
@@ -190,6 +207,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     }
 
     private synchronized Mono<Void> connect(Product product) {
+        intentionalDisconnects.remove(product);
         if (session(product) != null && session(product).isOpen()) return Mono.empty();
         if (subscription(product) == null || subscription(product).isDisposed()) {
             UUID connectionId = UUID.randomUUID();
@@ -216,6 +234,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                         setSubscription(product, null);
                         connectionIds.remove(product, connectionId);
                         lifecycleDiagnostics.cleanupCompleted(connectionId, product.name());
+                        scheduleRecovery(product);
                     }).subscribe());
         }
         return waitUntilConnected(product)
@@ -224,6 +243,10 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
     @Override
     public Mono<Void> disconnect() {
+            intentionalDisconnects.add(Product.SPOT);
+            intentionalDisconnects.add(Product.FUTURES);
+            recoverySubscriptions.values().forEach(Disposable::dispose);
+            recoverySubscriptions.clear();
             WebSocketSession currentSession = this.session.get();
             Mono<Void> closeSpot = currentSession == null || !currentSession.isOpen()
                     ? Mono.empty()
@@ -271,6 +294,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             MarketStreamRequest request
     ) {
         validateProviderSymbols(markets);
+        Set<Product> products = products(markets);
+        unsubscribeInFlight.addAll(products);
         List<Market> remoteUnsubscribeMarkets = markets == null
                 ? List.of()
                 : markets.stream()
@@ -280,7 +305,14 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         return sendByProduct(remoteUnsubscribeMarkets, request, KrakenSubscriptionMethod.UNSUBSCRIBE)
                 .doOnSuccess(ignored ->
                 unregisterMarkets(markets, request)
-        );
+        ).doFinally(ignored -> products.forEach(product -> {
+            unsubscribeInFlight.remove(product);
+            if (recoveryPending.remove(product)
+                    && !intentionalDisconnects.contains(product)
+                    && hasActiveSubscriptions(product)) {
+                scheduleRecovery(product);
+            }
+        }));
     }
     private Mono<Void> sendByProduct(List<Market> markets, MarketStreamRequest request,
                                      KrakenSubscriptionMethod method) {
@@ -293,7 +325,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     List<String> symbols = extractSymbols(family, product);
                     if (symbols.isEmpty()) return Mono.empty();
                     boolean alreadyConnected = session(product) != null && session(product).isOpen();
-                    Mono<Void> connection = alreadyConnected ? Mono.empty() : connect(product);
+                    Mono<Void> connection = alreadyConnected || method == KrakenSubscriptionMethod.UNSUBSCRIBE
+                            ? Mono.empty() : connect(product);
                     return connection.then(alreadyConnected
                             ? sendSubscriptionRequest(method, resolveChannel(request),
                             symbols, request, product)
@@ -645,36 +678,41 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
     private void handleOrderBookDelta(OrderBookDelta delta, KrakenMessageType messageType,
                                       Product product, Market market, int depth) {
-        boolean capture = shouldCaptureEvidence(product, market, depth);
-        if (messageType == KrakenMessageType.SNAPSHOT) {
-            if (!capture || orderBookEvidenceCaptureService.acceptSnapshot(delta)) {
-                if (capture) {
-                    lifecycleDiagnostics.snapshotAccepted(connectionIds.get(product),
-                            orderBookEvidenceCaptureService.diagnosticSnapshot(
-                                    new OrderBookKey(market.getMarketId(), depth)));
+        OrderBookKey key = new OrderBookKey(market.getMarketId(), depth);
+        synchronized (orderBookLifecycleLocks.computeIfAbsent(key, ignored -> new Object())) {
+            boolean capture = shouldCaptureEvidence(product, market, depth);
+            if (messageType == KrakenMessageType.SNAPSHOT) {
+                if (!capture || orderBookEvidenceCaptureService.acceptSnapshot(delta)) {
+                    if (capture) {
+                        lifecycleDiagnostics.snapshotAccepted(connectionIds.get(product),
+                                orderBookEvidenceCaptureService.diagnosticSnapshot(key));
+                        markRecoverySucceeded(product);
+                    }
+                    orderBookEventPublisher.publish(orderBookStateService.initialize(delta));
                 }
-                orderBookEventPublisher.publish(orderBookStateService.initialize(delta));
+                return;
             }
-            return;
-        }
-        if (capture && !orderBookEvidenceCaptureService.acceptUpdate(delta)) {
-            clearOrderBook(market, depth, true);
-            return;
-        }
-        orderBookStateService.update(delta).ifPresent(snapshot -> {
-            if (capture) {
-                orderBookEvidenceCaptureService.checkpoint(delta, snapshot);
+            if (capture && !orderBookEvidenceCaptureService.acceptUpdate(delta)) {
+                clearOrderBook(market, depth, true);
+                return;
             }
-            orderBookEventPublisher.publish(snapshot);
-        });
+            orderBookStateService.update(delta).ifPresent(snapshot -> {
+                if (capture) {
+                    orderBookEvidenceCaptureService.checkpoint(delta, snapshot);
+                }
+                orderBookEventPublisher.publish(snapshot);
+            });
+        }
     }
 
     private void clearOrderBook(Market market, int depth, boolean invalidateEvidence) {
         OrderBookKey key = new OrderBookKey(market.getMarketId(), depth);
-        orderBookStateService.clear(key);
-        orderBookEventPublisher.clear(key);
-        if (invalidateEvidence) {
-            orderBookEvidenceCaptureService.invalidate(key);
+        synchronized (orderBookLifecycleLocks.computeIfAbsent(key, ignored -> new Object())) {
+            orderBookStateService.clear(key);
+            orderBookEventPublisher.clear(key);
+            if (invalidateEvidence && orderBookEvidenceCaptureService != null) {
+                orderBookEvidenceCaptureService.invalidate(key);
+            }
         }
     }
 
@@ -848,11 +886,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             depths.forEach(depth -> {
                 OrderBookKey key =
                         new OrderBookKey(market.getMarketId(), depth);
-                orderBookStateService.clear(key);
-                orderBookEventPublisher.clear(key);
-                if (orderBookEvidenceCaptureService != null) {
-                    orderBookEvidenceCaptureService.invalidate(key);
-                }
+                clearOrderBook(market, depth, true);
             });
         });
         tradeSymbols.forEach(symbol -> {
@@ -866,6 +900,120 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             recentTradesStateService.clear(market.getMarketId());
             recentTradesEventPublisher.clear(market.getMarketId());
         });
+    }
+
+    private void scheduleRecovery(Product product) {
+        if (product != Product.FUTURES) {
+            return;
+        }
+        if (intentionalDisconnects.contains(product)) {
+            lifecycleDiagnostics.recoverySuppressed(product.name(), "normal shutdown");
+            return;
+        }
+        if (unsubscribeInFlight.contains(product)) {
+            recoveryPending.add(product);
+            lifecycleDiagnostics.recoverySuppressed(product.name(), "unsubscribe in flight");
+            return;
+        }
+        if (!hasActiveSubscriptions(product) || !recoveryInFlight.add(product)) {
+            return;
+        }
+        AtomicInteger attempts = recoveryAttempts.computeIfAbsent(product, ignored -> new AtomicInteger());
+        int attempt = attempts.incrementAndGet();
+        if (attempt > MAX_RECOVERY_ATTEMPTS) {
+            recoveryInFlight.remove(product);
+            lifecycleDiagnostics.recoveryExhausted(product.name(), attempt - 1);
+            return;
+        }
+        Duration delay = RECOVERY_DELAYS[attempt - 1];
+        recoverySnapshotSignals.put(product, Sinks.one());
+        lifecycleDiagnostics.recoveryScheduled(product.name(), attempt, delay);
+        Disposable recoverySubscription = Mono.delay(delay)
+                .doOnNext(ignored -> lifecycleDiagnostics.recoveryStarted(product.name(), attempt))
+                .flatMap(ignored -> {
+                    if (intentionalDisconnects.contains(product)) {
+                        recoveryAttempts.remove(product);
+                        recoveryInFlight.remove(product);
+                        recoverySnapshotSignals.remove(product);
+                        lifecycleDiagnostics.recoverySuppressed(product.name(), "normal shutdown");
+                        return Mono.empty();
+                    }
+                    if (unsubscribeInFlight.contains(product)) {
+                        recoveryPending.add(product);
+                        recoveryInFlight.remove(product);
+                        recoverySnapshotSignals.remove(product);
+                        lifecycleDiagnostics.recoverySuppressed(product.name(), "unsubscribe in flight");
+                        return Mono.empty();
+                    }
+                    if (!hasActiveSubscriptions(product)) {
+                        recoveryAttempts.remove(product);
+                        recoveryInFlight.remove(product);
+                        recoverySnapshotSignals.remove(product);
+                        return Mono.empty();
+                    }
+                    return connect(product).then(awaitFreshSnapshot(product));
+                })
+                .doOnSuccess(ignored -> {
+                    if (!requiresFreshSnapshot(product)) {
+                        markRecoverySucceeded(product);
+                    }
+                })
+                .doOnError(error -> {
+                    terminateRecoveryConnection(product);
+                    recoverySnapshotSignals.remove(product);
+                    recoveryInFlight.remove(product);
+                    lifecycleDiagnostics.recoveryFailed(product.name(), attempt, error);
+                    scheduleRecovery(product);
+                })
+                .subscribe();
+        recoverySubscriptions.put(product, recoverySubscription);
+    }
+
+    private void terminateRecoveryConnection(Product product) {
+        Disposable current = subscription(product);
+        if (current != null && !current.isDisposed()) {
+            current.dispose();
+        }
+    }
+
+    private void markRecoverySucceeded(Product product) {
+        Sinks.One<Void> signal = recoverySnapshotSignals.remove(product);
+        if (signal != null) {
+            int attempt = recoveryAttempts.get(product).get();
+            signal.tryEmitEmpty();
+            recoveryAttempts.remove(product);
+            recoveryInFlight.remove(product);
+            lifecycleDiagnostics.recoverySucceeded(product.name(), attempt);
+        }
+    }
+
+    private Mono<Void> awaitFreshSnapshot(Product product) {
+        if (!requiresFreshSnapshot(product)) {
+            return Mono.empty();
+        }
+        Sinks.One<Void> signal = recoverySnapshotSignals.get(product);
+        if (signal == null) {
+            return Mono.error(new IllegalStateException("Recovery snapshot signal is unavailable"));
+        }
+        return signal.asMono().timeout(RECOVERY_SNAPSHOT_TIMEOUT).then();
+    }
+
+    private boolean requiresFreshSnapshot(Product product) {
+        return activeSubscriptions.values().stream()
+                .filter(subscription -> product(subscription.market()) == product)
+                .anyMatch(subscription -> subscription.request().parameters() != null
+                        && shouldCaptureEvidence(product, subscription.market(),
+                        subscription.request().parameters().depth()));
+    }
+
+    private boolean hasActiveSubscriptions(Product product) {
+        return activeSubscriptions.values().stream()
+                .anyMatch(subscription -> product(subscription.market()) == product);
+    }
+
+    private Set<Product> products(List<Market> markets) {
+        if (markets == null) return Set.of();
+        return markets.stream().filter(Objects::nonNull).map(this::product).collect(Collectors.toSet());
     }
 
     private List<OrderBookEvidenceCaptureService.SequenceDiagnostics> activeSequenceDiagnostics(Product product) {
@@ -890,14 +1038,14 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             if (success) {
                 log.info(
                         "Kraken control message succeeded method={}",
-                        root.path("method").asString()
+                        root.path(METHOD_FIELD).asString()
                 );
                 lifecycleDiagnostics.subscriptionConfirmed(connectionIds.get(product), product.name(),
-                        root.path("method").asString());
+                        root.path(METHOD_FIELD).asString());
             } else {
                 log.warn(
                         "Kraken control message failed method={} error={}",
-                        root.path("method").asString(),
+                        root.path(METHOD_FIELD).asString(),
                         root.path("error").asString()
                 );
             }
