@@ -18,6 +18,8 @@ describe('Accounts', () => {
     eligibleRiskProfiles: ReturnType<typeof vi.fn>;
     createPaper: ReturnType<typeof vi.fn>;
     createAndConnect: ReturnType<typeof vi.fn>;
+    connectExisting: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
     revoke: ReturnType<typeof vi.fn>;
   };
   let accounts: BehaviorSubject<Account[]>;
@@ -33,6 +35,8 @@ describe('Accounts', () => {
       eligibleRiskProfiles: vi.fn(() => of([])),
       createPaper: vi.fn(() => of({ executionMode: 'PAPER' })),
       createAndConnect: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
+      connectExisting: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
+      disconnect: vi.fn(() => of(brokerAccount('account-1', 'DISCONNECTED'))),
       revoke: vi.fn(() => of(void 0)),
     };
     await TestBed.configureTestingModule({
@@ -217,6 +221,111 @@ describe('Accounts', () => {
     component.connectBroker();
 
     expect(brokerAccountService.createAndConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers an existing LIVE account through the existing-account endpoint', async () => {
+    const account = brokerAccount('account-1', 'DISCONNECTED');
+
+    component.startRecovery(account);
+    component.brokerForm.controls.apiKey.setValue('a'.repeat(8));
+    component.brokerForm.controls.apiSecret.setValue('b'.repeat(16));
+    component.brokerForm.controls.passphrase.setValue('passphrase');
+
+    component.connectBroker();
+    await fixture.whenStable();
+
+    expect(brokerAccountService.connectExisting).toHaveBeenCalledWith('account-1', {
+      apiKey: 'a'.repeat(8),
+      apiSecret: 'b'.repeat(16),
+      passphrase: 'passphrase',
+    });
+    expect(brokerAccountService.createAndConnect).not.toHaveBeenCalled();
+    expect(component.recoveryAccount()).toBeNull();
+    expect(component.brokerForm.controls.apiSecret.value).toBe('');
+    expect(component.connectionFeedback()?.kind).toBe('success');
+  });
+
+  it('cancels existing-account recovery without submitting credentials', () => {
+    const account = brokerAccount('account-1', 'INVALID_CREDENTIALS');
+
+    component.startRecovery(account);
+    component.brokerForm.controls.apiKey.setValue('a'.repeat(8));
+    component.cancelRecovery();
+
+    expect(brokerAccountService.connectExisting).not.toHaveBeenCalled();
+    expect(component.recoveryAccount()).toBeNull();
+    expect(component.brokerForm.controls.apiKey.value).toBe('');
+  });
+
+  it('clears sensitive fields when existing-account recovery fails', async () => {
+    brokerAccountService.connectExisting.mockReturnValue(throwError(() => new Error('fail')));
+    component.startRecovery(brokerAccount('account-1', 'DISCONNECTED'));
+    component.brokerForm.controls.apiKey.setValue('a'.repeat(8));
+    component.brokerForm.controls.apiSecret.setValue('b'.repeat(16));
+    component.brokerForm.controls.passphrase.setValue('secret');
+
+    component.connectBroker();
+    await fixture.whenStable();
+
+    expect(component.brokerForm.controls.apiKey.value).toBe('');
+    expect(component.brokerForm.controls.apiSecret.value).toBe('');
+    expect(component.brokerForm.controls.passphrase.value).toBe('');
+    expect(component.connectionFeedback()?.kind).toBe('error');
+  });
+
+  it('disconnects a connected account only after confirmation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const account = brokerAccount('account-1', 'CONNECTED');
+
+    component.disconnectBrokerAccount(account);
+    await fixture.whenStable();
+
+    expect(brokerAccountService.disconnect).toHaveBeenCalledWith('account-1');
+    expect(component.disconnectingAccountId()).toBeNull();
+    expect(component.disconnectFeedback()).toEqual({
+      kind: 'success',
+      message: 'Le compte broker « Test account » a été déconnecté.',
+    });
+  });
+
+  it('does not expose recovery or disconnect actions for revoked accounts', () => {
+    const account = brokerAccount('account-1', 'REVOKED');
+
+    expect(component.canRecover(account)).toBe(false);
+    component.startRecovery(account);
+    component.disconnectBrokerAccount(account);
+
+    expect(brokerAccountService.connectExisting).not.toHaveBeenCalled();
+    expect(brokerAccountService.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('does not replace an active recovery form when another account is selected', () => {
+    const first = brokerAccount('account-1', 'DISCONNECTED');
+    const second = brokerAccount('account-2', 'INVALID_CREDENTIALS');
+
+    component.startRecovery(first);
+    component.brokerForm.controls.apiKey.setValue('a'.repeat(8));
+    component.startRecovery(second);
+
+    expect(component.recoveryAccount()?.id).toBe('account-1');
+    expect(component.brokerForm.controls.apiKey.value).toBe('a'.repeat(8));
+  });
+
+  it('blocks conflicting lifecycle operations while one operation is pending', () => {
+    const pending = new Subject<void>();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    brokerAccountService.disconnect.mockReturnValue(pending);
+    const account = brokerAccount('account-1', 'CONNECTED');
+
+    component.disconnectBrokerAccount(account);
+    component.revokeBrokerAccount(account);
+    component.startRecovery(account);
+
+    expect(brokerAccountService.disconnect).toHaveBeenCalledTimes(1);
+    expect(brokerAccountService.revoke).not.toHaveBeenCalled();
+    expect(component.recoveryAccount()).toBeNull();
+    pending.next();
+    pending.complete();
   });
 
   it('shows visible success feedback and reloads accounts on sync success', async () => {

@@ -13,6 +13,7 @@ import com.hope.trading.broker_service.credential.domain.CredentialValidationOut
 import com.hope.trading.broker_service.credential.domain.CredentialValidationResult;
 import com.hope.trading.broker_service.secret.application.SecretRevoker;
 import com.hope.trading.broker_service.secret.application.SecretRotator;
+import com.hope.trading.broker_service.secret.application.SecretRevokedException;
 import com.hope.trading.broker_service.secret.application.SecretWriter;
 import com.hope.trading.broker_service.secret.domain.CredentialReference;
 import com.hope.trading.broker_service.secret.domain.NewSecret;
@@ -64,11 +65,15 @@ public class BrokerCredentialConnectionService {
 
     @Transactional
     public CredentialValidationResponse connect(UUID ownerId, UUID accountId, CredentialMaterial credentials,
-                                                String authorization) {
+                                                 String authorization) {
         TradingCoreBrokerAccountClient.BrokerAccountContract account = tradingCore.findOwned(accountId, authorization);
+        if (account.connectionStatus() == BrokerConnectionStatus.REVOKED) {
+            throw new BrokerConnectionRevokedException();
+        }
         BrokerConnection connection = connectionRepository.findByBrokerAccountId(accountId)
                 .orElseGet(() -> BrokerConnection.create(accountId, ownerId, account.provider(), clock.instant()));
         requireOwner(connection, ownerId);
+        ensureNotRevoked(connection);
         connection.pending(clock.instant());
         connectionRepository.save(connection);
         callback(connection, BrokerConnectionStatus.PENDING_VALIDATION, null, null, clock.instant(), authorization);
@@ -77,14 +82,14 @@ public class BrokerCredentialConnectionService {
         if (validation.outcome() != CredentialValidationOutcome.VALID) {
             applyFailure(connection, validation);
             connectionRepository.save(connection);
-            callback(connection, connection.technicalStatus(), null, null, validation.validatedAt(), authorization);
+            callback(connection, connection.technicalStatus(), connection.activeCredentialReference(),
+                    connection.externalAccountId(), validation.validatedAt(), authorization);
             return response(connection, validation);
         }
 
         String hint = credentials.apiKeyHint();
         try (NewSecret secret = serialize(credentials)) {
-            CredentialReference reference = secretWriter.write(secret,
-                    new SecretMetadata(accountId, account.provider(), hint));
+            CredentialReference reference = writeOrRotate(connection, accountId, account.provider(), hint, secret);
             connection.connected(reference.value(), validation.detectedPermissions(),
                     validation.externalAccountId(), hint, validation.validatedAt());
             connectionRepository.save(connection);
@@ -97,8 +102,13 @@ public class BrokerCredentialConnectionService {
     @Transactional
     public CredentialValidationResponse rotate(UUID ownerId, UUID accountId, CredentialMaterial replacement,
                                                String authorization) {
-        tradingCore.findOwned(accountId, authorization);
+        TradingCoreBrokerAccountClient.BrokerAccountContract account = tradingCore.findOwned(accountId, authorization);
+        ensureNotRevoked(account);
         BrokerConnection connection = requireConnection(ownerId, accountId);
+        ensureNotRevoked(connection);
+        if (connection.activeCredentialReference() == null) {
+            throw new SecretRevokedException();
+        }
         CredentialValidationResult validation = validator(connection.provider()).validate(replacement);
         if (validation.outcome() != CredentialValidationOutcome.VALID) {
             // ADR-024: a failed rotation must not alter the active version or connected state.
@@ -120,8 +130,10 @@ public class BrokerCredentialConnectionService {
 
     @Transactional
     public CredentialValidationResponse validate(UUID ownerId, UUID accountId, String authorization) {
-        tradingCore.findOwned(accountId, authorization);
+        TradingCoreBrokerAccountClient.BrokerAccountContract account = tradingCore.findOwned(accountId, authorization);
+        ensureNotRevoked(account);
         BrokerConnection connection = requireConnection(ownerId, accountId);
+        ensureNotRevoked(connection);
         try (CredentialMaterial material = credentialSource.resolve(
                 new CredentialReference(connection.activeCredentialReference()))) {
             CredentialValidationResult validation = validator(connection.provider()).validate(material);
@@ -159,8 +171,10 @@ public class BrokerCredentialConnectionService {
 
     @Transactional
     public void disconnect(UUID ownerId, UUID accountId, String authorization) {
-        tradingCore.findOwned(accountId, authorization);
+        TradingCoreBrokerAccountClient.BrokerAccountContract account = tradingCore.findOwned(accountId, authorization);
+        ensureNotRevoked(account);
         BrokerConnection connection = requireConnection(ownerId, accountId);
+        ensureNotRevoked(connection);
         connection.disconnect(clock.instant());
         callback(connection, BrokerConnectionStatus.DISCONNECTED, connection.activeCredentialReference(),
                 connection.externalAccountId(), clock.instant(), authorization);
@@ -173,6 +187,27 @@ public class BrokerCredentialConnectionService {
 
     private void requireOwner(BrokerConnection connection, UUID ownerId) {
         if (!connection.ownerId().equals(ownerId)) throw new BrokerAccountOwnershipException();
+    }
+
+    private void ensureNotRevoked(BrokerConnection connection) {
+        if (connection.technicalStatus() == BrokerConnectionStatus.REVOKED) {
+            throw new BrokerConnectionRevokedException();
+        }
+    }
+
+    private void ensureNotRevoked(TradingCoreBrokerAccountClient.BrokerAccountContract account) {
+        if (account.connectionStatus() == BrokerConnectionStatus.REVOKED) {
+            throw new BrokerConnectionRevokedException();
+        }
+    }
+
+    private CredentialReference writeOrRotate(BrokerConnection connection, UUID accountId,
+                                              BrokerProviderId provider, String hint, NewSecret secret) {
+        SecretMetadata metadata = new SecretMetadata(accountId, provider, hint);
+        if (connection.activeCredentialReference() == null) {
+            return secretWriter.write(secret, metadata);
+        }
+        return secretRotator.rotate(new CredentialReference(connection.activeCredentialReference()), secret, metadata);
     }
 
     private BrokerCredentialValidator validator(BrokerProviderId provider) {

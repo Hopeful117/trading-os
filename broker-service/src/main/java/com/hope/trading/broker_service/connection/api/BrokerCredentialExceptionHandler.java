@@ -2,6 +2,7 @@ package com.hope.trading.broker_service.connection.api;
 
 import com.hope.trading.broker_service.connection.application.BrokerAccountOwnershipException;
 import com.hope.trading.broker_service.connection.application.BrokerConnectionNotFoundException;
+import com.hope.trading.broker_service.connection.application.BrokerConnectionRevokedException;
 import com.hope.trading.broker_service.connection.application.CredentialRateLimitExceededException;
 import com.hope.trading.broker_service.secret.application.ConcurrentCredentialRotationException;
 import com.hope.trading.broker_service.secret.application.SecretDecryptionException;
@@ -26,7 +27,8 @@ public class BrokerCredentialExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "Credential payload has an invalid format");
     }
 
-    @ExceptionHandler({ConcurrentCredentialRotationException.class, SecretRevokedException.class})
+    @ExceptionHandler({ConcurrentCredentialRotationException.class, SecretRevokedException.class,
+            BrokerConnectionRevokedException.class})
     ResponseEntity<ProblemDetail> conflict(RuntimeException exception) {
         return response(HttpStatus.CONFLICT, exception.getMessage());
     }

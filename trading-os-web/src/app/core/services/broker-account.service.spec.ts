@@ -129,6 +129,21 @@ describe('BrokerAccountService', () => {
     });
   });
 
+  it('connects credentials for an existing account', () => {
+    service.connectExisting('acc-1', { apiKey: 'new-key', apiSecret: 'new-secret' }).subscribe();
+
+    const req = http.expectOne('/api/v1/broker-accounts/acc-1/credentials');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ apiKey: 'new-key', apiSecret: 'new-secret' });
+    req.flush({
+      outcome: 'VALID',
+      connectionStatus: 'CONNECTED',
+      missingPermissions: [],
+      validatedAt: '2026-07-29T10:00:00Z',
+      safeMessage: 'ok',
+    });
+  });
+
   it('disconnect terminates the broker connection', () => {
     service.disconnect('acc-1').subscribe();
 
