@@ -135,9 +135,7 @@
             [disabled]="revokingAccountId() !== null"
             (click)="revokeBrokerAccount(brokerAccount)"
           >
-            {{
-              revokingAccountId() === brokerAccount.id ? 'Révocation…' : 'Révoquer'
-            }}
+            {{ revokingAccountId() === brokerAccount.id ? 'Révocation…' : 'Révoquer' }}
           </button>
         }
       </article>

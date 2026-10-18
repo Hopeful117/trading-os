@@ -260,12 +260,10 @@ export class Accounts {
   }
 
   private loadBrokerAccounts(): void {
-    this.brokerAccounts = this.brokerAccountService
-      .list()
-      .pipe(
-        map((accounts) => accounts.filter((account) => account.connectionStatus !== 'REVOKED')),
-        shareReplay({ bufferSize: 1, refCount: true }),
-      );
+    this.brokerAccounts = this.brokerAccountService.list().pipe(
+      map((accounts) => accounts.filter((account) => account.connectionStatus !== 'REVOKED')),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
     this.refreshAccountState();
   }
 

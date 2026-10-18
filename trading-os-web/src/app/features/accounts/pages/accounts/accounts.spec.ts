@@ -310,8 +310,9 @@ describe('Accounts', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="revoke-broker-account-button"]'))
-      .toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="revoke-broker-account-button"]'),
+    ).toBeNull();
   });
 
   it('disables the sync button and shows progress label while syncing', async () => {
