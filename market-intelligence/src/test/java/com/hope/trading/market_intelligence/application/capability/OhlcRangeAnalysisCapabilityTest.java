@@ -52,6 +52,14 @@ class OhlcRangeAnalysisCapabilityTest {
         assertThat(finding.metrics().get("simpleReturn")).isEqualByComparingTo("0.15");
     }
 
+    @Test
+    void supportsStrictPassiveExecution() {
+        assertThat(new OhlcRangeAnalysisCapability().supportedModes())
+                .containsExactlyInAnyOrder(
+                        AnalysisExecutionMode.PASSIVE,
+                        AnalysisExecutionMode.ACTIVE);
+    }
+
     private OhlcPoint candle(String open, String high, String low, String close) {
         Instant now = Instant.now();
         return new OhlcPoint(

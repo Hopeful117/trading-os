@@ -101,7 +101,7 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
 
     @Override
     public Set<AnalysisExecutionMode> supportedModes() {
-        return Set.of(AnalysisExecutionMode.ACTIVE);
+        return Set.of(AnalysisExecutionMode.PASSIVE, AnalysisExecutionMode.ACTIVE);
     }
 
     @Override

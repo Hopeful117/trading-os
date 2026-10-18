@@ -99,6 +99,25 @@ class FeatureSnapshotProjectionServiceTest {
         verify(snapshots).saveIfAbsent(any());
     }
 
+    @Test
+    void acceptsEvidenceEndingBeforeTheEvaluationCutoff() {
+        AnalysisExecutionRepository executions = mock(AnalysisExecutionRepository.class);
+        ArtifactPersistencePort artifacts = mock(ArtifactPersistencePort.class);
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(executions.findById(EXECUTION_ID)).thenReturn(java.util.Optional.of(execution()));
+        when(artifacts.find(any(), eq(ProductionArtifactTypes.OHLC_RANGE_ANALYSIS), any())).thenReturn(
+                List.of(artifact(EXECUTION_ID, CUTOFF.minusSeconds(900), CONTEXT_FINGERPRINT, true)));
+        when(artifacts.find(any(), eq(ProductionArtifactTypes.MARKET_STRUCTURE), any())).thenReturn(List.of());
+        when(artifacts.find(any(), eq(ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT), any())).thenReturn(List.of());
+
+        FeatureSnapshotProjectionService service = new FeatureSnapshotProjectionService(
+                executions, artifacts, snapshots, Clock.fixed(CUTOFF, ZoneOffset.UTC));
+
+        service.project(EXECUTION_ID);
+
+        verify(snapshots).saveIfAbsent(any());
+    }
+
     private AnalysisExecution execution() {
         return AnalysisExecution.restore(
                 EXECUTION_ID, new IdempotencyKey("feature-projection-test"), AnalysisExecutionStatus.COMPLETED,

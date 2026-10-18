@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.application.strategy;
 
+import com.hope.trading.market_intelligence.application.capability.OhlcRangeAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.SpreadAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
 import com.hope.trading.market_intelligence.domain.*;
@@ -38,7 +39,9 @@ public class PassiveAnalysisStrategy implements AnalysisExecutionStrategy {
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT)
                 );
         List<String> capabilities = strictObserved
-                ? List.of(TrendContextAnalysisCapability.CAPABILITY_ID)
+                ? List.of(
+                        TrendContextAnalysisCapability.CAPABILITY_ID,
+                        OhlcRangeAnalysisCapability.CAPABILITY_ID)
                 : List.of(
                         TrendContextAnalysisCapability.CAPABILITY_ID,
                         SpreadAnalysisCapability.CAPABILITY_ID
