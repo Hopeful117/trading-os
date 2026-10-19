@@ -99,7 +99,7 @@ class KrakenDataProviderDispatchTest {
 
         @Override
         public Mono<Void> connect(
-                URI uri, Function<WebSocketSession, Mono<Void>> sessionHandler) {
+                UUID connectionId, URI uri, Function<WebSocketSession, Mono<Void>> sessionHandler) {
             this.lastUri = uri;
             this.handler = sessionHandler;
             return sessionHandler.apply(session);

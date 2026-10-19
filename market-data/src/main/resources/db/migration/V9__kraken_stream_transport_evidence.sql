@@ -1,0 +1,13 @@
+ALTER TABLE kraken_stream_termination ADD COLUMN netty_channel_id VARCHAR(128);
+ALTER TABLE kraken_stream_termination ADD COLUMN websocket_close_observed BOOLEAN;
+ALTER TABLE kraken_stream_termination ADD COLUMN websocket_close_code INTEGER;
+ALTER TABLE kraken_stream_termination ADD COLUMN websocket_close_reason VARCHAR(256);
+ALTER TABLE kraken_stream_termination ADD COLUMN channel_inactive_observed BOOLEAN;
+ALTER TABLE kraken_stream_termination ADD COLUMN channel_inactive_at TIMESTAMP(6) WITH TIME ZONE;
+ALTER TABLE kraken_stream_termination ADD COLUMN input_shutdown_observed BOOLEAN;
+ALTER TABLE kraken_stream_termination ADD COLUMN tls_close_observed BOOLEAN;
+ALTER TABLE kraken_stream_termination ADD COLUMN tls_close_succeeded BOOLEAN;
+ALTER TABLE kraken_stream_termination ADD COLUMN tls_exception_class VARCHAR(255);
+ALTER TABLE kraken_stream_termination ADD COLUMN transport_exception_observed BOOLEAN;
+ALTER TABLE kraken_stream_termination ADD COLUMN transport_exception_class VARCHAR(255);
+ALTER TABLE kraken_stream_termination ADD COLUMN transport_root_cause_class VARCHAR(255);

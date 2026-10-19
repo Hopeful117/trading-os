@@ -4,6 +4,7 @@ import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -19,5 +20,18 @@ public interface KrakenStreamConnector {
      * Opens a WebSocket connection and hands the established session to the
      * given handler. The returned mono completes when the connection ends.
      */
-    Mono<Void> connect(URI uri, Function<WebSocketSession, Mono<Void>> sessionHandler);
+    Mono<Void> connect(UUID connectionId, URI uri, Function<WebSocketSession, Mono<Void>> sessionHandler);
+
+    default KrakenTransportTerminationEvidence terminationEvidence(UUID connectionId) {
+        return KrakenTransportTerminationEvidence.empty();
+    }
+
+    default KrakenTransportTerminationEvidence consumeTerminationEvidence(UUID connectionId) {
+        KrakenTransportTerminationEvidence evidence = terminationEvidence(connectionId);
+        clearTerminationEvidence(connectionId);
+        return evidence;
+    }
+
+    default void clearTerminationEvidence(UUID connectionId) {
+    }
 }

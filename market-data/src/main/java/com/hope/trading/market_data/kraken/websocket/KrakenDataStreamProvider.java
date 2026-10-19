@@ -232,7 +232,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             lifecycleDiagnostics.connecting(connectionId, product.name());
             AtomicReference<Throwable> terminationError = new AtomicReference<>();
             AtomicReference<CloseStatus> closeStatus = new AtomicReference<>();
-            setSubscription(product, connector.connect(URI.create(url(product)), ws -> {
+            setSubscription(product, connector.connect(connectionId, URI.create(url(product)), ws -> {
                 synchronized (connectionLifecycleLock(product)) {
                     if (!connectionId.equals(connectionIds.get(product))) {
                         return Mono.empty();
@@ -253,17 +253,19 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                                 connectionId, error);
                     })
                     .doFinally(signal -> {
+                        KrakenTransportTerminationEvidence transportEvidence =
+                                readTransportEvidence(connectionId);
                         KrakenStreamTerminationContext context;
                         synchronized (connectionLifecycleLock(product)) {
                             KrakenStreamTerminationClassification classification = classifyTermination(
-                                    signal, terminationError.get(), closeStatus.get(), product, connectionId);
+                                    signal, terminationError.get(), transportEvidence, connectionId);
                             boolean ownsConnection = connectionId.equals(connectionIds.get(product))
                                     && connectionIds.remove(product, connectionId);
                             String intentReason = terminationIntentReason.get(connectionId);
                             context = KrakenStreamTerminationContext.create(
                                     connectionId, product.name(), signal, terminationError.get(), closeStatus.get(),
                                     connectionStartedAt.get(connectionId), Instant.now(), classification, intentReason,
-                                    ownsConnection ? activeSequenceDiagnostics(product) : List.of());
+                                    transportEvidence, ownsConnection ? activeSequenceDiagnostics(product) : List.of());
                             lifecycleDiagnostics.terminating(context);
                             if (ownsConnection) {
                                 clearRealtimeStates(product);
@@ -1097,17 +1099,31 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                 });
     }
 
+    private KrakenTransportTerminationEvidence readTransportEvidence(UUID connectionId) {
+        try {
+            return connector.consumeTerminationEvidence(connectionId);
+        } catch (RuntimeException ignored) {
+            return KrakenTransportTerminationEvidence.empty();
+        }
+    }
+
     private KrakenStreamTerminationClassification classifyTermination(
             reactor.core.publisher.SignalType signal,
             Throwable error,
-            CloseStatus closeStatus,
-            Product product,
+            KrakenTransportTerminationEvidence transportEvidence,
             UUID connectionId
     ) {
         KrakenStreamTerminationClassification intent = terminationIntent.get(connectionId);
         if (intent != null) return intent;
-        if (error != null) return KrakenStreamTerminationClassification.NETWORK_FAILURE;
-        if (closeStatus != null) return KrakenStreamTerminationClassification.REMOTE_CLOSE;
+        if (Boolean.TRUE.equals(transportEvidence.websocketCloseObserved())) {
+            return KrakenStreamTerminationClassification.REMOTE_CLOSE;
+        }
+        if (Boolean.TRUE.equals(transportEvidence.transportExceptionObserved())
+                || (Boolean.TRUE.equals(transportEvidence.tlsCloseObserved())
+                && Boolean.FALSE.equals(transportEvidence.tlsCloseSucceeded()))
+                || error != null) {
+            return KrakenStreamTerminationClassification.NETWORK_FAILURE;
+        }
         if (signal == reactor.core.publisher.SignalType.CANCEL) {
             return KrakenStreamTerminationClassification.LOCAL_DISPOSE;
         }
