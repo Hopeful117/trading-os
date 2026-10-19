@@ -18,6 +18,8 @@ public record ResearchPopulationSpec(
         Set<OutcomeHorizon> horizons,
         ResearchSamplingCadence samplingCadence,
         Set<FeatureMissingness> acceptedFeatureMissingness,
+        Map<ResearchFeatureSnapshotKey, String> selectedFeatureSnapshotFingerprints,
+        ResearchFeatureRequirements featureRequirements,
         Map<ResearchOutcomeKey, String> selectedOutcomeFingerprints
 ) {
     public static final String FUTURE_INTERVAL = "FIFTEEN_MINUTES";
@@ -43,6 +45,13 @@ public record ResearchPopulationSpec(
         Objects.requireNonNull(samplingCadence, "sampling cadence");
         Objects.requireNonNull(acceptedFeatureMissingness, "accepted feature missingness");
         acceptedFeatureMissingness = Set.copyOf(acceptedFeatureMissingness);
+        Objects.requireNonNull(selectedFeatureSnapshotFingerprints, "selected feature snapshot fingerprints");
+        selectedFeatureSnapshotFingerprints = Map.copyOf(selectedFeatureSnapshotFingerprints);
+        selectedFeatureSnapshotFingerprints.forEach((key, value) -> {
+            Objects.requireNonNull(key, "feature snapshot selection key");
+            required(value, "selected feature snapshot fingerprint");
+        });
+        Objects.requireNonNull(featureRequirements, "feature requirements");
         Objects.requireNonNull(selectedOutcomeFingerprints, "selected outcome fingerprints");
         selectedOutcomeFingerprints = Map.copyOf(selectedOutcomeFingerprints);
         selectedOutcomeFingerprints.forEach((key, value) -> {
@@ -59,6 +68,10 @@ public record ResearchPopulationSpec(
 
     public Optional<String> selectedOutcomeFingerprint(ResearchOutcomeKey key) {
         return Optional.ofNullable(selectedOutcomeFingerprints.get(key));
+    }
+
+    public Optional<String> selectedFeatureSnapshotFingerprint(ResearchFeatureSnapshotKey key) {
+        return Optional.ofNullable(selectedFeatureSnapshotFingerprints.get(key));
     }
 
     public String interval() {

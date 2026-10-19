@@ -33,27 +33,45 @@ public final class ResearchDatasetBuilder {
             throw new IllegalArgumentException("unsupported feature projection version: "
                     + population.featureProjectionVersion());
         }
+        validateFeatureRequirements(population, schema);
+        Set<ObservedMarketOutcome> uniqueOutcomes = new HashSet<>();
+        for (ObservedMarketOutcome outcome : outcomes) {
+            if (!uniqueOutcomes.add(outcome)) {
+                throw new IllegalArgumentException("duplicate outcome input");
+            }
+        }
         Map<ResearchOutcomeKey, List<ObservedMarketOutcome>> outcomesByKey = outcomes.stream()
                 .collect(Collectors.groupingBy(value -> new ResearchOutcomeKey(
                         value.marketId(), value.evaluationCutoff(), value.horizon())));
         List<ResearchSample> samples = new ArrayList<>();
-        Map<String, FeatureSnapshot> seenSnapshots = new HashMap<>();
-        for (FeatureSnapshot snapshot : snapshots.stream()
-                 .sorted(Comparator.comparing(FeatureSnapshot::marketId).thenComparing(FeatureSnapshot::evaluationCutoff)
-                         .thenComparing(FeatureSnapshot::fingerprint)).toList()) {
-            if (!population.includes(snapshot.marketId(), snapshot.evaluationCutoff())) continue;
-            FeatureSnapshot previous = seenSnapshots.putIfAbsent(snapshot.identityFingerprint(), snapshot);
-            boolean duplicate = previous != null;
-            if (duplicate && !previous.fingerprint().equals(snapshot.fingerprint())) {
-                throw new IllegalArgumentException("conflicting feature snapshots share one semantic identity");
-            }
-                for (var horizon : population.horizons().stream().sorted(Comparator.comparing(com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon::value)).toList()) {
-                if (duplicate) {
-                    samples.add(ResearchSample.excluded(DATASET_DEFINITION_VERSION, snapshot, horizon,
-                            ResearchExclusionReason.DUPLICATE_FEATURE_SNAPSHOT));
-                } else {
-                    samples.add(buildSample(population, snapshot, horizon, outcomesByKey, schema));
+        Map<String, FeatureSnapshot> snapshotsByFingerprint = new HashMap<>();
+        for (FeatureSnapshot snapshot : snapshots) {
+            FeatureSnapshot previous = snapshotsByFingerprint.putIfAbsent(snapshot.fingerprint(), snapshot);
+            if (previous != null) {
+                if (previous.hasSameSemanticContent(snapshot)) {
+                    throw new IllegalArgumentException("duplicate feature snapshot input");
                 }
+                throw new IllegalArgumentException("conflicting feature snapshots share one fingerprint");
+            }
+        }
+        for (var selection : population.selectedFeatureSnapshotFingerprints().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResearchFeatureSnapshotKey::marketId)
+                        .thenComparing(ResearchFeatureSnapshotKey::evaluationCutoff))).toList()) {
+            FeatureSnapshot snapshot = snapshotsByFingerprint.get(selection.getValue());
+            if (snapshot == null) {
+                throw new IllegalArgumentException("selected feature snapshot fingerprint is missing: " + selection.getValue());
+            }
+            ResearchFeatureSnapshotKey key = selection.getKey();
+            if (!population.includes(key.marketId(), key.evaluationCutoff())) {
+                throw new IllegalArgumentException("selected feature snapshot is outside population bounds: " + key);
+            }
+            if (!snapshot.marketId().equals(key.marketId())
+                    || !snapshot.evaluationCutoff().equals(key.evaluationCutoff())) {
+                throw new IllegalArgumentException("selected feature snapshot identity does not match population key: " + key);
+            }
+            for (var horizon : population.horizons().stream()
+                    .sorted(Comparator.comparing(com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon::value)).toList()) {
+                samples.add(buildSample(population, snapshot, horizon, outcomesByKey, schema));
             }
         }
         samples.sort(Comparator.comparing(ResearchSample::marketId)
@@ -89,8 +107,10 @@ public final class ResearchDatasetBuilder {
                     ResearchExclusionReason.FEATURE_SNAPSHOT_INVALID);
         }
         Optional<FeatureMissingness> disallowed = snapshot.values().stream()
+                .filter(value -> population.featureRequirements().requiredFeatureNames().contains(value.name()))
                 .map(com.hope.trading.market_intelligence.domain.feature.FeatureValue::status)
-                .filter(status -> status != FeatureMissingness.PRESENT && !population.acceptedFeatureMissingness().contains(status))
+                .filter(status -> status != FeatureMissingness.PRESENT
+                        && !population.featureRequirements().acceptedMissingness().contains(status))
                 .findFirst();
         if (disallowed.isPresent()) {
             return ResearchSample.excluded(DATASET_DEFINITION_VERSION, snapshot, horizon,
@@ -110,7 +130,6 @@ public final class ResearchDatasetBuilder {
         Optional<ObservedMarketOutcome> selected = candidates.stream()
                 .filter(value -> value.outcomeDefinitionVersion().equals(population.outcomeDefinitionVersion()))
                 .filter(value -> value.outcomeFingerprint().equals(selectedFingerprint))
-                .distinct()
                 .reduce((left, right) -> {
                     throw new IllegalArgumentException("conflicting outcomes share one selected identity");
                 });
@@ -130,7 +149,7 @@ public final class ResearchDatasetBuilder {
     }
 
     private boolean matchesSchema(FeatureSnapshot snapshot,
-                                 com.hope.trading.market_intelligence.domain.feature.FeatureSchema schema) {
+                                  com.hope.trading.market_intelligence.domain.feature.FeatureSchema schema) {
         Map<String, com.hope.trading.market_intelligence.domain.feature.FeatureValue> values = new HashMap<>();
         for (var value : snapshot.values()) {
             if (values.put(value.name(), value) != null) return false;
@@ -145,6 +164,19 @@ public final class ResearchDatasetBuilder {
                 case BOOLEAN -> value instanceof com.hope.trading.market_intelligence.domain.feature.BooleanFeatureValue;
             };
         });
+    }
+
+    private void validateFeatureRequirements(ResearchPopulationSpec population,
+                                              com.hope.trading.market_intelligence.domain.feature.FeatureSchema schema) {
+        Set<String> schemaNames = schema.definitions().stream()
+                .map(com.hope.trading.market_intelligence.domain.feature.FeatureDefinition::name)
+                .collect(Collectors.toSet());
+        population.featureRequirements().requiredFeatureNames().stream()
+                .filter(value -> !schemaNames.contains(value))
+                .findFirst()
+                .ifPresent(value -> {
+                    throw new IllegalArgumentException("unsupported required feature: " + value);
+                });
     }
 
     private List<String> datasetMaterial(ResearchPopulationSpec population, List<ResearchSample> samples,
@@ -164,6 +196,15 @@ public final class ResearchDatasetBuilder {
         material.add("cadence=" + population.samplingCadence());
         population.acceptedFeatureMissingness().stream().map(Enum::name).sorted()
                 .forEach(value -> material.add("acceptedMissingness=" + value));
+        material.add("featureRequirementsVersion=" + population.featureRequirements().version());
+        population.featureRequirements().requiredFeatureNames().stream().sorted()
+                .forEach(value -> material.add("requiredFeature=" + value));
+        population.featureRequirements().acceptedMissingness().stream().map(Enum::name).sorted()
+                .forEach(value -> material.add("requiredAcceptedMissingness=" + value));
+        population.selectedFeatureSnapshotFingerprints().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResearchFeatureSnapshotKey::marketId)
+                        .thenComparing(ResearchFeatureSnapshotKey::evaluationCutoff)))
+                .forEach(value -> material.add("selectedFeatureSnapshot=" + value.getKey() + "|" + value.getValue()));
         population.selectedOutcomeFingerprints().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResearchOutcomeKey::marketId)
                         .thenComparing(ResearchOutcomeKey::evaluationCutoff)
