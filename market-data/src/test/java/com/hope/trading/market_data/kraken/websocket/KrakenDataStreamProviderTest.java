@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
+import org.springframework.web.reactive.socket.CloseStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -30,10 +31,14 @@ import tools.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.math.BigDecimal;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -45,6 +50,8 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.atLeastOnce;
@@ -101,6 +108,8 @@ class KrakenDataStreamProviderTest {
             mock(OrderBookEvidenceCaptureService.class);
     private final KrakenStreamLifecycleDiagnostics lifecycleDiagnostics =
             mock(KrakenStreamLifecycleDiagnostics.class);
+    private final KrakenStreamTerminationRepository terminationRepository =
+            mock(KrakenStreamTerminationRepository.class);
     private final com.hope.trading.market_data.kraken.helper.KrakenTickerMapper tickerMapper =
             mock(com.hope.trading.market_data.kraken.helper.KrakenTickerMapper.class);
     private final com.hope.trading.market_data.kraken.helper.KrakenOhlcMapper ohlcMapper =
@@ -128,6 +137,7 @@ class KrakenDataStreamProviderTest {
                 orderBookMapper, orderBookStateService, orderBookPublisher,
                 evidenceCaptureService, captureProperties, lifecycleDiagnostics,
                 tradeMapper, recentTradesStateService, tradesPublisher);
+        provider.setTerminationRepository(terminationRepository);
 
         market = new Market();
         market.setMarketId(UUID.randomUUID());
@@ -167,6 +177,7 @@ class KrakenDataStreamProviderTest {
                     return message;
                 }));
         when(session.close()).thenReturn(Mono.empty());
+        when(session.closeStatus()).thenReturn(Mono.empty());
 
         connector.scriptSession(session);
     }
@@ -232,8 +243,11 @@ class KrakenDataStreamProviderTest {
         inbound.tryEmitComplete();
 
         InOrder order = inOrder(lifecycleDiagnostics, recentTradesStateService);
-        order.verify(lifecycleDiagnostics).terminating(any(), eq("SPOT"), eq(SignalType.ON_COMPLETE),
-                isNull(), any());
+         order.verify(lifecycleDiagnostics).terminating(Mockito.argThat(context ->
+                 context.product().equals("SPOT")
+                         && context.signalType() == SignalType.ON_COMPLETE
+                         && context.classification()
+                         == KrakenStreamTerminationClassification.UNKNOWN_TRANSPORT_COMPLETION));
         order.verify(recentTradesStateService).clear(market.getMarketId());
     }
 
@@ -246,9 +260,101 @@ class KrakenDataStreamProviderTest {
         inbound.tryEmitError(failure);
 
         InOrder order = inOrder(lifecycleDiagnostics, recentTradesStateService);
-        order.verify(lifecycleDiagnostics).terminating(any(), eq("SPOT"), eq(SignalType.ON_ERROR),
-                eq(failure), any());
+         order.verify(lifecycleDiagnostics).terminating(Mockito.argThat(context ->
+                 context.product().equals("SPOT")
+                         && context.signalType() == SignalType.ON_ERROR
+                         && context.classification()
+                         == KrakenStreamTerminationClassification.NETWORK_FAILURE
+                         && context.exceptionClass().equals(failure.getClass().getName())));
         order.verify(recentTradesStateService).clear(market.getMarketId());
+    }
+
+    @Test
+    void diagnosticPersistenceFailureDoesNotBlockRealtimeCleanup() {
+        establishConnection();
+        subscribeTrades();
+        doThrow(new IllegalStateException("diagnostics unavailable"))
+                .when(terminationRepository).append(any());
+
+        inbound.tryEmitComplete();
+
+        verify(recentTradesStateService, timeout(1000)).clear(market.getMarketId());
+        verify(lifecycleDiagnostics, timeout(1000)).cleanupCompleted(any(), eq("SPOT"));
+    }
+
+    @Test
+    void slowDiagnosticPersistenceDoesNotBlockRealtimeCleanup() throws Exception {
+        CountDownLatch persistenceStarted = new CountDownLatch(1);
+        CountDownLatch releasePersistence = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            persistenceStarted.countDown();
+            releasePersistence.await(2, TimeUnit.SECONDS);
+            return true;
+        }).when(terminationRepository).append(any());
+
+        establishConnection();
+        subscribeTrades();
+        inbound.tryEmitComplete();
+
+        assertThat(persistenceStarted.await(1, TimeUnit.SECONDS)).isTrue();
+        verify(lifecycleDiagnostics, timeout(1000)).cleanupCompleted(any(), eq("SPOT"));
+        releasePersistence.countDown();
+    }
+
+    @Test
+    void staleConnectionCallbackCannotInstallAReplacementSession() throws Exception {
+        establishConnection();
+        Function<WebSocketSession, Mono<Void>> staleHandler = connector.handler;
+        Map<Object, UUID> connectionIds = connectionIds();
+        Object product = connectionIds.keySet().iterator().next();
+        UUID oldConnectionId = connectionIds.get(product);
+        connectionIds.put(product, UUID.randomUUID());
+
+        WebSocketSession replacement = mock(WebSocketSession.class);
+        assertThat(staleHandler.apply(replacement).block()).isNull();
+        assertThat(sessionReference().get()).isSameAs(session);
+
+        connectionIds.put(product, oldConnectionId);
+        provider.disconnect().block();
+        inbound.tryEmitComplete();
+    }
+
+    @Test
+    void staleDisconnectCleanupCannotClearAConnectionOwnedSession() throws Exception {
+        establishConnection();
+        Map<Object, UUID> connectionIds = connectionIds();
+        Object product = connectionIds.keySet().iterator().next();
+        UUID oldConnectionId = connectionIds.get(product);
+        connectionIds.put(product, UUID.randomUUID());
+
+        Method clearSessionIfOwner = KrakenDataStreamProvider.class.getDeclaredMethod(
+                "clearSessionIfOwner", product.getClass(), UUID.class);
+        clearSessionIfOwner.setAccessible(true);
+        clearSessionIfOwner.invoke(provider, product, oldConnectionId);
+
+        assertThat(sessionReference().get()).isSameAs(session);
+
+        connectionIds.put(product, oldConnectionId);
+        provider.disconnect().block();
+        inbound.tryEmitComplete();
+    }
+
+    @Test
+    void closeStatusIsPersistedAsRemoteCloseWhenAvailable() {
+        prepareSession();
+        when(session.closeStatus()).thenReturn(Mono.just(new CloseStatus(1001, "going away")));
+        provider.connect().block(java.time.Duration.ofSeconds(2));
+        subscribeTicker();
+
+        inbound.tryEmitComplete();
+
+        verify(lifecycleDiagnostics).terminating(Mockito.argThat(context ->
+                context.classification() == KrakenStreamTerminationClassification.REMOTE_CLOSE
+                        && context.closeCode() == 1001
+                        && context.closeReason().equals("going away")));
+        verify(terminationRepository, timeout(1000)).append(Mockito.argThat(context ->
+                context.classification() == KrakenStreamTerminationClassification.REMOTE_CLOSE
+                        && context.closeCode() == 1001));
     }
 
     @Test
@@ -259,8 +365,11 @@ class KrakenDataStreamProviderTest {
         cancelProviderConnection();
 
         InOrder order = inOrder(lifecycleDiagnostics, recentTradesStateService);
-        order.verify(lifecycleDiagnostics).terminating(any(), eq("SPOT"), eq(SignalType.CANCEL),
-                isNull(), any());
+         order.verify(lifecycleDiagnostics).terminating(Mockito.argThat(context ->
+                 context.product().equals("SPOT")
+                         && context.signalType() == SignalType.CANCEL
+                         && context.classification()
+                         == KrakenStreamTerminationClassification.LOCAL_DISPOSE));
         order.verify(recentTradesStateService).clear(market.getMarketId());
     }
 
@@ -270,6 +379,20 @@ class KrakenDataStreamProviderTest {
         field.setAccessible(true);
         AtomicReference<Disposable> subscription = (AtomicReference<Disposable>) field.get(provider);
         subscription.get().dispose();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<Object, UUID> connectionIds() throws Exception {
+        Field field = KrakenDataStreamProvider.class.getDeclaredField("connectionIds");
+        field.setAccessible(true);
+        return (Map<Object, UUID>) field.get(provider);
+    }
+
+    @SuppressWarnings("unchecked")
+    private AtomicReference<WebSocketSession> sessionReference() throws Exception {
+        Field field = KrakenDataStreamProvider.class.getDeclaredField("session");
+        field.setAccessible(true);
+        return (AtomicReference<WebSocketSession>) field.get(provider);
     }
 
     @Test
@@ -470,8 +593,11 @@ class KrakenDataStreamProviderTest {
         establishConnection();
 
         provider.disconnect().block();
+        inbound.tryEmitComplete();
 
         verify(session).close();
+        verify(lifecycleDiagnostics).terminating(Mockito.argThat(context ->
+                context.classification() == KrakenStreamTerminationClassification.APPLICATION_SHUTDOWN));
     }
 
 }

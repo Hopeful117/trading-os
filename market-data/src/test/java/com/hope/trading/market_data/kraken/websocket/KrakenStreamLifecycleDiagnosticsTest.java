@@ -2,6 +2,7 @@ package com.hope.trading.market_data.kraken.websocket;
 
 import com.hope.trading.market_data.service.OrderBookEvidenceCaptureService;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.reactive.socket.CloseStatus;
 import reactor.core.publisher.SignalType;
 
 import java.time.Duration;
@@ -51,5 +52,31 @@ class KrakenStreamLifecycleDiagnosticsTest {
 
         assertThat(context.exceptionMessage()).hasSize(256);
         assertThat(context.exceptionMessage()).doesNotContain("\n", "\r", "\t");
+    }
+
+    @Test
+    void classifiesExceptionFreeCompletionAsUnknownAndPreservesCloseMetadata() {
+        var context = KrakenStreamTerminationContext.create(
+                UUID.randomUUID(), "FUTURES", SignalType.ON_COMPLETE, null,
+                new CloseStatus(1000, "remote\nclose"), Instant.parse("2026-10-16T11:59:00Z"),
+                Instant.parse("2026-10-16T12:00:00Z"),
+                KrakenStreamTerminationClassification.UNKNOWN_TRANSPORT_COMPLETION, null, null);
+
+        assertThat(context.classification())
+                .isEqualTo(KrakenStreamTerminationClassification.UNKNOWN_TRANSPORT_COMPLETION);
+        assertThat(context.closeCode()).isEqualTo(1000);
+        assertThat(context.closeReason()).isEqualTo("remote close");
+    }
+
+    @Test
+    void boundsIntentAndExceptionMetadata() {
+        String value = "x".repeat(400);
+        var context = KrakenStreamTerminationContext.create(
+                UUID.randomUUID(), "FUTURES", SignalType.ON_ERROR,
+                new IllegalStateException(value), null, null, Instant.now(),
+                KrakenStreamTerminationClassification.NETWORK_FAILURE, value, null);
+
+        assertThat(context.exceptionMessage()).hasSize(256);
+        assertThat(context.intentionalReason()).hasSize(64);
     }
 }

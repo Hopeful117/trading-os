@@ -67,13 +67,12 @@ public class KrakenStreamLifecycleDiagnostics {
                 sequence.localOrdinal(), sequence.lastOccurredAt(), sequence.lastKnownAt(), connectionId);
     }
 
-    public void terminating(UUID connectionId, String product, SignalType signal, Throwable error,
-                            List<OrderBookEvidenceCaptureService.SequenceDiagnostics> sequences) {
-        if (sequences.isEmpty()) {
-            logTermination(connectionId, product, signal, error, null);
+    public void terminating(KrakenStreamTerminationContext context) {
+        if (context.sequences().isEmpty()) {
+            logTermination(context, null);
             return;
         }
-        sequences.forEach(sequence -> logTermination(connectionId, product, signal, error, sequence));
+        context.sequences().forEach(sequence -> logTermination(context, sequence));
     }
 
     public void cleanupCompleted(UUID connectionId, String product) {
@@ -107,23 +106,29 @@ public class KrakenStreamLifecycleDiagnostics {
         log.info("STREAM_RECOVERY_SUPPRESSED provider=KRAKEN product={} reason={}", product, reason);
     }
 
-    private void logTermination(UUID connectionId, String product, SignalType signal, Throwable error,
+    private void logTermination(KrakenStreamTerminationContext context,
                                 OrderBookEvidenceCaptureService.SequenceDiagnostics sequence) {
-        TerminationContext context = terminationContext(signal, error, sequence);
         log.warn("STREAM_TERMINATING provider=KRAKEN product={} signalType={} exceptionClass={} "
-                        + "exceptionMessage={} rootCauseClass={} rootCauseMessage={} connectionId={} "
+                        + "exceptionMessage={} rootCauseClass={} rootCauseMessage={} classification={} "
+                        + "closeCode={} closeReason={} intentionalReason={} connectionId={} "
                         + "marketId={} depth={} sequenceId={} lastProviderSequence={} lastLocalOrdinal={} "
                         + "lastOccurredAt={} lastKnownAt={} occurredToKnownLag={}",
-                product, context.signalType(), context.exceptionClass(), context.exceptionMessage(),
-                context.rootCauseClass(), context.rootCauseMessage(),
-                connectionId,
+                context.product(), context.signalType(), context.exceptionClass(), context.exceptionMessage(),
+                context.rootCauseClass(), context.rootCauseMessage(), context.classification(),
+                context.closeCode(), context.closeReason(), context.intentionalReason(), context.connectionId(),
                 sequence == null ? null : sequence.marketId(),
                 sequence == null ? null : sequence.depth(),
                 sequence == null ? null : sequence.sequenceId(),
                 sequence == null ? null : sequence.providerSequence(),
                 sequence == null ? null : sequence.localOrdinal(),
                 sequence == null ? null : sequence.lastOccurredAt(),
-                sequence == null ? null : sequence.lastKnownAt(), context.occurredToKnownLag());
+                sequence == null ? null : sequence.lastKnownAt(), occurredToKnownLag(sequence));
+    }
+
+    private Duration occurredToKnownLag(
+            OrderBookEvidenceCaptureService.SequenceDiagnostics sequence) {
+        return sequence == null || sequence.lastOccurredAt() == null || sequence.lastKnownAt() == null
+                ? null : Duration.between(sequence.lastOccurredAt(), sequence.lastKnownAt());
     }
 
     static TerminationContext terminationContext(
