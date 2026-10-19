@@ -11,7 +11,13 @@ public interface EconomicResearchClient {
     EvaluationResponse evaluate(@RequestBody EvaluationRequest request);
 
     record EvaluationRequest(String candidateJsonl, String researchCutoff,
-                             String transactionCostModelVersion) { }
+                             String transactionCostModelVersion, java.util.UUID brokerAccountId,
+                             String provider, String productType) {
+        public EvaluationRequest(String candidateJsonl, String researchCutoff,
+                                  String transactionCostModelVersion) {
+            this(candidateJsonl, researchCutoff, transactionCostModelVersion, null, null, null);
+        }
+    }
 
     record EvaluationResponse(String candidateJsonl, String resultJsonl, String manifestJson,
                               String readme, String manifestFingerprint) { }

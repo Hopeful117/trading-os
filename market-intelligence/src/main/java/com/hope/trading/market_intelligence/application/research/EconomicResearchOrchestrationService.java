@@ -30,7 +30,19 @@ public final class EconomicResearchOrchestrationService {
 
     public EconomicResearchClient.EvaluationResponse evaluate(String candidateJsonl, Instant researchCutoff,
                                                               String costModelVersion) {
+        return evaluate(candidateJsonl, researchCutoff, costModelVersion, null, null, null);
+    }
+
+    public EconomicResearchClient.EvaluationResponse evaluate(String candidateJsonl, Instant researchCutoff,
+                                                              String costModelVersion, UUID brokerAccountId,
+                                                              String provider, String productType) {
         Objects.requireNonNull(candidateJsonl, "candidateJsonl");
+        boolean anyFeeContext = brokerAccountId != null || provider != null || productType != null;
+        boolean completeFeeContext = brokerAccountId != null && provider != null && !provider.isBlank()
+                && productType != null && !productType.isBlank();
+        if (anyFeeContext && !completeFeeContext) {
+            throw new IllegalArgumentException("brokerAccountId, provider and productType must be supplied together");
+        }
         if (candidateJsonl.getBytes(StandardCharsets.UTF_8).length > MAX_BUNDLE_BYTES) {
             throw new IllegalArgumentException("candidate bundle exceeds the configured size bound");
         }
@@ -54,8 +66,12 @@ public final class EconomicResearchOrchestrationService {
             }
         }
         String normalized = String.join("\n", lines);
-        return tradingCore.evaluate(new EconomicResearchClient.EvaluationRequest(normalized,
-                researchCutoff.toString(), costModelVersion));
+        EconomicResearchClient.EvaluationRequest request = brokerAccountId == null && provider == null
+                && productType == null
+                ? new EconomicResearchClient.EvaluationRequest(normalized, researchCutoff.toString(), costModelVersion)
+                : new EconomicResearchClient.EvaluationRequest(normalized, researchCutoff.toString(), costModelVersion,
+                brokerAccountId, provider, productType);
+        return tradingCore.evaluate(request);
     }
 
     private JsonNode requiredObject(JsonNode node, String field) {

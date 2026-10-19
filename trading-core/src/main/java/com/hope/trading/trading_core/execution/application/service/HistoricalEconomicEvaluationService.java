@@ -9,6 +9,7 @@ import com.hope.trading.trading_core.execution.domain.economic.ExplicitCost;
 import com.hope.trading.trading_core.execution.domain.economic.SimulatedExecution;
 import com.hope.trading.trading_core.execution.domain.economic.SimulatedExecutionStatus;
 import com.hope.trading.trading_core.execution.domain.economic.StrategyIntent;
+import com.hope.trading.trading_core.execution.domain.economic.TransactionCosts;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -36,6 +37,11 @@ public final class HistoricalEconomicEvaluationService {
     }
 
     public EconomicResult evaluate(HistoricalEconomicEvaluationRequest request) {
+        return evaluate(request, null);
+    }
+
+    public EconomicResult evaluate(HistoricalEconomicEvaluationRequest request,
+                                   CommissionSelection commissionSelection) {
         Objects.requireNonNull(request, "request is required");
         if (hasFutureCostEvidence(request)) {
             return unavailableLifecycle(request, null, null, EconomicResultStatus.STALE,
@@ -64,9 +70,45 @@ public final class HistoricalEconomicEvaluationService {
                     entry.execution().filledQuantity());
         }
 
+        TransactionCosts costs = request.transactionCosts();
+        if (commissionSelection != null) {
+            BigDecimal entryNotional = entry.execution().averageExecutionPrice()
+                    .multiply(entry.execution().filledQuantity());
+            BigDecimal exitNotional = exit.execution().averageExecutionPrice()
+                    .multiply(exit.execution().filledQuantity());
+            BigDecimal commission = entryNotional.multiply(commissionSelection.entryTakerRate())
+                    .add(exitNotional.multiply(commissionSelection.exitTakerRate()));
+            costs = new TransactionCosts(costs.executionImpact(),
+                    ExplicitCost.available(commission, commissionSelection.aggregateEvidence(),
+                            request.transactionCostModelVersion()),
+                    costs.fundingComponent(), costs.otherExplicitCosts(), null,
+                    request.transactionCostModelVersion());
+        }
         return evaluator.evaluate(request.entryIntent(), entry.marketState(), exit.marketState(),
-                entry.execution(), exit.execution(), request.transactionCosts(),
+                entry.execution(), exit.execution(), costs,
                 request.executionModelVersion(), request.transactionCostModelVersion(), request.researchCutoff());
+    }
+
+    public record CommissionSelection(BigDecimal entryTakerRate, BigDecimal exitTakerRate,
+                                      com.hope.trading.trading_core.execution.domain.economic.CostEvidence entryEvidence,
+                                      com.hope.trading.trading_core.execution.domain.economic.CostEvidence exitEvidence) {
+        public CommissionSelection {
+            Objects.requireNonNull(entryTakerRate, "entryTakerRate is required");
+            Objects.requireNonNull(exitTakerRate, "exitTakerRate is required");
+            Objects.requireNonNull(entryEvidence, "entryEvidence is required");
+            Objects.requireNonNull(exitEvidence, "exitEvidence is required");
+        }
+
+        public com.hope.trading.trading_core.execution.domain.economic.CostEvidence aggregateEvidence() {
+            if (entryEvidence.fingerprint().equals(exitEvidence.fingerprint())) return entryEvidence;
+            Instant knownAt = entryEvidence.knownAt().isAfter(exitEvidence.knownAt())
+                    ? entryEvidence.knownAt() : exitEvidence.knownAt();
+            Instant effectiveFrom = entryEvidence.effectiveFrom().isBefore(exitEvidence.effectiveFrom())
+                    ? entryEvidence.effectiveFrom() : exitEvidence.effectiveFrom();
+            return new com.hope.trading.trading_core.execution.domain.economic.CostEvidence(
+                    "entry=" + entryEvidence.fingerprint() + "|exit=" + exitEvidence.fingerprint(),
+                    entryEvidence.sourceId() + "+" + exitEvidence.sourceId(), effectiveFrom, null, knownAt);
+        }
     }
 
     private boolean hasFutureCostEvidence(HistoricalEconomicEvaluationRequest request) {

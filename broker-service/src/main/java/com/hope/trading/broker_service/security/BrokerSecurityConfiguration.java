@@ -25,6 +25,7 @@ public class BrokerSecurityConfiguration {
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request,response,exception) -> response.sendError(401)))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/internal/v1/historical-fees/**").hasRole("SERVICE")
                         .anyRequest().authenticated())
                 .addFilterBefore(new ServiceJwtAuthenticationFilter(serviceJwtService, serviceJwtProperties),
                         UsernamePasswordAuthenticationFilter.class)
