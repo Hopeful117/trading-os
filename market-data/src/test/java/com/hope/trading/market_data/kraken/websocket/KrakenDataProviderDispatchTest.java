@@ -124,6 +124,7 @@ class KrakenDataProviderDispatchTest {
                             return message;
                         }));
         when(session.close()).thenReturn(Mono.empty());
+        when(session.closeStatus()).thenReturn(Mono.empty());
 
         connector.session = session;
         provider.connect().block(java.time.Duration.ofSeconds(2));

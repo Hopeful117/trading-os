@@ -36,14 +36,16 @@ import com.hope.trading.market_data.service.RecentTradesEventPublisher;
 import com.hope.trading.market_data.service.RecentTradesStateService;
 import com.hope.trading.market_data.service.TickerEventPublisher;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.socket.CloseStatus;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
-import org.springframework.beans.factory.annotation.Autowired;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -94,6 +96,11 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final AtomicReference<WebSocketSession> futuresSession = new AtomicReference<>();
     private final AtomicReference<Disposable> futuresConnectionSubscription = new AtomicReference<>();
     private final ConcurrentMap<Product, UUID> connectionIds = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Product, Object> connectionLifecycleLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, Instant> connectionStartedAt = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, KrakenStreamTerminationClassification> terminationIntent =
+            new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, String> terminationIntentReason = new ConcurrentHashMap<>();
     private final ConcurrentMap<Product, AtomicInteger> recoveryAttempts = new ConcurrentHashMap<>();
     private final Set<Product> recoveryInFlight = ConcurrentHashMap.newKeySet();
     private final Set<Product> intentionalDisconnects = ConcurrentHashMap.newKeySet();
@@ -138,6 +145,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     private final KrakenTradeMapper tradeMapper;
     private final RecentTradesStateService recentTradesStateService;
     private final RecentTradesEventPublisher recentTradesEventPublisher;
+    private KrakenStreamTerminationRepository terminationRepository;
     private final Object outboundEmissionLock =
             new Object();
 
@@ -178,6 +186,11 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         this.krakenProperties = krakenProperties;
     }
 
+    @Autowired(required = false)
+    void setTerminationRepository(KrakenStreamTerminationRepository terminationRepository) {
+        this.terminationRepository = terminationRepository;
+    }
+
     public KrakenDataStreamProvider(
             KrakenStreamConnector connector,
             KrakenProperties krakenProperties,
@@ -211,30 +224,59 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         if (session(product) != null && session(product).isOpen()) return Mono.empty();
         if (subscription(product) == null || subscription(product).isDisposed()) {
             UUID connectionId = UUID.randomUUID();
-            connectionIds.put(product, connectionId);
+            Instant connectedAt = Instant.now();
+            synchronized (connectionLifecycleLock(product)) {
+                connectionIds.put(product, connectionId);
+                connectionStartedAt.put(connectionId, connectedAt);
+            }
             lifecycleDiagnostics.connecting(connectionId, product.name());
             AtomicReference<Throwable> terminationError = new AtomicReference<>();
+            AtomicReference<CloseStatus> closeStatus = new AtomicReference<>();
             setSubscription(product, connector.connect(URI.create(url(product)), ws -> {
-                setSession(product, ws);
+                synchronized (connectionLifecycleLock(product)) {
+                    if (!connectionId.equals(connectionIds.get(product))) {
+                        return Mono.empty();
+                    }
+                    setSession(product, ws);
+                }
                 lifecycleDiagnostics.connected(connectionId, product.name());
                 Mono<Void> outbound = ws.send(outbound(product).asFlux().map(ws::textMessage));
                 Mono<Void> inbound = ws.receive().map(WebSocketMessage::getPayloadAsText)
                         .doOnNext(message -> handleMessage(message, product)).then();
-                return Mono.when(outbound, inbound);
+                Mono<CloseStatus> status = ws.closeStatus();
+                if (status == null) status = Mono.empty();
+                return Mono.when(outbound, inbound)
+                        .then(status.doOnNext(closeStatus::set).then());
             }).doOnError(error -> {
                         terminationError.set(error);
                         log.error("[KRAKEN] {} WebSocket connection failed connectionId={}", product,
                                 connectionId, error);
                     })
                     .doFinally(signal -> {
-                        lifecycleDiagnostics.terminating(connectionId, product.name(), signal,
-                                terminationError.get(), activeSequenceDiagnostics(product));
-                        clearRealtimeStates(product);
-                        setSession(product, null);
-                        setSubscription(product, null);
-                        connectionIds.remove(product, connectionId);
-                        lifecycleDiagnostics.cleanupCompleted(connectionId, product.name());
-                        scheduleRecovery(product);
+                        KrakenStreamTerminationContext context;
+                        synchronized (connectionLifecycleLock(product)) {
+                            KrakenStreamTerminationClassification classification = classifyTermination(
+                                    signal, terminationError.get(), closeStatus.get(), product, connectionId);
+                            boolean ownsConnection = connectionId.equals(connectionIds.get(product))
+                                    && connectionIds.remove(product, connectionId);
+                            String intentReason = terminationIntentReason.get(connectionId);
+                            context = KrakenStreamTerminationContext.create(
+                                    connectionId, product.name(), signal, terminationError.get(), closeStatus.get(),
+                                    connectionStartedAt.get(connectionId), Instant.now(), classification, intentReason,
+                                    ownsConnection ? activeSequenceDiagnostics(product) : List.of());
+                            lifecycleDiagnostics.terminating(context);
+                            if (ownsConnection) {
+                                clearRealtimeStates(product);
+                                setSession(product, null);
+                                setSubscription(product, null);
+                                scheduleRecovery(product);
+                            }
+                            connectionStartedAt.remove(connectionId, connectedAt);
+                            terminationIntent.remove(connectionId);
+                            terminationIntentReason.remove(connectionId);
+                            lifecycleDiagnostics.cleanupCompleted(connectionId, product.name());
+                        }
+                        persistTermination(context);
                     }).subscribe());
         }
         return waitUntilConnected(product)
@@ -245,9 +287,14 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     public Mono<Void> disconnect() {
             intentionalDisconnects.add(Product.SPOT);
             intentionalDisconnects.add(Product.FUTURES);
+            markTerminationIntent(connectionIds.get(Product.SPOT),
+                    KrakenStreamTerminationClassification.APPLICATION_SHUTDOWN, "disconnect requested");
+            markTerminationIntent(connectionIds.get(Product.FUTURES),
+                    KrakenStreamTerminationClassification.APPLICATION_SHUTDOWN, "disconnect requested");
             recoverySubscriptions.values().forEach(Disposable::dispose);
             recoverySubscriptions.clear();
             WebSocketSession currentSession = this.session.get();
+            UUID spotConnectionId = connectionIds.get(Product.SPOT);
             Mono<Void> closeSpot = currentSession == null || !currentSession.isOpen()
                     ? Mono.empty()
                     : currentSession.close()
@@ -260,11 +307,13 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                                     error
                             )
                     )
-                    .doFinally(signal -> this.session.set(null));
+                    .doFinally(signal -> clearSessionIfOwner(Product.SPOT, spotConnectionId));
             WebSocketSession currentFuturesSession = this.futuresSession.get();
+            UUID futuresConnectionId = connectionIds.get(Product.FUTURES);
             Mono<Void> closeFutures = currentFuturesSession == null || !currentFuturesSession.isOpen()
                     ? Mono.empty()
-                     : currentFuturesSession.close().doFinally(signal -> this.futuresSession.set(null));
+                     : currentFuturesSession.close()
+                     .doFinally(signal -> clearSessionIfOwner(Product.FUTURES, futuresConnectionId));
             return Mono.when(closeSpot, closeFutures).then();
         }
 
@@ -296,6 +345,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         validateProviderSymbols(markets);
         Set<Product> products = products(markets);
         unsubscribeInFlight.addAll(products);
+        products.forEach(product -> markTerminationIntent(connectionIds.get(product),
+                KrakenStreamTerminationClassification.EXPLICIT_UNSUBSCRIBE, "unsubscribe requested"));
         List<Market> remoteUnsubscribeMarkets = markets == null
                 ? List.of()
                 : markets.stream()
@@ -970,6 +1021,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
     }
 
     private void terminateRecoveryConnection(Product product) {
+        markTerminationIntent(connectionIds.get(product), KrakenStreamTerminationClassification.LOCAL_DISPOSE,
+                "recovery connection disposed");
         Disposable current = subscription(product);
         if (current != null && !current.isDisposed()) {
             current.dispose();
@@ -1030,6 +1083,43 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             });
         });
         return List.copyOf(result);
+    }
+
+    private void persistTermination(KrakenStreamTerminationContext context) {
+        if (terminationRepository == null) return;
+        Mono.fromRunnable(() -> terminationRepository.append(context))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(exception -> log.error(
+                        "Unable to persist Kraken stream termination context connectionId={} product={}",
+                        context.connectionId(), context.product(), exception))
+                .subscribe(null, ignored -> {
+                    // Diagnostics are best-effort and must not surface as a lifecycle error.
+                });
+    }
+
+    private KrakenStreamTerminationClassification classifyTermination(
+            reactor.core.publisher.SignalType signal,
+            Throwable error,
+            CloseStatus closeStatus,
+            Product product,
+            UUID connectionId
+    ) {
+        KrakenStreamTerminationClassification intent = terminationIntent.get(connectionId);
+        if (intent != null) return intent;
+        if (error != null) return KrakenStreamTerminationClassification.NETWORK_FAILURE;
+        if (closeStatus != null) return KrakenStreamTerminationClassification.REMOTE_CLOSE;
+        if (signal == reactor.core.publisher.SignalType.CANCEL) {
+            return KrakenStreamTerminationClassification.LOCAL_DISPOSE;
+        }
+        return KrakenStreamTerminationClassification.UNKNOWN_TRANSPORT_COMPLETION;
+    }
+
+    private void markTerminationIntent(UUID connectionId, KrakenStreamTerminationClassification classification,
+                                       String reason) {
+        if (connectionId != null) {
+            terminationIntent.put(connectionId, classification);
+            terminationIntentReason.put(connectionId, reason);
+        }
     }
     private void handleControlMessage(JsonNode root, Product product) {
         if (root.has("success")) {
@@ -1234,6 +1324,18 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
 
     private void setSession(Product product, WebSocketSession value) {
         if (product == Product.FUTURES) futuresSession.set(value); else session.set(value);
+    }
+
+    private void clearSessionIfOwner(Product product, UUID connectionId) {
+        synchronized (connectionLifecycleLock(product)) {
+            if (connectionId != null && connectionId.equals(connectionIds.get(product))) {
+                setSession(product, null);
+            }
+        }
+    }
+
+    private Object connectionLifecycleLock(Product product) {
+        return connectionLifecycleLocks.computeIfAbsent(product, ignored -> new Object());
     }
 
     private Disposable subscription(Product product) {
