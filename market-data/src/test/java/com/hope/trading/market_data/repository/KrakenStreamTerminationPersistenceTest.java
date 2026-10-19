@@ -3,6 +3,7 @@ package com.hope.trading.market_data.repository;
 import com.hope.trading.market_data.kraken.websocket.KrakenStreamTerminationClassification;
 import com.hope.trading.market_data.kraken.websocket.KrakenStreamTerminationContext;
 import com.hope.trading.market_data.kraken.websocket.KrakenStreamTerminationRepository;
+import com.hope.trading.market_data.kraken.websocket.KrakenTransportTerminationEvidence;
 import com.hope.trading.market_data.helper.InstrumentProductType;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.helper.TradingStatus;
@@ -51,14 +52,19 @@ class KrakenStreamTerminationPersistenceTest {
                 null, null, Instant.parse("2026-10-19T01:00:00Z"),
                 Instant.parse("2026-10-19T01:21:00Z"),
                 KrakenStreamTerminationClassification.UNKNOWN_TRANSPORT_COMPLETION,
-                null, null);
+                null, new KrakenTransportTerminationEvidence(
+                        "channel-1", true, 1001, "going away", true,
+                        Instant.parse("2026-10-19T01:21:00Z"), false, true, true,
+                        null, false, null, null), null);
 
         assertThat(repository.append(context)).isTrue();
         assertThat(repository.append(context)).isFalse();
 
         var row = jdbc.queryForMap("""
-                SELECT product, classification, signal_type, close_code, close_reason,
-                       exception_class, connected_at, terminated_at
+                 SELECT product, classification, signal_type, close_code, close_reason,
+                        exception_class, connected_at, terminated_at, netty_channel_id,
+                        websocket_close_observed, websocket_close_code, websocket_close_reason,
+                        channel_inactive_observed
                 FROM kraken_stream_termination
                 WHERE connection_id = ?
                 """, connectionId);
@@ -71,6 +77,11 @@ class KrakenStreamTerminationPersistenceTest {
         assertThat(row.get("EXCEPTION_CLASS")).isNull();
         assertThat(row.get("CONNECTED_AT")).isNotNull();
         assertThat(row.get("TERMINATED_AT")).isNotNull();
+        assertThat(row.get("NETTY_CHANNEL_ID")).isEqualTo("channel-1");
+        assertThat(row.get("WEBSOCKET_CLOSE_OBSERVED")).isEqualTo(true);
+        assertThat(row.get("WEBSOCKET_CLOSE_CODE")).isEqualTo(1001);
+        assertThat(row.get("WEBSOCKET_CLOSE_REASON")).isEqualTo("going away");
+        assertThat(row.get("CHANNEL_INACTIVE_OBSERVED")).isEqualTo(true);
     }
 
     @Test

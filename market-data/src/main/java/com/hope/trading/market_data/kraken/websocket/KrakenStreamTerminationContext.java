@@ -23,10 +23,13 @@ public record KrakenStreamTerminationContext(
         Instant connectedAt,
         Instant terminatedAt,
         String intentionalReason,
+        KrakenTransportTerminationEvidence transportEvidence,
         List<OrderBookEvidenceCaptureService.SequenceDiagnostics> sequences
 ) {
     public KrakenStreamTerminationContext {
         sequences = sequences == null ? List.of() : List.copyOf(sequences);
+        transportEvidence = transportEvidence == null
+                ? KrakenTransportTerminationEvidence.empty() : transportEvidence;
     }
 
     public static KrakenStreamTerminationContext create(
@@ -41,6 +44,23 @@ public record KrakenStreamTerminationContext(
             String intentionalReason,
             List<OrderBookEvidenceCaptureService.SequenceDiagnostics> sequences
     ) {
+        return create(connectionId, product, signalType, error, closeStatus, connectedAt, terminatedAt,
+                classification, intentionalReason, KrakenTransportTerminationEvidence.empty(), sequences);
+    }
+
+    public static KrakenStreamTerminationContext create(
+            UUID connectionId,
+            String product,
+            SignalType signalType,
+            Throwable error,
+            CloseStatus closeStatus,
+            Instant connectedAt,
+            Instant terminatedAt,
+            KrakenStreamTerminationClassification classification,
+            String intentionalReason,
+            KrakenTransportTerminationEvidence transportEvidence,
+            List<OrderBookEvidenceCaptureService.SequenceDiagnostics> sequences
+    ) {
         Throwable rootCause = rootCause(error);
         return new KrakenStreamTerminationContext(
                 UUID.randomUUID(), connectionId, product, classification, signalType,
@@ -50,14 +70,14 @@ public record KrakenStreamTerminationContext(
                 sanitize(error == null ? null : error.getMessage()),
                 rootCause == null ? null : rootCause.getClass().getName(),
                 sanitize(rootCause == null ? null : rootCause.getMessage()),
-                connectedAt, terminatedAt, sanitize(intentionalReason, 64), sequences);
+                connectedAt, terminatedAt, sanitize(intentionalReason, 64), transportEvidence, sequences);
     }
 
     static String sanitize(String value) {
         return sanitize(value, 256);
     }
 
-    private static String sanitize(String value, int maxLength) {
+    static String sanitize(String value, int maxLength) {
         if (value == null) return null;
         String sanitized = value.replaceAll("[\\r\\n\\t]", " ");
         return sanitized.length() <= maxLength ? sanitized : sanitized.substring(0, maxLength);

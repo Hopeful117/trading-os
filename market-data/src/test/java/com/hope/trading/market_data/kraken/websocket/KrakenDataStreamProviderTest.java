@@ -74,6 +74,8 @@ class KrakenDataStreamProviderTest {
         Function<WebSocketSession, Mono<Void>> handler;
         final List<String> sent = new CopyOnWriteArrayList<>();
         private WebSocketSession session;
+        private KrakenTransportTerminationEvidence terminationEvidence = KrakenTransportTerminationEvidence.empty();
+        private boolean evidenceCleared;
 
         void scriptSession(WebSocketSession session) {
             this.session = session;
@@ -81,9 +83,19 @@ class KrakenDataStreamProviderTest {
 
         @Override
         public Mono<Void> connect(
-                URI uri, Function<WebSocketSession, Mono<Void>> sessionHandler) {
+                UUID connectionId, URI uri, Function<WebSocketSession, Mono<Void>> sessionHandler) {
             this.handler = sessionHandler;
             return sessionHandler.apply(session);
+        }
+
+        @Override
+        public KrakenTransportTerminationEvidence terminationEvidence(UUID connectionId) {
+            return terminationEvidence;
+        }
+
+        @Override
+        public void clearTerminationEvidence(UUID connectionId) {
+            evidenceCleared = true;
         }
     }
 
@@ -345,6 +357,9 @@ class KrakenDataStreamProviderTest {
         when(session.closeStatus()).thenReturn(Mono.just(new CloseStatus(1001, "going away")));
         provider.connect().block(java.time.Duration.ofSeconds(2));
         subscribeTicker();
+        connector.terminationEvidence = new KrakenTransportTerminationEvidence(
+                "channel-1", true, 1001, "going away", true, Instant.now(),
+                false, false, null, null, false, null, null);
 
         inbound.tryEmitComplete();
 
@@ -355,6 +370,38 @@ class KrakenDataStreamProviderTest {
         verify(terminationRepository, timeout(1000)).append(Mockito.argThat(context ->
                 context.classification() == KrakenStreamTerminationClassification.REMOTE_CLOSE
                         && context.closeCode() == 1001));
+    }
+
+    @Test
+    void closeFrameEvidenceWinsOverTransportError() {
+        prepareSession();
+        provider.connect().block(java.time.Duration.ofSeconds(2));
+        subscribeTicker();
+        connector.terminationEvidence = new KrakenTransportTerminationEvidence(
+                "channel-1", true, 1001, "going away", true, Instant.now(),
+                false, false, null, null, true, "java.io.IOException", "java.io.IOException");
+
+        inbound.tryEmitError(new IllegalStateException("stream failed"));
+
+        verify(lifecycleDiagnostics).terminating(Mockito.argThat(context ->
+                context.classification() == KrakenStreamTerminationClassification.REMOTE_CLOSE));
+    }
+
+    @Test
+    void terminationConsumesCorrelatedTransportEvidenceExactlyOnce() {
+        establishConnection();
+        subscribeTrades();
+        connector.terminationEvidence = new KrakenTransportTerminationEvidence(
+                "channel-1", true, 1001, "going away", true, Instant.now(),
+                false, false, null, null, false, null, null);
+
+        inbound.tryEmitComplete();
+
+        verify(terminationRepository, timeout(1000)).append(Mockito.argThat(context ->
+                context.transportEvidence().nettyChannelId().equals("channel-1")
+                        && context.transportEvidence().websocketCloseObserved()
+                        && context.classification() == KrakenStreamTerminationClassification.REMOTE_CLOSE));
+        assertThat(connector.evidenceCleared).isTrue();
     }
 
     @Test

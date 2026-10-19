@@ -26,7 +26,14 @@ public class KrakenStreamTerminationRepository {
                 context.classification().name(), context.signalType().name(), context.closeCode(),
                 context.closeReason(), context.exceptionClass(), context.exceptionMessage(),
                 context.rootCauseClass(), context.rootCauseMessage(), timestamp(context.connectedAt()),
-                timestamp(context.terminatedAt()), context.intentionalReason(), timestamp(context.terminatedAt()));
+                timestamp(context.terminatedAt()), context.intentionalReason(),
+                context.transportEvidence().nettyChannelId(), context.transportEvidence().websocketCloseObserved(),
+                context.transportEvidence().websocketCloseCode(), context.transportEvidence().websocketCloseReason(),
+                context.transportEvidence().channelInactiveObserved(), timestamp(context.transportEvidence().channelInactiveAt()),
+                context.transportEvidence().inputShutdownObserved(), context.transportEvidence().tlsCloseObserved(),
+                context.transportEvidence().tlsCloseSucceeded(), context.transportEvidence().tlsExceptionClass(),
+                context.transportEvidence().transportExceptionObserved(), context.transportEvidence().transportExceptionClass(),
+                context.transportEvidence().transportRootCauseClass(), timestamp(context.terminatedAt()));
         if (inserted != 1) return false;
 
         context.sequences().forEach(sequence -> jdbc.update("""
@@ -52,9 +59,13 @@ public class KrakenStreamTerminationRepository {
                 (termination_id, connection_id, product, classification, signal_type,
                  close_code, close_reason, exception_class, exception_message,
                  root_cause_class, root_cause_message, connected_at, terminated_at,
-                 intentional_reason, created_at)
+                 intentional_reason, netty_channel_id, websocket_close_observed,
+                 websocket_close_code, websocket_close_reason, channel_inactive_observed,
+                 channel_inactive_at, input_shutdown_observed, tls_close_observed,
+                 tls_close_succeeded, tls_exception_class, transport_exception_observed,
+                 transport_exception_class, transport_root_cause_class, created_at)
                 """;
-        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String values = "VALUES (" + "?, ".repeat(27) + "?)";
         if (isH2()) {
             return "MERGE INTO kraken_stream_termination " + columns + " KEY(connection_id) " + values;
         }
