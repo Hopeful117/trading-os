@@ -143,6 +143,15 @@ public class OrderBookEvidenceCaptureService {
         }
     }
 
+    public void seal(OrderBookKey key) {
+        synchronized (sequenceLocks.computeIfAbsent(key, ignored -> new Object())) {
+            ActiveSequence current = sequences.get(key);
+            if (trySeal(key)) {
+                sequences.remove(key, current);
+            }
+        }
+    }
+
     public SequenceDiagnostics diagnosticSnapshot(OrderBookKey key) {
         ActiveSequence current = sequences.get(key);
         return current == null ? null : new SequenceDiagnostics(current.sequenceId(), current.marketId(),
@@ -159,6 +168,26 @@ public class OrderBookEvidenceCaptureService {
             log.error("Unable to persist order-book sequence invalidation key={} reason={}",
                     key, reason, ignored);
             return false;
+        }
+    }
+
+    private boolean trySeal(OrderBookKey key) {
+        Instant sealedAt = clock.instant();
+        try {
+            repository.sealActiveSequences(key.marketId(), key.depth(), sealedAt);
+            return true;
+        } catch (RuntimeException exception) {
+            durabilityCompromised = true;
+            log.error("Unable to persist order-book sequence seal key={}", key, exception);
+            try {
+                repository.invalidateActiveSequences(key.marketId(), key.depth(),
+                        "sequence sealing persistence failure", sealedAt);
+                return true;
+            } catch (RuntimeException invalidationException) {
+                log.error("Unable to fail closed after order-book sequence seal failure key={}", key,
+                        invalidationException);
+                return false;
+            }
         }
     }
 

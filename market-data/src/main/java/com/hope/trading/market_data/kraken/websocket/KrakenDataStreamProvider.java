@@ -763,8 +763,12 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
         synchronized (orderBookLifecycleLocks.computeIfAbsent(key, ignored -> new Object())) {
             orderBookStateService.clear(key);
             orderBookEventPublisher.clear(key);
-            if (invalidateEvidence && orderBookEvidenceCaptureService != null) {
-                orderBookEvidenceCaptureService.invalidate(key);
+            if (orderBookEvidenceCaptureService != null) {
+                if (invalidateEvidence) {
+                    orderBookEvidenceCaptureService.invalidate(key);
+                } else {
+                    orderBookEvidenceCaptureService.seal(key);
+                }
             }
         }
     }
@@ -939,7 +943,7 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
             depths.forEach(depth -> {
                 OrderBookKey key =
                         new OrderBookKey(market.getMarketId(), depth);
-                clearOrderBook(market, depth, true);
+                clearOrderBook(market, depth, false);
             });
         });
         tradeSymbols.forEach(symbol -> {
