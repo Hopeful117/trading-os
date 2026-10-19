@@ -24,11 +24,23 @@ public final class EconomicResearchOrchestrationController {
                 || request.transactionCostModelVersion().isBlank()) {
             throw new IllegalArgumentException("candidateJsonl, researchCutoff and transactionCostModelVersion are required");
         }
+        boolean any = request.brokerAccountId() != null || request.provider() != null || request.productType() != null;
+        boolean complete = request.brokerAccountId() != null && request.provider() != null
+                && !request.provider().isBlank() && request.productType() != null
+                && !request.productType().isBlank();
+        if (any && !complete) {
+            throw new IllegalArgumentException("brokerAccountId, provider and productType must be supplied together");
+        }
         return ResponseEntity.ok(marketIntelligence.evaluate(new EconomicResearchMarketIntelligenceClient.EvaluationRequest(
-                request.candidateJsonl(), request.researchCutoff(), request.transactionCostModelVersion())));
+                request.candidateJsonl(), request.researchCutoff(), request.transactionCostModelVersion(),
+                request.brokerAccountId(), request.provider(), request.productType())));
     }
 
     public record OrchestrationRequest(String candidateJsonl, String researchCutoff,
-                                       String transactionCostModelVersion) {
+                                       String transactionCostModelVersion, java.util.UUID brokerAccountId,
+                                       String provider, String productType) {
+        public OrchestrationRequest(String candidateJsonl, String researchCutoff, String transactionCostModelVersion) {
+            this(candidateJsonl, researchCutoff, transactionCostModelVersion, null, null, null);
+        }
     }
 }

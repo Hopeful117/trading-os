@@ -11,6 +11,7 @@ import java.util.Date;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.GetRiskSnapshotService;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.GetTechnicalCapabilitiesService;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.PreviewMarginService;
+import com.hope.trading.broker_service.broker.infrastructure.persistence.HistoricalFeeScheduleRepository;
 import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerAuthorizationException;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,30 @@ class BrokerApiSecurityIntegrationTest {
     @MockitoBean GetRiskSnapshotService riskSnapshots;
     @MockitoBean GetTechnicalCapabilitiesService technicalCapabilities;
     @MockitoBean PreviewMarginService marginPreviews;
+    @MockitoBean HistoricalFeeScheduleRepository historicalFeeSchedules;
     @Test void internalApiRequiresServiceJwtAndValidatesDtos() throws Exception {mvc.perform(post("/internal/v1/executions").contentType(MediaType.APPLICATION_JSON).content("{}" )).andExpect(status().isUnauthorized());mvc.perform(post("/internal/v1/executions").header("X-Service-Authorization","Bearer "+serviceToken()).contentType(MediaType.APPLICATION_JSON).content("{}" )).andExpect(status().isBadRequest());}
+    @Test void historicalFeesRequiresServiceJwt() throws Exception {
+        mvc.perform(get("/internal/v1/historical-fees/eligible")
+                .queryParam("brokerAccountId", UUID.randomUUID().toString())
+                .queryParam("provider", "KRAKEN")
+                .queryParam("productType", "LINEAR_PERPETUAL")
+                .queryParam("instrument", "PF_XBTUSD")
+                .queryParam("executionTime", "2026-10-19T16:00:00Z")
+                .queryParam("researchCutoff", "2026-10-19T18:00:00Z"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test void historicalFeesAllowsAuthorizedServiceOnly() throws Exception {
+        mvc.perform(get("/internal/v1/historical-fees/eligible")
+                .queryParam("brokerAccountId", UUID.randomUUID().toString())
+                .queryParam("provider", "KRAKEN")
+                .queryParam("productType", "LINEAR_PERPETUAL")
+                .queryParam("instrument", "PF_XBTUSD")
+                .queryParam("executionTime", "2026-10-19T16:00:00Z")
+                .queryParam("researchCutoff", "2026-10-19T18:00:00Z")
+                .header("X-Service-Authorization", "Bearer " + serviceToken()))
+                .andExpect(status().isNotFound());
+    }
     @Test void riskSnapshotUsesAuthenticatedOwner() throws Exception {
         UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
         Instant from=Instant.parse("2026-08-01T00:00:00Z"),to=Instant.parse("2026-08-02T00:00:00Z");
