@@ -141,6 +141,8 @@ class ValidatorTest(unittest.TestCase):
             "outcomeDefinition=market-outcome-v1",
             "cadence=ONE_PER_FEATURE_SNAPSHOT",
             "horizon=PT1H",
+            "featureRequirementsVersion=q1-v1",
+            "selectedFeatureSnapshot=ResearchFeatureSnapshotKey[marketId=11111111-1111-1111-1111-111111111111, evaluationCutoff=2026-10-15T10:00:00Z]|feature-fingerprint",
             "sample=" + row["lineage"]["sampleFingerprint"],
             "exclusion=OUTCOME_MISSING|1",
         ]
@@ -158,6 +160,16 @@ class ValidatorTest(unittest.TestCase):
                 "horizons": ["PT1H"],
                 "samplingCadence": "ONE_PER_FEATURE_SNAPSHOT",
                 "acceptedFeatureMissingness": [],
+                "featureRequirements": {
+                    "version": "q1-v1",
+                    "requiredFeatureNames": [],
+                    "acceptedMissingness": [],
+                },
+                "selectedFeatureSnapshotFingerprints": [{
+                    "marketId": "11111111-1111-1111-1111-111111111111",
+                    "evaluationCutoff": "2026-10-15T10:00:00Z",
+                    "snapshotFingerprint": "feature-fingerprint",
+                }],
                 "selectedOutcomeFingerprints": [],
             },
             "featureSchema": {"version": "feature-projection-v1", "definitions": [{
@@ -212,6 +224,51 @@ class ValidatorTest(unittest.TestCase):
             (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
             result = validate_bundle(root)
             self.assertIn("outcome.selection_mismatch", {item["code"] for item in result.diagnostics})
+
+    def test_rejects_selected_feature_snapshot_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = Path(__file__).parent / "fixtures" / "java-generated"
+            for name in ("dataset-manifest.json", "samples.jsonl"):
+                (root / name).write_bytes((fixture / name).read_bytes())
+            row = json.loads((root / "samples.jsonl").read_text())
+            row["lineage"]["featureSnapshotFingerprint"] = "different-snapshot"
+            samples = json.dumps(row, separators=(",", ":")) + "\n"
+            (root / "samples.jsonl").write_text(samples, encoding="utf-8")
+            manifest = json.loads((root / "dataset-manifest.json").read_text())
+            manifest["samplesSha256"] = hashlib.sha256(samples.encode()).hexdigest()
+            (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            result = validate_bundle(root)
+            self.assertIn("feature.selection_mismatch", {item["code"] for item in result.diagnostics})
+
+    def test_rejects_duplicate_required_feature_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = Path(__file__).parent / "fixtures" / "java-generated"
+            for name in ("dataset-manifest.json", "samples.jsonl"):
+                (root / name).write_bytes((fixture / name).read_bytes())
+            manifest = json.loads((root / "dataset-manifest.json").read_text())
+            manifest["population"]["featureRequirements"]["requiredFeatureNames"] = [
+                "ohlc.range_fraction", " ohlc.range_fraction "
+            ]
+            (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            result = validate_bundle(root)
+            self.assertIn("manifest.duplicate_required_feature", {item["code"] for item in result.diagnostics})
+
+    def test_rejects_non_canonical_required_feature_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = Path(__file__).parent / "fixtures" / "java-generated"
+            for name in ("dataset-manifest.json", "samples.jsonl"):
+                (root / name).write_bytes((fixture / name).read_bytes())
+            manifest = json.loads((root / "dataset-manifest.json").read_text())
+            manifest["population"]["featureRequirements"]["requiredFeatureNames"] = [
+                " ohlc.range_fraction "
+            ]
+            (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            result = validate_bundle(root)
+            codes = {item["code"] for item in result.diagnostics}
+            self.assertIn("manifest.non_canonical_required_feature", codes)
 
     def test_rejects_malformed_excluded_outcome(self):
         with tempfile.TemporaryDirectory() as directory:

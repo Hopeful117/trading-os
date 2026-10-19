@@ -44,6 +44,12 @@ class ResearchDatasetExportCommandTest {
                   "horizons": ["PT1H"],
                   "samplingCadence": "ONE_PER_FEATURE_SNAPSHOT",
                   "acceptedFeatureMissingness": ["PRESENT"],
+                  "selectedFeatureSnapshotFingerprints": [],
+                  "featureRequirements": {
+                    "version": "q1-v1",
+                    "requiredFeatureNames": [],
+                    "acceptedMissingness": []
+                  },
                   "selectedOutcomeFingerprints": []
                 }
                 """);
@@ -93,6 +99,120 @@ class ResearchDatasetExportCommandTest {
     }
 
     @Test
+    void rejectsDuplicateSelectedFeatureSnapshotKeys() throws Exception {
+        Path spec = tempDir.resolve("duplicate-snapshot-selection.json");
+        Files.writeString(spec, """
+                {
+                  "populationPolicyVersion": "population-v1",
+                  "marketIds": ["11111111-1111-1111-1111-111111111111"],
+                  "startCutoffInclusive": "2026-10-01T00:00:00Z",
+                  "endCutoffExclusive": "2026-10-02T00:00:00Z",
+                  "featureProjectionVersion": "feature-projection-v1",
+                  "featureEvidencePolicy": "STRICT_OBSERVED",
+                  "outcomeDefinitionVersion": "outcome-v1",
+                  "horizons": ["PT1H"],
+                  "samplingCadence": "ONE_PER_FEATURE_SNAPSHOT",
+                  "acceptedFeatureMissingness": [],
+                  "selectedFeatureSnapshotFingerprints": [
+                    {"marketId": "11111111-1111-1111-1111-111111111111", "evaluationCutoff": "2026-10-01T00:00:00Z", "snapshotFingerprint": "one"},
+                    {"marketId": "11111111-1111-1111-1111-111111111111", "evaluationCutoff": "2026-10-01T00:00:00Z", "snapshotFingerprint": "two"}
+                  ],
+                  "featureRequirements": {
+                    "version": "q1-v1",
+                    "requiredFeatureNames": [],
+                    "acceptedMissingness": []
+                  },
+                  "selectedOutcomeFingerprints": []
+                }
+                """);
+        ResearchDatasetExportCommand command = new ResearchDatasetExportCommand(
+                new ObjectMapper(), mock(ResearchDatasetExportService.class),
+                mock(ConfigurableApplicationContext.class));
+        Method readPopulation = ResearchDatasetExportCommand.class
+                .getDeclaredMethod("readPopulation", Path.class);
+        readPopulation.setAccessible(true);
+
+        assertThatThrownBy(() -> readPopulation.invoke(command, spec))
+                .isInstanceOf(InvocationTargetException.class)
+                .hasCauseInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsExactDuplicateRequiredFeatureNamesFromJson() throws Exception {
+        Path spec = tempDir.resolve("duplicate-required-feature.json");
+        Files.writeString(spec, """
+                {
+                  "populationPolicyVersion": "population-v1",
+                  "marketIds": ["11111111-1111-1111-1111-111111111111"],
+                  "startCutoffInclusive": "2026-10-01T00:00:00Z",
+                  "endCutoffExclusive": "2026-10-02T00:00:00Z",
+                  "featureProjectionVersion": "feature-projection-v1",
+                  "featureEvidencePolicy": "STRICT_OBSERVED",
+                  "outcomeDefinitionVersion": "outcome-v1",
+                  "horizons": ["PT1H"],
+                  "samplingCadence": "ONE_PER_FEATURE_SNAPSHOT",
+                  "acceptedFeatureMissingness": [],
+                  "selectedFeatureSnapshotFingerprints": [],
+                  "featureRequirements": {
+                    "version": "experiment-v1",
+                    "requiredFeatureNames": ["trend.bias.direction", "trend.bias.direction"],
+                    "acceptedMissingness": []
+                  },
+                  "selectedOutcomeFingerprints": []
+                }
+                """);
+        ResearchDatasetExportCommand command = new ResearchDatasetExportCommand(
+                new ObjectMapper(), mock(ResearchDatasetExportService.class),
+                mock(ConfigurableApplicationContext.class));
+        Method readPopulation = ResearchDatasetExportCommand.class
+                .getDeclaredMethod("readPopulation", Path.class);
+        readPopulation.setAccessible(true);
+
+        assertThatThrownBy(() -> readPopulation.invoke(command, spec))
+                .isInstanceOf(InvocationTargetException.class)
+                .hasCauseInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsDuplicateSelectedOutcomeKeys() throws Exception {
+        Path spec = tempDir.resolve("duplicate-outcome-selection.json");
+        Files.writeString(spec, """
+                {
+                  "populationPolicyVersion": "population-v1",
+                  "marketIds": ["11111111-1111-1111-1111-111111111111"],
+                  "startCutoffInclusive": "2026-10-01T00:00:00Z",
+                  "endCutoffExclusive": "2026-10-02T00:00:00Z",
+                  "featureProjectionVersion": "feature-projection-v1",
+                  "featureEvidencePolicy": "STRICT_OBSERVED",
+                  "outcomeDefinitionVersion": "outcome-v1",
+                  "horizons": ["PT1H"],
+                  "samplingCadence": "ONE_PER_FEATURE_SNAPSHOT",
+                  "acceptedFeatureMissingness": [],
+                  "selectedFeatureSnapshotFingerprints": [],
+                  "featureRequirements": {
+                    "version": "q1-v1",
+                    "requiredFeatureNames": [],
+                    "acceptedMissingness": []
+                  },
+                  "selectedOutcomeFingerprints": [
+                    {"marketId": "11111111-1111-1111-1111-111111111111", "evaluationCutoff": "2026-10-01T00:00:00Z", "horizon": "PT1H", "outcomeFingerprint": "one"},
+                    {"marketId": "11111111-1111-1111-1111-111111111111", "evaluationCutoff": "2026-10-01T00:00:00Z", "horizon": "PT1H", "outcomeFingerprint": "two"}
+                  ]
+                }
+                """);
+        ResearchDatasetExportCommand command = new ResearchDatasetExportCommand(
+                new ObjectMapper(), mock(ResearchDatasetExportService.class),
+                mock(ConfigurableApplicationContext.class));
+        Method readPopulation = ResearchDatasetExportCommand.class
+                .getDeclaredMethod("readPopulation", Path.class);
+        readPopulation.setAccessible(true);
+
+        assertThatThrownBy(() -> readPopulation.invoke(command, spec))
+                .isInstanceOf(InvocationTargetException.class)
+                .hasCauseInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void exportsPopulationAndRequestsApplicationExit() throws Exception {
         Path spec = tempDir.resolve("population.json");
         Files.writeString(spec, """
@@ -107,6 +227,12 @@ class ResearchDatasetExportCommandTest {
                   "horizons": ["PT1H"],
                   "samplingCadence": "ONE_PER_FEATURE_SNAPSHOT",
                   "acceptedFeatureMissingness": ["PRESENT"],
+                  "selectedFeatureSnapshotFingerprints": [],
+                  "featureRequirements": {
+                    "version": "q1-v1",
+                    "requiredFeatureNames": [],
+                    "acceptedMissingness": []
+                  },
                   "selectedOutcomeFingerprints": []
                 }
                 """);

@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.research;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.domain.research.DatasetManifest;
+import com.hope.trading.market_intelligence.domain.research.ResearchFeatureSnapshotKey;
 import com.hope.trading.market_intelligence.domain.research.ResearchOutcomeKey;
 
 import java.io.IOException;
@@ -102,6 +103,24 @@ public final class ResearchDatasetBundleExporter {
         population.put("samplingCadence", value.samplingCadence().name());
         population.put("acceptedFeatureMissingness", value.acceptedFeatureMissingness().stream()
                 .map(Enum::name).sorted().toList());
+        Map<String, Object> featureRequirements = new LinkedHashMap<>();
+        featureRequirements.put("version", value.featureRequirements().version());
+        featureRequirements.put("requiredFeatureNames", value.featureRequirements().requiredFeatureNames().stream().sorted().toList());
+        featureRequirements.put("acceptedMissingness", value.featureRequirements().acceptedMissingness().stream()
+                .map(Enum::name).sorted().toList());
+        population.put("featureRequirements", featureRequirements);
+        List<Map<String, String>> snapshotSelections = new ArrayList<>();
+        value.selectedFeatureSnapshotFingerprints().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResearchFeatureSnapshotKey::marketId)
+                        .thenComparing(ResearchFeatureSnapshotKey::evaluationCutoff)))
+                .forEach(entry -> {
+                    Map<String, String> selection = new LinkedHashMap<>();
+                    selection.put("marketId", entry.getKey().marketId().toString());
+                    selection.put("evaluationCutoff", entry.getKey().evaluationCutoff().toString());
+                    selection.put("snapshotFingerprint", entry.getValue());
+                    snapshotSelections.add(selection);
+                });
+        population.put("selectedFeatureSnapshotFingerprints", snapshotSelections);
         List<Map<String, String>> selections = new ArrayList<>();
         value.selectedOutcomeFingerprints().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResearchOutcomeKey::marketId)

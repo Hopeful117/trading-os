@@ -12,6 +12,16 @@
     "horizons" : [ "PT1H" ],
     "samplingCadence" : "ONE_PER_FEATURE_SNAPSHOT",
     "acceptedFeatureMissingness" : [ "INSUFFICIENT_DATA" ],
+    "featureRequirements" : {
+      "version" : "q1-v1",
+      "requiredFeatureNames" : [ ],
+      "acceptedMissingness" : [ ]
+    },
+    "selectedFeatureSnapshotFingerprints" : [ {
+      "marketId" : "11111111-1111-1111-1111-111111111111",
+      "evaluationCutoff" : "2026-10-15T10:00:00Z",
+      "snapshotFingerprint" : "snapshot-cross-language"
+    } ],
     "selectedOutcomeFingerprints" : [ {
       "marketId" : "11111111-1111-1111-1111-111111111111",
       "evaluationCutoff" : "2026-10-15T10:00:00Z",
@@ -458,7 +468,7 @@
   "eligibleCount" : 1,
   "excludedCount" : 0,
   "exclusionCounts" : { },
-  "datasetFingerprint" : "8688bc6a33e02bedca58979ca7c8c2613313ef291df367b0326e2d541c3e167e",
-  "fingerprintMaterial" : [ "definition=research-dataset-v1", "populationPolicyVersion=population-v1", "startCutoff=2026-10-15T09:59:59Z", "endCutoff=2026-10-15T10:00:01Z", "featureProjection=feature-projection-v1", "featurePolicy=STRICT_OBSERVED", "outcomeDefinition=market-outcome-v1", "horizon=PT1H", "cadence=ONE_PER_FEATURE_SNAPSHOT", "acceptedMissingness=INSUFFICIENT_DATA", "selectedOutcome=ResearchOutcomeKey[marketId=11111111-1111-1111-1111-111111111111, evaluationCutoff=2026-10-15T10:00:00Z, horizon=OutcomeHorizon[value=PT1H]]|outcome-cross-language", "sample=f741ea6d2ccfcc8549dfd642a43f81da0d2989cb04718da380e929936cc07011" ],
+  "datasetFingerprint" : "8eefc33c7614134c56b8d8cb236197e54011826ef9ac9f83bfb258f48e0eb260",
+  "fingerprintMaterial" : [ "definition=research-dataset-v1", "populationPolicyVersion=population-v1", "startCutoff=2026-10-15T09:59:59Z", "endCutoff=2026-10-15T10:00:01Z", "featureProjection=feature-projection-v1", "featurePolicy=STRICT_OBSERVED", "outcomeDefinition=market-outcome-v1", "horizon=PT1H", "cadence=ONE_PER_FEATURE_SNAPSHOT", "acceptedMissingness=INSUFFICIENT_DATA", "featureRequirementsVersion=q1-v1", "selectedFeatureSnapshot=ResearchFeatureSnapshotKey[marketId=11111111-1111-1111-1111-111111111111, evaluationCutoff=2026-10-15T10:00:00Z]|snapshot-cross-language", "selectedOutcome=ResearchOutcomeKey[marketId=11111111-1111-1111-1111-111111111111, evaluationCutoff=2026-10-15T10:00:00Z, horizon=OutcomeHorizon[value=PT1H]]|outcome-cross-language", "sample=f741ea6d2ccfcc8549dfd642a43f81da0d2989cb04718da380e929936cc07011" ],
   "samplesSha256" : "80414b7a23f6bb112ed85820eeaff94512e0b449628b52dd6ed66a9a446cec19"
 }

@@ -33,7 +33,7 @@ class ResearchDatasetBuilderTest {
         ObservedMarketOutcome oneHour = outcome(OutcomeHorizon.oneHour(), "outcome-1h", ObservedMarketOutcomeStatus.AVAILABLE);
         ObservedMarketOutcome fourHours = outcome(OutcomeHorizon.fourHours(), "outcome-4h", ObservedMarketOutcomeStatus.AVAILABLE);
         ObservedMarketOutcome oneDay = outcome(OutcomeHorizon.oneDay(), "outcome-24h", ObservedMarketOutcomeStatus.AVAILABLE);
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-1h",
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.fourHours()), "outcome-4h",
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneDay()), "outcome-24h"),
@@ -50,7 +50,7 @@ class ResearchDatasetBuilderTest {
     void preservesMissingnessAndTypesInJsonlExport() throws Exception {
         FeatureSnapshot snapshot = snapshot("snapshot-export");
         ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-export", ObservedMarketOutcomeStatus.AVAILABLE);
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-export"),
                 Set.of(OutcomeHorizon.oneHour()));
 
@@ -71,12 +71,12 @@ class ResearchDatasetBuilderTest {
     void excludesUnselectedOrIncompleteOutcomeWithoutInventingValues() {
         FeatureSnapshot snapshot = snapshot("snapshot-exclusion");
         ObservedMarketOutcome incomplete = outcome(OutcomeHorizon.oneHour(), "outcome-incomplete", ObservedMarketOutcomeStatus.INCOMPLETE);
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-incomplete"),
                 Set.of(OutcomeHorizon.oneHour()));
 
         DatasetBuildResult incompleteResult = builder().build(population, List.of(snapshot), List.of(incomplete));
-        DatasetBuildResult unselectedResult = builder().build(population(
+        DatasetBuildResult unselectedResult = builder().build(population(snapshot,
                 Map.of(), Set.of(OutcomeHorizon.oneHour())), List.of(snapshot), List.of(incomplete));
 
         assertThat(incompleteResult.samples().getFirst().exclusionReason()).isEqualTo(ResearchExclusionReason.OUTCOME_INCOMPLETE);
@@ -89,7 +89,7 @@ class ResearchDatasetBuilderTest {
         FeatureSnapshot snapshot = snapshot("snapshot-stable");
         ObservedMarketOutcome first = outcome(OutcomeHorizon.oneHour(), "outcome-stable-1", ObservedMarketOutcomeStatus.AVAILABLE);
         ObservedMarketOutcome second = outcome(OutcomeHorizon.fourHours(), "outcome-stable-4", ObservedMarketOutcomeStatus.AVAILABLE);
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-stable-1",
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.fourHours()), "outcome-stable-4"),
                 Set.of(OutcomeHorizon.oneHour(), OutcomeHorizon.fourHours()));
@@ -106,7 +106,7 @@ class ResearchDatasetBuilderTest {
     void exportsAtomicBundleWithManifestAndSampleChecksum() throws Exception {
         FeatureSnapshot snapshot = snapshot("snapshot-bundle");
         ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-bundle", ObservedMarketOutcomeStatus.AVAILABLE);
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-bundle"),
                 Set.of(OutcomeHorizon.oneHour()));
         DatasetBuildResult result = builder().build(population, List.of(snapshot), List.of(outcome));
@@ -148,7 +148,7 @@ class ResearchDatasetBuilderTest {
     void currentExporterMatchesCommittedCrossLanguageFixture() throws Exception {
         FeatureSnapshot snapshot = snapshot("snapshot-cross-language");
         ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-cross-language", ObservedMarketOutcomeStatus.AVAILABLE);
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-cross-language"),
                 Set.of(OutcomeHorizon.oneHour()));
         DatasetBuildResult result = builder().build(population, List.of(snapshot), List.of(outcome));
@@ -158,10 +158,13 @@ class ResearchDatasetBuilderTest {
 
         new ResearchDatasetBundleExporter(new ObjectMapper()).export(result, generated);
 
-        assertThat(Files.readAllBytes(generated.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)))
-                .isEqualTo(Files.readAllBytes(fixture.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)));
         assertThat(Files.readAllBytes(generated.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE)))
                 .isEqualTo(Files.readAllBytes(fixture.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE)));
+        assertThat(Files.readAllBytes(generated.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)))
+                .isEqualTo(Files.readAllBytes(fixture.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)));
+        var manifest = new ObjectMapper().readTree(Files.readString(generated.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)));
+        assertThat(manifest.path("population").path("selectedFeatureSnapshotFingerprints")).hasSize(1);
+        assertThat(manifest.path("population").path("featureRequirements").path("version").asText()).isEqualTo("q1-v1");
     }
 
     @Test
@@ -195,9 +198,9 @@ class ResearchDatasetBuilderTest {
         ObservedMarketOutcome corrected = outcome(OutcomeHorizon.oneHour(), "outcome-corrected", ObservedMarketOutcomeStatus.AVAILABLE);
         ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
 
-        DatasetBuildResult originalDataset = builder().build(population(Map.of(key, "outcome-original"), Set.of(OutcomeHorizon.oneHour())),
+        DatasetBuildResult originalDataset = builder().build(population(snapshot, Map.of(key, "outcome-original"), Set.of(OutcomeHorizon.oneHour())),
                 List.of(snapshot), List.of(original, corrected));
-        DatasetBuildResult correctedDataset = builder().build(population(Map.of(key, "outcome-corrected"), Set.of(OutcomeHorizon.oneHour())),
+        DatasetBuildResult correctedDataset = builder().build(population(snapshot, Map.of(key, "outcome-corrected"), Set.of(OutcomeHorizon.oneHour())),
                 List.of(snapshot), List.of(original, corrected));
 
         assertThat(correctedDataset.samples().getFirst().sampleFingerprint())
@@ -208,26 +211,115 @@ class ResearchDatasetBuilderTest {
     }
 
     @Test
-    void excludesDuplicateSnapshotAndRejectsConflictingDuplicateSnapshot() {
+    void rejectsRepeatedSelectedSnapshotInput() {
         FeatureSnapshot snapshot = snapshot("snapshot-duplicate");
         ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-duplicate", ObservedMarketOutcomeStatus.AVAILABLE);
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-duplicate"),
                 Set.of(OutcomeHorizon.oneHour()));
 
-        DatasetBuildResult result = builder().build(population, List.of(snapshot, snapshot), List.of(outcome));
+        assertThatThrownBy(() -> builder().build(population, List.of(snapshot, snapshot), List.of(outcome)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("duplicate feature snapshot input");
+    }
+
+    @Test
+    void ignoresLaterSnapshotVersionWhenPopulationSelectsOriginal() {
+        FeatureSnapshot original = snapshot("snapshot-original");
+        FeatureSnapshot later = snapshot("snapshot-later");
+        ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
+        ResearchPopulationSpec population = population(original, Map.of(key, "outcome-selected"),
+                Set.of(OutcomeHorizon.oneHour()));
+
+        DatasetBuildResult result = builder().build(population, List.of(later, original),
+                List.of(outcome(OutcomeHorizon.oneHour(), "outcome-selected", ObservedMarketOutcomeStatus.AVAILABLE)));
+
+        assertThat(result.samples()).hasSize(1);
+        assertThat(result.samples().getFirst().featureSnapshot().fingerprint()).isEqualTo("snapshot-original");
+    }
+
+    @Test
+    void missingSelectedSnapshotFailsClosed() {
+        FeatureSnapshot selected = snapshot("snapshot-selected");
+        ResearchPopulationSpec population = population(selected,
+                Map.of(new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-selected"),
+                Set.of(OutcomeHorizon.oneHour()));
+
+        assertThatThrownBy(() -> builder().build(population, List.of(), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("selected feature snapshot fingerprint is missing");
+    }
+
+    @Test
+    void selectedSnapshotOutsidePopulationBoundsFailsClosed() {
+        FeatureSnapshot snapshot = snapshot("snapshot-outside-bounds");
+        ResearchPopulationSpec population = new ResearchPopulationSpec("population-v1", Set.of(UUID.randomUUID()),
+                T0.plusSeconds(1), T0.plusSeconds(2), "feature-projection-v1",
+                EvidenceAcquisitionPolicy.STRICT_OBSERVED, "market-outcome-v1",
+                Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA),
+                Map.of(new ResearchFeatureSnapshotKey(MARKET_ID, T0), snapshot.fingerprint()),
+                ResearchFeatureRequirements.q1(), Map.of());
+
+        assertThatThrownBy(() -> builder().build(population, List.of(snapshot), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("outside population bounds");
+    }
+
+    @Test
+    void acceptedMissingnessAppliesToRequiredFeature() {
+        FeatureSnapshot snapshot = snapshot("snapshot-accepted-required-missingness");
+        ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
+        ResearchPopulationSpec population = population(snapshot, Map.of(key, "outcome-accepted-required-missingness"),
+                Set.of(OutcomeHorizon.oneHour()),
+                new ResearchFeatureRequirements("test-v1", Set.of("trend.trigger.atr_ratio"),
+                        Set.of(FeatureMissingness.INSUFFICIENT_DATA)));
+
+        DatasetBuildResult result = builder().build(population, List.of(snapshot),
+                List.of(outcome(OutcomeHorizon.oneHour(), "outcome-accepted-required-missingness", ObservedMarketOutcomeStatus.AVAILABLE)));
 
         assertThat(result.manifest().eligibleCount()).isEqualTo(1);
-        assertThat(result.manifest().excludedCount()).isEqualTo(1);
-        assertThat(result.samples()).extracting(ResearchSample::exclusionReason)
-                .containsExactly(null, ResearchExclusionReason.DUPLICATE_FEATURE_SNAPSHOT);
+    }
+
+    @Test
+    void rejectsRequiredFeatureOutsideProjectionSchema() {
+        FeatureSnapshot snapshot = snapshot("snapshot-unknown-required-feature");
+        ResearchPopulationSpec population = population(snapshot, Map.of(), Set.of(OutcomeHorizon.oneHour()),
+                new ResearchFeatureRequirements("test-v1", Set.of("unknown.feature"), Set.of()));
+
+        assertThatThrownBy(() -> builder().build(population, List.of(snapshot), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unsupported required feature");
+    }
+
+    @Test
+    void rejectsCanonicalDuplicateRequiredFeatureNames() {
+        assertThatThrownBy(() -> new ResearchFeatureRequirements("test-v1", Set.of("feature", " feature "), Set.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("duplicate required feature name");
+    }
+
+    @Test
+    void addingUnselectedOutcomeVersionDoesNotChangeFrozenPopulation() {
+        FeatureSnapshot snapshot = snapshot("snapshot-frozen-outcome");
+        ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
+        ResearchPopulationSpec population = population(snapshot, Map.of(key, "outcome-selected"),
+                Set.of(OutcomeHorizon.oneHour()));
+        ObservedMarketOutcome selected = outcome(OutcomeHorizon.oneHour(), "outcome-selected", ObservedMarketOutcomeStatus.AVAILABLE);
+        ObservedMarketOutcome later = outcome(OutcomeHorizon.oneHour(), "outcome-later", ObservedMarketOutcomeStatus.AVAILABLE);
+
+        DatasetBuildResult original = builder().build(population, List.of(snapshot), List.of(selected));
+        DatasetBuildResult withLaterVersion = builder().build(population, List.of(snapshot), List.of(later, selected));
+
+        assertThat(withLaterVersion.manifest().datasetFingerprint())
+                .isEqualTo(original.manifest().datasetFingerprint());
     }
 
     @Test
     void distinguishesMissingSelectedOutcomeFromWrongOutcomeVersion() {
         FeatureSnapshot snapshot = snapshot("snapshot-missing-outcome");
         ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
-        ResearchPopulationSpec population = population(Map.of(key, "selected"), Set.of(OutcomeHorizon.oneHour()));
+        ResearchPopulationSpec population = population(snapshot, Map.of(key, "selected"), Set.of(OutcomeHorizon.oneHour()));
 
         DatasetBuildResult missing = builder().build(population, List.of(snapshot), List.of());
         DatasetBuildResult wrongFingerprint = builder().build(population, List.of(snapshot),
@@ -244,7 +336,7 @@ class ResearchDatasetBuilderTest {
                 List.of(new NumericFeatureValue("unknown", FeatureMissingness.PRESENT, BigDecimal.ONE)),
                 List.of(), List.of(), "invalid-snapshot", T0.plusSeconds(1));
         ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
-        ResearchPopulationSpec population = population(Map.of(key, "outcome-invalid"), Set.of(OutcomeHorizon.oneHour()));
+        ResearchPopulationSpec population = population(invalid, Map.of(key, "outcome-invalid"), Set.of(OutcomeHorizon.oneHour()));
 
         DatasetBuildResult result = builder().build(population, List.of(invalid),
                 List.of(outcome(OutcomeHorizon.oneHour(), "outcome-invalid", ObservedMarketOutcomeStatus.AVAILABLE)));
@@ -256,7 +348,7 @@ class ResearchDatasetBuilderTest {
     void rejectsConflictingOutcomesWithTheSameSelectedIdentity() {
         FeatureSnapshot snapshot = snapshot("snapshot-outcome-conflict");
         ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
-        ResearchPopulationSpec population = population(Map.of(key, "outcome-conflict"), Set.of(OutcomeHorizon.oneHour()));
+        ResearchPopulationSpec population = population(snapshot, Map.of(key, "outcome-conflict"), Set.of(OutcomeHorizon.oneHour()));
         ObservedMarketOutcome first = outcomeWithFinalPrice("outcome-conflict", new BigDecimal("102"));
         ObservedMarketOutcome second = outcomeWithFinalPrice("outcome-conflict", new BigDecimal("103"));
 
@@ -268,12 +360,24 @@ class ResearchDatasetBuilderTest {
     }
 
     @Test
+    void rejectsRepeatedOutcomeInput() {
+        FeatureSnapshot snapshot = snapshot("snapshot-outcome-duplicate");
+        ResearchOutcomeKey key = new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour());
+        ResearchPopulationSpec population = population(snapshot, Map.of(key, "outcome-duplicate"), Set.of(OutcomeHorizon.oneHour()));
+        ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-duplicate", ObservedMarketOutcomeStatus.AVAILABLE);
+
+        assertThatThrownBy(() -> builder().build(population, List.of(snapshot), List.of(outcome, outcome)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("duplicate outcome input");
+    }
+
+    @Test
     void rejectsUnsupportedFeatureProjectionVersion() {
         FeatureSnapshot snapshot = snapshot("snapshot-unsupported-version");
         ResearchPopulationSpec population = new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1),
                 T0.plusSeconds(1), "feature-projection-v2", EvidenceAcquisitionPolicy.STRICT_OBSERVED,
-                "market-outcome-v1", Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
-                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
+                 "market-outcome-v1", Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                 Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of(), ResearchFeatureRequirements.q1(), Map.of());
 
         ResearchDatasetBuilder builder = builder();
         Throwable unsupported = catchThrowable(() -> builder.build(population, List.of(snapshot), List.of()));
@@ -288,7 +392,7 @@ class ResearchDatasetBuilderTest {
         FeatureSnapshot mismatched = new FeatureSnapshot(base.snapshotId(), base.analysisExecutionId(), base.marketId(),
                 base.evaluationCutoff(), base.evidencePolicy(), "feature-projection-v2", base.contextFingerprint(),
                 base.values(), base.groups(), base.provenance(), base.fingerprint(), base.createdAt());
-        ResearchPopulationSpec population = population(Map.of(
+        ResearchPopulationSpec population = population(mismatched, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-version-mismatch"),
                 Set.of(OutcomeHorizon.oneHour()));
 
@@ -301,10 +405,10 @@ class ResearchDatasetBuilderTest {
     @Test
     void excludesSnapshotWithFeatureMissingnessThatPopulationDoesNotAccept() {
         FeatureSnapshot snapshot = snapshot("snapshot-required-feature");
-        ResearchPopulationSpec population = new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1),
-                T0.plusSeconds(1), "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED,
-                "market-outcome-v1", Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
-                Set.of(), Map.of(new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-required-feature"));
+        ResearchPopulationSpec population = population(snapshot,
+                Map.of(new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-required-feature"),
+                Set.of(OutcomeHorizon.oneHour()),
+                new ResearchFeatureRequirements("test-v1", Set.of("trend.trigger.atr_ratio"), Set.of()));
 
         DatasetBuildResult result = builder().build(population, List.of(snapshot),
                 List.of(outcome(OutcomeHorizon.oneHour(), "outcome-required-feature", ObservedMarketOutcomeStatus.AVAILABLE)));
@@ -316,10 +420,10 @@ class ResearchDatasetBuilderTest {
     @Test
     void excludesPendingAndUnavailableOutcomesWithoutTreatingThemAsEligible() {
         FeatureSnapshot snapshot = snapshot("snapshot-outcome-status");
-        ResearchPopulationSpec pendingPopulation = population(Map.of(
+        ResearchPopulationSpec pendingPopulation = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-pending"),
                 Set.of(OutcomeHorizon.oneHour()));
-        ResearchPopulationSpec unavailablePopulation = population(Map.of(
+        ResearchPopulationSpec unavailablePopulation = population(snapshot, Map.of(
                 new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-unavailable"),
                 Set.of(OutcomeHorizon.oneHour()));
 
@@ -354,22 +458,22 @@ class ResearchDatasetBuilderTest {
     private ResearchPopulationSpec populationWithInvalidInterval() {
         return new ResearchPopulationSpec("population-v1", Set.of(), T0, T0,
                 "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED, "market-outcome-v1",
-                Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
-                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
+                 Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                 Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of(), ResearchFeatureRequirements.q1(), Map.of());
     }
 
     private ResearchPopulationSpec populationWithLiveEvidence() {
         return new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1), T0.plusSeconds(1),
                 "feature-projection-v1", EvidenceAcquisitionPolicy.LIVE_CURRENT, "market-outcome-v1",
                 Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
-                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of(), ResearchFeatureRequirements.q1(), Map.of());
     }
 
     private ResearchPopulationSpec populationWithoutHorizons() {
         return new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1), T0.plusSeconds(1),
                 "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED, "market-outcome-v1",
                 Set.of(), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
-                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of());
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of(), ResearchFeatureRequirements.q1(), Map.of());
     }
 
     private DatasetManifest manifest(int samples, int eligible, int excluded, List<String> material) {
@@ -382,7 +486,25 @@ class ResearchDatasetBuilderTest {
         return new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1), T0.plusSeconds(1),
                 "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED, "market-outcome-v1",
                 horizons, ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
-                Set.of(FeatureMissingness.INSUFFICIENT_DATA), selected);
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of(), ResearchFeatureRequirements.q1(), selected);
+    }
+
+    private ResearchPopulationSpec population(FeatureSnapshot snapshot,
+                                              Map<ResearchOutcomeKey, String> selected,
+                                              Set<OutcomeHorizon> horizons) {
+        return population(snapshot, selected, horizons, ResearchFeatureRequirements.q1());
+    }
+
+    private ResearchPopulationSpec population(FeatureSnapshot snapshot,
+                                              Map<ResearchOutcomeKey, String> selected,
+                                              Set<OutcomeHorizon> horizons,
+                                              ResearchFeatureRequirements requirements) {
+        return new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1), T0.plusSeconds(1),
+                "feature-projection-v1", EvidenceAcquisitionPolicy.STRICT_OBSERVED, "market-outcome-v1",
+                horizons, ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
+                Set.of(FeatureMissingness.INSUFFICIENT_DATA),
+                Map.of(new ResearchFeatureSnapshotKey(snapshot.marketId(), snapshot.evaluationCutoff()), snapshot.fingerprint()),
+                requirements, selected);
     }
 
     private FeatureSnapshot snapshot(String fingerprint) {

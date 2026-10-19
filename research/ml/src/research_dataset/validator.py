@@ -33,8 +33,10 @@ OUTCOME_FIELDS = {
 POPULATION_FIELDS = {
     "populationPolicyVersion", "marketIds", "startCutoffInclusive", "endCutoffExclusive",
     "featureProjectionVersion", "featureEvidencePolicy", "outcomeDefinitionVersion", "horizons",
-    "samplingCadence", "acceptedFeatureMissingness", "selectedOutcomeFingerprints",
+    "samplingCadence", "acceptedFeatureMissingness", "featureRequirements",
+    "selectedFeatureSnapshotFingerprints", "selectedOutcomeFingerprints",
 }
+FEATURE_REQUIREMENTS_FIELDS = {"version", "requiredFeatureNames", "acceptedMissingness"}
 VALID_OUTCOME_STATUSES = {"AVAILABLE", "PENDING", "INCOMPLETE", "UNAVAILABLE"}
 VALID_HORIZON = re.compile(r"^P(?:(?:\d+D)?(?:T(?:(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?)?)$")
 VALID_MISSINGNESS = {"PRESENT", "MISSING", "INSUFFICIENT_DATA", "STALE_INPUT", "INVALID_INPUT",
@@ -103,7 +105,7 @@ def validate_bundle(bundle: str | Path) -> ValidationResult:
         population = {}
     feature_schema = manifest.get("featureSchema")
     feature_types = _feature_types(feature_schema, diagnostics, population)
-    _validate_population(population, diagnostics)
+    _validate_population(population, diagnostics, feature_types)
     expected_count = manifest.get("sampleCount")
     rows: list[dict[str, Any]] = []
     try:
@@ -221,6 +223,7 @@ def _validate_row(row: dict[str, Any], line: int, population: dict[str, Any],
     if row.get("evidencePolicy") != population.get("featureEvidencePolicy"):
         _add(diagnostics, "samples.evidence_policy_mismatch", "row evidence policy differs from manifest", line)
     _validate_known_at(row, cutoff, diagnostics, line)
+    _validate_selected_snapshot(row, population, diagnostics, line)
     _validate_selected_outcome(row, population, diagnostics, line)
     if not isinstance(row.get("horizon"), str) or not _valid_duration(row["horizon"]):
         _add(diagnostics, "samples.invalid_horizon", "horizon must be an ISO-8601 duration", line)
@@ -232,7 +235,12 @@ def _validate_row(row: dict[str, Any], line: int, population: dict[str, Any],
     if not isinstance(features, dict) or set(features) != set(feature_types):
         _add(diagnostics, "features.schema_mismatch", "feature names do not match manifest schema", line)
     else:
-        accepted = set(population.get("acceptedFeatureMissingness", []))
+        requirements = population.get("featureRequirements") if isinstance(population.get("featureRequirements"), dict) else {}
+        required_names = {
+            name.strip() for name in requirements.get("requiredFeatureNames", [])
+            if isinstance(name, str)
+        }
+        accepted = set(requirements.get("acceptedMissingness", []))
         for name, feature in features.items():
             if not isinstance(feature, dict) or set(feature) != {"type", "status", "value"}:
                 _add(diagnostics, "features.invalid_value", f"invalid feature projection: {name}", line)
@@ -244,7 +252,7 @@ def _validate_row(row: dict[str, Any], line: int, population: dict[str, Any],
             if status not in {"PRESENT", "MISSING", "INSUFFICIENT_DATA", "STALE_INPUT", "INVALID_INPUT",
                               "UNAVAILABLE", "UNSUPPORTED", "NOT_APPLICABLE"}:
                 _add(diagnostics, "features.invalid_status", f"invalid feature missingness: {name}", line)
-            if status != "PRESENT" and status not in accepted:
+            if name in required_names and status != "PRESENT" and status not in accepted:
                 _add(diagnostics, "features.disallowed_missingness", f"disallowed missingness: {name}", line)
             if status == "PRESENT" and feature.get("value") is None:
                 _add(diagnostics, "features.present_without_value", f"present feature has null value: {name}", line)
@@ -380,6 +388,24 @@ def _validate_selected_outcome(row: dict[str, Any], population: dict[str, Any],
             _add(diagnostics, "outcome.selection_missing", "row outcome is not explicitly selected", line)
     elif row.get("status") == "ELIGIBLE" and actual != selected:
         _add(diagnostics, "outcome.selection_mismatch", "row outcome differs from selected fingerprint", line)
+
+
+def _validate_selected_snapshot(row: dict[str, Any], population: dict[str, Any],
+                                diagnostics: list[dict[str, Any]], line: int) -> None:
+    selections = population.get("selectedFeatureSnapshotFingerprints")
+    if not isinstance(selections, list):
+        return
+    key = (row.get("marketId"), row.get("evaluationCutoff"))
+    selected = {
+        (entry.get("marketId"), entry.get("evaluationCutoff")): entry.get("snapshotFingerprint")
+        for entry in selections if isinstance(entry, dict)
+    }.get(key)
+    lineage = row.get("lineage") if isinstance(row.get("lineage"), dict) else {}
+    actual = lineage.get("featureSnapshotFingerprint")
+    if selected is None:
+        _add(diagnostics, "feature.selection_missing", "row feature snapshot is not explicitly selected", line)
+    elif actual != selected:
+        _add(diagnostics, "feature.selection_mismatch", "row feature snapshot differs from selected fingerprint", line)
     elif actual is not None and actual != selected:
         _add(diagnostics, "outcome.selection_mismatch", "row outcome differs from selected fingerprint", line)
 
@@ -456,18 +482,57 @@ def _feature_types(schema: Any, diagnostics: list[dict[str, Any]], population: d
     return {name: data_type for name, data_type in types.items() if isinstance(name, str)}
 
 
-def _validate_population(population: dict[str, Any], diagnostics: list[dict[str, Any]]) -> None:
+def _validate_population(population: dict[str, Any], diagnostics: list[dict[str, Any]],
+                         feature_types: dict[str, Any]) -> None:
     _unknown_fields(population, POPULATION_FIELDS, "population", diagnostics)
     for field in ("populationPolicyVersion", "marketIds", "startCutoffInclusive", "endCutoffExclusive",
                   "featureProjectionVersion", "featureEvidencePolicy", "outcomeDefinitionVersion",
-                  "horizons", "samplingCadence", "acceptedFeatureMissingness", "selectedOutcomeFingerprints"):
+                  "horizons", "samplingCadence", "acceptedFeatureMissingness", "featureRequirements",
+                  "selectedFeatureSnapshotFingerprints", "selectedOutcomeFingerprints"):
         if field not in population:
             _add(diagnostics, "manifest.invalid_population", f"population field is missing: {field}")
     if population.get("featureEvidencePolicy") != "STRICT_OBSERVED":
         _add(diagnostics, "manifest.non_strict_evidence", "population requires STRICT_OBSERVED evidence")
-    for field in ("marketIds", "horizons", "acceptedFeatureMissingness", "selectedOutcomeFingerprints"):
+    for field in ("marketIds", "horizons", "acceptedFeatureMissingness", "selectedFeatureSnapshotFingerprints",
+                  "selectedOutcomeFingerprints"):
         if field in population and not isinstance(population[field], list):
             _add(diagnostics, "manifest.invalid_population", f"population field must be a list: {field}")
+    requirements = population.get("featureRequirements")
+    if not isinstance(requirements, dict):
+        _add(diagnostics, "manifest.invalid_feature_requirements", "featureRequirements must be an object")
+    else:
+        _unknown_fields(requirements, FEATURE_REQUIREMENTS_FIELDS, "population.featureRequirements", diagnostics)
+        for field in FEATURE_REQUIREMENTS_FIELDS:
+            if field not in requirements:
+                _add(diagnostics, "manifest.invalid_feature_requirements",
+                     f"featureRequirements field is missing: {field}")
+        if not isinstance(requirements.get("version"), str) or not requirements.get("version"):
+            _add(diagnostics, "manifest.invalid_feature_requirements", "featureRequirements.version must be a string")
+        for field in ("requiredFeatureNames", "acceptedMissingness"):
+            if not isinstance(requirements.get(field), list) \
+                    or not all(isinstance(value, str) for value in requirements[field]):
+                _add(diagnostics, "manifest.invalid_feature_requirements",
+                     f"featureRequirements field must be a string list: {field}")
+        if isinstance(requirements.get("acceptedMissingness"), list):
+            for value in requirements["acceptedMissingness"]:
+                if value not in VALID_MISSINGNESS:
+                    _add(diagnostics, "manifest.invalid_feature_requirements",
+                         f"invalid required-feature missingness: {value}")
+        if isinstance(requirements.get("requiredFeatureNames"), list):
+            names: set[str] = set()
+            for value in requirements["requiredFeatureNames"]:
+                if not isinstance(value, str):
+                    continue
+                canonical = value.strip()
+                if value != canonical:
+                    _add(diagnostics, "manifest.non_canonical_required_feature",
+                         "required feature name must be canonical")
+                if canonical in names:
+                    _add(diagnostics, "manifest.duplicate_required_feature", "required feature name is duplicated")
+                names.add(canonical)
+                if canonical not in feature_types:
+                    _add(diagnostics, "manifest.invalid_feature_requirements",
+                         f"required feature is not in the feature schema: {canonical}")
     if isinstance(population.get("marketIds"), list):
         for value in population["marketIds"]:
             try:
@@ -497,6 +562,24 @@ def _validate_population(population: dict[str, Any], diagnostics: list[dict[str,
                 _add(diagnostics, "manifest.invalid_population", "selected outcome horizon is invalid")
             elif entry["horizon"] not in _list_value(population.get("horizons")):
                 _add(diagnostics, "manifest.invalid_population", "selected outcome horizon is not declared")
+    if isinstance(population.get("selectedFeatureSnapshotFingerprints"), list):
+        selection_keys: set[tuple[Any, Any]] = set()
+        for entry in population["selectedFeatureSnapshotFingerprints"]:
+            if not isinstance(entry, dict) or set(entry) != {
+                    "marketId", "evaluationCutoff", "snapshotFingerprint"}:
+                _add(diagnostics, "manifest.invalid_population", "selected feature snapshot entry has an invalid shape")
+                continue
+            key = (entry["marketId"], entry["evaluationCutoff"])
+            if key in selection_keys:
+                _add(diagnostics, "manifest.duplicate_selection", "selected feature snapshot identity is duplicated")
+            selection_keys.add(key)
+            try:
+                UUID(entry["marketId"])
+                _parse_time(entry["evaluationCutoff"])
+            except (AttributeError, TypeError, ValueError):
+                _add(diagnostics, "manifest.invalid_population", "selected feature snapshot identity is invalid")
+            if not isinstance(entry["snapshotFingerprint"], str) or not entry["snapshotFingerprint"]:
+                _add(diagnostics, "manifest.invalid_population", "selected feature snapshot fingerprint is invalid")
     for field in ("startCutoffInclusive", "endCutoffExclusive"):
         try:
             _parse_time(population[field])
@@ -589,6 +672,17 @@ def _dataset_material(manifest: dict[str, Any], population: dict[str, Any],
     material.extend(f"market={value}" for value in sorted(_list_value(population.get("marketIds"))))
     material.extend(f"horizon={value}" for value in sorted(_list_value(population.get("horizons"))))
     material.extend(f"acceptedMissingness={value}" for value in sorted(_list_value(population.get("acceptedFeatureMissingness"))))
+    requirements = population.get("featureRequirements")
+    if isinstance(requirements, dict):
+        material.append(f"featureRequirementsVersion={requirements.get('version')}")
+        material.extend(f"requiredFeature={value}" for value in sorted(_list_value(requirements.get("requiredFeatureNames"))))
+        material.extend(f"requiredAcceptedMissingness={value}"
+                        for value in sorted(_list_value(requirements.get("acceptedMissingness"))))
+    for selection in _list_value(population.get("selectedFeatureSnapshotFingerprints")):
+        if isinstance(selection, dict):
+            key = (f"ResearchFeatureSnapshotKey[marketId={selection.get('marketId')}, "
+                   f"evaluationCutoff={selection.get('evaluationCutoff')}]" )
+            material.append(f"selectedFeatureSnapshot={key}|{selection.get('snapshotFingerprint')}")
     for selection in _list_value(population.get("selectedOutcomeFingerprints")):
         if isinstance(selection, dict):
             key = (f"ResearchOutcomeKey[marketId={selection.get('marketId')}, "

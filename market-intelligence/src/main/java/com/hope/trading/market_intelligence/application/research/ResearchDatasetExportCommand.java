@@ -6,6 +6,8 @@ import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.feature.FeatureMissingness;
 import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 import com.hope.trading.market_intelligence.domain.research.ResearchOutcomeKey;
+import com.hope.trading.market_intelligence.domain.research.ResearchFeatureRequirements;
+import com.hope.trading.market_intelligence.domain.research.ResearchFeatureSnapshotKey;
 import com.hope.trading.market_intelligence.domain.research.ResearchPopulationSpec;
 import com.hope.trading.market_intelligence.domain.research.ResearchSamplingCadence;
 import org.springframework.boot.ApplicationArguments;
@@ -20,6 +22,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -62,11 +65,33 @@ public final class ResearchDatasetExportCommand implements ApplicationRunner {
         Set<FeatureMissingness> missingness = new HashSet<>();
         root.path("acceptedFeatureMissingness").forEach(value -> missingness.add(FeatureMissingness.valueOf(value.asText())));
         Map<ResearchOutcomeKey, String> selected = new HashMap<>();
-        root.path("selectedOutcomeFingerprints").forEach(value -> selected.put(
-                new ResearchOutcomeKey(UUID.fromString(value.path("marketId").asText()),
-                        Instant.parse(value.path("evaluationCutoff").asText()),
-                        new OutcomeHorizon(Duration.parse(value.path("horizon").asText()))),
-                value.path("outcomeFingerprint").asText()));
+        root.path("selectedOutcomeFingerprints").forEach(value -> {
+            ResearchOutcomeKey key = new ResearchOutcomeKey(UUID.fromString(value.path("marketId").asText()),
+                    Instant.parse(value.path("evaluationCutoff").asText()),
+                    new OutcomeHorizon(Duration.parse(value.path("horizon").asText())));
+            if (selected.containsKey(key)) {
+                throw new IllegalArgumentException("duplicate selected outcome key: " + key);
+            }
+            selected.put(key, value.path("outcomeFingerprint").asText());
+        });
+        Map<ResearchFeatureSnapshotKey, String> selectedSnapshots = new HashMap<>();
+        requiredArray(root, "selectedFeatureSnapshotFingerprints").forEach(value -> {
+            ResearchFeatureSnapshotKey key = new ResearchFeatureSnapshotKey(
+                    UUID.fromString(value.path("marketId").asText()),
+                    Instant.parse(value.path("evaluationCutoff").asText()));
+            if (selectedSnapshots.containsKey(key)) {
+                throw new IllegalArgumentException("duplicate selected feature snapshot key: " + key);
+            }
+            selectedSnapshots.put(key, value.path("snapshotFingerprint").asText());
+        });
+        JsonNode requirements = root.get("featureRequirements");
+        if (requirements == null || !requirements.isObject()) {
+            throw new IllegalArgumentException("required object field: featureRequirements");
+        }
+        List<String> requiredFeatures = new ArrayList<>();
+        requirements.path("requiredFeatureNames").forEach(value -> requiredFeatures.add(value.asText()));
+        Set<FeatureMissingness> requiredMissingness = new HashSet<>();
+        requirements.path("acceptedMissingness").forEach(value -> requiredMissingness.add(FeatureMissingness.valueOf(value.asText())));
         return new ResearchPopulationSpec(
                 root.path("populationPolicyVersion").asText(), markets,
                 Instant.parse(root.path("startCutoffInclusive").asText()),
@@ -75,7 +100,9 @@ public final class ResearchDatasetExportCommand implements ApplicationRunner {
                 EvidenceAcquisitionPolicy.valueOf(root.path("featureEvidencePolicy").asText()),
                 root.path("outcomeDefinitionVersion").asText(), horizons,
                 ResearchSamplingCadence.valueOf(root.path("samplingCadence").asText()),
-                missingness, selected);
+                 missingness, selectedSnapshots,
+                 ResearchFeatureRequirements.fromNames(requirements.path("version").asText(), requiredFeatures, requiredMissingness),
+                 selected);
     }
 
     private JsonNode requiredArray(JsonNode root, String name) {
