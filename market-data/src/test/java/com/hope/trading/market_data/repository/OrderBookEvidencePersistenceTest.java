@@ -77,7 +77,20 @@ class OrderBookEvidencePersistenceTest {
         assertThat(evidenceRepository.appendSnapshotAsNewSequence(newEvidence, KNOWN_AT)).isTrue();
 
         assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT.plusSeconds(1)))
-                .containsExactly(newEvidence);
+                 .containsExactly(newEvidence);
+    }
+
+    @Test
+    void sealedSequenceRemainsReplayableOnlyWithinItsKnownEvidenceInterval() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        OrderBookEvidence evidence = evidence(marketId, sequenceId, 0, KNOWN_AT);
+
+        assertThat(evidenceRepository.append(evidence)).isTrue();
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
+
+        assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT)).containsExactly(evidence);
+        assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT.plusSeconds(2))).isEmpty();
     }
 
     @Test

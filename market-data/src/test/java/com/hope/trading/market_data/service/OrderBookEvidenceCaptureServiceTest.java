@@ -145,6 +145,22 @@ class OrderBookEvidenceCaptureServiceTest {
     }
 
     @Test
+    void sealsSequenceAtTransportBoundaryWithoutInvalidatingHistoricalEvidence() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        when(repository.append(any())).thenReturn(true);
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenReturn(true);
+        OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
+                repository, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isTrue();
+        service.seal(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25));
+
+        verify(repository).sealActiveSequences(MARKET_ID, 25, NOW);
+        assertThat(service.diagnosticSnapshot(new com.hope.trading.market_data.model.OrderBookKey(MARKET_ID, 25)))
+                .isNull();
+    }
+
+    @Test
     void serializesConcurrentSnapshotAcceptancePerMarketAndDepth() throws Exception {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
         CountDownLatch entered = new CountDownLatch(1);
