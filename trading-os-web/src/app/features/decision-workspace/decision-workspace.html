@@ -7,6 +7,10 @@
     </div>
   </header>
 
+  @if (workspaceContext$ | async; as workspaceContext) {
+    <app-workspace-context [view]="workspaceContext" />
+  }
+
   <section class="account-card" aria-labelledby="account-context-title">
     <div class="section-heading">
       <div>

@@ -20,6 +20,15 @@
         @if (ticker$ | async; as ticker) {
           <span class="market-updated"> Updated {{ ticker.occurredAt | date: 'mediumTime' }} </span>
         }
+
+        <a
+          class="decision-workspace-link"
+          [routerLink]="['/decision-workspace']"
+          [queryParams]="{ marketId: market.marketId }"
+          data-testid="decision-workspace-link"
+        >
+          Review in Decision Workspace
+        </a>
       </div>
     </header>
 

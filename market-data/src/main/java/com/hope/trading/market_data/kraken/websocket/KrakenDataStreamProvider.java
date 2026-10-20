@@ -380,10 +380,8 @@ public class KrakenDataStreamProvider implements MarketDataStreamProvider {
                     boolean alreadyConnected = session(product) != null && session(product).isOpen();
                     Mono<Void> connection = alreadyConnected || method == KrakenSubscriptionMethod.UNSUBSCRIBE
                             ? Mono.empty() : connect(product);
-                    return connection.then(alreadyConnected
-                            ? sendSubscriptionRequest(method, resolveChannel(request),
-                            symbols, request, product)
-                            : Mono.empty());
+                    return connection.then(sendSubscriptionRequest(method, resolveChannel(request),
+                            symbols, request, product));
                 }).then();
     }
 

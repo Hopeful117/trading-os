@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.application.context.ContextContribut
 import com.hope.trading.market_intelligence.domain.*;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.List;
 
 @Component
@@ -27,7 +28,12 @@ public class MarketSnapshotContextContributor implements ContextContributor {
     @Override
     public ContextSection contribute(IntelligenceAnalysisRequest request) {
         MarketPriceSnapshotResponse snapshot = marketDataClient.findPriceSnapshots(
-                new MarketPriceSnapshotRequest(List.of(request.marketId()))
+                new MarketPriceSnapshotRequest(
+                        List.of(request.marketId()),
+                        Duration.ofSeconds(30),
+                        Duration.ofSeconds(18),
+                        "CONFIRM_OR_ACQUIRE"
+                )
         ).stream().findFirst().orElse(null);
         ContextRequirement requirement =
                 ContextRequirement.requiredPublic(sectionType());
@@ -49,7 +55,16 @@ public class MarketSnapshotContextContributor implements ContextContributor {
                 snapshot.tradable(),
                 snapshot.occurredAt()
         );
-        ContextSection section = sectionFactory.snapshotAt(
+        // A live active scan acquires its snapshot during context construction, so
+        // its capture time is necessarily after the dispatch cutoff.
+        ContextSection section = request.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                && request.scanId() != null
+                ? sectionFactory.snapshot(
+                payload,
+                snapshot.status(),
+                snapshot.occurredAt(),
+                snapshot.capturedAt())
+                : sectionFactory.snapshotAt(
                 payload,
                 snapshot.status(),
                 snapshot.occurredAt(),
