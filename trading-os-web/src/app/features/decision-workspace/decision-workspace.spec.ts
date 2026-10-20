@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
-import { BehaviorSubject, NEVER, of, Subject, throwError } from 'rxjs';
+import { BehaviorSubject, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 
 import { Account } from '../../core/models/account.model';
 import { DecisionContextResponse } from '../../core/models/decision-context.model';
@@ -220,6 +220,17 @@ describe('DecisionWorkspace', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="excluded-markets"]')).toBeTruthy();
   });
 
+  it('shows loading context after an account is selected while resolution is pending', () => {
+    contextServiceMock.resolve.mockReturnValue(NEVER);
+
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Loading account context');
+    expect(text).not.toContain('No account selected');
+  });
+
   it('filters the market catalogue only after a focused search', async () => {
     component.selectAccount(account.accountId);
     component.setMarketSearch('btc');
@@ -248,6 +259,7 @@ describe('DecisionWorkspace', () => {
   });
 
   it('clears the selected market when the account changes', () => {
+    component.selectedAccountId = 'account-1';
     component.selectedMarketId = 'market-1';
 
     component.selectAccount('account-2');
@@ -442,6 +454,19 @@ describe('DecisionWorkspace', () => {
     expect(status).toBe('ineligible');
   });
 
+  it('keeps ineligible markets distinct from Market Data tradability', async () => {
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, marketId: 'market-2' }),
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Not eligible');
+    expect(text).not.toContain('Market Data reports that this market cannot be used now.');
+    expect(text).toContain('Select market');
+  });
+
   it('restores an eligible market from URL context after account resolution', async () => {
     routeQueryParamMap.next(
       convertToParamMap({ accountId: account.accountId, marketId: 'market-1' }),
@@ -455,17 +480,53 @@ describe('DecisionWorkspace', () => {
     expect(marketServiceMock.findById).toHaveBeenCalledWith('market-1');
   });
 
-  it('clears opportunity context when the selected account changes', () => {
+  it('preserves a market-first market when an account is selected', () => {
+    component.selectedMarketId = 'market-1';
+
+    component.selectAccount(account.accountId);
+
+    expect(component.selectedMarketId).toBe('market-1');
+    expect(routerMock.navigate).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({
+        queryParams: expect.objectContaining({
+          accountId: account.accountId,
+          marketId: 'market-1',
+        }),
+      }),
+    );
+  });
+
+  it('preserves Opportunity context when an account is selected from an opportunity entry', () => {
+    component.selectedMarketId = 'market-1';
+    component.opportunity = { id: 'opportunity-1' } as OpportunityResponse;
+
+    component.selectAccount(account.accountId);
+
+    expect(component.opportunity).toEqual({ id: 'opportunity-1' });
+    expect(routerMock.navigate).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({
+        queryParams: expect.objectContaining({
+          accountId: account.accountId,
+          marketId: 'market-1',
+          opportunityId: 'opportunity-1',
+        }),
+      }),
+    );
+  });
+
+  it('preserves opportunity context when the selected account changes', () => {
     component.selectedAccountId = account.accountId;
     component.opportunity = { id: 'opportunity-1' } as OpportunityResponse;
 
     component.selectAccount('account-2');
 
-    expect(component.opportunity).toBeNull();
+    expect(component.opportunity).toEqual({ id: 'opportunity-1' });
     expect(component.opportunityError).toBe(false);
   });
 
-  it('ignores a delayed opportunity response after the URL account changes', () => {
+  it('preserves a pending opportunity response after the URL account changes', () => {
     const response = new Subject<OpportunityResponse>();
     opportunityServiceMock.findById.mockReturnValue(response.asObservable());
 
@@ -476,10 +537,71 @@ describe('DecisionWorkspace', () => {
       convertToParamMap({ accountId: 'account-2', opportunityId: 'opportunity-1' }),
     );
 
+    response.next({ id: 'opportunity-1', marketId: 'market-1' } as OpportunityResponse);
+
+    expect(component.opportunity).toEqual({ id: 'opportunity-1', marketId: 'market-1' });
+    expect(component.opportunityError).toBe(false);
+  });
+
+  it('clears projected Opportunity context while a new Opportunity is loading', () => {
+    const response = new Subject<OpportunityResponse>();
+    opportunityServiceMock.findById.mockReturnValue(response.asObservable());
+
+    routeQueryParamMap.next(convertToParamMap({ opportunityId: 'opportunity-1' }));
     response.next({ id: 'opportunity-1' } as OpportunityResponse);
+    fixture.detectChanges();
+
+    routeQueryParamMap.next(convertToParamMap({ opportunityId: 'opportunity-2' }));
+    fixture.detectChanges();
 
     expect(component.opportunity).toBeNull();
-    expect(component.opportunityError).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('opportunity-1');
+  });
+
+  it('cancels a pending Opportunity request when context changes', () => {
+    let cancellations = 0;
+    opportunityServiceMock.findById.mockImplementation(
+      () => new Observable<OpportunityResponse>(() => () => (cancellations += 1)),
+    );
+
+    routeQueryParamMap.next(convertToParamMap({ opportunityId: 'opportunity-1' }));
+    routeQueryParamMap.next(
+      convertToParamMap({ accountId: account.accountId, opportunityId: 'opportunity-1' }),
+    );
+
+    expect(opportunityServiceMock.findById).toHaveBeenCalledTimes(1);
+    expect(cancellations).toBe(0);
+  });
+
+  it('does not project an opportunity onto a different market context', () => {
+    const response = new Subject<OpportunityResponse>();
+    opportunityServiceMock.findById.mockReturnValue(response.asObservable());
+
+    routeQueryParamMap.next(
+      convertToParamMap({ marketId: 'market-1', opportunityId: 'opportunity-1' }),
+    );
+    response.next({ id: 'opportunity-1', marketId: 'market-1' } as OpportunityResponse);
+    expect(component.opportunity?.marketId).toBe('market-1');
+
+    routeQueryParamMap.next(
+      convertToParamMap({ marketId: 'market-3', opportunityId: 'opportunity-1' }),
+    );
+
+    expect(component.opportunity).toBeNull();
+    expect(component.opportunityError).toBe(true);
+  });
+
+  it('keeps the resolved account context selected while the account catalogue reloads', () => {
+    accountServiceMock.getAccounts.mockReturnValue(NEVER);
+    component.selectAccount(account.accountId);
+    (
+      component as unknown as { accountsRefreshSubject: Subject<void> }
+    ).accountsRefreshSubject.next();
+    fixture.detectChanges();
+
+    const context = fixture.nativeElement.querySelector('[data-testid="workspace-context"]');
+    expect(context.textContent).toContain('Paper account');
+    expect(context.textContent).not.toContain('Loading account context');
   });
 
   it('unsubscribes the previous market streams when switching markets', () => {

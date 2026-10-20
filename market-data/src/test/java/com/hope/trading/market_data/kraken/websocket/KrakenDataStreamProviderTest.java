@@ -228,6 +228,19 @@ class KrakenDataStreamProviderTest {
     }
 
     @Test
+    void firstSubscriptionSendsCommandAfterOpeningConnection() {
+        prepareSession();
+
+        subscribeTicker();
+
+        assertThat(outboundTexts).anySatisfy(payload -> {
+            assertThat(payload).contains("\"method\":\"subscribe\"");
+            assertThat(payload).contains("ticker");
+            assertThat(payload).contains("XBT/EUR");
+        });
+    }
+
+    @Test
     void futuresSubscriptionIsIncludedInLifecycleDiagnostics() {
         prepareSession();
         Market futuresMarket = new Market();

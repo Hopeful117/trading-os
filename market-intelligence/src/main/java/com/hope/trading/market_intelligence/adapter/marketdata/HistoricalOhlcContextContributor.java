@@ -56,6 +56,8 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
         OhlcEvidenceSource.OhlcEvidenceBatch batch = source(request).acquire(
                 request.marketId(), ACTIVE_INTERVAL, ACTIVE_LIMIT, request.evaluationCutoff());
         List<OhlcResponse> response = batch.observations();
+        boolean liveCurrentActive = request.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                && request.scanId() != null;
         if (response.isEmpty()) {
             return ContextSection.missing(
                     ContextRequirement.optionalPublic(sectionType()),
@@ -64,7 +66,7 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
         }
         List<OhlcResponse> accepted = response.stream()
                 .filter(candle -> hasTemporalMetadata(candle)
-                        && (request.evaluationCutoff() == null
+                        && (liveCurrentActive || request.evaluationCutoff() == null
                         || (!isAfter(candle.occurredAt(), request.evaluationCutoff())
                         && !isAfter(candle.fetchedAt(), request.evaluationCutoff()))))
                 .sorted(Comparator.comparing(OhlcResponse::closeTime,
@@ -100,7 +102,17 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                 .filter(java.util.Objects::nonNull)
                 .max(Comparator.naturalOrder())
                 .orElse(null);
-        ContextSection section = sectionFactory.availableAt(
+        ContextSection section = liveCurrentActive
+                ? sectionFactory.available(
+                sectionType(),
+                new HistoricalOhlcContext(
+                        request.marketId(), ACTIVE_INTERVAL, candles
+                ),
+                occurredAt,
+                accepted.stream().map(OhlcResponse::fetchedAt)
+                        .filter(java.util.Objects::nonNull)
+                        .max(Comparator.naturalOrder()).orElse(null))
+                : sectionFactory.availableAt(
                 sectionType(),
                 new HistoricalOhlcContext(
                         request.marketId(), ACTIVE_INTERVAL, candles

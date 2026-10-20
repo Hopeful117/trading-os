@@ -6,6 +6,8 @@ import com.hope.trading.market_intelligence.application.pipeline.ProductionIntel
 import com.hope.trading.market_intelligence.application.observation.TrendContextObservationService;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.hope.trading.market_intelligence.domain.IntelligenceExecutionStatus;
 import com.hope.trading.market_intelligence.domain.execution.*;
 import org.springframework.stereotype.Component;
@@ -23,6 +25,7 @@ import java.util.concurrent.*;
  */
 @Component
 public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispatcher {
+    private static final Logger log = LoggerFactory.getLogger(LocalAnalysisExecutionDispatcher.class);
     private final AnalysisExecutionRepository repository;
     private final CapabilityAnalysisCoordinator coordinator;
     private final ExecutorService executor;
@@ -96,11 +99,15 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
         } catch (CancellationException ignored) {
             // Cancellation state is owned by AnalysisExecutionService.
         } catch (AnalysisContextUnavailableException exception) {
+            log.warn("Analysis context unavailable executionId={} code={} message={}",
+                    executionId, exception.code(), exception.getMessage());
             repository.findById(executionId)
                     .filter(execution -> !execution.status().isTerminal())
                     .map(execution -> execution.fail(exception.code(), Instant.now()))
                     .ifPresent(repository::save);
         } catch (RuntimeException exception) {
+            log.warn("Analysis execution failed executionId={} exceptionClass={} message={}",
+                    executionId, exception.getClass().getName(), exception.getMessage(), exception);
             repository.findById(executionId)
                     .filter(execution -> !execution.status().isTerminal())
                     .map(execution -> execution.transitionTo(

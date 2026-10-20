@@ -128,6 +128,18 @@ describe('MarketsDetails', () => {
     expect(market).toEqual(mockMarket);
   });
 
+  it('offers a market-first Decision Workspace link without an account', async () => {
+    await setup('mkt-1');
+
+    const link = fixture.nativeElement.querySelector(
+      '[data-testid="decision-workspace-link"]',
+    ) as HTMLAnchorElement;
+
+    expect(link.getAttribute('href')).toContain('/decision-workspace');
+    expect(link.getAttribute('href')).toContain('marketId=mkt-1');
+    expect(link.getAttribute('href')).not.toContain('accountId=');
+  });
+
   it('should not call findById when no marketId in route', async () => {
     await setup(null);
     expect(marketServiceMock.findById).not.toHaveBeenCalled();

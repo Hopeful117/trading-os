@@ -38,7 +38,7 @@ public class MarketIdentityContextContributor implements ContextContributor {
                 sectionType(),
                 payload,
                 market.marketState() == null ? null : market.marketState().lastUpdated(),
-                null,
+                market.marketState() == null ? null : market.marketState().lastUpdated(),
                 request.evaluationCutoff()
         );
     }

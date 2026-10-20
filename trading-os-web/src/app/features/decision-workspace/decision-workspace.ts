@@ -15,6 +15,7 @@ import {
   startWith,
   Subject,
   switchMap,
+  takeUntil,
   tap,
   timer,
 } from 'rxjs';
@@ -48,6 +49,7 @@ import { MarketChartComponent } from '../markets/market-chart-component/market-c
 import { OrderBookComponent } from '../markets/order-book-component/order-book-component';
 import { RecentTradesComponent } from '../markets/recent-trades-component/recent-trades-component';
 import { ManualTradeTicket } from '../trade-planning/manual-trade-ticket/manual-trade-ticket';
+import { WorkspaceContext, WorkspaceContextView } from './workspace-context/workspace-context';
 
 export type DecisionWorkspaceContextView =
   | { status: 'select-account' }
@@ -91,6 +93,7 @@ export type HistoryView<T> =
     OrderBookComponent,
     RecentTradesComponent,
     ManualTradeTicket,
+    WorkspaceContext,
   ],
   templateUrl: './decision-workspace.html',
   styleUrl: './decision-workspace.scss',
@@ -117,6 +120,10 @@ export class DecisionWorkspace {
   private readonly selectedOrderBookDepthSubject = new BehaviorSubject<OrderBookDepth>(
     ORDER_BOOK_DEPTHS[0],
   );
+  private readonly opportunitySubject = new BehaviorSubject<OpportunityResponse | null>(null);
+  private readonly opportunityRequestCancelSubject = new Subject<void>();
+  private pendingOpportunityId: string | null = null;
+  private pendingOpportunityMarketId: string | null = null;
 
   private activeOhlcSubscription: ActiveSubscription | null = null;
   private activeOrderBookSubscription: ActiveSubscription | null = null;
@@ -132,6 +139,7 @@ export class DecisionWorkspace {
   opportunityPreparing = false;
   opportunityError = false;
   private opportunityRequestKey: string | null = null;
+  private opportunityRequestInFlight = false;
 
   readonly accounts$ = this.accountsRefreshSubject.pipe(
     startWith(undefined),
@@ -305,40 +313,131 @@ export class DecisionWorkspace {
     shareReplay({ bufferSize: 1, refCount: true }),
   );
 
+  readonly workspaceContext$: Observable<WorkspaceContextView> = combineLatest([
+    this.accounts$,
+    this.context$,
+    this.marketView$,
+    this.ticker$,
+    this.opportunitySubject,
+  ]).pipe(
+    map(([accounts, context, marketView, ticker, opportunity]) => {
+      const accountState: WorkspaceContextView['accountState'] =
+        context.status === 'ready'
+          ? 'selected'
+          : context.status === 'loading'
+            ? 'loading'
+            : context.status === 'error'
+              ? 'error'
+              : accounts.status === 'error'
+                ? 'error'
+                : accounts.status === 'loading'
+                  ? 'loading'
+                  : 'unavailable';
+      const marketState: WorkspaceContextView['marketState'] =
+        marketView.status === 'none'
+          ? 'unselected'
+          : marketView.status === 'loaded'
+            ? 'ready'
+            : marketView.status === 'ineligible'
+              ? 'ineligible'
+              : marketView.status === 'unavailable'
+                ? 'not-tradable'
+                : marketView.status;
+      const freshness: WorkspaceContextView['freshness'] =
+        ticker.status === 'live'
+          ? this.marketFreshness(ticker, ticker.data.occurredAt)
+          : 'UNAVAILABLE';
+      const workflowStage = this.workspaceWorkflowStage(
+        accountState,
+        context.status,
+        marketState,
+        opportunity,
+      );
+
+      return {
+        account: context.status === 'ready' ? context.context.account : null,
+        accountState,
+        market: marketView.status === 'loaded' ? marketView.market : null,
+        marketState,
+        opportunity,
+        freshness,
+        workflowStage,
+        nextAction: this.workspaceNextAction(workflowStage),
+      };
+    }),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
+
   constructor() {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const accountId = params.get('accountId');
       const marketId = params.get('marketId');
       const opportunityId = params.get('opportunityId');
-      const accountChanged =
-        this.selectedAccountId !== null && accountId !== this.selectedAccountId;
+      this.pendingOpportunityId = opportunityId;
+      this.pendingOpportunityMarketId = marketId;
 
-      if (accountChanged) {
+      const marketContextChanged =
+        this.opportunity !== null && marketId !== null && this.opportunity.marketId !== marketId;
+      const opportunityContextChanged =
+        opportunityId !== this.opportunity?.id || marketContextChanged;
+
+      if (opportunityId === null || marketContextChanged) {
+        this.opportunityRequestCancelSubject.next();
         this.opportunity = null;
-        this.opportunityError = false;
+        this.opportunitySubject.next(null);
+        this.opportunityError = marketContextChanged;
         this.opportunityRequestKey = null;
+        this.opportunityRequestInFlight = false;
       }
 
-      if (!accountChanged && opportunityId !== this.opportunity?.id) {
-        this.opportunity = null;
-        this.opportunityError = false;
-        if (opportunityId !== null) {
-          const requestKey = `${accountId ?? ''}:${opportunityId}`;
-          this.opportunityRequestKey = requestKey;
-          this.opportunityService.findById(opportunityId).subscribe({
-            next: (opportunity) => {
-              if (this.opportunityRequestKey === requestKey) {
-                this.opportunity = opportunity;
-              }
-            },
-            error: () => {
-              if (this.opportunityRequestKey === requestKey) {
-                this.opportunityError = true;
-              }
-            },
-          });
-        } else {
-          this.opportunityRequestKey = null;
+      if (opportunityId !== null && opportunityContextChanged && !marketContextChanged) {
+        if (this.opportunityRequestKey !== opportunityId) {
+          this.opportunityRequestCancelSubject.next();
+          this.opportunity = null;
+          this.opportunitySubject.next(null);
+          this.opportunityError = false;
+          this.opportunityRequestKey = opportunityId;
+          this.opportunityRequestInFlight = false;
+        }
+
+        if (
+          this.opportunityRequestKey === opportunityId &&
+          this.opportunity === null &&
+          !this.opportunityRequestInFlight
+        ) {
+          const requestKey = opportunityId;
+          this.opportunityRequestInFlight = true;
+          this.opportunityService
+            .findById(opportunityId)
+            .pipe(
+              takeUntil(this.opportunityRequestCancelSubject),
+              takeUntilDestroyed(this.destroyRef),
+            )
+            .subscribe({
+              next: (opportunity) => {
+                if (this.opportunityRequestKey === requestKey) {
+                  this.opportunityRequestInFlight = false;
+                  if (
+                    this.pendingOpportunityMarketId === null ||
+                    opportunity.marketId === this.pendingOpportunityMarketId
+                  ) {
+                    this.opportunity = opportunity;
+                    this.opportunitySubject.next(opportunity);
+                  } else {
+                    this.opportunity = null;
+                    this.opportunityError = true;
+                    this.opportunitySubject.next(null);
+                  }
+                }
+              },
+              error: () => {
+                if (this.opportunityRequestKey === requestKey) {
+                  this.opportunityRequestInFlight = false;
+                  this.opportunityError = true;
+                  this.opportunitySubject.next(null);
+                }
+              },
+            });
         }
       }
 
@@ -371,20 +470,28 @@ export class DecisionWorkspace {
   }
 
   selectAccount(accountId: string): void {
+    const preserveContext = this.selectedAccountId === null || this.selectedAccountId === accountId;
+    const marketIdToRestore = preserveContext ? this.selectedMarketId : null;
+    const opportunityIdToRestore = this.opportunity?.id ?? this.pendingOpportunityId;
     this.selectedAccountId = accountId || null;
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
-    this.opportunity = null;
-    this.opportunityError = false;
-    this.opportunityRequestKey = null;
     this.clearActiveSubscriptions().subscribe(() => {
       this.selectedMarketSubject.next(null);
       this.selectedAccountSubject.next(accountId || null);
+      if (marketIdToRestore !== null) {
+        this.selectedMarketId = marketIdToRestore;
+        this.selectedMarketSubject.next(marketIdToRestore);
+      }
     });
     void this.router.navigate([], {
-      queryParams: { accountId: accountId || null, marketId: null, opportunityId: null },
+      queryParams: {
+        accountId: accountId || null,
+        marketId: marketIdToRestore,
+        opportunityId: opportunityIdToRestore,
+      },
       queryParamsHandling: 'merge',
     });
   }
@@ -548,6 +655,50 @@ export class DecisionWorkspace {
     }
 
     return 'STALE';
+  }
+
+  private workspaceWorkflowStage(
+    accountState: WorkspaceContextView['accountState'],
+    contextStatus: DecisionWorkspaceContextView['status'],
+    marketState: WorkspaceContextView['marketState'],
+    opportunity: OpportunityResponse | null,
+  ): WorkspaceContextView['workflowStage'] {
+    if (accountState === 'loading' || accountState === 'error') {
+      return 'Resolve account context';
+    }
+
+    if (accountState !== 'selected' || contextStatus === 'select-account') {
+      return 'Select account';
+    }
+
+    if (contextStatus === 'loading' || contextStatus === 'error') {
+      return 'Resolve account context';
+    }
+
+    if (marketState !== 'ready') {
+      return 'Select market';
+    }
+
+    if (opportunity !== null) {
+      return 'Review opportunity';
+    }
+
+    return 'Prepare Trade Plan';
+  }
+
+  private workspaceNextAction(workflowStage: WorkspaceContextView['workflowStage']): string {
+    switch (workflowStage) {
+      case 'Select account':
+        return 'Select an account';
+      case 'Resolve account context':
+        return 'Wait for authoritative context';
+      case 'Select market':
+        return 'Choose an eligible market';
+      case 'Review opportunity':
+        return 'Review evidence before preparation';
+      case 'Prepare Trade Plan':
+        return 'Review the proposal before acceptance';
+    }
   }
 
   private tickerStream(market: MarketResponse): Observable<StreamView<TickerEvent>> {

@@ -23,8 +23,8 @@ class MarketIdentityContextContributorTest {
 
         ContextSection section = contributor(client).contribute(request(null));
 
-        assertThat(section.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
-        assertThat(section.payload()).isNull();
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.AVAILABLE);
+        assertThat(section.payload()).isInstanceOf(MarketIdentityContext.class);
         assertThat(section.provenance().sourceOccurredAt()).isEqualTo(updatedAt);
     }
 
