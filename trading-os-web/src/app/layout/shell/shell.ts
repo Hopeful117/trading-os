@@ -9,4 +9,14 @@ import { RouterOutlet } from '@angular/router';
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
 })
-export class Shell {}
+export class Shell {
+  mobileMenuOpen = false;
+
+  toggleMobileMenu(): void {
+    this.mobileMenuOpen = !this.mobileMenuOpen;
+  }
+
+  closeMobileMenu(): void {
+    this.mobileMenuOpen = false;
+  }
+}

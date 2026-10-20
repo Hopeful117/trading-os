@@ -43,19 +43,21 @@ describe('Navbar', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should show Dashboard, Accounts, Markets links when logged in', () => {
+  it('should keep only global links in the authenticated navbar', () => {
     authService.isLoggedIn.mockReturnValue(true);
     fixture.detectChanges();
 
     const links = fixture.nativeElement.querySelectorAll('a');
     const linkTexts = Array.from(links).map((el: unknown) => (el as Element).textContent!.trim());
 
-    expect(linkTexts).toContain('Dashboard');
-    expect(linkTexts).toContain('Accounts');
-    expect(linkTexts).toContain('Markets');
     expect(linkTexts).toContain('Home');
     expect(linkTexts).not.toContain('Login');
     expect(linkTexts).not.toContain('Register');
+    expect(linkTexts).not.toContain('Dashboard');
+    expect(linkTexts).not.toContain('Accounts');
+    expect(linkTexts).not.toContain('Markets');
+    expect(linkTexts).not.toContain('Decision Workspace');
+    expect(fixture.nativeElement.querySelector('.mobile-menu-toggle')).toBeTruthy();
   });
 
   it('should show Login, Register links when not logged in', () => {
@@ -79,5 +81,15 @@ describe('Navbar', () => {
 
     expect(authService.logout).toHaveBeenCalledOnce();
     expect(router.navigate).toHaveBeenCalledWith(['/']);
+  });
+
+  it('should emit the mobile menu toggle action', () => {
+    const toggle = vi.fn();
+    component.menuToggle.subscribe(toggle);
+    fixture.detectChanges();
+
+    component.toggleMenu();
+
+    expect(toggle).toHaveBeenCalledOnce();
   });
 });

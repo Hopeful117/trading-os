@@ -21,4 +21,14 @@ describe('Shell', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should toggle and close the mobile navigation state', () => {
+    expect(component.mobileMenuOpen).toBe(false);
+
+    component.toggleMobileMenu();
+    expect(component.mobileMenuOpen).toBe(true);
+
+    component.closeMobileMenu();
+    expect(component.mobileMenuOpen).toBe(false);
+  });
 });
