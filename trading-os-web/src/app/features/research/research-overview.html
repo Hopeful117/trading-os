@@ -1,0 +1,217 @@
+<div class="research-page">
+  @if (viewModel$ | async; as viewModel) {
+    @switch (viewModel.kind) {
+      @case ('loading') {
+        <section class="state-panel" aria-live="polite">
+          <span class="loading-orb" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">Research operations</p>
+            <h1>Loading readiness</h1>
+            <p>Checking the current evidence boundary before any experiment is considered.</p>
+          </div>
+        </section>
+      }
+      @case ('error') {
+        <section class="state-panel state-error" role="alert">
+          <p class="eyebrow">Research operations</p>
+          <h1>Readiness unavailable</h1>
+          <p>{{ viewModel.message }}</p>
+          <button type="button" (click)="refresh()">Try again</button>
+        </section>
+      }
+      @case ('ready') {
+        <header class="page-header">
+          <div>
+            <p class="eyebrow">Research operations</p>
+            <h1>Research overview</h1>
+            <p>Observe data readiness and deterministic S1 evidence without implying results.</p>
+          </div>
+          <div class="header-actions">
+            <span [class]="'readiness-badge ' + readinessClass(viewModel.readiness.s1)">
+              S1 {{ viewModel.readiness.s1.ready ? 'ready' : 'blocked' }}
+            </span>
+            <button type="button" (click)="refresh()">Refresh readiness</button>
+          </div>
+        </header>
+
+        <section class="boundary-panel" aria-labelledby="boundary-heading">
+          <div>
+            <p class="eyebrow">Decision boundary</p>
+            <h2 id="boundary-heading">Readiness is not performance</h2>
+            <p>
+              This view reports acquisition health and experimental readiness only. It does not
+              calculate returns, win rate, P&amp;L, Sharpe, or backtest results.
+            </p>
+          </div>
+          <div class="boundary-state">Results unavailable by design</div>
+        </section>
+
+        <section class="summary-grid" aria-label="Research readiness summary">
+          <article class="summary-card">
+            <span>Signals</span>
+            <strong>{{ viewModel.readiness.s1.totalSignals | number }}</strong>
+            <small>
+              {{ viewModel.readiness.s1.longSignals }} LONG ·
+              {{ viewModel.readiness.s1.shortSignals }} SHORT
+            </small>
+          </article>
+          <article class="summary-card">
+            <span>Aggregate regimes</span>
+            <strong>{{ viewModel.readiness.s1.aggregateRegimes.length }}</strong>
+            <small>Observed regime labels</small>
+          </article>
+          <article class="summary-card">
+            <span>Available population</span>
+            <strong>{{
+              viewModel.readiness.approximateAvailableResearchPopulation | number
+            }}</strong>
+            <small>{{ viewModel.readiness.pendingOutcomeCount | number }} outcomes pending</small>
+          </article>
+          <article class="summary-card">
+            <span>Feature snapshots</span>
+            <strong>{{ viewModel.readiness.featureSnapshotCount | number }}</strong>
+            <small>{{ viewModel.readiness.configuredMarkets.length }} configured markets</small>
+          </article>
+        </section>
+
+        <section class="panel" aria-labelledby="s1-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Frozen strategy hypothesis</p>
+              <h2 id="s1-heading">S1 evidence gates</h2>
+            </div>
+            <span [class]="'panel-status ' + readinessClass(viewModel.readiness.s1)">
+              {{ viewModel.readiness.s1.ready ? 'All gates passed' : 'Blocking evidence gaps' }}
+            </span>
+          </div>
+
+          <div class="gate-grid">
+            <article class="gate-card">
+              <div class="gate-title">
+                <h3>Signal balance</h3>
+                <span class="gate-status ready">Observed</span>
+              </div>
+              <strong
+                >{{ viewModel.readiness.s1.longSignals }} LONG /
+                {{ viewModel.readiness.s1.shortSignals }} SHORT</strong
+              >
+              <p>
+                {{ viewModel.readiness.s1.totalSignals }} frozen signals in the current evidence
+                set.
+              </p>
+            </article>
+
+            <article class="gate-card">
+              <div class="gate-title">
+                <h3>Replay evidence</h3>
+                <span
+                  [class]="'gate-status ' + coverageClass(viewModel.readiness.s1.replayCoverage)"
+                >
+                  {{ coveragePercent(viewModel.readiness.s1.replayCoverage) | number: '1.0-1' }}%
+                </span>
+              </div>
+              <strong
+                >{{ viewModel.readiness.s1.replayAvailable }} /
+                {{ viewModel.readiness.s1.replayChecks }} checks available</strong
+              >
+              <p>Historical order-book replay coverage required for execution realism.</p>
+            </article>
+
+            <article class="gate-card">
+              <div class="gate-title">
+                <h3>Fee evidence</h3>
+                <span [class]="'gate-status ' + coverageClass(viewModel.readiness.s1.feeCoverage)">
+                  {{ coveragePercent(viewModel.readiness.s1.feeCoverage) | number: '1.0-1' }}%
+                </span>
+              </div>
+              <strong
+                >{{ viewModel.readiness.s1.feeAvailable }} /
+                {{ viewModel.readiness.s1.feeChecks }} checks available</strong
+              >
+              <p>Historical fee coverage used to preserve net-of-cost semantics.</p>
+            </article>
+
+            <article class="gate-card">
+              <div class="gate-title">
+                <h3>Regime diversity</h3>
+                <span class="gate-status ready">Observed</span>
+              </div>
+              <strong
+                >{{ viewModel.readiness.s1.aggregateRegimes.length }} aggregate regimes</strong
+              >
+              <p>
+                {{
+                  viewModel.readiness.s1.aggregateRegimes.join(', ') ||
+                    'No regime labels available.'
+                }}
+              </p>
+            </article>
+          </div>
+
+          @if (viewModel.readiness.s1.blockingReasons.length > 0) {
+            <div class="blockers" role="status">
+              <h3>Why S1 is blocked</h3>
+              <ul>
+                @for (reason of viewModel.readiness.s1.blockingReasons; track reason) {
+                  <li>{{ blockerLabel(reason) }}</li>
+                }
+              </ul>
+            </div>
+          }
+        </section>
+
+        <section class="detail-grid">
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Acquisition health</p>
+                <h2>Dataset boundary</h2>
+              </div>
+              <span class="availability" [class.ready-state]="viewModel.readiness.enabled">
+                {{ viewModel.readiness.enabled ? 'Enabled' : 'Disabled' }}
+              </span>
+            </div>
+            <dl class="detail-list">
+              <div>
+                <dt>Evidence policy</dt>
+                <dd>{{ viewModel.readiness.featureEvidencePolicy }}</dd>
+              </div>
+              <div>
+                <dt>Observation cadence</dt>
+                <dd>{{ viewModel.readiness.observationCadence }}</dd>
+              </div>
+              <div>
+                <dt>Eligible outcomes</dt>
+                <dd>{{ viewModel.readiness.eligibleOutcomeCount | number }}</dd>
+              </div>
+              <div>
+                <dt>Outcome horizons</dt>
+                <dd>{{ viewModel.readiness.outcomeHorizons.join(', ') || 'None configured' }}</dd>
+              </div>
+              <div>
+                <dt>Latest cutoff</dt>
+                <dd>
+                  {{
+                    viewModel.readiness.latestFeatureSnapshotCutoff
+                      ? (viewModel.readiness.latestFeatureSnapshotCutoff | date: 'medium')
+                      : 'Unavailable'
+                  }}
+                </dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="panel deferred-panel">
+            <p class="eyebrow">Experimental results</p>
+            <h2>Not available yet</h2>
+            <p>
+              Result metrics remain intentionally deferred until the evidence gates and the
+              preregistered evaluation workflow are complete.
+            </p>
+            <span>Deferred: returns · win rate · P&amp;L · Sharpe · backtest comparison</span>
+          </article>
+        </section>
+      }
+    }
+  }
+</div>

@@ -269,6 +269,32 @@ class GatewayDownstreamRoutingIntegrationTest {
                 "GET /api/v1/intelligence/scans/whatever");
     }
 
+    @Test
+    void researchReadinessRequestRoutesToMarketIntelligenceWithAuth() throws Exception {
+        HttpResponse<String> response = send("GET", "/api/v1/intelligence/research/readiness");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(intelligenceRequests).containsExactly(
+                "GET /api/v1/intelligence/research/readiness");
+        assertThat(intelligenceActorHeaders).containsExactly(AUTHENTICATED_USER_ID.toString());
+    }
+
+    @Test
+    void unauthenticatedResearchReadinessRequestIsRejectedBeforeDownstreamRouting()
+            throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + gatewayPort
+                        + "/api/v1/intelligence/research/readiness"))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isIn(401, 403);
+        assertThat(intelligenceRequests).isEmpty();
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     /** Authenticated request: the gateway JWT filter protects these paths. */

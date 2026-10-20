@@ -19,6 +19,7 @@ import { ManualTradePage } from './features/trade-planning/manual-trade-page/man
 import { ChallengeDashboard } from './features/challenges/pages/challenge-dashboard/challenge-dashboard';
 import { EconomicContext } from './features/economic-context/economic-context';
 import { FinancialNews } from './features/financial-news/financial-news';
+import { ResearchOverview } from './features/research/research-overview';
 
 export const routes: Routes = [
   {
@@ -110,6 +111,11 @@ export const routes: Routes = [
   {
     path: 'financial-news',
     component: FinancialNews,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'research',
+    component: ResearchOverview,
     canActivate: [authGuard],
   },
 ];

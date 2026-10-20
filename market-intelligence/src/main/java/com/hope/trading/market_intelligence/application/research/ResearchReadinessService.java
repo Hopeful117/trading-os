@@ -44,6 +44,7 @@ public class ResearchReadinessService {
     private final OrderBookReplayClient replay;
     private final HistoricalFeeScheduleClient fees;
     private final Clock clock;
+    private volatile CachedReadiness cachedReadiness;
 
     public ResearchReadinessService(
             ResearchLifecycleProperties properties,
@@ -79,6 +80,24 @@ public class ResearchReadinessService {
     public ResearchReadiness current() {
         properties.validate();
         Instant now = clock.instant();
+        CachedReadiness cached = cachedReadiness;
+        if (cached != null && now.isBefore(cached.expiresAt())) {
+            return cached.value();
+        }
+        synchronized (this) {
+            now = clock.instant();
+            cached = cachedReadiness;
+            if (cached != null && now.isBefore(cached.expiresAt())) {
+                return cached.value();
+            }
+            ResearchReadiness computed = computeCurrent(now);
+            cachedReadiness = new CachedReadiness(
+                    computed, now.plus(properties.getReadinessCacheDuration()));
+            return computed;
+        }
+    }
+
+    private ResearchReadiness computeCurrent(Instant now) {
         Set<UUID> markets = properties.getMarketIds();
         List<FeatureSnapshot> values = markets.isEmpty()
                 ? List.of()
@@ -122,6 +141,8 @@ public class ResearchReadinessService {
                 values.stream().map(FeatureSnapshot::evaluationCutoff).max(Comparator.naturalOrder()).orElse(null),
                 outcomeCounts, available, pending, approximatePopulation, s1(values, now));
     }
+
+    private record CachedReadiness(ResearchReadiness value, Instant expiresAt) { }
 
     private S1Readiness s1(List<FeatureSnapshot> snapshots, Instant now) {
         List<Signal> signals = snapshots.stream().map(this::signal).flatMap(Optional::stream).toList();

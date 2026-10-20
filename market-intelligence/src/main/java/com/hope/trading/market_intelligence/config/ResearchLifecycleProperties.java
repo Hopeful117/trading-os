@@ -17,6 +17,7 @@ public class ResearchLifecycleProperties {
     private List<Duration> outcomeHorizons = new ArrayList<>(List.of(
             Duration.ofHours(1), Duration.ofHours(4), Duration.ofHours(24)));
     private Duration fixedDelay = Duration.ofMinutes(1);
+    private Duration readinessCacheDuration = Duration.ofSeconds(30);
     private S1FeeCoverage feeCoverage = new S1FeeCoverage();
 
     public void validate() {
@@ -31,6 +32,9 @@ public class ResearchLifecycleProperties {
         }
         if (fixedDelay.isZero() || fixedDelay.isNegative()) {
             throw new IllegalStateException("Research lifecycle fixed delay must be positive");
+        }
+        if (readinessCacheDuration.isZero() || readinessCacheDuration.isNegative()) {
+            throw new IllegalStateException("Research readiness cache duration must be positive");
         }
         if (outcomeHorizons.isEmpty() || outcomeHorizons.stream().anyMatch(Duration::isNegative)
                 || outcomeHorizons.stream().anyMatch(Duration::isZero)) {
@@ -80,6 +84,14 @@ public class ResearchLifecycleProperties {
 
     public void setFixedDelay(Duration fixedDelay) {
         this.fixedDelay = fixedDelay;
+    }
+
+    public Duration getReadinessCacheDuration() {
+        return readinessCacheDuration;
+    }
+
+    public void setReadinessCacheDuration(Duration readinessCacheDuration) {
+        this.readinessCacheDuration = readinessCacheDuration;
     }
 
     public S1FeeCoverage getFeeCoverage() {
