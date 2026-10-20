@@ -179,22 +179,30 @@ public class OrderBookEvidenceRepository {
     @Transactional(readOnly = true)
     public List<OrderBookEvidence> findTrusted(UUID marketId, int depth, Instant cutoff) {
         return jdbc.query("""
-                        WITH sequence_bounds AS (
-                            SELECT sequence.sequence_id, sequence.status,
-                                   MIN(evidence.known_at) AS first_known_at,
-                                   MAX(evidence.known_at) AS latest_known_at
+                        WITH eligible_sequences AS (
+                            SELECT sequence.sequence_id, sequence.status
                             FROM historical_order_book_sequence sequence
-                            JOIN historical_order_book_evidence evidence
-                              ON sequence.sequence_id = evidence.sequence_id
                             WHERE sequence.market_id = ? AND sequence.depth = ?
-                              AND evidence.trusted = true
-                            GROUP BY sequence.sequence_id, sequence.status
-                        ), eligible_sequences AS (
-                            SELECT sequence_id, status
-                            FROM sequence_bounds
-                            WHERE first_known_at <= ?
-                              AND (status = 'ACTIVE'
-                                   OR (status = 'SEALED' AND latest_known_at >= ?))
+                              AND EXISTS (
+                                   SELECT 1
+                                   FROM historical_order_book_evidence snapshot
+                                   WHERE snapshot.sequence_id = sequence.sequence_id
+                                     AND snapshot.market_id = sequence.market_id
+                                     AND snapshot.depth = sequence.depth
+                                     AND snapshot.trusted = true
+                                     AND snapshot.evidence_type = 'SNAPSHOT'
+                                     AND snapshot.known_at <= ?
+                              )
+                              AND (sequence.status = 'ACTIVE'
+                                   OR (sequence.status = 'SEALED' AND EXISTS (
+                                       SELECT 1
+                                        FROM historical_order_book_evidence latest
+                                        WHERE latest.sequence_id = sequence.sequence_id
+                                          AND latest.market_id = sequence.market_id
+                                          AND latest.depth = sequence.depth
+                                          AND latest.trusted = true
+                                          AND latest.known_at >= ?
+                                   )))
                         ), selected_sequence AS (
                             SELECT sequence_id
                             FROM eligible_sequences
@@ -233,7 +241,7 @@ public class OrderBookEvidenceRepository {
                         result.getObject("checksum", Long.class),
                         result.getString("normalization_version"),
                         result.getString("content_fingerprint")),
-                marketId, depth, Timestamp.from(cutoff), Timestamp.from(cutoff),
-                marketId, depth, Timestamp.from(cutoff));
+                 marketId, depth, Timestamp.from(cutoff), Timestamp.from(cutoff),
+                 marketId, depth, Timestamp.from(cutoff));
     }
 }

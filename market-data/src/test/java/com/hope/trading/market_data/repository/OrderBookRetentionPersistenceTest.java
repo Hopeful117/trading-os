@@ -14,6 +14,7 @@ import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.service.OrderBookEvidenceFingerprint;
 import com.hope.trading.market_data.service.OrderBookEvidenceRepository;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
+import com.hope.trading.market_data.service.OrderBookReplayService;
 import com.hope.trading.market_data.config.OrderBookRetentionProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,8 @@ class OrderBookRetentionPersistenceTest {
     private OrderBookEvidenceRepository evidenceRepository;
     @Autowired
     private OrderBookRetentionService retentionService;
+    @Autowired
+    private OrderBookReplayService replayService;
     @Autowired
     private OrderBookRetentionProperties retentionProperties;
 
@@ -85,6 +88,31 @@ class OrderBookRetentionPersistenceTest {
         assertThat(retentionService.retire(preview.operationFingerprint(), preview.candidates().getFirst()))
                 .isEqualTo(1);
         assertThat(retentionService.previewRetirement().candidates()).isEmpty();
+    }
+
+    @Test
+    void replaySelectsTheCurrentActiveSequenceWithoutUsingInvalidatedHistory() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID invalidatedSequenceId = UUID.randomUUID();
+        UUID activeSequenceId = UUID.randomUUID();
+        Instant cutoff = KNOWN_AT.plusSeconds(30);
+
+        evidenceRepository.append(evidence(marketId, invalidatedSequenceId));
+        evidenceRepository.invalidateActiveSequences(marketId, 25, "test invalidation", KNOWN_AT);
+
+        OrderBookEvidence activeEvidence = evidence(marketId, activeSequenceId);
+        evidenceRepository.append(new OrderBookEvidence(activeEvidence.evidenceId(), activeEvidence.marketId(),
+                activeEvidence.provider(), activeEvidence.symbol(), activeEvidence.providerSymbol(),
+                activeEvidence.depth(), activeEvidence.evidenceType(), activeEvidence.origin(),
+                activeEvidence.sourceStartOrdinal(), activeEvidence.sourceEndOrdinal(), activeEvidence.sequenceId(),
+                activeEvidence.sequenceOrdinal(), activeEvidence.providerSequence(), cutoff, cutoff,
+                activeEvidence.bids(), activeEvidence.asks(), activeEvidence.checksum(),
+                activeEvidence.normalizationVersion(), activeEvidence.contentFingerprint()));
+
+        var result = replayService.replay(marketId, 25, cutoff);
+
+        assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.AVAILABLE);
+        assertThat(result.sequenceId()).isEqualTo(activeSequenceId);
     }
 
     private OrderBookEvidence evidence(UUID marketId, UUID sequenceId) {

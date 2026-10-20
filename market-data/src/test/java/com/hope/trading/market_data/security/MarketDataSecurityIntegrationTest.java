@@ -19,6 +19,7 @@ import javax.crypto.SecretKey;
 import java.util.Base64;
 import java.util.Date;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -138,6 +139,23 @@ class MarketDataSecurityIntegrationTest {
                         .header("X-Service-Authorization", "Bearer " + serviceToken("other-service"))
                         .contentType("application/json")
                         .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void authorizedServiceCanPreviewRetention() throws Exception {
+        org.mockito.Mockito.when(orderBookRetentionService.previewRetirement()).thenReturn(
+                new OrderBookRetentionService.RetirementPreview("fingerprint", Instant.now(), List.of()));
+
+        mockMvc.perform(get("/internal/v1/order-book/retention/preview")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void unauthorizedServiceCannotPreviewRetention() throws Exception {
+        mockMvc.perform(get("/internal/v1/order-book/retention/preview")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("other-service")))
                 .andExpect(status().isUnauthorized());
     }
 
