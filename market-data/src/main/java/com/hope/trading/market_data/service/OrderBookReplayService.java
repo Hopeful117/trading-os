@@ -78,6 +78,9 @@ public class OrderBookReplayService {
                 startingPoint.sequenceOrdinal(), lastEvidence.sequenceOrdinal(),
                 startingPoint.provider().name(), startingPoint.providerSymbol(),
                 startingPoint.normalizationVersion(), fingerprint(startingPoint, sequence),
+                "TRUSTED",
+                java.util.stream.Stream.concat(java.util.stream.Stream.of(startingPoint), sequence.stream())
+                        .map(OrderBookEvidence::contentFingerprint).toList(),
                 limit(bids, depth), limit(asks, depth), null);
     }
 

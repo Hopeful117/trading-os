@@ -19,6 +19,7 @@ public class ServiceJwtProperties {
     private Set<String> authorizedCallers = Set.of();
     private Set<String> marketFactsAuthorizedCallers = Set.of();
     private Set<String> orderBookReplayAuthorizedCallers = Set.of();
+    private Set<String> orderBookRetentionAuthorizedCallers = Set.of();
 
     public void validate() {
         if (!enabled) {
@@ -39,6 +40,10 @@ public class ServiceJwtProperties {
                 || orderBookReplayAuthorizedCallers.stream().anyMatch(caller -> {
                     String secret = trusted.get(caller);
                     return secret == null || secret.isBlank();
+                })
+                || orderBookRetentionAuthorizedCallers.stream().anyMatch(caller -> {
+                    String secret = trusted.get(caller);
+                    return secret == null || secret.isBlank();
                 })) {
             throw new IllegalStateException("Valid service JWT configuration is required");
         }
@@ -52,6 +57,10 @@ public class ServiceJwtProperties {
         if (path.startsWith("/internal/v1/order-book/replay/")
                 && !orderBookReplayAuthorizedCallers.isEmpty()) {
             return orderBookReplayAuthorizedCallers.contains(caller);
+        }
+        if (path.startsWith("/internal/v1/order-book/retention/")
+                && !orderBookRetentionAuthorizedCallers.isEmpty()) {
+            return orderBookRetentionAuthorizedCallers.contains(caller);
         }
         return !authorizedCallers.isEmpty()
                 ? authorizedCallers.contains(caller)

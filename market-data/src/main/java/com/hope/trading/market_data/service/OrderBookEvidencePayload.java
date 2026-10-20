@@ -17,6 +17,17 @@ final class OrderBookEvidencePayload {
                 .orElse("");
     }
 
+    static String encodeStrings(List<String> values) {
+        return String.join(";", values);
+    }
+
+    static List<String> decodeStrings(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return List.of();
+        }
+        return List.of(payload.split(";", -1));
+    }
+
     static List<OrderBookLevel> decode(String payload) {
         if (payload == null || payload.isBlank()) {
             return List.of();

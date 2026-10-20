@@ -80,6 +80,28 @@ class OrderBookEvidenceCaptureServiceTest {
     }
 
     @Test
+    void quarantinesAndRemovesActiveSequenceWhenCheckpointPersistenceIsNotConfirmed() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenReturn(true);
+        when(repository.append(any())).thenReturn(true, false);
+        when(repository.containsTrusted(any())).thenReturn(false);
+        OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
+                repository, Clock.fixed(NOW, ZoneOffset.UTC));
+        OrderBookDelta snapshot = delta(OrderBookDeltaType.SNAPSHOT, 10);
+        OrderBookDelta update = delta(OrderBookDeltaType.UPDATE, 11);
+
+        assertThat(service.acceptSnapshot(snapshot)).isTrue();
+        assertThat(service.acceptUpdate(update)).isTrue();
+        service.checkpoint(update, new OrderBookSnapshot(MARKET_ID, MarketProvider.KRAKEN, "BTC/USD", 25,
+                update.bids(), update.asks(), new BigDecimal("100"), new BigDecimal("101"),
+                new BigDecimal("1"), BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, NOW));
+
+        assertThat(service.activeSequences()).isEmpty();
+        assertThat(service.durabilityCompromised()).isTrue();
+        assertThat(service.acceptUpdate(delta(OrderBookDeltaType.UPDATE, 12))).isFalse();
+    }
+
+    @Test
     void rejectsSnapshotWhenPersistenceFails() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
         when(repository.appendSnapshotAsNewSequence(any(), any()))
@@ -102,6 +124,20 @@ class OrderBookEvidenceCaptureServiceTest {
         assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isTrue();
         assertThat(service.acceptUpdate(delta(OrderBookDeltaType.UPDATE, 11))).isFalse();
         assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 12))).isFalse();
+        verify(repository).invalidateActiveSequences(any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void rejectsUpdateWhenPersistenceIsNotConfirmed() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        when(repository.appendSnapshotAsNewSequence(any(), any())).thenReturn(true);
+        when(repository.append(any())).thenReturn(false);
+        when(repository.containsTrusted(any())).thenReturn(false);
+        OrderBookEvidenceCaptureService service = new OrderBookEvidenceCaptureService(
+                repository, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(service.acceptSnapshot(delta(OrderBookDeltaType.SNAPSHOT, 10))).isTrue();
+        assertThat(service.acceptUpdate(delta(OrderBookDeltaType.UPDATE, 11))).isFalse();
         verify(repository).invalidateActiveSequences(any(), anyInt(), any(), any());
     }
 

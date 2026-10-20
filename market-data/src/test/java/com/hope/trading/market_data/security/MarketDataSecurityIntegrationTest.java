@@ -4,6 +4,7 @@ import com.hope.trading.market_data.service.MarketPriceSnapshotService;
 import com.hope.trading.market_data.service.MarketFactsService;
 import com.hope.trading.market_data.service.MarketSynchronization;
 import com.hope.trading.market_data.service.OrderBookReplayService;
+import com.hope.trading.market_data.service.OrderBookRetentionService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,9 @@ class MarketDataSecurityIntegrationTest {
 
     @MockitoBean
     private OrderBookReplayService orderBookReplayService;
+
+    @MockitoBean
+    private OrderBookRetentionService orderBookRetentionService;
 
     @Test
     void internalSnapshotRequiresServiceCredential() throws Exception {
@@ -111,6 +115,30 @@ class MarketDataSecurityIntegrationTest {
                         .param("depth", "25")
                         .param("asOf", "2026-10-20T00:00:00Z"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void bothAuthorizedServicesCanUseRetentionEndpoint() throws Exception {
+        String body = "{\"dependencyKey\":\"test\",\"consumerType\":\"TEST\","
+                + "\"consumerIdentity\":\"sample\",\"artifactId\":null,\"sequenceId\":null,"
+                + "\"reason\":\"test\"}";
+                mockMvc.perform(post("/internal/v1/order-book/retention/dependencies")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("trading-core"))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/internal/v1/order-book/retention/dependencies")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void unauthorizedServiceCannotUseRetentionEndpoint() throws Exception {
+        mockMvc.perform(post("/internal/v1/order-book/retention/dependencies")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("other-service"))
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
