@@ -10,7 +10,7 @@
     auto
     minmax(0, 1fr);
   gap: 1rem;
-  height: 42rem;
+  height: clamp(17.5rem, 31vw, 22.5rem);
   overflow: hidden;
 }
 
@@ -104,7 +104,7 @@
 
 @media (max-width: 720px) {
   .order-book {
-    height: 36rem;
+    height: 20rem;
   }
 
   .book-summary {

@@ -55,7 +55,7 @@
               </select>
             </label>
           }
-        }
+      }
       }
     }
   </section>
@@ -80,121 +80,132 @@
         </section>
       }
       @case ('ready') {
-        <section class="context-grid">
-          <article class="context-card account-summary">
-            <span class="eyebrow">Selected account</span>
-            <h2>{{ view.context.account.name }}</h2>
-            <dl>
-              <div>
-                <dt>Currency</dt>
-                <dd>{{ view.context.account.baseCurrency }}</dd>
-              </div>
-              <div>
-                <dt>Risk profile</dt>
-                <dd>{{ view.context.account.riskProfileSemanticVersion ?? 'Unavailable' }}</dd>
-              </div>
-              <div>
-                <dt>Planning profile</dt>
-                <dd>{{ view.context.account.tradePlanningProfileVersion ?? 'Unavailable' }}</dd>
-              </div>
-            </dl>
-          </article>
-
-          <article class="context-card markets-summary">
-            <div class="section-heading">
-              <div>
-                <span class="eyebrow">Step 2</span>
-                <h2>Choose a market</h2>
-              </div>
-              <span class="count-badge">{{ view.context.eligibleMarketIds.length }} eligible</span>
-            </div>
-
-            @if (view.context.eligibleMarketIds.length === 0) {
-              <p class="state-message" data-testid="no-eligible-markets">
-                No market is currently eligible for this account.
-              </p>
-            } @else {
-              <label class="market-search">
-                <input
-                  type="search"
-                  data-testid="market-search"
-                  aria-label="Search available markets"
-                  placeholder="Search symbol, e.g. BNT/USD"
-                  [value]="marketSearch"
-                  (input)="setMarketSearch($any($event.target).value)"
-                />
-                <small
-                  >Type at least 2 characters to search
-                  {{ view.context.eligibleMarketIds.length }} markets.</small
-                >
-              </label>
-
-              @if (marketSearch.length < 2) {
-                <div class="market-picker-empty" data-testid="market-search-hint">
-                  <strong>Search when you know what to inspect</strong>
-                  <span>The full market catalogue stays out of the way until you filter it.</span>
+        <div class="workstation-layout">
+          <aside class="selector-rail" aria-label="Account and market selection">
+            <section class="context-grid">
+              <article class="context-card account-summary">
+                <div class="section-heading">
+                  <div>
+                    <span class="eyebrow">Account context</span>
+                    <h2>{{ view.context.account.name }}</h2>
+                  </div>
+                  <span class="count-badge">{{ view.context.account.baseCurrency }}</span>
                 </div>
-              } @else if (eligibleMarkets(view.context).length === 0) {
-                <p class="state-message" data-testid="market-search-empty">
-                  No eligible market matches “{{ marketSearch }}”.
-                </p>
-              } @else {
-                <div class="market-list" data-testid="eligible-markets">
-                  @for (market of eligibleMarkets(view.context); track market.marketId) {
-                    <button
-                      type="button"
-                      class="market-option"
-                      [class.selected]="selectedMarketId === market.marketId"
-                      [attr.aria-pressed]="selectedMarketId === market.marketId"
-                      (click)="selectMarket(market.marketId, view.context)"
+                <dl>
+                  <div>
+                    <dt>Risk profile</dt>
+                    <dd>{{ view.context.account.riskProfileSemanticVersion ?? 'Unavailable' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Planning profile</dt>
+                    <dd>{{ view.context.account.tradePlanningProfileVersion ?? 'Unavailable' }}</dd>
+                  </div>
+                </dl>
+              </article>
+
+              <article class="context-card markets-summary">
+                <div class="section-heading">
+                  <div>
+                    <span class="eyebrow">Market selection</span>
+                    <h2>Choose a market</h2>
+                  </div>
+                  <span class="count-badge">{{ view.context.eligibleMarketIds.length }} eligible</span>
+                </div>
+
+                @if (view.context.eligibleMarketIds.length === 0) {
+                  <p class="state-message" data-testid="no-eligible-markets">
+                    No market is currently eligible for this account.
+                  </p>
+                } @else {
+                  <label class="market-search">
+                    <input
+                      type="search"
+                      data-testid="market-search"
+                      aria-label="Search available markets"
+                      placeholder="Search symbol, e.g. BNT/USD"
+                      [value]="marketSearch"
+                      (input)="setMarketSearch($any($event.target).value)"
+                    />
+                    <small
+                      >Type at least 2 characters to search
+                      {{ view.context.eligibleMarketIds.length }} markets.</small
                     >
-                      <strong>{{ market.symbol ?? market.marketId }}</strong>
-                      <span>{{ market.provider ?? 'Unknown provider' }}</span>
-                    </button>
-                  }
-                </div>
-                @if (eligibleMarkets(view.context).length === 40) {
-                  <small class="market-list-note"
-                    >Showing the first 40 matches. Refine your search.</small
-                  >
-                }
-              }
-            }
-          </article>
-        </section>
+                  </label>
 
-        @if (view.context.markets.length > view.context.eligibleMarketIds.length) {
-          <app-disclosure-section
-            class="context-card excluded-markets"
-            data-testid="excluded-markets"
-            title="Unavailable markets"
-            eyebrow="Backend decision"
-            [summary]="
-              view.context.markets.length - view.context.eligibleMarketIds.length + ' hidden'
-            "
-            [expanded]="showUnavailableMarkets"
-            (expandedChange)="showUnavailableMarkets = $event"
-          >
-            @if (showUnavailableMarkets) {
-              <div class="excluded-markets-content">
-                <p>These markets are excluded from this account context and cannot be selected.</p>
-                <ul>
-                  @for (market of unavailableMarkets(view.context); track market.marketId) {
-                    <li>
-                      <strong>{{ market.symbol ?? market.marketId }}</strong>
-                      <span>{{ market.reasons.join(', ') }}</span>
-                    </li>
+                  @if (marketSearch.length < 2) {
+                    <div class="market-picker-empty" data-testid="market-search-hint">
+                      <strong>Search when you know what to inspect</strong>
+                      <span>The full market catalogue stays out of the way until you filter it.</span>
+                    </div>
+                  } @else if (eligibleMarkets(view.context).length === 0) {
+                    <p class="state-message" data-testid="market-search-empty">
+                      No eligible market matches “{{ marketSearch }}”.
+                    </p>
+                  } @else {
+                    <div class="market-list" data-testid="eligible-markets">
+                      @for (market of eligibleMarkets(view.context); track market.marketId) {
+                        <button
+                          type="button"
+                          class="market-option"
+                          [class.selected]="selectedMarketId === market.marketId"
+                          [attr.aria-pressed]="selectedMarketId === market.marketId"
+                          (click)="selectMarket(market.marketId, view.context)"
+                        >
+                          <strong>{{ market.symbol ?? market.marketId }}</strong>
+                          <span>{{ market.provider ?? 'Unknown provider' }}</span>
+                        </button>
+                      }
+                    </div>
+                    @if (eligibleMarkets(view.context).length === 40) {
+                      <small class="market-list-note"
+                        >Showing the first 40 matches. Refine your search.</small
+                      >
+                    }
                   }
-                </ul>
-                @if (view.context.markets.length - view.context.eligibleMarketIds.length > 40) {
-                  <small>Showing the first 40 unavailable markets.</small>
                 }
-              </div>
-            }
-          </app-disclosure-section>
-        }
+              </article>
+            </section>
 
-        @if (selectedMarketId; as marketId) {
+            @if (view.context.markets.length > view.context.eligibleMarketIds.length) {
+              <app-disclosure-section
+                class="context-card excluded-markets"
+                data-testid="excluded-markets"
+                title="Unavailable markets"
+                eyebrow="Backend decision"
+                [summary]="
+                  view.context.markets.length - view.context.eligibleMarketIds.length + ' hidden'
+                "
+                [expanded]="showUnavailableMarkets"
+                (expandedChange)="showUnavailableMarkets = $event"
+              >
+                @if (showUnavailableMarkets) {
+                  <div class="excluded-markets-content">
+                    <p>These markets are excluded from this account context and cannot be selected.</p>
+                    <ul>
+                      @for (market of unavailableMarkets(view.context); track market.marketId) {
+                        <li>
+                          <strong>{{ market.symbol ?? market.marketId }}</strong>
+                          <span>{{ market.reasons.join(', ') }}</span>
+                        </li>
+                      }
+                    </ul>
+                    @if (view.context.markets.length - view.context.eligibleMarketIds.length > 40) {
+                      <small>Showing the first 40 unavailable markets.</small>
+                    }
+                  </div>
+                }
+              </app-disclosure-section>
+            }
+          </aside>
+
+          <section class="active-workspace" aria-label="Active market investigation">
+            @if (selectedMarketId === null) {
+              <section class="workspace-empty-state" data-testid="workspace-select-market-state">
+                <span class="eyebrow">Investigation surface</span>
+                <h2>Select an eligible market</h2>
+                <p>Use the selector rail to load quote, chart, Trend Context, and Order Flow.</p>
+              </section>
+            } @else if (selectedMarketId; as marketId) {
           @if (marketView$ | async; as marketView) {
             @switch (marketView.status) {
               @case ('loading') {
@@ -225,26 +236,16 @@
               @case ('loaded') {
                 <section class="market-context" data-testid="market-context">
                   <span hidden>{{ freshnessTick$ | async }}</span>
-                  <header class="market-header">
-                    <div>
-                      <span class="eyebrow">Step 3 · Account-scoped market</span>
-                      <span class="provider">{{ marketView.market.provider }}</span>
-                      <h2>{{ marketView.market.symbol }}</h2>
-                      <p>{{ marketView.market.baseAsset }} / {{ marketView.market.quoteAsset }}</p>
-                    </div>
-                    <div class="market-status-block">
-                      <span
-                        class="market-status"
-                        [class.open]="marketView.market.marketState.tradable"
-                      >
-                        {{ marketView.market.marketState.tradingStatus }}
-                      </span>
-                      <small>
-                        State updated
-                        {{ marketView.market.marketState.lastUpdated | date: 'mediumTime' }}
-                      </small>
-                    </div>
-                  </header>
+                  @if (ticker$ | async; as ticker) {
+                    <app-market-quote-panel
+                      [market]="marketView.market"
+                      [ticker]="ticker"
+                      [freshness]="marketFreshness(
+                        ticker,
+                        ticker.status === 'live' ? ticker.data.occurredAt : null
+                      )"
+                    />
+                  }
 
                   @if (trendContext$ | async; as trendContext) {
                     @switch (trendContext.status) {
@@ -332,6 +333,12 @@
                               </article>
                             </div>
 
+                            <app-disclosure-section
+                              class="trend-context-details"
+                              title="Detailed deterministic evidence"
+                              summary="Roles, provenance, diagnostics"
+                              [expanded]="true"
+                            >
                             <div class="trend-context-meta" data-testid="trend-context-provenance">
                               @if (trendContext.readModel.observationId) {
                                 <span>Observation {{ trendContext.readModel.observationId }}</span>
@@ -610,6 +617,7 @@
                                 </ul>
                               </div>
                             }
+                            </app-disclosure-section>
                           } @else if (
                             trendContext.readModel.lastSuccessfulAssessment;
                             as historical
@@ -647,11 +655,12 @@
                               No current Trend Context assessment is available.
                             </p>
                           }
-                        </section>
+                          </section>
                       }
                     }
                   }
 
+                  <section class="decision-action-region" aria-label="Decision actions">
                   @if (manualTradeOpen) {
                     <app-manual-trade-ticket
                       [account]="view.context.account"
@@ -707,63 +716,9 @@
                       }
                     </section>
                   }
-
-                  <section class="market-section" aria-labelledby="workspace-ticker-title">
-                    <div class="section-heading">
-                      <div>
-                        <span class="eyebrow">Live market</span>
-                        <h3 id="workspace-ticker-title">Ticker</h3>
-                      </div>
-                      @if (ticker$ | async; as ticker) {
-                        <span class="stream-badge">{{
-                          marketFreshness(
-                            ticker,
-                            ticker.status === 'live' ? ticker.data.occurredAt : null
-                          )
-                        }}</span>
-                      }
-                    </div>
-
-                    @if (ticker$ | async; as ticker) {
-                      @switch (ticker.status) {
-                        @case ('waiting') {
-                          <p class="section-placeholder">Waiting for live market data...</p>
-                        }
-                        @case ('error') {
-                          <p class="section-placeholder error">Ticker data unavailable.</p>
-                        }
-                        @case ('live') {
-                          <div class="ticker-grid">
-                            <article class="ticker-card ticker-card--primary">
-                              <span>Last price</span>
-                              <strong>{{ ticker.data.last }}</strong>
-                              <small>{{ ticker.data.occurredAt | date: 'mediumTime' }}</small>
-                            </article>
-                            <article class="ticker-card">
-                              <span>Bid</span>
-                              <strong>{{ ticker.data.bid }}</strong>
-                            </article>
-                            <article class="ticker-card">
-                              <span>Ask</span>
-                              <strong>{{ ticker.data.ask }}</strong>
-                            </article>
-                            <article class="ticker-card">
-                              <span>Spread</span>
-                              <strong>{{ ticker.data.ask - ticker.data.bid }}</strong>
-                            </article>
-                            @if (ticker.data.volume !== null) {
-                              <article class="ticker-card">
-                                <span>Volume</span>
-                                <strong>{{ ticker.data.volume }}</strong>
-                              </article>
-                            }
-                          </div>
-                        }
-                      }
-                    }
                   </section>
 
-                  <section class="market-section" aria-labelledby="workspace-chart-title">
+                  <section class="market-section chart-panel" aria-labelledby="workspace-chart-title">
                     <div class="section-heading">
                       <div>
                         <span class="eyebrow">Price history</span>
@@ -812,7 +767,7 @@
                     }
                   </section>
 
-                  <div class="market-secondary-grid">
+                  <div class="market-secondary-grid order-flow-panel">
                     <section class="market-section" aria-labelledby="workspace-order-book-title">
                       <div class="section-heading">
                         <h3 id="workspace-order-book-title">Order book</h3>
@@ -890,7 +845,7 @@
                     </section>
                   </div>
 
-                  <section class="market-section" aria-labelledby="workspace-information-title">
+                  <section class="market-section constraints-panel" aria-labelledby="workspace-information-title">
                     <div class="section-heading">
                       <h3 id="workspace-information-title">Market information</h3>
                     </div>
@@ -928,6 +883,8 @@
             }
           }
         }
+          </section>
+        </div>
       }
     }
   }
