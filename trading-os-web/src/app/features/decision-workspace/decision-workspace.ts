@@ -142,6 +142,7 @@ export class DecisionWorkspace {
   manualTradeOpen = false;
   marketSearch = '';
   showUnavailableMarkets = false;
+  showTrendContextDetails = false;
   opportunity: OpportunityResponse | null = null;
   opportunityPreparing = false;
   opportunityError = false;
@@ -453,6 +454,7 @@ export class DecisionWorkspace {
         this.selectedAccountId = accountId;
         this.selectedMarketId = null;
         this.manualTradeOpen = false;
+        this.showTrendContextDetails = false;
         this.clearActiveSubscriptions().subscribe(() => {
           this.selectedMarketSubject.next(null);
           this.selectedAccountSubject.next(accountId);
@@ -467,6 +469,7 @@ export class DecisionWorkspace {
       if (marketId !== this.selectedMarketId) {
         this.selectedMarketId = marketId;
         this.manualTradeOpen = false;
+        this.showTrendContextDetails = false;
         this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
       }
     });
@@ -485,6 +488,7 @@ export class DecisionWorkspace {
     this.manualTradeOpen = false;
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
+    this.showTrendContextDetails = false;
     this.clearActiveSubscriptions().subscribe(() => {
       this.selectedMarketSubject.next(null);
       this.selectedAccountSubject.next(accountId || null);
@@ -509,6 +513,7 @@ export class DecisionWorkspace {
     this.manualTradeOpen = false;
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
+    this.showTrendContextDetails = false;
     this.opportunityRequestKey = null;
     this.clearActiveSubscriptions().subscribe(() => {
       this.selectedMarketSubject.next(null);
@@ -528,6 +533,7 @@ export class DecisionWorkspace {
 
     this.selectedMarketId = marketId;
     this.manualTradeOpen = false;
+    this.showTrendContextDetails = false;
     this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
     void this.router.navigate([], {
       queryParams: { marketId },

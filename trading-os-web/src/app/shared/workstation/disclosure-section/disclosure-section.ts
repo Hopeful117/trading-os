@@ -9,6 +9,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
         type="button"
         class="disclosure-button disclosure-section__button"
         [attr.aria-expanded]="expanded"
+        [attr.aria-controls]="contentId"
         (click)="expandedChange.emit(!expanded)"
       >
         <span>
@@ -23,7 +24,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
         </span>
       </button>
       @if (expanded) {
-        <div class="disclosure-section__content">
+        <div class="disclosure-section__content" [id]="contentId">
           <ng-content />
         </div>
       }
@@ -35,6 +36,7 @@ export class DisclosureSection {
   @Input({ required: true }) title!: string;
   @Input() eyebrow: string | null = null;
   @Input() summary: string | null = null;
+  @Input() contentId: string | null = null;
   @Input() expanded = false;
   @Output() readonly expandedChange = new EventEmitter<boolean>();
 }
