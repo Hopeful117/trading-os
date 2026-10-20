@@ -18,6 +18,8 @@ public record OrderBookReplayResult(
         String providerSymbol,
         String normalizationVersion,
         String sourceEvidenceFingerprint,
+        String sourceTrustStatus,
+        List<String> sourceEvidenceFingerprints,
         List<OrderBookLevel> bids,
         List<OrderBookLevel> asks,
         String reason
@@ -30,12 +32,12 @@ public record OrderBookReplayResult(
 
     public static OrderBookReplayResult unavailable(UUID marketId, int depth, Instant cutoff, String reason) {
         return new OrderBookReplayResult(ReplayStatus.UNAVAILABLE, marketId, depth, null, cutoff,
-                null, null, null, null, null, null, null, null, List.of(), List.of(), reason);
+                null, null, null, null, null, null, null, null, null, null, List.of(), List.of(), reason);
     }
 
     public static OrderBookReplayResult invalid(UUID marketId, int depth, Instant cutoff, UUID sequenceId,
                                                 String reason) {
         return new OrderBookReplayResult(ReplayStatus.INVALID, marketId, depth, sequenceId, cutoff,
-                null, null, null, null, null, null, null, null, List.of(), List.of(), reason);
+                null, null, null, null, null, null, null, null, null, null, List.of(), List.of(), reason);
     }
 }

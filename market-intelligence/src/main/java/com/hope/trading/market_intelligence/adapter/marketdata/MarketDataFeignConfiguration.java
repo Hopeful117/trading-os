@@ -35,9 +35,10 @@ public class MarketDataFeignConfiguration {
             if (template.url().startsWith("/internal/")) {
                 boolean facts = template.url().startsWith("/internal/v1/market-facts/");
                 boolean replay = template.url().startsWith("/internal/v1/order-book/replay/");
+                boolean retention = template.url().startsWith("/internal/v1/order-book/retention/");
                 template.header("X-Service-Authorization", "Bearer " + issueToken(
-                        facts || replay ? intelligenceSecret : secret,
-                        facts || replay ? INTELLIGENCE_ISSUER : CORE_ISSUER));
+                        facts || replay || retention ? intelligenceSecret : secret,
+                        facts || replay || retention ? INTELLIGENCE_ISSUER : CORE_ISSUER));
             }
         };
     }

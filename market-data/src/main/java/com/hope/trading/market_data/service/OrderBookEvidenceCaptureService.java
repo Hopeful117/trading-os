@@ -8,6 +8,7 @@ import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import com.hope.trading.market_data.model.OrderBookKey;
 import com.hope.trading.market_data.model.OrderBookSnapshot;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +16,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
+import java.util.Comparator;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -26,15 +30,31 @@ public class OrderBookEvidenceCaptureService {
     private final ConcurrentMap<OrderBookKey, ActiveSequence> sequences = new ConcurrentHashMap<>();
     private final ConcurrentMap<OrderBookKey, Object> sequenceLocks = new ConcurrentHashMap<>();
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final OrderBookStoragePressureGuard pressureGuard;
+    private final AtomicReference<Instant> lastSuccessfulPersistence = new AtomicReference<>();
     private volatile boolean durabilityCompromised;
 
-    public OrderBookEvidenceCaptureService(OrderBookEvidenceRepository repository, Clock clock) {
+    @Autowired
+    public OrderBookEvidenceCaptureService(OrderBookEvidenceRepository repository, Clock clock,
+                                           OrderBookStoragePressureGuard pressureGuard) {
         this.repository = repository;
         this.clock = clock;
+        this.pressureGuard = pressureGuard;
+    }
+
+    public OrderBookEvidenceCaptureService(OrderBookEvidenceRepository repository, Clock clock) {
+        this(repository, clock, new OrderBookStoragePressureGuard(testProperties()));
+    }
+
+    private static com.hope.trading.market_data.config.OrderBookRetentionProperties testProperties() {
+        var properties = new com.hope.trading.market_data.config.OrderBookRetentionProperties();
+        properties.setMinimumFreeBytes(0);
+        return properties;
     }
 
     public boolean acceptSnapshot(OrderBookDelta delta) {
-        if (durabilityCompromised || delta.type() != OrderBookDeltaType.SNAPSHOT || !validChecksum(delta)) {
+        if (durabilityCompromised || pressureGuard.underPressure()
+                || delta.type() != OrderBookDeltaType.SNAPSHOT || !validChecksum(delta)) {
             return false;
         }
         OrderBookKey key = new OrderBookKey(delta.marketId(), delta.depth());
@@ -52,6 +72,7 @@ public class OrderBookEvidenceCaptureService {
                     return false;
                 }
                 sequences.put(key, sequence);
+                lastSuccessfulPersistence.set(knownAt);
                 log.info("ORDER_BOOK_SEQUENCE_STARTED provider={} marketId={} depth={} sequenceId={} "
                                 + "providerSequence={} occurredAt={} knownAt={}",
                         delta.provider(), delta.marketId(), delta.depth(), sequenceId, delta.providerSequence(),
@@ -65,7 +86,8 @@ public class OrderBookEvidenceCaptureService {
     }
 
     public boolean acceptUpdate(OrderBookDelta delta) {
-        if (durabilityCompromised || delta.type() != OrderBookDeltaType.UPDATE || !validChecksum(delta)) {
+        if (durabilityCompromised || pressureGuard.underPressure()
+                || delta.type() != OrderBookDeltaType.UPDATE || !validChecksum(delta)) {
             return false;
         }
         OrderBookKey key = new OrderBookKey(delta.marketId(), delta.depth());
@@ -81,14 +103,21 @@ public class OrderBookEvidenceCaptureService {
             long ordinal = current.ordinal() + 1;
             Instant knownAt = knownAt();
             try {
-                repository.append(toEvidence(delta,
+                OrderBookEvidence evidence = toEvidence(delta,
                         new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
                                 delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
                                 delta.occurredAt(), knownAt), knownAt,
-                        OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER, ordinal));
+                        OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER, ordinal);
+                boolean persisted = repository.append(evidence);
+                if (!persisted && !repository.containsTrusted(evidence.contentFingerprint())) {
+                    tryInvalidate(key, "evidence persistence was not confirmed");
+                    sequences.remove(key);
+                    return false;
+                }
                 sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
                         delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
                         delta.occurredAt(), knownAt));
+                lastSuccessfulPersistence.set(knownAt);
                 return true;
             } catch (RuntimeException exception) {
                 tryInvalidate(key, "evidence persistence failure");
@@ -118,15 +147,20 @@ public class OrderBookEvidenceCaptureService {
             try {
                 boolean inserted = repository.append(persistedCheckpoint);
                 if (!inserted && !repository.containsTrusted(persistedCheckpoint.contentFingerprint())) {
+                    durabilityCompromised = true;
                     tryInvalidate(key, "checkpoint persistence was not confirmed");
+                    sequences.remove(key, current);
                     return;
                 }
             } catch (RuntimeException exception) {
+                durabilityCompromised = true;
                 tryInvalidate(key, "checkpoint persistence failure");
+                sequences.remove(key, current);
                 return;
             }
             sequences.put(key, new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), current.ordinal(),
                     current.providerSequence(), knownAt, current.ordinal(), snapshot.occurredAt(), knownAt));
+            lastSuccessfulPersistence.set(knownAt);
         }
     }
 
@@ -157,6 +191,22 @@ public class OrderBookEvidenceCaptureService {
         return current == null ? null : new SequenceDiagnostics(current.sequenceId(), current.marketId(),
                 current.depth(), current.providerSequence(), current.ordinal(), current.lastOccurredAt(),
                 current.lastKnownAt());
+    }
+
+    public boolean durabilityCompromised() {
+        return durabilityCompromised;
+    }
+
+    public Instant lastSuccessfulPersistence() {
+        return lastSuccessfulPersistence.get();
+    }
+
+    public List<SequenceDiagnostics> activeSequences() {
+        return sequences.values().stream()
+                .map(current -> new SequenceDiagnostics(current.sequenceId(), current.marketId(), current.depth(),
+                        current.providerSequence(), current.ordinal(), current.lastOccurredAt(), current.lastKnownAt()))
+                .sorted(Comparator.comparing(SequenceDiagnostics::sequenceId))
+                .toList();
     }
 
     private boolean tryInvalidate(OrderBookKey key, String reason) {
