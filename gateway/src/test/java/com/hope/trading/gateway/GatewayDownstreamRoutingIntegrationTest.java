@@ -43,6 +43,8 @@ class GatewayDownstreamRoutingIntegrationTest {
             new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> intelligenceActorHeaders =
             new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<String> intelligenceAuthorizationHeaders =
+            new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> tradingCoreIdempotencyHeaders =
             new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> tradingCoreAuthorizationHeaders =
@@ -63,7 +65,7 @@ class GatewayDownstreamRoutingIntegrationTest {
     @BeforeEach
     void startStubsAndGateway() throws Exception {
         intelligenceStub = stub(intelligenceRequests, "X-Actor-Id", intelligenceActorHeaders,
-                null, null, "intelligence");
+                intelligenceAuthorizationHeaders, null, "intelligence");
         intelligenceStub.start();
         intelligencePort = intelligenceStub.getAddress().getPort();
 
@@ -277,6 +279,18 @@ class GatewayDownstreamRoutingIntegrationTest {
         assertThat(intelligenceRequests).containsExactly(
                 "GET /api/v1/intelligence/research/readiness");
         assertThat(intelligenceActorHeaders).containsExactly(AUTHENTICATED_USER_ID.toString());
+    }
+
+    @Test
+    void researchIntegrityRequestRoutesToMarketIntelligenceWithAuth() throws Exception {
+        HttpResponse<String> response = send("GET", "/api/v1/intelligence/research/integrity");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(intelligenceRequests).containsExactly(
+                "GET /api/v1/intelligence/research/integrity");
+        assertThat(intelligenceActorHeaders).containsExactly(AUTHENTICATED_USER_ID.toString());
+        assertThat(intelligenceAuthorizationHeaders).hasSize(1);
+        assertThat(intelligenceAuthorizationHeaders.get(0)).startsWith("Bearer ");
     }
 
     @Test

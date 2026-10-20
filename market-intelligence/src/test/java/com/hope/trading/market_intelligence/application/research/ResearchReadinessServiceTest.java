@@ -435,6 +435,51 @@ class ResearchReadinessServiceTest {
                 org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any());
     }
 
+    @Test
+    void s1ReadinessStopsRemoteReplayChecksAfterDependencyFailure() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+
+        FeatureSnapshot first = mock(FeatureSnapshot.class);
+        when(first.marketId()).thenReturn(MARKET_ID);
+        when(first.evaluationCutoff()).thenReturn(NOW.minus(Duration.ofDays(15)));
+        when(first.values()).thenReturn(List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                "trend.trigger.break_status",
+                com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                "CONFIRMED_BULLISH_BREAK")));
+        FeatureSnapshot second = mock(FeatureSnapshot.class);
+        when(second.marketId()).thenReturn(MARKET_ID);
+        when(second.evaluationCutoff()).thenReturn(NOW.minus(Duration.ofDays(14)));
+        List<com.hope.trading.market_intelligence.domain.feature.FeatureValue> signalValues =
+                List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                        "trend.trigger.break_status",
+                        com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                        "CONFIRMED_BULLISH_BREAK"));
+        when(second.values()).thenReturn(signalValues);
+
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of(first, second));
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        OrderBookReplayClient replay = mock(OrderBookReplayClient.class);
+        when(replay.replay(org.mockito.ArgumentMatchers.eq(MARKET_ID), org.mockito.ArgumentMatchers.eq(25),
+                org.mockito.ArgumentMatchers.any())).thenThrow(new IllegalStateException("unavailable"));
+
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                mock(ArtifactPersistencePort.class), replay, null,
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(readiness.s1().replayAvailable()).isZero();
+        verify(replay).replay(org.mockito.ArgumentMatchers.eq(MARKET_ID),
+                org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any());
+    }
+
     private ObservedMarketOutcome outcome(OutcomeHorizon horizon, String fingerprint) {
         ObservedMarketOutcome outcome = mock(ObservedMarketOutcome.class);
         when(outcome.marketId()).thenReturn(MARKET_ID);

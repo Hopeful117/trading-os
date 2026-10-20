@@ -41,6 +41,20 @@ describe('ResearchOverview', () => {
     },
   };
 
+  const integrityResponse = {
+    evaluatedAt: '2026-10-16T10:00:00Z',
+    enabled: true,
+    configuredMarkets: ['BTC-USD', 'ETH-USD'],
+    observationCadence: 'PT1H',
+    status: 'HEALTHY',
+    acquisitionByMarket: {},
+    maturationByHorizon: {},
+    overdueOutcomeCount: 0,
+    latestSuccessfulOutcomeComputedAt: '2026-10-16T09:00:00Z',
+    timestampAnomalyCount: 0,
+    warnings: [],
+  };
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ResearchOverview],
@@ -55,10 +69,16 @@ describe('ResearchOverview', () => {
         (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
       )
       .flush(response);
+
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
+      )
+      .flush(integrityResponse);
     fixture.detectChanges();
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => httpMock.verify({ ignoreCancelled: true }));
 
   it('renders readiness without inventing experiment results', () => {
     const text = fixture.nativeElement.textContent;
@@ -66,25 +86,64 @@ describe('ResearchOverview', () => {
     expect(text).toContain('30 LONG / 30 SHORT');
     expect(text).toContain('Results unavailable by design');
     expect(text).toContain('Deferred: returns');
+    expect(text).toContain('HEALTHY');
   });
 
   it('renders blocking reasons from the authoritative readiness response', () => {
     fixture.componentInstance.refresh();
     httpMock
-      .expectOne(() => true)
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
+      )
       .flush({
         ...response,
         s1: { ...response.s1, ready: false, blockingReasons: ['fee_coverage_incomplete'] },
       });
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
+      )
+      .flush(integrityResponse);
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('S1 blocked');
     expect(fixture.nativeElement.textContent).toContain('fee coverage incomplete');
   });
 
+  it('projects degraded integrity warnings without changing readiness semantics', () => {
+    fixture.componentInstance.refresh();
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
+      )
+      .flush(response);
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
+      )
+      .flush({
+        ...integrityResponse,
+        status: 'DEGRADED',
+        overdueOutcomeCount: 2,
+        timestampAnomalyCount: 1,
+        warnings: ['overdue_outcome', 'outcome_timestamp_incoherent'],
+      });
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('S1 ready');
+    expect(text).toContain('DEGRADED');
+    expect(text).toContain('overdue outcome');
+    expect(text).toContain('timestamp incoherent');
+  });
+
   it('renders a retryable error state', () => {
     fixture.componentInstance.refresh();
-    httpMock.expectOne(() => true).flush('unavailable', { status: 503, statusText: 'Unavailable' });
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
+      )
+      .flush('unavailable', { status: 503, statusText: 'Unavailable' });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Readiness unavailable');
@@ -102,5 +161,33 @@ describe('ResearchOverview', () => {
     );
     expect(requests).toHaveLength(1);
     requests[0].flush(response);
+    const integrityRequests = httpMock.match(
+      (candidate) =>
+        candidate.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
+    );
+    expect(integrityRequests).toHaveLength(1);
+    integrityRequests[0].flush(integrityResponse);
+  });
+
+  it('keeps readiness visible when the integrity projection is unavailable', () => {
+    fixture.componentInstance.refresh();
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
+      )
+      .flush(response);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('S1 ready');
+    expect(fixture.nativeElement.textContent).toContain('Acquisition integrity is unknown');
+
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
+      )
+      .flush('unavailable', { status: 503, statusText: 'Unavailable' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('S1 ready');
+    expect(fixture.nativeElement.textContent).toContain('Acquisition integrity is unknown');
   });
 });

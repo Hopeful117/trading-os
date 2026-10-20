@@ -30,3 +30,36 @@ export interface ResearchReadiness {
   approximateAvailableResearchPopulation: number;
   s1: S1Readiness;
 }
+
+export type ResearchIntegrityStatus = 'HEALTHY' | 'DEGRADED' | 'STALE' | 'NO_DATA_YET' | 'UNKNOWN';
+
+export interface MarketAcquisitionIntegrity {
+  status: ResearchIntegrityStatus;
+  expectedCutoff: string | null;
+  latestSnapshotCutoff: string | null;
+  lagSeconds: number;
+}
+
+export interface OutcomeMaturationIntegrity {
+  dueSnapshotCount: number;
+  availableCount: number;
+  pendingCount: number;
+  incompleteCount: number;
+  unavailableCount: number;
+  overdueCount: number;
+  latestComputedAt: string | null;
+}
+
+export interface ResearchIntegrity {
+  evaluatedAt: string;
+  enabled: boolean;
+  configuredMarkets: string[];
+  observationCadence: string;
+  status: ResearchIntegrityStatus;
+  acquisitionByMarket: Record<string, MarketAcquisitionIntegrity>;
+  maturationByHorizon: Record<string, OutcomeMaturationIntegrity>;
+  overdueOutcomeCount: number;
+  latestSuccessfulOutcomeComputedAt: string | null;
+  timestampAnomalyCount: number;
+  warnings: string[];
+}

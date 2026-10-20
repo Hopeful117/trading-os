@@ -23,5 +23,8 @@ public interface ObservedMarketOutcomeRepository {
 
     List<ObservedMarketOutcome> findByMarkets(Set<UUID> marketIds);
 
+    List<ObservedMarketOutcome> findByMarketsAndCutoffRange(
+            Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive);
+
     ObservedMarketOutcome saveIfAbsent(ObservedMarketOutcome outcome);
 }

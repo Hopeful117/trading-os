@@ -222,11 +222,15 @@ public class ResearchReadinessService {
         ReplayKey key = new ReplayKey(marketId, cutoff);
         Long cached = cache.get(key);
         if (cached != null) return cached;
+        if (budget.replayUnavailable()) return 0L;
         if (!budget.tryConsume()) return 0L;
         long result;
         try {
             result = "AVAILABLE".equalsIgnoreCase(replay.replay(marketId, REPLAY_DEPTH, cutoff).status()) ? 1L : 0L;
-        } catch (RuntimeException ignored) { result = 0L; }
+        } catch (RuntimeException ignored) {
+            budget.markReplayUnavailable();
+            result = 0L;
+        }
         cache.put(key, result);
         return result;
     }
@@ -244,6 +248,7 @@ public class ResearchReadinessService {
                                 Map<Instant, Long> cache, RemoteCheckBudget budget) {
         Long cached = cache.get(executionTime);
         if (cached != null) return cached;
+        if (budget.feeUnavailable()) return 0L;
         if (!budget.tryConsume()) return 0L;
         var config = properties.getFeeCoverage();
         long result;
@@ -251,7 +256,10 @@ public class ResearchReadinessService {
             var response = fees.findEligible(config.getBrokerAccountId(), config.getProvider(), config.getProductType(),
                     config.getInstrument(), executionTime, researchCutoff);
             result = response != null && response.getStatusCode().is2xxSuccessful() && response.getBody() != null ? 1L : 0L;
-        } catch (RuntimeException ignored) { result = 0L; }
+        } catch (RuntimeException ignored) {
+            budget.markFeeUnavailable();
+            result = 0L;
+        }
         cache.put(executionTime, result);
         return result;
     }
@@ -267,6 +275,8 @@ public class ResearchReadinessService {
     private static final class RemoteCheckBudget {
         private int remaining;
         private boolean exhausted;
+        private boolean replayUnavailable;
+        private boolean feeUnavailable;
 
         private RemoteCheckBudget(int maximum) {
             this.remaining = maximum;
@@ -283,6 +293,22 @@ public class ResearchReadinessService {
 
         private boolean exhausted() {
             return exhausted;
+        }
+
+        private boolean replayUnavailable() {
+            return replayUnavailable;
+        }
+
+        private void markReplayUnavailable() {
+            replayUnavailable = true;
+        }
+
+        private boolean feeUnavailable() {
+            return feeUnavailable;
+        }
+
+        private void markFeeUnavailable() {
+            feeUnavailable = true;
         }
     }
 

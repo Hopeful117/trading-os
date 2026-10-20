@@ -120,6 +120,65 @@ button:focus-visible {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
 }
 
+.integrity-panel {
+  margin-bottom: 1.25rem;
+}
+
+.integrity-status {
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.integrity-status.healthy {
+  background: rgba(74, 222, 128, 0.14);
+  color: #86efac;
+}
+
+.integrity-status.degraded,
+.integrity-status.no_data_yet {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fcd34d;
+}
+
+.integrity-status.stale,
+.integrity-status.unknown {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+}
+
+.integrity-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.integrity-summary div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.integrity-summary strong {
+  font-size: 1.2rem;
+}
+
+.integrity-summary span,
+.integrity-unavailable {
+  color: #94a3b8;
+  font-size: 0.86rem;
+}
+
+.integrity-warnings {
+  margin: 1rem 0 0;
+  padding: 0.8rem 1rem 0.8rem 1.8rem;
+  border-left: 4px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  color: #fcd34d;
+}
+
 .boundary-panel {
   display: flex;
   align-items: center;
@@ -306,7 +365,8 @@ button:focus-visible {
   }
 
   .summary-grid,
-  .gate-grid {
+  .gate-grid,
+  .integrity-summary {
     grid-template-columns: 1fr;
   }
 

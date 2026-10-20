@@ -109,7 +109,7 @@ public class ResearchLifecycleProperties {
         private String instrument;
 
         public void validate() {
-            if (brokerAccountId == null && provider == null && productType == null && instrument == null) {
+            if (brokerAccountId == null && blank(provider) && blank(productType) && blank(instrument)) {
                 return;
             }
             if (brokerAccountId == null || blank(provider) || blank(productType) || blank(instrument)) {

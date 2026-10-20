@@ -46,6 +46,54 @@
           <div class="boundary-state">Results unavailable by design</div>
         </section>
 
+        <section class="integrity-panel panel" aria-labelledby="integrity-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Acquisition integrity</p>
+              <h2 id="integrity-heading">Accumulation health</h2>
+            </div>
+            @if (viewModel.integrity; as integrity) {
+              <span [class]="'integrity-status ' + integrity.status.toLowerCase()">
+                {{ integrity.status.replaceAll('_', ' ') }}
+              </span>
+            } @else {
+              <span class="integrity-status unknown">UNKNOWN</span>
+            }
+          </div>
+
+          @if (viewModel.integrity; as integrity) {
+            <div class="integrity-summary">
+              <div>
+                <strong>{{ integrity.configuredMarkets.length }}</strong>
+                <span>configured markets</span>
+              </div>
+              <div>
+                <strong>{{ integrity.overdueOutcomeCount }}</strong>
+                <span>overdue outcomes</span>
+              </div>
+              <div>
+                <strong>{{ integrity.timestampAnomalyCount }}</strong>
+                <span>timestamp warnings</span>
+              </div>
+              <div>
+                <strong>{{ integrity.observationCadence }}</strong>
+                <span>configured cadence</span>
+              </div>
+            </div>
+            @if (integrity.warnings.length > 0) {
+              <ul class="integrity-warnings" aria-label="Integrity warnings">
+                @for (warning of integrity.warnings; track warning) {
+                  <li>{{ warning.replaceAll('_', ' ') }}</li>
+                }
+              </ul>
+            }
+          } @else {
+            <p class="integrity-unavailable">
+              Acquisition integrity is unknown because its authoritative read model is unavailable.
+            </p>
+          }
+        </section>
+
         <section class="summary-grid" aria-label="Research readiness summary">
           <article class="summary-card">
             <span>Signals</span>

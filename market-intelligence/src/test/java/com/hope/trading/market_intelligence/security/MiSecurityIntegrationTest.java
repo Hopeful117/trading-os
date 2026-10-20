@@ -54,6 +54,12 @@ class MiSecurityIntegrationTest {
     }
 
     @Test
+    void missingJwtIsRejectedOnResearchIntegrity() throws Exception {
+        mvc.perform(get("/api/v1/intelligence/research/integrity"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void invalidJwtIsRejected() throws Exception {
         mvc.perform(get("/api/v1/opportunities/active")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer invalid"))
@@ -78,6 +84,20 @@ class MiSecurityIntegrationTest {
     }
 
     @Test
+    void authenticatedUsersCanReadResearchReadiness() throws Exception {
+        mvc.perform(get("/api/v1/intelligence/research/readiness")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID())))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void authenticatedUsersCanReadResearchIntegrity() throws Exception {
+        mvc.perform(get("/api/v1/intelligence/research/integrity")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID())))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void compatibilityHeaderCannotOverrideAuthenticatedUser() throws Exception {
         UUID authenticatedUser = UUID.randomUUID();
         mvc.perform(get("/api/v1/intelligence/scans")
@@ -91,6 +111,20 @@ class MiSecurityIntegrationTest {
         mvc.perform(get("/internal/trade-planning/metrics")
                         .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID())))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void ordinaryUserCannotAccessInternalResearchIntegrity() throws Exception {
+        mvc.perform(get("/internal/v1/research/integrity")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID())))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void validCoreServiceTokenCanReadInternalResearchIntegrity() throws Exception {
+        mvc.perform(get("/internal/v1/research/integrity")
+                        .header("X-Service-Authorization", serviceBearer(null)))
+                .andExpect(status().isOk());
     }
 
     @Test

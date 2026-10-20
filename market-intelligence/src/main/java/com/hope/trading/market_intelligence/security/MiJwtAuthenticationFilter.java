@@ -55,11 +55,13 @@ public final class MiJwtAuthenticationFilter extends OncePerRequestFilter {
                     : List.of(new SimpleGrantedAuthority(role));
             SecurityContextHolder.getContext().setAuthentication(
                     new UsernamePasswordAuthenticationToken(principal, null, authorities));
-            chain.doFilter(request, response);
         } catch (Exception invalidToken) {
             SecurityContextHolder.clearContext();
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
+
+        chain.doFilter(request, response);
     }
 
     private SecretKey signingKey() {
