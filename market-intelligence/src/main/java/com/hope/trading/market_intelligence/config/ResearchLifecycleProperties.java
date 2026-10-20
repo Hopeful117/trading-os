@@ -17,6 +17,7 @@ public class ResearchLifecycleProperties {
     private List<Duration> outcomeHorizons = new ArrayList<>(List.of(
             Duration.ofHours(1), Duration.ofHours(4), Duration.ofHours(24)));
     private Duration fixedDelay = Duration.ofMinutes(1);
+    private S1FeeCoverage feeCoverage = new S1FeeCoverage();
 
     public void validate() {
         if (!enabled) {
@@ -38,6 +39,7 @@ public class ResearchLifecycleProperties {
         if (new LinkedHashSet<>(outcomeHorizons).size() != outcomeHorizons.size()) {
             throw new IllegalStateException("Research outcome horizons must be unique");
         }
+        feeCoverage.validate();
     }
 
     public boolean isEnabled() {
@@ -78,5 +80,41 @@ public class ResearchLifecycleProperties {
 
     public void setFixedDelay(Duration fixedDelay) {
         this.fixedDelay = fixedDelay;
+    }
+
+    public S1FeeCoverage getFeeCoverage() {
+        return feeCoverage;
+    }
+
+    public void setFeeCoverage(S1FeeCoverage feeCoverage) {
+        this.feeCoverage = feeCoverage == null ? new S1FeeCoverage() : feeCoverage;
+    }
+
+    public static class S1FeeCoverage {
+        private UUID brokerAccountId;
+        private String provider;
+        private String productType;
+        private String instrument;
+
+        public void validate() {
+            if (brokerAccountId == null && provider == null && productType == null && instrument == null) {
+                return;
+            }
+            if (brokerAccountId == null || blank(provider) || blank(productType) || blank(instrument)) {
+                throw new IllegalStateException(
+                        "S1 fee coverage requires brokerAccountId, provider, productType and instrument");
+            }
+        }
+
+        public UUID getBrokerAccountId() { return brokerAccountId; }
+        public void setBrokerAccountId(UUID brokerAccountId) { this.brokerAccountId = brokerAccountId; }
+        public String getProvider() { return provider; }
+        public void setProvider(String provider) { this.provider = provider; }
+        public String getProductType() { return productType; }
+        public void setProductType(String productType) { this.productType = productType; }
+        public String getInstrument() { return instrument; }
+        public void setInstrument(String instrument) { this.instrument = instrument; }
+
+        private static boolean blank(String value) { return value == null || value.isBlank(); }
     }
 }

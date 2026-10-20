@@ -1,6 +1,8 @@
 package com.hope.trading.market_intelligence.application.research;
 
 import com.hope.trading.market_intelligence.adapter.marketdata.HistoricalOhlcClient;
+import com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayClient;
+import com.hope.trading.market_intelligence.application.port.ArtifactPersistencePort;
 import com.hope.trading.market_intelligence.application.port.FeatureSnapshotRepository;
 import com.hope.trading.market_intelligence.application.port.ObservedMarketOutcomeRepository;
 import com.hope.trading.market_intelligence.config.ResearchLifecycleProperties;
@@ -18,9 +20,13 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.ResponseEntity;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 class ResearchReadinessServiceTest {
     private static final UUID MARKET_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -163,6 +169,165 @@ class ResearchReadinessServiceTest {
                 .containsOnlyKeys("PT1H:PENDING");
         assertThat(readiness.eligibleOutcomeCount()).isZero();
         assertThat(readiness.approximateAvailableResearchPopulation()).isZero();
+    }
+
+    @Test
+    void s1ReadinessFailsClosedWhenFeeIdentityIsNotConfigured() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+
+        FeatureSnapshot signal = mock(FeatureSnapshot.class);
+        when(signal.marketId()).thenReturn(MARKET_ID);
+        when(signal.evaluationCutoff()).thenReturn(NOW.minus(Duration.ofDays(15)));
+        when(signal.values()).thenReturn(List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                "trend.trigger.break_status",
+                com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                "CONFIRMED_BULLISH_BREAK")));
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of(signal));
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                mock(ArtifactPersistencePort.class), mock(OrderBookReplayClient.class),
+                mock(com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.class),
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(readiness.s1().totalSignals()).isEqualTo(1);
+        assertThat(readiness.s1().feeCoverage()).isZero();
+        assertThat(readiness.s1().ready()).isFalse();
+        assertThat(readiness.s1().blockingReasons()).contains("fee_coverage_incomplete");
+    }
+
+    @Test
+    void s1ReadinessChecksReplayAndFeesAtT0AndT1() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        var feeConfig = properties.getFeeCoverage();
+        feeConfig.setBrokerAccountId(UUID.randomUUID());
+        feeConfig.setProvider("KRAKEN");
+        feeConfig.setProductType("LINEAR_PERPETUAL");
+        feeConfig.setInstrument("PF_XBTUSD");
+
+        Instant cutoff = NOW.minus(Duration.ofDays(15));
+        FeatureSnapshot signal = mock(FeatureSnapshot.class);
+        when(signal.marketId()).thenReturn(MARKET_ID);
+        when(signal.evaluationCutoff()).thenReturn(cutoff);
+        when(signal.values()).thenReturn(List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                "trend.trigger.break_status",
+                com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                "CONFIRMED_BEARISH_BREAK")));
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of(signal, signal));
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        OrderBookReplayClient replay = mock(OrderBookReplayClient.class);
+        var replayResponse = mock(OrderBookReplayClient.ReplayResponse.class);
+        when(replayResponse.status()).thenReturn("AVAILABLE");
+        when(replay.replay(MARKET_ID, 25, cutoff)).thenReturn(replayResponse);
+        when(replay.replay(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1)))).thenReturn(replayResponse);
+        var fees = mock(com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.class);
+        when(fees.findEligible(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(NOW)))
+                .thenReturn(ResponseEntity.ok(mock(
+                        com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.ScheduleResponse.class)));
+
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                mock(ArtifactPersistencePort.class), replay, fees,
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(readiness.s1().shortSignals()).isEqualTo(2);
+        assertThat(readiness.s1().replayCoverage()).isEqualTo(1.0d);
+        assertThat(readiness.s1().feeCoverage()).isEqualTo(1.0d);
+        verify(replay).replay(MARKET_ID, 25, cutoff);
+        verify(replay).replay(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1)));
+        verify(fees).findEligible(feeConfig.getBrokerAccountId(), "KRAKEN", "LINEAR_PERPETUAL",
+                "PF_XBTUSD", cutoff, NOW);
+        verify(fees).findEligible(feeConfig.getBrokerAccountId(), "KRAKEN", "LINEAR_PERPETUAL",
+                "PF_XBTUSD", cutoff.plus(Duration.ofHours(1)), NOW);
+    }
+
+    @Test
+    void s1ReadinessDoesNotClassifyUnconfirmedBreakAsSignal() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        FeatureSnapshot snapshot = mock(FeatureSnapshot.class);
+        when(snapshot.marketId()).thenReturn(MARKET_ID);
+        when(snapshot.evaluationCutoff()).thenReturn(NOW.minus(Duration.ofDays(15)));
+        when(snapshot.values()).thenReturn(List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                "trend.trigger.break_status",
+                com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                "UNCONFIRMED_BULLISH_BREAK")));
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of(snapshot));
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(readiness.s1().totalSignals()).isZero();
+        assertThat(readiness.s1().blockingReasons()).contains("no_signal_period");
+    }
+
+    @Test
+    void s1ReadinessFailsClosedWhenRemoteEvidenceBudgetIsExceeded() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        List<FeatureSnapshot> snapshotsData = new java.util.ArrayList<>();
+        for (int index = 0; index < 201; index++) {
+            FeatureSnapshot snapshot = mock(FeatureSnapshot.class);
+            when(snapshot.marketId()).thenReturn(MARKET_ID);
+            when(snapshot.evaluationCutoff()).thenReturn(NOW.minus(Duration.ofDays(15)).plus(Duration.ofHours(index * 3L)));
+            when(snapshot.values()).thenReturn(List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                    "trend.trigger.break_status",
+                    com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                    "CONFIRMED_BULLISH_BREAK")));
+            snapshotsData.add(snapshot);
+        }
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(snapshotsData);
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        OrderBookReplayClient replay = mock(OrderBookReplayClient.class);
+        var replayResponse = mock(OrderBookReplayClient.ReplayResponse.class);
+        when(replayResponse.status()).thenReturn("AVAILABLE");
+        when(replay.replay(org.mockito.ArgumentMatchers.eq(MARKET_ID), org.mockito.ArgumentMatchers.eq(25),
+                org.mockito.ArgumentMatchers.any())).thenReturn(replayResponse);
+
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                mock(ArtifactPersistencePort.class), replay, null,
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(readiness.s1().replayAvailable()).isEqualTo(400);
+        assertThat(readiness.s1().blockingReasons()).contains("remote_evidence_check_budget_exceeded");
+        verify(replay, times(400)).replay(org.mockito.ArgumentMatchers.eq(MARKET_ID),
+                org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any());
     }
 
     private ObservedMarketOutcome outcome(OutcomeHorizon horizon, String fingerprint) {

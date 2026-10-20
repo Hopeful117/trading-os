@@ -57,6 +57,19 @@ class BrokerApiSecurityIntegrationTest {
                 .header("X-Service-Authorization", "Bearer " + serviceToken()))
                 .andExpect(status().isNotFound());
     }
+    @Test void historicalFeesAllowsMarketIntelligenceService() throws Exception {
+        mvc.perform(get("/internal/v1/historical-fees/eligible")
+                .queryParam("brokerAccountId", UUID.randomUUID().toString())
+                .queryParam("provider", "KRAKEN")
+                .queryParam("productType", "LINEAR_PERPETUAL")
+                .queryParam("instrument", "PF_XBTUSD")
+                .queryParam("executionTime", "2026-10-19T16:00:00Z")
+                .queryParam("researchCutoff", "2026-10-19T18:00:00Z")
+                .header("X-Service-Authorization", "Bearer " + serviceTokenWithIssuer(
+                        "market-intelligence", "broker-service", Instant.now().plusSeconds(60),
+                        java.util.Base64.getDecoder().decode("QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="))))
+                .andExpect(status().isNotFound());
+    }
     @Test void riskSnapshotUsesAuthenticatedOwner() throws Exception {
         UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
         Instant from=Instant.parse("2026-08-01T00:00:00Z"),to=Instant.parse("2026-08-02T00:00:00Z");

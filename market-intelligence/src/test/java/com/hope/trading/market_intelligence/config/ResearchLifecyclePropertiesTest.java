@@ -46,6 +46,16 @@ class ResearchLifecyclePropertiesTest {
                 .hasMessageContaining("cadence");
     }
 
+    @Test
+    void rejectsPartialS1FeeIdentity() {
+        ResearchLifecycleProperties properties = valid();
+        properties.getFeeCoverage().setProvider("KRAKEN");
+
+        assertThatThrownBy(properties::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("fee coverage requires");
+    }
+
     private ResearchLifecycleProperties valid() {
         ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
         properties.setEnabled(true);

@@ -1195,6 +1195,36 @@ Acquisition status = PASS, with run-level observability gaps
 The health conclusion is about acquisition/readiness only. No S1 performance
 was evaluated.
 
+The first implementation of the read-only S1 readiness model is now present in
+Market Intelligence. It extends the existing
+`GET /internal/v1/research/readiness` response with `s1` diagnostics and does
+not change FeatureProjection, outcome persistence, replay behavior, fee
+resolution, or any execution path.
+
+The implementation uses the frozen trigger-break classifier:
+
+- `CONFIRMED_BULLISH_BREAK` -> LONG;
+- `CONFIRMED_BEARISH_BREAK` -> SHORT;
+- every other value, including missing values, is not a signal.
+
+Aggregate regime diversity is read from the persisted aggregate
+`TrendContextAssessment.regime` artifact. Only non-null regimes attached to
+signal observations are counted.
+
+Replay readiness checks both T0 (`evaluationCutoff`) and T1
+(`evaluationCutoff + PT1H`) through the existing trusted Order Book replay
+endpoint. Coverage is available replay checks divided by the two checks per
+signal and must be at least 90%.
+
+Fee readiness checks both T0 and T1 through the existing historical fee
+schedule endpoint. Because that endpoint requires execution identity, S1 fee
+coverage now has explicit configuration for `brokerAccountId`, `provider`,
+`productType`, and `instrument`. An incomplete identity or unavailable fee
+schedule fails closed. No fee data is synthesized and no order is submitted.
+
+The endpoint reports the counts, denominators, coverage ratios, and blocking
+reasons. It does not report P&L, returns, win rate, or any performance metric.
+
 ## 77. Development Opportunity Matrix
 
 Scores use 1–5, with higher risk meaning more risk. Priority is a transparent

@@ -3,6 +3,7 @@ package com.hope.trading.market_data.security;
 import com.hope.trading.market_data.service.MarketPriceSnapshotService;
 import com.hope.trading.market_data.service.MarketFactsService;
 import com.hope.trading.market_data.service.MarketSynchronization;
+import com.hope.trading.market_data.service.OrderBookReplayService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ class MarketDataSecurityIntegrationTest {
 
     @MockitoBean
     private MarketSynchronization marketSynchronization;
+
+    @MockitoBean
+    private OrderBookReplayService orderBookReplayService;
 
     @Test
     void internalSnapshotRequiresServiceCredential() throws Exception {
@@ -83,6 +87,29 @@ class MarketDataSecurityIntegrationTest {
                         .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
                         .contentType("application/json")
                         .content("{\"marketIds\":[]}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void marketIntelligenceCredentialCanUseOrderBookReplay() throws Exception {
+        org.mockito.Mockito.when(orderBookReplayService.replay(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(25),
+                org.mockito.ArgumentMatchers.any())).thenReturn(
+                org.mockito.Mockito.mock(com.hope.trading.market_data.model.OrderBookReplayResult.class));
+
+        mockMvc.perform(get("/internal/v1/order-book/replay/00000000-0000-0000-0000-000000000001")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                        .param("depth", "25")
+                        .param("asOf", "2026-10-20T00:00:00Z"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void tradingCoreCredentialCannotUseMarketIntelligenceReplayEndpoint() throws Exception {
+        mockMvc.perform(get("/internal/v1/order-book/replay/00000000-0000-0000-0000-000000000001")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("trading-core"))
+                        .param("depth", "25")
+                        .param("asOf", "2026-10-20T00:00:00Z"))
                 .andExpect(status().isForbidden());
     }
 
