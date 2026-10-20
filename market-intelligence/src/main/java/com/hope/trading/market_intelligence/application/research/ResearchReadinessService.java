@@ -15,8 +15,11 @@ import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapa
 import com.hope.trading.market_intelligence.domain.capability.ProducedArtifact;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
+import feign.FeignException;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -33,6 +36,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class ResearchReadinessService {
+    private static final Logger log = LoggerFactory.getLogger(ResearchReadinessService.class);
     private static final String PROJECTION_VERSION = "feature-projection-v1";
     private static final int REPLAY_DEPTH = 25;
     private static final int MAX_REMOTE_EVIDENCE_CHECKS = 400;
@@ -238,7 +242,10 @@ public class ResearchReadinessService {
     private long feeAvailable(Signal signal, Instant researchCutoff,
                               Map<Instant, Long> cache, RemoteCheckBudget budget) {
         var config = properties.getFeeCoverage();
-        if (fees == null || config.getBrokerAccountId() == null) return 0L;
+        if (fees == null || config.getBrokerAccountId() == null) {
+            log.warn("Historical fee readiness client or broker account is not configured");
+            return 0L;
+        }
         return feeAvailableAt(signal.snapshot().evaluationCutoff(), researchCutoff, cache, budget)
                 + feeAvailableAt(signal.snapshot().evaluationCutoff().plus(Duration.ofHours(1)),
                 researchCutoff, cache, budget);
@@ -256,7 +263,17 @@ public class ResearchReadinessService {
             var response = fees.findEligible(config.getBrokerAccountId(), config.getProvider(), config.getProductType(),
                     config.getInstrument(), executionTime, researchCutoff);
             result = response != null && response.getStatusCode().is2xxSuccessful() && response.getBody() != null ? 1L : 0L;
+            if (result == 0L) {
+                log.debug("No eligible historical fee schedule for executionTime={} researchCutoff={} status={}",
+                        executionTime, researchCutoff, response == null ? "null" : response.getStatusCode());
+            }
+        } catch (FeignException.NotFound notFound) {
+            log.debug("No eligible historical fee schedule for executionTime={} researchCutoff={}",
+                    executionTime, researchCutoff);
+            result = 0L;
         } catch (RuntimeException ignored) {
+            log.warn("Historical fee lookup failed for executionTime={} researchCutoff={}",
+                    executionTime, researchCutoff, ignored);
             budget.markFeeUnavailable();
             result = 0L;
         }

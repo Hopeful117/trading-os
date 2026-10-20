@@ -244,7 +244,7 @@ public class OrderBookRetentionRepository {
                 result.getLong("evidence_count"), result.getLong("first_ordinal"),
                  result.getLong("last_ordinal"), result.getTimestamp("first_known_at").toInstant(),
                   result.getTimestamp("last_known_at").toInstant(), instant(result.getTimestamp("invalidated_at"))),
-                 invalidatedBefore);
+                  Timestamp.from(invalidatedBefore));
     }
 
     @Transactional(readOnly = true)
