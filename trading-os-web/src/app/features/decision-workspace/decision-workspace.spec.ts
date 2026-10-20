@@ -881,6 +881,16 @@ describe('DecisionWorkspace', () => {
     expect(element.textContent).toContain('Analytical evidence only');
     expect(element.textContent).toContain('Not Risk approval');
     expect(element.textContent).toContain('Not execution authorization');
+    expect(element.querySelector('.trend-context-details .disclosure-section__content')).toBeNull();
+
+    (
+      element.querySelector('.trend-context-details .disclosure-button') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    expect(
+      element.querySelector('.trend-context-details .disclosure-section__content'),
+    ).toBeTruthy();
     expect(element.textContent).toContain('No optional trigger assessment was provided.');
   });
 });

@@ -176,6 +176,7 @@
                 data-testid="excluded-markets"
                 title="Unavailable markets"
                 eyebrow="Backend decision"
+                contentId="unavailable-markets-content"
                 [summary]="
                   view.context.markets.length - view.context.eligibleMarketIds.length + ' hidden'
                 "
@@ -356,7 +357,9 @@
                                   class="trend-context-details"
                                   title="Detailed deterministic evidence"
                                   summary="Roles, provenance, diagnostics"
-                                  [expanded]="true"
+                                  contentId="trend-context-details-content"
+                                  [expanded]="showTrendContextDetails"
+                                  (expandedChange)="showTrendContextDetails = $event"
                                 >
                                   <div
                                     class="trend-context-meta"
