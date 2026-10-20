@@ -1,7 +1,7 @@
-<app-navbar></app-navbar>
+<app-navbar [mobileMenuOpen]="mobileMenuOpen" (menuToggle)="toggleMobileMenu()"></app-navbar>
 
 <div class="container">
-  <app-sidebar></app-sidebar>
+  <app-sidebar [mobileOpen]="mobileMenuOpen" (navigationSelected)="closeMobileMenu()"></app-sidebar>
 
   <main>
     <router-outlet></router-outlet>

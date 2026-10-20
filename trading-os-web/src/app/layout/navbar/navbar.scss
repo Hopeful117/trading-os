@@ -93,6 +93,10 @@
   }
 }
 
+.mobile-menu-toggle {
+  display: none;
+}
+
 @media (max-width: 767px) {
   .navbar {
     padding: 0 12px;
@@ -117,6 +121,14 @@
       padding: 6px 10px;
       font-size: 0.76rem;
       white-space: nowrap;
+    }
+
+    .mobile-menu-toggle {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #334155;
+      background: transparent;
+      color: #cbd5e1;
     }
   }
 }

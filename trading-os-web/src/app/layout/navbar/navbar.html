@@ -7,14 +7,15 @@
     <a routerLink="/">Home</a>
 
     @if (isLoggedIn()) {
-      <a routerLink="/dashboard">Dashboard</a>
-
-      <a routerLink="/accounts">Accounts</a>
-
-      <a routerLink="/markets">Markets</a>
-
-      <a routerLink="/decision-workspace">Decision Workspace</a>
-
+      <button
+        class="mobile-menu-toggle"
+        type="button"
+        aria-controls="primary-sidebar"
+        [attr.aria-expanded]="mobileMenuOpen"
+        (click)="toggleMenu()"
+      >
+        Menu
+      </button>
       <button type="button" (click)="logout()">Logout</button>
     } @else {
       <a routerLink="/login">Login</a>

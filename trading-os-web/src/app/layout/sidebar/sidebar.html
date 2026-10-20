@@ -1,29 +1,45 @@
-<nav class="sidebar">
+@if (mobileOpen) {
+  <button
+    class="sidebar-backdrop"
+    type="button"
+    aria-label="Close navigation"
+    (click)="closeMobileNavigation()"
+  ></button>
+}
+
+<nav
+  id="primary-sidebar"
+  class="sidebar"
+  [class.mobile-open]="mobileOpen"
+  aria-label="Primary navigation"
+>
+  <button
+    class="mobile-close"
+    type="button"
+    aria-label="Close navigation"
+    (click)="closeMobileNavigation()"
+  >
+    Close
+  </button>
+
   <div class="sidebar-menu">
-    <a routerLink="/dashboard"> Dashboard </a>
-
-    <a routerLink="/accounts"> Accounts </a>
-
-    <a routerLink="/challenges"> Challenges </a>
-
-    <a routerLink="/markets"> Markets </a>
-
-    <a routerLink="/economic-context"> Economic context </a>
-
-    <a routerLink="/financial-news"> Financial news </a>
-
-    <a routerLink="/research" routerLinkActive="active"> Research </a>
-
-    <a routerLink="/opportunities"> Opportunities </a>
-
-    <a routerLink="/positions"> Positions </a>
-
-    <a routerLink="/analytics"> Trade history </a>
-  </div>
-
-  <div class="sidebar-footer">
-    <span> AI Engine </span>
-
-    <span class="status"> ● Online </span>
+    @for (section of sections; track section.id) {
+      <section class="sidebar-section" [attr.aria-labelledby]="section.id + '-heading'">
+        <h2 [id]="section.id + '-heading'">{{ section.label }}</h2>
+        <div class="sidebar-section-links">
+          @for (item of section.items; track item.route) {
+            <a
+              [routerLink]="item.route"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: item.exact }"
+              ariaCurrentWhenActive="page"
+              (click)="closeMobileNavigation()"
+            >
+              {{ item.label }}
+            </a>
+          }
+        </div>
+      </section>
+    }
   </div>
 </nav>

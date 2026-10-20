@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 
@@ -9,6 +9,9 @@ import { AuthService } from '../../core/services/auth.service';
   styleUrl: './navbar.scss',
 })
 export class Navbar {
+  @Input() mobileMenuOpen = false;
+  @Output() menuToggle = new EventEmitter<void>();
+
   private authService = inject(AuthService);
   private router = inject(Router);
 
@@ -19,5 +22,9 @@ export class Navbar {
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/']);
+  }
+
+  toggleMenu(): void {
+    this.menuToggle.emit();
   }
 }
