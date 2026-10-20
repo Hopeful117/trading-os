@@ -1,0 +1,67 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.market-quote-panel h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+}
+
+.market-quote-panel__state {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.market-quote-panel__metrics {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.4fr) repeat(4, minmax(5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.market-quote-panel__last {
+  border-right: 1px solid var(--workstation-border, #304b67);
+  padding-right: 0.75rem;
+}
+
+.market-quote-panel__last ::ng-deep .metric-value strong {
+  font-size: 1.45rem;
+}
+
+.quote-placeholder {
+  margin: 0;
+  color: var(--workstation-muted, #9eb2c7);
+}
+
+.quote-placeholder--error {
+  color: #ffaaa6;
+}
+
+@media (max-width: 900px) {
+  .market-quote-panel__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .market-quote-panel__last {
+    grid-column: span 3;
+    border-right: 0;
+    border-bottom: 1px solid var(--workstation-border, #304b67);
+    padding: 0 0 0.7rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .market-quote-panel__state {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .market-quote-panel__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .market-quote-panel__last {
+    grid-column: span 2;
+  }
+}

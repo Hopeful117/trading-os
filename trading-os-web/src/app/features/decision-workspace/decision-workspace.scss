@@ -75,55 +75,6 @@ select {
   margin-top: 1.25rem;
 }
 
-.market-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  border: 1px solid #26384d;
-  border-radius: 0.8rem;
-  background: #111d2b;
-  padding: 1.25rem;
-}
-
-.market-header h2 {
-  margin: 0.25rem 0 0;
-  font-size: 1.8rem;
-}
-
-.market-header p,
-.market-header small {
-  color: #91a4ba;
-}
-
-.provider {
-  color: #65a9e8;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.market-status-block {
-  display: grid;
-  justify-items: end;
-  gap: 0.5rem;
-}
-
-.market-status {
-  border-radius: 999px;
-  background: #5e2930;
-  color: #ffd6d3;
-  padding: 0.35rem 0.7rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.market-status.open {
-  background: #145c4b;
-  color: #b9f3d8;
-}
-
 .trend-context-panel {
   display: grid;
   gap: 1rem;
@@ -289,14 +240,6 @@ select {
   letter-spacing: 0.08em;
 }
 
-.ticker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.ticker-card,
 .detail-card {
   display: grid;
   gap: 0.4rem;
@@ -306,24 +249,14 @@ select {
   padding: 0.85rem;
 }
 
-.ticker-card span,
 .detail-card .card-label {
   color: #91a4ba;
   font-size: 0.78rem;
 }
 
-.ticker-card strong,
 .detail-card strong {
   color: #e6eef8;
   font-size: 1.1rem;
-}
-
-.ticker-card small {
-  color: #91a4ba;
-}
-
-.ticker-card--primary {
-  border-color: #3778ad;
 }
 
 .market-secondary-grid {
@@ -495,40 +428,6 @@ dd {
   list-style: none;
 }
 
-.disclosure-button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  border: 0;
-  background: transparent;
-  color: #e6eef8;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-}
-
-.disclosure-button strong {
-  display: block;
-  margin-top: 0.25rem;
-  font-size: 1rem;
-}
-
-.disclosure-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  color: #91a4ba;
-  font-size: 0.8rem;
-}
-
-.disclosure-summary span {
-  color: #65a9e8;
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
 .excluded-markets-content {
   margin-top: 1rem;
   border-top: 1px solid #26384d;
@@ -614,7 +513,6 @@ dd {
 
   .page-header,
   .section-heading,
-  .market-header,
   .trading-actions,
   dl div,
   .excluded-markets li {
@@ -625,8 +523,79 @@ dd {
   dd {
     text-align: left;
   }
+}
 
-  .market-status-block {
-    justify-items: start;
+/* Story 0136 workstation composition. */
+.workstation-layout {
+  display: grid;
+  grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+.selector-rail {
+  display: grid;
+  gap: 0.75rem;
+}
+.selector-rail .context-grid {
+  grid-template-columns: 1fr;
+}
+.active-workspace {
+  min-width: 0;
+}
+.market-context {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
+  grid-template-areas: 'quote quote' 'trend action' 'chart action' 'order order' 'constraints constraints';
+  gap: 0.75rem;
+  margin-top: 0;
+}
+.market-context > app-market-quote-panel {
+  grid-area: quote;
+}
+.market-context > .trend-context-panel {
+  grid-area: trend;
+}
+.market-context > .decision-action-region {
+  grid-area: action;
+  align-self: start;
+}
+.market-context > .chart-panel {
+  grid-area: chart;
+}
+.market-context > .order-flow-panel {
+  grid-area: order;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.market-context > .constraints-panel {
+  grid-area: constraints;
+}
+.chart-panel app-market-chart {
+  display: block;
+  height: clamp(18rem, 31vw, 26rem);
+}
+
+@media (max-width: 1024px) {
+  .workstation-layout {
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
+  .market-context {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'quote' 'chart' 'action' 'trend' 'order' 'constraints';
+  }
+}
+
+@media (max-width: 760px) {
+  .decision-workspace {
+    padding: 0.75rem;
+  }
+  .workstation-layout {
+    grid-template-columns: 1fr;
+  }
+  .trend-context-summary,
+  .order-flow-panel,
+  .constraints-panel .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .chart-panel app-market-chart {
+    height: 18rem;
   }
 }

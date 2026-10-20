@@ -1,0 +1,42 @@
+<app-workspace-panel
+  class="market-quote-panel"
+  labelledBy="market-quote-panel-title"
+  data-testid="market-quote-panel"
+>
+  <app-workspace-panel-header>
+    <div workspace-panel-title>
+      <span class="eyebrow">Live market quote</span>
+      <h3 id="market-quote-panel-title">{{ market.symbol }}</h3>
+      <small>{{ market.provider }} · {{ market.productType }}</small>
+    </div>
+    <div workspace-panel-meta class="market-quote-panel__state">
+      <app-status-badge [label]="market.marketState.tradingStatus" [tone]="marketStatusTone()" />
+      <app-freshness-indicator [freshness]="freshness" />
+    </div>
+  </app-workspace-panel-header>
+
+  @switch (ticker.status) {
+    @case ('waiting') {
+      <p class="quote-placeholder">Waiting for live market data...</p>
+    }
+    @case ('error') {
+      <p class="quote-placeholder quote-placeholder--error">Ticker data unavailable.</p>
+    }
+    @case ('live') {
+      <div class="market-quote-panel__metrics">
+        <app-metric-value
+          class="market-quote-panel__last"
+          label="Last price"
+          [value]="ticker.data.last"
+          [detail]="ticker.data.occurredAt | date: 'mediumTime'"
+        />
+        <app-metric-value label="Bid" [value]="ticker.data.bid" />
+        <app-metric-value label="Ask" [value]="ticker.data.ask" />
+        <app-metric-value label="Spread" [value]="ticker.data.ask - ticker.data.bid" />
+        @if (ticker.data.volume !== null) {
+          <app-metric-value label="Volume" [value]="ticker.data.volume" />
+        }
+      </div>
+    }
+  }
+</app-workspace-panel>
