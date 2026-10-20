@@ -10,10 +10,7 @@
       <small>{{ market.provider }} · {{ market.productType }}</small>
     </div>
     <div workspace-panel-meta class="market-quote-panel__state">
-      <app-status-badge
-        [label]="market.marketState.tradingStatus"
-        [tone]="marketStatusTone()"
-      />
+      <app-status-badge [label]="market.marketState.tradingStatus" [tone]="marketStatusTone()" />
       <app-freshness-indicator [freshness]="freshness" />
     </div>
   </app-workspace-panel-header>

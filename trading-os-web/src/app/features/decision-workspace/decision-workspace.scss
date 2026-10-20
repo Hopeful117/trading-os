@@ -523,7 +523,6 @@ dd {
   dd {
     text-align: left;
   }
-
 }
 
 /* Story 0136 workstation composition. */
@@ -532,9 +531,16 @@ dd {
   grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
   gap: 0.75rem;
 }
-.selector-rail { display: grid; gap: 0.75rem; }
-.selector-rail .context-grid { grid-template-columns: 1fr; }
-.active-workspace { min-width: 0; }
+.selector-rail {
+  display: grid;
+  gap: 0.75rem;
+}
+.selector-rail .context-grid {
+  grid-template-columns: 1fr;
+}
+.active-workspace {
+  min-width: 0;
+}
 .market-context {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
@@ -542,16 +548,35 @@ dd {
   gap: 0.75rem;
   margin-top: 0;
 }
-.market-context > app-market-quote-panel { grid-area: quote; }
-.market-context > .trend-context-panel { grid-area: trend; }
-.market-context > .decision-action-region { grid-area: action; align-self: start; }
-.market-context > .chart-panel { grid-area: chart; }
-.market-context > .order-flow-panel { grid-area: order; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.market-context > .constraints-panel { grid-area: constraints; }
-.chart-panel app-market-chart { display: block; height: clamp(18rem, 31vw, 26rem); }
+.market-context > app-market-quote-panel {
+  grid-area: quote;
+}
+.market-context > .trend-context-panel {
+  grid-area: trend;
+}
+.market-context > .decision-action-region {
+  grid-area: action;
+  align-self: start;
+}
+.market-context > .chart-panel {
+  grid-area: chart;
+}
+.market-context > .order-flow-panel {
+  grid-area: order;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.market-context > .constraints-panel {
+  grid-area: constraints;
+}
+.chart-panel app-market-chart {
+  display: block;
+  height: clamp(18rem, 31vw, 26rem);
+}
 
 @media (max-width: 1024px) {
-  .workstation-layout { grid-template-columns: 15rem minmax(0, 1fr); }
+  .workstation-layout {
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
   .market-context {
     grid-template-columns: 1fr;
     grid-template-areas: 'quote' 'chart' 'action' 'trend' 'order' 'constraints';
@@ -559,10 +584,18 @@ dd {
 }
 
 @media (max-width: 760px) {
-  .decision-workspace { padding: 0.75rem; }
-  .workstation-layout { grid-template-columns: 1fr; }
+  .decision-workspace {
+    padding: 0.75rem;
+  }
+  .workstation-layout {
+    grid-template-columns: 1fr;
+  }
   .trend-context-summary,
   .order-flow-panel,
-  .constraints-panel .detail-grid { grid-template-columns: 1fr; }
-  .chart-panel app-market-chart { height: 18rem; }
+  .constraints-panel .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .chart-panel app-market-chart {
+    height: 18rem;
+  }
 }

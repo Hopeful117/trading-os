@@ -55,7 +55,7 @@
               </select>
             </label>
           }
-      }
+        }
       }
     }
   </section>
@@ -109,7 +109,9 @@
                     <span class="eyebrow">Market selection</span>
                     <h2>Choose a market</h2>
                   </div>
-                  <span class="count-badge">{{ view.context.eligibleMarketIds.length }} eligible</span>
+                  <span class="count-badge"
+                    >{{ view.context.eligibleMarketIds.length }} eligible</span
+                  >
                 </div>
 
                 @if (view.context.eligibleMarketIds.length === 0) {
@@ -135,7 +137,9 @@
                   @if (marketSearch.length < 2) {
                     <div class="market-picker-empty" data-testid="market-search-hint">
                       <strong>Search when you know what to inspect</strong>
-                      <span>The full market catalogue stays out of the way until you filter it.</span>
+                      <span
+                        >The full market catalogue stays out of the way until you filter it.</span
+                      >
                     </div>
                   } @else if (eligibleMarkets(view.context).length === 0) {
                     <p class="state-message" data-testid="market-search-empty">
@@ -180,7 +184,9 @@
               >
                 @if (showUnavailableMarkets) {
                   <div class="excluded-markets-content">
-                    <p>These markets are excluded from this account context and cannot be selected.</p>
+                    <p>
+                      These markets are excluded from this account context and cannot be selected.
+                    </p>
                     <ul>
                       @for (market of unavailableMarkets(view.context); track market.marketId) {
                         <li>
@@ -206,683 +212,761 @@
                 <p>Use the selector rail to load quote, chart, Trend Context, and Order Flow.</p>
               </section>
             } @else if (selectedMarketId; as marketId) {
-          @if (marketView$ | async; as marketView) {
-            @switch (marketView.status) {
-              @case ('loading') {
-                <section class="state-card" data-testid="market-loading">
-                  <p>Loading selected market...</p>
-                </section>
-              }
-              @case ('ineligible') {
-                <section class="state-card error" data-testid="market-ineligible">
-                  <h2>Market is no longer eligible</h2>
-                  <p>The account context changed or the market is no longer available.</p>
-                </section>
-              }
-              @case ('unavailable') {
-                <section class="state-card error" data-testid="market-unavailable">
-                  <h2>Market is not tradable</h2>
-                  <p>
-                    Market Data reports that this market is unavailable. No live stream was opened.
-                  </p>
-                </section>
-              }
-              @case ('error') {
-                <section class="state-card error" data-testid="market-error">
-                  <h2>Unable to load selected market</h2>
-                  <p>Market Data is temporarily unavailable. No live stream was opened.</p>
-                </section>
-              }
-              @case ('loaded') {
-                <section class="market-context" data-testid="market-context">
-                  <span hidden>{{ freshnessTick$ | async }}</span>
-                  @if (ticker$ | async; as ticker) {
-                    <app-market-quote-panel
-                      [market]="marketView.market"
-                      [ticker]="ticker"
-                      [freshness]="marketFreshness(
-                        ticker,
-                        ticker.status === 'live' ? ticker.data.occurredAt : null
-                      )"
-                    />
+              @if (marketView$ | async; as marketView) {
+                @switch (marketView.status) {
+                  @case ('loading') {
+                    <section class="state-card" data-testid="market-loading">
+                      <p>Loading selected market...</p>
+                    </section>
                   }
-
-                  @if (trendContext$ | async; as trendContext) {
-                    @switch (trendContext.status) {
-                      @case ('loading') {
-                        <section class="trend-context-panel" data-testid="trend-context-loading">
-                          <div class="section-heading">
-                            <div>
-                              <span class="eyebrow">Analytical evidence</span>
-                              <h3>Trend Context</h3>
-                            </div>
-                          </div>
-                          <p class="section-placeholder">Loading deterministic Trend Context...</p>
-                        </section>
+                  @case ('ineligible') {
+                    <section class="state-card error" data-testid="market-ineligible">
+                      <h2>Market is no longer eligible</h2>
+                      <p>The account context changed or the market is no longer available.</p>
+                    </section>
+                  }
+                  @case ('unavailable') {
+                    <section class="state-card error" data-testid="market-unavailable">
+                      <h2>Market is not tradable</h2>
+                      <p>
+                        Market Data reports that this market is unavailable. No live stream was
+                        opened.
+                      </p>
+                    </section>
+                  }
+                  @case ('error') {
+                    <section class="state-card error" data-testid="market-error">
+                      <h2>Unable to load selected market</h2>
+                      <p>Market Data is temporarily unavailable. No live stream was opened.</p>
+                    </section>
+                  }
+                  @case ('loaded') {
+                    <section class="market-context" data-testid="market-context">
+                      <span hidden>{{ freshnessTick$ | async }}</span>
+                      @if (ticker$ | async; as ticker) {
+                        <app-market-quote-panel
+                          [market]="marketView.market"
+                          [ticker]="ticker"
+                          [freshness]="
+                            marketFreshness(
+                              ticker,
+                              ticker.status === 'live' ? ticker.data.occurredAt : null
+                            )
+                          "
+                        />
                       }
-                      @case ('unavailable') {
+
+                      @if (trendContext$ | async; as trendContext) {
+                        @switch (trendContext.status) {
+                          @case ('loading') {
+                            <section
+                              class="trend-context-panel"
+                              data-testid="trend-context-loading"
+                            >
+                              <div class="section-heading">
+                                <div>
+                                  <span class="eyebrow">Analytical evidence</span>
+                                  <h3>Trend Context</h3>
+                                </div>
+                              </div>
+                              <p class="section-placeholder">
+                                Loading deterministic Trend Context...
+                              </p>
+                            </section>
+                          }
+                          @case ('unavailable') {
+                            <section
+                              class="trend-context-panel trend-context-panel--unavailable"
+                              data-testid="trend-context-unavailable"
+                            >
+                              <div class="section-heading">
+                                <div>
+                                  <span class="eyebrow">Analytical evidence</span>
+                                  <h3>Trend Context unavailable</h3>
+                                </div>
+                                <span class="trend-context-authority"
+                                  >Not Risk approval / Not execution authorization</span
+                                >
+                              </div>
+                              <p class="section-placeholder error">{{ trendContext.message }}</p>
+                            </section>
+                          }
+                          @case ('loaded') {
+                            <section class="trend-context-panel" data-testid="trend-context-panel">
+                              <div class="section-heading">
+                                <div>
+                                  <span class="eyebrow">Analytical evidence only</span>
+                                  <h3>Trend Context</h3>
+                                </div>
+                                <span class="trend-context-authority"
+                                  >Not Risk approval / Not execution authorization</span
+                                >
+                              </div>
+
+                              <div class="trend-context-meta" data-testid="trend-context-status">
+                                <span>Status: {{ trendContext.readModel.operationalStatus }}</span>
+                                <span
+                                  >Validity: {{ trendContext.readModel.assessmentValidity }}</span
+                                >
+                                @if (trendContext.readModel.assessment) {
+                                  <span>
+                                    Assessed
+                                    {{
+                                      trendContext.readModel.assessment.assessmentAt
+                                        | date: 'medium'
+                                    }}
+                                  </span>
+                                }
+                                @if (trendContext.readModel.observationVersion !== null) {
+                                  <span
+                                    >Observation v{{
+                                      trendContext.readModel.observationVersion
+                                    }}</span
+                                  >
+                                }
+                              </div>
+
+                              @if (trendContext.readModel.assessment; as assessment) {
+                                <div
+                                  class="trend-context-summary"
+                                  data-testid="trend-context-assessment"
+                                >
+                                  <article class="trend-context-value">
+                                    <span>Direction</span>
+                                    <strong>{{ assessment.direction }}</strong>
+                                  </article>
+                                  <article class="trend-context-value">
+                                    <span>Regime</span>
+                                    <strong>{{ assessment.regime }}</strong>
+                                  </article>
+                                  <article class="trend-context-value">
+                                    <span>Phase</span>
+                                    <strong>{{ assessment.phase }}</strong>
+                                  </article>
+                                  <article
+                                    class="trend-context-value trend-context-value--attention"
+                                    [attr.data-attention]="assessment.attention"
+                                  >
+                                    <span>Attention outcome</span>
+                                    <strong>{{ assessment.attention }}</strong>
+                                  </article>
+                                </div>
+
+                                <app-disclosure-section
+                                  class="trend-context-details"
+                                  title="Detailed deterministic evidence"
+                                  summary="Roles, provenance, diagnostics"
+                                  [expanded]="true"
+                                >
+                                  <div
+                                    class="trend-context-meta"
+                                    data-testid="trend-context-provenance"
+                                  >
+                                    @if (trendContext.readModel.observationId) {
+                                      <span
+                                        >Observation
+                                        {{ trendContext.readModel.observationId }}</span
+                                      >
+                                    }
+                                    @if (trendContext.readModel.lineageId) {
+                                      <span>Lineage {{ trendContext.readModel.lineageId }}</span>
+                                    }
+                                    @if (trendContext.readModel.analysisExecutionId) {
+                                      <span
+                                        >Analysis
+                                        {{ trendContext.readModel.analysisExecutionId }}</span
+                                      >
+                                    }
+                                    @if (trendContext.readModel.validFrom) {
+                                      <span
+                                        >Valid from
+                                        {{
+                                          trendContext.readModel.validFrom | date: 'medium'
+                                        }}</span
+                                      >
+                                    }
+                                    @if (trendContext.readModel.validUntil) {
+                                      <span
+                                        >Valid until
+                                        {{
+                                          trendContext.readModel.validUntil | date: 'medium'
+                                        }}</span
+                                      >
+                                    }
+                                  </div>
+
+                                  <div
+                                    class="trend-context-roles"
+                                    data-testid="trend-context-roles"
+                                  >
+                                    @for (role of ['BIAS', 'SETUP', 'TRIGGER']; track role) {
+                                      @if (
+                                        roleAssessment(assessment, role);
+                                        as roleAssessmentValue
+                                      ) {
+                                        <article class="trend-context-role">
+                                          <div class="section-heading">
+                                            <h4>{{ role }}</h4>
+                                            <span class="trend-context-role-state">
+                                              {{ roleAssessmentValue.fresh ? 'FRESH' : 'STALE' }}
+                                            </span>
+                                          </div>
+                                          <div class="trend-context-role-grid">
+                                            <span
+                                              >Interval
+                                              <strong>{{
+                                                roleAssessmentValue.interval
+                                              }}</strong></span
+                                            >
+                                            <span
+                                              >Direction
+                                              <strong>{{
+                                                roleAssessmentValue.direction
+                                              }}</strong></span
+                                            >
+                                            <span
+                                              >Regime
+                                              <strong>{{
+                                                roleAssessmentValue.regime
+                                              }}</strong></span
+                                            >
+                                            <span
+                                              >Phase
+                                              <strong>{{ roleAssessmentValue.phase }}</strong></span
+                                            >
+                                            <span
+                                              >High relation
+                                              <strong>{{
+                                                valueOrUnavailable(roleAssessmentValue.highRelation)
+                                              }}</strong></span
+                                            >
+                                            <span
+                                              >Low relation
+                                              <strong>{{
+                                                valueOrUnavailable(roleAssessmentValue.lowRelation)
+                                              }}</strong></span
+                                            >
+                                            <span
+                                              >EMA
+                                              <strong>{{
+                                                roleAssessmentValue.ema.available
+                                                  ? valueOrUnavailable(
+                                                      roleAssessmentValue.ema.current
+                                                    )
+                                                  : 'Unavailable'
+                                              }}</strong></span
+                                            >
+                                            <span
+                                              >ATR
+                                              <strong>{{
+                                                roleAssessmentValue.atr.available
+                                                  ? valueOrUnavailable(
+                                                      roleAssessmentValue.atr.current
+                                                    )
+                                                  : 'Unavailable'
+                                              }}</strong></span
+                                            >
+                                          </div>
+                                          <p class="trend-context-role-detail">
+                                            Structural break:
+                                            <strong>{{
+                                              roleAssessmentValue.structuralBreak.status
+                                            }}</strong>
+                                            · Confirmed swings:
+                                            {{ roleAssessmentValue.swings.length }}
+                                          </p>
+                                          @if (
+                                            roleAssessmentValue.protectedLevel;
+                                            as protectedLevel
+                                          ) {
+                                            <p class="trend-context-role-detail">
+                                              Protected level:
+                                              <strong
+                                                >{{ protectedLevel.type }}
+                                                {{ protectedLevel.price }}</strong
+                                              >
+                                            </p>
+                                          }
+                                          @if (roleAssessmentValue.levels.length > 0) {
+                                            <p class="trend-context-role-detail">
+                                              Structural levels:
+                                              @for (
+                                                level of roleAssessmentValue.levels;
+                                                track level.pivotTime
+                                              ) {
+                                                <span>{{ level.type }} {{ level.price }}</span
+                                                >{{ $last ? '' : ', ' }}
+                                              }
+                                            </p>
+                                          }
+                                          @if (
+                                            roleAssessmentValue.structuralBreak.evidence;
+                                            as breakEvidence
+                                          ) {
+                                            <p class="trend-context-role-detail">
+                                              Break evidence:
+                                              <strong>{{
+                                                breakEvidence.sourceIds.join(', ')
+                                              }}</strong>
+                                            </p>
+                                          }
+                                        </article>
+                                      } @else if (role === 'TRIGGER') {
+                                        <article
+                                          class="trend-context-role trend-context-role--unavailable"
+                                        >
+                                          <div class="section-heading">
+                                            <h4>TRIGGER</h4>
+                                            <span class="trend-context-role-state"
+                                              >UNAVAILABLE</span
+                                            >
+                                          </div>
+                                          <p class="section-placeholder">
+                                            No optional trigger assessment was provided.
+                                          </p>
+                                        </article>
+                                      }
+                                    }
+                                  </div>
+
+                                  <div class="trend-context-evidence-grid">
+                                    <article>
+                                      <span class="card-label">Alignment</span>
+                                      <strong>{{ assessment.alignment }}</strong>
+                                    </article>
+                                    <article>
+                                      <span class="card-label">Profile / rules</span>
+                                      <strong
+                                        >{{ assessment.profileId }} ·
+                                        {{ assessment.profileVersion }} /
+                                        {{ assessment.ruleVersion }}</strong
+                                      >
+                                    </article>
+                                    <article>
+                                      <span class="card-label">Cut-off</span>
+                                      <strong>{{ assessment.cutOffAt | date: 'medium' }}</strong>
+                                    </article>
+                                  </div>
+
+                                  @if (assessment.contradictions.length > 0) {
+                                    <div
+                                      class="trend-context-list"
+                                      data-testid="trend-context-contradictions"
+                                    >
+                                      <h4>Contradictions</h4>
+                                      <ul>
+                                        @for (
+                                          contradiction of assessment.contradictions;
+                                          track contradiction.code
+                                        ) {
+                                          <li>
+                                            <strong>{{ contradiction.code }}</strong>
+                                            {{ contradiction.message }}
+                                          </li>
+                                        }
+                                      </ul>
+                                    </div>
+                                  }
+
+                                  @if (assessment.exclusions.length > 0) {
+                                    <div
+                                      class="trend-context-list"
+                                      data-testid="trend-context-exclusions"
+                                    >
+                                      <h4>Exclusions</h4>
+                                      <ul>
+                                        @for (
+                                          exclusion of assessment.exclusions;
+                                          track exclusion.code + exclusion.role
+                                        ) {
+                                          <li>
+                                            <strong>{{ exclusion.code }}</strong>
+                                            {{ exclusion.detail }}
+                                          </li>
+                                        }
+                                      </ul>
+                                    </div>
+                                  }
+
+                                  @if (assessment.invalidations.length > 0) {
+                                    <div
+                                      class="trend-context-list"
+                                      data-testid="trend-context-invalidations"
+                                    >
+                                      <h4>Invalidation</h4>
+                                      <ul>
+                                        @for (
+                                          invalidation of assessment.invalidations;
+                                          track invalidation.ruleId + invalidation.level
+                                        ) {
+                                          <li>
+                                            <strong>{{ invalidation.ruleId }}</strong> level
+                                            {{ valueOrUnavailable(invalidation.level) }} · thesis
+                                            {{ invalidation.thesisDirection }}
+                                            @if (invalidation.protectedLevel; as protectedLevel) {
+                                              · protected {{ protectedLevel.type }}
+                                              {{ protectedLevel.price }}
+                                            }
+                                            @if (invalidation.evidence; as invalidationEvidence) {
+                                              · evidence
+                                              {{ invalidationEvidence.sourceIds.join(', ') }}
+                                            }
+                                          </li>
+                                        }
+                                      </ul>
+                                    </div>
+                                  }
+
+                                  @if (trendContext.readModel.diagnostics.length > 0) {
+                                    <div
+                                      class="trend-context-list"
+                                      data-testid="trend-context-diagnostics"
+                                    >
+                                      <h4>Diagnostics</h4>
+                                      <ul>
+                                        @for (
+                                          diagnostic of trendContext.readModel.diagnostics;
+                                          track diagnostic
+                                        ) {
+                                          <li>{{ diagnostic }}</li>
+                                        }
+                                      </ul>
+                                    </div>
+                                  }
+
+                                  @if (
+                                    trendContext.readModel.sourceReferences | keyvalue;
+                                    as references
+                                  ) {
+                                    @if (references.length > 0) {
+                                      <div
+                                        class="trend-context-list"
+                                        data-testid="trend-context-source-references"
+                                      >
+                                        <h4>Source references</h4>
+                                        <ul>
+                                          @for (reference of references; track reference.key) {
+                                            <li>
+                                              <strong>{{ reference.key }}</strong>
+                                              {{ reference.value.source }} ·
+                                              {{ reference.value.symbol }} ·
+                                              {{ reference.value.interval }} ·
+                                              {{ reference.value.contentDigest }}
+                                            </li>
+                                          }
+                                        </ul>
+                                      </div>
+                                    }
+                                  }
+
+                                  @if (assessment.findings.length > 0) {
+                                    <div class="trend-context-list" data-testid="trend-context-why">
+                                      <h4>Why / evidence findings</h4>
+                                      <ul>
+                                        @for (
+                                          finding of assessment.findings;
+                                          track finding.code + finding.role
+                                        ) {
+                                          <li>
+                                            <strong>{{ finding.code }}</strong>
+                                            {{ finding.message }}
+                                          </li>
+                                        }
+                                      </ul>
+                                    </div>
+                                  }
+                                </app-disclosure-section>
+                              } @else if (
+                                trendContext.readModel.lastSuccessfulAssessment;
+                                as historical
+                              ) {
+                                <div
+                                  class="trend-context-historical"
+                                  data-testid="trend-context-historical"
+                                >
+                                  <strong>Historical assessment only</strong>
+                                  <p>
+                                    The current Trend Context is not available. The following result
+                                    is retained for context and is not current:
+                                    {{ historical.attention }} ·
+                                    {{ historical.assessmentAt | date: 'medium' }}
+                                  </p>
+                                  <div
+                                    class="trend-context-meta"
+                                    data-testid="trend-context-historical-provenance"
+                                  >
+                                    <span
+                                      >Profile {{ historical.profileId }} v{{
+                                        historical.profileVersion
+                                      }}</span
+                                    >
+                                    <span>Rules {{ historical.ruleVersion }}</span>
+                                    <span>Cut-off {{ historical.cutOffAt | date: 'medium' }}</span>
+                                    <span>Assessment {{ historical.fingerprint }}</span>
+                                  </div>
+                                </div>
+                              } @else {
+                                <p
+                                  class="section-placeholder"
+                                  data-testid="trend-context-no-assessment"
+                                >
+                                  No current Trend Context assessment is available.
+                                </p>
+                              }
+                            </section>
+                          }
+                        }
+                      }
+
+                      <section class="decision-action-region" aria-label="Decision actions">
+                        @if (manualTradeOpen) {
+                          <app-manual-trade-ticket
+                            [account]="view.context.account"
+                            [market]="marketView.market"
+                            [referencePrice]="manualReferencePrice(ticker$ | async)"
+                          />
+                          <button
+                            type="button"
+                            class="secondary-button trading-action-close"
+                            (click)="closeManualTrade()"
+                            data-testid="close-manual-trade"
+                          >
+                            Close manual ticket
+                          </button>
+                        } @else {
+                          <section class="trading-actions" aria-labelledby="trading-actions-title">
+                            <div>
+                              <span class="eyebrow">Trading actions</span>
+                              <h3 id="trading-actions-title">Prepare a discretionary proposal</h3>
+                              <p>
+                                Keep the market context visible while describing a MANUAL Trade
+                                Plan.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              class="primary-button"
+                              (click)="openManualTrade()"
+                              data-testid="open-manual-trade"
+                            >
+                              Prepare manual trade
+                            </button>
+                            @if (opportunity; as activeOpportunity) {
+                              <div class="opportunity-action" data-testid="opportunity-context">
+                                <span class="eyebrow">Opportunity context</span>
+                                <strong
+                                  >{{ activeOpportunity.direction }} ·
+                                  {{ activeOpportunity.scenario }}</strong
+                                >
+                                <span>{{ activeOpportunity.explanation }}</span>
+                                <button
+                                  type="button"
+                                  class="secondary-button"
+                                  [disabled]="opportunityPreparing"
+                                  (click)="prepareFromOpportunity()"
+                                  data-testid="prepare-from-opportunity"
+                                >
+                                  {{
+                                    opportunityPreparing
+                                      ? 'Preparing...'
+                                      : 'Prepare from opportunity'
+                                  }}
+                                </button>
+                              </div>
+                            } @else if (opportunityError) {
+                              <p class="state-message error" data-testid="opportunity-error">
+                                Opportunity context is unavailable. You can still prepare a manual
+                                proposal.
+                              </p>
+                            }
+                          </section>
+                        }
+                      </section>
+
+                      <section
+                        class="market-section chart-panel"
+                        aria-labelledby="workspace-chart-title"
+                      >
+                        <div class="section-heading">
+                          <div>
+                            <span class="eyebrow">Price history</span>
+                            <h3 id="workspace-chart-title">Market chart</h3>
+                          </div>
+                          <div class="timeframe-selector">
+                            @if (selectedTimeframe$ | async; as selectedTimeframe) {
+                              @for (timeframe of ohlcIntervals; track timeframe.minutes) {
+                                <button
+                                  type="button"
+                                  [class.active]="selectedTimeframe.minutes === timeframe.minutes"
+                                  [attr.aria-pressed]="
+                                    selectedTimeframe.minutes === timeframe.minutes
+                                  "
+                                  (click)="selectOhlcInterval(timeframe)"
+                                >
+                                  {{ timeframe.label }}
+                                </button>
+                              }
+                            }
+                          </div>
+                          @if (ohlc$ | async; as liveOhlc) {
+                            <span class="stream-badge">{{
+                              marketFreshness(
+                                liveOhlc,
+                                liveOhlc.status === 'live' ? liveOhlc.data.occurredAt : null
+                              )
+                            }}</span>
+                          }
+                        </div>
+
+                        @if (ohlcHistory$ | async; as history) {
+                          @switch (history.status) {
+                            @case ('loading') {
+                              <p class="section-placeholder">Loading OHLC history...</p>
+                            }
+                            @case ('error') {
+                              <p class="section-placeholder error">OHLC history unavailable.</p>
+                            }
+                            @case ('loaded') {
+                              <app-market-chart
+                                [history]="history.data"
+                                [liveCandle]="liveCandle(ohlc$ | async)"
+                                [resetKey]="(chartReset$ | async) ?? 0"
+                              />
+                            }
+                          }
+                        }
+                      </section>
+
+                      <div class="market-secondary-grid order-flow-panel">
                         <section
-                          class="trend-context-panel trend-context-panel--unavailable"
-                          data-testid="trend-context-unavailable"
+                          class="market-section"
+                          aria-labelledby="workspace-order-book-title"
                         >
                           <div class="section-heading">
-                            <div>
-                              <span class="eyebrow">Analytical evidence</span>
-                              <h3>Trend Context unavailable</h3>
-                            </div>
-                            <span class="trend-context-authority"
-                              >Not Risk approval / Not execution authorization</span
-                            >
-                          </div>
-                          <p class="section-placeholder error">{{ trendContext.message }}</p>
-                        </section>
-                      }
-                      @case ('loaded') {
-                        <section class="trend-context-panel" data-testid="trend-context-panel">
-                          <div class="section-heading">
-                            <div>
-                              <span class="eyebrow">Analytical evidence only</span>
-                              <h3>Trend Context</h3>
-                            </div>
-                            <span class="trend-context-authority"
-                              >Not Risk approval / Not execution authorization</span
-                            >
-                          </div>
-
-                          <div class="trend-context-meta" data-testid="trend-context-status">
-                            <span>Status: {{ trendContext.readModel.operationalStatus }}</span>
-                            <span>Validity: {{ trendContext.readModel.assessmentValidity }}</span>
-                            @if (trendContext.readModel.assessment) {
-                              <span>
-                                Assessed
-                                {{
-                                  trendContext.readModel.assessment.assessmentAt | date: 'medium'
-                                }}
-                              </span>
-                            }
-                            @if (trendContext.readModel.observationVersion !== null) {
-                              <span
-                                >Observation v{{ trendContext.readModel.observationVersion }}</span
-                              >
-                            }
-                          </div>
-
-                          @if (trendContext.readModel.assessment; as assessment) {
-                            <div
-                              class="trend-context-summary"
-                              data-testid="trend-context-assessment"
-                            >
-                              <article class="trend-context-value">
-                                <span>Direction</span>
-                                <strong>{{ assessment.direction }}</strong>
-                              </article>
-                              <article class="trend-context-value">
-                                <span>Regime</span>
-                                <strong>{{ assessment.regime }}</strong>
-                              </article>
-                              <article class="trend-context-value">
-                                <span>Phase</span>
-                                <strong>{{ assessment.phase }}</strong>
-                              </article>
-                              <article
-                                class="trend-context-value trend-context-value--attention"
-                                [attr.data-attention]="assessment.attention"
-                              >
-                                <span>Attention outcome</span>
-                                <strong>{{ assessment.attention }}</strong>
-                              </article>
-                            </div>
-
-                            <app-disclosure-section
-                              class="trend-context-details"
-                              title="Detailed deterministic evidence"
-                              summary="Roles, provenance, diagnostics"
-                              [expanded]="true"
-                            >
-                            <div class="trend-context-meta" data-testid="trend-context-provenance">
-                              @if (trendContext.readModel.observationId) {
-                                <span>Observation {{ trendContext.readModel.observationId }}</span>
-                              }
-                              @if (trendContext.readModel.lineageId) {
-                                <span>Lineage {{ trendContext.readModel.lineageId }}</span>
-                              }
-                              @if (trendContext.readModel.analysisExecutionId) {
-                                <span
-                                  >Analysis {{ trendContext.readModel.analysisExecutionId }}</span
-                                >
-                              }
-                              @if (trendContext.readModel.validFrom) {
-                                <span
-                                  >Valid from
-                                  {{ trendContext.readModel.validFrom | date: 'medium' }}</span
-                                >
-                              }
-                              @if (trendContext.readModel.validUntil) {
-                                <span
-                                  >Valid until
-                                  {{ trendContext.readModel.validUntil | date: 'medium' }}</span
-                                >
-                              }
-                            </div>
-
-                            <div class="trend-context-roles" data-testid="trend-context-roles">
-                              @for (role of ['BIAS', 'SETUP', 'TRIGGER']; track role) {
-                                @if (roleAssessment(assessment, role); as roleAssessmentValue) {
-                                  <article class="trend-context-role">
-                                    <div class="section-heading">
-                                      <h4>{{ role }}</h4>
-                                      <span class="trend-context-role-state">
-                                        {{ roleAssessmentValue.fresh ? 'FRESH' : 'STALE' }}
-                                      </span>
-                                    </div>
-                                    <div class="trend-context-role-grid">
-                                      <span
-                                        >Interval
-                                        <strong>{{ roleAssessmentValue.interval }}</strong></span
-                                      >
-                                      <span
-                                        >Direction
-                                        <strong>{{ roleAssessmentValue.direction }}</strong></span
-                                      >
-                                      <span
-                                        >Regime
-                                        <strong>{{ roleAssessmentValue.regime }}</strong></span
-                                      >
-                                      <span
-                                        >Phase
-                                        <strong>{{ roleAssessmentValue.phase }}</strong></span
-                                      >
-                                      <span
-                                        >High relation
-                                        <strong>{{
-                                          valueOrUnavailable(roleAssessmentValue.highRelation)
-                                        }}</strong></span
-                                      >
-                                      <span
-                                        >Low relation
-                                        <strong>{{
-                                          valueOrUnavailable(roleAssessmentValue.lowRelation)
-                                        }}</strong></span
-                                      >
-                                      <span
-                                        >EMA
-                                        <strong>{{
-                                          roleAssessmentValue.ema.available
-                                            ? valueOrUnavailable(roleAssessmentValue.ema.current)
-                                            : 'Unavailable'
-                                        }}</strong></span
-                                      >
-                                      <span
-                                        >ATR
-                                        <strong>{{
-                                          roleAssessmentValue.atr.available
-                                            ? valueOrUnavailable(roleAssessmentValue.atr.current)
-                                            : 'Unavailable'
-                                        }}</strong></span
-                                      >
-                                    </div>
-                                    <p class="trend-context-role-detail">
-                                      Structural break:
-                                      <strong>{{
-                                        roleAssessmentValue.structuralBreak.status
-                                      }}</strong>
-                                      · Confirmed swings: {{ roleAssessmentValue.swings.length }}
-                                    </p>
-                                    @if (roleAssessmentValue.protectedLevel; as protectedLevel) {
-                                      <p class="trend-context-role-detail">
-                                        Protected level:
-                                        <strong
-                                          >{{ protectedLevel.type }}
-                                          {{ protectedLevel.price }}</strong
-                                        >
-                                      </p>
-                                    }
-                                    @if (roleAssessmentValue.levels.length > 0) {
-                                      <p class="trend-context-role-detail">
-                                        Structural levels:
-                                        @for (
-                                          level of roleAssessmentValue.levels;
-                                          track level.pivotTime
-                                        ) {
-                                          <span>{{ level.type }} {{ level.price }}</span
-                                          >{{ $last ? '' : ', ' }}
-                                        }
-                                      </p>
-                                    }
-                                    @if (
-                                      roleAssessmentValue.structuralBreak.evidence;
-                                      as breakEvidence
-                                    ) {
-                                      <p class="trend-context-role-detail">
-                                        Break evidence:
-                                        <strong>{{ breakEvidence.sourceIds.join(', ') }}</strong>
-                                      </p>
-                                    }
-                                  </article>
-                                } @else if (role === 'TRIGGER') {
-                                  <article
-                                    class="trend-context-role trend-context-role--unavailable"
+                            <h3 id="workspace-order-book-title">Order book</h3>
+                            <div class="timeframe-selector" aria-label="Order-book depth">
+                              @if (selectedOrderBookDepth$ | async; as selectedDepth) {
+                                @for (depth of orderBookDepths; track depth) {
+                                  <button
+                                    type="button"
+                                    [class.active]="selectedDepth === depth"
+                                    [attr.aria-pressed]="selectedDepth === depth"
+                                    (click)="selectOrderBookDepth(depth)"
                                   >
-                                    <div class="section-heading">
-                                      <h4>TRIGGER</h4>
-                                      <span class="trend-context-role-state">UNAVAILABLE</span>
-                                    </div>
-                                    <p class="section-placeholder">
-                                      No optional trigger assessment was provided.
-                                    </p>
-                                  </article>
+                                    {{ depth }} levels
+                                  </button>
                                 }
                               }
                             </div>
-
-                            <div class="trend-context-evidence-grid">
-                              <article>
-                                <span class="card-label">Alignment</span>
-                                <strong>{{ assessment.alignment }}</strong>
-                              </article>
-                              <article>
-                                <span class="card-label">Profile / rules</span>
-                                <strong
-                                  >{{ assessment.profileId }} · {{ assessment.profileVersion }} /
-                                  {{ assessment.ruleVersion }}</strong
-                                >
-                              </article>
-                              <article>
-                                <span class="card-label">Cut-off</span>
-                                <strong>{{ assessment.cutOffAt | date: 'medium' }}</strong>
-                              </article>
-                            </div>
-
-                            @if (assessment.contradictions.length > 0) {
-                              <div
-                                class="trend-context-list"
-                                data-testid="trend-context-contradictions"
-                              >
-                                <h4>Contradictions</h4>
-                                <ul>
-                                  @for (
-                                    contradiction of assessment.contradictions;
-                                    track contradiction.code
-                                  ) {
-                                    <li>
-                                      <strong>{{ contradiction.code }}</strong>
-                                      {{ contradiction.message }}
-                                    </li>
-                                  }
-                                </ul>
-                              </div>
+                            @if (orderBook$ | async; as orderBook) {
+                              <span class="stream-badge">{{
+                                marketFreshness(
+                                  orderBook,
+                                  orderBook.status === 'live' ? orderBook.data.occurredAt : null
+                                )
+                              }}</span>
                             }
-
-                            @if (assessment.exclusions.length > 0) {
-                              <div
-                                class="trend-context-list"
-                                data-testid="trend-context-exclusions"
-                              >
-                                <h4>Exclusions</h4>
-                                <ul>
-                                  @for (
-                                    exclusion of assessment.exclusions;
-                                    track exclusion.code + exclusion.role
-                                  ) {
-                                    <li>
-                                      <strong>{{ exclusion.code }}</strong> {{ exclusion.detail }}
-                                    </li>
-                                  }
-                                </ul>
-                              </div>
-                            }
-
-                            @if (assessment.invalidations.length > 0) {
-                              <div
-                                class="trend-context-list"
-                                data-testid="trend-context-invalidations"
-                              >
-                                <h4>Invalidation</h4>
-                                <ul>
-                                  @for (
-                                    invalidation of assessment.invalidations;
-                                    track invalidation.ruleId + invalidation.level
-                                  ) {
-                                    <li>
-                                      <strong>{{ invalidation.ruleId }}</strong> level
-                                      {{ valueOrUnavailable(invalidation.level) }} · thesis
-                                      {{ invalidation.thesisDirection }}
-                                      @if (invalidation.protectedLevel; as protectedLevel) {
-                                        · protected {{ protectedLevel.type }}
-                                        {{ protectedLevel.price }}
-                                      }
-                                      @if (invalidation.evidence; as invalidationEvidence) {
-                                        · evidence {{ invalidationEvidence.sourceIds.join(', ') }}
-                                      }
-                                    </li>
-                                  }
-                                </ul>
-                              </div>
-                            }
-
-                            @if (trendContext.readModel.diagnostics.length > 0) {
-                              <div
-                                class="trend-context-list"
-                                data-testid="trend-context-diagnostics"
-                              >
-                                <h4>Diagnostics</h4>
-                                <ul>
-                                  @for (
-                                    diagnostic of trendContext.readModel.diagnostics;
-                                    track diagnostic
-                                  ) {
-                                    <li>{{ diagnostic }}</li>
-                                  }
-                                </ul>
-                              </div>
-                            }
-
-                            @if (
-                              trendContext.readModel.sourceReferences | keyvalue;
-                              as references
-                            ) {
-                              @if (references.length > 0) {
-                                <div
-                                  class="trend-context-list"
-                                  data-testid="trend-context-source-references"
-                                >
-                                  <h4>Source references</h4>
-                                  <ul>
-                                    @for (reference of references; track reference.key) {
-                                      <li>
-                                        <strong>{{ reference.key }}</strong>
-                                        {{ reference.value.source }} ·
-                                        {{ reference.value.symbol }} ·
-                                        {{ reference.value.interval }} ·
-                                        {{ reference.value.contentDigest }}
-                                      </li>
-                                    }
-                                  </ul>
-                                </div>
+                          </div>
+                          @if (orderBook$ | async; as orderBook) {
+                            @switch (orderBook.status) {
+                              @case ('waiting') {
+                                <p class="section-placeholder section-placeholder--compact">
+                                  Waiting for order-book snapshot...
+                                </p>
+                              }
+                              @case ('error') {
+                                <p class="section-placeholder section-placeholder--compact error">
+                                  Order book unavailable.
+                                </p>
+                              }
+                              @case ('live') {
+                                <app-order-book [snapshot]="orderBook.data" />
                               }
                             }
-
-                            @if (assessment.findings.length > 0) {
-                              <div class="trend-context-list" data-testid="trend-context-why">
-                                <h4>Why / evidence findings</h4>
-                                <ul>
-                                  @for (
-                                    finding of assessment.findings;
-                                    track finding.code + finding.role
-                                  ) {
-                                    <li>
-                                      <strong>{{ finding.code }}</strong> {{ finding.message }}
-                                    </li>
-                                  }
-                                </ul>
-                              </div>
-                            }
-                            </app-disclosure-section>
-                          } @else if (
-                            trendContext.readModel.lastSuccessfulAssessment;
-                            as historical
-                          ) {
-                            <div
-                              class="trend-context-historical"
-                              data-testid="trend-context-historical"
-                            >
-                              <strong>Historical assessment only</strong>
-                              <p>
-                                The current Trend Context is not available. The following result is
-                                retained for context and is not current:
-                                {{ historical.attention }} ·
-                                {{ historical.assessmentAt | date: 'medium' }}
-                              </p>
-                              <div
-                                class="trend-context-meta"
-                                data-testid="trend-context-historical-provenance"
-                              >
-                                <span
-                                  >Profile {{ historical.profileId }} v{{
-                                    historical.profileVersion
-                                  }}</span
-                                >
-                                <span>Rules {{ historical.ruleVersion }}</span>
-                                <span>Cut-off {{ historical.cutOffAt | date: 'medium' }}</span>
-                                <span>Assessment {{ historical.fingerprint }}</span>
-                              </div>
-                            </div>
-                          } @else {
-                            <p
-                              class="section-placeholder"
-                              data-testid="trend-context-no-assessment"
-                            >
-                              No current Trend Context assessment is available.
-                            </p>
                           }
-                          </section>
-                      }
-                    }
-                  }
+                        </section>
 
-                  <section class="decision-action-region" aria-label="Decision actions">
-                  @if (manualTradeOpen) {
-                    <app-manual-trade-ticket
-                      [account]="view.context.account"
-                      [market]="marketView.market"
-                      [referencePrice]="manualReferencePrice(ticker$ | async)"
-                    />
-                    <button
-                      type="button"
-                      class="secondary-button trading-action-close"
-                      (click)="closeManualTrade()"
-                      data-testid="close-manual-trade"
-                    >
-                      Close manual ticket
-                    </button>
-                  } @else {
-                    <section class="trading-actions" aria-labelledby="trading-actions-title">
-                      <div>
-                        <span class="eyebrow">Trading actions</span>
-                        <h3 id="trading-actions-title">Prepare a discretionary proposal</h3>
-                        <p>Keep the market context visible while describing a MANUAL Trade Plan.</p>
+                        <section class="market-section" aria-labelledby="workspace-trades-title">
+                          <div class="section-heading">
+                            <h3 id="workspace-trades-title">Recent trades</h3>
+                            @if (recentTrades$ | async; as recentTrades) {
+                              <span class="stream-badge">{{
+                                marketFreshness(
+                                  recentTrades,
+                                  recentTrades.status === 'live'
+                                    ? recentTrades.data.generatedAt
+                                    : null
+                                )
+                              }}</span>
+                            }
+                          </div>
+                          @if (recentTrades$ | async; as recentTrades) {
+                            @switch (recentTrades.status) {
+                              @case ('waiting') {
+                                <p class="section-placeholder section-placeholder--compact">
+                                  Waiting for recent trades...
+                                </p>
+                              }
+                              @case ('error') {
+                                <p class="section-placeholder section-placeholder--compact error">
+                                  Recent trades unavailable.
+                                </p>
+                              }
+                              @case ('live') {
+                                <app-recent-trades [snapshot]="recentTrades.data" />
+                              }
+                            }
+                          }
+                        </section>
                       </div>
-                      <button
-                        type="button"
-                        class="primary-button"
-                        (click)="openManualTrade()"
-                        data-testid="open-manual-trade"
+
+                      <section
+                        class="market-section constraints-panel"
+                        aria-labelledby="workspace-information-title"
                       >
-                        Prepare manual trade
-                      </button>
-                      @if (opportunity; as activeOpportunity) {
-                        <div class="opportunity-action" data-testid="opportunity-context">
-                          <span class="eyebrow">Opportunity context</span>
-                          <strong
-                            >{{ activeOpportunity.direction }} ·
-                            {{ activeOpportunity.scenario }}</strong
-                          >
-                          <span>{{ activeOpportunity.explanation }}</span>
-                          <button
-                            type="button"
-                            class="secondary-button"
-                            [disabled]="opportunityPreparing"
-                            (click)="prepareFromOpportunity()"
-                            data-testid="prepare-from-opportunity"
-                          >
-                            {{ opportunityPreparing ? 'Preparing...' : 'Prepare from opportunity' }}
-                          </button>
+                        <div class="section-heading">
+                          <h3 id="workspace-information-title">Market information</h3>
                         </div>
-                      } @else if (opportunityError) {
-                        <p class="state-message error" data-testid="opportunity-error">
-                          Opportunity context is unavailable. You can still prepare a manual
-                          proposal.
-                        </p>
-                      }
+                        <div class="detail-grid">
+                          <article class="detail-card">
+                            <span class="card-label">Minimum order size</span>
+                            <strong>{{
+                              marketView.market.marketConstraints.minimumOrderSize
+                            }}</strong>
+                          </article>
+                          <article class="detail-card">
+                            <span class="card-label">Minimum cost</span>
+                            <strong>{{ marketView.market.marketConstraints.minimumCost }}</strong>
+                          </article>
+                          <article class="detail-card">
+                            <span class="card-label">Tick size</span>
+                            <strong>{{ marketView.market.marketConstraints.tickSize }}</strong>
+                          </article>
+                          <article class="detail-card">
+                            <span class="card-label">Quantity precision</span>
+                            <strong>{{
+                              marketView.market.marketConstraints.quantityPrecision
+                            }}</strong>
+                          </article>
+                          <article class="detail-card">
+                            <span class="card-label">Price precision</span>
+                            <strong>{{
+                              marketView.market.marketConstraints.pricePrecision
+                            }}</strong>
+                          </article>
+                        </div>
+                        @if (marketView.market.marketState.closureReason) {
+                          <div class="market-notice">
+                            <strong>Market status information</strong>
+                            <p>{{ marketView.market.marketState.closureReason }}</p>
+                          </div>
+                        }
+                      </section>
                     </section>
                   }
-                  </section>
-
-                  <section class="market-section chart-panel" aria-labelledby="workspace-chart-title">
-                    <div class="section-heading">
-                      <div>
-                        <span class="eyebrow">Price history</span>
-                        <h3 id="workspace-chart-title">Market chart</h3>
-                      </div>
-                      <div class="timeframe-selector">
-                        @if (selectedTimeframe$ | async; as selectedTimeframe) {
-                          @for (timeframe of ohlcIntervals; track timeframe.minutes) {
-                            <button
-                              type="button"
-                              [class.active]="selectedTimeframe.minutes === timeframe.minutes"
-                              [attr.aria-pressed]="selectedTimeframe.minutes === timeframe.minutes"
-                              (click)="selectOhlcInterval(timeframe)"
-                            >
-                              {{ timeframe.label }}
-                            </button>
-                          }
-                        }
-                      </div>
-                      @if (ohlc$ | async; as liveOhlc) {
-                        <span class="stream-badge">{{
-                          marketFreshness(
-                            liveOhlc,
-                            liveOhlc.status === 'live' ? liveOhlc.data.occurredAt : null
-                          )
-                        }}</span>
-                      }
-                    </div>
-
-                    @if (ohlcHistory$ | async; as history) {
-                      @switch (history.status) {
-                        @case ('loading') {
-                          <p class="section-placeholder">Loading OHLC history...</p>
-                        }
-                        @case ('error') {
-                          <p class="section-placeholder error">OHLC history unavailable.</p>
-                        }
-                        @case ('loaded') {
-                          <app-market-chart
-                            [history]="history.data"
-                            [liveCandle]="liveCandle(ohlc$ | async)"
-                            [resetKey]="(chartReset$ | async) ?? 0"
-                          />
-                        }
-                      }
-                    }
-                  </section>
-
-                  <div class="market-secondary-grid order-flow-panel">
-                    <section class="market-section" aria-labelledby="workspace-order-book-title">
-                      <div class="section-heading">
-                        <h3 id="workspace-order-book-title">Order book</h3>
-                        <div class="timeframe-selector" aria-label="Order-book depth">
-                          @if (selectedOrderBookDepth$ | async; as selectedDepth) {
-                            @for (depth of orderBookDepths; track depth) {
-                              <button
-                                type="button"
-                                [class.active]="selectedDepth === depth"
-                                [attr.aria-pressed]="selectedDepth === depth"
-                                (click)="selectOrderBookDepth(depth)"
-                              >
-                                {{ depth }} levels
-                              </button>
-                            }
-                          }
-                        </div>
-                        @if (orderBook$ | async; as orderBook) {
-                          <span class="stream-badge">{{
-                            marketFreshness(
-                              orderBook,
-                              orderBook.status === 'live' ? orderBook.data.occurredAt : null
-                            )
-                          }}</span>
-                        }
-                      </div>
-                      @if (orderBook$ | async; as orderBook) {
-                        @switch (orderBook.status) {
-                          @case ('waiting') {
-                            <p class="section-placeholder section-placeholder--compact">
-                              Waiting for order-book snapshot...
-                            </p>
-                          }
-                          @case ('error') {
-                            <p class="section-placeholder section-placeholder--compact error">
-                              Order book unavailable.
-                            </p>
-                          }
-                          @case ('live') {
-                            <app-order-book [snapshot]="orderBook.data" />
-                          }
-                        }
-                      }
-                    </section>
-
-                    <section class="market-section" aria-labelledby="workspace-trades-title">
-                      <div class="section-heading">
-                        <h3 id="workspace-trades-title">Recent trades</h3>
-                        @if (recentTrades$ | async; as recentTrades) {
-                          <span class="stream-badge">{{
-                            marketFreshness(
-                              recentTrades,
-                              recentTrades.status === 'live' ? recentTrades.data.generatedAt : null
-                            )
-                          }}</span>
-                        }
-                      </div>
-                      @if (recentTrades$ | async; as recentTrades) {
-                        @switch (recentTrades.status) {
-                          @case ('waiting') {
-                            <p class="section-placeholder section-placeholder--compact">
-                              Waiting for recent trades...
-                            </p>
-                          }
-                          @case ('error') {
-                            <p class="section-placeholder section-placeholder--compact error">
-                              Recent trades unavailable.
-                            </p>
-                          }
-                          @case ('live') {
-                            <app-recent-trades [snapshot]="recentTrades.data" />
-                          }
-                        }
-                      }
-                    </section>
-                  </div>
-
-                  <section class="market-section constraints-panel" aria-labelledby="workspace-information-title">
-                    <div class="section-heading">
-                      <h3 id="workspace-information-title">Market information</h3>
-                    </div>
-                    <div class="detail-grid">
-                      <article class="detail-card">
-                        <span class="card-label">Minimum order size</span>
-                        <strong>{{ marketView.market.marketConstraints.minimumOrderSize }}</strong>
-                      </article>
-                      <article class="detail-card">
-                        <span class="card-label">Minimum cost</span>
-                        <strong>{{ marketView.market.marketConstraints.minimumCost }}</strong>
-                      </article>
-                      <article class="detail-card">
-                        <span class="card-label">Tick size</span>
-                        <strong>{{ marketView.market.marketConstraints.tickSize }}</strong>
-                      </article>
-                      <article class="detail-card">
-                        <span class="card-label">Quantity precision</span>
-                        <strong>{{ marketView.market.marketConstraints.quantityPrecision }}</strong>
-                      </article>
-                      <article class="detail-card">
-                        <span class="card-label">Price precision</span>
-                        <strong>{{ marketView.market.marketConstraints.pricePrecision }}</strong>
-                      </article>
-                    </div>
-                    @if (marketView.market.marketState.closureReason) {
-                      <div class="market-notice">
-                        <strong>Market status information</strong>
-                        <p>{{ marketView.market.marketState.closureReason }}</p>
-                      </div>
-                    }
-                  </section>
-                </section>
+                }
               }
             }
-          }
-        }
           </section>
         </div>
       }

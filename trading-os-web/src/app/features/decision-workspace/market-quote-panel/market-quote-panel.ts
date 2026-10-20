@@ -5,14 +5,15 @@ import { MarketResponse } from '../../../core/models/market-response';
 import { TickerEvent } from '../../../core/models/ticker-event.model';
 import { FreshnessIndicator } from '../../../shared/workstation/freshness-indicator/freshness-indicator';
 import { MetricValue } from '../../../shared/workstation/metric-value/metric-value';
-import { StatusBadge, StatusBadgeTone } from '../../../shared/workstation/status-badge/status-badge';
+import {
+  StatusBadge,
+  StatusBadgeTone,
+} from '../../../shared/workstation/status-badge/status-badge';
 import { WorkspacePanelHeader } from '../../../shared/workstation/workspace-panel-header/workspace-panel-header';
 import { WorkspacePanel } from '../../../shared/workstation/workspace-panel/workspace-panel';
 
 export type MarketQuoteStreamView =
-  | { status: 'waiting' }
-  | { status: 'live'; data: TickerEvent }
-  | { status: 'error' };
+  { status: 'waiting' } | { status: 'live'; data: TickerEvent } | { status: 'error' };
 
 export type MarketQuoteFreshness = 'LIVE' | 'RECENT' | 'STALE' | 'UNAVAILABLE';
 
