@@ -16,4 +16,7 @@ interface SpringDataObservedMarketOutcomeRepository
             UUID marketId, Instant evaluationCutoff, long horizonSeconds);
 
     List<JpaObservedMarketOutcomeEntity> findByMarketIdIn(Collection<UUID> marketIds);
+
+    List<JpaObservedMarketOutcomeEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThan(
+            Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive);
 }

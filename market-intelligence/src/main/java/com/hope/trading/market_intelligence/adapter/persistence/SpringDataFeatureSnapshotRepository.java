@@ -19,4 +19,7 @@ interface SpringDataFeatureSnapshotRepository extends JpaRepository<JpaFeatureSn
     List<JpaFeatureSnapshotEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicy(
             Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
             String projectionVersion, String evidencePolicy);
+
+    Optional<JpaFeatureSnapshotEntity> findTopByMarketIdAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicyOrderByEvaluationCutoffDesc(
+            UUID marketId, Instant endCutoffExclusive, String projectionVersion, String evidencePolicy);
 }

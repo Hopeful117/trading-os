@@ -14,5 +14,8 @@ public interface FeatureSnapshotRepository {
     List<FeatureSnapshot> findByPopulation(Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
                                            String featureProjectionVersion, String evidencePolicy);
 
+    Optional<FeatureSnapshot> findLatestByMarket(UUID marketId, Instant endCutoffExclusive,
+                                                  String featureProjectionVersion, String evidencePolicy);
+
     FeatureSnapshot saveIfAbsent(FeatureSnapshot snapshot);
 }

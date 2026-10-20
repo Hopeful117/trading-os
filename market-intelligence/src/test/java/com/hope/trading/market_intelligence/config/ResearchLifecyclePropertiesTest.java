@@ -56,6 +56,16 @@ class ResearchLifecyclePropertiesTest {
                 .hasMessageContaining("fee coverage requires");
     }
 
+    @Test
+    void acceptsEmptyS1FeeIdentityFromEnvironment() {
+        ResearchLifecycleProperties properties = valid();
+        properties.getFeeCoverage().setProvider("");
+        properties.getFeeCoverage().setProductType("");
+        properties.getFeeCoverage().setInstrument("");
+
+        properties.validate();
+    }
+
     private ResearchLifecycleProperties valid() {
         ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
         properties.setEnabled(true);

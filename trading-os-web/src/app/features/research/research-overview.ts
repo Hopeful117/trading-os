@@ -2,13 +2,17 @@ import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { Observable, Subject, catchError, map, of, shareReplay, startWith, switchMap } from 'rxjs';
 
-import { ResearchReadiness, S1Readiness } from '../../core/models/research-readiness.model';
+import {
+  ResearchIntegrity,
+  ResearchReadiness,
+  S1Readiness,
+} from '../../core/models/research-readiness.model';
 import { ResearchService } from '../../core/services/research.service';
 
 type ResearchOverviewViewModel =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; readiness: ResearchReadiness };
+  | { kind: 'ready'; readiness: ResearchReadiness; integrity: ResearchIntegrity | null };
 
 @Component({
   selector: 'app-research-overview',
@@ -24,7 +28,17 @@ export class ResearchOverview {
     startWith(undefined),
     switchMap(() =>
       this.researchService.getReadiness().pipe(
-        map((readiness) => ({ kind: 'ready', readiness }) as ResearchOverviewViewModel),
+        switchMap((readiness) =>
+          this.researchService.getIntegrity().pipe(
+            map(
+              (integrity) => ({ kind: 'ready', readiness, integrity }) as ResearchOverviewViewModel,
+            ),
+            startWith({ kind: 'ready', readiness, integrity: null } as ResearchOverviewViewModel),
+            catchError(() =>
+              of({ kind: 'ready', readiness, integrity: null } as ResearchOverviewViewModel),
+            ),
+          ),
+        ),
         startWith({ kind: 'loading' } as ResearchOverviewViewModel),
         catchError(() =>
           of<ResearchOverviewViewModel>({

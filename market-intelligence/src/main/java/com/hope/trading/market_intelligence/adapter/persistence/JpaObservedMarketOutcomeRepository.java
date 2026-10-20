@@ -57,6 +57,19 @@ public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcome
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ObservedMarketOutcome> findByMarketsAndCutoffRange(
+            Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive) {
+        if (marketIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThan(
+                        marketIds, startCutoffInclusive, endCutoffExclusive).stream()
+                .map(JpaObservedMarketOutcomeEntity::toDomain)
+                .toList();
+    }
+
+    @Override
     public ObservedMarketOutcome saveIfAbsent(ObservedMarketOutcome outcome) {
         Optional<JpaObservedMarketOutcomeEntity> existing =
                 repository.findByOutcomeFingerprint(outcome.outcomeFingerprint());

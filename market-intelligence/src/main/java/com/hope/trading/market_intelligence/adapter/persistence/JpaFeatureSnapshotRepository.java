@@ -55,6 +55,14 @@ public class JpaFeatureSnapshotRepository implements FeatureSnapshotRepository {
     }
 
     @Override
+    public Optional<FeatureSnapshot> findLatestByMarket(UUID marketId, Instant endCutoffExclusive,
+                                                        String featureProjectionVersion, String evidencePolicy) {
+        return repository.findTopByMarketIdAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicyOrderByEvaluationCutoffDesc(
+                        marketId, endCutoffExclusive, featureProjectionVersion, evidencePolicy)
+                .map(this::toDomain);
+    }
+
+    @Override
     public FeatureSnapshot saveIfAbsent(FeatureSnapshot snapshot) {
         Optional<JpaFeatureSnapshotEntity> sameIdentity = repository.findByIdentityFingerprint(
                 snapshot.identityFingerprint());

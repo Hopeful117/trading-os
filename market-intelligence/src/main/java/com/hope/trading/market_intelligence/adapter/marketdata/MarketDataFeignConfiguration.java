@@ -45,7 +45,7 @@ public class MarketDataFeignConfiguration {
     @Bean
     Request.Options marketDataRequestOptions(
             @Value("${MARKET_INTELLIGENCE_MARKET_DATA_CONNECT_TIMEOUT_MS:2000}") int connectTimeoutMs,
-            @Value("${MARKET_INTELLIGENCE_MARKET_DATA_READ_TIMEOUT_MS:5000}") int readTimeoutMs) {
+            @Value("${MARKET_INTELLIGENCE_MARKET_DATA_READ_TIMEOUT_MS:1000}") int readTimeoutMs) {
         return new Request.Options(connectTimeoutMs, readTimeoutMs);
     }
 
