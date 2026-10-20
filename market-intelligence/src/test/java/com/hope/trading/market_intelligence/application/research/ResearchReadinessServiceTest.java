@@ -10,6 +10,9 @@ import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
 import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
+import feign.FeignException;
+import feign.Request;
+import feign.Response;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -363,6 +366,56 @@ class ResearchReadinessServiceTest {
                 "PF_XBTUSD", cutoff, NOW);
         verify(fees).findEligible(feeConfig.getBrokerAccountId(), "KRAKEN", "LINEAR_PERPETUAL",
                 "PF_XBTUSD", cutoff.plus(Duration.ofHours(1)), NOW);
+    }
+
+    @Test
+    void s1ReadinessKeepsCheckingAfterHistoricalFeeScheduleNotFound() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        var feeConfig = properties.getFeeCoverage();
+        feeConfig.setBrokerAccountId(UUID.randomUUID());
+        feeConfig.setProvider("KRAKEN");
+        feeConfig.setProductType("LINEAR_PERPETUAL");
+        feeConfig.setInstrument("PF_XBTUSD");
+
+        Instant cutoff = NOW.minus(Duration.ofDays(15));
+        FeatureSnapshot signal = mock(FeatureSnapshot.class);
+        when(signal.marketId()).thenReturn(MARKET_ID);
+        when(signal.evaluationCutoff()).thenReturn(cutoff);
+        when(signal.values()).thenReturn(List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                "trend.trigger.break_status",
+                com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                "CONFIRMED_BEARISH_BREAK")));
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of(signal));
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+
+        var fees = mock(com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.class);
+        when(fees.findEligible(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq(cutoff), org.mockito.ArgumentMatchers.eq(NOW)))
+                .thenThrow(FeignException.errorStatus("HistoricalFeeScheduleClient#findEligible",
+                        Response.builder().status(404).request(Request.create(Request.HttpMethod.GET,
+                                "/internal/v1/historical-fees/eligible", java.util.Map.of(), null, null, null)).build()));
+        when(fees.findEligible(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq(cutoff.plus(Duration.ofHours(1))), org.mockito.ArgumentMatchers.eq(NOW)))
+                .thenReturn(ResponseEntity.ok(mock(
+                        com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.ScheduleResponse.class)));
+
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                mock(ArtifactPersistencePort.class), mock(OrderBookReplayClient.class), fees,
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(readiness.s1().feeCoverage()).isEqualTo(0.5d);
+        assertThat(readiness.s1().blockingReasons()).contains("fee_coverage_incomplete");
     }
 
     @Test
