@@ -16,9 +16,13 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.http.ResponseEntity;
 
@@ -136,6 +140,107 @@ class ResearchReadinessServiceTest {
                 Clock.fixed(NOW, ZoneOffset.UTC)).current();
 
         assertThat(readiness.latestSuccessfulEvidenceKnownAt()).isEmpty();
+    }
+
+    @Test
+    void readinessCachesTheExpensiveProjectionWithinConfiguredFreshness() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        properties.setReadinessCacheDuration(Duration.ofMinutes(1));
+
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of());
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+
+        var service = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.current();
+        service.current();
+
+        verify(snapshots, times(1)).findByPopulation(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+        verify(outcomes, times(1)).findByMarkets(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void readinessRecomputesAfterTheConfiguredFreshnessWindow() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        properties.setReadinessCacheDuration(Duration.ofMinutes(1));
+
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of());
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        MutableClock clock = new MutableClock(NOW);
+        var service = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class), clock);
+
+        service.current();
+        clock.advance(Duration.ofMinutes(1).plusSeconds(1));
+        service.current();
+
+        verify(snapshots, times(2)).findByPopulation(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void concurrentReadinessRequestsShareOneProjectionComputation() throws Exception {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+
+        CountDownLatch computationStarted = new CountDownLatch(1);
+        CountDownLatch releaseComputation = new CountDownLatch(1);
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> {
+                    computationStarted.countDown();
+                    releaseComputation.await(5, TimeUnit.SECONDS);
+                    return List.of();
+                });
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        var service = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            var first = executor.submit(service::current);
+            assertThat(computationStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            var second = executor.submit(service::current);
+            releaseComputation.countDown();
+            first.get(5, TimeUnit.SECONDS);
+            second.get(5, TimeUnit.SECONDS);
+        } finally {
+            releaseComputation.countDown();
+            executor.shutdownNow();
+        }
+
+        verify(snapshots, times(1)).findByPopulation(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -339,5 +444,32 @@ class ResearchReadinessServiceTest {
         when(outcome.outcomeFingerprint()).thenReturn(fingerprint);
         when(outcome.forwardReturn()).thenReturn(BigDecimal.ZERO);
         return outcome;
+    }
+
+    private static final class MutableClock extends Clock {
+        private Instant current;
+
+        private MutableClock(Instant current) {
+            this.current = current;
+        }
+
+        private void advance(Duration duration) {
+            current = current.plus(duration);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return current;
+        }
     }
 }

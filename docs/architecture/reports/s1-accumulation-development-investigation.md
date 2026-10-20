@@ -1225,6 +1225,13 @@ schedule fails closed. No fee data is synthesized and no order is submitted.
 The endpoint reports the counts, denominators, coverage ratios, and blocking
 reasons. It does not report P&L, returns, win rate, or any performance metric.
 
+The same read model is available to authenticated traders through the existing
+Gateway Market Intelligence prefix at
+`GET /api/v1/intelligence/research/readiness`. The public endpoint is read-only;
+the internal endpoint remains reserved for service-to-service callers. The
+Angular Research Overview consumes the public contract and keeps experimental
+results explicitly unavailable until a separate evaluation surface is approved.
+
 ## 77. Development Opportunity Matrix
 
 Scores use 1–5, with higher risk meaning more risk. Priority is a transparent

@@ -48,6 +48,12 @@ class MiSecurityIntegrationTest {
     }
 
     @Test
+    void missingJwtIsRejectedOnResearchReadiness() throws Exception {
+        mvc.perform(get("/api/v1/intelligence/research/readiness"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void invalidJwtIsRejected() throws Exception {
         mvc.perform(get("/api/v1/opportunities/active")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer invalid"))

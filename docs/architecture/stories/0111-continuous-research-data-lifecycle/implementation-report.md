@@ -51,6 +51,11 @@ services must be explicitly configured for the same bounded market universe.
 evidence timestamps, snapshot counts and ranges, outcome counts by horizon/status,
 maturing outcomes, and an approximate available research population.
 
+An authenticated read-only trader surface now exposes the same readiness model at
+`GET /api/v1/intelligence/research/readiness` through the Gateway. The internal
+endpoint remains service-only. No experiment result metrics are exposed by this
+surface.
+
 Dataset export remains an explicit `ResearchDatasetExportCommand` action. The
 continuously growing factual population is not itself a dataset.
 

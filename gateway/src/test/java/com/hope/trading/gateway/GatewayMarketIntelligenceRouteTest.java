@@ -40,6 +40,13 @@ class GatewayMarketIntelligenceRouteTest {
     }
 
     @Test
+    void researchReadinessRoutesToMarketIntelligence() {
+        Route route = matchedRoute(HttpMethod.GET, "/api/v1/intelligence/research/readiness");
+        assertThat(route.getId()).isEqualTo("market-intelligence");
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://market-intelligence"));
+    }
+
+    @Test
     void opportunityListRoutesToMarketIntelligence() {
         Route route = matchedRoute(HttpMethod.GET, "/api/v1/opportunities");
         assertThat(route.getId()).isEqualTo("opportunities");
