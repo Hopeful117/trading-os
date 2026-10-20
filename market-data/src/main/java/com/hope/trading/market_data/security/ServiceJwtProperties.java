@@ -16,17 +16,27 @@ public class ServiceJwtProperties {
     private String audience;
     private Map<String, String> trusted = new HashMap<>();
     private String authorizedCaller;
+    private Set<String> authorizedCallers = Set.of();
     private Set<String> marketFactsAuthorizedCallers = Set.of();
+    private Set<String> orderBookReplayAuthorizedCallers = Set.of();
 
     public void validate() {
         if (!enabled) {
             return;
         }
         if (audience == null || audience.isBlank()
-                || authorizedCaller == null || authorizedCaller.isBlank()
-                || trusted.get(authorizedCaller) == null
-                || trusted.get(authorizedCaller).isBlank()
+                || (authorizedCallers.isEmpty() && (authorizedCaller == null || authorizedCaller.isBlank()))
+                || (authorizedCallers.isEmpty() && (trusted.get(authorizedCaller) == null
+                || trusted.get(authorizedCaller).isBlank()))
+                || authorizedCallers.stream().anyMatch(caller -> {
+                    String secret = trusted.get(caller);
+                    return secret == null || secret.isBlank();
+                })
                 || marketFactsAuthorizedCallers.stream().anyMatch(caller -> {
+                    String secret = trusted.get(caller);
+                    return secret == null || secret.isBlank();
+                })
+                || orderBookReplayAuthorizedCallers.stream().anyMatch(caller -> {
                     String secret = trusted.get(caller);
                     return secret == null || secret.isBlank();
                 })) {
@@ -39,6 +49,12 @@ public class ServiceJwtProperties {
                 && !marketFactsAuthorizedCallers.isEmpty()) {
             return marketFactsAuthorizedCallers.contains(caller);
         }
-        return authorizedCaller.equals(caller);
+        if (path.startsWith("/internal/v1/order-book/replay/")
+                && !orderBookReplayAuthorizedCallers.isEmpty()) {
+            return orderBookReplayAuthorizedCallers.contains(caller);
+        }
+        return !authorizedCallers.isEmpty()
+                ? authorizedCallers.contains(caller)
+                : authorizedCaller.equals(caller);
     }
 }

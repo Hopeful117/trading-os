@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.marketdata;
 
 import feign.RequestInterceptor;
+import feign.Request;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -33,11 +34,19 @@ public class MarketDataFeignConfiguration {
         return template -> {
             if (template.url().startsWith("/internal/")) {
                 boolean facts = template.url().startsWith("/internal/v1/market-facts/");
+                boolean replay = template.url().startsWith("/internal/v1/order-book/replay/");
                 template.header("X-Service-Authorization", "Bearer " + issueToken(
-                        facts ? intelligenceSecret : secret,
-                        facts ? INTELLIGENCE_ISSUER : CORE_ISSUER));
+                        facts || replay ? intelligenceSecret : secret,
+                        facts || replay ? INTELLIGENCE_ISSUER : CORE_ISSUER));
             }
         };
+    }
+
+    @Bean
+    Request.Options marketDataRequestOptions(
+            @Value("${MARKET_INTELLIGENCE_MARKET_DATA_CONNECT_TIMEOUT_MS:2000}") int connectTimeoutMs,
+            @Value("${MARKET_INTELLIGENCE_MARKET_DATA_READ_TIMEOUT_MS:5000}") int readTimeoutMs) {
+        return new Request.Options(connectTimeoutMs, readTimeoutMs);
     }
 
     private String issueToken(String signingSecret, String issuer) {

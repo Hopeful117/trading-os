@@ -21,5 +21,6 @@ public record ResearchReadiness(
         Map<String, Long> outcomeCountsByHorizonAndStatus,
         long eligibleOutcomeCount,
         long pendingOutcomeCount,
-        long approximateAvailableResearchPopulation
+        long approximateAvailableResearchPopulation,
+        S1Readiness s1
 ) { }
