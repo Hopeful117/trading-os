@@ -1,0 +1,57 @@
+<app-workspace-panel
+  class="workspace-context"
+  labelledBy="workspace-context-title"
+  data-testid="workspace-context"
+>
+  <app-workspace-panel-header>
+    <div workspace-panel-title>
+      <span class="workspace-context-eyebrow">Active trading context</span>
+      <h2 id="workspace-context-title">{{ view.workflowStage }}</h2>
+    </div>
+    <div workspace-panel-meta class="workspace-context-next-action">
+      <span>Next safe action</span>
+      <strong>{{ view.nextAction }}</strong>
+    </div>
+  </app-workspace-panel-header>
+
+  <div class="workspace-context-grid">
+    <app-metric-value
+      class="workspace-context-metric workspace-context-metric--primary"
+      label="Account"
+      [value]="accountValue()"
+      [detail]="accountDetail()"
+    />
+
+    <app-metric-value
+      class="workspace-context-metric workspace-context-metric--primary"
+      label="Market"
+      [value]="marketValue()"
+      [detail]="marketDetail()"
+    />
+
+    <div class="workspace-context-metric">
+      <span class="workspace-context-label">Tradability</span>
+      <app-status-badge [label]="tradabilityLabel()" [tone]="tradabilityTone()" />
+      <small>{{ tradabilityDetail() }}</small>
+    </div>
+
+    <div class="workspace-context-metric">
+      <span class="workspace-context-label">Market data freshness</span>
+      <app-freshness-indicator
+        [freshness]="view.freshness"
+        [updatedAt]="
+          view.market ? (view.market.marketState.lastUpdated | date: 'mediumTime') : null
+        "
+      />
+    </div>
+
+    @if (view.opportunity; as opportunity) {
+      <app-metric-value
+        class="workspace-context-metric workspace-context-metric--opportunity"
+        label="Opportunity context"
+        [value]="opportunity.direction + ' · ' + opportunity.scenario"
+        [detail]="'Provenance ' + opportunity.id + ' · v' + opportunity.version"
+      />
+    }
+  </div>
+</app-workspace-panel>

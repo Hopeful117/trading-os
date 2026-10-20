@@ -49,7 +49,11 @@ import { MarketChartComponent } from '../markets/market-chart-component/market-c
 import { OrderBookComponent } from '../markets/order-book-component/order-book-component';
 import { RecentTradesComponent } from '../markets/recent-trades-component/recent-trades-component';
 import { ManualTradeTicket } from '../trade-planning/manual-trade-ticket/manual-trade-ticket';
-import { WorkspaceContext, WorkspaceContextView } from './workspace-context/workspace-context';
+import {
+  WorkspaceContextStrip,
+  WorkspaceContextView,
+} from './workspace-context/workspace-context-strip';
+import { DisclosureSection } from '../../shared/workstation/disclosure-section/disclosure-section';
 
 export type DecisionWorkspaceContextView =
   | { status: 'select-account' }
@@ -93,7 +97,8 @@ export type HistoryView<T> =
     OrderBookComponent,
     RecentTradesComponent,
     ManualTradeTicket,
-    WorkspaceContext,
+    DisclosureSection,
+    WorkspaceContextStrip,
   ],
   templateUrl: './decision-workspace.html',
   styleUrl: './decision-workspace.scss',

@@ -3,10 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { DecisionContextAccount } from '../../../core/models/decision-context.model';
 import { MarketResponse } from '../../../core/models/market-response';
-import { WorkspaceContext, WorkspaceContextView } from './workspace-context';
+import { WorkspaceContextStrip, WorkspaceContextView } from './workspace-context-strip';
 
-describe('WorkspaceContext', () => {
-  let fixture: ComponentFixture<WorkspaceContext>;
+describe('WorkspaceContextStrip', () => {
+  let fixture: ComponentFixture<WorkspaceContextStrip>;
 
   const account: DecisionContextAccount = {
     accountId: 'account-1',
@@ -57,8 +57,8 @@ describe('WorkspaceContext', () => {
   };
 
   beforeEach(async () => {
-    await TestBed.configureTestingModule({ imports: [WorkspaceContext] }).compileComponents();
-    fixture = TestBed.createComponent(WorkspaceContext);
+    await TestBed.configureTestingModule({ imports: [WorkspaceContextStrip] }).compileComponents();
+    fixture = TestBed.createComponent(WorkspaceContextStrip);
     fixture.componentRef.setInput('view', baseView);
     fixture.detectChanges();
   });
@@ -91,6 +91,109 @@ describe('WorkspaceContext', () => {
     expect(element.textContent).toContain('No market selected');
     expect(element.textContent).toContain('UNKNOWN');
     expect(element.textContent).toContain('Select an account');
+  });
+
+  it.each([
+    ['loading', 'Loading account context', 'Authoritative account data is being resolved.'],
+    ['error', 'Unavailable', 'Account context could not be resolved.'],
+  ] as const)('preserves the account %s state', (accountState, value, detail) => {
+    fixture.componentRef.setInput('view', {
+      ...baseView,
+      account: null,
+      accountState,
+    });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain(value);
+    expect(element.textContent).toContain(detail);
+  });
+
+  it.each([
+    ['loading', 'Loading market', 'Market facts are being resolved after eligibility.'],
+    ['unavailable', 'Unavailable', 'Market facts are currently unavailable.'],
+    ['ineligible', 'Not eligible', 'This account context excludes the selected market.'],
+    ['not-tradable', 'Not tradable', 'Market Data reports that this market cannot be used now.'],
+    ['error', 'Unavailable', 'Market facts are currently unavailable.'],
+  ] as const)('preserves the market %s state', (marketState, value, detail) => {
+    fixture.componentRef.setInput('view', {
+      ...baseView,
+      market: null,
+      marketState,
+    });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain(value);
+    expect(element.textContent).toContain(detail);
+  });
+
+  it('keeps a non-tradable ready market distinct from an ineligible market', () => {
+    fixture.componentRef.setInput('view', {
+      ...baseView,
+      market: {
+        ...market,
+        marketState: { ...market.marketState, tradable: false, tradingStatus: 'HALTED' },
+      },
+    });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const badge = element.querySelector('app-status-badge .status-badge');
+    expect(element.textContent).toContain('Not tradable');
+    expect(element.textContent).toContain('HALTED');
+    expect(badge?.getAttribute('data-tone')).toBe('neutral');
+  });
+
+  it.each([
+    ['ready-tradable', { marketState: 'ready', market }, 'positive'],
+    [
+      'ready-non-tradable',
+      {
+        marketState: 'ready',
+        market: {
+          ...market,
+          marketState: { ...market.marketState, tradable: false },
+        },
+      },
+      'neutral',
+    ],
+    ['ineligible', { marketState: 'ineligible', market: null }, 'warning'],
+    ['not-tradable', { marketState: 'not-tradable', market: null }, 'warning'],
+    ['unknown', { marketState: 'unselected', market: null }, 'neutral'],
+  ] as const)('uses the expected status tone for %s', (_state, marketContext, tone) => {
+    fixture.componentRef.setInput('view', { ...baseView, ...marketContext });
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('app-status-badge .status-badge')
+        ?.getAttribute('data-tone'),
+    ).toBe(tone);
+  });
+
+  it.each([
+    ['RECENT', 'RECENT'],
+    ['STALE', 'STALE'],
+  ] as const)('renders %s freshness without collapsing it into LIVE', (freshness, label) => {
+    fixture.componentRef.setInput('view', { ...baseView, freshness });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const freshnessLabel = element.querySelector('.freshness-indicator__label');
+    expect(freshnessLabel?.textContent).toContain(label);
+    expect(freshnessLabel?.textContent).not.toContain('LIVE');
+  });
+
+  it('exposes a labelled panel and visible state labels for assistive technologies', () => {
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('section.workspace-panel')?.getAttribute('aria-labelledby')).toBe(
+      'workspace-context-title',
+    );
+    expect(element.querySelector('.metric-value__label')?.textContent).toContain('Account');
+    expect(element.querySelector('.status-badge')?.textContent).toContain('Tradable');
+    expect(element.querySelector('.freshness-indicator__label')?.textContent).toContain('LIVE');
   });
 
   it('keeps Opportunity provenance separate from tradability and freshness', () => {

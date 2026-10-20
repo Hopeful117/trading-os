@@ -1,0 +1,33 @@
+:host {
+  display: inline-flex;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.status-badge[data-tone='positive'] {
+  color: var(--workstation-positive, #8dd6b0);
+}
+
+.status-badge[data-tone='warning'] {
+  color: var(--workstation-warning, #f2c67e);
+}
+
+.status-badge[data-tone='negative'] {
+  color: #f09a98;
+}
+
+.status-badge[data-tone='neutral'] {
+  color: var(--workstation-neutral, #b5c1cf);
+}

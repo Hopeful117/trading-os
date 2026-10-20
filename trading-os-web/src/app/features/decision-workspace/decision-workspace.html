@@ -8,7 +8,7 @@
   </header>
 
   @if (workspaceContext$ | async; as workspaceContext) {
-    <app-workspace-context [view]="workspaceContext" />
+    <app-workspace-context-strip [view]="workspaceContext" />
   }
 
   <section class="account-card" aria-labelledby="account-context-title">
@@ -164,22 +164,17 @@
         </section>
 
         @if (view.context.markets.length > view.context.eligibleMarketIds.length) {
-          <section class="context-card excluded-markets" data-testid="excluded-markets">
-            <button
-              type="button"
-              class="disclosure-button"
-              [attr.aria-expanded]="showUnavailableMarkets"
-              (click)="showUnavailableMarkets = !showUnavailableMarkets"
-            >
-              <span>
-                <span class="eyebrow">Backend decision</span>
-                <strong>Unavailable markets</strong>
-              </span>
-              <span class="disclosure-summary">
-                {{ view.context.markets.length - view.context.eligibleMarketIds.length }} hidden
-                <span aria-hidden="true">{{ showUnavailableMarkets ? '−' : '+' }}</span>
-              </span>
-            </button>
+          <app-disclosure-section
+            class="context-card excluded-markets"
+            data-testid="excluded-markets"
+            title="Unavailable markets"
+            eyebrow="Backend decision"
+            [summary]="
+              view.context.markets.length - view.context.eligibleMarketIds.length + ' hidden'
+            "
+            [expanded]="showUnavailableMarkets"
+            (expandedChange)="showUnavailableMarkets = $event"
+          >
             @if (showUnavailableMarkets) {
               <div class="excluded-markets-content">
                 <p>These markets are excluded from this account context and cannot be selected.</p>
@@ -196,7 +191,7 @@
                 }
               </div>
             }
-          </section>
+          </app-disclosure-section>
         }
 
         @if (selectedMarketId; as marketId) {
