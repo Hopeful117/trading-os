@@ -1,0 +1,39 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.metric-value {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  gap: 0.22rem;
+}
+
+.metric-value__label {
+  color: var(--workstation-accent, #78b7eb);
+  font-size: 0.65rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.metric-value strong,
+.metric-value small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-value strong {
+  color: var(--workstation-primary, #f2f7fc);
+  font-size: 0.92rem;
+}
+
+.metric-value__number {
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-value small {
+  color: var(--workstation-muted, #9eb2c7);
+}

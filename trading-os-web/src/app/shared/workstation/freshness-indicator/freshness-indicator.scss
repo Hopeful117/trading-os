@@ -1,0 +1,31 @@
+:host {
+  display: block;
+}
+
+.freshness-indicator {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.freshness-indicator__label {
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.freshness-indicator small {
+  color: var(--workstation-muted, #9eb2c7);
+}
+
+.freshness-indicator[data-freshness='LIVE'] .freshness-indicator__label,
+.freshness-indicator[data-freshness='RECENT'] .freshness-indicator__label {
+  color: var(--workstation-positive, #8dd6b0);
+}
+
+.freshness-indicator[data-freshness='STALE'] .freshness-indicator__label {
+  color: var(--workstation-warning, #f2c67e);
+}
+
+.freshness-indicator[data-freshness='UNAVAILABLE'] .freshness-indicator__label {
+  color: var(--workstation-neutral, #b5c1cf);
+}

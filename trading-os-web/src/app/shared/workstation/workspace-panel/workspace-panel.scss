@@ -1,0 +1,20 @@
+:host {
+  --workstation-border: #304b67;
+  --workstation-muted: #9eb2c7;
+  --workstation-primary: #f2f7fc;
+  --workstation-accent: #78b7eb;
+  --workstation-positive: #8dd6b0;
+  --workstation-warning: #f2c67e;
+  --workstation-neutral: #b5c1cf;
+  display: block;
+}
+
+.workspace-panel {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid var(--workstation-border);
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, #14263a, #101d2b);
+  padding: 0.85rem 1rem;
+  color: var(--workstation-primary);
+}

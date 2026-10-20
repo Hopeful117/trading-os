@@ -1,0 +1,31 @@
+:host {
+  display: block;
+}
+
+.workspace-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.workspace-panel-header__title,
+.workspace-panel-header__meta {
+  min-width: 0;
+}
+
+.workspace-panel-header__meta {
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .workspace-panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .workspace-panel-header__meta {
+    text-align: left;
+  }
+}
