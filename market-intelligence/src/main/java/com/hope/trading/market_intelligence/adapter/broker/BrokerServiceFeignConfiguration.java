@@ -2,11 +2,15 @@ package com.hope.trading.market_intelligence.adapter.broker;
 
 import feign.RequestInterceptor;
 import feign.Request;
+import feign.codec.Decoder;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.cloud.openfeign.support.FeignHttpMessageConverters;
+import org.springframework.cloud.openfeign.support.SpringDecoder;
 
 import javax.crypto.SecretKey;
 import java.time.Instant;
@@ -32,6 +36,13 @@ public class BrokerServiceFeignConfiguration {
             @Value("${MARKET_INTELLIGENCE_BROKER_SERVICE_CONNECT_TIMEOUT_MS:2000}") int connectTimeoutMs,
             @Value("${MARKET_INTELLIGENCE_BROKER_SERVICE_READ_TIMEOUT_MS:5000}") int readTimeoutMs) {
         return new Request.Options(connectTimeoutMs, readTimeoutMs);
+    }
+
+    @Bean
+    Decoder brokerServiceDecoder(ObjectProvider<FeignHttpMessageConverters> converters) {
+        // Initialize the shared converter list before readiness starts parallel Feign calls.
+        converters.getObject().getConverters();
+        return new SpringDecoder(converters);
     }
 
     private String issueToken() {

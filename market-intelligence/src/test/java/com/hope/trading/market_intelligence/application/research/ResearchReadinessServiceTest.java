@@ -27,8 +27,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import org.springframework.http.ResponseEntity;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -349,8 +347,8 @@ class ResearchReadinessServiceTest {
         when(fees.findEligible(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(NOW)))
-                .thenReturn(ResponseEntity.ok(mock(
-                        com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.ScheduleResponse.class)));
+                .thenReturn(mock(
+                        com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.ScheduleResponse.class));
 
         ResearchReadiness readiness = new ResearchReadinessService(
                 properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
@@ -406,8 +404,8 @@ class ResearchReadinessServiceTest {
         when(fees.findEligible(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.eq(cutoff.plus(Duration.ofHours(1))), org.mockito.ArgumentMatchers.eq(NOW)))
-                .thenReturn(ResponseEntity.ok(mock(
-                        com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.ScheduleResponse.class)));
+                .thenReturn(mock(
+                        com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.ScheduleResponse.class));
 
         ResearchReadiness readiness = new ResearchReadinessService(
                 properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
@@ -453,6 +451,7 @@ class ResearchReadinessServiceTest {
         properties.setEnabled(true);
         properties.setMarketIds(List.of(MARKET_ID));
         properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        properties.setMaxRemoteEvidenceChecks(400);
         List<FeatureSnapshot> snapshotsData = new java.util.ArrayList<>();
         for (int index = 0; index < 201; index++) {
             FeatureSnapshot snapshot = mock(FeatureSnapshot.class);
@@ -529,7 +528,7 @@ class ResearchReadinessServiceTest {
                 Clock.fixed(NOW, ZoneOffset.UTC)).current();
 
         assertThat(readiness.s1().replayAvailable()).isZero();
-        verify(replay).replay(org.mockito.ArgumentMatchers.eq(MARKET_ID),
+        verify(replay, org.mockito.Mockito.atMost(4)).replay(org.mockito.ArgumentMatchers.eq(MARKET_ID),
                 org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any());
     }
 

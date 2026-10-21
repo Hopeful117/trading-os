@@ -12,6 +12,7 @@ import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -178,70 +179,100 @@ public class OrderBookEvidenceRepository {
 
     @Transactional(readOnly = true)
     public List<OrderBookEvidence> findTrusted(UUID marketId, int depth, Instant cutoff) {
-        return jdbc.query("""
-                        WITH eligible_sequences AS (
-                            SELECT sequence.sequence_id, sequence.status
-                            FROM historical_order_book_sequence sequence
-                            WHERE sequence.market_id = ? AND sequence.depth = ?
-                              AND EXISTS (
+        Optional<UUID> sequenceId = findUniqueEligibleSequence(marketId, depth, cutoff);
+        if (sequenceId.isEmpty()) return List.of();
+
+        Optional<OrderBookEvidence> anchor = findLatestTrustedSnapshot(
+                marketId, depth, sequenceId.get(), cutoff);
+        if (anchor.isEmpty()) return List.of();
+
+        List<OrderBookEvidence> result = new java.util.ArrayList<>();
+        result.add(anchor.get());
+        result.addAll(findTrustedEvidenceAfter(
+                marketId, depth, sequenceId.get(), anchor.get().sequenceOrdinal(), cutoff));
+        return result;
+    }
+
+    private Optional<UUID> findUniqueEligibleSequence(UUID marketId, int depth, Instant cutoff) {
+        List<UUID> candidates = jdbc.queryForList("""
+                        SELECT sequence.sequence_id
+                        FROM historical_order_book_sequence sequence
+                        WHERE sequence.market_id = ? AND sequence.depth = ?
+                          AND EXISTS (
+                              SELECT 1
+                              FROM historical_order_book_evidence snapshot
+                              WHERE snapshot.market_id = sequence.market_id
+                                AND snapshot.depth = sequence.depth
+                                AND snapshot.sequence_id = sequence.sequence_id
+                                AND snapshot.trusted = true
+                                AND snapshot.evidence_type = 'SNAPSHOT'
+                                AND snapshot.known_at <= ?
+                          )
+                          AND (sequence.status = 'ACTIVE'
+                               OR (sequence.status = 'SEALED' AND EXISTS (
                                    SELECT 1
-                                   FROM historical_order_book_evidence snapshot
-                                   WHERE snapshot.sequence_id = sequence.sequence_id
-                                     AND snapshot.market_id = sequence.market_id
-                                     AND snapshot.depth = sequence.depth
-                                     AND snapshot.trusted = true
-                                     AND snapshot.evidence_type = 'SNAPSHOT'
-                                     AND snapshot.known_at <= ?
-                              )
-                              AND (sequence.status = 'ACTIVE'
-                                   OR (sequence.status = 'SEALED' AND EXISTS (
-                                       SELECT 1
-                                        FROM historical_order_book_evidence latest
-                                        WHERE latest.sequence_id = sequence.sequence_id
-                                          AND latest.market_id = sequence.market_id
-                                          AND latest.depth = sequence.depth
-                                          AND latest.trusted = true
-                                          AND latest.known_at >= ?
-                                   )))
-                        ), selected_sequence AS (
-                            SELECT sequence_id
-                            FROM eligible_sequences
-                            WHERE (SELECT COUNT(*) FROM eligible_sequences) = 1
-                        )
-                        SELECT evidence.evidence_id, evidence.market_id, evidence.provider, evidence.symbol,
-                               evidence.provider_symbol, evidence.depth, evidence.evidence_type, evidence.origin,
-                               evidence.source_start_ordinal, evidence.source_end_ordinal,
-                               evidence.sequence_id, evidence.sequence_ordinal, evidence.provider_sequence,
-                               evidence.occurred_at, evidence.known_at, evidence.bids_payload, evidence.asks_payload,
-                               evidence.checksum, evidence.normalization_version, evidence.content_fingerprint
-                        FROM historical_order_book_evidence evidence
-                        JOIN selected_sequence selected
-                          ON selected.sequence_id = evidence.sequence_id
-                        WHERE evidence.market_id = ? AND evidence.depth = ?
-                          AND evidence.trusted = true
-                          AND evidence.known_at <= ?
-                        ORDER BY evidence.known_at, evidence.sequence_ordinal
-                        """,
-                (result, row) -> new OrderBookEvidence(
-                        result.getObject("evidence_id", UUID.class),
-                        result.getObject("market_id", UUID.class),
-                        MarketProvider.valueOf(result.getString("provider")),
-                        result.getString("symbol"), result.getString("provider_symbol"),
-                        result.getInt("depth"),
-                        OrderBookEvidenceType.valueOf(result.getString("evidence_type")),
-                        OrderBookEvidenceOrigin.valueOf(result.getString("origin")),
-                         result.getObject("source_start_ordinal", Long.class),
-                         result.getObject("source_end_ordinal", Long.class),
-                         result.getObject("sequence_id", UUID.class), result.getLong("sequence_ordinal"),
-                        result.getObject("provider_sequence", Long.class),
-                        result.getTimestamp("occurred_at").toInstant(),
-                        result.getTimestamp("known_at").toInstant(),
-                        OrderBookEvidencePayload.decode(result.getString("bids_payload")),
-                        OrderBookEvidencePayload.decode(result.getString("asks_payload")),
-                        result.getObject("checksum", Long.class),
-                        result.getString("normalization_version"),
-                        result.getString("content_fingerprint")),
-                 marketId, depth, Timestamp.from(cutoff), Timestamp.from(cutoff),
-                 marketId, depth, Timestamp.from(cutoff));
+                                   FROM historical_order_book_evidence latest
+                                   WHERE latest.market_id = sequence.market_id
+                                     AND latest.depth = sequence.depth
+                                     AND latest.sequence_id = sequence.sequence_id
+                                     AND latest.trusted = true
+                                     AND latest.known_at >= ?
+                               )))
+                        LIMIT 2
+                        """, UUID.class, marketId, depth,
+                Timestamp.from(cutoff), Timestamp.from(cutoff));
+        return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
+    }
+
+    private Optional<OrderBookEvidence> findLatestTrustedSnapshot(
+            UUID marketId, int depth, UUID sequenceId, Instant cutoff) {
+        return jdbc.query("""
+                        SELECT evidence_id, market_id, provider, symbol, provider_symbol, depth,
+                               evidence_type, origin, source_start_ordinal, source_end_ordinal,
+                               sequence_id, sequence_ordinal, provider_sequence, occurred_at, known_at,
+                               bids_payload, asks_payload, checksum, normalization_version, content_fingerprint
+                        FROM historical_order_book_evidence
+                        WHERE market_id = ? AND depth = ? AND sequence_id = ?
+                          AND trusted = true AND evidence_type = 'SNAPSHOT' AND known_at <= ?
+                        ORDER BY known_at DESC, sequence_ordinal DESC
+                        LIMIT 1
+                        """, this::map, marketId, depth, sequenceId, Timestamp.from(cutoff))
+                .stream().findFirst();
+    }
+
+    private List<OrderBookEvidence> findTrustedEvidenceAfter(
+            UUID marketId, int depth, UUID sequenceId, long anchorOrdinal, Instant cutoff) {
+        return jdbc.query("""
+                        SELECT evidence_id, market_id, provider, symbol, provider_symbol, depth,
+                               evidence_type, origin, source_start_ordinal, source_end_ordinal,
+                               sequence_id, sequence_ordinal, provider_sequence, occurred_at, known_at,
+                               bids_payload, asks_payload, checksum, normalization_version, content_fingerprint
+                        FROM historical_order_book_evidence
+                        WHERE market_id = ? AND depth = ? AND sequence_id = ?
+                          AND trusted = true AND sequence_ordinal > ? AND known_at <= ?
+                        ORDER BY sequence_ordinal
+                        """, this::map, marketId, depth, sequenceId, anchorOrdinal, Timestamp.from(cutoff));
+    }
+
+    private OrderBookEvidence map(java.sql.ResultSet result, int row) throws java.sql.SQLException {
+        return new OrderBookEvidence(
+                result.getObject("evidence_id", UUID.class),
+                result.getObject("market_id", UUID.class),
+                MarketProvider.valueOf(result.getString("provider")),
+                result.getString("symbol"), result.getString("provider_symbol"),
+                result.getInt("depth"),
+                OrderBookEvidenceType.valueOf(result.getString("evidence_type")),
+                OrderBookEvidenceOrigin.valueOf(result.getString("origin")),
+                result.getObject("source_start_ordinal", Long.class),
+                result.getObject("source_end_ordinal", Long.class),
+                result.getObject("sequence_id", UUID.class), result.getLong("sequence_ordinal"),
+                result.getObject("provider_sequence", Long.class),
+                result.getTimestamp("occurred_at").toInstant(),
+                result.getTimestamp("known_at").toInstant(),
+                OrderBookEvidencePayload.decode(result.getString("bids_payload")),
+                OrderBookEvidencePayload.decode(result.getString("asks_payload")),
+                result.getObject("checksum", Long.class),
+                result.getString("normalization_version"),
+                result.getString("content_fingerprint"));
     }
 }

@@ -94,6 +94,40 @@ class OrderBookEvidencePersistenceTest {
     }
 
     @Test
+    void replayReadStartsAtLatestCheckpointAndExcludesFutureEvidence() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        OrderBookEvidence initial = evidence(marketId, sequenceId, 0, KNOWN_AT,
+                OrderBookEvidenceType.SNAPSHOT, OrderBookEvidenceOrigin.PROVIDER, level("100", "1"));
+        OrderBookEvidence beforeCheckpoint = evidence(marketId, sequenceId, 1,
+                KNOWN_AT.plusSeconds(1), OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER,
+                level("100", "2"));
+        OrderBookEvidence checkpointDelta = evidence(marketId, sequenceId, 2,
+                KNOWN_AT.plusSeconds(299), OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER,
+                level("100", "2.5"));
+        OrderBookEvidence checkpoint = evidence(marketId, sequenceId, 2,
+                KNOWN_AT.plusSeconds(300), OrderBookEvidenceType.SNAPSHOT, OrderBookEvidenceOrigin.CHECKPOINT,
+                level("100", "3"));
+        OrderBookEvidence afterCheckpoint = evidence(marketId, sequenceId, 3,
+                KNOWN_AT.plusSeconds(301), OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER,
+                level("100", "4"));
+        OrderBookEvidence future = evidence(marketId, sequenceId, 4,
+                KNOWN_AT.plusSeconds(302), OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER,
+                level("100", "5"));
+
+        assertThat(evidenceRepository.append(initial)).isTrue();
+        assertThat(evidenceRepository.append(beforeCheckpoint)).isTrue();
+        assertThat(evidenceRepository.append(checkpointDelta)).isTrue();
+        assertThat(evidenceRepository.append(checkpoint)).isTrue();
+        assertThat(evidenceRepository.append(afterCheckpoint)).isTrue();
+        assertThat(evidenceRepository.append(future)).isTrue();
+
+        assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT.plusSeconds(301)))
+                .extracting(OrderBookEvidence::sequenceOrdinal)
+                .containsExactly(2L, 3L);
+    }
+
+    @Test
     void invalidatedLatestSequenceDoesNotFallBackToOlderActiveEvidence() {
         UUID marketId = markets.saveAndFlush(market()).getMarketId();
         UUID oldSequenceId = UUID.randomUUID();
@@ -113,12 +147,19 @@ class OrderBookEvidencePersistenceTest {
     }
 
     private OrderBookEvidence evidence(UUID marketId, UUID sequenceId, long ordinal, Instant knownAt) {
+        return evidence(marketId, sequenceId, ordinal, knownAt, OrderBookEvidenceType.SNAPSHOT,
+                OrderBookEvidenceOrigin.PROVIDER, level("100", "1"));
+    }
+
+    private OrderBookEvidence evidence(UUID marketId, UUID sequenceId, long ordinal, Instant knownAt,
+                                       OrderBookEvidenceType type, OrderBookEvidenceOrigin origin,
+                                       OrderBookLevel bid) {
         OrderBookEvidence value = new OrderBookEvidence(
                 UUID.randomUUID(), marketId, MarketProvider.KRAKEN, "BTC/USD", "PF_XBTUSD", 25,
-                OrderBookEvidenceType.SNAPSHOT, OrderBookEvidenceOrigin.PROVIDER, null, null,
+                type, origin, null, null,
                 sequenceId, ordinal,
                 100L, knownAt.minusSeconds(1), knownAt,
-                List.of(level("100", "1")), List.of(level("101", "1")), null,
+                List.of(bid), List.of(level("101", "1")), null,
                 OrderBookEvidenceFingerprint.NORMALIZATION_VERSION, "pending");
         return new OrderBookEvidence(value.evidenceId(), value.marketId(), value.provider(), value.symbol(),
                 value.providerSymbol(), value.depth(), value.evidenceType(), value.origin(),

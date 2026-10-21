@@ -1,7 +1,6 @@
 package com.hope.trading.market_intelligence.adapter.broker;
 
 import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -13,7 +12,7 @@ import java.util.UUID;
         configuration = BrokerServiceFeignConfiguration.class)
 public interface HistoricalFeeScheduleClient {
     @GetMapping("/internal/v1/historical-fees/eligible")
-    ResponseEntity<ScheduleResponse> findEligible(
+    ScheduleResponse findEligible(
             @RequestParam UUID brokerAccountId,
             @RequestParam String provider,
             @RequestParam String productType,
