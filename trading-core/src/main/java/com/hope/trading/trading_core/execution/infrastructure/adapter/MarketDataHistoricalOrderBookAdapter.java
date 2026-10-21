@@ -17,7 +17,7 @@ public final class MarketDataHistoricalOrderBookAdapter implements HistoricalOrd
 
     @Override
     public Replay replay(UUID marketId, int depth, Instant executionCutoff) {
-        HistoricalOrderBookClient.ReplayResponse response = client.replay(marketId, depth, executionCutoff);
+        HistoricalOrderBookClient.ReplayResponse response = client.replay(marketId, depth, executionCutoff, null);
         Status status;
         try {
             status = Status.valueOf(response.status());

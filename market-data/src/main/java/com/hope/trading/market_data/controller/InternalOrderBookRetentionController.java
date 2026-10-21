@@ -3,6 +3,8 @@ package com.hope.trading.market_data.controller;
 import com.hope.trading.market_data.model.OrderBookEvidenceDependency;
 import com.hope.trading.market_data.model.OrderBookRetentionHold;
 import com.hope.trading.market_data.model.OrderBookRetirementCandidate;
+import com.hope.trading.market_data.model.OrderBookReplayArtifact;
+import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
 import com.hope.trading.market_data.service.OrderBookStorageHealthService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,12 @@ public class InternalOrderBookRetentionController {
     @PostMapping("/retire")
     public ResponseEntity<Integer> retire(@RequestBody RetirementRequest request) {
         return ResponseEntity.ok(retentionService.retire(request.dryRunFingerprint(), request.candidate()));
+    }
+
+    @PostMapping("/artifacts")
+    public ResponseEntity<OrderBookReplayArtifact> promote(@RequestBody PromotionRequest request) {
+        return ResponseEntity.ok(retentionService.promote(request.replay(), request.semanticIdentity(),
+                request.promotionReason()));
     }
 
     @PostMapping("/dependencies")
@@ -76,5 +84,9 @@ public class InternalOrderBookRetentionController {
     }
 
     public record RetirementRequest(String dryRunFingerprint, OrderBookRetirementCandidate candidate) {
+    }
+
+    public record PromotionRequest(OrderBookReplayResult replay, String semanticIdentity,
+                                   String promotionReason) {
     }
 }

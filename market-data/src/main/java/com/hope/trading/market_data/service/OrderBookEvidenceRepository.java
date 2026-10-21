@@ -126,14 +126,7 @@ public class OrderBookEvidenceRepository {
         jdbc.update("""
                         UPDATE historical_order_book_sequence target
                         SET status = 'INVALIDATED', sealed_at = NULL, invalidated_at = ?, invalidation_reason = ?
-                        WHERE target.status = 'ACTIVE'
-                          AND EXISTS (
-                              SELECT 1
-                              FROM historical_order_book_sequence source
-                              WHERE source.sequence_id = ?
-                                AND source.market_id = target.market_id
-                                AND source.depth = target.depth
-                          )
+                        WHERE target.sequence_id = ? AND target.status = 'ACTIVE'
                         """,
                 Timestamp.from(invalidatedAt), reason, sequenceId);
     }
@@ -193,6 +186,13 @@ public class OrderBookEvidenceRepository {
         return result;
     }
 
+    @Transactional(readOnly = true)
+    public boolean isCurrentEligibleSequence(UUID sequenceId, UUID marketId, int depth, Instant cutoff) {
+        return findUniqueEligibleSequence(marketId, depth, cutoff)
+                .filter(sequenceId::equals)
+                .isPresent();
+    }
+
     private Optional<UUID> findUniqueEligibleSequence(UUID marketId, int depth, Instant cutoff) {
         List<UUID> candidates = jdbc.queryForList("""
                         SELECT sequence.sequence_id
@@ -218,10 +218,17 @@ public class OrderBookEvidenceRepository {
                                      AND latest.trusted = true
                                      AND latest.known_at >= ?
                                )))
-                        LIMIT 2
-                        """, UUID.class, marketId, depth,
+                          """ + lockingClause() + "\n LIMIT 2", UUID.class, marketId, depth,
                 Timestamp.from(cutoff), Timestamp.from(cutoff));
         return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
+    }
+
+    private String lockingClause() {
+        try (var connection = dataSource.getConnection()) {
+            return connection.getMetaData().getDatabaseProductName().contains("H2") ? "" : " FOR SHARE";
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException("Unable to determine database product", exception);
+        }
     }
 
     private Optional<OrderBookEvidence> findLatestTrustedSnapshot(

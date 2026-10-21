@@ -11,6 +11,7 @@ public class OrderBookRetentionProperties {
     private long minimumFreeBytes = 10L * 1024L * 1024L * 1024L;
     private int retirementBatchSize = 1000;
     private Duration invalidatedDiagnosticRetention = Duration.ofDays(30);
+    private String artifactSigningKey = "";
 
     public boolean isDestructiveRetirementEnabled() {
         return destructiveRetirementEnabled;
@@ -59,5 +60,20 @@ public class OrderBookRetentionProperties {
             throw new IllegalArgumentException("invalidatedDiagnosticRetention cannot be negative or null");
         }
         this.invalidatedDiagnosticRetention = invalidatedDiagnosticRetention;
+    }
+
+    public String getArtifactSigningKey() {
+        return artifactSigningKey;
+    }
+
+    public void setArtifactSigningKey(String artifactSigningKey) {
+        this.artifactSigningKey = artifactSigningKey == null ? "" : artifactSigningKey;
+    }
+
+    public String requireArtifactSigningKey() {
+        if (artifactSigningKey.isBlank()) {
+            throw new IllegalStateException("order-book artifact signing key is required");
+        }
+        return artifactSigningKey;
     }
 }

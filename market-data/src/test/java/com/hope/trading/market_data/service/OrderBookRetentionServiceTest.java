@@ -31,8 +31,11 @@ class OrderBookRetentionServiceTest {
     void promotesAvailableReplayWithStableProvenance() {
         OrderBookRetentionRepository repository = mock(OrderBookRetentionRepository.class);
         when(repository.saveArtifact(any())).thenReturn(true);
+        when(repository.saveDependency(any())).thenReturn(true);
         when(repository.matchesPersistedEvidence(any())).thenReturn(true);
-        OrderBookRetentionService service = service(repository);
+        OrderBookEvidenceRepository evidenceRepository = mock(OrderBookEvidenceRepository.class);
+        when(evidenceRepository.isCurrentEligibleSequence(any(), any(), any(Integer.class), any())).thenReturn(true);
+        OrderBookRetentionService service = service(repository, evidenceRepository);
 
         var artifact = service.promote(replay(), "research:sample:1", "freeze research sample");
 
@@ -46,7 +49,7 @@ class OrderBookRetentionServiceTest {
     @Test
     void rejectsUnavailableReplay() {
         OrderBookRetentionRepository repository = mock(OrderBookRetentionRepository.class);
-        OrderBookRetentionService service = service(repository);
+        OrderBookRetentionService service = service(repository, mock(OrderBookEvidenceRepository.class));
         OrderBookReplayResult replay = OrderBookReplayResult.unavailable(MARKET_ID, 25, CUTOFF, "missing");
 
         assertThatThrownBy(() -> service.promote(replay, "research:sample:1", "freeze"))
@@ -57,7 +60,7 @@ class OrderBookRetentionServiceTest {
     @Test
     void rejectsReplayThatUsesLookAheadData() {
         OrderBookRetentionRepository repository = mock(OrderBookRetentionRepository.class);
-        OrderBookRetentionService service = service(repository);
+        OrderBookRetentionService service = service(repository, mock(OrderBookEvidenceRepository.class));
         OrderBookReplayResult replay = new OrderBookReplayResult(
                 OrderBookReplayResult.ReplayStatus.AVAILABLE, MARKET_ID, 25, SEQUENCE_ID, CUTOFF,
                 CUTOFF.plusSeconds(1), CUTOFF, 0L, 2L, "KRAKEN", "PF_XBTUSD",
@@ -74,7 +77,7 @@ class OrderBookRetentionServiceTest {
     void previewsOnlyRepositorySelectedCandidatesAndRecordsDryRun() {
         OrderBookRetentionRepository repository = mock(OrderBookRetentionRepository.class);
         when(repository.findRetirementCandidates(any())).thenReturn(List.of());
-        OrderBookRetentionService service = service(repository);
+        OrderBookRetentionService service = service(repository, mock(OrderBookEvidenceRepository.class));
 
         var preview = service.previewRetirement();
 
@@ -90,7 +93,7 @@ class OrderBookRetentionServiceTest {
         properties.setDestructiveRetirementEnabled(true);
         when(repository.matchesDryRun(any(), any())).thenReturn(false);
         when(repository.retirementDetails(any())).thenReturn("sequence:0-0;artifacts=[];dependencies=[];holds=[]");
-        OrderBookRetentionService service = new OrderBookRetentionService(repository, properties,
+        OrderBookRetentionService service = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class), properties,
                 Clock.fixed(NOW, ZoneOffset.UTC));
 
         var candidate = new com.hope.trading.market_data.model.OrderBookRetirementCandidate(
@@ -111,7 +114,7 @@ class OrderBookRetentionServiceTest {
         when(repository.findDependency("dependency")).thenReturn(java.util.Optional.of(
                 new OrderBookEvidenceDependency(UUID.randomUUID(), "dependency", "RESEARCH", "one", artifactId,
                         null, OrderBookDependencyState.PROTECTED, "reason", NOW, null)));
-        OrderBookRetentionService service = service(repository);
+        OrderBookRetentionService service = service(repository, mock(OrderBookEvidenceRepository.class));
 
         assertThatThrownBy(() -> service.protectDependency("dependency", "RESEARCH", "two", artifactId,
                 null, "reason"))
@@ -126,7 +129,7 @@ class OrderBookRetentionServiceTest {
         when(repository.saveHold(any())).thenReturn(false);
         when(repository.findHold("hold")).thenReturn(java.util.Optional.of(
                 new OrderBookRetentionHold(UUID.randomUUID(), "hold", artifactId, null, "original", NOW, null)));
-        OrderBookRetentionService service = service(repository);
+        OrderBookRetentionService service = service(repository, mock(OrderBookEvidenceRepository.class));
 
         assertThatThrownBy(() -> service.addHold("hold", artifactId, null, "changed"))
                 .isInstanceOf(IllegalStateException.class)
@@ -147,9 +150,9 @@ class OrderBookRetentionServiceTest {
                 com.hope.trading.market_data.model.OrderBookSequenceStatus.SEALED,
                 2, 0, 1, CUTOFF, CUTOFF, null);
 
-        var first = new OrderBookRetentionService(repository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+        var first = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class), properties, Clock.fixed(NOW, ZoneOffset.UTC));
         assertThat(first.retire("dry-run", candidate)).isEqualTo(1);
-        var restarted = new OrderBookRetentionService(repository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+        var restarted = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class), properties, Clock.fixed(NOW, ZoneOffset.UTC));
         assertThat(restarted.retire("dry-run", candidate)).isZero();
 
         verify(repository).recordPartialOperation(any(), org.mockito.ArgumentMatchers.eq(1));
@@ -157,8 +160,15 @@ class OrderBookRetentionServiceTest {
     }
 
     private OrderBookRetentionService service(OrderBookRetentionRepository repository) {
+        return service(repository, mock(OrderBookEvidenceRepository.class));
+    }
+
+    private OrderBookRetentionService service(OrderBookRetentionRepository repository,
+                                              OrderBookEvidenceRepository evidenceRepository) {
         var properties = new com.hope.trading.market_data.config.OrderBookRetentionProperties();
-        return new OrderBookRetentionService(repository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+        properties.setArtifactSigningKey("story-0142-test-signing-key");
+        return new OrderBookRetentionService(repository, evidenceRepository, properties,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private OrderBookReplayResult replay() {

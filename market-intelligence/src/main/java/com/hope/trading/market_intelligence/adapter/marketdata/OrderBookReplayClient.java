@@ -17,7 +17,8 @@ public interface OrderBookReplayClient {
     ReplayResponse replay(
             @PathVariable UUID marketId,
             @RequestParam int depth,
-            @RequestParam Instant asOf
+            @RequestParam Instant asOf,
+            @RequestParam(required = false) String semanticIdentity
     );
 
     record ReplayResponse(
@@ -34,6 +35,8 @@ public interface OrderBookReplayClient {
             String providerSymbol,
             String normalizationVersion,
             String sourceEvidenceFingerprint,
+            String sourceTrustStatus,
+            List<String> sourceEvidenceFingerprints,
             List<LevelResponse> bids,
             List<LevelResponse> asks,
             String reason

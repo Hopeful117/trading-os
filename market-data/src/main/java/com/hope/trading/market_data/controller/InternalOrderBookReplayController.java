@@ -25,10 +25,11 @@ public class InternalOrderBookReplayController {
     public ResponseEntity<OrderBookReplayResult> replay(
             @PathVariable UUID marketId,
             @RequestParam int depth,
-            @RequestParam Instant asOf
+            @RequestParam Instant asOf,
+            @RequestParam(required = false) String semanticIdentity
     ) {
         try {
-            return ResponseEntity.ok(replayService.replay(marketId, depth, asOf));
+            return ResponseEntity.ok(replayService.replay(marketId, depth, asOf, semanticIdentity));
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Invalid Order Book replay request", exception);
