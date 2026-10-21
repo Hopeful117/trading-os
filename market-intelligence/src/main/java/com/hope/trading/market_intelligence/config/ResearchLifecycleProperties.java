@@ -19,6 +19,7 @@ public class ResearchLifecycleProperties {
     private Duration fixedDelay = Duration.ofMinutes(1);
     private Duration readinessCacheDuration = Duration.ofSeconds(30);
     private int readinessRemoteConcurrency = 8;
+    private Duration readinessRemoteTimeout = Duration.ofSeconds(20);
     private int maxRemoteEvidenceChecks = 512;
     private S1FeeCoverage feeCoverage = new S1FeeCoverage();
 
@@ -40,6 +41,9 @@ public class ResearchLifecycleProperties {
         }
         if (readinessRemoteConcurrency < 1) {
             throw new IllegalStateException("Research readiness remote concurrency must be positive");
+        }
+        if (readinessRemoteTimeout.isZero() || readinessRemoteTimeout.isNegative()) {
+            throw new IllegalStateException("Research readiness remote timeout must be positive");
         }
         if (maxRemoteEvidenceChecks < 1) {
             throw new IllegalStateException("Research readiness remote evidence budget must be positive");
@@ -108,6 +112,14 @@ public class ResearchLifecycleProperties {
 
     public void setReadinessRemoteConcurrency(int readinessRemoteConcurrency) {
         this.readinessRemoteConcurrency = readinessRemoteConcurrency;
+    }
+
+    public Duration getReadinessRemoteTimeout() {
+        return readinessRemoteTimeout;
+    }
+
+    public void setReadinessRemoteTimeout(Duration readinessRemoteTimeout) {
+        this.readinessRemoteTimeout = readinessRemoteTimeout;
     }
 
     public int getMaxRemoteEvidenceChecks() {

@@ -144,6 +144,11 @@ describe('ResearchOverview', () => {
         (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
       )
       .flush('unavailable', { status: 503, statusText: 'Unavailable' });
+    httpMock
+      .expectOne(
+        (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
+      )
+      .flush(integrityResponse);
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Readiness unavailable');
@@ -155,18 +160,42 @@ describe('ResearchOverview', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Loading readiness');
 
-    const requests = httpMock.match(
+    const readinessRequests = httpMock.match(
       (candidate) =>
         candidate.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
     );
-    expect(requests).toHaveLength(1);
-    requests[0].flush(response);
     const integrityRequests = httpMock.match(
       (candidate) =>
         candidate.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
     );
+    expect(readinessRequests).toHaveLength(1);
     expect(integrityRequests).toHaveLength(1);
+    readinessRequests[0].flush(response);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('S1 ready');
+    expect(fixture.nativeElement.textContent).toContain('Acquisition integrity is unknown');
     integrityRequests[0].flush(integrityResponse);
+  });
+
+  it('starts integrity before readiness completes without delaying readiness rendering', () => {
+    fixture.componentInstance.refresh();
+    fixture.detectChanges();
+
+    const readinessRequest = httpMock.expectOne(
+      (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/readiness`,
+    );
+    const integrityRequest = httpMock.expectOne(
+      (request) => request.url === `${environment.gatewayUrl}v1/intelligence/research/integrity`,
+    );
+
+    integrityRequest.flush(integrityResponse);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Loading readiness');
+
+    readinessRequest.flush(response);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('S1 ready');
+    expect(fixture.nativeElement.textContent).toContain('HEALTHY');
   });
 
   it('keeps readiness visible when the integrity projection is unavailable', () => {
