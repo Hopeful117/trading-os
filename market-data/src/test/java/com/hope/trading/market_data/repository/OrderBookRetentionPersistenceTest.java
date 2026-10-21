@@ -199,6 +199,7 @@ class OrderBookRetentionPersistenceTest {
 
         OrderBookReplayResult canonical = replayService.replay(marketId, 25, KNOWN_AT);
         retentionService.promote(canonical, "research:sample:artifact-read", "test artifact read");
+        assertThat(retentionService.isReusableArtifact("research:sample:artifact-read")).isTrue();
         assertThat(retentionRepository.findDependency("artifact:research:sample:artifact-read"))
                 .get().extracting(OrderBookEvidenceDependency::state)
                 .isEqualTo(OrderBookDependencyState.PROTECTED);

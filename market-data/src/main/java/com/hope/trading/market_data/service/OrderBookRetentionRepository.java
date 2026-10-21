@@ -9,6 +9,8 @@ import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.model.OrderBookSequenceStatus;
 import com.hope.trading.market_data.config.OrderBookRetentionProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,7 @@ import java.util.UUID;
 
 @Repository
 public class OrderBookRetentionRepository {
+    private static final Logger log = LoggerFactory.getLogger(OrderBookRetentionRepository.class);
     private final JdbcTemplate jdbc;
     private final DataSource dataSource;
     private final OrderBookRetentionProperties properties;
@@ -71,10 +74,13 @@ public class OrderBookRetentionRepository {
                 SELECT market_id, provider, provider_symbol, depth, sequence_id, sequence_ordinal,
                        occurred_at, known_at, normalization_version, trusted, content_fingerprint,
                        evidence_type, bids_payload, asks_payload
-                  FROM historical_order_book_evidence
-                 WHERE sequence_id = ? AND sequence_ordinal BETWEEN ? AND ?
+                 FROM historical_order_book_evidence
+                 WHERE sequence_id = ?
+                   AND ((sequence_ordinal = ? AND evidence_type = 'SNAPSHOT')
+                        OR (sequence_ordinal > ? AND sequence_ordinal <= ? AND evidence_type = 'DELTA'))
+                   AND known_at <= ?
                  ORDER BY sequence_ordinal
-                """, (result, row) -> new PersistedEvidence(result.getObject("market_id", UUID.class),
+                 """, (result, row) -> new PersistedEvidence(result.getObject("market_id", UUID.class),
                         result.getString("provider"), result.getString("provider_symbol"),
                         result.getInt("depth"), result.getObject("sequence_id", UUID.class),
                         result.getLong("sequence_ordinal"), result.getTimestamp("occurred_at").toInstant(),
@@ -82,7 +88,8 @@ public class OrderBookRetentionRepository {
                          result.getBoolean("trusted"), result.getString("content_fingerprint"),
                          result.getString("evidence_type"), OrderBookEvidencePayload.decode(result.getString("bids_payload")),
                          OrderBookEvidencePayload.decode(result.getString("asks_payload"))), replay.sequenceId(),
-                replay.sourceStartOrdinal(), replay.sourceEndOrdinal());
+                 replay.sourceStartOrdinal(), replay.sourceStartOrdinal(), replay.sourceEndOrdinal(),
+                 Timestamp.from(replay.evaluationCutoff()));
         List<String> fingerprints = evidence.stream().map(PersistedEvidence::fingerprint).toList();
         boolean contiguous = evidence.stream().findFirst()
                 .map(first -> evidence.size() == replay.sourceEndOrdinal() - replay.sourceStartOrdinal() + 1
@@ -103,9 +110,15 @@ public class OrderBookRetentionRepository {
                 replay.latestOccurredAt().equals(evidence.getLast().occurredAt())
                         && replay.latestKnownAt().equals(evidence.getLast().knownAt())).orElse(false);
         boolean payload = !verifyPayload || canonicalPayloadMatches(evidence, replay.depth(), replay.bids(), replay.asks());
-        return fingerprints.equals(replay.sourceEvidenceFingerprints())
-                && fingerprint(fingerprints).equals(replay.sourceEvidenceFingerprint())
-                && contiguous && metadata && latest && payload;
+        boolean fingerprintsMatch = fingerprints.equals(replay.sourceEvidenceFingerprints());
+        boolean aggregateFingerprintMatch = fingerprint(fingerprints).equals(replay.sourceEvidenceFingerprint());
+        boolean valid = fingerprintsMatch && aggregateFingerprintMatch && contiguous && metadata && latest && payload;
+        if (!valid) {
+            log.warn("Replay evidence mismatch sequence={} start={} end={} rows={} fingerprints={} aggregate={} contiguous={} metadata={} latest={} payload={}",
+                    replay.sequenceId(), replay.sourceStartOrdinal(), replay.sourceEndOrdinal(), evidence.size(),
+                    fingerprintsMatch, aggregateFingerprintMatch, contiguous, metadata, latest, payload);
+        }
+        return valid;
     }
 
     @Transactional(readOnly = true)

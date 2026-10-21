@@ -23,16 +23,25 @@ public class OrderBookRetentionService {
     private static final String ARTIFACT_SCHEMA_VERSION = "order-book-replay-artifact-v2";
     private final OrderBookRetentionRepository repository;
     private final OrderBookEvidenceRepository evidenceRepository;
+    private final OrderBookReplayService replayService;
     private final OrderBookRetentionProperties properties;
     private final Clock clock;
 
     public OrderBookRetentionService(OrderBookRetentionRepository repository,
                                      OrderBookEvidenceRepository evidenceRepository,
+                                     OrderBookReplayService replayService,
                                      OrderBookRetentionProperties properties, Clock clock) {
         this.repository = repository;
         this.evidenceRepository = evidenceRepository;
+        this.replayService = replayService;
         this.properties = properties;
         this.clock = clock;
+    }
+
+    @Transactional
+    public OrderBookReplayArtifact promoteCanonical(UUID marketId, int depth, Instant cutoff,
+                                                    String semanticIdentity, String promotionReason) {
+        return promote(replayService.replay(marketId, depth, cutoff), semanticIdentity, promotionReason);
     }
 
     @Transactional
@@ -97,6 +106,16 @@ public class OrderBookRetentionService {
         protectDependency("artifact:" + semanticIdentity, "REPLAY_ARTIFACT", semanticIdentity,
                 promoted.artifactId(), promoted.sequenceId(), "promoted replay artifact source protection");
         return promoted;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isReusableArtifact(String semanticIdentity) {
+        if (semanticIdentity == null || semanticIdentity.isBlank()) {
+            return false;
+        }
+        return repository.findArtifact(semanticIdentity)
+                .filter(repository::matchesArtifactFingerprint)
+                .isPresent();
     }
 
     @Transactional

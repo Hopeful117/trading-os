@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/internal/v1/order-book/retention")
@@ -45,6 +46,17 @@ public class InternalOrderBookRetentionController {
     public ResponseEntity<OrderBookReplayArtifact> promote(@RequestBody PromotionRequest request) {
         return ResponseEntity.ok(retentionService.promote(request.replay(), request.semanticIdentity(),
                 request.promotionReason()));
+    }
+
+    @PostMapping("/artifacts/canonical")
+    public ResponseEntity<OrderBookReplayArtifact> promoteCanonical(@RequestBody CanonicalPromotionRequest request) {
+        return ResponseEntity.ok(retentionService.promoteCanonical(request.marketId(), request.depth(),
+                request.cutoff(), request.semanticIdentity(), request.promotionReason()));
+    }
+
+    @GetMapping("/artifacts/{semanticIdentity}/reusable")
+    public ResponseEntity<Boolean> isReusableArtifact(@PathVariable String semanticIdentity) {
+        return ResponseEntity.ok(retentionService.isReusableArtifact(semanticIdentity));
     }
 
     @PostMapping("/dependencies")
@@ -88,5 +100,9 @@ public class InternalOrderBookRetentionController {
 
     public record PromotionRequest(OrderBookReplayResult replay, String semanticIdentity,
                                    String promotionReason) {
+    }
+
+    public record CanonicalPromotionRequest(UUID marketId, int depth, Instant cutoff,
+                                            String semanticIdentity, String promotionReason) {
     }
 }

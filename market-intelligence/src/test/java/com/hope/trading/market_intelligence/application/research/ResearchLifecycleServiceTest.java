@@ -61,7 +61,8 @@ class ResearchLifecycleServiceTest {
 
         ResearchLifecycleService service = new ResearchLifecycleService(
                 properties, executions, executionRepository, mock(FeatureSnapshotProjectionService.class),
-                snapshots, mock(MarketOutcomeEvaluationService.class), Clock.fixed(NOW, ZoneOffset.UTC));
+                snapshots, mock(MarketOutcomeEvaluationService.class), mock(ResearchArtifactPopulationService.class),
+                Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.runOnce();
 
@@ -74,13 +75,57 @@ class ResearchLifecycleServiceTest {
     }
 
     @Test
+    void populatesArtifactsWithTheAlignedObservationCutoff() {
+        ResearchLifecycleProperties properties = validProperties();
+        AnalysisExecutionService executions = mock(AnalysisExecutionService.class);
+        AnalysisExecutionRepository executionRepository = mock(AnalysisExecutionRepository.class);
+        when(executionRepository.findByIdempotencyKey(any())).thenReturn(Optional.of(mock(AnalysisExecution.class)));
+        when(executionRepository.findByResearchScope(any(), any(), any(), any())).thenReturn(List.of());
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(any(), any(), any(), any(), any())).thenReturn(List.of());
+        ResearchArtifactPopulationService population = mock(ResearchArtifactPopulationService.class);
+
+        ResearchLifecycleService service = new ResearchLifecycleService(
+                properties, executions, executionRepository, mock(FeatureSnapshotProjectionService.class),
+                snapshots, mock(MarketOutcomeEvaluationService.class), population,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.runOnce();
+
+        verify(population).populate(Instant.parse("2026-10-16T10:00:00Z"));
+    }
+
+    @Test
+    void populationFailureDoesNotStopTheResearchLifecycle() {
+        ResearchLifecycleProperties properties = validProperties();
+        AnalysisExecutionService executions = mock(AnalysisExecutionService.class);
+        AnalysisExecutionRepository executionRepository = mock(AnalysisExecutionRepository.class);
+        when(executionRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
+        when(executionRepository.findByResearchScope(any(), any(), any(), any())).thenReturn(List.of());
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(any(), any(), any(), any(), any())).thenReturn(List.of());
+        ResearchArtifactPopulationService population = mock(ResearchArtifactPopulationService.class);
+        doThrow(new RuntimeException("population unavailable")).when(population).populate(any());
+
+        ResearchLifecycleService service = new ResearchLifecycleService(
+                properties, executions, executionRepository, mock(FeatureSnapshotProjectionService.class),
+                snapshots, mock(MarketOutcomeEvaluationService.class), population,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.runOnce();
+
+        verify(executions).create(any(), any(IdempotencyKey.class), anyString(), anyString());
+    }
+
+    @Test
     void doesNotSubmitWhenTheLifecycleIsDisabled() {
         ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
         AnalysisExecutionService executions = mock(AnalysisExecutionService.class);
         ResearchLifecycleService service = new ResearchLifecycleService(
                 properties, executions, mock(AnalysisExecutionRepository.class),
                 mock(FeatureSnapshotProjectionService.class), mock(FeatureSnapshotRepository.class),
-                mock(MarketOutcomeEvaluationService.class), Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(MarketOutcomeEvaluationService.class), mock(ResearchArtifactPopulationService.class),
+                Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.runOnce();
 
@@ -101,7 +146,8 @@ class ResearchLifecycleServiceTest {
 
         ResearchLifecycleService service = new ResearchLifecycleService(
                 properties, executions, executionRepository, mock(FeatureSnapshotProjectionService.class),
-                snapshots, mock(MarketOutcomeEvaluationService.class), Clock.fixed(NOW, ZoneOffset.UTC));
+                snapshots, mock(MarketOutcomeEvaluationService.class), mock(ResearchArtifactPopulationService.class),
+                Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.runOnce();
 
@@ -127,7 +173,7 @@ class ResearchLifecycleServiceTest {
         ResearchLifecycleService service = new ResearchLifecycleService(
                 properties, mock(AnalysisExecutionService.class), executionRepository,
                 mock(FeatureSnapshotProjectionService.class), snapshots, outcomes,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(ResearchArtifactPopulationService.class), Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.runOnce();
 
@@ -156,7 +202,7 @@ class ResearchLifecycleServiceTest {
         ResearchLifecycleService service = new ResearchLifecycleService(
                 properties, mock(AnalysisExecutionService.class), executionRepository,
                 projections, snapshots, mock(MarketOutcomeEvaluationService.class),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(ResearchArtifactPopulationService.class), Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.runOnce();
 
@@ -181,7 +227,7 @@ class ResearchLifecycleServiceTest {
         ResearchLifecycleService service = new ResearchLifecycleService(
                 properties, mock(AnalysisExecutionService.class), executionRepository,
                 mock(FeatureSnapshotProjectionService.class), snapshots, outcomes,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(ResearchArtifactPopulationService.class), Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.runOnce();
 
@@ -205,7 +251,7 @@ class ResearchLifecycleServiceTest {
         ResearchLifecycleService service = new ResearchLifecycleService(
                 properties, mock(AnalysisExecutionService.class), executionRepository,
                 projections, snapshots, mock(MarketOutcomeEvaluationService.class),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(ResearchArtifactPopulationService.class), Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.runOnce();
 
