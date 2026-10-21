@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Base64;
+import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
 
 class ServiceJwtServiceTest {
@@ -32,6 +35,30 @@ class ServiceJwtServiceTest {
         assertThatThrownBy(() -> service.validate("not-a-token", "broker-service"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Invalid service credential");
+    }
+
+    @Test
+    void acceptsMarketIntelligenceTokenContract() {
+        var properties = properties();
+        properties.setTrusted(Map.of("market-intelligence", SECRET));
+        var service = new ServiceJwtService(properties);
+        var now = new Date();
+        var token = Jwts.builder()
+                .issuer("market-intelligence")
+                .subject("market-intelligence")
+                .audience().add("broker-service").and()
+                .claim("type", "service")
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + 60_000))
+                .id(UUID.randomUUID().toString())
+                .signWith(Keys.hmacShaKeyFor(Base64.getDecoder().decode(SECRET)))
+                .compact();
+
+        var principal = service.validate(token, "broker-service");
+
+        assertThat(principal.serviceName()).isEqualTo("market-intelligence");
+        assertThat(principal.audience()).isEqualTo("broker-service");
+        assertThat(principal.actorId()).isNull();
     }
 
     private ServiceJwtProperties properties() {
