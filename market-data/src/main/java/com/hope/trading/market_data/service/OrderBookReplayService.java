@@ -3,9 +3,11 @@ package com.hope.trading.market_data.service;
 import com.hope.trading.market_data.model.OrderBookEvidence;
 import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import com.hope.trading.market_data.model.OrderBookLevel;
+import com.hope.trading.market_data.model.OrderBookReplayArtifact;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -25,14 +27,33 @@ import java.util.UUID;
 @Slf4j
 public class OrderBookReplayService {
     private final OrderBookEvidenceRepository repository;
+    private final OrderBookRetentionRepository retentionRepository;
 
-    public OrderBookReplayService(OrderBookEvidenceRepository repository) {
+    public OrderBookReplayService(OrderBookEvidenceRepository repository,
+                                  OrderBookRetentionRepository retentionRepository) {
         this.repository = repository;
+        this.retentionRepository = retentionRepository;
     }
 
+    // Artifact eligibility uses FOR SHARE so invalidation cannot commit mid-replay.
+    @Transactional
     public OrderBookReplayResult replay(UUID marketId, int depth, Instant cutoff) {
+        return replay(marketId, depth, cutoff, null);
+    }
+
+    @Transactional
+    public OrderBookReplayResult replay(UUID marketId, int depth, Instant cutoff, String semanticIdentity) {
         if (marketId == null || depth < 1 || cutoff == null) {
             throw new IllegalArgumentException("marketId, depth and cutoff are required");
+        }
+        if (semanticIdentity != null && !semanticIdentity.isBlank()) {
+            var artifactReplay = retentionRepository.findArtifact(semanticIdentity)
+                    .filter(value -> matchesRequest(value, marketId, depth, cutoff))
+                     .filter(value -> repository.isCurrentEligibleSequence(
+                             value.sequenceId(), marketId, depth, cutoff))
+                     .filter(retentionRepository::matchesArtifactFingerprint)
+                     .map(this::fromArtifact);
+            if (artifactReplay.isPresent()) return artifactReplay.get();
         }
         long startedAt = System.nanoTime();
         long repositoryStartedAt = System.nanoTime();
@@ -109,6 +130,33 @@ public class OrderBookReplayService {
                 marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
                 elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
         return result;
+    }
+
+    private boolean matchesRequest(OrderBookReplayArtifact artifact, UUID marketId, int depth, Instant cutoff) {
+        return "TRUSTED".equals(artifact.sourceTrustStatus())
+                && artifact.marketId().equals(marketId)
+                && artifact.depth() == depth
+                && artifact.evaluationCutoff().equals(cutoff)
+                 && artifact.artifactSchemaVersion().equals("order-book-replay-artifact-v2")
+                && artifact.normalizationVersion().equals(OrderBookEvidenceFingerprint.NORMALIZATION_VERSION)
+                && artifact.latestOccurredAt() != null
+                && artifact.latestKnownAt() != null
+                && !artifact.latestOccurredAt().isAfter(cutoff)
+                && !artifact.latestKnownAt().isAfter(cutoff)
+                && artifact.sourceStartOrdinal() != null
+                && artifact.sourceEndOrdinal() != null
+                && artifact.sourceStartOrdinal() >= 0
+                && artifact.sourceEndOrdinal() >= artifact.sourceStartOrdinal();
+    }
+
+    private OrderBookReplayResult fromArtifact(OrderBookReplayArtifact artifact) {
+        return new OrderBookReplayResult(
+                OrderBookReplayResult.ReplayStatus.AVAILABLE, artifact.marketId(), artifact.depth(),
+                artifact.sequenceId(), artifact.evaluationCutoff(), artifact.latestOccurredAt(),
+                artifact.latestKnownAt(), artifact.sourceStartOrdinal(), artifact.sourceEndOrdinal(),
+                artifact.provider(), artifact.providerSymbol(), artifact.normalizationVersion(),
+                artifact.sourceEvidenceFingerprint(), artifact.sourceTrustStatus(),
+                artifact.sourceEvidenceFingerprints(), artifact.bids(), artifact.asks(), null);
     }
 
     private long elapsedMillis(long startedAt) {

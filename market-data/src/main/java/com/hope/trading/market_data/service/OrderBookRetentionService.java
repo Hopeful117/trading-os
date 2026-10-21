@@ -20,14 +20,17 @@ import java.util.UUID;
 
 @Service
 public class OrderBookRetentionService {
-    private static final String ARTIFACT_SCHEMA_VERSION = "order-book-replay-artifact-v1";
+    private static final String ARTIFACT_SCHEMA_VERSION = "order-book-replay-artifact-v2";
     private final OrderBookRetentionRepository repository;
+    private final OrderBookEvidenceRepository evidenceRepository;
     private final OrderBookRetentionProperties properties;
     private final Clock clock;
 
     public OrderBookRetentionService(OrderBookRetentionRepository repository,
+                                     OrderBookEvidenceRepository evidenceRepository,
                                      OrderBookRetentionProperties properties, Clock clock) {
         this.repository = repository;
+        this.evidenceRepository = evidenceRepository;
         this.properties = properties;
         this.clock = clock;
     }
@@ -62,8 +65,13 @@ public class OrderBookRetentionService {
         if (!repository.matchesPersistedEvidence(replay)) {
             throw new IllegalArgumentException("replay provenance does not match persisted evidence");
         }
+        if (!evidenceRepository.isCurrentEligibleSequence(
+                replay.sequenceId(), replay.marketId(), replay.depth(), replay.evaluationCutoff())) {
+            throw new IllegalArgumentException("replay sequence is no longer eligible for promotion");
+        }
         Instant createdAt = clock.instant();
-        String fingerprint = fingerprint(replay, semanticIdentity, promotionReason);
+        String fingerprint = OrderBookReplayArtifactFingerprint.calculate(replay, semanticIdentity, promotionReason,
+                properties.requireArtifactSigningKey());
         OrderBookReplayArtifact artifact = new OrderBookReplayArtifact(
                 UUID.randomUUID(), semanticIdentity, fingerprint, replay.marketId(), replay.depth(),
                 replay.sequenceId(), replay.evaluationCutoff(), replay.latestOccurredAt(), replay.latestKnownAt(),
@@ -71,15 +79,24 @@ public class OrderBookRetentionService {
                 replay.normalizationVersion(), ARTIFACT_SCHEMA_VERSION, replay.sourceEvidenceFingerprint(),
                 replay.sourceTrustStatus(), replay.sourceEvidenceFingerprints(), replay.bids(), replay.asks(),
                 promotionReason, createdAt);
+        OrderBookReplayArtifact promoted;
         if (repository.saveArtifact(artifact)) {
-            return artifact;
+            promoted = artifact;
+        } else {
+            OrderBookReplayArtifact existing = repository.findArtifactForPromotion(semanticIdentity)
+                    .orElseThrow(() -> new IllegalStateException("promotion identity exists without an artifact"));
+            if (repository.isInvalidatedSequence(existing.sequenceId())) {
+                throw new IllegalStateException(
+                        "promotion identity is bound to an invalidated artifact; use a new semantic identity for rebuild");
+            }
+            if (!existing.artifactFingerprint().equals(artifact.artifactFingerprint())) {
+                throw new IllegalStateException("promotion identity conflicts with an existing artifact");
+            }
+            promoted = existing;
         }
-        OrderBookReplayArtifact existing = repository.findArtifact(semanticIdentity)
-                .orElseThrow(() -> new IllegalStateException("promotion identity exists without an artifact"));
-        if (!existing.artifactFingerprint().equals(artifact.artifactFingerprint())) {
-            throw new IllegalStateException("promotion identity conflicts with an existing artifact");
-        }
-        return existing;
+        protectDependency("artifact:" + semanticIdentity, "REPLAY_ARTIFACT", semanticIdentity,
+                promoted.artifactId(), promoted.sequenceId(), "promoted replay artifact source protection");
+        return promoted;
     }
 
     @Transactional
@@ -96,6 +113,9 @@ public class OrderBookRetentionService {
                 .orElseThrow(() -> new IllegalStateException("dependency identity exists without a dependency"));
         if (!sameTarget(existing, dependency)) {
             throw new IllegalStateException("dependency key conflicts with an existing target");
+        }
+        if (existing.state() != OrderBookDependencyState.PROTECTED) {
+            throw new IllegalStateException("dependency was explicitly released; use a new promotion identity");
         }
         if (!java.util.Objects.equals(existing.consumerType(), dependency.consumerType())
                 || !java.util.Objects.equals(existing.consumerIdentity(), dependency.consumerIdentity())
@@ -191,16 +211,6 @@ public class OrderBookRetentionService {
     private boolean sameTarget(OrderBookRetentionHold left, OrderBookRetentionHold right) {
         return java.util.Objects.equals(left.artifactId(), right.artifactId())
                 && java.util.Objects.equals(left.sequenceId(), right.sequenceId());
-    }
-
-    private String fingerprint(OrderBookReplayResult replay, String semanticIdentity, String reason) {
-        return fingerprint(String.join("|", semanticIdentity, reason, replay.marketId().toString(),
-                Integer.toString(replay.depth()), replay.sequenceId().toString(), replay.evaluationCutoff().toString(),
-                String.valueOf(replay.sourceStartOrdinal()), String.valueOf(replay.sourceEndOrdinal()),
-                replay.provider(), replay.providerSymbol(), replay.normalizationVersion(),
-                replay.sourceEvidenceFingerprint(), String.join(",", replay.sourceEvidenceFingerprints()),
-                replay.sourceTrustStatus(), replay.latestOccurredAt().toString(), replay.latestKnownAt().toString(),
-                replay.bids().toString(), replay.asks().toString()), replay.evaluationCutoff());
     }
 
     private String fingerprint(String material, Instant timestamp) {

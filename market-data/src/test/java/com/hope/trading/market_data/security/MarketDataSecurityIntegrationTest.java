@@ -99,7 +99,7 @@ class MarketDataSecurityIntegrationTest {
     void marketIntelligenceCredentialCanUseOrderBookReplay() throws Exception {
         org.mockito.Mockito.when(orderBookReplayService.replay(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(25),
-                org.mockito.ArgumentMatchers.any())).thenReturn(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull())).thenReturn(
                 org.mockito.Mockito.mock(com.hope.trading.market_data.model.OrderBookReplayResult.class));
 
         mockMvc.perform(get("/internal/v1/order-book/replay/00000000-0000-0000-0000-000000000001")
@@ -107,6 +107,16 @@ class MarketDataSecurityIntegrationTest {
                         .param("depth", "25")
                         .param("asOf", "2026-10-20T00:00:00Z"))
                 .andExpect(status().isOk());
+
+        mockMvc.perform(get("/internal/v1/order-book/replay/00000000-0000-0000-0000-000000000001")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                        .param("depth", "25")
+                        .param("asOf", "2026-10-20T00:00:00Z")
+                        .param("semanticIdentity", "order-book-replay:v1:sample"))
+                .andExpect(status().isOk());
+        org.mockito.Mockito.verify(orderBookReplayService, org.mockito.Mockito.times(2)).replay(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(25),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -136,6 +146,29 @@ class MarketDataSecurityIntegrationTest {
     @Test
     void unauthorizedServiceCannotUseRetentionEndpoint() throws Exception {
         mockMvc.perform(post("/internal/v1/order-book/retention/dependencies")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("other-service"))
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void authorizedServiceCanPromoteReplayArtifact() throws Exception {
+        org.mockito.Mockito.when(orderBookRetentionService.promote(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("research:test"),
+                org.mockito.ArgumentMatchers.eq("test promotion"))).thenReturn(null);
+
+        mockMvc.perform(post("/internal/v1/order-book/retention/artifacts")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                        .contentType("application/json")
+                        .content("{\"replay\":null,\"semanticIdentity\":\"research:test\","
+                                + "\"promotionReason\":\"test promotion\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void unauthorizedServiceCannotPromoteReplayArtifact() throws Exception {
+        mockMvc.perform(post("/internal/v1/order-book/retention/artifacts")
                         .header("X-Service-Authorization", "Bearer " + serviceToken("other-service"))
                         .contentType("application/json")
                         .content("{}"))

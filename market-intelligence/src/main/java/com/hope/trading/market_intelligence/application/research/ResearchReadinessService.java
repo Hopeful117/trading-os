@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.application.research;
 
 import com.hope.trading.market_intelligence.adapter.marketdata.HistoricalOhlcClient;
 import com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayClient;
+import com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayIdentity;
 import com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient;
 import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
 import com.hope.trading.market_intelligence.application.port.FeatureSnapshotRepository;
@@ -296,7 +297,9 @@ public class ResearchReadinessService {
         long startedAt = System.nanoTime();
         long result;
         try {
-            result = "AVAILABLE".equalsIgnoreCase(replay.replay(marketId, REPLAY_DEPTH, cutoff).status()) ? 1L : 0L;
+            result = "AVAILABLE".equalsIgnoreCase(
+                    replay.replay(marketId, REPLAY_DEPTH, cutoff,
+                            OrderBookReplayIdentity.forRequest(marketId, REPLAY_DEPTH, cutoff)).status()) ? 1L : 0L;
         } catch (RuntimeException ignored) {
             budget.markReplayUnavailable();
             result = 0L;

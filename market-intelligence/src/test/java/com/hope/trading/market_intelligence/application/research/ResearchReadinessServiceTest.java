@@ -496,8 +496,12 @@ class ResearchReadinessServiceTest {
         OrderBookReplayClient replay = mock(OrderBookReplayClient.class);
         var replayResponse = mock(OrderBookReplayClient.ReplayResponse.class);
         when(replayResponse.status()).thenReturn("AVAILABLE");
-        when(replay.replay(MARKET_ID, 25, cutoff)).thenReturn(replayResponse);
-        when(replay.replay(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1)))).thenReturn(replayResponse);
+        when(replay.replay(MARKET_ID, 25, cutoff,
+                com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayIdentity
+                        .forRequest(MARKET_ID, 25, cutoff))).thenReturn(replayResponse);
+        when(replay.replay(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1)),
+                com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayIdentity
+                        .forRequest(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1))))).thenReturn(replayResponse);
         var fees = mock(com.hope.trading.market_intelligence.adapter.broker.HistoricalFeeScheduleClient.class);
         when(fees.findEligible(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
@@ -513,8 +517,12 @@ class ResearchReadinessServiceTest {
         assertThat(readiness.s1().shortSignals()).isEqualTo(2);
         assertThat(readiness.s1().replayCoverage()).isEqualTo(1.0d);
         assertThat(readiness.s1().feeCoverage()).isEqualTo(1.0d);
-        verify(replay).replay(MARKET_ID, 25, cutoff);
-        verify(replay).replay(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1)));
+        verify(replay).replay(MARKET_ID, 25, cutoff,
+                com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayIdentity
+                        .forRequest(MARKET_ID, 25, cutoff));
+        verify(replay).replay(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1)),
+                com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayIdentity
+                        .forRequest(MARKET_ID, 25, cutoff.plus(Duration.ofHours(1))));
         verify(fees).findEligible(feeConfig.getBrokerAccountId(), "KRAKEN", "LINEAR_PERPETUAL",
                 "PF_XBTUSD", cutoff, NOW);
         verify(fees).findEligible(feeConfig.getBrokerAccountId(), "KRAKEN", "LINEAR_PERPETUAL",
@@ -661,7 +669,8 @@ class ResearchReadinessServiceTest {
         var replayResponse = mock(OrderBookReplayClient.ReplayResponse.class);
         when(replayResponse.status()).thenReturn("AVAILABLE");
         when(replay.replay(org.mockito.ArgumentMatchers.eq(MARKET_ID), org.mockito.ArgumentMatchers.eq(25),
-                org.mockito.ArgumentMatchers.any())).thenReturn(replayResponse);
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(replayResponse);
 
         ResearchReadiness readiness = new ResearchReadinessService(
                 properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
@@ -671,7 +680,8 @@ class ResearchReadinessServiceTest {
         assertThat(readiness.s1().replayAvailable()).isEqualTo(400);
         assertThat(readiness.s1().blockingReasons()).contains("remote_evidence_check_budget_exceeded");
         verify(replay, times(400)).replay(org.mockito.ArgumentMatchers.eq(MARKET_ID),
-                org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -707,7 +717,8 @@ class ResearchReadinessServiceTest {
         when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
         OrderBookReplayClient replay = mock(OrderBookReplayClient.class);
         when(replay.replay(org.mockito.ArgumentMatchers.eq(MARKET_ID), org.mockito.ArgumentMatchers.eq(25),
-                org.mockito.ArgumentMatchers.any())).thenThrow(new IllegalStateException("unavailable"));
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenThrow(new IllegalStateException("unavailable"));
 
         ResearchReadiness readiness = new ResearchReadinessService(
                 properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
@@ -716,7 +727,8 @@ class ResearchReadinessServiceTest {
 
         assertThat(readiness.s1().replayAvailable()).isZero();
         verify(replay, org.mockito.Mockito.atMost(4)).replay(org.mockito.ArgumentMatchers.eq(MARKET_ID),
-                org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.eq(25), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString());
     }
 
     private ObservedMarketOutcome outcome(OutcomeHorizon horizon, String fingerprint) {

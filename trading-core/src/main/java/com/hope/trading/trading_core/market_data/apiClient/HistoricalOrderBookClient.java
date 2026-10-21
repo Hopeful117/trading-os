@@ -15,7 +15,8 @@ import java.util.UUID;
         configuration = MarketDataFeignConfiguration.class)
 public interface HistoricalOrderBookClient {
     @GetMapping("/internal/v1/order-book/replay/{marketId}")
-    ReplayResponse replay(@PathVariable UUID marketId, @RequestParam int depth, @RequestParam Instant asOf);
+    ReplayResponse replay(@PathVariable UUID marketId, @RequestParam int depth, @RequestParam Instant asOf,
+                          @RequestParam(required = false) String semanticIdentity);
 
     record ReplayResponse(
             String status,
@@ -31,6 +32,8 @@ public interface HistoricalOrderBookClient {
             String providerSymbol,
             String normalizationVersion,
             String sourceEvidenceFingerprint,
+            String sourceTrustStatus,
+            List<String> sourceEvidenceFingerprints,
             List<LevelResponse> bids,
             List<LevelResponse> asks,
             String reason

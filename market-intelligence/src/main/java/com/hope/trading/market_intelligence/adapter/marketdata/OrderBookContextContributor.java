@@ -36,7 +36,9 @@ public class OrderBookContextContributor implements ContextContributor {
                     "Historical Order Book analysis requires strict replay and an evaluation cutoff");
         }
         OrderBookReplayClient.ReplayResponse response = client.replay(
-                request.marketId(), BOUNDED_DEPTH, request.evaluationCutoff());
+                request.marketId(), BOUNDED_DEPTH, request.evaluationCutoff(),
+                OrderBookReplayIdentity.forRequest(request.marketId(), BOUNDED_DEPTH,
+                        request.evaluationCutoff()));
         OrderBookContext context = map(request, response);
         if (context.status() == OrderBookContext.ReplayStatus.UNAVAILABLE) {
             return ContextSection.unavailable(requirement, context.reason());

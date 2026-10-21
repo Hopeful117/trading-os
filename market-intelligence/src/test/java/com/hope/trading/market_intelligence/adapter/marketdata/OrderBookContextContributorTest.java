@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OrderBookContextContributorTest {
@@ -24,7 +25,8 @@ class OrderBookContextContributorTest {
     @Test
     void mapsStrictReplayToAvailableContextWithProvenance() {
         OrderBookReplayClient client = mock(OrderBookReplayClient.class);
-        when(client.replay(MARKET_ID, 25, CUTOFF)).thenReturn(response("AVAILABLE", "evidence"));
+        String identity = OrderBookReplayIdentity.forRequest(MARKET_ID, 25, CUTOFF);
+        when(client.replay(MARKET_ID, 25, CUTOFF, identity)).thenReturn(response("AVAILABLE", "evidence"));
 
         var section = new OrderBookContextContributor(client).contribute(request());
 
@@ -32,6 +34,7 @@ class OrderBookContextContributorTest {
         assertThat(section.status()).isEqualTo(ContextSectionStatus.AVAILABLE);
         assertThat(section.provenance().evidenceFingerprint()).isEqualTo("evidence");
         assertThat(section.provenance().sourceReference()).isEqualTo(SEQUENCE_ID.toString());
+        verify(client).replay(MARKET_ID, 25, CUTOFF, identity);
     }
 
     @Test
@@ -56,7 +59,7 @@ class OrderBookContextContributorTest {
     private OrderBookReplayClient.ReplayResponse response(String status, String fingerprint) {
         return new OrderBookReplayClient.ReplayResponse(status, MARKET_ID, 25, SEQUENCE_ID,
                 CUTOFF, CUTOFF.minusSeconds(1), CUTOFF, 0L, 1L, "KRAKEN", "PF_XBTUSD",
-                "order-book-normalization-v1", fingerprint,
+                "order-book-normalization-v1", fingerprint, "TRUSTED", List.of(fingerprint),
                 List.of(new OrderBookReplayClient.LevelResponse(new BigDecimal("100"), new BigDecimal("1"))),
                 List.of(new OrderBookReplayClient.LevelResponse(new BigDecimal("101"), new BigDecimal("1"))), null);
     }

@@ -7,6 +7,7 @@ import com.hope.trading.market_data.model.OrderBookRetentionHold;
 import com.hope.trading.market_data.model.OrderBookRetirementCandidate;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.model.OrderBookSequenceStatus;
+import com.hope.trading.market_data.config.OrderBookRetentionProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,18 +18,24 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 import java.util.UUID;
 
 @Repository
 public class OrderBookRetentionRepository {
     private final JdbcTemplate jdbc;
     private final DataSource dataSource;
+    private final OrderBookRetentionProperties properties;
 
-    public OrderBookRetentionRepository(JdbcTemplate jdbc, DataSource dataSource) {
+    public OrderBookRetentionRepository(JdbcTemplate jdbc, DataSource dataSource,
+                                        OrderBookRetentionProperties properties) {
         this.jdbc = jdbc;
         this.dataSource = dataSource;
+        this.properties = properties;
     }
 
     @Transactional
@@ -51,17 +58,30 @@ public class OrderBookRetentionRepository {
 
     @Transactional(readOnly = true)
     public boolean matchesPersistedEvidence(OrderBookReplayResult replay) {
+        return matchesPersistedEvidence(replay, true);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean matchesPersistedProvenance(OrderBookReplayResult replay) {
+        return matchesPersistedEvidence(replay, false);
+    }
+
+    private boolean matchesPersistedEvidence(OrderBookReplayResult replay, boolean verifyPayload) {
         List<PersistedEvidence> evidence = jdbc.query("""
-                SELECT market_id, depth, sequence_id, sequence_ordinal, occurred_at, known_at,
-                       normalization_version, trusted, content_fingerprint
+                SELECT market_id, provider, provider_symbol, depth, sequence_id, sequence_ordinal,
+                       occurred_at, known_at, normalization_version, trusted, content_fingerprint,
+                       evidence_type, bids_payload, asks_payload
                   FROM historical_order_book_evidence
                  WHERE sequence_id = ? AND sequence_ordinal BETWEEN ? AND ?
                  ORDER BY sequence_ordinal
                 """, (result, row) -> new PersistedEvidence(result.getObject("market_id", UUID.class),
+                        result.getString("provider"), result.getString("provider_symbol"),
                         result.getInt("depth"), result.getObject("sequence_id", UUID.class),
                         result.getLong("sequence_ordinal"), result.getTimestamp("occurred_at").toInstant(),
                         result.getTimestamp("known_at").toInstant(), result.getString("normalization_version"),
-                        result.getBoolean("trusted"), result.getString("content_fingerprint")), replay.sequenceId(),
+                         result.getBoolean("trusted"), result.getString("content_fingerprint"),
+                         result.getString("evidence_type"), OrderBookEvidencePayload.decode(result.getString("bids_payload")),
+                         OrderBookEvidencePayload.decode(result.getString("asks_payload"))), replay.sequenceId(),
                 replay.sourceStartOrdinal(), replay.sourceEndOrdinal());
         List<String> fingerprints = evidence.stream().map(PersistedEvidence::fingerprint).toList();
         boolean contiguous = evidence.stream().findFirst()
@@ -74,26 +94,55 @@ public class OrderBookRetentionRepository {
                 && replay.marketId().equals(item.marketId())
                 && replay.depth() == item.depth()
                 && replay.sequenceId().equals(item.sequenceId())
+                && java.util.Objects.equals(replay.provider(), item.provider())
+                && java.util.Objects.equals(replay.providerSymbol(), item.providerSymbol())
                 && replay.normalizationVersion().equals(item.normalizationVersion())
                 && !item.knownAt().isAfter(replay.evaluationCutoff())
                 && !item.occurredAt().isAfter(replay.evaluationCutoff()));
+        boolean latest = evidence.stream().findFirst().map(ignored ->
+                replay.latestOccurredAt().equals(evidence.getLast().occurredAt())
+                        && replay.latestKnownAt().equals(evidence.getLast().knownAt())).orElse(false);
+        boolean payload = !verifyPayload || canonicalPayloadMatches(evidence, replay.depth(), replay.bids(), replay.asks());
         return fingerprints.equals(replay.sourceEvidenceFingerprints())
                 && fingerprint(fingerprints).equals(replay.sourceEvidenceFingerprint())
-                && contiguous && metadata;
+                && contiguous && metadata && latest && payload;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean matchesArtifactFingerprint(OrderBookReplayArtifact artifact) {
+        return "order-book-replay-artifact-v2".equals(artifact.artifactSchemaVersion())
+                && OrderBookReplayArtifactFingerprint.matches(artifact, properties.requireArtifactSigningKey());
     }
 
     @Transactional(readOnly = true)
     public Optional<OrderBookReplayArtifact> findArtifact(String semanticIdentity) {
+        return findArtifact(semanticIdentity, false);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<OrderBookReplayArtifact> findArtifactForPromotion(String semanticIdentity) {
+        return findArtifact(semanticIdentity, true);
+    }
+
+    private Optional<OrderBookReplayArtifact> findArtifact(String semanticIdentity, boolean includeInvalidated) {
         List<OrderBookReplayArtifact> artifacts = jdbc.query("""
-                SELECT artifact_id, semantic_identity, artifact_fingerprint, market_id, depth, sequence_id,
-                       evaluation_cutoff, latest_occurred_at, latest_known_at, source_start_ordinal,
-                       source_end_ordinal, provider, provider_symbol, normalization_version,
-                       artifact_schema_version, source_evidence_fingerprint, source_trust_status,
-                       source_evidence_fingerprints_payload,
-                       bids_payload, asks_payload, promotion_reason, created_at
-                  FROM historical_order_book_replay_artifact
-                 WHERE semantic_identity = ?
-                """, (result, row) -> new OrderBookReplayArtifact(
+                SELECT artifact.artifact_id, artifact.semantic_identity, artifact.artifact_fingerprint,
+                       artifact.market_id, artifact.depth, artifact.sequence_id,
+                       artifact.evaluation_cutoff, artifact.latest_occurred_at, artifact.latest_known_at,
+                       artifact.source_start_ordinal, artifact.source_end_ordinal, artifact.provider,
+                       artifact.provider_symbol, artifact.normalization_version, artifact.artifact_schema_version,
+                       artifact.source_evidence_fingerprint, artifact.source_trust_status,
+                       artifact.source_evidence_fingerprints_payload, artifact.bids_payload, artifact.asks_payload,
+                       artifact.promotion_reason, artifact.created_at
+                   FROM historical_order_book_replay_artifact artifact
+                   JOIN historical_order_book_sequence sequence
+                     ON sequence.sequence_id = artifact.sequence_id
+                  WHERE artifact.semantic_identity = ?
+                 """ + (includeInvalidated ? "" : " AND sequence.status <> 'INVALIDATED'\n"
+                         + " AND EXISTS (SELECT 1 FROM historical_order_book_evidence_dependency dependency\n"
+                         + "             WHERE dependency.artifact_id = artifact.artifact_id\n"
+                         + "               AND dependency.state = 'PROTECTED')\n"),
+                (result, row) -> new OrderBookReplayArtifact(
                 result.getObject("artifact_id", UUID.class), result.getString("semantic_identity"),
                 result.getString("artifact_fingerprint"), result.getObject("market_id", UUID.class),
                 result.getInt("depth"), result.getObject("sequence_id", UUID.class),
@@ -110,6 +159,15 @@ public class OrderBookRetentionRepository {
                 result.getString("promotion_reason"), result.getTimestamp("created_at").toInstant()),
                 semanticIdentity);
         return artifacts.stream().findFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isInvalidatedSequence(UUID sequenceId) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) > 0
+                  FROM historical_order_book_sequence
+                 WHERE sequence_id = ? AND status = 'INVALIDATED'
+                """, Boolean.class, sequenceId);
     }
 
     @Transactional
@@ -381,8 +439,8 @@ public class OrderBookRetentionRepository {
                       ORDER BY evidence.sequence_ordinal
                       LIMIT ?
                  )
-                """, candidate.sequenceId(), candidate.firstOrdinal(), candidate.lastOrdinal(), invalidatedBefore,
-                 batchSize);
+                 """, candidate.sequenceId(), candidate.firstOrdinal(), candidate.lastOrdinal(), Timestamp.from(invalidatedBefore),
+                  batchSize);
     }
 
     private String artifactInsertSql() {
@@ -456,6 +514,39 @@ public class OrderBookRetentionRepository {
         }
     }
 
+    private boolean canonicalPayloadMatches(List<PersistedEvidence> evidence, int depth,
+                                            List<com.hope.trading.market_data.model.OrderBookLevel> expectedBids,
+                                            List<com.hope.trading.market_data.model.OrderBookLevel> expectedAsks) {
+        if (evidence.isEmpty() || !"SNAPSHOT".equals(evidence.getFirst().evidenceType())) {
+            return false;
+        }
+        NavigableMap<BigDecimal, BigDecimal> bids = new TreeMap<>(java.util.Comparator.reverseOrder());
+        NavigableMap<BigDecimal, BigDecimal> asks = new TreeMap<>();
+        apply(bids, evidence.getFirst().bids());
+        apply(asks, evidence.getFirst().asks());
+        for (PersistedEvidence item : evidence.subList(1, evidence.size())) {
+            if (!"DELTA".equals(item.evidenceType())) return false;
+            apply(bids, item.bids());
+            apply(asks, item.asks());
+        }
+        return limit(bids, depth).equals(expectedBids) && limit(asks, depth).equals(expectedAsks);
+    }
+
+    private void apply(NavigableMap<BigDecimal, BigDecimal> book,
+                       List<com.hope.trading.market_data.model.OrderBookLevel> levels) {
+        levels.forEach(level -> {
+            if (level.quantity().signum() == 0) book.remove(level.price());
+            else book.put(level.price(), level.quantity());
+        });
+    }
+
+    private List<com.hope.trading.market_data.model.OrderBookLevel> limit(
+            NavigableMap<BigDecimal, BigDecimal> book, int depth) {
+        return book.entrySet().stream().limit(depth)
+                .map(entry -> new com.hope.trading.market_data.model.OrderBookLevel(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
     private boolean existsArtifact(String semanticIdentity, String artifactFingerprint) {
         return jdbc.queryForObject("""
                 SELECT COUNT(*) FROM historical_order_book_replay_artifact
@@ -490,8 +581,11 @@ public class OrderBookRetentionRepository {
         }
     }
 
-    private record PersistedEvidence(UUID marketId, int depth, UUID sequenceId, long ordinal,
+    private record PersistedEvidence(UUID marketId, String provider, String providerSymbol,
+                                     int depth, UUID sequenceId, long ordinal,
                                      Instant occurredAt, Instant knownAt, String normalizationVersion,
-                                     boolean trusted, String fingerprint) {
+                                     boolean trusted, String fingerprint, String evidenceType,
+                                     List<com.hope.trading.market_data.model.OrderBookLevel> bids,
+                                     List<com.hope.trading.market_data.model.OrderBookLevel> asks) {
     }
 }
