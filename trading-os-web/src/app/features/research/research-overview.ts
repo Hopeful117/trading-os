@@ -1,6 +1,17 @@
 import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { Observable, Subject, catchError, map, of, shareReplay, startWith, switchMap } from 'rxjs';
+import {
+  Observable,
+  Subject,
+  catchError,
+  map,
+  merge,
+  of,
+  scan,
+  shareReplay,
+  startWith,
+  switchMap,
+} from 'rxjs';
 
 import {
   ResearchIntegrity,
@@ -14,6 +25,18 @@ type ResearchOverviewViewModel =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; readiness: ResearchReadiness; integrity: ResearchIntegrity | null };
 
+type ResearchLoadEvent =
+  | { kind: 'readiness'; readiness: ResearchReadiness }
+  | { kind: 'readiness-error' }
+  | { kind: 'integrity'; integrity: ResearchIntegrity }
+  | { kind: 'integrity-error' };
+
+type ResearchLoadState = {
+  readiness: ResearchReadiness | null;
+  readinessError: boolean;
+  integrity: ResearchIntegrity | null;
+};
+
 @Component({
   selector: 'app-research-overview',
   imports: [AsyncPipe, DatePipe, DecimalPipe],
@@ -26,28 +49,42 @@ export class ResearchOverview {
 
   readonly viewModel$: Observable<ResearchOverviewViewModel> = this.refreshSubject.pipe(
     startWith(undefined),
-    switchMap(() =>
-      this.researchService.getReadiness().pipe(
-        switchMap((readiness) =>
-          this.researchService.getIntegrity().pipe(
-            map(
-              (integrity) => ({ kind: 'ready', readiness, integrity }) as ResearchOverviewViewModel,
-            ),
-            startWith({ kind: 'ready', readiness, integrity: null } as ResearchOverviewViewModel),
-            catchError(() =>
-              of({ kind: 'ready', readiness, integrity: null } as ResearchOverviewViewModel),
-            ),
-          ),
+    switchMap(() => {
+      const readiness$ = this.researchService.getReadiness().pipe(
+        map((readiness): ResearchLoadEvent => ({ kind: 'readiness', readiness })),
+        catchError(() => of<ResearchLoadEvent>({ kind: 'readiness-error' })),
+      );
+      const integrity$ = this.researchService.getIntegrity().pipe(
+        map((integrity): ResearchLoadEvent => ({ kind: 'integrity', integrity })),
+        catchError(() => of<ResearchLoadEvent>({ kind: 'integrity-error' })),
+      );
+
+      return merge(readiness$, integrity$).pipe(
+        scan<ResearchLoadEvent, ResearchLoadState>(
+          (state, event) =>
+            event.kind === 'readiness'
+              ? { ...state, readiness: event.readiness }
+              : event.kind === 'readiness-error'
+                ? { ...state, readinessError: true }
+                : event.kind === 'integrity'
+                  ? { ...state, integrity: event.integrity }
+                  : state,
+          { readiness: null, readinessError: false, integrity: null },
+        ),
+        map<ResearchLoadState, ResearchOverviewViewModel>((state) =>
+          state.readinessError
+            ? {
+                kind: 'error',
+                message:
+                  'Research readiness is temporarily unavailable. Check the Gateway connection.',
+              }
+            : state.readiness
+              ? { kind: 'ready', readiness: state.readiness, integrity: state.integrity }
+              : { kind: 'loading' },
         ),
         startWith({ kind: 'loading' } as ResearchOverviewViewModel),
-        catchError(() =>
-          of<ResearchOverviewViewModel>({
-            kind: 'error',
-            message: 'Research readiness is temporarily unavailable. Check the Gateway connection.',
-          }),
-        ),
-      ),
-    ),
+      );
+    }),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
 

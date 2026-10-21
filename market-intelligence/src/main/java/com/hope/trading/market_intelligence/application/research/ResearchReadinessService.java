@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class ResearchReadinessService {
@@ -89,34 +90,46 @@ public class ResearchReadinessService {
         Instant now = clock.instant();
         CachedReadiness cached = cachedReadiness;
         if (cached != null && now.isBefore(cached.expiresAt())) {
+            log.debug("Research readiness cache hit markets={} remainingCacheMs={}",
+                    properties.getMarketIds().size(), Duration.between(now, cached.expiresAt()).toMillis());
             return cached.value();
         }
         synchronized (this) {
             now = clock.instant();
             cached = cachedReadiness;
             if (cached != null && now.isBefore(cached.expiresAt())) {
+                log.debug("Research readiness cache hit after lock markets={} remainingCacheMs={}",
+                        properties.getMarketIds().size(), Duration.between(now, cached.expiresAt()).toMillis());
                 return cached.value();
             }
+            log.debug("Research readiness cache miss markets={}", properties.getMarketIds().size());
             ResearchReadiness computed = computeCurrent(now);
             cachedReadiness = new CachedReadiness(
-                    computed, now.plus(properties.getReadinessCacheDuration()));
+                    computed, clock.instant().plus(properties.getReadinessCacheDuration()));
             return computed;
         }
     }
 
     private ResearchReadiness computeCurrent(Instant now) {
+        long computationStartedAt = System.nanoTime();
         Set<UUID> markets = properties.getMarketIds();
+        long snapshotLoadStartedAt = System.nanoTime();
         List<FeatureSnapshot> values = markets.isEmpty()
                 ? List.of()
                 : snapshots.findByPopulation(
-                        markets, Instant.EPOCH, now.plusSeconds(1), PROJECTION_VERSION,
-                        EvidenceAcquisitionPolicy.STRICT_OBSERVED.name());
+                         markets, Instant.EPOCH, now.plusSeconds(1), PROJECTION_VERSION,
+                         EvidenceAcquisitionPolicy.STRICT_OBSERVED.name());
+        long snapshotLoadDurationMs = elapsedMillis(snapshotLoadStartedAt);
         Set<java.time.Duration> configuredHorizons = Set.copyOf(properties.getOutcomeHorizons());
+        long outcomeLoadStartedAt = System.nanoTime();
         List<ObservedMarketOutcome> observedOutcomes = outcomes.findByMarkets(markets).stream()
                 .filter(outcome -> configuredHorizons.contains(outcome.horizon().value()))
                 .toList();
+        long outcomeLoadDurationMs = elapsedMillis(outcomeLoadStartedAt);
 
+        long latestEvidenceStartedAt = System.nanoTime();
         Map<UUID, Instant> latestEvidence = latestEvidence(now, markets);
+        long latestEvidenceDurationMs = elapsedMillis(latestEvidenceStartedAt);
         Map<UUID, Long> snapshotsByMarket = values.stream()
                 .collect(Collectors.groupingBy(FeatureSnapshot::marketId, LinkedHashMap::new, Collectors.counting()));
         Map<String, Long> outcomeCounts = observedOutcomes.stream()
@@ -140,18 +153,29 @@ public class ResearchReadinessService {
                         .count())
                 .sum();
 
-        return new ResearchReadiness(
+        ResearchReadiness readiness = new ResearchReadiness(
                 properties.isEnabled(), markets, properties.getObservationCadence(),
                 properties.getOutcomeHorizons(), EvidenceAcquisitionPolicy.STRICT_OBSERVED.name(),
                 latestEvidence, values.size(), snapshotsByMarket,
                 values.stream().map(FeatureSnapshot::evaluationCutoff).min(Comparator.naturalOrder()).orElse(null),
                 values.stream().map(FeatureSnapshot::evaluationCutoff).max(Comparator.naturalOrder()).orElse(null),
                 outcomeCounts, available, pending, approximatePopulation, s1(values, now));
+        log.info("Research readiness computation completed markets={} snapshots={} outcomes={} signals={} "
+                        + "snapshotLoadMs={} outcomeLoadMs={} latestEvidenceMs={} totalMs={}",
+                markets.size(), values.size(), observedOutcomes.size(), readiness.s1().totalSignals(),
+                snapshotLoadDurationMs, outcomeLoadDurationMs, latestEvidenceDurationMs,
+                elapsedMillis(computationStartedAt));
+        return readiness;
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
     private record CachedReadiness(ResearchReadiness value, Instant expiresAt) { }
 
     private S1Readiness s1(List<FeatureSnapshot> snapshots, Instant now) {
+        long startedAt = System.nanoTime();
         List<Signal> signals = snapshots.stream().map(this::signal).flatMap(Optional::stream).toList();
         long longs = signals.stream().filter(value -> value.direction().equals("LONG")).count();
         long shorts = signals.stream().filter(value -> value.direction().equals("SHORT")).count();
@@ -161,18 +185,19 @@ public class ResearchReadinessService {
         long feeChecks = signals.size() * 2L;
         long replayAvailable;
         long feeAvailable;
+        S1RemoteMetrics remoteMetrics = new S1RemoteMetrics();
         try (ExecutorService executor = Executors.newFixedThreadPool(properties.getReadinessRemoteConcurrency())) {
             Map<ReplayKey, CompletableFuture<Long>> replayFutures = new HashMap<>();
             Map<Instant, CompletableFuture<Long>> feeFutures = new HashMap<>();
             for (Signal signal : signals) {
                 scheduleReplay(signal.snapshot().marketId(), signal.snapshot().evaluationCutoff(),
-                        replayFutures, executor, remoteBudget);
+                        replayFutures, executor, remoteBudget, remoteMetrics);
                 scheduleReplay(signal.snapshot().marketId(), signal.snapshot().evaluationCutoff().plus(Duration.ofHours(1)),
-                        replayFutures, executor, remoteBudget);
+                        replayFutures, executor, remoteBudget, remoteMetrics);
                 if (fees != null && properties.getFeeCoverage().getBrokerAccountId() != null) {
-                    scheduleFee(signal.snapshot().evaluationCutoff(), now, feeFutures, executor, remoteBudget);
+                    scheduleFee(signal.snapshot().evaluationCutoff(), now, feeFutures, executor, remoteBudget, remoteMetrics);
                     scheduleFee(signal.snapshot().evaluationCutoff().plus(Duration.ofHours(1)), now,
-                            feeFutures, executor, remoteBudget);
+                            feeFutures, executor, remoteBudget, remoteMetrics);
                 }
             }
             replayAvailable = signals.stream()
@@ -182,6 +207,17 @@ public class ResearchReadinessService {
         }
         double replayCoverage = coverage(replayAvailable, replayChecks);
         double feeCoverage = coverage(feeAvailable, feeChecks);
+        int replayKeys = replayKeyCount(signals);
+        int feeKeys = fees != null && properties.getFeeCoverage().getBrokerAccountId() != null
+                ? feeKeyCount(signals) : 0;
+        log.info("Research S1 checks completed signals={} replayChecks={} feeChecks={} "
+                        + "remoteChecksConsumed={} remoteBudgetExhausted={} durationMs={} "
+                        + "replayCalls={} replayRemoteMs={} replayKeys={} replayReuses={} "
+                        + "feeCalls={} feeRemoteMs={} feeKeys={} feeReuses={}",
+                signals.size(), replayChecks, feeChecks, remoteBudget.consumed(), remoteBudget.exhausted(),
+                elapsedMillis(startedAt), remoteMetrics.replayCalls(), remoteMetrics.replayDurationMs(),
+                replayKeys, replayChecks - replayKeys, remoteMetrics.feeCalls(),
+                remoteMetrics.feeDurationMs(), feeKeys, feeKeys == 0 ? 0 : feeChecks - feeKeys);
         List<String> blockers = new java.util.ArrayList<>();
         if (signals.size() < 60) blockers.add("signal_count_below_60");
         if (longs < 30) blockers.add("long_signal_count_below_30");
@@ -233,11 +269,12 @@ public class ResearchReadinessService {
     }
 
     private void scheduleReplay(UUID marketId, Instant cutoff,
-                                Map<ReplayKey, CompletableFuture<Long>> cache,
-                                ExecutorService executor, RemoteCheckBudget budget) {
+                                 Map<ReplayKey, CompletableFuture<Long>> cache,
+                                 ExecutorService executor, RemoteCheckBudget budget,
+                                 S1RemoteMetrics metrics) {
         ReplayKey key = new ReplayKey(marketId, cutoff);
         cache.computeIfAbsent(key, ignored -> CompletableFuture.supplyAsync(
-                () -> replayAvailableAt(marketId, cutoff, budget), executor)
+                () -> replayAvailableAt(marketId, cutoff, budget, metrics), executor)
                 .exceptionally(error -> {
                     log.warn("Bounded replay readiness check failed", error);
                     budget.markReplayUnavailable();
@@ -252,25 +289,29 @@ public class ResearchReadinessService {
                 .plus(Duration.ofHours(1)))).join();
     }
 
-    private long replayAvailableAt(UUID marketId, Instant cutoff, RemoteCheckBudget budget) {
+    private long replayAvailableAt(UUID marketId, Instant cutoff, RemoteCheckBudget budget, S1RemoteMetrics metrics) {
         if (replay == null) return 0L;
         if (budget.replayUnavailable()) return 0L;
         if (!budget.tryConsume()) return 0L;
+        long startedAt = System.nanoTime();
         long result;
         try {
             result = "AVAILABLE".equalsIgnoreCase(replay.replay(marketId, REPLAY_DEPTH, cutoff).status()) ? 1L : 0L;
         } catch (RuntimeException ignored) {
             budget.markReplayUnavailable();
             result = 0L;
+        } finally {
+            metrics.recordReplay(Duration.ofNanos(System.nanoTime() - startedAt));
         }
         return result;
     }
 
     private void scheduleFee(Instant executionTime, Instant researchCutoff,
-                             Map<Instant, CompletableFuture<Long>> cache,
-                             ExecutorService executor, RemoteCheckBudget budget) {
+                              Map<Instant, CompletableFuture<Long>> cache,
+                              ExecutorService executor, RemoteCheckBudget budget,
+                              S1RemoteMetrics metrics) {
         cache.computeIfAbsent(executionTime, ignored -> CompletableFuture.supplyAsync(
-                () -> feeAvailableAt(executionTime, researchCutoff, budget), executor)
+                () -> feeAvailableAt(executionTime, researchCutoff, budget, metrics), executor)
                 .exceptionally(error -> {
                     log.warn("Bounded historical fee readiness check failed", error);
                     budget.markFeeUnavailable();
@@ -288,10 +329,12 @@ public class ResearchReadinessService {
                 + cache.get(signal.snapshot().evaluationCutoff().plus(Duration.ofHours(1))).join();
     }
 
-    private long feeAvailableAt(Instant executionTime, Instant researchCutoff, RemoteCheckBudget budget) {
+    private long feeAvailableAt(Instant executionTime, Instant researchCutoff,
+                                RemoteCheckBudget budget, S1RemoteMetrics metrics) {
         if (fees == null) return 0L;
         if (budget.feeUnavailable()) return 0L;
         if (!budget.tryConsume()) return 0L;
+        long startedAt = System.nanoTime();
         var config = properties.getFeeCoverage();
         long result;
         try {
@@ -318,8 +361,28 @@ public class ResearchReadinessService {
                     executionTime, researchCutoff, ignored);
             budget.markFeeUnavailable();
             result = 0L;
+        } finally {
+            metrics.recordFee(Duration.ofNanos(System.nanoTime() - startedAt));
         }
         return result;
+    }
+
+    private int replayKeyCount(List<Signal> signals) {
+        return (int) signals.stream()
+                .map(signal -> new ReplayKey(signal.snapshot().marketId(), signal.snapshot().evaluationCutoff()))
+                .flatMap(key -> java.util.stream.Stream.of(key,
+                        new ReplayKey(key.marketId(), key.cutoff().plus(Duration.ofHours(1)))))
+                .distinct()
+                .count();
+    }
+
+    private int feeKeyCount(List<Signal> signals) {
+        return signals.stream()
+                .map(signal -> signal.snapshot().evaluationCutoff())
+                .flatMap(cutoff -> java.util.stream.Stream.of(cutoff, cutoff.plus(Duration.ofHours(1))))
+                .distinct()
+                .mapToInt(ignored -> 1)
+                .sum();
     }
 
     private double coverage(long available, long checks) {
@@ -330,13 +393,48 @@ public class ResearchReadinessService {
 
     private record ReplayKey(UUID marketId, Instant cutoff) { }
 
+    private static final class S1RemoteMetrics {
+        private final java.util.concurrent.atomic.LongAdder replayCalls = new java.util.concurrent.atomic.LongAdder();
+        private final java.util.concurrent.atomic.LongAdder replayDurationNanos = new java.util.concurrent.atomic.LongAdder();
+        private final java.util.concurrent.atomic.LongAdder feeCalls = new java.util.concurrent.atomic.LongAdder();
+        private final java.util.concurrent.atomic.LongAdder feeDurationNanos = new java.util.concurrent.atomic.LongAdder();
+
+        private void recordReplay(Duration duration) {
+            replayCalls.increment();
+            replayDurationNanos.add(duration.toNanos());
+        }
+
+        private void recordFee(Duration duration) {
+            feeCalls.increment();
+            feeDurationNanos.add(duration.toNanos());
+        }
+
+        private long replayCalls() {
+            return replayCalls.sum();
+        }
+
+        private long replayDurationMs() {
+            return Duration.ofNanos(replayDurationNanos.sum()).toMillis();
+        }
+
+        private long feeCalls() {
+            return feeCalls.sum();
+        }
+
+        private long feeDurationMs() {
+            return Duration.ofNanos(feeDurationNanos.sum()).toMillis();
+        }
+    }
+
     private static final class RemoteCheckBudget {
+        private final int maximum;
         private final java.util.concurrent.atomic.AtomicInteger remaining;
         private final java.util.concurrent.atomic.AtomicBoolean exhausted = new java.util.concurrent.atomic.AtomicBoolean();
         private final java.util.concurrent.atomic.AtomicBoolean replayUnavailable = new java.util.concurrent.atomic.AtomicBoolean();
         private final java.util.concurrent.atomic.AtomicBoolean feeUnavailable = new java.util.concurrent.atomic.AtomicBoolean();
 
         private RemoteCheckBudget(int maximum) {
+            this.maximum = maximum;
             this.remaining = new java.util.concurrent.atomic.AtomicInteger(maximum);
         }
 
@@ -357,6 +455,10 @@ public class ResearchReadinessService {
             return exhausted.get();
         }
 
+        private int consumed() {
+            return maximum - Math.max(0, remaining.get());
+        }
+
         private boolean replayUnavailable() {
             return replayUnavailable.get();
         }
@@ -375,20 +477,39 @@ public class ResearchReadinessService {
     }
 
     private Map<UUID, Instant> latestEvidence(Instant now, Set<UUID> markets) {
-        Map<UUID, Instant> result = new LinkedHashMap<>();
-        for (UUID marketId : markets) {
-            try {
-                HistoricalOhlcClient.HistoricalOhlcSeriesResponse response = historicalOhlc.findHistoricalOhlc(
-                        marketId, "FIFTEEN_MINUTES", now, 1);
-                response.observations().stream()
-                        .map(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse::knownAt)
-                        .filter(Objects::nonNull)
-                        .max(Comparator.naturalOrder())
-                        .ifPresent(value -> result.put(marketId, value));
-            } catch (RuntimeException ignored) {
-                // Readiness remains available when Market Data is temporarily unavailable.
-            }
+        if (markets.isEmpty()) {
+            return Map.of();
         }
-        return result;
+        ExecutorService executor = Executors.newFixedThreadPool(properties.getReadinessRemoteConcurrency());
+        try {
+            Map<UUID, CompletableFuture<Optional<Instant>>> futures = new LinkedHashMap<>();
+            for (UUID marketId : markets) {
+                futures.put(marketId, CompletableFuture.supplyAsync(
+                                () -> latestEvidenceAt(marketId, now), executor)
+                        .completeOnTimeout(Optional.empty(), properties.getReadinessRemoteTimeout().toMillis(),
+                                TimeUnit.MILLISECONDS)
+                        .exceptionally(ignored -> Optional.empty()));
+            }
+
+            Map<UUID, Instant> result = new LinkedHashMap<>();
+            futures.forEach((marketId, future) -> future.join().ifPresent(value -> result.put(marketId, value)));
+            return result;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private Optional<Instant> latestEvidenceAt(UUID marketId, Instant now) {
+        try {
+            HistoricalOhlcClient.HistoricalOhlcSeriesResponse response = historicalOhlc.findHistoricalOhlc(
+                    marketId, "FIFTEEN_MINUTES", now, 1);
+            return response.observations().stream()
+                    .map(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse::knownAt)
+                    .filter(Objects::nonNull)
+                    .max(Comparator.naturalOrder());
+        } catch (RuntimeException ignored) {
+            // Readiness remains available when Market Data is temporarily unavailable.
+            return Optional.empty();
+        }
     }
 }

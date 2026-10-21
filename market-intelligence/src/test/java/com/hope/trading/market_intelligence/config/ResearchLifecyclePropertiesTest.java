@@ -47,6 +47,16 @@ class ResearchLifecyclePropertiesTest {
     }
 
     @Test
+    void rejectsNonPositiveReadinessRemoteTimeout() {
+        ResearchLifecycleProperties properties = valid();
+        properties.setReadinessRemoteTimeout(Duration.ZERO);
+
+        assertThatThrownBy(properties::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("remote timeout");
+    }
+
+    @Test
     void rejectsPartialS1FeeIdentity() {
         ResearchLifecycleProperties properties = valid();
         properties.getFeeCoverage().setProvider("KRAKEN");

@@ -5,6 +5,7 @@ import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class OrderBookReplayService {
     private final OrderBookEvidenceRepository repository;
 
@@ -32,7 +34,10 @@ public class OrderBookReplayService {
         if (marketId == null || depth < 1 || cutoff == null) {
             throw new IllegalArgumentException("marketId, depth and cutoff are required");
         }
+        long startedAt = System.nanoTime();
+        long repositoryStartedAt = System.nanoTime();
         List<OrderBookEvidence> evidence = repository.findTrusted(marketId, depth, cutoff);
+        long repositoryDurationMs = elapsedMillis(repositoryStartedAt);
         Map<UUID, List<OrderBookEvidence>> bySequence = new HashMap<>();
         evidence.forEach(item -> bySequence.computeIfAbsent(item.sequenceId(), ignored -> new ArrayList<>()).add(item));
 
@@ -43,8 +48,13 @@ public class OrderBookReplayService {
                         .thenComparingLong(OrderBookEvidence::sequenceOrdinal))
                 .orElse(null);
         if (startingPoint == null) {
-            return OrderBookReplayResult.unavailable(marketId, depth, cutoff,
+            OrderBookReplayResult result = OrderBookReplayResult.unavailable(marketId, depth, cutoff,
                     "No trusted snapshot is known at the cutoff");
+            log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
+                            + "repositoryMs={} assemblyMs={} totalMs={}",
+                    marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
+                    elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
+            return result;
         }
 
         NavigableMap<BigDecimal, BigDecimal> bids = new TreeMap<>(Comparator.reverseOrder());
@@ -58,12 +68,24 @@ public class OrderBookReplayService {
                 .toList();
         for (OrderBookEvidence item : sequence) {
             if (item.evidenceType() != OrderBookEvidenceType.DELTA) {
-                return OrderBookReplayResult.invalid(marketId, depth, cutoff, startingPoint.sequenceId(),
+                OrderBookReplayResult result = OrderBookReplayResult.invalid(marketId, depth, cutoff,
+                        startingPoint.sequenceId(),
                         "Unexpected non-delta evidence after replay snapshot");
+                log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
+                                + "repositoryMs={} assemblyMs={} totalMs={}",
+                        marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
+                        elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
+                return result;
             }
             if (item.sequenceOrdinal() != expectedOrdinal + 1) {
-                return OrderBookReplayResult.invalid(marketId, depth, cutoff, startingPoint.sequenceId(),
+                OrderBookReplayResult result = OrderBookReplayResult.invalid(marketId, depth, cutoff,
+                        startingPoint.sequenceId(),
                         "Sequence is not contiguous at replay cutoff");
+                log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
+                                + "repositoryMs={} assemblyMs={} totalMs={}",
+                        marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
+                        elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
+                return result;
             }
             apply(bids, item.bids());
             apply(asks, item.asks());
@@ -71,7 +93,7 @@ public class OrderBookReplayService {
         }
 
         OrderBookEvidence lastEvidence = sequence.isEmpty() ? startingPoint : sequence.getLast();
-        return new OrderBookReplayResult(
+        OrderBookReplayResult result = new OrderBookReplayResult(
                 OrderBookReplayResult.ReplayStatus.AVAILABLE, marketId, depth,
                 startingPoint.sequenceId(), cutoff,
                 lastEvidence.occurredAt(), lastEvidence.knownAt(),
@@ -82,6 +104,15 @@ public class OrderBookReplayService {
                 java.util.stream.Stream.concat(java.util.stream.Stream.of(startingPoint), sequence.stream())
                         .map(OrderBookEvidence::contentFingerprint).toList(),
                 limit(bids, depth), limit(asks, depth), null);
+        log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
+                        + "repositoryMs={} assemblyMs={} totalMs={}",
+                marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
+                elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
+        return result;
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return java.time.Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
     private String fingerprint(OrderBookEvidence startingPoint, List<OrderBookEvidence> sequence) {

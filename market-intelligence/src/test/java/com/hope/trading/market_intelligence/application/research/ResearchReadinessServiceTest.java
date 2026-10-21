@@ -35,6 +35,8 @@ import static org.mockito.Mockito.times;
 
 class ResearchReadinessServiceTest {
     private static final UUID MARKET_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID SECOND_MARKET_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final UUID THIRD_MARKET_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-10-16T10:00:00Z");
 
     @Test
@@ -144,6 +146,127 @@ class ResearchReadinessServiceTest {
     }
 
     @Test
+    void latestHistoricalEvidenceTimeoutRemainsFailClosed() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        properties.setReadinessRemoteTimeout(Duration.ofMillis(50));
+
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of());
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        HistoricalOhlcClient historicalOhlc = mock(HistoricalOhlcClient.class);
+        CountDownLatch release = new CountDownLatch(1);
+        when(historicalOhlc.findHistoricalOhlc(MARKET_ID, "FIFTEEN_MINUTES", NOW, 1))
+                .thenAnswer(invocation -> {
+                    release.await(5, TimeUnit.SECONDS);
+                    return null;
+                });
+
+        long startedAt = System.nanoTime();
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, historicalOhlc,
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+        release.countDown();
+
+        assertThat(readiness.latestSuccessfulEvidenceKnownAt()).isEmpty();
+        assertThat(Duration.ofNanos(System.nanoTime() - startedAt).toMillis()).isLessThan(1000L);
+    }
+
+    @Test
+    void latestHistoricalEvidenceLookupsUseBoundedConcurrency() throws Exception {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID, SECOND_MARKET_ID, THIRD_MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        properties.setReadinessRemoteConcurrency(2);
+
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of());
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        HistoricalOhlcClient historicalOhlc = mock(HistoricalOhlcClient.class);
+        CountDownLatch firstBatchStarted = new CountDownLatch(2);
+        CountDownLatch releaseFirstBatch = new CountDownLatch(1);
+        CountDownLatch thirdStarted = new CountDownLatch(1);
+        when(historicalOhlc.findHistoricalOhlc(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(1)))
+                .thenAnswer(invocation -> {
+                    UUID marketId = invocation.getArgument(0);
+                    if (firstBatchStarted.getCount() > 0) {
+                        firstBatchStarted.countDown();
+                    } else {
+                        thirdStarted.countDown();
+                    }
+                    releaseFirstBatch.await(5, TimeUnit.SECONDS);
+                    var evidence = mock(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse.class);
+                    when(evidence.knownAt()).thenReturn(NOW.minus(Duration.ofMinutes(5)));
+                    return new HistoricalOhlcClient.HistoricalOhlcSeriesResponse(
+                            marketId, "FIFTEEN_MINUTES", NOW, List.of(evidence), "AVAILABLE", null);
+                });
+
+        var service = new ResearchReadinessService(
+                properties, snapshots, outcomes, historicalOhlc,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        var caller = Executors.newSingleThreadExecutor();
+        try {
+            var computation = caller.submit(service::current);
+            assertThat(firstBatchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(thirdStarted.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            releaseFirstBatch.countDown();
+            computation.get(5, TimeUnit.SECONDS);
+        } finally {
+            releaseFirstBatch.countDown();
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    void oneHistoricalEvidenceFailureDoesNotHideOtherMarkets() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID, SECOND_MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of());
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        HistoricalOhlcClient historicalOhlc = mock(HistoricalOhlcClient.class);
+        when(historicalOhlc.findHistoricalOhlc(
+                org.mockito.ArgumentMatchers.eq(MARKET_ID), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(1)))
+                .thenThrow(new RuntimeException("market data unavailable"));
+        var evidence = mock(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse.class);
+        when(evidence.knownAt()).thenReturn(NOW.minus(Duration.ofMinutes(5)));
+        when(historicalOhlc.findHistoricalOhlc(
+                org.mockito.ArgumentMatchers.eq(SECOND_MARKET_ID), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(1)))
+                .thenReturn(new HistoricalOhlcClient.HistoricalOhlcSeriesResponse(
+                        SECOND_MARKET_ID, "FIFTEEN_MINUTES", NOW, List.of(evidence), "AVAILABLE", null));
+
+        ResearchReadiness readiness = new ResearchReadinessService(
+                properties, snapshots, outcomes, historicalOhlc,
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(readiness.latestSuccessfulEvidenceKnownAt())
+                .containsOnlyKeys(SECOND_MARKET_ID)
+                .containsEntry(SECOND_MARKET_ID, NOW.minus(Duration.ofMinutes(5)));
+    }
+
+    @Test
     void readinessCachesTheExpensiveProjectionWithinConfiguredFreshness() {
         ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
         properties.setEnabled(true);
@@ -171,6 +294,38 @@ class ResearchReadinessServiceTest {
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString());
         verify(outcomes, times(1)).findByMarkets(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void readinessCacheFreshnessStartsAfterASlowComputation() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+        properties.setReadinessCacheDuration(Duration.ofMinutes(1));
+
+        MutableClock clock = new MutableClock(NOW);
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> {
+                    clock.advance(Duration.ofMinutes(2));
+                    return List.of();
+                });
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+
+        var service = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class), clock);
+
+        service.current();
+        service.current();
+
+        verify(snapshots, times(1)).findByPopulation(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -364,6 +519,38 @@ class ResearchReadinessServiceTest {
                 "PF_XBTUSD", cutoff, NOW);
         verify(fees).findEligible(feeConfig.getBrokerAccountId(), "KRAKEN", "LINEAR_PERPETUAL",
                 "PF_XBTUSD", cutoff.plus(Duration.ofHours(1)), NOW);
+    }
+
+    @Test
+    void s1ReadinessIsDeterministicForEquivalentInputs() {
+        ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
+        properties.setEnabled(true);
+        properties.setMarketIds(List.of(MARKET_ID));
+        properties.setOutcomeHorizons(List.of(Duration.ofHours(1)));
+
+        FeatureSnapshot signal = mock(FeatureSnapshot.class);
+        when(signal.marketId()).thenReturn(MARKET_ID);
+        when(signal.evaluationCutoff()).thenReturn(NOW.minus(Duration.ofDays(15)));
+        when(signal.values()).thenReturn(List.of(new com.hope.trading.market_intelligence.domain.feature.CategoricalFeatureValue(
+                "trend.trigger.break_status",
+                com.hope.trading.market_intelligence.domain.feature.FeatureMissingness.PRESENT,
+                "CONFIRMED_BEARISH_BREAK")));
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of(signal));
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        when(outcomes.findByMarkets(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+
+        ResearchReadiness first = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+        ResearchReadiness second = new ResearchReadinessService(
+                properties, snapshots, outcomes, mock(HistoricalOhlcClient.class),
+                Clock.fixed(NOW, ZoneOffset.UTC)).current();
+
+        assertThat(second.s1()).isEqualTo(first.s1());
     }
 
     @Test
