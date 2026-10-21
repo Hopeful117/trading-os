@@ -93,7 +93,8 @@ class OrderBookRetentionServiceTest {
         properties.setDestructiveRetirementEnabled(true);
         when(repository.matchesDryRun(any(), any())).thenReturn(false);
         when(repository.retirementDetails(any())).thenReturn("sequence:0-0;artifacts=[];dependencies=[];holds=[]");
-        OrderBookRetentionService service = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class), properties,
+        OrderBookRetentionService service = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class),
+                mock(OrderBookReplayService.class), properties,
                 Clock.fixed(NOW, ZoneOffset.UTC));
 
         var candidate = new com.hope.trading.market_data.model.OrderBookRetirementCandidate(
@@ -150,9 +151,11 @@ class OrderBookRetentionServiceTest {
                 com.hope.trading.market_data.model.OrderBookSequenceStatus.SEALED,
                 2, 0, 1, CUTOFF, CUTOFF, null);
 
-        var first = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class), properties, Clock.fixed(NOW, ZoneOffset.UTC));
+        var first = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class),
+                mock(OrderBookReplayService.class), properties, Clock.fixed(NOW, ZoneOffset.UTC));
         assertThat(first.retire("dry-run", candidate)).isEqualTo(1);
-        var restarted = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class), properties, Clock.fixed(NOW, ZoneOffset.UTC));
+        var restarted = new OrderBookRetentionService(repository, mock(OrderBookEvidenceRepository.class),
+                mock(OrderBookReplayService.class), properties, Clock.fixed(NOW, ZoneOffset.UTC));
         assertThat(restarted.retire("dry-run", candidate)).isZero();
 
         verify(repository).recordPartialOperation(any(), org.mockito.ArgumentMatchers.eq(1));
@@ -167,7 +170,7 @@ class OrderBookRetentionServiceTest {
                                               OrderBookEvidenceRepository evidenceRepository) {
         var properties = new com.hope.trading.market_data.config.OrderBookRetentionProperties();
         properties.setArtifactSigningKey("story-0142-test-signing-key");
-        return new OrderBookRetentionService(repository, evidenceRepository, properties,
+        return new OrderBookRetentionService(repository, evidenceRepository, mock(OrderBookReplayService.class), properties,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

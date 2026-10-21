@@ -176,6 +176,23 @@ class MarketDataSecurityIntegrationTest {
     }
 
     @Test
+    void authorizedServiceCanCheckReusableReplayArtifact() throws Exception {
+        org.mockito.Mockito.when(orderBookRetentionService.isReusableArtifact("research:test"))
+                .thenReturn(true);
+
+        mockMvc.perform(get("/internal/v1/order-book/retention/artifacts/research:test/reusable")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void unauthorizedServiceCannotCheckReusableReplayArtifact() throws Exception {
+        mockMvc.perform(get("/internal/v1/order-book/retention/artifacts/research:test/reusable")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("other-service")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void authorizedServiceCanPreviewRetention() throws Exception {
         org.mockito.Mockito.when(orderBookRetentionService.previewRetirement()).thenReturn(
                 new OrderBookRetentionService.RetirementPreview("fingerprint", Instant.now(), List.of()));

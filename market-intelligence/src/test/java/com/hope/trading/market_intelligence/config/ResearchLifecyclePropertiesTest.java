@@ -76,6 +76,28 @@ class ResearchLifecyclePropertiesTest {
         properties.validate();
     }
 
+    @Test
+    void rejectsNonPositiveArtifactPopulationDepthWhenEnabled() {
+        ResearchLifecycleProperties properties = valid();
+        properties.setArtifactPopulationEnabled(true);
+        properties.setArtifactPopulationDepth(0);
+
+        assertThatThrownBy(properties::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("population depth");
+    }
+
+    @Test
+    void rejectsBlankArtifactPromotionReasonWhenEnabled() {
+        ResearchLifecycleProperties properties = valid();
+        properties.setArtifactPopulationEnabled(true);
+        properties.setArtifactPopulationPromotionReason(" ");
+
+        assertThatThrownBy(properties::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("promotion reason");
+    }
+
     private ResearchLifecycleProperties valid() {
         ResearchLifecycleProperties properties = new ResearchLifecycleProperties();
         properties.setEnabled(true);

@@ -37,6 +37,7 @@ public class ResearchLifecycleService {
     private final FeatureSnapshotProjectionService projections;
     private final FeatureSnapshotRepository snapshots;
     private final MarketOutcomeEvaluationService outcomes;
+    private final ResearchArtifactPopulationService artifactPopulation;
     private final Clock clock;
 
     public ResearchLifecycleService(
@@ -46,6 +47,7 @@ public class ResearchLifecycleService {
             FeatureSnapshotProjectionService projections,
             FeatureSnapshotRepository snapshots,
             MarketOutcomeEvaluationService outcomes,
+            ResearchArtifactPopulationService artifactPopulation,
             Clock clock
     ) {
         this.properties = properties;
@@ -54,6 +56,7 @@ public class ResearchLifecycleService {
         this.projections = projections;
         this.snapshots = snapshots;
         this.outcomes = outcomes;
+        this.artifactPopulation = artifactPopulation;
         this.clock = clock;
     }
 
@@ -63,6 +66,12 @@ public class ResearchLifecycleService {
             return;
         }
         Instant now = clock.instant();
+        try {
+            artifactPopulation.populate(alignedCutoff(now, properties.getObservationCadence()));
+        } catch (RuntimeException exception) {
+            log.warn("Research artifact population failed; continuing lifecycle errorType={}",
+                    exception.getClass().getSimpleName());
+        }
         submitLatestObservation(now);
         projectCompletedExecutions(now);
         evaluateMaturedOutcomes(now);
