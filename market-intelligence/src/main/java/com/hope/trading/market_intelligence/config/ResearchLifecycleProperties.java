@@ -21,6 +21,10 @@ public class ResearchLifecycleProperties {
     private int readinessRemoteConcurrency = 8;
     private Duration readinessRemoteTimeout = Duration.ofSeconds(20);
     private int maxRemoteEvidenceChecks = 512;
+    private boolean artifactPopulationEnabled;
+    private int artifactPopulationDepth = 25;
+    private int artifactPopulationMaxPerRun = 1;
+    private String artifactPopulationPromotionReason = "research-lifecycle:v1";
     private S1FeeCoverage feeCoverage = new S1FeeCoverage();
 
     public void validate() {
@@ -47,6 +51,16 @@ public class ResearchLifecycleProperties {
         }
         if (maxRemoteEvidenceChecks < 1) {
             throw new IllegalStateException("Research readiness remote evidence budget must be positive");
+        }
+        if (artifactPopulationEnabled && artifactPopulationDepth < 1) {
+            throw new IllegalStateException("Research artifact population depth must be positive");
+        }
+        if (artifactPopulationEnabled && artifactPopulationMaxPerRun < 1) {
+            throw new IllegalStateException("Research artifact population limit must be positive");
+        }
+        if (artifactPopulationEnabled && (artifactPopulationPromotionReason == null
+                || artifactPopulationPromotionReason.isBlank())) {
+            throw new IllegalStateException("Research artifact population promotion reason is required");
         }
         if (outcomeHorizons.isEmpty() || outcomeHorizons.stream().anyMatch(Duration::isNegative)
                 || outcomeHorizons.stream().anyMatch(Duration::isZero)) {
@@ -128,6 +142,38 @@ public class ResearchLifecycleProperties {
 
     public void setMaxRemoteEvidenceChecks(int maxRemoteEvidenceChecks) {
         this.maxRemoteEvidenceChecks = maxRemoteEvidenceChecks;
+    }
+
+    public boolean isArtifactPopulationEnabled() {
+        return artifactPopulationEnabled;
+    }
+
+    public void setArtifactPopulationEnabled(boolean artifactPopulationEnabled) {
+        this.artifactPopulationEnabled = artifactPopulationEnabled;
+    }
+
+    public int getArtifactPopulationDepth() {
+        return artifactPopulationDepth;
+    }
+
+    public void setArtifactPopulationDepth(int artifactPopulationDepth) {
+        this.artifactPopulationDepth = artifactPopulationDepth;
+    }
+
+    public int getArtifactPopulationMaxPerRun() {
+        return artifactPopulationMaxPerRun;
+    }
+
+    public void setArtifactPopulationMaxPerRun(int artifactPopulationMaxPerRun) {
+        this.artifactPopulationMaxPerRun = artifactPopulationMaxPerRun;
+    }
+
+    public String getArtifactPopulationPromotionReason() {
+        return artifactPopulationPromotionReason;
+    }
+
+    public void setArtifactPopulationPromotionReason(String artifactPopulationPromotionReason) {
+        this.artifactPopulationPromotionReason = artifactPopulationPromotionReason;
     }
 
     public S1FeeCoverage getFeeCoverage() {
