@@ -14,6 +14,7 @@ public final class TradeOutcome {
     private final UUID accountId;
     private final UUID brokerAccountId;
     private final UUID executionIntentId;
+    private final UUID tradeId;
     private final UUID tradePlanId;
     private final long tradePlanVersion;
     private final List<TradePlanProvenance> provenance;
@@ -33,7 +34,7 @@ public final class TradeOutcome {
     private final Instant updatedAt;
 
     private TradeOutcome(UUID id, UUID accountId, UUID brokerAccountId, UUID executionIntentId,
-                         UUID tradePlanId, long tradePlanVersion, List<TradePlanProvenance> provenance,
+                         UUID tradeId, UUID tradePlanId, long tradePlanVersion, List<TradePlanProvenance> provenance,
                          String instrument, ExecutionParameters.Side side, BigDecimal quantity,
                          BigDecimal entryPrice, BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
                          BigDecimal expectedMonetaryRisk, BigDecimal riskRewardRatio,
@@ -43,6 +44,7 @@ public final class TradeOutcome {
         this.accountId = Objects.requireNonNull(accountId);
         this.brokerAccountId = Objects.requireNonNull(brokerAccountId);
         this.executionIntentId = Objects.requireNonNull(executionIntentId);
+        this.tradeId = tradeId;
         this.tradePlanId = Objects.requireNonNull(tradePlanId);
         if (tradePlanVersion < 1) throw new IllegalArgumentException("trade plan version starts at 1");
         this.tradePlanVersion = tradePlanVersion;
@@ -68,7 +70,16 @@ public final class TradeOutcome {
                                             long tradePlanVersion, List<TradePlanProvenance> provenance,
                                             ExecutionParameters parameters, BigDecimal entryPrice,
                                             Instant now) {
-        return new TradeOutcome(id, accountId, brokerAccountId, executionIntentId, tradePlanId,
+        return acknowledged(id, accountId, brokerAccountId, executionIntentId, null, tradePlanId,
+                tradePlanVersion, provenance, parameters, entryPrice, now);
+    }
+
+    public static TradeOutcome acknowledged(UUID id, UUID accountId, UUID brokerAccountId,
+                                            UUID executionIntentId, UUID tradeId, UUID tradePlanId,
+                                            long tradePlanVersion, List<TradePlanProvenance> provenance,
+                                            ExecutionParameters parameters, BigDecimal entryPrice,
+                                            Instant now) {
+        return new TradeOutcome(id, accountId, brokerAccountId, executionIntentId, tradeId, tradePlanId,
                 tradePlanVersion, provenance, parameters.instrument(), parameters.side(),
                 parameters.quantity(), entryPrice, parameters.stopLossPrice(), parameters.takeProfitPrices(),
                 parameters.expectedMonetaryRisk(), parameters.riskRewardRatio(), null, null, null,
@@ -83,7 +94,22 @@ public final class TradeOutcome {
                                          BigDecimal expectedMonetaryRisk, BigDecimal riskRewardRatio,
                                          BigDecimal realizedPnl, BigDecimal actualFee, Instant closedAt,
                                          TradeOutcomeStatus status, Instant createdAt, Instant updatedAt) {
-        return new TradeOutcome(id, accountId, brokerAccountId, executionIntentId, tradePlanId,
+        return rehydrate(id, accountId, brokerAccountId, executionIntentId, null, tradePlanId,
+                tradePlanVersion, provenance, instrument, side, quantity, entryPrice, stopLossPrice,
+                takeProfitPrices, expectedMonetaryRisk, riskRewardRatio, realizedPnl, actualFee,
+                closedAt, status, createdAt, updatedAt);
+    }
+
+    public static TradeOutcome rehydrate(UUID id, UUID accountId, UUID brokerAccountId,
+                                         UUID executionIntentId, UUID tradeId, UUID tradePlanId,
+                                         long tradePlanVersion, List<TradePlanProvenance> provenance,
+                                         String instrument, ExecutionParameters.Side side, BigDecimal quantity,
+                                         BigDecimal entryPrice, BigDecimal stopLossPrice,
+                                         List<BigDecimal> takeProfitPrices, BigDecimal expectedMonetaryRisk,
+                                         BigDecimal riskRewardRatio, BigDecimal realizedPnl, BigDecimal actualFee,
+                                         Instant closedAt, TradeOutcomeStatus status, Instant createdAt,
+                                         Instant updatedAt) {
+        return new TradeOutcome(id, accountId, brokerAccountId, executionIntentId, tradeId, tradePlanId,
                 tradePlanVersion, provenance, instrument, side, quantity, entryPrice, stopLossPrice,
                 takeProfitPrices, expectedMonetaryRisk, riskRewardRatio, realizedPnl, actualFee, closedAt,
                 status, createdAt, updatedAt);
@@ -93,6 +119,7 @@ public final class TradeOutcome {
     public UUID accountId() { return accountId; }
     public UUID brokerAccountId() { return brokerAccountId; }
     public UUID executionIntentId() { return executionIntentId; }
+    public UUID tradeId() { return tradeId; }
     public UUID tradePlanId() { return tradePlanId; }
     public long tradePlanVersion() { return tradePlanVersion; }
     public List<TradePlanProvenance> provenance() { return provenance; }

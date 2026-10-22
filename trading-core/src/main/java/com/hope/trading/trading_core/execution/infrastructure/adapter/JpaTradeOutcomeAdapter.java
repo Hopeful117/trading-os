@@ -24,7 +24,7 @@ public class JpaTradeOutcomeAdapter implements TradeOutcomeRepositoryPort {
     public TradeOutcome save(TradeOutcome value) {
         TradeOutcomeEntity entity = repository.findById(value.id()).orElseGet(TradeOutcomeEntity::new);
         entity.id = value.id(); entity.accountId = value.accountId(); entity.brokerAccountId = value.brokerAccountId();
-        entity.executionIntentId = value.executionIntentId(); entity.tradePlanId = value.tradePlanId();
+        entity.executionIntentId = value.executionIntentId(); entity.tradeId = value.tradeId(); entity.tradePlanId = value.tradePlanId();
         entity.tradePlanVersion = value.tradePlanVersion(); entity.instrument = value.instrument();
         entity.side = value.side().name(); entity.quantity = value.quantity(); entity.entryPrice = value.entryPrice();
         entity.stopLossPrice = value.stopLossPrice();
@@ -66,7 +66,7 @@ public class JpaTradeOutcomeAdapter implements TradeOutcomeRepositoryPort {
                         item.accountId, item.sourceScanId, item.sourceScanMarketId,
                         item.analysisExecutionId, item.marketId)).toList();
         return TradeOutcome.rehydrate(value.id, value.accountId, value.brokerAccountId, value.executionIntentId,
-                value.tradePlanId, value.tradePlanVersion, provenance, value.instrument,
+                value.tradeId, value.tradePlanId, value.tradePlanVersion, provenance, value.instrument,
                 com.hope.trading.trading_core.execution.domain.model.ExecutionParameters.Side.valueOf(value.side),
                 value.quantity, value.entryPrice, value.stopLossPrice,
                 value.takeProfitPrices == null || value.takeProfitPrices.isBlank() ? List.of() :

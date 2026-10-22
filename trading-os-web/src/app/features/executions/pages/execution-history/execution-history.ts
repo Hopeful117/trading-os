@@ -1,7 +1,7 @@
 import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Observable, catchError, map, of, startWith, switchMap } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, startWith, switchMap } from 'rxjs';
 import {
   ExecutionDto,
   ExecutionStatus,
@@ -10,6 +10,9 @@ import {
 import { TradePlanResponse } from '../../../../core/models/trade-plan.model';
 import { ExecutionService } from '../../../../core/services/execution.service';
 import { TradePlanService } from '../../../../core/services/trade-plan.service';
+import { AccountService } from '../../../../core/services/account.service';
+import { DecisionHistoryService } from '../../../../core/services/decision-history.service';
+import { DecisionHistoryItem } from '../../../../core/models/decision-history.model';
 
 interface HistoryViewModel {
   executions: ExecutionSummaryDto[];
@@ -24,6 +27,12 @@ interface DetailState {
   plan: TradePlanResponse | null;
 }
 
+interface DecisionHistoryViewModel {
+  decisions: DecisionHistoryItem[];
+  loading: boolean;
+  error: boolean;
+}
+
 @Component({
   selector: 'app-execution-history',
   imports: [AsyncPipe, DatePipe, DecimalPipe, RouterLink],
@@ -33,6 +42,8 @@ interface DetailState {
 export class ExecutionHistory {
   private readonly executionService = inject(ExecutionService);
   private readonly tradePlanService = inject(TradePlanService);
+  private readonly accountService = inject(AccountService, { optional: true });
+  private readonly decisionHistoryService = inject(DecisionHistoryService);
   private readonly details = signal<Record<string, DetailState>>({});
 
   readonly viewModel$: Observable<HistoryViewModel> = this.executionService.list().pipe(
@@ -40,6 +51,21 @@ export class ExecutionHistory {
     catchError(() => of({ executions: [], loading: false, error: true })),
     startWith({ executions: [], loading: true, error: false }),
   );
+
+  readonly decisionHistory$: Observable<DecisionHistoryViewModel> = this.accountService
+    ? this.accountService.getAccounts().pipe(
+        switchMap((accounts) =>
+          accounts.length === 0
+            ? of([] as DecisionHistoryItem[])
+            : forkJoin(
+                accounts.map((account) => this.decisionHistoryService.list(account.accountId)),
+              ).pipe(map((histories) => histories.flat())),
+        ),
+        map((decisions) => ({ decisions, loading: false, error: false })),
+        catchError(() => of({ decisions: [], loading: false, error: true })),
+        startWith({ decisions: [], loading: true, error: false }),
+      )
+    : of({ decisions: [], loading: false, error: false });
 
   detailFor(executionId: string): DetailState | null {
     return this.details()[executionId] ?? null;

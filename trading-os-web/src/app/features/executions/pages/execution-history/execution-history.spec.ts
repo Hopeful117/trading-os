@@ -7,11 +7,15 @@ import { TradePlanResponse } from '../../../../core/models/trade-plan.model';
 import { ExecutionService } from '../../../../core/services/execution.service';
 import { TradePlanService } from '../../../../core/services/trade-plan.service';
 import { ExecutionHistory } from './execution-history';
+import { AccountService } from '../../../../core/services/account.service';
+import { DecisionHistoryService } from '../../../../core/services/decision-history.service';
 
 describe('ExecutionHistory', () => {
   let fixture: ComponentFixture<ExecutionHistory>;
   let executionService: { list: ReturnType<typeof vi.fn>; getExecution: ReturnType<typeof vi.fn> };
   let tradePlanService: { getPlan: ReturnType<typeof vi.fn> };
+  let accountService: { getAccounts: ReturnType<typeof vi.fn> };
+  let decisionHistoryService: { list: ReturnType<typeof vi.fn> };
 
   const summary: ExecutionSummaryDto = {
     id: 'execution-1',
@@ -55,6 +59,8 @@ describe('ExecutionHistory', () => {
       getExecution: vi.fn(() => of(execution)),
     };
     tradePlanService = { getPlan: vi.fn(() => of(plan)) };
+    accountService = { getAccounts: vi.fn(() => of([])) };
+    decisionHistoryService = { list: vi.fn(() => of([])) };
 
     await TestBed.configureTestingModule({
       imports: [ExecutionHistory],
@@ -62,6 +68,8 @@ describe('ExecutionHistory', () => {
         provideRouter([]),
         { provide: ExecutionService, useValue: executionService },
         { provide: TradePlanService, useValue: tradePlanService },
+        { provide: AccountService, useValue: accountService },
+        { provide: DecisionHistoryService, useValue: decisionHistoryService },
       ],
     }).compileComponents();
   });
@@ -153,6 +161,41 @@ describe('ExecutionHistory', () => {
 
     expect(text()).toContain('Trade Plan continuity is unavailable');
     expect(fixture.nativeElement.querySelector('[data-testid="trade-plan-link"]')).toBeNull();
+  });
+
+  it('loads decision history for every owned account', async () => {
+    accountService.getAccounts.mockReturnValue(
+      of([{ accountId: 'account-1' }, { accountId: 'account-2' }]),
+    );
+    decisionHistoryService.list.mockImplementation((accountId: string) =>
+      of([
+        {
+          outcomeId: `outcome-${accountId}`,
+          instrument: 'BTC/USD',
+          side: 'BUY',
+          resultAvailable: false,
+          lineageAvailable: true,
+        },
+      ]),
+    );
+
+    await create();
+
+    expect(decisionHistoryService.list).toHaveBeenCalledWith('account-1');
+    expect(decisionHistoryService.list).toHaveBeenCalledWith('account-2');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="decision-card"]').length).toBe(2);
+  });
+
+  it('keeps decision history errors distinct from an empty history', async () => {
+    accountService.getAccounts.mockReturnValue(of([{ accountId: 'account-1' }]));
+    decisionHistoryService.list.mockReturnValue(throwError(() => new Error('down')));
+
+    await create();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="decision-history-error"]'),
+    ).toBeTruthy();
+    expect(text()).not.toContain('No acknowledged decisions are available');
   });
 
   it.each([

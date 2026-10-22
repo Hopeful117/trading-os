@@ -59,15 +59,22 @@ public final class ExecutionFinalizationStep {
     public void execute(ExecutionPipelineContext context) {
         switch (context.submissionResult()) {
             case BrokerExecutionPort.Acknowledged acknowledged -> {
+                java.util.UUID settledTradeId = null;
                 if (isPaperAccount(context.intent().brokerAccountId())) {
-                    paperSettlementService.settle(context.intent(), context.attempt(), context.brokerOrder());
+                    settledTradeId = paperSettlementService.settle(
+                            context.intent(), context.attempt(), context.brokerOrder());
                 }
                 lifecycle.acknowledged(context.intent(), context.attempt(),
                         context.brokerOrder(), acknowledged.correlationId(), context.now());
                 orders.save(context.brokerOrder());
                 if (tradeOutcomeService != null
                         && context.intent().purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
-                    tradeOutcomeService.acknowledge(context.intent(), context.brokerOrder(), context.now());
+                    if (settledTradeId == null) {
+                        tradeOutcomeService.acknowledge(context.intent(), context.brokerOrder(), context.now());
+                    } else {
+                        tradeOutcomeService.acknowledge(
+                                context.intent(), context.brokerOrder(), settledTradeId, context.now());
+                    }
                 }
                 metrics.executionSucceeded();
             }
