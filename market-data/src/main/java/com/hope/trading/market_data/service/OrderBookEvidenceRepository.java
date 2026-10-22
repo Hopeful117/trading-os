@@ -27,12 +27,14 @@ public class OrderBookEvidenceRepository {
 
     @Transactional
     public boolean append(OrderBookEvidence evidence) {
+        requireTrustedEvidence(evidence);
         ensureSequence(evidence);
         return insertEvidence(evidence);
     }
 
     @Transactional
     public boolean appendSnapshotAsNewSequence(OrderBookEvidence evidence, Instant supersededAt) {
+        requireTrustedEvidence(evidence);
         if (exists(evidence.contentFingerprint())) {
             return false;
         }
@@ -59,6 +61,18 @@ public class OrderBookEvidenceRepository {
                 OrderBookEvidencePayload.encode(evidence.asks()), evidence.checksum(),
                 evidence.normalizationVersion(), evidence.contentFingerprint(), true);
         return rows == 1;
+    }
+
+    private void requireTrustedEvidence(OrderBookEvidence evidence) {
+        if (evidence.checksum() != null) {
+            throw new IllegalArgumentException("unvalidated provider checksum cannot be trusted");
+        }
+        if (!OrderBookEvidenceFingerprint.NORMALIZATION_VERSION.equals(evidence.normalizationVersion())) {
+            throw new IllegalArgumentException("unsupported order-book normalization version");
+        }
+        if (!OrderBookEvidenceFingerprint.fingerprint(evidence).equals(evidence.contentFingerprint())) {
+            throw new IllegalArgumentException("order-book evidence fingerprint does not match canonical content");
+        }
     }
 
     private void ensureSequence(OrderBookEvidence evidence) {

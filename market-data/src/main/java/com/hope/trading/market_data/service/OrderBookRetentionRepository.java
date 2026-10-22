@@ -185,6 +185,7 @@ public class OrderBookRetentionRepository {
 
     @Transactional
     public boolean saveDependency(OrderBookEvidenceDependency dependency) {
+        lockProtectionTarget(dependency.artifactId(), dependency.sequenceId());
         if (isH2() && existsDependency(dependency.dependencyKey())) {
             return false;
         }
@@ -223,6 +224,7 @@ public class OrderBookRetentionRepository {
 
     @Transactional
     public boolean saveHold(OrderBookRetentionHold hold) {
+        lockProtectionTarget(hold.artifactId(), hold.sequenceId());
         if (isH2() && existsHold(hold.holdKey())) {
             return false;
         }
@@ -399,6 +401,7 @@ public class OrderBookRetentionRepository {
 
     @Transactional
     public int retireEvidence(OrderBookRetirementCandidate candidate, int batchSize, Instant invalidatedBefore) {
+        lockRetirementTarget(candidate.sequenceId());
         return jdbc.update("""
                 DELETE FROM historical_order_book_evidence
                  WHERE evidence_id IN (
@@ -453,7 +456,44 @@ public class OrderBookRetentionRepository {
                       LIMIT ?
                  )
                  """, candidate.sequenceId(), candidate.firstOrdinal(), candidate.lastOrdinal(), Timestamp.from(invalidatedBefore),
-                  batchSize);
+                batchSize);
+    }
+
+    private void lockProtectionTarget(UUID artifactId, UUID sequenceId) {
+        UUID targetSequenceId = resolveTargetSequence(artifactId, sequenceId);
+        lockRetirementTarget(targetSequenceId);
+        if (jdbc.queryForObject("""
+                SELECT COUNT(*)
+                  FROM historical_order_book_evidence
+                 WHERE sequence_id = ?
+                """, Long.class, targetSequenceId) == 0) {
+            throw new IllegalStateException("cannot protect a sequence without retained evidence");
+        }
+    }
+
+    private UUID resolveTargetSequence(UUID artifactId, UUID sequenceId) {
+        UUID artifactSequence = artifactId == null ? null : jdbc.queryForObject("""
+                SELECT sequence_id
+                  FROM historical_order_book_replay_artifact
+                 WHERE artifact_id = ?
+                """, UUID.class, artifactId);
+        if (sequenceId != null && artifactSequence != null && !sequenceId.equals(artifactSequence)) {
+            throw new IllegalArgumentException("dependency target sequence does not match artifact sequence");
+        }
+        UUID target = sequenceId == null ? artifactSequence : sequenceId;
+        if (target == null) {
+            throw new IllegalArgumentException("a dependency or hold target is required");
+        }
+        return target;
+    }
+
+    private void lockRetirementTarget(UUID sequenceId) {
+        jdbc.queryForObject("""
+                SELECT sequence_id
+                  FROM historical_order_book_sequence
+                 WHERE sequence_id = ?
+                 FOR UPDATE
+                """, UUID.class, sequenceId);
     }
 
     private String artifactInsertSql() {

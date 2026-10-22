@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -63,6 +64,45 @@ class OrderBookEvidencePersistenceTest {
                 evidence.sequenceOrdinal(), evidence.providerSequence(),
                 evidence.occurredAt(), evidence.knownAt(), evidence.bids(), evidence.asks(), evidence.checksum(),
                 evidence.normalizationVersion(), evidence.contentFingerprint()))).isFalse();
+    }
+
+    @Test
+    void rejectsEvidenceWithNonCanonicalFingerprint() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        OrderBookEvidence valid = evidence(marketId, UUID.randomUUID(), 0);
+        OrderBookEvidence forged = new OrderBookEvidence(
+                valid.evidenceId(), valid.marketId(), valid.provider(), valid.symbol(), valid.providerSymbol(),
+                valid.depth(), valid.evidenceType(), valid.origin(), valid.sourceStartOrdinal(), valid.sourceEndOrdinal(),
+                valid.sequenceId(), valid.sequenceOrdinal(), valid.providerSequence(), valid.occurredAt(),
+                valid.knownAt(), valid.bids(), valid.asks(), valid.checksum(), valid.normalizationVersion(),
+                "forged");
+
+        assertThatThrownBy(() -> evidenceRepository.append(forged))
+                .hasRootCauseInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("fingerprint");
+    }
+
+    @Test
+    void rejectsEvidenceWithUnvalidatedChecksum() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        OrderBookEvidence valid = evidence(marketId, UUID.randomUUID(), 0);
+        OrderBookEvidence withChecksum = new OrderBookEvidence(
+                valid.evidenceId(), valid.marketId(), valid.provider(), valid.symbol(), valid.providerSymbol(),
+                valid.depth(), valid.evidenceType(), valid.origin(), valid.sourceStartOrdinal(), valid.sourceEndOrdinal(),
+                valid.sequenceId(), valid.sequenceOrdinal(), valid.providerSequence(), valid.occurredAt(),
+                valid.knownAt(), valid.bids(), valid.asks(), 123L, valid.normalizationVersion(), "pending");
+        withChecksum = new OrderBookEvidence(withChecksum.evidenceId(), withChecksum.marketId(),
+                withChecksum.provider(), withChecksum.symbol(), withChecksum.providerSymbol(), withChecksum.depth(),
+                withChecksum.evidenceType(), withChecksum.origin(), withChecksum.sourceStartOrdinal(),
+                withChecksum.sourceEndOrdinal(), withChecksum.sequenceId(), withChecksum.sequenceOrdinal(),
+                withChecksum.providerSequence(), withChecksum.occurredAt(), withChecksum.knownAt(),
+                withChecksum.bids(), withChecksum.asks(), withChecksum.checksum(), withChecksum.normalizationVersion(),
+                OrderBookEvidenceFingerprint.fingerprint(withChecksum));
+
+        OrderBookEvidence candidate = withChecksum;
+        assertThatThrownBy(() -> evidenceRepository.append(candidate))
+                .hasRootCauseInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("checksum");
     }
 
     @Test
