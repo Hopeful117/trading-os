@@ -112,20 +112,20 @@ public class PaperSettlementService {
     }
 
     @Transactional
-    public void settle(ExecutionIntent intent, ExecutionAttempt attempt, BrokerOrder order) {
+    public UUID settle(ExecutionIntent intent, ExecutionAttempt attempt, BrokerOrder order) {
         Optional<com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount> brokerAccountOpt =
                 brokerAccountRepository.findById(intent.brokerAccountId());
         if (brokerAccountOpt.isEmpty()) {
-            return;
+            return null;
         }
         com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount = brokerAccountOpt.get();
         if (brokerAccount.executionMode() != ExecutionMode.PAPER) {
-            return;
+            return null;
         }
 
         Optional<Account> accountOpt = accountRepository.findByBrokerAccountId(brokerAccount.id());
         if (accountOpt.isEmpty()) {
-            return;
+            return null;
         }
         Account account = accountOpt.get();
         if (account.getUser() == null || !brokerAccount.ownerId().equals(account.getUser().getUserId())
@@ -138,24 +138,37 @@ public class PaperSettlementService {
                 && productType == InstrumentProductType.LINEAR_PERPETUAL;
         BrokerOrder.Fill fill = getFill(order);
 
+        UUID settledTradeId = null;
+        Trade settledTrade = null;
         if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT) {
-            settleExit(account, intent, fill, cashSettledDerivative);
+            settledTradeId = settleExit(account, intent, fill, cashSettledDerivative);
         } else if (cashSettledDerivative) {
-            updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
+            settledTrade = updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
             ensureRealizedBalance(account);
             account.setRealizedBalance(account.getRealizedBalance().subtract(fill.fee()));
             recomputeCashEquity(account, fill.executedAt());
         } else {
             updateBalances(account, intent, params.side(), fill.quantity(), fill.price(), fill.fee(), params);
-            updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
+            settledTrade = updatePosition(account, intent, params.side(), fill.quantity(), fill.price(), fill.executedAt(), params);
             recalculateEquity(account, fill.fee());
         }
 
-        accountRepository.save(account);
+        Account persistedAccount = accountRepository.save(account);
+        accountRepository.flush();
+        if (settledTrade != null) {
+            Trade settledEntry = settledTrade;
+            settledTradeId = persistedAccount.getTrades().stream()
+                    .filter(trade -> trade.getSymbol().equals(settledEntry.getSymbol())
+                            && trade.getOpenedAt().equals(settledEntry.getOpenedAt()))
+                    .findFirst()
+                    .map(Trade::getTradeId)
+                    .orElse(settledEntry.getTradeId());
+        }
         if (challengeReevaluationOutbox != null) {
             accountRepository.flush();
             challengeReevaluationOutbox.enqueue(intent.id().value(), account.getAccountId(), fill.executedAt());
         }
+        return settledTradeId;
     }
 
     private InstrumentProductType requireCompatibleSettlement(Account account,
@@ -189,7 +202,7 @@ public class PaperSettlementService {
         return matches.getFirst().getProductType();
     }
 
-    private void settleExit(Account account, ExecutionIntent intent, BrokerOrder.Fill fill,
+    private UUID settleExit(Account account, ExecutionIntent intent, BrokerOrder.Fill fill,
                             boolean cashSettledDerivative) {
         UUID targetId = intent.targetTradeId().orElseThrow(() -> new IllegalStateException("EXIT target is required"));
         Trade trade = account.getTrades().stream().filter(candidate -> targetId.equals(candidate.getTradeId()))
@@ -226,6 +239,7 @@ public class PaperSettlementService {
                 account.setPeakEquity(account.getEquity());
             }
         }
+        return trade.getTradeId();
     }
 
     private void updateExitBalances(Account account, Trade trade, BrokerOrder.Fill fill) {
@@ -311,7 +325,7 @@ public class PaperSettlementService {
         return account.getBaseCurrency();
     }
 
-    private void updatePosition(Account account, ExecutionIntent intent, ExecutionParameters.Side side, BigDecimal quantity,
+    private Trade updatePosition(Account account, ExecutionIntent intent, ExecutionParameters.Side side, BigDecimal quantity,
                                  BigDecimal fillPrice, Instant executedAt, ExecutionParameters params) {
         TradePlanRiskPort.Snapshot plan = resolvePlan(intent);
         BigDecimal stopPrice = plan == null ? null : plan.stopPrice();
@@ -332,6 +346,7 @@ public class PaperSettlementService {
             trade.setEntryPrice(newEntryPrice);
             if (trade.getStopLoss() == null) trade.setStopLoss(stopPrice);
             if (trade.getTakeProfit() == null) trade.setTakeProfit(takeProfit);
+            return trade;
         } else {
             Trade trade = Trade.builder()
                     .symbol(params.instrument())
@@ -345,6 +360,7 @@ public class PaperSettlementService {
                     .tradeStatus(TradeStatus.OPEN)
                     .build();
             account.addTrade(trade);
+            return trade;
         }
     }
 

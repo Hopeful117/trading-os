@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record TradeOutcomeDto(
-        UUID id, UUID accountId, UUID brokerAccountId, UUID executionIntentId,
+        UUID id, UUID accountId, UUID brokerAccountId, UUID executionIntentId, UUID tradeId,
         UUID tradePlanId, long tradePlanVersion, String instrument, String side,
         BigDecimal quantity, BigDecimal entryPrice, BigDecimal stopLossPrice,
         List<BigDecimal> takeProfitPrices, BigDecimal expectedMonetaryRisk,
@@ -18,7 +18,7 @@ public record TradeOutcomeDto(
         List<TradePlanProvenance> provenance, Instant createdAt, Instant updatedAt) {
     public static TradeOutcomeDto from(TradeOutcome value) {
         return new TradeOutcomeDto(value.id(), value.accountId(), value.brokerAccountId(),
-                value.executionIntentId(), value.tradePlanId(), value.tradePlanVersion(),
+                value.executionIntentId(), value.tradeId(), value.tradePlanId(), value.tradePlanVersion(),
                 value.instrument(), value.side().name(), value.quantity(), value.entryPrice(),
                 value.stopLossPrice(), value.takeProfitPrices(), value.expectedMonetaryRisk(),
                 value.riskRewardRatio(), value.realizedPnl(), value.actualFee(), value.closedAt(),

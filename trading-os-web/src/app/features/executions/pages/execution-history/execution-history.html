@@ -7,6 +7,54 @@
     </div>
   </header>
 
+  @if (decisionHistory$ | async; as decisions) {
+    <section class="decision-history" aria-label="Decision history">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Decision record</p>
+          <h2>Post-trade decision history</h2>
+        </div>
+        <span class="section-note">Authoritative facts only</span>
+      </div>
+      @if (decisions.loading) {
+        <p class="state-panel" data-testid="decision-history-loading">Loading decision history…</p>
+      } @else if (decisions.error) {
+        <p class="state-panel error" data-testid="decision-history-error" role="alert">
+          Decision history is temporarily unavailable. Please try again later.
+        </p>
+      } @else if (decisions.decisions.length === 0) {
+        <p class="state-panel empty">No acknowledged decisions are available for this account.</p>
+      } @else {
+        <div class="decision-list">
+          @for (decision of decisions.decisions; track decision.outcomeId) {
+            <article class="decision-card" data-testid="decision-card">
+              <div class="decision-heading">
+                <div>
+                  <h3>{{ decision.instrument }} · {{ decision.side }}</h3>
+                  <p>{{ decision.createdAt | date: 'medium' }}</p>
+                </div>
+                <span class="status-badge" [class.completed]="decision.resultAvailable">
+                  {{ decision.resultAvailable ? 'Result available' : 'Result unavailable' }}
+                </span>
+              </div>
+              <div class="decision-facts">
+                <span>Plan: {{ decision.tradePlanId ? 'v' + decision.tradePlanVersion : 'Unavailable' }}</span>
+                <span>Risk: {{ decision.riskEvaluationId ? 'Recorded' : 'Unavailable' }}</span>
+                <span>Entry: {{ decision.actualEntryPrice ?? '—' }}</span>
+                <span>P&amp;L: {{ decision.realizedPnl ?? 'Unavailable' }}</span>
+              </div>
+              @if (!decision.lineageAvailable) {
+                <p class="notice uncertain">Trade lineage is unavailable. No result is inferred.</p>
+              } @else if (!decision.resultAvailable) {
+                <p class="notice uncertain">The position remains open or its result is not yet authoritative.</p>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+  }
+
   @if (viewModel$ | async; as vm) {
     @if (vm.loading) {
       <output class="state-panel" data-testid="history-loading"> Loading executions… </output>

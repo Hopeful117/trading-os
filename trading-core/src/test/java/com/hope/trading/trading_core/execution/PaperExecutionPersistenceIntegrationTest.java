@@ -6,18 +6,23 @@ import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.execution.application.service.ExecutionTimeRiskRevalidationService;
 import com.hope.trading.trading_core.execution.application.service.ExecuteTradeService;
+import com.hope.trading.trading_core.execution.application.service.PaperSettlementService;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.aggregate.BrokerOrder;
+import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionAttempt;
 import com.hope.trading.trading_core.execution.domain.model.ExecutionParameters;
 import com.hope.trading.trading_core.execution.domain.model.RiskApprovalReference;
 import com.hope.trading.trading_core.execution.domain.model.TradePlanReference;
 import com.hope.trading.trading_core.execution.domain.valueobject.BrokerOrderStatus;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionIntentId;
+import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionAttemptId;
+import com.hope.trading.trading_core.execution.domain.valueobject.BrokerOrderId;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionStatus;
 import com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey;
 import com.hope.trading.trading_core.execution.domain.repository.BrokerOrderRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.repository.ExecutionAttemptRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntentRepositoryPort;
+import com.hope.trading.trading_core.execution.domain.repository.TradeOutcomeRepositoryPort;
 import com.hope.trading.trading_core.execution.infrastructure.adapter.BrokerExecutionClient;
 import com.hope.trading.trading_core.helper.Role;
 import com.hope.trading.trading_core.helper.TradeStatus;
@@ -96,6 +101,8 @@ class PaperExecutionPersistenceIntegrationTest {
     @Autowired private ExecutionAttemptRepositoryPort attempts;
     @Autowired private BrokerOrderRepositoryPort orders;
     @Autowired private ExecuteTradeService execution;
+    @Autowired private PaperSettlementService settlement;
+    @Autowired private TradeOutcomeRepositoryPort outcomes;
     @Autowired private EntityManager entityManager;
     @Autowired private JdbcTemplate jdbc;
 
@@ -188,6 +195,9 @@ class PaperExecutionPersistenceIntegrationTest {
         assertThat(persistedAccount.getEquity()).isEqualByComparingTo("10000");
         assertThat(persistedAccount.getPeakEquity()).isEqualByComparingTo("10000");
         assertThat(persistedAccount.getSettlementModel()).isEqualTo(SettlementModel.INVENTORY);
+        var persistedTrade = persistedAccount.getTrades().stream().findFirst().orElseThrow();
+        var persistedOutcome = outcomes.findByExecutionIntentId(intent.id().value()).orElseThrow();
+        assertThat(persistedOutcome.tradeId()).isEqualTo(persistedTrade.getTradeId());
         assertThat(persistedAccount.getTrades()).singleElement().satisfies(trade -> {
             assertThat(trade.getSymbol()).isEqualTo("BTC/USD");
             assertThat(trade.getType()).isEqualTo(TradeType.BUY);
@@ -198,6 +208,49 @@ class PaperExecutionPersistenceIntegrationTest {
             assertThat(trade.getAccount().getAccountId()).isEqualTo(accountId);
         });
 
+    }
+
+    @Test
+    void reloadsOutcomeAssociationThroughPaperExitAndClosedTrade() {
+        ExecutionIntent entry = persistedIntent();
+        entityManager.flush();
+        entityManager.clear();
+
+        execution.execute(entry.id());
+        entityManager.clear();
+
+        Account afterEntry = accounts.findById(accountId).orElseThrow();
+        TradeType entryType = afterEntry.getTrades().getFirst().getType();
+        UUID tradeId = afterEntry.getTrades().getFirst().getTradeId();
+        var entryOutcome = outcomes.findByExecutionIntentId(entry.id().value()).orElseThrow();
+        assertThat(entryOutcome.tradeId()).isEqualTo(tradeId);
+
+        ExecutionIntent exit = ExecutionIntent.createExit(
+                ExecutionIntentId.newId(), ownerId, brokerAccountId, accountId, tradeId,
+                new ExecutionParameters("BTC/USD",
+                        entryType == TradeType.BUY ? ExecutionParameters.Side.SELL : ExecutionParameters.Side.BUY,
+                        ExecutionParameters.OrderType.MARKET, decimal("0.1"), null),
+                new IdempotencyKey("paper-exit-persisted-" + UUID.randomUUID()), NOW, NOW.plusSeconds(600));
+        ExecutionAttempt exitAttempt = ExecutionAttempt.create(
+                ExecutionAttemptId.newId(), exit.id(), 1, NOW, UUID.randomUUID());
+        BrokerOrder exitOrder = BrokerOrder.acknowledged(
+                BrokerOrderId.newId(), exit.id(), exitAttempt.id(), "SIM-EXIT", NOW);
+        exitOrder.addFill(new BrokerOrder.Fill("exit-fill", decimal("0.1"), decimal("50150"),
+                BigDecimal.ZERO, NOW), true, NOW);
+
+        settlement.settle(exit, exitAttempt, exitOrder);
+        entityManager.flush();
+        entityManager.clear();
+
+        Account reloaded = accounts.findById(accountId).orElseThrow();
+        var closedTrade = reloaded.getTrades().stream()
+                .filter(trade -> tradeId.equals(trade.getTradeId())).findFirst().orElseThrow();
+        var reloadedOutcome = outcomes.findByExecutionIntentId(entry.id().value()).orElseThrow();
+
+        assertThat(reloadedOutcome.tradeId()).isEqualTo(closedTrade.getTradeId());
+        assertThat(closedTrade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(closedTrade.getPnl()).isEqualByComparingTo("5");
+        assertThat(closedTrade.getClosedAt()).isNotNull();
     }
 
     private ExecutionIntent persistedIntent() {

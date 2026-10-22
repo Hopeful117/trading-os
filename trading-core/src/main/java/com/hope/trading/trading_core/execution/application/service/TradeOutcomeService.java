@@ -24,6 +24,10 @@ public final class TradeOutcomeService {
     }
 
     public TradeOutcome acknowledge(ExecutionIntent intent, BrokerOrder order, Instant now) {
+        return acknowledge(intent, order, null, now);
+    }
+
+    public TradeOutcome acknowledge(ExecutionIntent intent, BrokerOrder order, UUID tradeId, Instant now) {
         TradeOutcome existing = outcomes.findByExecutionIntentId(intent.id().value()).orElse(null);
         if (existing != null) return existing;
         UUID accountId = intent.accountId();
@@ -37,7 +41,7 @@ public final class TradeOutcomeService {
         try {
             BigDecimal entryPrice = averageFillPrice(order);
             TradeOutcome result = TradeOutcome.acknowledged(ids.get(), accountId,
-                    intent.brokerAccountId(), intent.id().value(), intent.tradePlan().tradePlanId(),
+                    intent.brokerAccountId(), intent.id().value(), tradeId, intent.tradePlan().tradePlanId(),
                     intent.tradePlan().version(), intent.provenance(), intent.parameters(), entryPrice, now);
             return outcomes.save(result);
         } catch (DataIntegrityViolationException race) {

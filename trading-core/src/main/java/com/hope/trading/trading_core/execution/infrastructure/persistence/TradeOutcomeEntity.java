@@ -15,6 +15,7 @@ public class TradeOutcomeEntity {
     @Column(name = "account_id", nullable = false, updatable = false) public UUID accountId;
     @Column(name = "broker_account_id", nullable = false, updatable = false) public UUID brokerAccountId;
     @Column(name = "execution_intent_id", nullable = false, updatable = false) public UUID executionIntentId;
+    @Column(name = "trade_id", updatable = false) public UUID tradeId;
     @Column(name = "trade_plan_id", nullable = false, updatable = false) public UUID tradePlanId;
     @Column(name = "trade_plan_version", nullable = false, updatable = false) public long tradePlanVersion;
     @Column(nullable = false, updatable = false) public String instrument;
