@@ -69,8 +69,12 @@ public final class ExecutionFinalizationStep {
                 orders.save(context.brokerOrder());
                 if (tradeOutcomeService != null
                         && context.intent().purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
-                    tradeOutcomeService.acknowledge(
-                            context.intent(), context.brokerOrder(), settledTradeId, context.now());
+                    if (settledTradeId == null) {
+                        tradeOutcomeService.acknowledge(context.intent(), context.brokerOrder(), context.now());
+                    } else {
+                        tradeOutcomeService.acknowledge(
+                                context.intent(), context.brokerOrder(), settledTradeId, context.now());
+                    }
                 }
                 metrics.executionSucceeded();
             }
