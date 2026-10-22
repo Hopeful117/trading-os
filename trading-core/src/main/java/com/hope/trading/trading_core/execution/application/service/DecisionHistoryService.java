@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.execution.domain.repository.TradeOutcomeRep
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionIntentId;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Trade;
+import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,13 +17,16 @@ public class DecisionHistoryService {
     private final TradeOutcomeRepositoryPort outcomes;
     private final AccountRepository accounts;
     private final QueryExecutionService executions;
+    private final TradePlanRiskPort tradePlans;
 
     public DecisionHistoryService(TradeOutcomeRepositoryPort outcomes,
                                   AccountRepository accounts,
-                                  QueryExecutionService executions) {
+                                  QueryExecutionService executions,
+                                  TradePlanRiskPort tradePlans) {
         this.outcomes = outcomes;
         this.accounts = accounts;
         this.executions = executions;
+        this.tradePlans = tradePlans;
     }
 
     @Transactional(readOnly = true)
@@ -41,10 +45,18 @@ public class DecisionHistoryService {
         var execution = executions.find(new ExecutionIntentId(outcome.executionIntentId()));
         boolean lineageAvailable = outcome.tradeId() != null && trade != null;
         UUID verifiedTradeId = lineageAvailable ? trade.getTradeId() : null;
+        var closeExecution = lineageAvailable
+                ? executions.findLatestExitForTrade(account.getAccountId(), trade.getTradeId())
+                : java.util.Optional.<com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent>empty();
+        String origin = resolveOrigin(outcome);
 
         return new DecisionHistoryItemDto(
                 outcome.id(),
                 outcome.executionIntentId(),
+                account.getAccountId(),
+                account.getName(),
+                origin,
+                outcome.provenance(),
                 verifiedTradeId,
                 outcome.tradePlanId(),
                 outcome.tradePlanVersion(),
@@ -67,6 +79,18 @@ public class DecisionHistoryService {
                 trade == null ? (outcome.tradeId() == null ? outcome.closedAt() : null) : trade.getClosedAt(),
                 lineageAvailable,
                 trade != null && trade.getClosedAt() != null && trade.getPnl() != null,
+                closeExecution.map(intent -> intent.id().value()).orElse(null),
+                closeExecution.map(com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent::status)
+                        .orElse(null),
                 outcome.createdAt());
+    }
+
+    private String resolveOrigin(TradeOutcome outcome) {
+        try {
+            String origin = tradePlans.load(outcome.tradePlanId(), outcome.tradePlanVersion()).origin();
+            return origin == null || origin.isBlank() ? "UNAVAILABLE" : origin;
+        } catch (RuntimeException unavailable) {
+            return "UNAVAILABLE";
+        }
     }
 }

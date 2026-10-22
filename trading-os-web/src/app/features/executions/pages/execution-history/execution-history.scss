@@ -37,6 +37,22 @@
   gap: 1rem;
 }
 
+.decision-details {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid #334155;
+}
+
+.decision-detail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+
 .section-heading h2,
 .decision-heading h3 {
   margin: 0;

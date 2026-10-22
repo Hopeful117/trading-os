@@ -18,4 +18,12 @@ public final class QueryExecutionService {
         return List.copyOf(intents.findByInitiatorId(initiatorId));
     }
     public List<ExecutionIntent> findAll() { return List.copyOf(intents.findAll()); }
+
+    public Optional<ExecutionIntent> findLatestExitForTrade(UUID accountId, UUID tradeId) {
+        return intents.findAll().stream()
+                .filter(intent -> intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT)
+                .filter(intent -> intent.targetTradeId().filter(tradeId::equals).isPresent())
+                .filter(intent -> intent.accountId() == null || accountId.equals(intent.accountId()))
+                .max(Comparator.comparing(ExecutionIntent::updatedAt));
+    }
 }

@@ -60,8 +60,8 @@ La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21
 - Interface Marchés : filtres et tri par produit (`Spot` ou `Futures`) avec
   contexte produit propagé vers les opportunités et les Trade Plans.
 - Règles et moteur de risque : première version implémentée ; les profils configurables complets restent à construire.
-- Cycle de vie local des trades et statistiques : API implémentée, positions PAPER observables dans l'interface ; fermeture PAPER et intégration Analytics complète restent à construire.
-- Exécution broker : intentions, tentatives, idempotence, soumission Kraken, annulation, récupération et réconciliation implémentées. La validation contractuelle contre le sandbox Kraken et le parcours déployé de bout en bout restent à exécuter.
+- Cycle de vie local des trades et statistiques : API implémentée, positions PAPER observables dans l'interface, fermeture PAPER, settlement et historique décisionnel account-scoped disponibles.
+- Exécution broker : intentions, tentatives, idempotence, soumission Kraken, annulation, récupération et réconciliation implémentées. La validation contractuelle contre le sandbox Kraken et le parcours déployé de bout en bout restent à exécuter ; ils ne sont pas requis pour le parcours PAPER V1.
 - Flux temps réel : ticker, OHLC, carnet d'ordres et transactions récentes avec abonnements dynamiques.
 
 Les flux Kraken Spot et Linear Perpetual utilisent des endpoints et des payloads
@@ -102,11 +102,15 @@ provisioning PAPER
     -> Trade OPEN persisté
     -> consultation des positions après reload
     -> valorisation Market Data
+    -> clôture PAPER explicite
+    -> settlement persisté
+    -> historique décisionnel account-scoped
 ```
 
-La sortie PAPER reste une capacité de lecture et de simulation. La clôture,
-le settlement réalisé et le suivi actif des positions ne sont pas encore
-implémentés.
+La sortie PAPER reste une capacité de lecture et de simulation, sans exécution
+autonome. La clôture et le settlement réalisés sont persistés par Trading Core ;
+le suivi actif des positions reste volontairement limité à la consultation,
+la valorisation et l'action explicite de clôture.
 
 ### Market Intelligence
 
@@ -159,9 +163,10 @@ Chaque couche enrichit les informations reçues sans remplacer les responsabilit
 
 Les briques Market Intelligence, Risk, Execution et Broker existent. L'autorisation
 déterministe des Trade Plans par le Risk Domain est connectée et exposée via le
-Gateway. L'enchaînement complet depuis une opportunité jusqu'à une exécution
-validée par l'utilisateur n'est pas encore intégré de bout en bout : l'exécution
-post-approbation reste une Story future.
+Gateway. Le parcours PAPER MANUAL complet, de la préparation à la clôture et à
+l'historique post-trade, est validé par Story 0061 et les Stories de Decision
+History. L'exécution LIVE, le sandbox broker et les parcours déployés restent
+des validations opérationnelles distinctes.
 
 ## Configuration
 
@@ -325,15 +330,16 @@ il ne doit jamais être ajouté au dépôt.
 - [x] Consultation des positions PAPER locales et valorisation Market Data
 - [ ] Stabilisation Docker, healthchecks et migrations de base
 - [x] Domaine de risque déterministe et tests métier associés
-- [ ] Intégration complète du domaine Risk aux parcours de trades et d'exécution
+- [x] Parcours PAPER complet: préparation, Risk déterministe, validation humaine, exécution idempotente, position, clôture et historique décisionnel
 - [ ] Routage Gateway de toutes les API publiques
 - [ ] Profils de règles configurables, versionnables et indépendants des prop firms
 - [x] Abonnements temps réel dynamiques
 - [ ] Événements de marché distribuables entre instances
-- [ ] Parcours complet préparation → risque → validation humaine → ordre broker idempotent
+- [ ] Validation LIVE/sandbox et parcours déployé Trading Core → Broker Service → Kraken
 - [x] Market Detail avec OHLC, ticker, carnet d'ordres et transactions récentes
 - [x] Première version du dashboard de compte
-- [ ] Journal, historique d'equity et pages Positions/Analytics complets
+- [x] Historique décisionnel PAPER account-scoped et consultation des positions
+- [ ] Journal analytique, historique d'equity et analytics avancées
 - [ ] News Service et calendrier économique
 - [x] Fondation d'orchestration Market Intelligence et première analyse déterministe
 - [x] Gouvernance asynchrone et idempotente des `AnalysisExecution`

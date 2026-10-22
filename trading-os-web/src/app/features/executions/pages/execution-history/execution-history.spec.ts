@@ -171,8 +171,16 @@ describe('ExecutionHistory', () => {
       of([
         {
           outcomeId: `outcome-${accountId}`,
+          accountId,
+          accountName: `Account ${accountId}`,
+          origin: accountId === 'account-1' ? 'MANUAL' : 'UNAVAILABLE',
+          provenance: [],
           instrument: 'BTC/USD',
           side: 'BUY',
+          executionStatus: 'COMPLETED',
+          tradeStatus: 'CLOSED',
+          closeExecutionStatus: 'COMPLETED',
+          tradeId: 'trade-1',
           resultAvailable: false,
           lineageAvailable: true,
         },
@@ -184,6 +192,21 @@ describe('ExecutionHistory', () => {
     expect(decisionHistoryService.list).toHaveBeenCalledWith('account-1');
     expect(decisionHistoryService.list).toHaveBeenCalledWith('account-2');
     expect(fixture.nativeElement.querySelectorAll('[data-testid="decision-card"]').length).toBe(2);
+
+    fixture.nativeElement.querySelector('[data-testid="decision-details-button"]').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="decision-details"]')).toBeTruthy();
+    expect(text()).toContain('Origin: MANUAL');
+    expect(text()).toContain('Close execution: COMPLETED');
+    expect(text()).toContain('Account: Account account-1');
+
+    fixture.nativeElement.querySelectorAll('[data-testid="decision-details-button"]')[1].click();
+    fixture.detectChanges();
+    const details = fixture.nativeElement.querySelectorAll('[data-testid="decision-details"]')[1];
+    expect(details.textContent).toContain(
+      'Decision origin or opportunity provenance is unavailable.',
+    );
+    expect(details.textContent).not.toContain('this is a MANUAL decision');
   });
 
   it('keeps decision history errors distinct from an empty history', async () => {
