@@ -1,8 +1,25 @@
 import { ExecutionStatus } from './execution.model';
 
+export interface TradePlanProvenance {
+  opportunityId: string;
+  opportunityVersion: number;
+  strategyMatchId: string | null;
+  strategyId: string | null;
+  strategyVersion: number | null;
+  accountId: string | null;
+  sourceScanId: string | null;
+  sourceScanMarketId: string | null;
+  analysisExecutionId: string | null;
+  marketId: string | null;
+}
+
 export interface DecisionHistoryItem {
   outcomeId: string;
   executionIntentId: string;
+  accountId: string;
+  accountName: string;
+  origin: 'MANUAL' | 'OPPORTUNITY' | string;
+  provenance: TradePlanProvenance[];
   tradeId: string | null;
   tradePlanId: string | null;
   tradePlanVersion: number;
@@ -24,5 +41,7 @@ export interface DecisionHistoryItem {
   closedAt: string | null;
   lineageAvailable: boolean;
   resultAvailable: boolean;
+  closeExecutionIntentId: string | null;
+  closeExecutionStatus: ExecutionStatus | null;
   createdAt: string;
 }

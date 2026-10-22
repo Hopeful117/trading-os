@@ -77,11 +77,12 @@ public class ExecutionConfiguration {
                                                    AccountRepository accounts) {
         return new TradeOutcomeService(outcomes, java.util.UUID::randomUUID, accounts);
     }
-    @Bean DecisionHistoryService decisionHistoryService(TradeOutcomeRepositoryPort outcomes,
-                                                        AccountRepository accounts,
-                                                        QueryExecutionService executions) {
-        return new DecisionHistoryService(outcomes, accounts, executions);
-    }
+     @Bean DecisionHistoryService decisionHistoryService(TradeOutcomeRepositoryPort outcomes,
+                                                         AccountRepository accounts,
+                                                         QueryExecutionService executions,
+                                                         com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort tradePlans) {
+         return new DecisionHistoryService(outcomes, accounts, executions, tradePlans);
+     }
     @Bean ExecuteTradeService executeTradeService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
             BrokerExecutionPort broker,ExecutionIdGenerator ids,ExecutionEventPublisher events,

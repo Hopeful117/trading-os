@@ -32,6 +32,7 @@
                 <div>
                   <h3>{{ decision.instrument }} · {{ decision.side }}</h3>
                   <p>{{ decision.createdAt | date: 'medium' }}</p>
+                  <p data-testid="decision-account">Account: {{ decision.accountName }}</p>
                 </div>
                 <span class="status-badge" [class.completed]="decision.resultAvailable">
                   {{ decision.resultAvailable ? 'Result available' : 'Result unavailable' }}
@@ -46,6 +47,54 @@
                 <span>Entry: {{ decision.actualEntryPrice ?? '—' }}</span>
                 <span>P&amp;L: {{ decision.realizedPnl ?? 'Unavailable' }}</span>
               </div>
+              <button
+                type="button"
+                class="context-button"
+                [attr.aria-expanded]="isDecisionExpanded(decision.outcomeId)"
+                (click)="toggleDecision(decision.outcomeId)"
+                data-testid="decision-details-button"
+              >
+                {{
+                  isDecisionExpanded(decision.outcomeId)
+                    ? 'Hide decision details'
+                    : 'View decision details'
+                }}
+              </button>
+              @if (isDecisionExpanded(decision.outcomeId)) {
+                <div class="decision-details" data-testid="decision-details">
+                  <div class="decision-detail-grid">
+                    <span>Origin: {{ decision.origin }}</span>
+                    <span>Risk: {{ decision.riskEvaluationId ? 'Recorded' : 'Unavailable' }}</span>
+                    <span>Entry execution: {{ decision.executionStatus ?? 'Unavailable' }}</span>
+                    <span>Position: {{ decision.tradeStatus ?? 'Unavailable' }}</span>
+                    <span>
+                      Close execution: {{ decision.closeExecutionStatus ?? 'Unavailable' }}
+                    </span>
+                    <span>Trade: {{ decision.tradeId ?? 'Unavailable' }}</span>
+                  </div>
+                  @if (decision.origin === 'MANUAL') {
+                    <p class="detail-state">Manual decision origin recorded.</p>
+                  } @else if (decision.provenance.length > 0) {
+                    <p class="detail-state">
+                      Opportunity provenance recorded ({{ decision.provenance.length }} source
+                      item(s)).
+                    </p>
+                  } @else {
+                    <p class="detail-state">
+                      Decision origin or opportunity provenance is unavailable.
+                    </p>
+                  }
+                  @if (!decision.lineageAvailable) {
+                    <p class="notice uncertain">
+                      Position and close lineage is unavailable. No result is inferred.
+                    </p>
+                  } @else if (!decision.resultAvailable) {
+                    <p class="notice uncertain">
+                      The position remains open or its result is not authoritative.
+                    </p>
+                  }
+                </div>
+              }
               @if (!decision.lineageAvailable) {
                 <p class="notice uncertain">Trade lineage is unavailable. No result is inferred.</p>
               } @else if (!decision.resultAvailable) {

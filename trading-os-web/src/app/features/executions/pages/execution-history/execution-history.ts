@@ -45,6 +45,7 @@ export class ExecutionHistory {
   private readonly accountService = inject(AccountService, { optional: true });
   private readonly decisionHistoryService = inject(DecisionHistoryService);
   private readonly details = signal<Record<string, DetailState>>({});
+  private readonly expandedDecisions = signal<Record<string, boolean>>({});
 
   readonly viewModel$: Observable<HistoryViewModel> = this.executionService.list().pipe(
     map((executions) => ({ executions, loading: false, error: false })),
@@ -69,6 +70,17 @@ export class ExecutionHistory {
 
   detailFor(executionId: string): DetailState | null {
     return this.details()[executionId] ?? null;
+  }
+
+  isDecisionExpanded(outcomeId: string): boolean {
+    return this.expandedDecisions()[outcomeId] === true;
+  }
+
+  toggleDecision(outcomeId: string): void {
+    this.expandedDecisions.update((expanded) => ({
+      ...expanded,
+      [outcomeId]: !expanded[outcomeId],
+    }));
   }
 
   loadDetails(summary: ExecutionSummaryDto): void {
