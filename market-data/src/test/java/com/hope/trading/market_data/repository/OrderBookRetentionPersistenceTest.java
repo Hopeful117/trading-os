@@ -132,6 +132,158 @@ class OrderBookRetentionPersistenceTest {
     }
 
     @Test
+    void rejectsProtectionAfterSequenceEvidenceWasRetired() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
+
+        retentionService.protectDependency("released-before-retirement", "TEST", "sample", null,
+                sequenceId, "test protection");
+        assertThat(retentionService.releaseDependency("released-before-retirement", "test release")).isTrue();
+
+        var preview = retentionService.previewRetirement();
+        retentionProperties.setDestructiveRetirementEnabled(true);
+        assertThat(retentionService.retire(preview.operationFingerprint(), preview.candidates().getFirst()))
+                .isEqualTo(1);
+
+        assertThatThrownBy(() -> retentionService.protectDependency(
+                "late-protection", "TEST", "sample", null, sequenceId, "late protection"))
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("without retained evidence");
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void dependencyRetirementRaceNeverLeavesProtectedReferenceToDeletedEvidence() throws Exception {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
+        retentionService.protectDependency("released-race-dependency", "TEST", "sample", null,
+                sequenceId, "released dependency");
+        retentionService.releaseDependency("released-race-dependency", "prepare retirement");
+
+        var preview = retentionService.previewRetirement();
+        retentionProperties.setDestructiveRetirementEnabled(true);
+        var executor = Executors.newFixedThreadPool(2);
+        try (var connection = jdbc.getDataSource().getConnection();
+             var statement = connection.prepareStatement("""
+                     SELECT sequence_id
+                       FROM historical_order_book_sequence
+                      WHERE sequence_id = ?
+                      FOR UPDATE
+                     """)) {
+            connection.setAutoCommit(false);
+            statement.setObject(1, sequenceId);
+            statement.executeQuery().close();
+
+            var dependencyFuture = executor.submit(() -> {
+                try {
+                    retentionService.protectDependency("race-dependency", "TEST", "sample", null,
+                            sequenceId, "concurrent dependency");
+                    return true;
+                } catch (RuntimeException ignored) {
+                    return false;
+                }
+            });
+            var retirementFuture = executor.submit(() -> {
+                try {
+                    return retentionService.retire(preview.operationFingerprint(), preview.candidates().getFirst());
+                } catch (RuntimeException ignored) {
+                    return -1;
+                }
+            });
+
+            Thread.sleep(200);
+            connection.commit();
+
+            boolean protectedDependency = dependencyFuture.get(5, TimeUnit.SECONDS);
+            int retired = retirementFuture.get(5, TimeUnit.SECONDS);
+            long evidenceCount = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM historical_order_book_evidence WHERE sequence_id = ?",
+                    Long.class, sequenceId);
+
+            assertThat(protectedDependency && retired > 0).isFalse();
+            if (protectedDependency) {
+                assertThat(evidenceCount).isPositive();
+            }
+        } finally {
+            executor.shutdownNow();
+            jdbc.update("DELETE FROM historical_order_book_evidence_dependency WHERE dependency_key IN (?, ?)",
+                    "released-race-dependency", "race-dependency");
+            jdbc.update("DELETE FROM historical_order_book_evidence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM historical_order_book_sequence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM markets WHERE market_id = ?", marketId);
+        }
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void holdRetirementRaceNeverLeavesActiveHoldForDeletedEvidence() throws Exception {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
+        retentionService.protectDependency("released-race-hold", "TEST", "sample", null,
+                sequenceId, "released dependency");
+        retentionService.releaseDependency("released-race-hold", "prepare retirement");
+
+        var preview = retentionService.previewRetirement();
+        retentionProperties.setDestructiveRetirementEnabled(true);
+        var executor = Executors.newFixedThreadPool(2);
+        try (var connection = jdbc.getDataSource().getConnection();
+             var statement = connection.prepareStatement("""
+                     SELECT sequence_id
+                       FROM historical_order_book_sequence
+                      WHERE sequence_id = ?
+                      FOR UPDATE
+                     """)) {
+            connection.setAutoCommit(false);
+            statement.setObject(1, sequenceId);
+            statement.executeQuery().close();
+
+            var holdFuture = executor.submit(() -> {
+                try {
+                    retentionService.addHold("race-hold", null, sequenceId, "concurrent hold");
+                    return true;
+                } catch (RuntimeException ignored) {
+                    return false;
+                }
+            });
+            var retirementFuture = executor.submit(() -> {
+                try {
+                    return retentionService.retire(preview.operationFingerprint(), preview.candidates().getFirst());
+                } catch (RuntimeException ignored) {
+                    return -1;
+                }
+            });
+
+            Thread.sleep(200);
+            connection.commit();
+
+            boolean activeHold = holdFuture.get(5, TimeUnit.SECONDS);
+            int retired = retirementFuture.get(5, TimeUnit.SECONDS);
+            long evidenceCount = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM historical_order_book_evidence WHERE sequence_id = ?",
+                    Long.class, sequenceId);
+
+            assertThat(activeHold && retired > 0).isFalse();
+            if (activeHold) {
+                assertThat(evidenceCount).isPositive();
+            }
+        } finally {
+            executor.shutdownNow();
+            jdbc.update("DELETE FROM historical_order_book_retention_hold WHERE hold_key = ?", "race-hold");
+            jdbc.update("DELETE FROM historical_order_book_evidence_dependency WHERE dependency_key = ?",
+                    "released-race-hold");
+            jdbc.update("DELETE FROM historical_order_book_evidence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM historical_order_book_sequence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM markets WHERE market_id = ?", marketId);
+        }
+    }
+
+    @Test
     void promotionRejectsPayloadThatDoesNotMatchCanonicalEvidence() {
         UUID marketId = markets.saveAndFlush(market()).getMarketId();
         UUID sequenceId = UUID.randomUUID();
@@ -161,13 +313,21 @@ class OrderBookRetentionPersistenceTest {
         evidenceRepository.invalidateActiveSequences(marketId, 25, "test invalidation", KNOWN_AT);
 
         OrderBookEvidence activeEvidence = evidence(marketId, activeSequenceId);
-        evidenceRepository.append(new OrderBookEvidence(activeEvidence.evidenceId(), activeEvidence.marketId(),
+        OrderBookEvidence activeAtCutoff = new OrderBookEvidence(activeEvidence.evidenceId(), activeEvidence.marketId(),
                 activeEvidence.provider(), activeEvidence.symbol(), activeEvidence.providerSymbol(),
                 activeEvidence.depth(), activeEvidence.evidenceType(), activeEvidence.origin(),
                 activeEvidence.sourceStartOrdinal(), activeEvidence.sourceEndOrdinal(), activeEvidence.sequenceId(),
                 activeEvidence.sequenceOrdinal(), activeEvidence.providerSequence(), cutoff, cutoff,
                 activeEvidence.bids(), activeEvidence.asks(), activeEvidence.checksum(),
-                activeEvidence.normalizationVersion(), activeEvidence.contentFingerprint()));
+                activeEvidence.normalizationVersion(), "pending");
+        activeAtCutoff = new OrderBookEvidence(activeAtCutoff.evidenceId(), activeAtCutoff.marketId(),
+                activeAtCutoff.provider(), activeAtCutoff.symbol(), activeAtCutoff.providerSymbol(),
+                activeAtCutoff.depth(), activeAtCutoff.evidenceType(), activeAtCutoff.origin(),
+                activeAtCutoff.sourceStartOrdinal(), activeAtCutoff.sourceEndOrdinal(), activeAtCutoff.sequenceId(),
+                activeAtCutoff.sequenceOrdinal(), activeAtCutoff.providerSequence(), activeAtCutoff.occurredAt(),
+                activeAtCutoff.knownAt(), activeAtCutoff.bids(), activeAtCutoff.asks(), activeAtCutoff.checksum(),
+                activeAtCutoff.normalizationVersion(), OrderBookEvidenceFingerprint.fingerprint(activeAtCutoff));
+        evidenceRepository.append(activeAtCutoff);
 
         var result = replayService.replay(marketId, 25, cutoff);
 
