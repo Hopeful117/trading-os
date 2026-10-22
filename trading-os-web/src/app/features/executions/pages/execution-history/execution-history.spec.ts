@@ -192,7 +192,9 @@ describe('ExecutionHistory', () => {
 
     await create();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="decision-history-error"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="decision-history-error"]'),
+    ).toBeTruthy();
     expect(text()).not.toContain('No acknowledged decisions are available');
   });
 

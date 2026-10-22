@@ -57,9 +57,9 @@ export class ExecutionHistory {
         switchMap((accounts) =>
           accounts.length === 0
             ? of([] as DecisionHistoryItem[])
-            : forkJoin(accounts.map((account) => this.decisionHistoryService.list(account.accountId))).pipe(
-                map((histories) => histories.flat()),
-              ),
+            : forkJoin(
+                accounts.map((account) => this.decisionHistoryService.list(account.accountId)),
+              ).pipe(map((histories) => histories.flat())),
         ),
         map((decisions) => ({ decisions, loading: false, error: false })),
         catchError(() => of({ decisions: [], loading: false, error: true })),

@@ -38,7 +38,10 @@
                 </span>
               </div>
               <div class="decision-facts">
-                <span>Plan: {{ decision.tradePlanId ? 'v' + decision.tradePlanVersion : 'Unavailable' }}</span>
+                <span
+                  >Plan:
+                  {{ decision.tradePlanId ? 'v' + decision.tradePlanVersion : 'Unavailable' }}</span
+                >
                 <span>Risk: {{ decision.riskEvaluationId ? 'Recorded' : 'Unavailable' }}</span>
                 <span>Entry: {{ decision.actualEntryPrice ?? '—' }}</span>
                 <span>P&amp;L: {{ decision.realizedPnl ?? 'Unavailable' }}</span>
@@ -46,7 +49,9 @@
               @if (!decision.lineageAvailable) {
                 <p class="notice uncertain">Trade lineage is unavailable. No result is inferred.</p>
               } @else if (!decision.resultAvailable) {
-                <p class="notice uncertain">The position remains open or its result is not yet authoritative.</p>
+                <p class="notice uncertain">
+                  The position remains open or its result is not yet authoritative.
+                </p>
               }
             </article>
           }
