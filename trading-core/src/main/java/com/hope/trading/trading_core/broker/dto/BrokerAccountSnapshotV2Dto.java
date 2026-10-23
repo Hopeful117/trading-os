@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public record BrokerAccountSnapshotV2Dto(
         UUID brokerAccountId,
-        String provider,
+        UUID providerRegistrationReference,
         String externalAccountId,
         Map<String, BigDecimal> balances,
         List<BrokerPositionSnapshotV2Dto> positions,

@@ -5,15 +5,14 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Regression tests ensuring BrokerProvider enum remains unchanged.
- * These tests protect against accidental addition of PAPER or other values
- * that would break the semantic contract of external broker identification.
+ * Regression tests ensuring the legacy source-compatibility reference remains
+ * opaque and does not become a provider enum in Trading Core.
  */
 class BrokerProviderRegressionTest {
 
     @Test
-    void brokerProviderEnumContainsOnlyKraken() {
-        BrokerProvider[] values = BrokerProvider.values();
+    void brokerProviderReferenceContainsOnlyTheLegacyOpaqueReference() {
+        java.util.UUID[] values = BrokerProvider.values();
 
         assertThat(values).hasSize(1);
         assertThat(values[0]).isEqualTo(BrokerProvider.KRAKEN);

@@ -83,7 +83,7 @@ class BrokerSynchronizationServiceImplTest {
                 .balances(balances)
                 .build();
         return BrokerAccountDto.builder()
-                .broker("KRAKEN")
+                .broker(BrokerProvider.KRAKEN.toString())
                 .accountName("main")
                 .baseCurrency("USD")
                 .balances(balanceDto)
@@ -112,7 +112,7 @@ class BrokerSynchronizationServiceImplTest {
         service.synchronize(username);
 
         Account account = user.getAccounts().getFirst();
-        assertThat(account.getBroker()).isEqualTo("KRAKEN");
+        assertThat(account.getBroker()).isEqualTo(BrokerProvider.KRAKEN.toString());
         // Base-currency balance + unrealized PnL of the open position.
         // Open positions without realized PnL contribute zero to equity.
         assertThat(account.getEquity()).isEqualByComparingTo("5000");
@@ -139,7 +139,7 @@ class BrokerSynchronizationServiceImplTest {
 
         Account synchronizedAccount = user.getAccounts().getFirst();
         Mockito.when(accountRepository.findByUser_UserIdAndBroker(
-                        userId, "KRAKEN"))
+                        userId, BrokerProvider.KRAKEN.toString()))
                 .thenReturn(Optional.of(synchronizedAccount));
 
         Position positionV2 = Position.builder()
@@ -167,7 +167,7 @@ class BrokerSynchronizationServiceImplTest {
         owner.setUserId(ownerId);
         Account account = Account.builder()
                 .brokerAccountId(brokerAccount.id())
-                .broker("KRAKEN")
+                .broker(BrokerProvider.KRAKEN.toString())
                 .name("Kraken live")
                 .baseCurrency("USD")
                 .user(owner)
@@ -177,7 +177,7 @@ class BrokerSynchronizationServiceImplTest {
                 .thenReturn(Optional.of(brokerAccount));
         when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
                 new BrokerAccountSnapshotV2Dto(
-                        brokerAccount.id(), "KRAKEN", "external-1",
+                        brokerAccount.id(), BrokerProvider.KRAKEN, "external-1",
                         Map.of("USD", new BigDecimal("6000")),
                         List.of(new BrokerPositionSnapshotV2Dto(
                                 "XBT/USD", new BigDecimal("2"), new BigDecimal("100"),
@@ -199,7 +199,7 @@ class BrokerSynchronizationServiceImplTest {
         otherOwner.setUserId(UUID.randomUUID());
         Account account = Account.builder()
                 .brokerAccountId(UUID.randomUUID())
-                .broker("KRAKEN")
+                .broker(BrokerProvider.KRAKEN.toString())
                 .name("Kraken live")
                 .baseCurrency("USD")
                 .user(otherOwner)
@@ -223,7 +223,7 @@ class BrokerSynchronizationServiceImplTest {
         owner.setUserId(ownerId);
         Account account = Account.builder()
                 .brokerAccountId(brokerAccount.id())
-                .broker("KRAKEN")
+                .broker(BrokerProvider.KRAKEN.toString())
                 .name("Kraken live")
                 .baseCurrency("USD")
                 .user(owner)
@@ -233,7 +233,7 @@ class BrokerSynchronizationServiceImplTest {
                 .thenReturn(Optional.of(brokerAccount));
         when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
                 new BrokerAccountSnapshotV2Dto(
-                        brokerAccount.id(), "OTHER", "external-1", Map.of(), List.of(),
+                        brokerAccount.id(), UUID.randomUUID(), "external-1", Map.of(), List.of(),
                         java.time.Instant.now()));
 
         assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))
@@ -254,7 +254,7 @@ class BrokerSynchronizationServiceImplTest {
         owner.setUserId(ownerId);
         Account account = Account.builder()
                 .brokerAccountId(brokerAccount.id())
-                .broker("KRAKEN")
+                .broker(BrokerProvider.KRAKEN.toString())
                 .name("Kraken live")
                 .baseCurrency("USD")
                 .user(owner)
@@ -264,7 +264,7 @@ class BrokerSynchronizationServiceImplTest {
                 .thenReturn(Optional.of(brokerAccount));
         when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
                 new BrokerAccountSnapshotV2Dto(
-                        brokerAccount.id(), "KRAKEN", "external-2", Map.of(), List.of(),
+                        brokerAccount.id(), BrokerProvider.KRAKEN, "external-2", Map.of(), List.of(),
                         java.time.Instant.now()));
 
         assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))

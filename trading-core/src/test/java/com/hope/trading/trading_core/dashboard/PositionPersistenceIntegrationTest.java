@@ -79,7 +79,7 @@ class PositionPersistenceIntegrationTest {
 
         Account account = Account.builder()
                 .brokerAccountId(brokerAccountId)
-                .broker(BrokerProvider.KRAKEN.name())
+                .broker(BrokerProvider.KRAKEN.toString())
                 .name("Persisted Paper")
                 .baseCurrency("USD")
                 .equity(new BigDecimal("10000"))

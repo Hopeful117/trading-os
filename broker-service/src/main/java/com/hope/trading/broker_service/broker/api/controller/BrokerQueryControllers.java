@@ -3,6 +3,7 @@ package com.hope.trading.broker_service.broker.api.controller;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.*;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import com.hope.trading.broker_service.security.BrokerPrincipal;
+import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
 import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.BrokerAuthorizationException;
 import java.util.*;
 import org.springframework.http.ResponseEntity;
@@ -119,19 +120,22 @@ public final class BrokerQueryControllers {
     @RequestMapping("/internal/v1/broker-providers")
     public static final class ProviderTechnicalCapabilitiesController {
         private final GetProviderTechnicalCapabilitiesService service;
+        private final BrokerProviderRegistrationCatalog registrations;
 
-        public ProviderTechnicalCapabilitiesController(GetProviderTechnicalCapabilitiesService service) {
+        public ProviderTechnicalCapabilitiesController(GetProviderTechnicalCapabilitiesService service,
+                                                        BrokerProviderRegistrationCatalog registrations) {
             this.service = service;
+            this.registrations = registrations;
         }
 
         @GetMapping("/{provider}/capabilities")
         public ResponseEntity<TechnicalCapabilities> get(
-                @PathVariable com.hope.trading.broker_service.connection.domain.BrokerProviderId provider,
+                @PathVariable UUID provider,
                 @RequestParam UUID brokerAccountId,
                 @RequestParam String instrument,
                 @AuthenticationPrincipal BrokerPrincipal principal) {
             requireDelegatedActor(principal);
-            return ResponseEntity.ok(service.get(provider, brokerAccountId, instrument));
+            return ResponseEntity.ok(service.get(registrations.resolve(provider), brokerAccountId, instrument));
         }
     }
 
@@ -161,18 +165,21 @@ public final class BrokerQueryControllers {
     @RequestMapping("/internal/v1/broker-providers")
     public static final class ProviderMarginPreviewController {
         private final PreviewProviderMarginService service;
+        private final BrokerProviderRegistrationCatalog registrations;
 
-        public ProviderMarginPreviewController(PreviewProviderMarginService service) {
+        public ProviderMarginPreviewController(PreviewProviderMarginService service,
+                                                BrokerProviderRegistrationCatalog registrations) {
             this.service = service;
+            this.registrations = registrations;
         }
 
         @PostMapping("/{provider}/margin-preview")
         public ResponseEntity<MarginPreview> preview(
-                @PathVariable com.hope.trading.broker_service.connection.domain.BrokerProviderId provider,
+                @PathVariable UUID provider,
                 @RequestBody MarginPreviewRequest request,
                 @AuthenticationPrincipal BrokerPrincipal principal) {
             requireDelegatedActor(principal);
-            return ResponseEntity.ok(service.preview(provider, request));
+            return ResponseEntity.ok(service.preview(registrations.resolve(provider), request));
         }
     }
 

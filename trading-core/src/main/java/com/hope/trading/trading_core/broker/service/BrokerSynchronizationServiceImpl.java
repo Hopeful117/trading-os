@@ -74,8 +74,9 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         var brokerAccount = brokerAccountRepository.findByIdAndOwnerId(brokerAccountId, ownerId)
                 .orElseThrow(() -> new EntityNotFoundException("Broker account mapping not found"));
         BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
-        validateSnapshot(brokerAccount.provider().name(), brokerAccountId, snapshot);
-        if (account.getBroker() != null && !brokerAccount.provider().name().equals(account.getBroker())) {
+        validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
+        if (account.getBroker() != null
+                && !brokerAccount.providerRegistrationReference().toString().equals(account.getBroker())) {
             throw new IllegalStateException("Account provider metadata mismatch");
         }
         if (brokerAccount.externalAccountId() != null
@@ -90,12 +91,12 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         accountRepository.save(account);
     }
 
-    private void validateSnapshot(String expectedProvider, UUID brokerAccountId,
+    private void validateSnapshot(UUID expectedProviderRegistrationReference, UUID brokerAccountId,
                                   BrokerAccountSnapshotV2Dto snapshot) {
         if (snapshot == null || !brokerAccountId.equals(snapshot.brokerAccountId())) {
             throw new IllegalStateException("Broker account snapshot identity mismatch");
         }
-        if (!expectedProvider.equals(snapshot.provider())) {
+        if (!expectedProviderRegistrationReference.equals(snapshot.providerRegistrationReference())) {
             throw new IllegalStateException("Broker account snapshot provider mismatch");
         }
     }

@@ -69,7 +69,7 @@ PROFILE_RULES="$(jq -c '.[0].rules' "$TMP_DIR/eligible.body")"
 request broker_account -X POST "$BASE_URL/api/v1/broker-accounts" \
     -H "Authorization: Bearer $TOKEN" \
     -H 'Content-Type: application/json' \
-    --data "{\"provider\":\"KRAKEN\",\"displayName\":\"Runtime PAPER $(date +%Y%m%d%H%M%S)\",\"executionMode\":\"PAPER\",\"initialCapital\":10000,\"riskProfile\":{\"profileId\":\"$PROFILE_ID\",\"semanticVersion\":\"$PROFILE_VERSION\"}}"
+            --data "{\"provider\":\"7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01\",\"displayName\":\"Runtime PAPER $(date +%Y%m%d%H%M%S)\",\"executionMode\":\"PAPER\",\"initialCapital\":10000,\"riskProfile\":{\"profileId\":\"$PROFILE_ID\",\"semanticVersion\":\"$PROFILE_VERSION\"}}"
 require_status broker_account '^2[0-9][0-9]$'
 BROKER_ACCOUNT_ID="$(jq -r '.id' "$TMP_DIR/broker_account.body")"
 [[ -n "$BROKER_ACCOUNT_ID" && "$BROKER_ACCOUNT_ID" != "null" ]] || { printf 'PAPER broker account creation returned no ID\n' >&2; exit 1; }
@@ -122,11 +122,11 @@ request opportunities -X GET "$BASE_URL/api/v1/opportunities/active" \
     -H "Authorization: Bearer $TOKEN"
 require_status opportunities '^2[0-9][0-9]$'
 if [[ "$STRICT_PAPER_ENTRY" == "true" ]]; then
-    OPPORTUNITY_ID="$(jq -r 'map(select((.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
+    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
 elif [[ "$ALLOW_PAPER_SHORT" == "true" ]]; then
-    OPPORTUNITY_ID="$(jq -r 'map(select((.direction // .tradeDirection // "") == "SHORT" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
+    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.direction // .tradeDirection // "") == "SHORT" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
 else
-    OPPORTUNITY_ID="$(jq -r 'map(select((.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD")))) | .[0].id // .[0].opportunityId // empty' "$TMP_DIR/opportunities.body")"
+    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD")))) | .[0].id // .[0].opportunityId // empty' "$TMP_DIR/opportunities.body")"
 fi
 if [[ -z "$OPPORTUNITY_ID" || "$OPPORTUNITY_ID" == "null" ]]; then
     printf 'No compatible PAPER opportunity was produced by scan %s. Candidates: %s\n' "$SCAN_ID" \

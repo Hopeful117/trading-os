@@ -155,7 +155,7 @@ class PaperExecutionVerticalRegressionTest {
         Account account = Account.builder()
                 .accountId(UUID.randomUUID())
                 .user(User.builder().userId(ownerId).build())
-                .broker(BrokerProvider.KRAKEN.name())
+                .broker(BrokerProvider.KRAKEN.toString())
                 .name("Paper Account")
                 .baseCurrency("USD")
                 .settlementModel(settlementModel)

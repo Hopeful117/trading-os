@@ -5,6 +5,8 @@ import com.hope.trading.broker_service.connection.api.CredentialValidationRespon
 import com.hope.trading.broker_service.connection.domain.BrokerConnection;
 import com.hope.trading.broker_service.connection.domain.BrokerConnectionStatus;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
+import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
+import com.hope.trading.broker_service.broker.domain.exception.BrokerExceptions.UnsupportedBrokerProviderException;
 import com.hope.trading.broker_service.connection.integration.TradingCoreBrokerAccountClient;
 import com.hope.trading.broker_service.credential.application.BrokerCredentialSource;
 import com.hope.trading.broker_service.credential.application.BrokerCredentialValidator;
@@ -18,6 +20,7 @@ import com.hope.trading.broker_service.secret.domain.CredentialReference;
 import com.hope.trading.broker_service.secret.domain.NewSecret;
 import com.hope.trading.broker_service.secret.domain.SecretMetadata;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,7 +46,9 @@ public class BrokerCredentialConnectionService {
     private final BrokerRevocationNotificationDeliveryService revocationDelivery;
     private final BrokerCredentialSource credentialSource;
     private final Clock clock;
+    private final BrokerProviderRegistrationCatalog providerRegistrations;
 
+    @Autowired
     public BrokerCredentialConnectionService(BrokerConnectionRepository connectionRepository,
                                              TradingCoreBrokerAccountClient tradingCore,
                                              List<BrokerCredentialValidator> validators,
@@ -52,7 +57,8 @@ public class BrokerCredentialConnectionService {
                                              BrokerRevocationPersistenceService revocationPersistence,
                                              BrokerRevocationNotificationDeliveryService revocationDelivery,
                                              BrokerCredentialSource credentialSource,
-                                             Clock clock) {
+                                             Clock clock,
+                                             BrokerProviderRegistrationCatalog providerRegistrations) {
         this.connectionRepository = connectionRepository;
         this.tradingCore = tradingCore;
         this.validators = validators.stream().collect(Collectors.toUnmodifiableMap(
@@ -63,6 +69,21 @@ public class BrokerCredentialConnectionService {
         this.revocationDelivery = revocationDelivery;
         this.credentialSource = credentialSource;
         this.clock = clock;
+        this.providerRegistrations = providerRegistrations;
+    }
+
+    public BrokerCredentialConnectionService(BrokerConnectionRepository connectionRepository,
+                                             TradingCoreBrokerAccountClient tradingCore,
+                                             List<BrokerCredentialValidator> validators,
+                                             SecretWriter secretWriter,
+                                             SecretRotator secretRotator,
+                                             BrokerRevocationPersistenceService revocationPersistence,
+                                             BrokerRevocationNotificationDeliveryService revocationDelivery,
+                                             BrokerCredentialSource credentialSource,
+                                             Clock clock) {
+        this(connectionRepository, tradingCore, validators, secretWriter, secretRotator,
+                revocationPersistence, revocationDelivery, credentialSource, clock,
+                new BrokerProviderRegistrationCatalog());
     }
 
     @Transactional
@@ -72,15 +93,25 @@ public class BrokerCredentialConnectionService {
         if (account.connectionStatus() == BrokerConnectionStatus.REVOKED) {
             throw new BrokerConnectionRevokedException();
         }
+        BrokerProviderId provider = providerRegistrations.resolve(account.providerRegistrationReference());
+        BrokerCredentialValidator credentialValidator = validators.get(provider);
+        if (credentialValidator == null) {
+            return new CredentialValidationResponse(
+                    CredentialValidationOutcome.BROKER_UNAVAILABLE,
+                    BrokerConnectionStatus.TEMPORARILY_UNAVAILABLE,
+                    java.util.Set.of(),
+                    clock.instant(),
+                    "Broker credential validation capability is unavailable");
+        }
         BrokerConnection connection = connectionRepository.findByBrokerAccountId(accountId)
-                .orElseGet(() -> BrokerConnection.create(accountId, ownerId, account.provider(), clock.instant()));
+                .orElseGet(() -> BrokerConnection.create(accountId, ownerId, provider, clock.instant()));
         requireOwner(connection, ownerId);
         ensureNotRevoked(connection);
         connection.pending(clock.instant());
         connectionRepository.save(connection);
         callback(connection, BrokerConnectionStatus.PENDING_VALIDATION, null, null, clock.instant(), authorization);
 
-        CredentialValidationResult validation = validator(account.provider()).validate(credentials);
+        CredentialValidationResult validation = credentialValidator.validate(credentials);
         if (validation.outcome() != CredentialValidationOutcome.VALID) {
             applyFailure(connection, validation);
             connectionRepository.save(connection);
@@ -91,7 +122,7 @@ public class BrokerCredentialConnectionService {
 
         String hint = credentials.apiKeyHint();
         try (NewSecret secret = serialize(credentials)) {
-            CredentialReference reference = writeOrRotate(connection, accountId, account.provider(), hint, secret);
+            CredentialReference reference = writeOrRotate(connection, accountId, provider, hint, secret);
             connection.connected(reference.value(), validation.detectedPermissions(),
                     validation.externalAccountId(), hint, validation.validatedAt());
             connectionRepository.save(connection);
@@ -207,7 +238,9 @@ public class BrokerCredentialConnectionService {
 
     private BrokerCredentialValidator validator(BrokerProviderId provider) {
         BrokerCredentialValidator validator = validators.get(provider);
-        if (validator == null) throw new IllegalArgumentException("Broker provider is not supported");
+        if (validator == null) {
+            throw new UnsupportedBrokerProviderException("Broker provider capability is unavailable: " + provider);
+        }
         return validator;
     }
 

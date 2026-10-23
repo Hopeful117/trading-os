@@ -40,12 +40,12 @@ public final class BrokerCapabilityQueryService {
         }
         var brokerAccount = brokerAccounts.findByIdAndOwnerId(account.getBrokerAccountId(), account.getUserId())
                 .orElse(null);
-        if (brokerAccount == null || brokerAccount.provider() == null) {
+        if (brokerAccount == null || brokerAccount.providerRegistrationReference() == null) {
             return normalize(instruments).stream().map(this::unavailable).toList();
         }
         return normalize(instruments).stream()
                 .map(instrument -> resolveOne(account.getBrokerAccountId(), brokerAccount.executionMode(),
-                        brokerAccount.provider().name(), instrument))
+                        brokerAccount.providerRegistrationReference().toString(), instrument))
                 .toList();
     }
 

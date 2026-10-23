@@ -13,6 +13,13 @@ class BrokerProviderRegistryTest {
     @Test void resolvesARegisteredProvider(){BrokerProvider provider=provider();var registry=new BrokerProviderRegistry(List.of(provider));assertThat(registry.resolve(BrokerProviderId.KRAKEN)).isSameAs(provider);}
     @Test void rejectsDuplicateProviders(){assertThatThrownBy(()->new BrokerProviderRegistry(List.of(provider(),provider()))).isInstanceOf(IllegalArgumentException.class);}
     @Test void rejectsAnUnsupportedProvider(){var registry=new BrokerProviderRegistry(List.of());assertThatThrownBy(()->registry.resolve(BrokerProviderId.KRAKEN)).isInstanceOf(UnsupportedBrokerProviderException.class);}
+    @Test void recognizedCTraderWithoutCapabilityFailsClosed(){
+        var registry = new BrokerProviderRegistry(List.of());
+
+        assertThatThrownBy(() -> registry.resolve(BrokerProviderId.CTRADER))
+                .isInstanceOf(UnsupportedBrokerProviderException.class)
+                .hasMessageContaining("CTRADER");
+    }
     @Test void exposesSupportedProvidersAsAnImmutableSet(){
         var registry=new BrokerProviderRegistry(List.of(provider()));
 

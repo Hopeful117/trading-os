@@ -39,10 +39,10 @@ class BrokerCapabilityQueryServiceTest {
         when(accounts.getAccountDtoById(accountId, "trader")).thenReturn(AccountDto.builder()
                 .accountId(accountId).brokerAccountId(brokerId).userId(ownerId).build());
         when(brokerAccounts.findByIdAndOwnerId(brokerId, ownerId)).thenReturn(Optional.of(broker));
-        when(broker.provider()).thenReturn(BrokerProvider.KRAKEN);
+        when(broker.providerRegistrationReference()).thenReturn(BrokerProvider.KRAKEN);
         when(broker.executionMode()).thenReturn(ExecutionMode.PAPER);
-        when(capabilities.getByProvider("KRAKEN", brokerId, "BTC/USD")).thenReturn(
-                new BrokerTechnicalCapabilities(brokerId, "KRAKEN", "BTC/USD", 4, NOW,
+        when(capabilities.getByProvider(BrokerProvider.KRAKEN.toString(), brokerId, "BTC/USD")).thenReturn(
+                new BrokerTechnicalCapabilities(brokerId, BrokerProvider.KRAKEN.toString(), "BTC/USD", 4, NOW,
                         List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
 
         BrokerCapabilityQueryService service = new BrokerCapabilityQueryService(accounts, brokerAccounts,

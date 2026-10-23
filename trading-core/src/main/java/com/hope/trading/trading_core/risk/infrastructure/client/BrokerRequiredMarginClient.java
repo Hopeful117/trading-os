@@ -64,7 +64,7 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
             var brokerAccount = brokerAccounts.findById(request.brokerAccountId()).orElse(null);
             if (brokerAccount == null) return Optional.empty();
             boolean paper = brokerAccount.executionMode() == ExecutionMode.PAPER;
-            String provider = brokerAccount.provider().name();
+            String provider = brokerAccount.providerRegistrationReference().toString();
             BrokerTechnicalCapabilities technical = paper
                     ? capabilities.getByProvider(provider, request.brokerAccountId(), request.instrument())
                     : capabilities.get(request.brokerAccountId(), request.instrument());

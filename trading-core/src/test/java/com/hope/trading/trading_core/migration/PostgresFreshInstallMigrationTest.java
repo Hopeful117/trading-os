@@ -49,10 +49,10 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(33);
+        assertMigrationHistory(34);
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                String.class)).isEqualTo("33");
+                String.class)).isEqualTo("34");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -89,7 +89,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                Integer.class)).isEqualTo(33);
+                Integer.class)).isEqualTo(34);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -108,13 +108,46 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(33);
+        assertMigrationHistory(34);
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
         assertThat(jdbc.queryForObject(
                 "select count(*) from challenge_definition where id = ? and definition_version = '1.0.0'",
                 Integer.class, BENCHMARK_DEFINITION_ID)).isEqualTo(1);
         assertRiskImmutabilityTriggers();
         assertImmutableRiskEvaluationT1();
+    }
+
+    @Test
+    void migratesLegacyKrakenProviderRowsToTheOpaqueReference() {
+        Flyway historical = flyway(jdbcUrlSchema(), "33");
+        historical.migrate();
+        UUID accountId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        jdbc.update("insert into broker_account(id, owner_id, provider, display_name, connection_status, "
+                        + "created_at, updated_at, version, execution_mode) values (?, ?, 'KRAKEN', 'legacy', "
+                        + "'CREATED', current_timestamp, current_timestamp, 0, 'PAPER')",
+                accountId, ownerId);
+
+        flyway(jdbcUrlSchema()).migrate();
+
+        assertThat(jdbc.queryForObject("select provider_registration_reference from broker_account where id = ?",
+                UUID.class, accountId)).isEqualTo(UUID.fromString("7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01"));
+        assertThat(jdbc.queryForObject("select count(*) from information_schema.columns "
+                        + "where table_schema = current_schema() and table_name = 'broker_account' and column_name = 'provider'",
+                Integer.class)).isZero();
+    }
+
+    @Test
+    void rejectsUnknownLegacyProviderRowsDuringMigration() {
+        Flyway historical = flyway(jdbcUrlSchema(), "33");
+        historical.migrate();
+        jdbc.update("insert into broker_account(id, owner_id, provider, display_name, connection_status, "
+                        + "created_at, updated_at, version, execution_mode) values (?, ?, 'UNKNOWN', 'legacy', "
+                        + "'CREATED', current_timestamp, current_timestamp, 0, 'PAPER')",
+                UUID.randomUUID(), UUID.randomUUID());
+
+        assertThatThrownBy(() -> flyway(jdbcUrlSchema()).migrate())
+                .hasMessageContaining("provider_registration_reference");
     }
 
     private void assertSchemaContract() {

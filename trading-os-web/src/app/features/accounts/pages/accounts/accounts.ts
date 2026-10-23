@@ -139,7 +139,7 @@ export class Accounts {
     this.brokerForm.controls.executionMode.disable();
     this.brokerForm.controls.initialCapital.disable();
     this.brokerForm.reset({
-      provider: account.provider,
+      provider: 'KRAKEN',
       executionMode: account.executionMode,
       displayName: account.displayName,
       initialCapital: null,
