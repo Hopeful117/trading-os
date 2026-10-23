@@ -271,4 +271,28 @@ class BrokerSynchronizationServiceImplTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("External broker account identity mismatch");
     }
+
+    @Test
+    void v2SynchronizationRejectsIncompleteOrStaleObservation() {
+        UUID ownerId = UUID.randomUUID();
+        BrokerAccount brokerAccount = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
+                ExecutionMode.LIVE, "Kraken live", java.time.Instant.now());
+        User owner = new User();
+        owner.setUserId(ownerId);
+        Account account = Account.builder().brokerAccountId(brokerAccount.id())
+                .broker(BrokerProvider.KRAKEN.toString()).name("Kraken live")
+                .baseCurrency("USD").user(owner).build();
+        when(accountRepository.findByBrokerAccountId(brokerAccount.id())).thenReturn(Optional.of(account));
+        when(brokerAccountRepository.findByIdAndOwnerId(brokerAccount.id(), ownerId))
+                .thenReturn(Optional.of(brokerAccount));
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
+                new BrokerAccountSnapshotV2Dto(brokerAccount.id(), BrokerProvider.KRAKEN, "external-1",
+                        Map.of(), List.of(), java.time.Instant.now(), null, List.of(), List.of(),
+                        "INCOMPLETE", "STALE", java.time.Instant.now(), java.time.Instant.now(),
+                        List.of("OBSERVATION_STALE")));
+
+        assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Broker account snapshot is not complete and fresh");
+    }
 }

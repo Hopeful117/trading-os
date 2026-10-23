@@ -35,6 +35,8 @@ public class BrokerConnection {
     @Column(nullable = false, length = 500)
     private String detectedPermissions;
     private String externalAccountId;
+    @Column(length = 16)
+    private String providerEnvironment;
     private String apiKeyHint;
     private Instant lastValidatedAt;
     @Column(nullable = false, updatable = false)
@@ -95,6 +97,10 @@ public class BrokerConnection {
     }
 
     public void bindExternalAccount(String externalAccountId, Instant at) {
+        bindExternalAccount(externalAccountId, null, at);
+    }
+
+    public void bindExternalAccount(String externalAccountId, String environment, Instant at) {
         if (externalAccountId == null || externalAccountId.isBlank()) {
             throw new IllegalArgumentException("externalAccountId is required");
         }
@@ -102,6 +108,9 @@ public class BrokerConnection {
             throw new IllegalStateException("Changing the external account requires explicit reauthorization");
         }
         this.externalAccountId = externalAccountId;
+        if (environment != null && !environment.isBlank()) {
+            this.providerEnvironment = environment;
+        }
         updatedAt = at;
     }
 
@@ -129,6 +138,7 @@ public class BrokerConnection {
         return Collections.unmodifiableSet(result);
     }
     public String externalAccountId() { return externalAccountId; }
+    public String providerEnvironment() { return providerEnvironment; }
     public String apiKeyHint() { return apiKeyHint; }
     public Instant lastValidatedAt() { return lastValidatedAt; }
 }
