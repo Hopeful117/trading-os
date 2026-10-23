@@ -56,7 +56,7 @@ public class PaperDerivativeAccountValuationService {
             return result(account, BigDecimal.ZERO, valuedAt, null, null);
         }
 
-        Map<String, MarketResponse> markets = resolveMarkets(account, openTrades);
+        Map<String, MarketResponse> markets = resolveMarkets(openTrades);
         List<java.util.UUID> marketIds = markets.values().stream()
                 .map(MarketResponse::getMarketId).distinct().toList();
         Map<java.util.UUID, MarketPriceSnapshotDto> prices = marketDataClient
@@ -107,7 +107,7 @@ public class PaperDerivativeAccountValuationService {
         }
     }
 
-    private Map<String, MarketResponse> resolveMarkets(Account account, List<Trade> trades) {
+    private Map<String, MarketResponse> resolveMarkets(List<Trade> trades) {
         List<MarketResponse> catalogue = marketDataClient.findAll();
         return trades.stream().map(Trade::getSymbol).distinct().collect(Collectors.toMap(
                 this::normalize,
@@ -115,8 +115,6 @@ public class PaperDerivativeAccountValuationService {
                     List<MarketResponse> matches = catalogue.stream()
                             .filter(market -> market != null && market.getSymbol() != null
                                     && symbol.equalsIgnoreCase(market.getSymbol())
-                                    && account.getBroker() != null && market.getProvider() != null
-                                    && account.getBroker().equalsIgnoreCase(market.getProvider().name())
                                     && market.getProductType() == InstrumentProductType.LINEAR_PERPETUAL)
                             .toList();
                     if (matches.size() != 1) {

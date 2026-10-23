@@ -110,10 +110,10 @@ class BrokerRequiredMarginClientTest {
         BrokerMarginFeignClient margin = mock(BrokerMarginFeignClient.class);
         BrokerTechnicalCapabilitiesFeignClient capabilities = mock(BrokerTechnicalCapabilitiesFeignClient.class);
         when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
-        when(capabilities.getByProvider("KRAKEN", broker.id(), "BTC/USD")).thenReturn(new BrokerTechnicalCapabilities(
-                broker.id(), "KRAKEN", "BTC/USD", 1, NOW,
+        when(capabilities.getByProvider(BrokerProvider.KRAKEN.toString(), broker.id(), "BTC/USD")).thenReturn(new BrokerTechnicalCapabilities(
+                broker.id(), BrokerProvider.KRAKEN.toString(), "BTC/USD", 1, NOW,
                 List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
-        when(margin.previewByProvider(eq("KRAKEN"), any())).thenReturn(new BrokerMarginPreview(
+        when(margin.previewByProvider(eq(BrokerProvider.KRAKEN.toString()), any())).thenReturn(new BrokerMarginPreview(
                 broker.id(), "BTC/USD", new BigDecimal("100"), "USD", "KRAKEN_ASSET_PAIRS_MARGIN", 1, NOW));
 
         BrokerRequiredMarginClient client = new BrokerRequiredMarginClient(margin, capabilities, brokers, accounts,
@@ -121,8 +121,8 @@ class BrokerRequiredMarginClientTest {
 
         Optional<RequiredMarginPort.Fact> result = client.resolve(new RequiredMarginPort.Request(broker.id(), "BTC/USD", "LONG",
                 new BigDecimal("2"), new BigDecimal("100"), NOW));
-        verify(capabilities).getByProvider("KRAKEN", broker.id(), "BTC/USD");
-        verify(margin).previewByProvider(eq("KRAKEN"), any());
+        verify(capabilities).getByProvider(BrokerProvider.KRAKEN.toString(), broker.id(), "BTC/USD");
+        verify(margin).previewByProvider(eq(BrokerProvider.KRAKEN.toString()), any());
         assertThat(result)
                 .contains(new RequiredMarginPort.Fact(new BigDecimal("100"), "USD",
                         "KRAKEN_ASSET_PAIRS_MARGIN", 1, NOW));

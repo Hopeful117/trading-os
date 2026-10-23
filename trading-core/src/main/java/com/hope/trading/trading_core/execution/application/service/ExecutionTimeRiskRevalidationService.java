@@ -165,7 +165,8 @@ public class ExecutionTimeRiskRevalidationService {
             throw unavailable("BROKER_ACCOUNT_MAPPING_INVALID");
         var brokerAccount = brokerAccounts.findByIdAndOwnerId(account.getBrokerAccountId(), intent.initiatorId())
                 .orElseThrow(() -> unavailable("BROKER_ACCOUNT_MAPPING_INVALID"));
-        if (account.getBroker() != null && !account.getBroker().equalsIgnoreCase(brokerAccount.provider().name()))
+        if (account.getBroker() != null && !account.getBroker().equalsIgnoreCase(
+                brokerAccount.providerRegistrationReference().toString()))
             throw unavailable("BROKER_ACCOUNT_MAPPING_INVALID");
         var profile = persistence.assignedProfile(accountId)
                 .orElseThrow(() -> unavailable("EFFECTIVE_RISK_PROFILE_MISSING"));

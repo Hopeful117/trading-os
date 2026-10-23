@@ -7,6 +7,7 @@ import com.hope.trading.broker_service.broker.infrastructure.monitoring.BrokerOp
 import com.hope.trading.broker_service.broker.application.registry.BrokerProviderRegistry;
 import com.hope.trading.broker_service.connection.application.BrokerConnectionRepository;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
+import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
 import java.util.*;
 import org.slf4j.Logger;import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -22,12 +23,15 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
          private final BrokerProviderResolver providers;
          private final BrokerOperationsMetrics metrics;
          private final BrokerConnectionRepository connections;
+         private final BrokerProviderRegistrationCatalog providerRegistrations;
 
          public GetAccountSnapshotV2Service(BrokerProviderResolver providers, BrokerOperationsMetrics metrics,
-                                            BrokerConnectionRepository connections) {
+                                             BrokerConnectionRepository connections,
+                                             BrokerProviderRegistrationCatalog providerRegistrations) {
              this.providers = providers;
              this.metrics = metrics;
              this.connections = connections;
+             this.providerRegistrations = providerRegistrations;
          }
 
          public BrokerAccountSnapshotV2 get(UUID ownerId, UUID brokerAccountId) {
@@ -37,7 +41,7 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
              var account = require(provider, AccountCapability.class).account(brokerAccountId);
              var positions = require(provider, PositionCapability.class).positions(brokerAccountId);
              return metrics.record("account_snapshot_v2", () -> new BrokerAccountSnapshotV2(
-                     brokerAccountId, connection.provider(), connection.externalAccountId(),
+                      brokerAccountId, providerRegistrations.referenceFor(connection.provider()), connection.externalAccountId(),
                      account.balances(), positions, account.observedAt()));
          }
      }

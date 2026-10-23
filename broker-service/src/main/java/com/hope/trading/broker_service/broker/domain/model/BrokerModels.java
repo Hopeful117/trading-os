@@ -105,17 +105,28 @@ public final class BrokerModels {
     public record AccountSnapshot(UUID brokerAccountId, java.util.Map<String,BigDecimal> balances, Instant observedAt) {
         public AccountSnapshot { Objects.requireNonNull(brokerAccountId); balances=java.util.Map.copyOf(balances); Objects.requireNonNull(observedAt); }
     }
-    public record BrokerAccountSnapshotV2(UUID brokerAccountId, BrokerProviderId provider,
+    public record BrokerAccountSnapshotV2(UUID brokerAccountId, UUID providerRegistrationReference,
                                           String externalAccountId,
                                           java.util.Map<String,BigDecimal> balances,
                                           java.util.List<PositionSnapshot> positions,
                                           Instant observedAt) {
         public BrokerAccountSnapshotV2 {
             Objects.requireNonNull(brokerAccountId);
-            Objects.requireNonNull(provider);
+            Objects.requireNonNull(providerRegistrationReference);
             balances = java.util.Map.copyOf(balances);
             positions = java.util.List.copyOf(positions);
             Objects.requireNonNull(observedAt);
+        }
+
+        public BrokerAccountSnapshotV2(UUID brokerAccountId, BrokerProviderId provider,
+                                       String externalAccountId,
+                                       java.util.Map<String, BigDecimal> balances,
+                                       java.util.List<PositionSnapshot> positions,
+                                       Instant observedAt) {
+            this(brokerAccountId,
+                    new com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog()
+                            .referenceFor(provider),
+                    externalAccountId, balances, positions, observedAt);
         }
     }
     public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, Instant observedAt, String brokerPositionReference) {}

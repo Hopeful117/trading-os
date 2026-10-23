@@ -58,10 +58,10 @@ class BrokerAccountControllerTest {
         mvc.perform(post("/api/v1/broker-accounts")
                         .principal(auth(userId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"provider\":\"KRAKEN\",\"displayName\":\"Test Account\",\"executionMode\":\"LIVE\"}"))
+                        .content("{\"provider\":\"7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01\",\"displayName\":\"Test Account\",\"executionMode\":\"LIVE\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/v1/broker-accounts/" + accountId))
-                .andExpect(jsonPath("$.provider").value("KRAKEN"));
+                .andExpect(jsonPath("$.provider").value("7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01"));
 
         verify(service).create(eq(userId), any());
     }
@@ -74,7 +74,7 @@ class BrokerAccountControllerTest {
 
         mvc.perform(get("/api/v1/broker-accounts").principal(auth(userId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].provider").value("KRAKEN"));
+                .andExpect(jsonPath("$[0].provider").value("7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01"));
 
         verify(service).list(userId);
     }

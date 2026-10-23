@@ -2,6 +2,8 @@ package com.hope.trading.broker_service.connection.integration;
 
 import com.hope.trading.broker_service.connection.domain.BrokerConnectionStatus;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
+import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.hope.trading.broker_service.config.TradingCoreFeignConfiguration;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.HttpHeaders;
@@ -31,9 +33,15 @@ public interface TradingCoreBrokerAccountClient {
             @RequestBody ConnectionStatusUpdate update,
             @RequestHeader("X-Service-Authorization") String serviceAuthorization);
 
-    record BrokerAccountContract(UUID id, BrokerProviderId provider, String displayName,
+    record BrokerAccountContract(UUID id, @JsonAlias("provider") UUID providerRegistrationReference, String displayName,
                                  String externalAccountId, BrokerConnectionStatus connectionStatus,
                                  Instant lastValidatedAt) {
+        public BrokerAccountContract(UUID id, BrokerProviderId provider, String displayName,
+                                     String externalAccountId, BrokerConnectionStatus connectionStatus,
+                                     Instant lastValidatedAt) {
+            this(id, new BrokerProviderRegistrationCatalog().referenceFor(provider), displayName,
+                    externalAccountId, connectionStatus, lastValidatedAt);
+        }
     }
 
     record ConnectionStatusUpdate(BrokerConnectionStatus status, UUID credentialReference,

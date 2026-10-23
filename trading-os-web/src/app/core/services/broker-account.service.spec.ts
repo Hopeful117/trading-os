@@ -49,7 +49,7 @@ describe('BrokerAccountService', () => {
 
     const accountRequest = http.expectOne('/api/v1/broker-accounts');
     expect(accountRequest.request.body).toEqual({
-      provider: 'KRAKEN',
+      provider: '7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01',
       displayName: 'Kraken lecture seule',
       executionMode: 'LIVE',
     });
@@ -80,7 +80,7 @@ describe('BrokerAccountService', () => {
     const request = http.expectOne('/api/v1/broker-accounts');
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({
-      provider: 'KRAKEN',
+      provider: '7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01',
       displayName: 'Paper account',
       executionMode: 'PAPER',
       initialCapital: 10000,

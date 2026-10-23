@@ -6,6 +6,7 @@ import {
   BrokerAccount,
   BrokerProvider,
   CredentialValidation,
+  KRAKEN_PROVIDER_REGISTRATION_REFERENCE,
 } from '../models/broker-account.model';
 import { RiskProfileCatalogEntry } from '../models/risk-profile.model';
 
@@ -32,7 +33,7 @@ export class BrokerAccountService {
     riskProfile: { profileId: string; semanticVersion: string };
   }): Observable<BrokerAccount> {
     return this.http.post<BrokerAccount>(this.baseUrl, {
-      provider: command.provider,
+      provider: this.providerReference(command.provider),
       displayName: command.displayName,
       executionMode: 'PAPER',
       initialCapital: command.initialCapital,
@@ -49,7 +50,7 @@ export class BrokerAccountService {
   }): Observable<CredentialValidation> {
     return this.http
       .post<BrokerAccount>(this.baseUrl, {
-        provider: command.provider,
+        provider: this.providerReference(command.provider),
         displayName: command.displayName,
         executionMode: 'LIVE',
       })
@@ -86,6 +87,13 @@ export class BrokerAccountService {
 
   disconnect(accountId: string): Observable<BrokerAccount> {
     return this.http.post<BrokerAccount>(`${this.baseUrl}/${accountId}/disconnect`, {});
+  }
+
+  private providerReference(provider: BrokerProvider): string {
+    if (provider === 'KRAKEN') {
+      return KRAKEN_PROVIDER_REGISTRATION_REFERENCE;
+    }
+    throw new Error(`Unsupported broker provider: ${provider}`);
   }
 
   revoke(accountId: string): Observable<void> {

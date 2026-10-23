@@ -165,9 +165,9 @@ class ValidateAndCreatePostgresTransactionIntegrationTest {
     private void insertAccount(UUID ownerId, UUID accountId, UUID brokerAccountId) {
         jdbc.update("insert into users(user_id,username,password,email,role) values(?,?,?,?,?)",
                 ownerId, "execution-" + accountId, "x", accountId + "@test.local", "ROLE_USER");
-        jdbc.update("insert into broker_account(id,owner_id,provider,display_name,connection_status,created_at,updated_at,version,execution_mode) "
+        jdbc.update("insert into broker_account(id,owner_id,provider_registration_reference,display_name,connection_status,created_at,updated_at,version,execution_mode) "
                         + "values(?,?,?, ?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,?)",
-                brokerAccountId, ownerId, "KRAKEN", "Execution Test", "CONNECTED", "PAPER");
+                brokerAccountId, ownerId, UUID.fromString("7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01"), "Execution Test", "CONNECTED", "PAPER");
         jdbc.update("insert into accounts(account_id,name,base_currency,broker_account_id,peak_equity,equity,starting_balance,user_id) "
                         + "values(?,?,?,?,?,?,?,?)", accountId, "Execution Test", "USD", brokerAccountId,
                 50000, 50000, 50000, ownerId);

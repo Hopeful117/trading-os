@@ -1,9 +1,9 @@
 package com.hope.trading.trading_core.brokeraccount.domain;
 
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -27,9 +27,8 @@ public class BrokerAccount {
     private UUID id;
     @Column(nullable = false, updatable = false)
     private UUID ownerId;
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)
-    private BrokerProvider provider;
+    private UUID providerRegistrationReference;
     @Column(nullable = false, length = MAX_DISPLAY_NAME_LENGTH)
     private String displayName;
     private String externalAccountId;
@@ -53,11 +52,12 @@ public class BrokerAccount {
     protected BrokerAccount() {
     }
 
-    private BrokerAccount(BrokerAccountId id, UUID ownerId, BrokerProvider provider,ExecutionMode executionMode,
+    private BrokerAccount(BrokerAccountId id, UUID ownerId, UUID providerRegistrationReference,ExecutionMode executionMode,
                           String displayName, Instant now) {
         this.id = Objects.requireNonNull(id, "id is required").value();
         this.ownerId = Objects.requireNonNull(ownerId, "ownerId is required");
-        this.provider = Objects.requireNonNull(provider, "provider is required");
+        this.providerRegistrationReference = Objects.requireNonNull(providerRegistrationReference,
+                "provider registration reference is required");
         this.displayName = validateDisplayName(displayName);
         this.connectionStatus = BrokerConnectionStatus.CREATED;
         this.createdAt = Objects.requireNonNull(now, "now is required");
@@ -66,9 +66,10 @@ public class BrokerAccount {
                 Objects.requireNonNull(executionMode, "executionMode is required");
     }
 
-    public static BrokerAccount create(UUID ownerId, BrokerProvider provider,ExecutionMode executionMode,
+    public static BrokerAccount create(UUID ownerId, UUID providerRegistrationReference,ExecutionMode executionMode,
                                        String displayName, Instant now) {
-        return new BrokerAccount(BrokerAccountId.newId(), ownerId, provider,executionMode, displayName, now);
+        return new BrokerAccount(BrokerAccountId.newId(), ownerId, providerRegistrationReference,
+                executionMode, displayName, now);
     }
 
     public void markPendingValidation(Instant now) {
@@ -149,7 +150,8 @@ public class BrokerAccount {
 
     public UUID id() { return id; }
     public UUID ownerId() { return ownerId; }
-    public BrokerProvider provider() { return provider; }
+    public UUID providerRegistrationReference() { return providerRegistrationReference; }
+    public UUID provider() { return providerRegistrationReference; }
     public String displayName() { return displayName; }
     public String externalAccountId() { return externalAccountId; }
     public BrokerConnectionStatus connectionStatus() { return connectionStatus; }

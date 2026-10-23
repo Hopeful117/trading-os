@@ -67,7 +67,7 @@ public class BrokerAccountService {
         }
         BrokerAccount account = BrokerAccount.create(
                 ownerId,
-                request.provider(),
+                request.providerRegistrationReference(),
                 request.executionMode(),
                 request.displayName(),
                 clock.instant()
@@ -101,7 +101,7 @@ public class BrokerAccountService {
         SettlementModel settlementModel = requestedSettlementModel(requestedSettlementModel);
 
         Account account = Account.builder()
-                 .broker(brokerAccount.provider().name())
+                 .broker(brokerAccount.providerRegistrationReference().toString())
                  .brokerAccountId(brokerAccount.id())
                 .name(brokerAccount.displayName())
                  .baseCurrency("USD") // PAPER accounts use USD as default base currency
@@ -267,7 +267,7 @@ public class BrokerAccountService {
     }
 
     private BrokerAccountResponse map(BrokerAccount account) {
-        return new BrokerAccountResponse(account.id(), account.provider(), account.executionMode(), account.displayName(),
+        return new BrokerAccountResponse(account.id(), account.providerRegistrationReference(), account.executionMode(), account.displayName(),
                 account.externalAccountId(), account.connectionStatus(), account.lastValidatedAt(),
                 account.lastSynchronizedAt(), account.createdAt(), account.updatedAt());
     }

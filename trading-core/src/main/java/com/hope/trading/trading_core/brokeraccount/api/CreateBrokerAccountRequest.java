@@ -1,8 +1,9 @@
 package com.hope.trading.trading_core.brokeraccount.api;
 
-import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -10,9 +11,10 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 public record CreateBrokerAccountRequest(
-        @NotNull BrokerProvider provider,
+        @NotNull @JsonProperty("provider") @JsonAlias("providerRegistrationReference") UUID providerRegistrationReference,
         @NotBlank @Size(max = 80) String displayName,
         @NotNull ExecutionMode executionMode,
         BigDecimal initialCapital,
@@ -29,16 +31,16 @@ public record CreateBrokerAccountRequest(
                 ? DEFAULT_RISK_DAY_RESET_TIME : riskDayResetTime.strip();
     }
 
-    public CreateBrokerAccountRequest(BrokerProvider provider, String displayName, ExecutionMode executionMode,
+    public CreateBrokerAccountRequest(UUID providerRegistrationReference, String displayName, ExecutionMode executionMode,
                                       BigDecimal initialCapital, RiskProfileReference riskProfile) {
-        this(provider, displayName, executionMode, initialCapital, riskProfile, null, "UTC",
+        this(providerRegistrationReference, displayName, executionMode, initialCapital, riskProfile, null, "UTC",
                 DEFAULT_RISK_DAY_RESET_TIME);
     }
 
-    public CreateBrokerAccountRequest(BrokerProvider provider, String displayName, ExecutionMode executionMode,
+    public CreateBrokerAccountRequest(UUID providerRegistrationReference, String displayName, ExecutionMode executionMode,
                                       BigDecimal initialCapital, RiskProfileReference riskProfile,
                                       SettlementModel settlementModel) {
-        this(provider, displayName, executionMode, initialCapital, riskProfile, settlementModel, "UTC",
+        this(providerRegistrationReference, displayName, executionMode, initialCapital, riskProfile, settlementModel, "UTC",
                 DEFAULT_RISK_DAY_RESET_TIME);
     }
 }

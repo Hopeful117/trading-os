@@ -72,7 +72,7 @@ class InternalBrokerAccountControllerTest {
                                 + "\"externalAccountId\":\"ext-001\","
                                 + "\"validatedAt\":\"2026-01-01T00:00:00Z\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.provider").value("KRAKEN"));
+                .andExpect(jsonPath("$.provider").value("7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01"));
 
         verify(service).updateStatus(eq(userId), eq(accountId), any(), any(), any(), any());
     }

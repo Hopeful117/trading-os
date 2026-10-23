@@ -129,11 +129,11 @@ public class PaperSettlementService {
         }
         Account account = accountOpt.get();
         if (account.getUser() == null || !brokerAccount.ownerId().equals(account.getUser().getUserId())
-                || (account.getBroker() != null && !brokerAccount.provider().name().equals(account.getBroker()))) {
+                || account.getBroker() == null) {
             throw new IllegalStateException("PAPER account identity is inconsistent");
         }
         ExecutionParameters params = intent.parameters();
-        InstrumentProductType productType = requireCompatibleSettlement(account, brokerAccount, params.instrument());
+        InstrumentProductType productType = requireCompatibleSettlement(account, params.instrument());
         boolean cashSettledDerivative = account.getSettlementModel() == SettlementModel.CASH
                 && productType == InstrumentProductType.LINEAR_PERPETUAL;
         BrokerOrder.Fill fill = getFill(order);
@@ -171,10 +171,8 @@ public class PaperSettlementService {
         return settledTradeId;
     }
 
-    private InstrumentProductType requireCompatibleSettlement(Account account,
-                                                               com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
-                                                               String symbol) {
-        InstrumentProductType productType = resolveProductType(brokerAccount, symbol);
+    private InstrumentProductType requireCompatibleSettlement(Account account, String symbol) {
+        InstrumentProductType productType = resolveProductType(account, symbol);
         try {
             SettlementCompatibilityPolicy.requireCompatible(account.getSettlementModel(), productType);
         } catch (IllegalArgumentException incompatible) {
@@ -184,16 +182,12 @@ public class PaperSettlementService {
         return productType;
     }
 
-    private InstrumentProductType resolveProductType(
-        com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
-             String symbol) {
+    private InstrumentProductType resolveProductType(Account account, String symbol) {
         if (marketDataClient == null) {
             throw new IllegalStateException("PAPER instrument product identity is unavailable or ambiguous");
         }
         List<MarketResponse> matches = Optional.ofNullable(marketDataClient.findAll()).orElse(List.of()).stream()
                 .filter(market -> market != null
-                        && market.getProvider() != null
-                        && brokerAccount.provider().name().equals(market.getProvider().name())
                         && symbol.equals(market.getSymbol()))
                 .toList();
         if (matches.size() != 1 || matches.getFirst().getProductType() == null) {

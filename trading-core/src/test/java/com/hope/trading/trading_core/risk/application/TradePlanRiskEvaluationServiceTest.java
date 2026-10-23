@@ -114,6 +114,8 @@ class TradePlanRiskEvaluationServiceTest {
         when(accounts.findById(accountId)).thenReturn(Optional.of(withoutRelation));
         when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                 accountId, brokerAccountId, "UTC", "USD", UUID.randomUUID())));
+        when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, actorId)).thenReturn(Optional.of(
+                BrokerAccount.create(actorId, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Kraken", now)));
 
         Response response = service.evaluate(command("key", 3));
 
@@ -130,6 +132,8 @@ class TradePlanRiskEvaluationServiceTest {
         when(accounts.findById(accountId)).thenReturn(Optional.of(inconsistent));
         when(persistence.configuration(accountId)).thenReturn(Optional.of(new RiskPersistence.AccountConfiguration(
                 accountId, brokerAccountId, "UTC", "USD", UUID.randomUUID())));
+        when(brokerAccounts.findByIdAndOwnerId(brokerAccountId, actorId)).thenReturn(Optional.of(
+                BrokerAccount.create(actorId, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Kraken", now)));
 
         Response response = service.evaluate(command("key", 3));
 
