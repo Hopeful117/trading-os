@@ -88,6 +88,23 @@ public class BrokerConnection {
         updatedAt = at;
     }
 
+    public void authenticate(UUID reference, Instant at) {
+        activeCredentialReference = Objects.requireNonNull(reference);
+        lastValidatedAt = at;
+        updatedAt = at;
+    }
+
+    public void bindExternalAccount(String externalAccountId, Instant at) {
+        if (externalAccountId == null || externalAccountId.isBlank()) {
+            throw new IllegalArgumentException("externalAccountId is required");
+        }
+        if (this.externalAccountId != null && !this.externalAccountId.equals(externalAccountId)) {
+            throw new IllegalStateException("Changing the external account requires explicit reauthorization");
+        }
+        this.externalAccountId = externalAccountId;
+        updatedAt = at;
+    }
+
     public void disconnect(Instant at) {
         technicalStatus = BrokerConnectionStatus.DISCONNECTED;
         updatedAt = at;
