@@ -1,7 +1,11 @@
 package com.hope.trading.trading_core.broker.service;
 
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
+import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.helper.TradeStatus;
@@ -19,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +33,9 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
     private final TradeRepository tradeRepository;
     private final TradingCalculatorService tradingCalculatorService;
     private final BrokerApiClient brokerApiClient;
+    private final BrokerAccountSnapshotV2Client brokerAccountSnapshotV2Client;
     private final AccountMapper accountMapper;
+    private final BrokerAccountRepository brokerAccountRepository;
 
     @Override
     @Transactional
@@ -49,6 +56,48 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         recalculateAccount(account);
 
         accountRepository.save(account);
+    }
+
+    @Override
+    @Transactional
+    public void synchronize(UUID ownerId, UUID brokerAccountId) {
+        if (ownerId == null || brokerAccountId == null) {
+            throw new IllegalArgumentException("ownerId and brokerAccountId are required");
+        }
+
+        Account account = accountRepository.findByBrokerAccountId(brokerAccountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account mapping not found"));
+        if (account.getUser() == null || !ownerId.equals(account.getUser().getUserId())) {
+            throw new EntityNotFoundException("Account mapping not found");
+        }
+
+        var brokerAccount = brokerAccountRepository.findByIdAndOwnerId(brokerAccountId, ownerId)
+                .orElseThrow(() -> new EntityNotFoundException("Broker account mapping not found"));
+        BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
+        validateSnapshot(brokerAccount.provider().name(), brokerAccountId, snapshot);
+        if (account.getBroker() != null && !brokerAccount.provider().name().equals(account.getBroker())) {
+            throw new IllegalStateException("Account provider metadata mismatch");
+        }
+        if (brokerAccount.externalAccountId() != null
+                && !brokerAccount.externalAccountId().equals(snapshot.externalAccountId())) {
+            throw new IllegalStateException("External broker account identity mismatch");
+        }
+
+        replaceBalances(account, snapshot.balances());
+        replaceOpenPositions(account, snapshot.positions());
+        account.setMarketDataTimestamp(snapshot.observedAt());
+        recalculateAccount(account);
+        accountRepository.save(account);
+    }
+
+    private void validateSnapshot(String expectedProvider, UUID brokerAccountId,
+                                  BrokerAccountSnapshotV2Dto snapshot) {
+        if (snapshot == null || !brokerAccountId.equals(snapshot.brokerAccountId())) {
+            throw new IllegalStateException("Broker account snapshot identity mismatch");
+        }
+        if (!expectedProvider.equals(snapshot.provider())) {
+            throw new IllegalStateException("Broker account snapshot provider mismatch");
+        }
     }
 
     private Account synchronizeAccount(User user,BrokerAccountDto snapshot){
@@ -77,26 +126,21 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
             Account account,
             BrokerAccountDto snapshot
     ){
+        replaceBalances(account, snapshot.getBalances().getBalances());
+    }
+
+    private void replaceBalances(Account account, java.util.Map<String, BigDecimal> balances) {
         account.getBalances().clear();
-
-        snapshot.getBalances()
-                .getBalances()
-                .forEach((asset, amount) -> {
-
-                    AccountBalance balance =
-                            AccountBalance.builder()
-                                    .asset(asset)
-                                    .amount(amount)
-                                    .build();
-
-                    account.addBalance(balance);
-                });
+        balances.forEach((asset, amount) -> account.addBalance(AccountBalance.builder()
+                .asset(asset)
+                .amount(amount)
+                .build()));
     }
     private void synchronizeOpenTrades(
             Account account,
             BrokerAccountDto snapshot
     ){
-                account.getTrades().removeIf(trade -> trade.getTradeStatus() == TradeStatus.OPEN);
+        account.getTrades().removeIf(trade -> trade.getTradeStatus() == TradeStatus.OPEN);
 
         snapshot.getOpenTrades()
                 .forEach(position -> {
@@ -122,6 +166,22 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
 
 
+    }
+
+    private void replaceOpenPositions(Account account, java.util.List<BrokerPositionSnapshotV2Dto> positions) {
+        account.getTrades().removeIf(trade -> trade.getTradeStatus() == TradeStatus.OPEN);
+        positions.forEach(position -> {
+            if (position.signedQuantity() == null || position.signedQuantity().signum() == 0) {
+                throw new IllegalStateException("Broker position quantity must be non-zero");
+            }
+            account.addTrade(Trade.builder()
+                    .symbol(position.instrument())
+                    .type(position.signedQuantity().signum() > 0 ? TradeType.BUY : TradeType.SELL)
+                    .entryPrice(position.entryPrice())
+                    .quantity(position.signedQuantity().abs())
+                    .tradeStatus(TradeStatus.OPEN)
+                    .build());
+        });
     }
     // TODO : remplacer par un calcul basé sur la valorisation complète des actifs
     // lorsque MarketDataService sera disponible

@@ -13,5 +13,12 @@ class BrokerProviderRegistryTest {
     @Test void resolvesARegisteredProvider(){BrokerProvider provider=provider();var registry=new BrokerProviderRegistry(List.of(provider));assertThat(registry.resolve(BrokerProviderId.KRAKEN)).isSameAs(provider);}
     @Test void rejectsDuplicateProviders(){assertThatThrownBy(()->new BrokerProviderRegistry(List.of(provider(),provider()))).isInstanceOf(IllegalArgumentException.class);}
     @Test void rejectsAnUnsupportedProvider(){var registry=new BrokerProviderRegistry(List.of());assertThatThrownBy(()->registry.resolve(BrokerProviderId.KRAKEN)).isInstanceOf(UnsupportedBrokerProviderException.class);}
+    @Test void exposesSupportedProvidersAsAnImmutableSet(){
+        var registry=new BrokerProviderRegistry(List.of(provider()));
+
+        assertThat(registry.supportedProviders()).containsExactly(BrokerProviderId.KRAKEN);
+        assertThatThrownBy(()->registry.supportedProviders().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
     private BrokerProvider provider(){return new BrokerProvider(){public BrokerProviderId id(){return BrokerProviderId.KRAKEN;}public <T>java.util.Optional<T> capability(Class<T> type){return java.util.Optional.empty();}};}
 }
