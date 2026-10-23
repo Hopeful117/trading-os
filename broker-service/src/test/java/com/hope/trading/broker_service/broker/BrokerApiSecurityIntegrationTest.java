@@ -47,6 +47,11 @@ class BrokerApiSecurityIntegrationTest {
                 .queryParam("researchCutoff", "2026-10-19T18:00:00Z"))
                 .andExpect(status().isUnauthorized());
     }
+    @Test void ctraderOAuthCallbackIsReachableWithoutUserJwt() throws Exception {
+        mvc.perform(get("/api/v1/broker-accounts/ctrader/authorization/callback")
+                .queryParam("state", "invalid"))
+                .andExpect(status().isConflict());
+    }
 
     @Test void historicalFeesAllowsAuthorizedServiceOnly() throws Exception {
         mvc.perform(get("/internal/v1/historical-fees/eligible")
