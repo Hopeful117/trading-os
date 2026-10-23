@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
+import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
@@ -17,32 +19,42 @@ import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import feign.RetryableException;
 
 @Component
 public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     private final BrokerRiskFactsPort liveFacts;
+    private final BrokerAccountSnapshotV2Client authoritativeSnapshots;
     private final ObjectMapper mapper;
     private final Clock clock;
     private final PaperDerivativeAccountValuationService derivativeValuation;
 
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper) {
-        this(liveFacts, mapper, Clock.systemUTC(), null);
+        this(liveFacts, null, mapper, Clock.systemUTC(), null);
     }
 
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock) {
-        this(liveFacts, mapper, clock, null);
+        this(liveFacts, null, mapper, clock, null);
     }
 
     @Autowired
-    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock,
+    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, BrokerAccountSnapshotV2Client authoritativeSnapshots,
+                                      ObjectMapper mapper, Clock clock,
                                       PaperDerivativeAccountValuationService derivativeValuation) {
         this.liveFacts = liveFacts;
+        this.authoritativeSnapshots = authoritativeSnapshots;
         this.mapper = mapper;
         this.clock = clock;
         this.derivativeValuation = derivativeValuation;
+    }
+
+    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock,
+                                      PaperDerivativeAccountValuationService derivativeValuation) {
+        this(liveFacts, null, mapper, clock, derivativeValuation);
     }
 
     @Override
@@ -50,12 +62,91 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                                            BrokerAccount brokerAccount, UUID sourceId,
                                              Instant from, Instant to) {
         if (brokerAccount.executionMode() == ExecutionMode.LIVE) {
+            if (authoritativeSnapshots != null) {
+                BrokerAccountSnapshotV2Dto authoritative = null;
+                try {
+                    authoritative = authoritativeSnapshots.getAccountSnapshot(sourceId);
+                } catch (RetryableException ignored) {
+                    // The v2 compatibility route is unavailable for Kraken in
+                    // this state. Its established RiskSnapshot route remains
+                    // the fallback; cTrader has no legacy Risk capability.
+                }
+                if (authoritative != null) {
+                    validateIdentity(brokerAccount, sourceId, authoritative);
+                    if (authoritative.account() != null) {
+                        return fromAuthoritative(authoritative, from, to);
+                    }
+                }
+            }
             return RiskFactsProvider.fromBroker(liveFacts.load(sourceId, from, to));
         }
         if (brokerAccount.executionMode() == ExecutionMode.PAPER) {
             return paperSnapshot(account, brokerAccount, from, to);
         }
         throw new IllegalStateException("Execution mode is unavailable");
+    }
+
+    private void validateIdentity(BrokerAccount brokerAccount, UUID sourceId,
+                                  BrokerAccountSnapshotV2Dto snapshot) {
+        if (!sourceId.equals(snapshot.brokerAccountId())
+                || !brokerAccount.providerRegistrationReference().equals(snapshot.providerRegistrationReference())
+                || (brokerAccount.externalAccountId() != null
+                && !brokerAccount.externalAccountId().equals(snapshot.externalAccountId()))) {
+            throw new IllegalStateException("Authoritative broker snapshot identity mismatch");
+        }
+    }
+
+    private RiskFactsProvider.Snapshot fromAuthoritative(BrokerAccountSnapshotV2Dto snapshot,
+                                                          Instant from, Instant to) {
+        List<String> reasons = new java.util.ArrayList<>(snapshot.unavailabilityReasons() == null
+                ? List.of() : snapshot.unavailabilityReasons());
+        boolean complete = "COMPLETE".equals(snapshot.completeness())
+                && "FRESH".equals(snapshot.freshness());
+        if (!complete) reasons.add("AUTHORITATIVE_SNAPSHOT_NOT_COMPLETE_AND_FRESH");
+
+        var account = snapshot.account();
+        if (account.valuationAsset() == null || account.balance() == null
+                || account.equity() == null || account.usedMargin() == null) {
+            complete = false;
+            reasons.add("ACCOUNT_RISK_FACTS_INCOMPLETE");
+        }
+        if (snapshot.positions() != null && !snapshot.positions().isEmpty()) {
+            // v2 currently carries no provider margin or protective-stop facts.
+            complete = false;
+            reasons.add("POSITION_RISK_FACTS_UNAVAILABLE");
+        }
+
+        List<RiskFactsProvider.Position> positions = snapshot.positions() == null ? List.of()
+                : snapshot.positions().stream().map(position -> new RiskFactsProvider.Position(
+                        UUID.nameUUIDFromBytes((sourceId(snapshot) + ":" + position.brokerPositionReference())
+                                .getBytes(StandardCharsets.UTF_8)),
+                        position.brokerPositionReference(), "BROKER_AUTHORITATIVE_V2", position.instrument(),
+                        position.signedQuantity(), position.entryPrice(), null, null, null, List.of()))
+                        .toList();
+        List<RiskFactsProvider.ClosedTrade> closedTrades = snapshot.deals() == null ? List.of()
+                : snapshot.deals().stream().map(deal -> new RiskFactsProvider.ClosedTrade(
+                        deal.providerTradeReference(), deal.instrument(), deal.settlementAsset(), deal.fee(),
+                        deal.realizedPnl(), deal.closedAt()))
+                .filter(deal -> deal.closedAt() == null
+                        || (!deal.closedAt().isBefore(from) && deal.closedAt().isBefore(to)))
+                .toList();
+        long sourceVersion = snapshot.completedAt() == null ? 0 : snapshot.completedAt().toEpochMilli();
+        return new RiskFactsProvider.Snapshot(snapshot.brokerAccountId(), sourceVersion, snapshot.observedAt(),
+                complete, List.copyOf(new java.util.LinkedHashSet<>(reasons)), snapshot.balances(),
+                new RiskFactsProvider.Account(account.valuationAsset(), account.balance(), account.equity(),
+                        account.usedMargin(), null), positions, closedTrades, List.of(), writePayload(snapshot));
+    }
+
+    private String sourceId(BrokerAccountSnapshotV2Dto snapshot) {
+        return snapshot.brokerAccountId().toString();
+    }
+
+    private String writePayload(BrokerAccountSnapshotV2Dto snapshot) {
+        try {
+            return mapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException failure) {
+            throw new IllegalStateException("Authoritative broker snapshot cannot be preserved", failure);
+        }
     }
 
     private RiskFactsProvider.Snapshot paperSnapshot(com.hope.trading.trading_core.model.Account account,

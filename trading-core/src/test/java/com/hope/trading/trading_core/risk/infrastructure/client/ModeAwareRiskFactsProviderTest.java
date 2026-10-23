@@ -10,6 +10,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
+import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.Trade;
@@ -26,12 +29,135 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import feign.Request;
+import feign.RetryableException;
 
 class ModeAwareRiskFactsProviderTest {
     private final BrokerRiskFactsPort liveFacts = mock(BrokerRiskFactsPort.class);
     private final BrokerAccount brokerAccount = mock(BrokerAccount.class);
     private final Instant from = Instant.parse("2026-08-01T00:00:00Z");
     private final Instant to = Instant.parse("2026-08-02T00:00:00Z");
+
+    @Test
+    void liveUsesFreshAuthoritativeV2FactsForRisk() {
+        UUID brokerId = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        UUID providerReference = UUID.randomUUID();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", new BigDecimal("1000")), List.of(),
+                from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", new BigDecimal("1000"),
+                new BigDecimal("990"), new BigDecimal("10"), new BigDecimal("980")), List.of(), List.of(),
+                "COMPLETE", "FRESH", from, from.plusSeconds(1), List.of()));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.account().equity()).isEqualByComparingTo("990");
+        verifyNoInteractions(liveFacts);
+    }
+
+    @Test
+    void staleAuthoritativeV2FactsFailClosed() {
+        UUID brokerId = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        UUID providerReference = UUID.randomUUID();
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
+                from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ZERO, BigDecimal.ONE), List.of(), List.of(), "INCOMPLETE", "STALE", from,
+                from.plusSeconds(1), List.of("OBSERVATION_STALE")));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isFalse();
+        assertThat(snapshot.unavailabilityReasons()).contains("OBSERVATION_STALE",
+                "AUTHORITATIVE_SNAPSHOT_NOT_COMPLETE_AND_FRESH");
+        verifyNoInteractions(liveFacts);
+    }
+
+    @Test
+    void liveFallsBackToLegacyFactsWhenV2IsUnavailable() {
+        UUID brokerId = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        BrokerRiskFactsPort.Snapshot legacy = new BrokerRiskFactsPort.Snapshot(
+                brokerId, 2, from.plusSeconds(1), true, List.of(), Map.of(),
+                new BrokerRiskFactsPort.Account("USD", BigDecimal.ONE, BigDecimal.ONE,
+                        BigDecimal.ZERO, BigDecimal.ONE), List.of(), List.of(), List.of(), "{}");
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        Request request = Request.create(Request.HttpMethod.GET, "http://broker", Map.of(),
+                (byte[]) null, null);
+        when(authoritative.getAccountSnapshot(brokerId)).thenThrow(new RetryableException(
+                503, "timeout", Request.HttpMethod.GET, (Long) null, request));
+        when(liveFacts.load(brokerId, from, to)).thenReturn(legacy);
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper(), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.sourceVersion()).isEqualTo(2);
+        verify(liveFacts).load(brokerId, from, to);
+    }
+
+    @Test
+    void authoritativeDealsAreLimitedToRiskWindowAndKeepSettlementAsset() {
+        UUID brokerId = UUID.randomUUID();
+        UUID providerReference = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        var deal = new com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto(
+                "deal-1", "EUR/USD", "EUR", "BUY", BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.TEN, from.plusSeconds(1));
+        var outside = new com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto(
+                "deal-2", "EUR/USD", "JPY", "BUY", BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.TEN, to.plusSeconds(1));
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", new BigDecimal("1000")), List.of(),
+                from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", new BigDecimal("1000"),
+                new BigDecimal("990"), new BigDecimal("10"), new BigDecimal("980")), List.of(),
+                List.of(deal, outside), "COMPLETE", "FRESH", from, from.plusSeconds(2), List.of()));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.closedTrades()).singleElement()
+                .satisfies(value -> {
+                    assertThat(value.settlementAsset()).isEqualTo("EUR");
+                    assertThat(value.sourceTradeReference()).isEqualTo("deal-1");
+                });
+    }
+
+    @Test
+    void authoritativeIdentityMismatchFailsClosedWithoutLegacyFallback() {
+        UUID brokerId = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(UUID.randomUUID());
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                UUID.randomUUID(), UUID.randomUUID(), "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
+                from.plusSeconds(1), null, List.of(), List.of(), "COMPLETE", "FRESH", from,
+                from.plusSeconds(1), List.of()));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ModeAwareRiskFactsProvider(
+                liveFacts, authoritative, new ObjectMapper(), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Authoritative broker snapshot identity mismatch");
+        verifyNoInteractions(liveFacts);
+    }
 
     @Test
     void liveUsesBrokerFactsAndDoesNotReadLocalState() {
