@@ -1,5 +1,7 @@
 package com.hope.trading.broker_service.broker.domain.model;
 
+import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -102,6 +104,19 @@ public final class BrokerModels {
     public record Inconsistent(String reasonCode) implements ReconciliationResult { public Inconsistent { reasonCode=required(reasonCode,"reasonCode"); } }
     public record AccountSnapshot(UUID brokerAccountId, java.util.Map<String,BigDecimal> balances, Instant observedAt) {
         public AccountSnapshot { Objects.requireNonNull(brokerAccountId); balances=java.util.Map.copyOf(balances); Objects.requireNonNull(observedAt); }
+    }
+    public record BrokerAccountSnapshotV2(UUID brokerAccountId, BrokerProviderId provider,
+                                          String externalAccountId,
+                                          java.util.Map<String,BigDecimal> balances,
+                                          java.util.List<PositionSnapshot> positions,
+                                          Instant observedAt) {
+        public BrokerAccountSnapshotV2 {
+            Objects.requireNonNull(brokerAccountId);
+            Objects.requireNonNull(provider);
+            balances = java.util.Map.copyOf(balances);
+            positions = java.util.List.copyOf(positions);
+            Objects.requireNonNull(observedAt);
+        }
     }
     public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, Instant observedAt, String brokerPositionReference) {}
 

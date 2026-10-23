@@ -29,6 +29,24 @@ public final class BrokerQueryControllers {
     }
 
     @RestController
+    @RequestMapping("/internal/v2/broker-accounts")
+    public static final class AccountSnapshotV2Controller {
+        private final GetAccountSnapshotV2Service service;
+
+        public AccountSnapshotV2Controller(GetAccountSnapshotV2Service service) {
+            this.service = service;
+        }
+
+        @GetMapping("/{id}/snapshot")
+        public ResponseEntity<BrokerAccountSnapshotV2> get(
+                @PathVariable UUID id,
+                @AuthenticationPrincipal BrokerPrincipal principal) {
+            requireDelegatedActor(principal);
+            return ResponseEntity.ok(service.get(principal.userId(), id));
+        }
+    }
+
+    @RestController
     @RequestMapping("/internal/v1/broker-accounts")
     public static final class PositionController {
         private final GetPositionsService service;

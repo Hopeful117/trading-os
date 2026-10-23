@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.Date;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.GetRiskSnapshotService;
+import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.GetAccountSnapshotV2Service;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.GetTechnicalCapabilitiesService;
 import com.hope.trading.broker_service.broker.application.service.BrokerOperationServices.PreviewMarginService;
 import com.hope.trading.broker_service.broker.infrastructure.persistence.HistoricalFeeScheduleRepository;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.*;
 class BrokerApiSecurityIntegrationTest {
     @Autowired MockMvc mvc;
     @MockitoBean GetRiskSnapshotService riskSnapshots;
+    @MockitoBean GetAccountSnapshotV2Service accountSnapshotsV2;
     @MockitoBean GetTechnicalCapabilitiesService technicalCapabilities;
     @MockitoBean PreviewMarginService marginPreviews;
     @MockitoBean HistoricalFeeScheduleRepository historicalFeeSchedules;
@@ -98,6 +100,27 @@ class BrokerApiSecurityIntegrationTest {
                 .queryParam("from",from.toString()).queryParam("to",to.toString())
                 .header("X-Service-Authorization","Bearer "+serviceTokenWithoutActor()))
                 .andExpect(status().isForbidden());
+    }
+    @Test void accountSnapshotV2RequiresDelegatedActor() throws Exception {
+        mvc.perform(get("/internal/v2/broker-accounts/{id}/snapshot", UUID.randomUUID())
+                .header("X-Service-Authorization", "Bearer " + serviceTokenWithoutActor()))
+                .andExpect(status().isForbidden());
+    }
+    @Test void accountSnapshotV2UsesAuthenticatedOwner() throws Exception {
+        UUID account = UUID.randomUUID();
+        UUID owner = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        when(accountSnapshotsV2.get(owner, account)).thenReturn(new BrokerAccountSnapshotV2(
+                account, com.hope.trading.broker_service.connection.domain.BrokerProviderId.KRAKEN,
+                "external-1", Map.of("USD", new java.math.BigDecimal("1000")), List.of(),
+                Instant.parse("2026-10-23T10:00:00Z")));
+
+        mvc.perform(get("/internal/v2/broker-accounts/{id}/snapshot", account)
+                .header("X-Service-Authorization", "Bearer " + serviceToken(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.brokerAccountId").value(account.toString()))
+                .andExpect(jsonPath("$.externalAccountId").value("external-1"))
+                .andExpect(jsonPath("$.balances.USD").value(1000));
+        verify(accountSnapshotsV2).get(owner, account);
     }
     @Test void technicalCapabilitiesRequiresDelegatedActor() throws Exception {
         mvc.perform(get("/internal/v1/broker-accounts/{id}/capabilities",UUID.randomUUID())

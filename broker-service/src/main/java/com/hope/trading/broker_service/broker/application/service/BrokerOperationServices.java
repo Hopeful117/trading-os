@@ -17,7 +17,30 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
         if(connections.findByBrokerAccountIdAndOwnerId(brokerAccountId,ownerId).isEmpty())
             throw new BrokerAuthorizationException("Broker account is not accessible");
     }
-    @Service public static final class GetAccountService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public GetAccountService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public AccountSnapshot get(UUID id){return metrics.record("account",()->require(providers.resolve(id),AccountCapability.class).account(id));}}
+     @Service public static final class GetAccountService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public GetAccountService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public AccountSnapshot get(UUID id){return metrics.record("account",()->require(providers.resolve(id),AccountCapability.class).account(id));}}
+     @Service public static class GetAccountSnapshotV2Service {
+         private final BrokerProviderResolver providers;
+         private final BrokerOperationsMetrics metrics;
+         private final BrokerConnectionRepository connections;
+
+         public GetAccountSnapshotV2Service(BrokerProviderResolver providers, BrokerOperationsMetrics metrics,
+                                            BrokerConnectionRepository connections) {
+             this.providers = providers;
+             this.metrics = metrics;
+             this.connections = connections;
+         }
+
+         public BrokerAccountSnapshotV2 get(UUID ownerId, UUID brokerAccountId) {
+             var connection = connections.findByBrokerAccountIdAndOwnerId(brokerAccountId, ownerId)
+                     .orElseThrow(() -> new BrokerAuthorizationException("Broker account is not accessible"));
+             var provider = providers.resolve(brokerAccountId);
+             var account = require(provider, AccountCapability.class).account(brokerAccountId);
+             var positions = require(provider, PositionCapability.class).positions(brokerAccountId);
+             return metrics.record("account_snapshot_v2", () -> new BrokerAccountSnapshotV2(
+                     brokerAccountId, connection.provider(), connection.externalAccountId(),
+                     account.balances(), positions, account.observedAt()));
+         }
+     }
     @Service public static final class GetPositionsService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public GetPositionsService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public List<PositionSnapshot> get(UUID id){return metrics.record("positions",()->require(providers.resolve(id),PositionCapability.class).positions(id));}}
     @Service public static final class GetOrdersService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public GetOrdersService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public List<OrderSnapshot> get(UUID id){return metrics.record("orders",()->require(providers.resolve(id),OrderCapability.class).orders(id));}}
     @Service public static final class ExecuteOrderService {private static final Logger log=LoggerFactory.getLogger(ExecuteOrderService.class);private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final com.hope.trading.broker_service.connection.application.BrokerConnectionRepository connections;public ExecuteOrderService(BrokerProviderResolver p,BrokerOperationsMetrics m,com.hope.trading.broker_service.connection.application.BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public ExecutionResult execute(ExecutionRequest r,UUID ownerId){log.info("broker_execution providerAccount={} attempt={}",r.brokerAccountId(),r.executionAttemptId());requireOwnership(connections,r.brokerAccountId(),ownerId);return metrics.record("execution",()->require(providers.resolve(r.brokerAccountId()),ExecutionCapability.class).execute(r));}}
