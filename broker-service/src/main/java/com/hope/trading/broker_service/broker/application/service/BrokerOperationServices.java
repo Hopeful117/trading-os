@@ -35,10 +35,14 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
          }
 
          public BrokerAccountSnapshotV2 get(UUID ownerId, UUID brokerAccountId) {
-             var connection = connections.findByBrokerAccountIdAndOwnerId(brokerAccountId, ownerId)
-                     .orElseThrow(() -> new BrokerAuthorizationException("Broker account is not accessible"));
-             var provider = providers.resolve(brokerAccountId);
-             var account = require(provider, AccountCapability.class).account(brokerAccountId);
+              var connection = connections.findByBrokerAccountIdAndOwnerId(brokerAccountId, ownerId)
+                      .orElseThrow(() -> new BrokerAuthorizationException("Broker account is not accessible"));
+              var provider = providers.resolve(brokerAccountId);
+              var authoritative = provider.capability(AuthoritativeSnapshotCapability.class);
+              if (authoritative.isPresent()) {
+                  return metrics.record("account_snapshot_v2", () -> authoritative.get().snapshot(brokerAccountId));
+              }
+              var account = require(provider, AccountCapability.class).account(brokerAccountId);
              var positions = require(provider, PositionCapability.class).positions(brokerAccountId);
              return metrics.record("account_snapshot_v2", () -> new BrokerAccountSnapshotV2(
                       brokerAccountId, providerRegistrations.referenceFor(connection.provider()), connection.externalAccountId(),

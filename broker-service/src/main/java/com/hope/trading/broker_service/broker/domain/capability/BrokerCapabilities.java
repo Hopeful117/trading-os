@@ -16,6 +16,9 @@ public final class BrokerCapabilities {
     public interface RiskSnapshotCapability {
         RiskSnapshot snapshot(UUID brokerAccountId, Instant closedFrom, Instant closedTo);
     }
+    public interface AuthoritativeSnapshotCapability {
+        BrokerAccountSnapshotV2 snapshot(UUID brokerAccountId);
+    }
     public interface TechnicalCapability {
         TechnicalCapabilities capabilities(UUID brokerAccountId, String instrument);
     }

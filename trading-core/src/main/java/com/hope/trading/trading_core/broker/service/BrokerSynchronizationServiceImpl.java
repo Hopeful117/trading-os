@@ -73,8 +73,11 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
         var brokerAccount = brokerAccountRepository.findByIdAndOwnerId(brokerAccountId, ownerId)
                 .orElseThrow(() -> new EntityNotFoundException("Broker account mapping not found"));
-        BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
-        validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
+         BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
+         validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
+         if (!"COMPLETE".equals(snapshot.completeness()) || !"FRESH".equals(snapshot.freshness())) {
+             throw new IllegalStateException("Broker account snapshot is not complete and fresh");
+         }
         if (account.getBroker() != null
                 && !brokerAccount.providerRegistrationReference().toString().equals(account.getBroker())) {
             throw new IllegalStateException("Account provider metadata mismatch");
@@ -86,8 +89,14 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
         replaceBalances(account, snapshot.balances());
         replaceOpenPositions(account, snapshot.positions());
-        account.setMarketDataTimestamp(snapshot.observedAt());
-        recalculateAccount(account);
+         account.setMarketDataTimestamp(snapshot.observedAt());
+         recalculateAccount(account);
+         if (snapshot.account() != null && snapshot.account().equity() != null) {
+             account.setEquity(snapshot.account().equity());
+             if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
+                 account.setPeakEquity(account.getEquity());
+             }
+         }
         accountRepository.save(account);
     }
 

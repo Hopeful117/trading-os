@@ -162,7 +162,7 @@ public class CTraderAuthenticationService {
                     || !connection.ownerId().equals(ownerId)) {
                 throw new CTraderAuthenticationException("Broker connection is not accessible");
             }
-            connection.bindExternalAccount(externalAccountId, clock.instant());
+            connection.bindExternalAccount(externalAccountId, attempt.environment(), clock.instant());
             connections.save(connection);
             attempts.save(attempt);
             return response(attempt, null, "cTrader account bound; synchronization and execution remain unavailable");

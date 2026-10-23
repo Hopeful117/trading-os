@@ -18,6 +18,7 @@ public final class BrokerModels {
     public enum OrderType { MARKET, LIMIT }
     public enum OrderStatus { ACKNOWLEDGED, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED, UNKNOWN }
     public enum SnapshotCompleteness { COMPLETE, INCOMPLETE }
+    public enum SnapshotFreshness { FRESH, STALE, UNKNOWN }
 
     public record TechnicalCapabilities(UUID brokerAccountId, String provider, String instrument, long sourceVersion,
             Instant observedAt, List<OrderType> supportedOrderTypes,
@@ -106,16 +107,41 @@ public final class BrokerModels {
         public AccountSnapshot { Objects.requireNonNull(brokerAccountId); balances=java.util.Map.copyOf(balances); Objects.requireNonNull(observedAt); }
     }
     public record BrokerAccountSnapshotV2(UUID brokerAccountId, UUID providerRegistrationReference,
-                                          String externalAccountId,
-                                          java.util.Map<String,BigDecimal> balances,
-                                          java.util.List<PositionSnapshot> positions,
-                                          Instant observedAt) {
+                                           String externalAccountId,
+                                           java.util.Map<String,BigDecimal> balances,
+                                           java.util.List<PositionSnapshot> positions,
+                                           Instant observedAt,
+                                           AccountFacts account,
+                                           java.util.List<OrderSnapshot> orders,
+                                           java.util.List<ClosedTrade> deals,
+                                           SnapshotCompleteness completeness,
+                                           SnapshotFreshness freshness,
+                                           Instant observationStartedAt,
+                                           Instant completedAt,
+                                           java.util.List<String> unavailabilityReasons) {
         public BrokerAccountSnapshotV2 {
             Objects.requireNonNull(brokerAccountId);
             Objects.requireNonNull(providerRegistrationReference);
             balances = java.util.Map.copyOf(balances);
             positions = java.util.List.copyOf(positions);
             Objects.requireNonNull(observedAt);
+            orders = java.util.List.copyOf(orders);
+            deals = java.util.List.copyOf(deals);
+            Objects.requireNonNull(completeness);
+            Objects.requireNonNull(freshness);
+            Objects.requireNonNull(observationStartedAt);
+            Objects.requireNonNull(completedAt);
+            unavailabilityReasons = List.copyOf(new java.util.LinkedHashSet<>(unavailabilityReasons));
+        }
+
+        public BrokerAccountSnapshotV2(UUID brokerAccountId, UUID providerRegistrationReference,
+                                       String externalAccountId,
+                                       java.util.Map<String,BigDecimal> balances,
+                                       java.util.List<PositionSnapshot> positions,
+                                       Instant observedAt) {
+            this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions,
+                    observedAt, null, List.of(), List.of(), SnapshotCompleteness.COMPLETE,
+                    SnapshotFreshness.FRESH, observedAt, observedAt, List.of());
         }
 
         public BrokerAccountSnapshotV2(UUID brokerAccountId, BrokerProviderId provider,
@@ -127,6 +153,13 @@ public final class BrokerModels {
                     new com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog()
                             .referenceFor(provider),
                     externalAccountId, balances, positions, observedAt);
+        }
+    }
+    public record AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                               BigDecimal usedMargin, BigDecimal freeMargin) {
+        public AccountFacts {
+            valuationAsset = required(valuationAsset, "valuationAsset");
+            Objects.requireNonNull(balance);
         }
     }
     public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, Instant observedAt, String brokerPositionReference) {}
@@ -202,7 +235,14 @@ public final class BrokerModels {
             String providerReferenceProvenance, BigDecimal quantity, BigDecimal stopPrice) {}
     public record ClosedTrade(String providerTradeReference, String instrument, String settlementAsset, Side side,
             BigDecimal quantity, BigDecimal price, BigDecimal fee, BigDecimal realizedPnl,
-            Instant closedAt) {}
+            Instant closedAt, BigDecimal swap) {
+        public ClosedTrade(String providerTradeReference, String instrument, String settlementAsset, Side side,
+                           BigDecimal quantity, BigDecimal price, BigDecimal fee, BigDecimal realizedPnl,
+                           Instant closedAt) {
+            this(providerTradeReference, instrument, settlementAsset, side, quantity, price, fee,
+                    realizedPnl, closedAt, null);
+        }
+    }
     public record LedgerEntry(String providerLedgerReference, String asset, String type,
             BigDecimal amount, BigDecimal fee, BigDecimal balance, Instant occurredAt) {}
     private static String required(String value,String name){String v=Objects.requireNonNull(value,name).trim();if(v.isEmpty())throw new IllegalArgumentException(name+" is required");return v;}
