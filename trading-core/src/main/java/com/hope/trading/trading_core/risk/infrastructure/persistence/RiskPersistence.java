@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.risk.infrastructure.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Response;
+import com.hope.trading.risk.projection.RiskHeadroomProjection;
 import com.hope.trading.trading_core.model.Account;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -221,7 +222,9 @@ public class RiskPersistence {
 
     public void accountMonitoringEvaluation(UUID id, UUID actorId, String key, UUID accountId,
                                              Instant requestedAt, String status, String decision,
-                                             Long contextVersion, Object officialResult) {
+                                             Long contextVersion, Object officialResult,
+                                             java.math.BigDecimal dailyReferenceBalance,
+                                             RiskHeadroomProjection headroom) {
         if (entityManager.createQuery("select e.id from RiskEvaluationEntity e where e.actorId=:actor and e.idempotencyKey=:key",
                         UUID.class).setParameter("actor", actorId).setParameter("key", key)
                 .getResultStream().findFirst().isPresent()) {
@@ -237,6 +240,17 @@ public class RiskPersistence {
         entity.decision = decision;
         entity.evaluationMode = "ACCOUNT_MONITORING";
         entity.contextSnapshotVersion = contextVersion;
+        entity.dailyReferenceBalance = dailyReferenceBalance;
+        headroom.dailyLoss().ifPresent(value -> {
+            entity.dailyLossLimit = value.limit().amount();
+            entity.dailyLossUsed = value.used().amount();
+            entity.dailyLossRemaining = value.remaining().amount();
+        });
+        headroom.totalLoss().ifPresent(value -> {
+            entity.totalDrawdownLimit = value.limit().amount();
+            entity.totalDrawdownUsed = value.used().amount();
+            entity.totalDrawdownRemaining = value.remaining().amount();
+        });
         entity.resultSchemaVersion = 1;
         entity.resultPayload = write(officialResult);
         entity.responseSchemaVersion = 1;
@@ -248,6 +262,14 @@ public class RiskPersistence {
                 "decision", decision == null ? "" : decision));
         entityManager.persist(entity);
         entityManager.flush();
+    }
+
+    public void accountMonitoringEvaluation(UUID id, UUID actorId, String key, UUID accountId,
+                                             Instant requestedAt, String status, String decision,
+                                             Long contextVersion, Object officialResult) {
+        accountMonitoringEvaluation(id, actorId, key, accountId, requestedAt, status, decision,
+                contextVersion, officialResult, null,
+                new RiskHeadroomProjection(java.util.Optional.empty(), java.util.Optional.empty()));
     }
 
     public void acknowledgment(UUID evaluationId, UUID tradePlanId, long tradePlanVersion,
@@ -334,6 +356,34 @@ public class RiskPersistence {
                 e.accountId, e.status, e.decision, response, e.evaluationMode));
     }
 
+    public Optional<AccountMonitoringEvaluation> latestAccountMonitoringEvaluation(UUID accountId, UUID challengeId,
+                                                                                   Instant startedAt, Instant freshSince,
+                                                                                   Instant asOf) {
+        return entityManager.createQuery("select e from RiskEvaluationEntity e where e.accountId=:account "
+                        + "and e.evaluationMode='ACCOUNT_MONITORING' and e.idempotencyKey like :key "
+                        + "and e.requestedAt>=:startedAt and e.requestedAt>=:freshSince "
+                        + "and e.requestedAt<=:asOf order by e.requestedAt desc",
+                        RiskEvaluationEntity.class)
+                .setParameter("account", accountId)
+                .setParameter("key", "challenge:" + challengeId + ":account:%")
+                .setParameter("startedAt", startedAt).setParameter("freshSince", freshSince)
+                .setParameter("asOf", asOf)
+                .setMaxResults(1).getResultStream().findFirst()
+                .flatMap(this::monitoringEvaluation);
+    }
+
+    private Optional<AccountMonitoringEvaluation> monitoringEvaluation(RiskEvaluationEntity e) {
+        try {
+            return Optional.of(new AccountMonitoringEvaluation(e.id, e.accountId, e.requestedAt, e.status,
+                    e.decision, e.dailyReferenceBalance, e.dailyLossLimit, e.dailyLossUsed,
+                    e.dailyLossRemaining, e.totalDrawdownLimit, e.totalDrawdownUsed,
+                    e.totalDrawdownRemaining, read(e.resultPayload,
+                    com.hope.trading.risk.domain.RiskValidationResult.class)));
+        } catch (RuntimeException unreadable) {
+            return Optional.empty();
+        }
+    }
+
     public void t1Evaluation(UUID id, UUID executionIntentId, UUID t0EvaluationId, UUID accountId,
                              Instant evaluatedAt, String status, String decision, String unavailableReasonCode,
                              Integer resultSchemaVersion, Object officialResult, String responsePayload,
@@ -375,6 +425,16 @@ public class RiskPersistence {
             this(id, tradePlanId, tradePlanVersion, accountId, status, decision, response, "PRE_TRADE");
         }
     }
+    public record AccountMonitoringEvaluation(UUID id, UUID accountId, Instant evaluatedAt,
+                                              String status, String decision,
+                                              java.math.BigDecimal dailyReferenceBalance,
+                                              java.math.BigDecimal dailyLossLimit,
+                                              java.math.BigDecimal dailyLossUsed,
+                                              java.math.BigDecimal dailyLossRemaining,
+                                              java.math.BigDecimal totalDrawdownLimit,
+                                              java.math.BigDecimal totalDrawdownUsed,
+                                              java.math.BigDecimal totalDrawdownRemaining,
+                                              com.hope.trading.risk.domain.RiskValidationResult result) { }
     public record AcknowledgmentDelivery(UUID evaluationId, UUID tradePlanId, long tradePlanVersion,
                                          String decision, Instant evaluatedAt, UUID claimToken) { }
     public record AccountConfiguration(UUID accountId, UUID brokerAccountId, String riskTimeZone,
@@ -502,6 +562,13 @@ class RiskEvaluationEntity {
     @Column(nullable=false, length=32) String status; @Column(length=32) String decision;
     @Column(name="evaluation_mode", nullable=false, length=32) String evaluationMode;
     @Column(name="context_snapshot_version") Long contextSnapshotVersion;
+    @Column(name="daily_reference_balance", precision=30, scale=12) java.math.BigDecimal dailyReferenceBalance;
+    @Column(name="daily_loss_limit", precision=30, scale=12) java.math.BigDecimal dailyLossLimit;
+    @Column(name="daily_loss_used", precision=30, scale=12) java.math.BigDecimal dailyLossUsed;
+    @Column(name="daily_loss_remaining", precision=30, scale=12) java.math.BigDecimal dailyLossRemaining;
+    @Column(name="total_drawdown_limit", precision=30, scale=12) java.math.BigDecimal totalDrawdownLimit;
+    @Column(name="total_drawdown_used", precision=30, scale=12) java.math.BigDecimal totalDrawdownUsed;
+    @Column(name="total_drawdown_remaining", precision=30, scale=12) java.math.BigDecimal totalDrawdownRemaining;
     @Column(name="result_schema_version", nullable=false) int resultSchemaVersion;
     @Column(name="result_payload", nullable=false, columnDefinition="text") String resultPayload;
     @Column(name="response_schema_version", nullable=false) int responseSchemaVersion;

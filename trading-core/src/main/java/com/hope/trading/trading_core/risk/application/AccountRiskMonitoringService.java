@@ -15,6 +15,7 @@ import com.hope.trading.risk.snapshot.PortfolioSnapshot;
 import com.hope.trading.risk.snapshot.PositionSnapshot;
 import com.hope.trading.risk.snapshot.RuleSetSnapshot;
 import com.hope.trading.risk.snapshot.TradingContext;
+import com.hope.trading.risk.projection.RiskHeadroomProjection;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
@@ -82,8 +83,16 @@ public class AccountRiskMonitoringService {
         EffectiveRiskRuleSet validatedRules = profileValidator.validate(profile, false);
         EffectiveRiskRuleSet rules = new EffectiveRiskRuleSet(validatedRules.rules(),
                 Map.of(challenge.activeRiskPolicyId().toString(), challenge.activeRiskPolicyVersion()));
-        RiskDay day = RiskDay.containing(requestedAt, configuration.riskTimeZone(),
-                LocalTime.parse(configuration.riskDayResetTime()));
+        if (challenge.riskTimeZone() != null
+                && (!challenge.riskTimeZone().equals(configuration.riskTimeZone())
+                || !challenge.riskDayResetTime().equals(LocalTime.parse(configuration.riskDayResetTime())))) {
+            throw new IllegalStateException("Challenge Risk-day configuration does not match account configuration");
+        }
+        String riskTimeZone = challenge.riskTimeZone() == null
+                ? configuration.riskTimeZone() : challenge.riskTimeZone();
+        LocalTime riskDayResetTime = challenge.riskDayResetTime() == null
+                ? LocalTime.parse(configuration.riskDayResetTime()) : challenge.riskDayResetTime();
+        RiskDay day = RiskDay.containing(requestedAt, riskTimeZone, riskDayResetTime);
         RiskFactsProvider.Snapshot snapshot = facts.load(account, broker, broker.id(), day.startsAt(), day.endsAt());
         if (!snapshot.complete() || snapshot.account() == null || snapshot.observedAt() == null
                 || snapshot.account().balance() == null || snapshot.account().equity() == null) {
@@ -147,10 +156,13 @@ public class AccountRiskMonitoringService {
                         "account", accountSnapshot, "portfolio", portfolioSnapshot,
                         "market", marketSnapshot, "rules", ruleSnapshot)));
         RiskValidationResult result = engine.evaluate(context);
+        RiskHeadroomProjection headroom = RiskHeadroomProjection.from(result,
+                new Money(baseline.amount(), currency), new Money(starting, currency));
         persistence.accountMonitoringEvaluation(evaluationId, account.getUser().getUserId(),
-                "challenge:" + challenge.id() + ":account:" + account.getVersion(), account.getAccountId(),
+                "challenge:" + challenge.id() + ":account:" + account.getVersion()
+                        + ":requested-at:" + requestedAt, account.getAccountId(),
                 requestedAt, result.evaluationStatus().name(),
-                result.decision().map(Enum::name).orElse(null), contextVersion, result);
+                result.decision().map(Enum::name).orElse(null), contextVersion, result, baseline.amount(), headroom);
         return new Evaluation(evaluationId, result, baseline.amount(), contextVersion);
     }
 

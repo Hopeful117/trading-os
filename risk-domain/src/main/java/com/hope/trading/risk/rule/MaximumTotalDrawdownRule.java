@@ -13,10 +13,19 @@ public final class MaximumTotalDrawdownRule implements RiskRule {
 
     @Override public RiskRuleResult evaluate(RiskRuleEvaluationContext context,
                                               RuleConfiguration configuration, Instant time) {
-        return ThresholdRuleSupport.maximumInclusiveBreach(configuration,
-                context.metrics().totalDrawdownRatio().orElseThrow(
-                        () -> new IllegalStateException("Account starting balance unavailable")).value(),
-                configuration.requiredParameter("maximumRatio"), time,
+        Object boundary = configuration.parameters().getOrDefault("breachBoundary", "INCLUSIVE");
+        if (!(boundary instanceof String value)
+                || (!"INCLUSIVE".equals(value) && !"STRICT".equals(value))) {
+            throw new IllegalArgumentException("Unsupported total drawdown breach boundary");
+        }
+        var current = context.metrics().totalDrawdownRatio().orElseThrow(
+                () -> new IllegalStateException("Account starting balance unavailable")).value();
+        var maximum = configuration.requiredParameter("maximumRatio");
+        if ("STRICT".equals(value)) {
+            return ThresholdRuleSupport.maximum(configuration, current, maximum, time,
+                    "maximum-total-drawdown");
+        }
+        return ThresholdRuleSupport.maximumInclusiveBreach(configuration, current, maximum, time,
                 "maximum-total-drawdown");
     }
 }

@@ -19,6 +19,8 @@ public record ChallengeProgress(
         BigDecimal dailyReferenceBalance,
         BigDecimal dailyLossRemaining,
         BigDecimal totalDrawdownRemaining,
+        RiskHeadroom dailyLossHeadroom,
+        RiskHeadroom totalLossHeadroom,
         Instant evaluatedAt,
         Instant passedAt,
         Instant breachedAt,

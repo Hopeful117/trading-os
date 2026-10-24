@@ -69,7 +69,9 @@ public class RiskProfileValidator {
     private boolean validBreachBoundary(RiskPersistence.ProfileRule rule) {
         String boundary = normalizedBreachBoundary(rule);
         return ("INCLUSIVE".equals(boundary) || "STRICT".equals(boundary))
-                && ("DAILY_DRAWDOWN".equals(rule.ruleId()) || "INCLUSIVE".equals(boundary));
+                && ("DAILY_DRAWDOWN".equals(rule.ruleId())
+                || "MAX_TOTAL_DRAWDOWN".equals(rule.ruleId())
+                || "INCLUSIVE".equals(boundary));
     }
 
     private String normalizedBreachBoundary(RiskPersistence.ProfileRule rule) {

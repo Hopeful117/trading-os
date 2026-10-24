@@ -13,6 +13,8 @@ import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -85,6 +87,12 @@ public class ChallengeDefinition {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "risk_time_zone", length = 80, updatable = false)
+    private String riskTimeZone;
+
+    @Column(name = "risk_day_reset_time", length = 16, updatable = false)
+    private LocalTime riskDayResetTime;
+
     @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
     @jakarta.persistence.CollectionTable(name = "challenge_definition_phase",
             joinColumns = {
@@ -104,7 +112,8 @@ public class ChallengeDefinition {
                                   InstrumentProductType requiredInstrumentProductType,
                                  UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
                                  Instant retrievedAt, Instant effectiveFrom, String provenance, Instant createdAt,
-                                 List<ChallengePhaseDefinition> phases) {
+                                  List<ChallengePhaseDefinition> phases, String riskTimeZone,
+                                  LocalTime riskDayResetTime) {
         this.id = requireId(id, "id");
         this.definitionVersion = required(definitionVersion, "definitionVersion", 64);
         this.provider = required(provider, "provider", MAX_IDENTIFIER_LENGTH);
@@ -123,6 +132,12 @@ public class ChallengeDefinition {
         this.effectiveFrom = Objects.requireNonNull(effectiveFrom, "effectiveFrom");
         this.provenance = required(provenance, "provenance", Integer.MAX_VALUE);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+        if ((riskTimeZone == null) != (riskDayResetTime == null)) {
+            throw new IllegalArgumentException("risk day timezone and reset time must be provided together");
+        }
+        if (riskTimeZone != null) ZoneId.of(riskTimeZone);
+        this.riskTimeZone = riskTimeZone;
+        this.riskDayResetTime = riskDayResetTime;
         this.phases = validatedPhases(phases);
     }
 
@@ -135,7 +150,7 @@ public class ChallengeDefinition {
                                               Instant createdAt) {
         return create(id, definitionVersion, provider, product, planCode, capitalCurrency, startingCapital,
                 profitTargetRatio, progressionValueSource, requiredSettlementModel, null, riskPolicyId,
-                riskPolicyVersion, sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt, List.of());
+                riskPolicyVersion, sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt, List.of(), null, null);
     }
 
     public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
@@ -150,7 +165,7 @@ public class ChallengeDefinition {
                 startingCapital, profitTargetRatio, progressionValueSource, requiredSettlementModel,
                 requiredInstrumentProductType,
                 riskPolicyId, riskPolicyVersion,
-                sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt, List.of());
+                sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt, List.of(), null, null);
     }
 
     public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
@@ -161,10 +176,25 @@ public class ChallengeDefinition {
                                               UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
                                               Instant retrievedAt, Instant effectiveFrom, String provenance,
                                               Instant createdAt, List<ChallengePhaseDefinition> phases) {
+        return create(id, definitionVersion, provider, product, planCode, capitalCurrency, startingCapital,
+                profitTargetRatio, progressionValueSource, requiredSettlementModel,
+                requiredInstrumentProductType, riskPolicyId, riskPolicyVersion, sourceUrl, retrievedAt,
+                effectiveFrom, provenance, createdAt, phases, null, null);
+    }
+
+    public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
+                                              String planCode, String capitalCurrency, BigDecimal startingCapital,
+                                              BigDecimal profitTargetRatio, ProgressionValueSource progressionValueSource,
+                                              SettlementModel requiredSettlementModel,
+                                              InstrumentProductType requiredInstrumentProductType,
+                                              UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
+                                              Instant retrievedAt, Instant effectiveFrom, String provenance,
+                                              Instant createdAt, List<ChallengePhaseDefinition> phases,
+                                              String riskTimeZone, LocalTime riskDayResetTime) {
         return new ChallengeDefinition(id, definitionVersion, provider, product, planCode, capitalCurrency,
                 startingCapital, profitTargetRatio, progressionValueSource, requiredSettlementModel,
                 requiredInstrumentProductType, riskPolicyId, riskPolicyVersion, sourceUrl, retrievedAt,
-                effectiveFrom, provenance, createdAt, phases);
+                effectiveFrom, provenance, createdAt, phases, riskTimeZone, riskDayResetTime);
     }
 
     @PreUpdate
@@ -208,6 +238,8 @@ public class ChallengeDefinition {
     public Instant effectiveFrom() { return effectiveFrom; }
     public String provenance() { return provenance; }
     public Instant createdAt() { return createdAt; }
+    public String riskTimeZone() { return riskTimeZone; }
+    public LocalTime riskDayResetTime() { return riskDayResetTime; }
 
     /** Returns explicit phases, or a deterministic single legacy phase. */
     public List<ChallengePhaseDefinition> effectivePhases() {

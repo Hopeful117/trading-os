@@ -5,6 +5,7 @@ import com.hope.trading.risk.domain.RiskValidationResult;
 import com.hope.trading.risk.engine.*;
 import com.hope.trading.risk.explain.DecisionExplainer;
 import com.hope.trading.risk.rule.*;
+import com.hope.trading.risk.projection.RiskHeadroomProjection;
 import com.hope.trading.risk.snapshot.*;
 import org.junit.jupiter.api.Test;
 import java.time.*;
@@ -53,6 +54,34 @@ class RiskEngineIntegrationTest {
         assertEquals(RuleStatus.FAILURE, result.ruleResults().getFirst().status());
         assertEquals(new BigDecimal("0.03"),
                 result.globalMetrics().totalDrawdownRatio().orElseThrow().value());
+    }
+
+    @Test void staticTotalDrawdownStrictBoundaryPassesAtTheLimitAndBreachesBelowIt() {
+        var exact = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context(
+                rules(strictTotalDrawdownRule("0.10")), accountAtEquity("45000"), null));
+        var below = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context(
+                rules(strictTotalDrawdownRule("0.10")), accountAtEquity("44999.99"), null));
+
+        assertEquals(RiskDecision.APPROVED, exact.decision().orElseThrow());
+        assertEquals(RuleStatus.PASS, exact.ruleResults().getFirst().status());
+        assertEquals(RiskDecision.REJECTED, below.decision().orElseThrow());
+        assertEquals(RuleStatus.FAILURE, below.ruleResults().getFirst().status());
+    }
+
+    @Test void riskOwnsAbsoluteDailyAndTotalHeadroomProjection() {
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context(rules(
+                strictDailyRule("0.05"), strictTotalDrawdownRule("0.10")), accountAtEquity("50000"), null));
+
+        var projection = RiskHeadroomProjection.from(result, usd("50000"), usd("50000"));
+
+        assertEquals(new BigDecimal("2500.00"), projection.dailyLoss().orElseThrow().remaining().amount());
+        assertEquals(new BigDecimal("5000.00"), projection.totalLoss().orElseThrow().remaining().amount());
+    }
+
+    private AccountSnapshot accountAtEquity(String equity) {
+        return new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd(equity),
+                usd("0"), java.util.Optional.of(usd("50000")),
+                new DailyRiskBaseline(usd("50000"), NOW, "TEST", java.util.Map.of()), usd("0"));
     }
 
     @Test void staticTotalDrawdownDoesNotMoveAfterProfit() {
