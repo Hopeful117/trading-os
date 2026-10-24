@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.hope.trading.trading_core.challenge.infrastructure.persistence.ChallengeReevaluationOutboxPersistence;
@@ -18,6 +19,21 @@ import org.junit.jupiter.api.Test;
 
 class ChallengeReevaluationDeliveryServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-14T10:00:00Z");
+
+    @Test
+    void skipsRetryWhenClockIsTemporarilyUnavailable() {
+        ChallengeReevaluationOutboxPersistence outbox = org.mockito.Mockito.mock(
+                ChallengeReevaluationOutboxPersistence.class);
+        ChallengeReevaluationService reevaluation = org.mockito.Mockito.mock(ChallengeReevaluationService.class);
+        Clock clock = org.mockito.Mockito.mock(Clock.class);
+        when(clock.instant()).thenReturn(null);
+
+        new ChallengeReevaluationDeliveryService(outbox, reevaluation, clock).retryDue();
+
+        verify(outbox, never()).due(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(outbox, never()).deleteDeliveredBefore(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyInt());
+    }
 
     @Test
     void marksRequestDeliveredAfterSuccessfulReevaluation() {

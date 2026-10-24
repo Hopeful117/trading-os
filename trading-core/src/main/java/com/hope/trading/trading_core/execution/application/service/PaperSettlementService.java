@@ -23,6 +23,7 @@ import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
 import com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService;
+import com.hope.trading.trading_core.execution.application.port.TradeExecutionProvenanceStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,8 @@ public class PaperSettlementService {
     private final ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox;
     private final MarketDataClient marketDataClient;
     private final PaperDerivativeAccountValuationService derivativeValuation;
+
+    private final TradeExecutionProvenanceStore executionProvenance;
 
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                    AccountRepository accountRepository) {
@@ -94,14 +97,27 @@ public class PaperSettlementService {
                 (ChallengeReevaluationOutboxPersistence) null, marketDataClient, derivativeValuation);
     }
 
-    @Autowired
     public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
                                   AccountRepository accountRepository,
                                   TradingCalculatorService tradingCalculatorService,
                                   TradePlanRiskPort tradePlans,
-                                  ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox,
-                                  MarketDataClient marketDataClient,
-                                  PaperDerivativeAccountValuationService derivativeValuation) {
+                                   ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox,
+                                   MarketDataClient marketDataClient,
+                                   PaperDerivativeAccountValuationService derivativeValuation) {
+        this(brokerAccountRepository, accountRepository, tradingCalculatorService, tradePlans,
+                challengeReevaluationOutbox, marketDataClient, derivativeValuation,
+                TradeExecutionProvenanceStore.noop());
+    }
+
+    @Autowired
+    public PaperSettlementService(BrokerAccountRepository brokerAccountRepository,
+                                   AccountRepository accountRepository,
+                                   TradingCalculatorService tradingCalculatorService,
+                                   TradePlanRiskPort tradePlans,
+                                   ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox,
+                                   MarketDataClient marketDataClient,
+                                   PaperDerivativeAccountValuationService derivativeValuation,
+                                   TradeExecutionProvenanceStore executionProvenance) {
         this.brokerAccountRepository = brokerAccountRepository;
         this.accountRepository = accountRepository;
         this.tradingCalculatorService = tradingCalculatorService;
@@ -109,6 +125,7 @@ public class PaperSettlementService {
         this.challengeReevaluationOutbox = challengeReevaluationOutbox;
         this.marketDataClient = marketDataClient;
         this.derivativeValuation = derivativeValuation;
+        this.executionProvenance = java.util.Objects.requireNonNull(executionProvenance);
     }
 
     @Transactional
@@ -137,6 +154,13 @@ public class PaperSettlementService {
         boolean cashSettledDerivative = account.getSettlementModel() == SettlementModel.CASH
                 && productType == InstrumentProductType.LINEAR_PERPETUAL;
         BrokerOrder.Fill fill = getFill(order);
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
+            Optional<TradeExecutionProvenanceStore.Provenance> alreadySettled =
+                    executionProvenance.findByBrokerOrderIdAndFillId(order.id().value(), fill.fillId());
+            if (alreadySettled.isPresent()) {
+                return alreadySettled.get().tradeId();
+            }
+        }
 
         UUID settledTradeId = null;
         Trade settledTrade = null;
@@ -157,18 +181,34 @@ public class PaperSettlementService {
         accountRepository.flush();
         if (settledTrade != null) {
             Trade settledEntry = settledTrade;
-            settledTradeId = persistedAccount.getTrades().stream()
-                    .filter(trade -> trade.getSymbol().equals(settledEntry.getSymbol())
-                            && trade.getOpenedAt().equals(settledEntry.getOpenedAt()))
-                    .findFirst()
-                    .map(Trade::getTradeId)
-                    .orElse(settledEntry.getTradeId());
+            settledTradeId = settledEntry.getTradeId();
+            if (settledTradeId == null) {
+                settledTradeId = persistedAccount.getTrades().stream()
+                        .filter(trade -> trade.getSymbol().equals(settledEntry.getSymbol())
+                                && trade.getOpenedAt().equals(settledEntry.getOpenedAt()))
+                        .findFirst()
+                        .map(Trade::getTradeId)
+                        .orElse(null);
+            }
+        }
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY
+                && settledTradeId != null && attempt != null) {
+            recordExecutionProvenance(settledTradeId, intent, attempt, order, fill);
         }
         if (challengeReevaluationOutbox != null) {
             accountRepository.flush();
             challengeReevaluationOutbox.enqueue(intent.id().value(), account.getAccountId(), fill.executedAt());
         }
         return settledTradeId;
+    }
+
+    private void recordExecutionProvenance(UUID tradeId, ExecutionIntent intent,
+                                           ExecutionAttempt attempt, BrokerOrder order,
+                                           BrokerOrder.Fill fill) {
+        executionProvenance.save(new TradeExecutionProvenanceStore.Provenance(
+                UUID.randomUUID(), tradeId, attempt.id().value(), order.id().value(),
+                fill.fillId(), fill.executedAt(), ExecutionMode.PAPER.name(),
+                intent.purpose().name()));
     }
 
     private InstrumentProductType requireCompatibleSettlement(Account account, String symbol) {

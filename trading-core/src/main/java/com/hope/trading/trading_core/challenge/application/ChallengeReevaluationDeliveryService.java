@@ -66,6 +66,10 @@ public class ChallengeReevaluationDeliveryService {
             initialDelayString = "${trading.challenge.reevaluation.retry-initial-delay-ms:5000}")
     public void retryDue() {
         Instant now = clock.instant();
+        if (now == null) {
+            log.warn("challenge_reevaluation_retry_skipped reason=CLOCK_UNAVAILABLE");
+            return;
+        }
         for (UUID executionIntentId : outbox.due(now, 50)) {
             outbox.claim(executionIntentId, now, false).ifPresent(this::deliverClaim);
         }
