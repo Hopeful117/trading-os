@@ -26,6 +26,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest @AutoConfigureMockMvc @ActiveProfiles("test")
@@ -142,6 +143,15 @@ class BrokerApiSecurityIntegrationTest {
                 .andExpect(jsonPath("$.supportedBuyLeverageLevels[1]").value(2))
                 .andExpect(jsonPath("$.supportedSellLeverageLevels[0]").value(1));
         verify(technicalCapabilities).get(owner,account,"BTC/USD");
+    }
+    @Test void technicalCapabilitiesBatchAcceptsAuthenticatedDelegatedActor() throws Exception {
+        UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
+        when(technicalCapabilities.get(owner,account,List.of("BTC/USD","ETH/USD"))).thenReturn(List.of());
+        mvc.perform(post("/internal/v1/broker-accounts/{id}/capabilities/batch",account)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"instruments\":[\"BTC/USD\",\"ETH/USD\"]}")
+                .header("X-Service-Authorization","Bearer "+serviceToken(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$",hasSize(0)));
+        verify(technicalCapabilities).get(owner,account,List.of("BTC/USD","ETH/USD"));
     }
     @Test void marginPreviewAcceptsAuthenticatedDelegatedActor() throws Exception {
         UUID account=UUID.randomUUID(),owner=UUID.fromString("11111111-1111-1111-1111-111111111111");
