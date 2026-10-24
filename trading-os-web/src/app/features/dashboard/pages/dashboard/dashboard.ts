@@ -1,6 +1,7 @@
 import { AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, inject } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   BehaviorSubject,
   catchError,
@@ -58,10 +59,19 @@ interface DashboardViewModel {
 })
 export class Dashboard {
   private readonly accountService = inject(AccountService);
+  private readonly router = inject(Router);
   private readonly dashboardService = inject(DashboardService);
   private readonly opportunityService = inject(OpportunityService);
   private readonly activeScanService = inject(ActiveScanService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly selectedAccountId = new BehaviorSubject<string | null>(null);
+
+  constructor() {
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => this.selectedAccountId.next(params.get('accountId')));
+  }
 
   private readonly accountsState$: Observable<AccountsState> = this.accountService
     .getAccounts()
@@ -161,6 +171,10 @@ export class Dashboard {
 
   selectAccount(accountId: string): void {
     this.selectedAccountId.next(accountId);
+    void this.router.navigate([], {
+      queryParams: { accountId },
+      queryParamsHandling: 'merge',
+    });
   }
 
   pnlClass(value: number | null): string {

@@ -1,10 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { Account } from '../../../../core/models/account.model';
 import { ActiveScanSummary } from '../../../../core/models/active-scan.model';
-import { DashboardSummary } from '../../../../core/models/dashboard-summary.model';
+import {
+  DashboardSummary,
+  OpenPositionDashboardView,
+} from '../../../../core/models/dashboard-summary.model';
 import { OpportunityResponse } from '../../../../core/models/opportunity.model';
 import { AccountService } from '../../../../core/services/account.service';
 import { ActiveScanService } from '../../../../core/services/active-scan.service';
@@ -119,6 +122,40 @@ describe('Dashboard', () => {
     expect(dashboardService.findDashboard).toHaveBeenCalledWith('account-2');
   });
 
+  it('persists account selection in the route', () => {
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    TestBed.createComponent(Dashboard).componentInstance.selectAccount('account-2');
+
+    expect(navigate).toHaveBeenCalledWith([], {
+      queryParams: { accountId: 'account-2' },
+      queryParamsHandling: 'merge',
+    });
+  });
+
+  it('restores the account selected by the route', async () => {
+    await configureTestingModule(
+      { getAccounts: () => of(accounts) },
+      dashboardService,
+      opportunityService,
+      activeScanService,
+      'account-2',
+    );
+    const data = summary();
+    data.account = { ...data.account, accountId: 'account-2', accountName: 'Secondary' };
+    dashboardService.findDashboard.mockReturnValue(of(data));
+    await create();
+    await nextTask();
+    fixture.detectChanges();
+
+    expect(dashboardService.findDashboard).toHaveBeenCalledWith('account-2');
+    expect(text()).toContain('Secondary');
+    expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe(
+      'account-2',
+    );
+  });
+
   it('shows empty state when no accounts exist', async () => {
     await reconfigure(
       { getAccounts: () => of([]) },
@@ -150,6 +187,18 @@ describe('Dashboard', () => {
     expect(t).toContain('Indisponible');
     expect(t).toContain('Perte max/jour');
     expect(t).toContain('3.20');
+  });
+
+  it('does not apply a default currency when position quote asset is unavailable', async () => {
+    const data = summary();
+    const position = pos('p1', 'BTC/USD', 25);
+    position.quoteAsset = null;
+    data.openPositions = [position];
+    dashboardService.findDashboard.mockReturnValue(of(data));
+
+    await create();
+
+    expect(text()).toContain('devise indisponible');
   });
 
   it('shows error state when accounts request fails', async () => {
@@ -376,12 +425,26 @@ describe('Dashboard', () => {
     dashService: { findDashboard: ReturnType<typeof vi.fn> },
     oppService: { findActive: ReturnType<typeof vi.fn> },
     scanService: { findRecent: ReturnType<typeof vi.fn> } = { findRecent: vi.fn(() => of([])) },
+    routeAccountId: string | null = null,
   ): Promise<void> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [
         provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap(
+                routeAccountId === null ? {} : { accountId: routeAccountId },
+              ),
+            },
+            queryParamMap: of(
+              convertToParamMap(routeAccountId === null ? {} : { accountId: routeAccountId }),
+            ),
+          },
+        },
         { provide: AccountService, useValue: accountProvider },
         { provide: DashboardService, useValue: dashService },
         { provide: OpportunityService, useValue: oppService },
@@ -464,7 +527,7 @@ describe('Dashboard', () => {
     };
   }
 
-  function pos(id: string, symbol: string, pnl: number) {
+  function pos(id: string, symbol: string, pnl: number): OpenPositionDashboardView {
     const now = new Date().toISOString();
     return {
       positionId: id,

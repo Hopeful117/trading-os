@@ -4,9 +4,11 @@ import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { BehaviorSubject, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 
 import { Account } from '../../core/models/account.model';
+import { DashboardSummary } from '../../core/models/dashboard-summary.model';
 import { DecisionContextResponse } from '../../core/models/decision-context.model';
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { AccountService } from '../../core/services/account.service';
+import { DashboardService } from '../../core/services/dashboard.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { TrendAttention, TrendContextReadModel } from '../../core/models/trend-context.model';
 import { TrendContextService } from '../../core/services/trend-context.service';
@@ -21,6 +23,7 @@ describe('DecisionWorkspace', () => {
   let fixture: ComponentFixture<DecisionWorkspace>;
   let component: DecisionWorkspace;
   let accountServiceMock: { getAccounts: ReturnType<typeof vi.fn> };
+  let dashboardServiceMock: { findDashboard: ReturnType<typeof vi.fn> };
   let contextServiceMock: { resolve: ReturnType<typeof vi.fn> };
   let trendContextServiceMock: { findTrendContext: ReturnType<typeof vi.fn> };
   let marketServiceMock: {
@@ -89,6 +92,49 @@ describe('DecisionWorkspace', () => {
     resolvedAt: '2026-09-20T10:00:00Z',
   };
 
+  const dashboardSummary: DashboardSummary = {
+    account: {
+      accountId: account.accountId,
+      accountName: account.name,
+      broker: 'KRAKEN',
+      currency: account.baseCurrency,
+      balance: 1000,
+      equity: 1020,
+      dailyPnl: 20,
+      dailyPnlPercentage: 2,
+      currentDrawdown: 80,
+      currentDrawdownPercentage: 7.27,
+      equitySource: 'BROKER',
+    },
+    risk: {
+      status: 'SAFE',
+      usedRiskAmount: 10,
+      usedRiskPercentage: 1,
+      remainingRiskAmount: 90,
+      remainingRiskPercentage: 9,
+      dailyLossAmount: 0,
+      dailyLossPercentage: 0,
+      maximumDailyLossPercentage: 5,
+      totalDrawdownAmount: 80,
+      totalDrawdownPercentage: 7.27,
+      maximumDrawdownPercentage: 10,
+      rules: [],
+    },
+    openPositions: [],
+    alerts: [],
+    watchedMarkets: [],
+    freshness: {
+      status: 'LIVE',
+      brokerDataAt: '2026-09-20T10:00:00Z',
+      marketDataAt: '2026-09-20T10:00:00Z',
+      calculatedAt: '2026-09-20T10:00:00Z',
+      brokerDataStale: false,
+      marketDataStale: false,
+      warnings: [],
+    },
+    generatedAt: '2026-09-20T10:00:00Z',
+  };
+
   const market = {
     marketId: 'market-1',
     provider: 'KRAKEN',
@@ -131,6 +177,9 @@ describe('DecisionWorkspace', () => {
 
   beforeEach(async () => {
     accountServiceMock = { getAccounts: vi.fn().mockReturnValue(of([account])) };
+    dashboardServiceMock = {
+      findDashboard: vi.fn().mockReturnValue(of(dashboardSummary)),
+    };
     contextServiceMock = { resolve: vi.fn().mockReturnValue(of(context)) };
     trendContextServiceMock = {
       findTrendContext: vi.fn().mockReturnValue(of(unavailableTrendContext)),
@@ -182,6 +231,7 @@ describe('DecisionWorkspace', () => {
       imports: [DecisionWorkspace],
       providers: [
         { provide: AccountService, useValue: accountServiceMock },
+        { provide: DashboardService, useValue: dashboardServiceMock },
         { provide: DecisionContextService, useValue: contextServiceMock },
         { provide: TrendContextService, useValue: trendContextServiceMock },
         { provide: MarketService, useValue: marketServiceMock },
@@ -218,6 +268,96 @@ describe('DecisionWorkspace', () => {
     expect(contextServiceMock.resolve).toHaveBeenCalledWith(account.accountId);
     expect(fixture.nativeElement.querySelector('[data-testid="market-search-hint"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="excluded-markets"]')).toBeTruthy();
+  });
+
+  it('loads the account cockpit from the authoritative dashboard contract', async () => {
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(dashboardServiceMock.findDashboard).toHaveBeenCalledWith(account.accountId);
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('SAFE');
+    expect(fixture.nativeElement.textContent).toContain('Balance');
+    expect(fixture.nativeElement.textContent).toContain('Drawdown');
+    expect(fixture.nativeElement.textContent).toContain('1,000');
+    expect(fixture.nativeElement.textContent).toContain('7.27');
+    expect(fixture.nativeElement.textContent).toContain('Open positions');
+  });
+
+  it('clears the previous cockpit while the next account is loading', () => {
+    dashboardServiceMock.findDashboard.mockReturnValue(NEVER);
+
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="cockpit-context-loading"]'),
+    ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeNull();
+  });
+
+  it('does not imply a currency when position exposure has no quote asset', async () => {
+    dashboardServiceMock.findDashboard.mockReturnValue(
+      of({
+        ...dashboardSummary,
+        openPositions: [
+          {
+            positionId: 'position-1',
+            accountId: account.accountId,
+            marketId: 'market-1',
+            symbol: 'BTC/USD',
+            side: 'BUY',
+            quantity: 1,
+            entryPrice: 100,
+            currentPrice: 110,
+            stopLoss: null,
+            takeProfit: null,
+            unrealizedPnl: 10,
+            unrealizedPnlPercentage: 10,
+            brokerUnrealizedPnl: 10,
+            riskAmount: 5,
+            riskPercentage: 0.5,
+            exposure: 110,
+            protectionStatus: 'PROTECTED',
+            marketTradable: true,
+            openedAt: null,
+            priceOccurredAt: null,
+            calculatedAt: '2026-09-20T10:00:00Z',
+            source: 'BROKER',
+            valuationStatus: 'FRESH',
+            quoteAsset: null,
+          },
+        ],
+      }),
+    );
+
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('currency unavailable');
+  });
+
+  it('clears rendered cockpit facts immediately when the account changes', async () => {
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    dashboardServiceMock.findDashboard.mockReturnValue(NEVER);
+    component.selectAccount('account-2');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="cockpit-context-loading"]'),
+    ).toBeTruthy();
   });
 
   it('shows loading context after an account is selected while resolution is pending', () => {
