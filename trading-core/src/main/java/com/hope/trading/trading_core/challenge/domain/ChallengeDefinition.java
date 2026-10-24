@@ -13,6 +13,10 @@ import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -81,6 +85,15 @@ public class ChallengeDefinition {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "challenge_definition_phase",
+            joinColumns = {
+                    @jakarta.persistence.JoinColumn(name = "definition_id", referencedColumnName = "id"),
+                    @jakarta.persistence.JoinColumn(name = "definition_version", referencedColumnName = "definition_version")
+            })
+    @jakarta.persistence.OrderBy("phaseOrder ASC")
+    private List<ChallengePhaseDefinition> phases = new ArrayList<>();
+
     protected ChallengeDefinition() {
     }
 
@@ -90,7 +103,8 @@ public class ChallengeDefinition {
                                   SettlementModel requiredSettlementModel,
                                   InstrumentProductType requiredInstrumentProductType,
                                  UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
-                                Instant retrievedAt, Instant effectiveFrom, String provenance, Instant createdAt) {
+                                 Instant retrievedAt, Instant effectiveFrom, String provenance, Instant createdAt,
+                                 List<ChallengePhaseDefinition> phases) {
         this.id = requireId(id, "id");
         this.definitionVersion = required(definitionVersion, "definitionVersion", 64);
         this.provider = required(provider, "provider", MAX_IDENTIFIER_LENGTH);
@@ -109,6 +123,7 @@ public class ChallengeDefinition {
         this.effectiveFrom = Objects.requireNonNull(effectiveFrom, "effectiveFrom");
         this.provenance = required(provenance, "provenance", Integer.MAX_VALUE);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+        this.phases = validatedPhases(phases);
     }
 
     public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
@@ -120,7 +135,7 @@ public class ChallengeDefinition {
                                               Instant createdAt) {
         return create(id, definitionVersion, provider, product, planCode, capitalCurrency, startingCapital,
                 profitTargetRatio, progressionValueSource, requiredSettlementModel, null, riskPolicyId,
-                riskPolicyVersion, sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt);
+                riskPolicyVersion, sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt, List.of());
     }
 
     public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
@@ -135,7 +150,21 @@ public class ChallengeDefinition {
                 startingCapital, profitTargetRatio, progressionValueSource, requiredSettlementModel,
                 requiredInstrumentProductType,
                 riskPolicyId, riskPolicyVersion,
-                sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt);
+                sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt, List.of());
+    }
+
+    public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
+                                              String planCode, String capitalCurrency, BigDecimal startingCapital,
+                                              BigDecimal profitTargetRatio, ProgressionValueSource progressionValueSource,
+                                              SettlementModel requiredSettlementModel,
+                                              InstrumentProductType requiredInstrumentProductType,
+                                              UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
+                                              Instant retrievedAt, Instant effectiveFrom, String provenance,
+                                              Instant createdAt, List<ChallengePhaseDefinition> phases) {
+        return new ChallengeDefinition(id, definitionVersion, provider, product, planCode, capitalCurrency,
+                startingCapital, profitTargetRatio, progressionValueSource, requiredSettlementModel,
+                requiredInstrumentProductType, riskPolicyId, riskPolicyVersion, sourceUrl, retrievedAt,
+                effectiveFrom, provenance, createdAt, phases);
     }
 
     @PreUpdate
@@ -179,4 +208,35 @@ public class ChallengeDefinition {
     public Instant effectiveFrom() { return effectiveFrom; }
     public String provenance() { return provenance; }
     public Instant createdAt() { return createdAt; }
+
+    /** Returns explicit phases, or a deterministic single legacy phase. */
+    public List<ChallengePhaseDefinition> effectivePhases() {
+        if (phases.isEmpty()) {
+            return List.of(ChallengePhaseDefinition.create("LEGACY", 1, profitTargetRatio,
+                    progressionValueSource, null, riskPolicyId, riskPolicyVersion, false));
+        }
+        return phases.stream().map(phase -> phase.withRiskPolicy(riskPolicyId, riskPolicyVersion)).toList();
+    }
+
+    public List<ChallengePhaseDefinition> phases() {
+        return Collections.unmodifiableList(phases);
+    }
+
+    private List<ChallengePhaseDefinition> validatedPhases(List<ChallengePhaseDefinition> values) {
+        if (values == null) throw new NullPointerException("phases");
+        List<ChallengePhaseDefinition> ordered = values.stream()
+                .map(Objects::requireNonNull)
+                .sorted(Comparator.comparingInt(ChallengePhaseDefinition::phaseOrder))
+                .toList();
+        if (ordered.stream().map(ChallengePhaseDefinition::phaseKey).distinct().count() != ordered.size()) {
+            throw new IllegalArgumentException("phase keys must be unique");
+        }
+        for (int index = 0; index < ordered.size(); index++) {
+            ChallengePhaseDefinition phase = ordered.get(index);
+            if (phase.phaseOrder() != index + 1) {
+                throw new IllegalArgumentException("phase orders must be contiguous and start at one");
+            }
+        }
+        return new ArrayList<>(Collections.unmodifiableList(ordered));
+    }
 }

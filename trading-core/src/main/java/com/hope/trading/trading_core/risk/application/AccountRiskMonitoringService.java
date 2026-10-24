@@ -76,11 +76,12 @@ public class AccountRiskMonitoringService {
         if (!challenge.capitalCurrency().equalsIgnoreCase(configuration.reportingCurrency())) {
             throw new IllegalStateException("Challenge and Risk reporting currencies differ");
         }
-        RiskPersistence.Profile profile = persistence.profile(challenge.riskPolicyId(), challenge.riskPolicyVersion())
+        RiskPersistence.Profile profile = persistence.profile(challenge.activeRiskPolicyId(),
+                        challenge.activeRiskPolicyVersion())
                 .orElseThrow(() -> new IllegalStateException("Challenge Risk Policy does not exist"));
         EffectiveRiskRuleSet validatedRules = profileValidator.validate(profile, false);
         EffectiveRiskRuleSet rules = new EffectiveRiskRuleSet(validatedRules.rules(),
-                Map.of(challenge.riskPolicyId().toString(), challenge.riskPolicyVersion()));
+                Map.of(challenge.activeRiskPolicyId().toString(), challenge.activeRiskPolicyVersion()));
         RiskDay day = RiskDay.containing(requestedAt, configuration.riskTimeZone(),
                 LocalTime.parse(configuration.riskDayResetTime()));
         RiskFactsProvider.Snapshot snapshot = facts.load(account, broker, broker.id(), day.startsAt(), day.endsAt());

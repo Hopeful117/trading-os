@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinitionKey;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
+import com.hope.trading.trading_core.challenge.domain.ChallengeProgressionEvidence;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.repository.AccountRepository;
@@ -44,10 +45,15 @@ public class ChallengeReevaluationService {
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void reevaluate(Account account) {
+        reevaluate(account, ChallengeProgressionEvidence.unavailable(clock.instant()));
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void reevaluate(Account account, ChallengeProgressionEvidence evidence) {
         ChallengeInstance challenge = instances.findByAccountIdAndStatus(account.getAccountId(), ChallengeStatus.ACTIVE)
                 .orElse(null);
         if (challenge == null) return;
-        reevaluateLoaded(challenge, account);
+        reevaluateLoaded(challenge, account, evidence);
     }
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
@@ -62,11 +68,16 @@ public class ChallengeReevaluationService {
                 .filter(broker -> broker.executionMode() == ExecutionMode.PAPER).isEmpty()) {
             return;
         }
-        reevaluateLoaded(challenge, account);
+        reevaluateLoaded(challenge, account, ChallengeProgressionEvidence.unavailable(clock.instant()));
     }
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public ChallengeStatus reevaluate(UUID challengeId) {
+        return reevaluate(challengeId, ChallengeProgressionEvidence.unavailable(clock.instant()));
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public ChallengeStatus reevaluate(UUID challengeId, ChallengeProgressionEvidence evidence) {
         ChallengeInstance challenge = instances.findById(challengeId).orElse(null);
         if (challenge == null || challenge.status() != ChallengeStatus.ACTIVE) {
             return challenge == null ? null : challenge.status();
@@ -78,18 +89,20 @@ public class ChallengeReevaluationService {
                 .filter(broker -> broker.executionMode() == ExecutionMode.PAPER).isEmpty()) {
             return null;
         }
-        return reevaluateLoaded(challenge, account);
+        return reevaluateLoaded(challenge, account, evidence);
     }
 
-    private ChallengeStatus reevaluateLoaded(ChallengeInstance challenge, Account account) {
+    private ChallengeStatus reevaluateLoaded(ChallengeInstance challenge, Account account,
+                                             ChallengeProgressionEvidence evidence) {
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(challenge.definitionId(), challenge.definitionVersion()))
                 .orElseThrow(() -> new IllegalStateException("Challenge definition does not exist"));
         AccountRiskMonitoringService.Evaluation evaluation = monitoring.evaluate(challenge, account, clock.instant());
         ChallengeStatus before = challenge.status();
         evaluator.evaluate(challenge, definition, account, evaluation.result(), evaluation.evaluationId(),
-                evaluation.result().evaluatedAt());
-        if (before != challenge.status()) instances.save(challenge);
+                evaluation.result().evaluatedAt(), evidence);
+        if (before != challenge.status()
+                || challenge.phaseProgressionState() != null) instances.save(challenge);
         return challenge.status();
     }
 }
