@@ -36,6 +36,12 @@ public class ChallengeInstance {
     @Column(name = "risk_policy_version", nullable = false, length = 64, updatable = false)
     private String riskPolicyVersion;
 
+    @Column(name = "active_risk_policy_id")
+    private UUID activeRiskPolicyId;
+
+    @Column(name = "active_risk_policy_version", length = 64)
+    private String activeRiskPolicyVersion;
+
     @Column(name = "starting_capital", nullable = false, precision = 30, scale = 12, updatable = false)
     private BigDecimal startingCapital;
 
@@ -64,6 +70,19 @@ public class ChallengeInstance {
     @Column(name = "terminal_risk_evaluation_id")
     private UUID terminalRiskEvaluationId;
 
+    @Column(name = "current_phase_key", length = 80)
+    private String currentPhaseKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "phase_progression_state", length = 32)
+    private ChallengePhaseProgressionState phaseProgressionState;
+
+    @Column(name = "phase_progression_evidence", columnDefinition = "TEXT")
+    private String phaseProgressionEvidence;
+
+    @Column(name = "phase_progressed_at")
+    private Instant phaseProgressedAt;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -79,11 +98,18 @@ public class ChallengeInstance {
         this.definitionVersion = definition.definitionVersion();
         this.riskPolicyId = definition.riskPolicyId();
         this.riskPolicyVersion = definition.riskPolicyVersion();
+        ChallengePhaseDefinition first = definition.effectivePhases().get(0);
+        this.activeRiskPolicyId = first.riskPolicyId();
+        this.activeRiskPolicyVersion = first.riskPolicyVersion();
         this.startingCapital = positive(startingCapital, "startingCapital");
         this.capitalCurrency = definition.capitalCurrency();
         this.startedAt = Objects.requireNonNull(startedAt, "startedAt");
         this.status = ChallengeStatus.ACTIVE;
         this.activeMarker = ChallengeStatus.ACTIVE.name();
+        if (!definition.phases().isEmpty()) {
+            this.currentPhaseKey = first.phaseKey();
+            this.phaseProgressionState = ChallengePhaseProgressionState.ACTIVE;
+        }
     }
 
     public static ChallengeInstance start(UUID id, UUID accountId, ChallengeDefinition definition,
@@ -106,6 +132,46 @@ public class ChallengeInstance {
 
     public void breach(Instant at, String reason, UUID riskEvaluationId) {
         transition(ChallengeStatus.BREACHED, at, reason, riskEvaluationId);
+    }
+
+    public void markLocallySatisfied(Instant at) {
+        Objects.requireNonNull(at, "at");
+        if (status != ChallengeStatus.ACTIVE) return;
+        if (phaseProgressionState == null) return;
+        if (phaseProgressionState == ChallengePhaseProgressionState.ACTIVE) {
+            phaseProgressionState = ChallengePhaseProgressionState.LOCALLY_SATISFIED;
+            phaseProgressedAt = at;
+        }
+    }
+
+    public void confirmProviderProgression(Instant at, String evidenceReference) {
+        Objects.requireNonNull(at, "at");
+        if (status != ChallengeStatus.ACTIVE) return;
+        if (phaseProgressionState != ChallengePhaseProgressionState.LOCALLY_SATISFIED) {
+            throw new IllegalStateException("Phase must be locally satisfied before provider confirmation");
+        }
+        if (evidenceReference == null || evidenceReference.isBlank()) {
+            throw new IllegalArgumentException("provider progression evidence is required");
+        }
+        phaseProgressionState = ChallengePhaseProgressionState.PROVIDER_CONFIRMED;
+        phaseProgressionEvidence = evidenceReference.strip();
+        phaseProgressedAt = at;
+    }
+
+    public void advanceTo(ChallengePhaseDefinition next, Instant at) {
+        Objects.requireNonNull(next, "next");
+        Objects.requireNonNull(at, "at");
+        if (status != ChallengeStatus.ACTIVE) throw new IllegalStateException("Challenge is not active");
+        if (phaseProgressionState != ChallengePhaseProgressionState.LOCALLY_SATISFIED
+                && phaseProgressionState != ChallengePhaseProgressionState.PROVIDER_CONFIRMED) {
+            throw new IllegalStateException("Current phase is not satisfied");
+        }
+        currentPhaseKey = next.phaseKey();
+        phaseProgressionState = ChallengePhaseProgressionState.ACTIVE;
+        phaseProgressionEvidence = null;
+        phaseProgressedAt = at;
+        activeRiskPolicyId = next.riskPolicyId();
+        activeRiskPolicyVersion = next.riskPolicyVersion();
     }
 
     private void transition(ChallengeStatus target, Instant at, String reason, UUID riskEvaluationId) {
@@ -141,6 +207,10 @@ public class ChallengeInstance {
     public String definitionVersion() { return definitionVersion; }
     public UUID riskPolicyId() { return riskPolicyId; }
     public String riskPolicyVersion() { return riskPolicyVersion; }
+    public UUID activeRiskPolicyId() { return activeRiskPolicyId == null ? riskPolicyId : activeRiskPolicyId; }
+    public String activeRiskPolicyVersion() {
+        return activeRiskPolicyVersion == null ? riskPolicyVersion : activeRiskPolicyVersion;
+    }
     public BigDecimal startingCapital() { return startingCapital; }
     public String capitalCurrency() { return capitalCurrency; }
     public Instant startedAt() { return startedAt; }
@@ -149,5 +219,9 @@ public class ChallengeInstance {
     public Instant breachedAt() { return breachedAt; }
     public String terminalReason() { return terminalReason; }
     public UUID terminalRiskEvaluationId() { return terminalRiskEvaluationId; }
+    public String currentPhaseKey() { return currentPhaseKey; }
+    public ChallengePhaseProgressionState phaseProgressionState() { return phaseProgressionState; }
+    public String phaseProgressionEvidence() { return phaseProgressionEvidence; }
+    public Instant phaseProgressedAt() { return phaseProgressedAt; }
     public long version() { return version; }
 }

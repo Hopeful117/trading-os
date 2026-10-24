@@ -6,6 +6,8 @@ import com.hope.trading.trading_core.challenge.application.StartChallengeCommand
 import com.hope.trading.trading_core.challenge.application.StartChallengeService;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
+import com.hope.trading.trading_core.challenge.domain.ChallengePhaseDefinition;
+import com.hope.trading.trading_core.challenge.domain.ChallengePhaseProgressionState;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import com.hope.trading.trading_core.challenge.domain.ProgressionValueSource;
 import org.junit.jupiter.api.BeforeEach;
@@ -160,6 +162,34 @@ class ChallengePersistenceTest {
         assertThat(definitions.findById(new com.hope.trading.trading_core.challenge.domain.ChallengeDefinitionKey(
                 definition.id(), definition.definitionVersion())).orElseThrow().product())
                 .isEqualTo("TEST_CHALLENGE");
+    }
+
+    @Test
+    void persistsOrderedPhasesAndInitialActivePhaseWithoutChangingLegacyRows() {
+        UUID definitionId = UUID.randomUUID();
+        ChallengeDefinition definition = ChallengeDefinition.create(definitionId, "2.0.0",
+                "TEST_PROVIDER", "TEST_CHALLENGE", "PLAN_A", "USD", new BigDecimal("10000"),
+                new BigDecimal("0.12"), ProgressionValueSource.BALANCE,
+                com.hope.trading.trading_core.shared.domain.model.SettlementModel.INVENTORY, null,
+                POLICY_ID, "1.0.0", "https://example.test/definition", NOW, NOW, "source", NOW,
+                List.of(
+                        ChallengePhaseDefinition.create("FIRST", 1, new BigDecimal("0.10"),
+                                ProgressionValueSource.BALANCE, 2, POLICY_ID, "1.0.0", false),
+                        ChallengePhaseDefinition.create("SECOND", 2, new BigDecimal("0.05"),
+                                ProgressionValueSource.BALANCE, 1, POLICY_ID, "1.0.0", true)));
+        definitions.saveAndFlush(definition);
+        ChallengeDefinition reloaded = definitions.findById(
+                new com.hope.trading.trading_core.challenge.domain.ChallengeDefinitionKey(definitionId, "2.0.0"))
+                .orElseThrow();
+
+        assertThat(reloaded.phases()).extracting(ChallengePhaseDefinition::phaseKey)
+                .containsExactly("FIRST", "SECOND");
+        ChallengeInstance instance = instances.saveAndFlush(ChallengeInstance.start(
+                UUID.randomUUID(), accountId, reloaded, reloaded.startingCapital(), NOW));
+
+        assertThat(instance.currentPhaseKey()).isEqualTo("FIRST");
+        assertThat(instance.phaseProgressionState()).isEqualTo(ChallengePhaseProgressionState.ACTIVE);
+        assertThat(instance.activeRiskPolicyId()).isEqualTo(POLICY_ID);
     }
 
     @Test

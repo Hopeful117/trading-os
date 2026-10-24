@@ -13,9 +13,15 @@ import java.util.Optional;
 /** Resolves only progression values that are authoritative for the definition source. */
 final class ChallengeProgressionValueResolver {
     Optional<BigDecimal> resolve(Account account, ChallengeDefinition definition) {
+        return resolve(account, definition, definition.progressionValueSource());
+    }
+
+    Optional<BigDecimal> resolve(Account account, ChallengeDefinition definition,
+                                 ProgressionValueSource source) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(definition, "definition");
-        if (definition.progressionValueSource() == ProgressionValueSource.EQUITY) {
+        Objects.requireNonNull(source, "source");
+        if (source == ProgressionValueSource.EQUITY) {
             return authoritativeEquity(account);
         }
         return balance(account, definition);

@@ -3,6 +3,7 @@ package com.hope.trading.trading_core.challenge.application;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinitionKey;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
+import com.hope.trading.trading_core.challenge.domain.ChallengePhaseDefinition;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import org.springframework.stereotype.Service;
@@ -37,11 +38,18 @@ public class ChallengeProgressService {
         ChallengeDefinition definition = definitions.findById(
                         new ChallengeDefinitionKey(challenge.definitionId(), challenge.definitionVersion()))
                 .orElseThrow(() -> new ChallengeConfigurationException("Challenge definition does not exist"));
-        BigDecimal current = progressionValues.resolve(account, definition).orElse(null);
-        BigDecimal target = definition.startingCapital()
-                .add(definition.startingCapital().multiply(definition.profitTargetRatio()));
+        ChallengePhaseDefinition phase = definition.effectivePhases().stream()
+                .filter(candidate -> challenge.currentPhaseKey() == null
+                        ? candidate.phaseOrder() == 1
+                        : candidate.phaseKey().equals(challenge.currentPhaseKey()))
+                .findFirst()
+                .orElseThrow(() -> new ChallengeConfigurationException("Challenge current phase does not exist"));
+        BigDecimal current = phase.profitTargetRatio() == null ? null
+                : progressionValues.resolve(account, definition, phase.progressionValueSource()).orElse(null);
+        BigDecimal target = phase.profitTargetRatio() == null ? null : definition.startingCapital()
+                .add(definition.startingCapital().multiply(phase.profitTargetRatio()));
         BigDecimal profit = current == null ? null : current.subtract(challenge.startingCapital());
-        BigDecimal progress = current == null ? null : target.compareTo(challenge.startingCapital()) == 0
+        BigDecimal progress = current == null || target == null ? null : target.compareTo(challenge.startingCapital()) == 0
                 ? BigDecimal.ONE : profit.divide(target.subtract(challenge.startingCapital()), 12,
                 java.math.RoundingMode.HALF_UP).max(BigDecimal.ZERO).min(BigDecimal.ONE);
         return new ChallengeProgress(challenge.id(), accountId, challenge.status(), challenge.startingCapital(),
