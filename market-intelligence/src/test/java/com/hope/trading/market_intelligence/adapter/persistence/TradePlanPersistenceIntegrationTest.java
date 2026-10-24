@@ -15,13 +15,19 @@ class TradePlanPersistenceIntegrationTest {
         TradePlan first = ((TradePlanningResult.Success) environment.service().create(
                 TradePlanTestFixtures.request(environment))).plan();
         TradePlan second = environment.service().transition(
-                first.id(), TradePlanStatus.ACCEPTED);
+                first.id(), TradePlanStatus.ACCEPTED, environment.owner());
 
         assertThat(environment.plans().find(
                 first.id(), first.version()).orElseThrow())
                 .usingRecursiveComparison().isEqualTo(first);
         assertThat(environment.plans().findLatest(first.id()).orElseThrow())
                 .usingRecursiveComparison().isEqualTo(second);
+        assertThat(second.decisionActorId()).contains(environment.owner());
+        assertThat(second.decisionAt()).isPresent();
+        TradePlan riskValidated = environment.service().transition(
+                second.id(), TradePlanStatus.RISK_VALIDATED);
+        assertThat(riskValidated.decisionActorId()).contains(environment.owner());
+        assertThat(riskValidated.decisionAt()).isEqualTo(second.decisionAt());
         assertThatThrownBy(() -> environment.plans().append(second))
                 .isInstanceOf(IllegalStateException.class);
     }

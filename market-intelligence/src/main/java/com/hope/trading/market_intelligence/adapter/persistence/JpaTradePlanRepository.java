@@ -111,6 +111,8 @@ public class JpaTradePlanRepository implements TradePlanRepository {
         entity.executionPayload = write(plan.execution());
         entity.rationalePayload = write(plan.rationale());
         entity.createdAt = plan.createdAt();
+        entity.decisionActorId = plan.decisionActorId().orElse(null);
+        entity.decisionAt = plan.decisionAt().orElse(null);
         return entity;
     }
 
@@ -124,7 +126,8 @@ public class JpaTradePlanRepository implements TradePlanRepository {
                         entity.tradingContextSnapshotAt),
                 read(entity.executionPayload, ExecutionParameters.class),
                 read(entity.rationalePayload, TradingRationale.class), entity.createdAt,
-                 new TradePlanOriginValue(entity.origin).origin(), entity.authorId));
+                  new TradePlanOriginValue(entity.origin).origin(), entity.authorId,
+                 entity.decisionActorId, entity.decisionAt));
     }
 
     private record TradePlanOriginValue(String value) {

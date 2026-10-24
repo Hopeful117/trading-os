@@ -78,7 +78,8 @@ class TradePlanRiskHandoffServiceTest {
                  "Human discretionary setup", Set.of("Price confirms"), Set.of("Stop is reached"), Set.of(),
                  "KRAKEN", "SPOT"));
         TradePlan proposed = ((TradePlanningResult.Success) result).plan();
-        TradePlan accepted = environment.service().transition(proposed.id(), TradePlanStatus.ACCEPTED);
+        TradePlan accepted = environment.service().transition(
+                proposed.id(), TradePlanStatus.ACCEPTED, environment.owner());
 
         TradePlanRiskSnapshot snapshot = service(environment).loadAcceptedSnapshot(
                 accepted.id(), accepted.version());
@@ -206,7 +207,7 @@ class TradePlanRiskHandoffServiceTest {
                         BigDecimal.valueOf(101), "changed"))
                 .plan();
         TradePlan changedAccepted = fixture.environment().service().transition(
-                changed.id(), TradePlanStatus.ACCEPTED);
+                changed.id(), TradePlanStatus.ACCEPTED, fixture.environment().owner());
         assertCode("RISK_EVALUATION_ALREADY_LINKED", () ->
                 fixture.service().acknowledgeApprovedEvaluation(
                         changedAccepted.id(), changedAccepted.version(), EVALUATION_ID,
@@ -223,7 +224,8 @@ class TradePlanRiskHandoffServiceTest {
         TradePlanTestFixtures.Environment environment = TradePlanTestFixtures.environment();
         TradePlan proposed = ((TradePlanningResult.Success) environment.service().create(
                 TradePlanTestFixtures.request(environment))).plan();
-        TradePlan accepted = environment.service().transition(proposed.id(), TradePlanStatus.ACCEPTED);
+        TradePlan accepted = environment.service().transition(
+                proposed.id(), TradePlanStatus.ACCEPTED, environment.owner());
         return new Fixture(environment, accepted, service(environment));
     }
 

@@ -95,7 +95,7 @@ class OpportunityTradePlanGenerationServiceTest {
     void reusesLatestPlanForOpportunityRegardlessOfStatus() {
         var first = generate();
         var plan = environment.plans().findLatest(new TradePlanId(first.tradePlanId())).orElseThrow();
-        environment.service().transition(plan.id(), TradePlanStatus.ACCEPTED);
+        environment.service().transition(plan.id(), TradePlanStatus.ACCEPTED, environment.owner());
 
         var second = generate();
 

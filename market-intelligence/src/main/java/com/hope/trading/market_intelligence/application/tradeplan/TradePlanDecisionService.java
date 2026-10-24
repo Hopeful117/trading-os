@@ -4,6 +4,8 @@ import com.hope.trading.market_intelligence.application.port.TradePlanRepository
 import com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository;
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,7 @@ public class TradePlanDecisionService {
     private final TradePlanRepository plans;
     private final TradePlanningContextRepository contexts;
     private final TradePlanApplicationService service;
+    private final ConcurrentMap<UUID, Object> decisionLocks = new ConcurrentHashMap<>();
 
     public TradePlanDecisionService(
             TradePlanRepository plans, TradePlanningContextRepository contexts,
@@ -30,28 +33,31 @@ public class TradePlanDecisionService {
 
     @Transactional
     public TradePlan decide(UUID planId, long version, UUID actorId, Decision decision) {
-        TradePlan latest = plans.findLatest(new TradePlanId(planId))
-                .orElseThrow(() -> notFound("TRADE_PLAN_NOT_FOUND"));
-        if (latest.version().value() != version) {
-            throw conflict("STALE_TRADE_PLAN_VERSION",
-                    "Decisions apply only to the latest Trade Plan version");
+        Object lock = decisionLocks.computeIfAbsent(planId, ignored -> new Object());
+        synchronized (lock) {
+            TradePlan latest = plans.findLatestForUpdate(new TradePlanId(planId))
+                    .orElseThrow(() -> notFound("TRADE_PLAN_NOT_FOUND"));
+            TradePlanningContext context = contexts.find(
+                            latest.planningContext().id(), latest.planningContext().version())
+                    .orElseThrow(() -> notFound("PLANNING_CONTEXT_NOT_FOUND"));
+            if (!context.ownerId().equals(actorId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "TRADE_PLAN_FORBIDDEN");
+            }
+            TradePlanStatus target = decision == Decision.ACCEPT
+                    ? TradePlanStatus.ACCEPTED : TradePlanStatus.REJECTED;
+            if (latest.status() == target) {
+                return latest;
+            }
+            if (latest.version().value() != version) {
+                throw conflict("STALE_TRADE_PLAN_VERSION",
+                        "Decisions apply only to the latest Trade Plan version");
+            }
+            if (latest.status() != TradePlanStatus.PROPOSED) {
+                throw conflict("TRADE_PLAN_NOT_PROPOSED",
+                        "Only a PROPOSED Trade Plan can be " + target.name().toLowerCase());
+            }
+            return service.transition(latest.id(), target, actorId);
         }
-        TradePlanningContext context = contexts.find(
-                        latest.planningContext().id(), latest.planningContext().version())
-                .orElseThrow(() -> notFound("PLANNING_CONTEXT_NOT_FOUND"));
-        if (!context.ownerId().equals(actorId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "TRADE_PLAN_FORBIDDEN");
-        }
-        TradePlanStatus target = decision == Decision.ACCEPT
-                ? TradePlanStatus.ACCEPTED : TradePlanStatus.REJECTED;
-        if (latest.status() == target) {
-            return latest;
-        }
-        if (latest.status() != TradePlanStatus.PROPOSED) {
-            throw conflict("TRADE_PLAN_NOT_PROPOSED",
-                    "Only a PROPOSED Trade Plan can be " + target.name().toLowerCase());
-        }
-        return service.transition(latest.id(), target);
     }
 
     public TradePlan loadForActor(UUID planId, long version, UUID actorId) {

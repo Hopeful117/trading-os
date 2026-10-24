@@ -8,5 +8,6 @@ record TradePlanEntity(
         UUID id, long version, Long previousVersion, String status,
         String origin, UUID authorId,
         UUID contextId, long contextVersion, Instant contextSnapshotAt,
-        ExecutionParameters execution, TradingRationale rationale, Instant createdAt
+        ExecutionParameters execution, TradingRationale rationale, Instant createdAt,
+        UUID decisionActorId, Instant decisionAt
 ) {}

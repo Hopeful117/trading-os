@@ -148,10 +148,23 @@ public final class TradePlanApplicationService {
     }
 
     public TradePlan transition(TradePlanId id, TradePlanStatus target) {
+        return transition(id, target, null);
+    }
+
+    public TradePlan transition(TradePlanId id, TradePlanStatus target, UUID decisionActorId) {
+        if ((target == TradePlanStatus.ACCEPTED || target == TradePlanStatus.REJECTED)
+                && decisionActorId == null) {
+            throw new IllegalArgumentException("A decision actor is required for TradePlan decisions");
+        }
         TradePlan current = repository.findLatest(id)
                 .orElseThrow(() -> new NoSuchElementException("TradePlan not found"));
+        if (decisionActorId != null
+                && (target == TradePlanStatus.ACCEPTED || target == TradePlanStatus.REJECTED)
+                && current.status() == target) {
+            return current;
+        }
         lifecycle.validate(current.status(), target);
-        TradePlan next = repository.append(engine.transition(current, target));
+        TradePlan next = repository.append(engine.transition(current, target, decisionActorId));
         switch (target) {
             case ACCEPTED -> {
                 metrics.increment("trade_plans_accepted");

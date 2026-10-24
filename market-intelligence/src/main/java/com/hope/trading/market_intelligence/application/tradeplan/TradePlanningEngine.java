@@ -118,8 +118,8 @@ public final class TradePlanningEngine {
         }
     }
 
-    TradePlan transition(TradePlan previous, TradePlanStatus target) {
-        return builder.transition(previous, target, clock.instant());
+    TradePlan transition(TradePlan previous, TradePlanStatus target, UUID decisionActorId) {
+        return builder.transition(previous, target, clock.instant(), decisionActorId);
     }
     private TradePlan predecessor(TradePlanningRequest request) {
         if (request.predecessorId() == null) return null;

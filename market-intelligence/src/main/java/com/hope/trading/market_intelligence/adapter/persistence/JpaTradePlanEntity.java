@@ -38,6 +38,10 @@ class JpaTradePlanEntity {
     String rationalePayload;
     @Column(name = "created_at", nullable = false)
     Instant createdAt;
+    @Column(name = "decision_actor_id")
+    UUID decisionActorId;
+    @Column(name = "decision_at")
+    Instant decisionAt;
 
     protected JpaTradePlanEntity() {
     }
