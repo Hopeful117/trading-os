@@ -11,6 +11,175 @@
     <app-workspace-context-strip [view]="workspaceContext" />
   }
 
+  @if (dashboard$ | async; as dashboard) {
+    @switch (dashboard.status) {
+      @case ('loading') {
+        <section class="state-card" data-testid="cockpit-context-loading">
+          <span class="eyebrow">Account cockpit</span>
+          <p>Loading authoritative account and Risk context...</p>
+        </section>
+      }
+      @case ('error') {
+        <section class="state-card error" data-testid="cockpit-context-error">
+          <span class="eyebrow">Account cockpit</span>
+          <h2>Account context unavailable</h2>
+          <p>
+            Risk and position facts could not be refreshed. No trading authorization is implied.
+          </p>
+        </section>
+      }
+      @case ('ready') {
+        <section
+          class="context-card"
+          data-testid="cockpit-context"
+          aria-labelledby="cockpit-context-title"
+        >
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">Account cockpit</span>
+              <h2 id="cockpit-context-title">{{ dashboard.summary.account.accountName }}</h2>
+            </div>
+            <a
+              routerLink="/dashboard"
+              [queryParams]="{ accountId: selectedAccountId }"
+              class="context-link"
+            >
+              Open full dashboard
+            </a>
+          </div>
+
+          <div class="detail-grid cockpit-metrics">
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Balance</span>
+              <strong>
+                @if (dashboard.summary.account.balance !== null) {
+                  {{
+                    dashboard.summary.account.balance | currency: dashboard.summary.account.currency
+                  }}
+                } @else {
+                  Unavailable
+                }
+              </strong>
+            </article>
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Equity</span>
+              <strong>
+                @if (dashboard.summary.account.equity !== null) {
+                  {{
+                    dashboard.summary.account.equity | currency: dashboard.summary.account.currency
+                  }}
+                } @else {
+                  Unavailable
+                }
+              </strong>
+              <small
+                >{{ dashboard.summary.account.currency }} ·
+                {{ dashboard.summary.account.equitySource }}</small
+              >
+            </article>
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Daily PnL</span>
+              <strong>
+                @if (dashboard.summary.account.dailyPnl !== null) {
+                  {{
+                    dashboard.summary.account.dailyPnl
+                      | currency: dashboard.summary.account.currency
+                  }}
+                } @else {
+                  Unavailable
+                }
+              </strong>
+              <small>{{ dashboard.summary.account.dailyPnlPercentage ?? '—' }}%</small>
+            </article>
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Drawdown</span>
+              <strong>
+                @if (dashboard.summary.account.currentDrawdown !== null) {
+                  {{
+                    dashboard.summary.account.currentDrawdown
+                      | currency: dashboard.summary.account.currency
+                  }}
+                } @else {
+                  Unavailable
+                }
+              </strong>
+              <small>{{ dashboard.summary.account.currentDrawdownPercentage ?? '—' }}%</small>
+            </article>
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Risk status</span>
+              <strong [class]="'risk-' + dashboard.summary.risk.status.toLowerCase()">
+                {{ dashboard.summary.risk.status }}
+              </strong>
+              <small>
+                {{ dashboard.summary.risk.usedRiskPercentage | number: '1.2-2' }}% used ·
+                {{ dashboard.summary.risk.remainingRiskPercentage | number: '1.2-2' }}% remaining
+              </small>
+            </article>
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Open positions</span>
+              <strong>{{ dashboard.summary.openPositions.length }}</strong>
+              <a
+                routerLink="/positions"
+                [queryParams]="{ accountId: selectedAccountId }"
+                class="context-link"
+              >
+                Review positions
+              </a>
+              @for (
+                position of dashboard.summary.openPositions.slice(0, 3);
+                track position.positionId
+              ) {
+                <small>
+                  {{ position.symbol }} ·
+                  @if (position.exposure !== null && position.quoteAsset !== null) {
+                    {{ position.exposure | currency: position.quoteAsset }}
+                  } @else if (position.exposure !== null) {
+                    {{ position.exposure | number: '1.2-8' }} · currency unavailable
+                  } @else {
+                    Unavailable
+                  }
+                </small>
+              }
+            </article>
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Alerts</span>
+              <strong>{{ dashboard.summary.alerts.length }}</strong>
+              <small>{{
+                dashboard.summary.alerts.length > 0 ? 'Attention required' : 'No active alerts'
+              }}</small>
+            </article>
+            <article class="detail-card cockpit-metric">
+              <span class="card-label">Data freshness</span>
+              <strong>{{ dashboard.summary.freshness.status }}</strong>
+              <small>{{
+                dashboard.summary.freshness.warnings.length > 0
+                  ? dashboard.summary.freshness.warnings[0]
+                  : 'Authoritative snapshot available'
+              }}</small>
+            </article>
+          </div>
+
+          @if (dashboard.summary.alerts.length > 0) {
+            <div class="market-notice cockpit-alerts" data-testid="cockpit-alerts">
+              @for (
+                alert of dashboard.summary.alerts.slice(0, 3);
+                track alert.code +
+                  (alert.positionId ?? '') +
+                  (alert.marketId ?? '') +
+                  alert.occurredAt
+              ) {
+                <span [class]="'alert-' + alert.severity.toLowerCase()">{{ alert.title }}</span>
+              }
+              @if (dashboard.summary.alerts.length > 3) {
+                <span>+{{ dashboard.summary.alerts.length - 3 }} more</span>
+              }
+            </div>
+          }
+        </section>
+      }
+    }
+  }
+
   <section class="account-card" aria-labelledby="account-context-title">
     <div class="section-heading">
       <div>

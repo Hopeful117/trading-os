@@ -1,7 +1,8 @@
-import { AsyncPipe, DatePipe, KeyValuePipe } from '@angular/common';
+import { AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe, KeyValuePipe } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import {
   BehaviorSubject,
   catchError,
@@ -21,6 +22,7 @@ import {
 } from 'rxjs';
 
 import { Account } from '../../core/models/account.model';
+import { DashboardSummary } from '../../core/models/dashboard-summary.model';
 import { DecisionContextResponse } from '../../core/models/decision-context.model';
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { MarketResponse } from '../../core/models/market-response';
@@ -38,6 +40,7 @@ import {
   TrendContextTimeframeAssessment,
 } from '../../core/models/trend-context.model';
 import { AccountService } from '../../core/services/account.service';
+import { DashboardService } from '../../core/services/dashboard.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
@@ -67,6 +70,12 @@ export type DecisionWorkspaceAccountsView =
   | { status: 'loaded'; accounts: Account[] }
   | { status: 'error'; accounts: Account[] };
 
+export type DecisionWorkspaceDashboardView =
+  | { status: 'select-account'; summary: null }
+  | { status: 'loading'; summary: null }
+  | { status: 'ready'; summary: DashboardSummary }
+  | { status: 'error'; summary: null };
+
 export type DecisionWorkspaceMarketView =
   | { status: 'none' }
   | { status: 'loading' }
@@ -92,8 +101,11 @@ export type HistoryView<T> =
   selector: 'app-decision-workspace',
   imports: [
     AsyncPipe,
+    CurrencyPipe,
     DatePipe,
+    DecimalPipe,
     KeyValuePipe,
+    RouterLink,
     MarketChartComponent,
     OrderBookComponent,
     RecentTradesComponent,
@@ -107,6 +119,7 @@ export type HistoryView<T> =
 })
 export class DecisionWorkspace {
   private readonly accountService = inject(AccountService);
+  private readonly dashboardService = inject(DashboardService);
   private readonly contextService = inject(DecisionContextService);
   private readonly trendContextService = inject(TrendContextService);
   private readonly marketService = inject(MarketService);
@@ -120,6 +133,7 @@ export class DecisionWorkspace {
 
   private readonly accountsRefreshSubject = new Subject<void>();
   private readonly selectedAccountSubject = new BehaviorSubject<string | null>(null);
+  private readonly dashboardAccountSubject = new BehaviorSubject<string | null>(null);
   private readonly selectedMarketSubject = new BehaviorSubject<string | null>(null);
   private readonly selectedTimeframeSubject = new BehaviorSubject<OhlcTimeframe>(
     OHLC_TIMEFRAMES[1],
@@ -171,6 +185,27 @@ export class DecisionWorkspace {
         map((context) => ({ status: 'ready' as const, context })),
         catchError(() => of<DecisionWorkspaceContextView>({ status: 'error' })),
         startWith<DecisionWorkspaceContextView>({ status: 'loading' }),
+      );
+    }),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
+
+  readonly dashboard$ = this.dashboardAccountSubject.pipe(
+    switchMap((accountId) => {
+      if (accountId === null) {
+        return of<DecisionWorkspaceDashboardView>({ status: 'select-account', summary: null });
+      }
+
+      return timer(0, 5_000).pipe(
+        switchMap(() =>
+          this.dashboardService.findDashboard(accountId).pipe(
+            map((summary) => ({ status: 'ready' as const, summary })),
+            catchError(() =>
+              of<DecisionWorkspaceDashboardView>({ status: 'error', summary: null }),
+            ),
+          ),
+        ),
+        startWith<DecisionWorkspaceDashboardView>({ status: 'loading', summary: null }),
       );
     }),
     shareReplay({ bufferSize: 1, refCount: true }),
@@ -455,6 +490,7 @@ export class DecisionWorkspace {
         this.selectedMarketId = null;
         this.manualTradeOpen = false;
         this.showTrendContextDetails = false;
+        this.dashboardAccountSubject.next(accountId);
         this.clearActiveSubscriptions().subscribe(() => {
           this.selectedMarketSubject.next(null);
           this.selectedAccountSubject.next(accountId);
@@ -489,6 +525,7 @@ export class DecisionWorkspace {
     this.marketSearch = '';
     this.showUnavailableMarkets = false;
     this.showTrendContextDetails = false;
+    this.dashboardAccountSubject.next(accountId || null);
     this.clearActiveSubscriptions().subscribe(() => {
       this.selectedMarketSubject.next(null);
       this.selectedAccountSubject.next(accountId || null);
@@ -515,6 +552,7 @@ export class DecisionWorkspace {
     this.showUnavailableMarkets = false;
     this.showTrendContextDetails = false;
     this.opportunityRequestKey = null;
+    this.dashboardAccountSubject.next(null);
     this.clearActiveSubscriptions().subscribe(() => {
       this.selectedMarketSubject.next(null);
       this.selectedAccountSubject.next(null);

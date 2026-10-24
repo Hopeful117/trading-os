@@ -10,11 +10,19 @@
         <label class="account-selector">
           <span>Compte</span>
           <select
-            [value]="vm.selectedAccountId"
+            [value]="vm.dashboard ? vm.dashboard.account.accountId : (vm.selectedAccountId ?? '')"
             (change)="selectAccount($any($event.target).value)"
           >
             @for (account of vm.accountsState.accounts; track account.accountId) {
-              <option [value]="account.accountId">{{ account.name }}</option>
+              <option
+                [value]="account.accountId"
+                [selected]="
+                  account.accountId ===
+                  (vm.dashboard ? vm.dashboard.account.accountId : vm.selectedAccountId)
+                "
+              >
+                {{ account.name }}
+              </option>
             }
           </select>
         </label>
@@ -98,7 +106,13 @@
         <section class="panel alerts">
           <h2>Attention Required</h2>
           <div class="alert-list">
-            @for (alert of dashboard.alerts; track alert.code + (alert.positionId ?? '')) {
+            @for (
+              alert of dashboard.alerts;
+              track alert.code +
+                (alert.positionId ?? '') +
+                (alert.marketId ?? '') +
+                alert.occurredAt
+            ) {
               <article class="alert" [class]="alert.severity.toLowerCase()">
                 <strong>{{ alert.title }}</strong>
                 <span>{{ alert.message }}</span>
@@ -151,7 +165,11 @@
                     </td>
                     <td [class]="pnlClass(position.unrealizedPnl)">
                       @if (position.unrealizedPnl !== null) {
-                        {{ position.unrealizedPnl | currency: position.quoteAsset ?? undefined }}
+                        @if (position.quoteAsset !== null) {
+                          {{ position.unrealizedPnl | currency: position.quoteAsset }}
+                        } @else {
+                          {{ position.unrealizedPnl | number: '1.2-8' }} · devise indisponible
+                        }
                         · {{ position.unrealizedPnlPercentage | number: '1.2-2' }} %
                       } @else {
                         —
@@ -159,7 +177,11 @@
                     </td>
                     <td>{{ position.stopLoss ?? '—' }} / {{ position.takeProfit ?? '—' }}</td>
                     <td>
-                      {{ position.riskAmount | currency: position.quoteAsset ?? undefined }}
+                      @if (position.quoteAsset !== null) {
+                        {{ position.riskAmount | currency: position.quoteAsset }}
+                      } @else {
+                        {{ position.riskAmount | number: '1.2-8' }} · devise indisponible
+                      }
                       @if (position.riskPercentage !== null) {
                         · {{ position.riskPercentage | number: '1.2-2' }} %
                       } @else {
@@ -167,7 +189,13 @@
                       }
                     </td>
                     <td>
-                      {{ position.exposure | currency: position.quoteAsset ?? undefined }}
+                      @if (position.exposure !== null && position.quoteAsset !== null) {
+                        {{ position.exposure | currency: position.quoteAsset }}
+                      } @else if (position.exposure !== null) {
+                        {{ position.exposure | number: '1.2-8' }} · devise indisponible
+                      } @else {
+                        —
+                      }
                     </td>
                     <td>
                       {{ position.openedAt ? (position.openedAt | date: 'short') : '—' }}
