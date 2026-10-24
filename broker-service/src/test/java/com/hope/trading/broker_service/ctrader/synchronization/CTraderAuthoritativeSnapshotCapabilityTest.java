@@ -54,8 +54,9 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
         when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
                 new CTraderReadOnlyObservation("9001", "USD", new BigDecimal("1000"),
                         new BigDecimal("1010"), new BigDecimal("100"), null,
-                        List.of(new CTraderReadOnlyObservation.Position("EUR/USD", new BigDecimal("2"),
-                                new BigDecimal("1.1"), now, "position-1")),
+                         List.of(new CTraderReadOnlyObservation.Position("EUR/USD", new BigDecimal("2"),
+                                 new BigDecimal("1.1"), now, "position-1", new BigDecimal("5"),
+                                 new BigDecimal("1.05"))),
                          List.of(), List.of(), now, now, now, true, List.of()));
 
         var snapshot = capability.snapshot(accountId);
@@ -65,6 +66,10 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
         assertThat(snapshot.account().equity()).isEqualByComparingTo("1010");
         assertThat(snapshot.positions()).singleElement().extracting(position -> position.brokerPositionReference())
                 .isEqualTo("position-1");
+        assertThat(snapshot.positions()).singleElement().satisfies(position -> {
+            assertThat(position.margin()).isEqualByComparingTo("5");
+            assertThat(position.stopLoss()).isEqualByComparingTo("1.05");
+        });
     }
 
     @Test

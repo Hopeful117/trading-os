@@ -190,14 +190,22 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 reasons.add("POSITION_ENTRY_PRICE_UNAVAILABLE:" + position.path("positionId").asText());
                 continue;
             }
-            positions.add(new CTraderReadOnlyObservation.Position(instrument, quantity,
-                    entryPrice, observedAt, position.path("positionId").asText()));
             BigDecimal positionMargin = money(position.path("usedMargin"), position.path("moneyDigits").asInt(moneyDigits));
             if (positionMargin == null) {
                 reasons.add("POSITION_MARGIN_UNAVAILABLE:" + position.path("positionId").asText());
             } else {
                 usedMargin = usedMargin.add(positionMargin);
             }
+            BigDecimal stopLoss = position.has("stopLoss") && position.path("stopLoss").isNumber()
+                    ? position.path("stopLoss").decimalValue() : null;
+            if (position.has("stopLoss") && stopLoss != null && stopLoss.signum() <= 0) {
+                if (stopLoss.signum() < 0) {
+                    reasons.add("POSITION_STOP_LOSS_INVALID:" + position.path("positionId").asText());
+                }
+                stopLoss = null;
+            }
+            positions.add(new CTraderReadOnlyObservation.Position(instrument, quantity,
+                    entryPrice, observedAt, position.path("positionId").asText(), positionMargin, stopLoss));
         }
 
         List<CTraderReadOnlyObservation.Order> orders = new java.util.ArrayList<>();

@@ -71,6 +71,14 @@ public class GatewayRouteConfig {
                         )
                         .uri(uriFor.apply("broker-service", "lb://broker-service"))
                 )
+                .route("ctrader-authorization", r -> r
+                        .path(
+                                "/api/v1/broker-accounts/ctrader/authorization/callback",
+                                "/api/v1/broker-accounts/*/ctrader/authorization",
+                                "/api/v1/broker-accounts/*/ctrader/authorization/**"
+                        )
+                        .uri(uriFor.apply("broker-service", "lb://broker-service"))
+                )
                 .route("broker-accounts", r -> r
                         .path("/api/v1/broker-accounts/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))

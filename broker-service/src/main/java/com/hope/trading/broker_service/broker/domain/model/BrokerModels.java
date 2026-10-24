@@ -162,7 +162,14 @@ public final class BrokerModels {
             Objects.requireNonNull(balance);
         }
     }
-    public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, Instant observedAt, String brokerPositionReference) {}
+    public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
+                                   Instant observedAt, String brokerPositionReference,
+                                   BigDecimal margin, BigDecimal stopLoss) {
+        public PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
+                                Instant observedAt, String brokerPositionReference) {
+            this(instrument, signedQuantity, entryPrice, observedAt, brokerPositionReference, null, null);
+        }
+    }
 
     public record ResolveTargetRequest(UUID brokerAccountId, String brokerPositionReference) {
         public ResolveTargetRequest {
