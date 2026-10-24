@@ -4,6 +4,7 @@ import com.hope.trading.risk.context.*;
 import com.hope.trading.risk.domain.*;
 import com.hope.trading.risk.policy.*;
 import com.hope.trading.risk.snapshot.*;
+import com.hope.trading.risk.rule.DailyDrawdownRule;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
@@ -18,6 +19,11 @@ final class RiskFixture {
                                   String maximum) {
         return new RuleConfiguration(id, "1.0", category, severity, 10,
                 Map.of("maximumRatio", new BigDecimal(maximum)));
+    }
+    static RuleConfiguration strictDailyRule(String maximum) {
+        return new RuleConfiguration(DailyDrawdownRule.ID, "1.0", RuleCategory.ACCOUNT,
+                RuleSeverity.BLOCKING, 10,
+                Map.of("maximumRatio", new BigDecimal(maximum), "breachBoundary", "STRICT"));
     }
     static EffectiveRiskRuleSet rules(RuleConfiguration... configurations) {
         return new EffectiveRiskRuleSet(List.of(configurations), Map.of("platform", "1"));

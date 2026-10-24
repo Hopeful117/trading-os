@@ -38,12 +38,14 @@ public class RiskProfileValidator {
         List<RuleConfiguration> rules = profile.rules().stream().map(rule -> {
             if (blank(rule.provenance()) || !semanticVersion(rule.ruleVersion())
                     || rule.maximumRatio() == null || rule.maximumRatio().signum() <= 0
-                    || rule.priority() < 0 || !validRuleVocabulary(rule)) {
+                    || rule.priority() < 0 || !validBreachBoundary(rule)
+                    || !validRuleVocabulary(rule)) {
                 throw new RiskProfileValidationException("EFFECTIVE_RISK_PROFILE_INVALID");
             }
             return new RuleConfiguration(rule.ruleId(), rule.ruleVersion(),
                     RuleCategory.valueOf(rule.category()), RuleSeverity.valueOf(rule.severity()),
-                    rule.priority(), Map.of("maximumRatio", rule.maximumRatio()));
+                    rule.priority(), Map.of("maximumRatio", rule.maximumRatio(),
+                            "breachBoundary", normalizedBreachBoundary(rule)));
         }).toList();
         return new EffectiveRiskRuleSet(rules, Map.of(profile.policyId(), profile.policyVersion()));
     }
@@ -62,6 +64,17 @@ public class RiskProfileValidator {
         } catch (RuntimeException invalid) {
             return false;
         }
+    }
+
+    private boolean validBreachBoundary(RiskPersistence.ProfileRule rule) {
+        String boundary = normalizedBreachBoundary(rule);
+        return ("INCLUSIVE".equals(boundary) || "STRICT".equals(boundary))
+                && ("DAILY_DRAWDOWN".equals(rule.ruleId()) || "INCLUSIVE".equals(boundary));
+    }
+
+    private String normalizedBreachBoundary(RiskPersistence.ProfileRule rule) {
+        return rule.breachBoundary() == null || rule.breachBoundary().isBlank()
+                ? "INCLUSIVE" : rule.breachBoundary().strip().toUpperCase(java.util.Locale.ROOT);
     }
 
     private boolean validAuthority(String authority) {

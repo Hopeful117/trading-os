@@ -40,6 +40,33 @@ class RiskProfileValidatorTest {
                 .hasMessage("EFFECTIVE_RISK_PROFILE_INCOMPLETE");
     }
 
+    @Test
+    void strictBoundaryIsAcceptedOnlyForDailyDrawdown() {
+        var effective = validator.validate(profile(List.of(
+                rule("MAX_POSITION_RISK", "POSITION", "0.01"),
+                rule("MAX_EXPOSURE", "PORTFOLIO", "0.03"),
+                rule("DAILY_DRAWDOWN", "ACCOUNT", "0.03", "STRICT"))), false);
+
+        assertThat(effective.rules()).filteredOn(rule -> "DAILY_DRAWDOWN".equals(rule.ruleId()))
+                .singleElement().satisfies(rule -> assertThat(rule.parameters().get("breachBoundary")).isEqualTo("STRICT"));
+        assertThatThrownBy(() -> validator.validate(profile(List.of(
+                rule("MAX_POSITION_RISK", "POSITION", "0.01", "STRICT"),
+                rule("MAX_EXPOSURE", "PORTFOLIO", "0.03"),
+                rule("DAILY_DRAWDOWN", "ACCOUNT", "0.03"))), false))
+                .isInstanceOf(RiskProfileValidationException.class)
+                .hasMessage("EFFECTIVE_RISK_PROFILE_INVALID");
+    }
+
+    @Test
+    void invalidBoundaryIsRejected() {
+        assertThatThrownBy(() -> validator.validate(profile(List.of(
+                rule("MAX_POSITION_RISK", "POSITION", "0.01"),
+                rule("MAX_EXPOSURE", "PORTFOLIO", "0.03"),
+                rule("DAILY_DRAWDOWN", "ACCOUNT", "0.03", "INVALID"))), false))
+                .isInstanceOf(RiskProfileValidationException.class)
+                .hasMessage("EFFECTIVE_RISK_PROFILE_INVALID");
+    }
+
     private RiskPersistence.Profile profile(List<RiskPersistence.ProfileRule> rules) {
         return new RiskPersistence.Profile(UUID.randomUUID(), "1.0.0", "policy", "1.0.0",
                 "PLATFORM", Instant.EPOCH, "profile-source", null, null, rules);
@@ -48,5 +75,10 @@ class RiskProfileValidatorTest {
     private RiskPersistence.ProfileRule rule(String id, String category, String maximum) {
         return new RiskPersistence.ProfileRule(id, "1.0.0", category, "BLOCKING", 10,
                 new BigDecimal(maximum), "rule-source:" + id);
+    }
+
+    private RiskPersistence.ProfileRule rule(String id, String category, String maximum, String boundary) {
+        return new RiskPersistence.ProfileRule(id, "1.0.0", category, "BLOCKING", 10,
+                new BigDecimal(maximum), "rule-source:" + id, boundary);
     }
 }

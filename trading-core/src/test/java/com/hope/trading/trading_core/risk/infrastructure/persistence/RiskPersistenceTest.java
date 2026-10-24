@@ -130,6 +130,8 @@ class RiskPersistenceTest {
             jdbc.update("insert into risk_profile_rule(profile_id,profile_semantic_version,rule_id,rule_version,category,severity,priority,maximum_ratio,provenance) values(?,?,?,?,?,?,?,?,?)",
                     profile, "2.1.0", rule, "3.0.0", "ACCOUNT", "BLOCKING", 10, ".05", "rule-source:" + rule);
         }
+        jdbc.update("update risk_profile_rule set breach_boundary='STRICT' where profile_id=? and "
+                        + "profile_semantic_version=? and rule_id='DAILY_DRAWDOWN'", profile, "2.1.0");
         jdbc.update("insert into account_risk_profile_assignment(account_id,profile_id,profile_semantic_version,assigned_at,provenance) values(?,?,?,?,?)",
                 account, profile, "2.1.0", Instant.now(), "assignment-source");
 
@@ -140,6 +142,9 @@ class RiskPersistenceTest {
         assertThat(loaded.provenance()).isEqualTo("policy-source");
         assertThat(loaded.assignmentProvenance()).isEqualTo("assignment-source");
         assertThat(loaded.rules()).hasSize(3).allMatch(rule -> rule.provenance().startsWith("rule-source:"));
+        assertThat(loaded.rules()).filteredOn(rule -> "DAILY_DRAWDOWN".equals(rule.ruleId()))
+                .singleElement().extracting(RiskPersistence.ProfileRule::breachBoundary)
+                .isEqualTo("STRICT");
     }
 
     @Test
