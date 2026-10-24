@@ -104,7 +104,8 @@ class InternalTradePlanRiskControllerTest {
         TradePlanTestFixtures.Environment environment = TradePlanTestFixtures.environment();
         TradePlan proposed = ((TradePlanningResult.Success) environment.service().create(
                 TradePlanTestFixtures.request(environment))).plan();
-        TradePlan accepted = environment.service().transition(proposed.id(), TradePlanStatus.ACCEPTED);
+        TradePlan accepted = environment.service().transition(
+                proposed.id(), TradePlanStatus.ACCEPTED, environment.owner());
         return fixture(environment, accepted);
     }
 

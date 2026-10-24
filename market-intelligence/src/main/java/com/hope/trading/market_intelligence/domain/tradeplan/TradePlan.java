@@ -14,12 +14,14 @@ public final class TradePlan {
     private final ExecutionParameters execution;
     private final TradingRationale rationale;
     private final Instant createdAt;
+    private final UUID decisionActorId;
+    private final Instant decisionAt;
 
     TradePlan(
             TradePlanId id, TradePlanVersion version, TradePlanVersion previousVersion,
             TradePlanStatus status, TradePlanningContextReference planningContext,
             ExecutionParameters execution, TradingRationale rationale, Instant createdAt,
-            TradePlanOrigin origin, UUID authorId
+            TradePlanOrigin origin, UUID authorId, UUID decisionActorId, Instant decisionAt
     ) {
         this.id = Objects.requireNonNull(id);
         this.version = Objects.requireNonNull(version);
@@ -46,6 +48,11 @@ public final class TradePlan {
         this.execution = Objects.requireNonNull(execution);
         this.rationale = Objects.requireNonNull(rationale);
         this.createdAt = Objects.requireNonNull(createdAt);
+        if ((decisionActorId == null) != (decisionAt == null)) {
+            throw new IllegalArgumentException("Decision actor and timestamp must be provided together");
+        }
+        this.decisionActorId = decisionActorId;
+        this.decisionAt = decisionAt;
     }
 
     public TradePlanId id() { return id; }
@@ -60,4 +67,6 @@ public final class TradePlan {
     public ExecutionParameters execution() { return execution; }
     public TradingRationale rationale() { return rationale; }
     public Instant createdAt() { return createdAt; }
+    public Optional<UUID> decisionActorId() { return Optional.ofNullable(decisionActorId); }
+    public Optional<Instant> decisionAt() { return Optional.ofNullable(decisionAt); }
 }

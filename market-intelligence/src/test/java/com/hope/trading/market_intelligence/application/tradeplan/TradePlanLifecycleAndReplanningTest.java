@@ -15,7 +15,7 @@ class TradePlanLifecycleAndReplanningTest {
                 environment.plans(), environment.service());
 
         TradePlan accepted = environment.service().transition(
-                proposed.id(), TradePlanStatus.ACCEPTED);
+                proposed.id(), TradePlanStatus.ACCEPTED, environment.owner());
         assertThat(proposed.status()).isEqualTo(TradePlanStatus.PROPOSED);
         assertThat(boundary.loadAcceptedSnapshot(
                 accepted.id(), accepted.version())).usingRecursiveComparison()

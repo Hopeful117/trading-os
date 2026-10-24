@@ -90,11 +90,16 @@ final class TradePlanBuilder {
                 rationale, createdAt, TradePlanOrigin.MANUAL, request.actorId()));
     }
 
-    TradePlan transition(TradePlan previous, TradePlanStatus target, Instant createdAt) {
+    TradePlan transition(TradePlan previous, TradePlanStatus target, Instant createdAt, UUID decisionActorId) {
+        UUID actor = target == TradePlanStatus.ACCEPTED || target == TradePlanStatus.REJECTED
+                ? decisionActorId : previous.decisionActorId().orElse(null);
+        Instant decidedAt = actor == null
+                ? previous.decisionAt().orElse(null)
+                : createdAt;
         return factory.create(new TradePlanFactory.Values(
                 previous.id(), previous.version().next(), previous.version(), target,
                 previous.planningContext(), previous.execution(), previous.rationale(), createdAt,
-                previous.origin(), previous.authorId().orElse(null)));
+                previous.origin(), previous.authorId().orElse(null), actor, decidedAt));
     }
     private <T> T required(TradePlanDraft draft, ContributionType type, Class<T> expected) {
         Object value = requiredRaw(draft, type);

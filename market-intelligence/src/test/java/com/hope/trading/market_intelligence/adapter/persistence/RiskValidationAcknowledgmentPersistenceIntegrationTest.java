@@ -171,7 +171,8 @@ class RiskValidationAcknowledgmentPersistenceIntegrationTest {
         var fixture = TradePlanTestFixtures.environment();
         TradePlan proposed = ((TradePlanningResult.Success) fixture.service().create(
                 TradePlanTestFixtures.request(fixture))).plan();
-        TradePlan accepted = fixture.service().transition(proposed.id(), TradePlanStatus.ACCEPTED);
+        TradePlan accepted = fixture.service().transition(
+                proposed.id(), TradePlanStatus.ACCEPTED, fixture.owner());
         TradePlanRepository plans = application.getBean(TradePlanRepository.class);
         plans.append(proposed);
         plans.append(accepted);

@@ -1,12 +1,17 @@
 package com.hope.trading.market_intelligence.application.tradeplan;
 
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus;
+import com.hope.trading.market_intelligence.domain.tradeplan.TradePlan;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanningContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Callable;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,6 +52,8 @@ class TradePlanDecisionServiceTest {
                 environment.owner(), TradePlanDecisionService.Decision.ACCEPT);
 
         assertThat(decided.status()).isEqualTo(TradePlanStatus.ACCEPTED);
+        assertThat(decided.decisionActorId()).contains(environment.owner());
+        assertThat(decided.decisionAt()).isPresent();
         assertThat(decided.version().value())
                 .isEqualTo(proposed.plan().version().value() + 1);
         assertThat(environment.plans().findLatest(proposed.plan().id()).orElseThrow().status())
@@ -62,6 +69,8 @@ class TradePlanDecisionServiceTest {
                 environment.owner(), TradePlanDecisionService.Decision.REJECT);
 
         assertThat(decided.status()).isEqualTo(TradePlanStatus.REJECTED);
+        assertThat(decided.decisionActorId()).contains(environment.owner());
+        assertThat(decided.decisionAt()).isPresent();
     }
 
     @Test
@@ -77,6 +86,36 @@ class TradePlanDecisionServiceTest {
         assertThat(repeated.status()).isEqualTo(TradePlanStatus.ACCEPTED);
         assertThat(repeated.version()).isEqualTo(accepted.version());
         assertThat(environment.plans().history(accepted.id())).hasSize(2);
+    }
+
+    @Test
+    void concurrentIdenticalDecisionsOnProposedVersionReturnTheSameAcceptedVersion()
+            throws Exception {
+        var proposed = propose();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<TradePlan> request = () -> {
+                ready.countDown();
+                start.await();
+                return service.decide(proposed.plan().id().value(),
+                        proposed.plan().version().value(), environment.owner(),
+                        TradePlanDecisionService.Decision.ACCEPT);
+            };
+            var first = executor.submit(request);
+            var second = executor.submit(request);
+            ready.await();
+            start.countDown();
+
+            List<TradePlan> results = List.of(first.get(), second.get());
+            assertThat(results).allSatisfy(result -> {
+                assertThat(result.status()).isEqualTo(TradePlanStatus.ACCEPTED);
+                assertThat(result.version()).isEqualTo(proposed.plan().version().next());
+                assertThat(result.decisionActorId()).contains(environment.owner());
+            });
+            assertThat(environment.plans().history(proposed.plan().id())).hasSize(2);
+        }
     }
 
     @Test
