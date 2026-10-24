@@ -20,10 +20,26 @@ public class JpaBrokerOrderAdapter implements BrokerOrderRepositoryPort {
     }
     @Override public BrokerOrder save(BrokerOrder order){
         BrokerOrderEntity entity=repository.findById(order.id().value()).orElseGet(BrokerOrderEntity::new);
+        // Fills are immutable execution evidence and may be referenced by provenance.
+        // Existing rows may be replayed identically, but conflicting rewrites are rejected.
+        List<BrokerFillEntity> newFills = new ArrayList<>();
+        for (BrokerOrder.Fill fill : order.fills()) {
+            Optional<BrokerFillEntity> existing = fillRepository.findById(fill.fillId());
+            if (existing.isPresent()) {
+                BrokerFillEntity value = existing.get();
+                if (!order.id().value().equals(value.brokerOrderId)
+                        || value.quantity.compareTo(fill.quantity()) != 0
+                        || value.price.compareTo(fill.price()) != 0
+                        || value.fee.compareTo(fill.fee()) != 0
+                        || !value.executedAt.equals(fill.executedAt())) {
+                    throw new IllegalStateException("Broker fill is immutable: " + fill.fillId());
+                }
+            } else {
+                newFills.add(mapper.toEntity(fill, order.id().value()));
+            }
+        }
         BrokerOrderEntity saved = repository.saveAndFlush(mapper.toEntity(order,entity));
-        fillRepository.deleteAllByBrokerOrderId(order.id().value());
-        fillRepository.saveAll(order.fills().stream()
-                .map(fill -> mapper.toEntity(fill, order.id().value())).toList());
+        if (!newFills.isEmpty()) fillRepository.saveAll(newFills);
         fillRepository.flush();
         return mapper.toDomain(saved,
                 fillRepository.findAllByBrokerOrderIdOrderByExecutedAtAsc(order.id().value()));

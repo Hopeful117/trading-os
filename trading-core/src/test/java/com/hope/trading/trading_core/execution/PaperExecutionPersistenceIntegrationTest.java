@@ -185,6 +185,8 @@ class PaperExecutionPersistenceIntegrationTest {
                 Integer.class, intent.id().value())).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from execution_broker_fill where broker_order_id = ?",
                 Integer.class, persistedOrder.id().value())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from trade_execution_provenance where broker_order_id = ?",
+                Integer.class, persistedOrder.id().value())).isEqualTo(1);
         assertThat(jdbc.queryForObject("select status from challenge_reevaluation_outbox where execution_intent_id = ?",
                 String.class, intent.id().value())).isEqualTo("PENDING");
 
@@ -207,6 +209,14 @@ class PaperExecutionPersistenceIntegrationTest {
             assertThat(trade.getCurrentPrice()).isEqualByComparingTo("50100");
             assertThat(trade.getAccount().getAccountId()).isEqualTo(accountId);
         });
+
+        settlement.settle(persistedIntent, persistedAttempt, persistedOrder);
+        entityManager.flush();
+        entityManager.clear();
+        Account afterRepeatedSettlement = accounts.findById(accountId).orElseThrow();
+        assertThat(amount(afterRepeatedSettlement, "USD")).isEqualByComparingTo("4990");
+        assertThat(amount(afterRepeatedSettlement, "BTC")).isEqualByComparingTo("0.1");
+        assertThat(afterRepeatedSettlement.getTrades()).hasSize(1);
 
     }
 

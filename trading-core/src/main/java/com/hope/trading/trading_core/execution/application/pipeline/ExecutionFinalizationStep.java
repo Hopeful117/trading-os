@@ -61,6 +61,11 @@ public final class ExecutionFinalizationStep {
             case BrokerExecutionPort.Acknowledged acknowledged -> {
                 java.util.UUID settledTradeId = null;
                 if (isPaperAccount(context.intent().brokerAccountId())) {
+                    // Provenance created by PAPER settlement references both aggregates.
+                    attempts.save(context.attempt());
+                    orders.save(context.brokerOrder());
+                }
+                if (isPaperAccount(context.intent().brokerAccountId())) {
                     settledTradeId = paperSettlementService.settle(
                             context.intent(), context.attempt(), context.brokerOrder());
                 }

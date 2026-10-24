@@ -60,10 +60,11 @@ public class ExecutionConfiguration {
               com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort tradePlans,
               com.hope.trading.trading_core.challenge.infrastructure.persistence.ChallengeReevaluationOutboxPersistence challengeReevaluationOutbox,
               com.hope.trading.trading_core.market_data.apiClient.MarketDataClient marketDataClient,
-              com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService derivativeValuation){
+              com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService derivativeValuation,
+              com.hope.trading.trading_core.execution.application.port.TradeExecutionProvenanceStore executionProvenance){
          return new PaperSettlementService(brokerAccountRepository, accountRepository, calculator, tradePlans,
-                 challengeReevaluationOutbox, marketDataClient, derivativeValuation);
-    }
+                 challengeReevaluationOutbox, marketDataClient, derivativeValuation, executionProvenance);
+     }
     @Bean ExecutionFinalizationStep executionFinalizationStep(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts, BrokerOrderRepositoryPort orders,
              ExecutionLifecycleService lifecycle, ExecutionMetrics metrics,

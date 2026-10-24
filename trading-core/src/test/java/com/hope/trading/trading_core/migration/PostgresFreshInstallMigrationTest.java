@@ -49,11 +49,12 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(38);
+        assertMigrationHistory(39);
         assertDailyDrawdownBoundarySchema();
+        assertTradeExecutionProvenanceConstraints();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("38");
+                 String.class)).isEqualTo("39");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -90,7 +91,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(38);
+                 Integer.class)).isEqualTo(39);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -109,7 +110,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(38);
+        assertMigrationHistory(39);
         assertDailyDrawdownBoundarySchema();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
         assertThat(jdbc.queryForObject(
@@ -173,6 +174,16 @@ class PostgresFreshInstallMigrationTest {
                         + "where t.relnamespace = current_schema()::regnamespace "
                         + "and t.relname = 'risk_profile_rule' "
                         + "and c.conname = 'risk_profile_rule_breach_boundary_check'", Integer.class)).isEqualTo(1);
+    }
+
+    private void assertTradeExecutionProvenanceConstraints() {
+        assertThat(tableExists("trade_execution_provenance")).isTrue();
+        assertThat(jdbc.queryForObject("select count(*) from pg_constraint "
+                        + "where connamespace = current_schema()::regnamespace and conname = ?",
+                Integer.class, "fk_trade_execution_provenance_fill")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from pg_constraint "
+                        + "where connamespace = current_schema()::regnamespace and conname = ?",
+                Integer.class, "uk_trade_execution_provenance_fill")).isEqualTo(1);
     }
 
     private void assertMigrationHistory(int expectedVersion) {
