@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.risk.infrastructure.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -41,9 +42,9 @@ class BrokerCapabilityQueryServiceTest {
         when(brokerAccounts.findByIdAndOwnerId(brokerId, ownerId)).thenReturn(Optional.of(broker));
         when(broker.providerRegistrationReference()).thenReturn(BrokerProvider.KRAKEN);
         when(broker.executionMode()).thenReturn(ExecutionMode.PAPER);
-        when(capabilities.getByProvider(BrokerProvider.KRAKEN.toString(), brokerId, "BTC/USD")).thenReturn(
-                new BrokerTechnicalCapabilities(brokerId, BrokerProvider.KRAKEN.toString(), "BTC/USD", 4, NOW,
-                        List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
+        when(capabilities.getByProviderBatch(eq(BrokerProvider.KRAKEN.toString()), eq(brokerId), any()))
+                .thenReturn(List.of(new BrokerTechnicalCapabilities(brokerId, BrokerProvider.KRAKEN.toString(),
+                        "BTC/USD", 4, NOW, List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE))));
 
         BrokerCapabilityQueryService service = new BrokerCapabilityQueryService(accounts, brokerAccounts,
                 capabilities, Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5));
@@ -52,6 +53,7 @@ class BrokerCapabilityQueryServiceTest {
 
         assertThat(result).singleElement().satisfies(value -> {
             assertThat(value.instrument()).isEqualTo("BTC/USD");
+            assertThat(value.provider()).isEqualTo(BrokerProvider.KRAKEN.toString());
             assertThat(value.available()).isTrue();
             assertThat(value.supportedOrderTypes()).containsExactly("MARKET");
         });
@@ -72,10 +74,10 @@ class BrokerCapabilityQueryServiceTest {
         when(brokerAccounts.findByIdAndOwnerId(brokerId, ownerId)).thenReturn(Optional.of(broker));
         when(broker.provider()).thenReturn(BrokerProvider.KRAKEN);
         when(broker.executionMode()).thenReturn(ExecutionMode.LIVE);
-        when(capabilities.get(brokerId, "BTC/USD")).thenReturn(
+        when(capabilities.getBatch(eq(brokerId), any())).thenReturn(List.of(
                 new BrokerTechnicalCapabilities(brokerId, "KRAKEN", "BTC/USD", 4,
                         NOW.minus(Duration.ofMinutes(6)), List.of("MARKET"),
-                        List.of(BigDecimal.ONE), List.of(BigDecimal.ONE)));
+                        List.of(BigDecimal.ONE), List.of(BigDecimal.ONE))));
 
         var result = new BrokerCapabilityQueryService(accounts, brokerAccounts, capabilities,
                 Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5))

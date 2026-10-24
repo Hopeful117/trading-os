@@ -10,11 +10,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public final class BrokerCapabilityQueryService {
+    private static final Logger log = LoggerFactory.getLogger(BrokerCapabilityQueryService.class);
     private final AccountService accounts;
     private final BrokerAccountRepository brokerAccounts;
     private final BrokerTechnicalCapabilitiesFeignClient capabilities;
@@ -43,41 +46,48 @@ public final class BrokerCapabilityQueryService {
         if (brokerAccount == null || brokerAccount.providerRegistrationReference() == null) {
             return normalize(instruments).stream().map(this::unavailable).toList();
         }
-        return normalize(instruments).stream()
-                .map(instrument -> resolveOne(account.getBrokerAccountId(), brokerAccount.executionMode(),
-                        brokerAccount.providerRegistrationReference().toString(), instrument))
+        List<String> normalized = normalize(instruments);
+        List<BrokerTechnicalCapabilities> values;
+        try {
+            values = brokerAccount.executionMode() == ExecutionMode.PAPER
+                    ? capabilities.getByProviderBatch(brokerAccount.providerRegistrationReference().toString(),
+                    account.getBrokerAccountId(), new MarketCapabilityRequest(normalized))
+                    : capabilities.getBatch(account.getBrokerAccountId(), new MarketCapabilityRequest(normalized));
+        } catch (RuntimeException unavailable) {
+            log.warn("broker_capability_batch_failed accountId={} instrumentCount={} error={}",
+                    accountId, normalized.size(), unavailable.toString());
+            values = List.of();
+        }
+        var byInstrument = values.stream()
+                .filter(value -> value != null && value.instrument() != null)
+                .collect(java.util.stream.Collectors.toMap(value -> value.instrument().toUpperCase(Locale.ROOT),
+                        value -> value, (first, ignored) -> first));
+        return normalized.stream()
+                .map(instrument -> resolveOne(byInstrument.get(instrument), instrument))
                 .toList();
     }
 
-    private MarketCapability resolveOne(UUID brokerAccountId, ExecutionMode mode, String provider,
-                                        String instrument) {
-        try {
-            BrokerTechnicalCapabilities value = mode == ExecutionMode.PAPER
-                    ? capabilities.getByProvider(provider, brokerAccountId, instrument)
-                    : capabilities.get(brokerAccountId, instrument);
-            if (value == null || value.sourceVersion() < 1 || value.observedAt() == null
-                    || value.observedAt().isAfter(clock.instant())
-                    || value.observedAt().plus(maxAge).isBefore(clock.instant())
-                    || value.instrument() == null || !instrument.equalsIgnoreCase(value.instrument())
-                    || value.supportedOrderTypes() == null || value.supportedOrderTypes().isEmpty()) {
-                return unavailable(instrument);
-            }
-            List<String> orderTypes = value.supportedOrderTypes().stream()
+    private MarketCapability resolveOne(BrokerTechnicalCapabilities value, String instrument) {
+        if (value == null || value.sourceVersion() < 1 || value.observedAt() == null
+                || value.observedAt().isAfter(clock.instant())
+                || value.observedAt().plus(maxAge).isBefore(clock.instant())
+                || value.instrument() == null || !instrument.equalsIgnoreCase(value.instrument())
+                || value.supportedOrderTypes() == null || value.supportedOrderTypes().isEmpty()) {
+            return unavailable(instrument);
+        }
+        List<String> orderTypes = value.supportedOrderTypes().stream()
                     .filter(type -> type != null && !type.isBlank())
                     .map(type -> type.toUpperCase(Locale.ROOT))
                     .distinct().toList();
-            if (!orderTypes.contains("MARKET")) {
-                return new MarketCapability(instrument, false, orderTypes,
-                        value.supportedBuyLeverageLevels(), value.supportedSellLeverageLevels(),
-                        value.sourceVersion(), value.observedAt(), provider,
-                        List.of("BROKER_MARKET_ORDER_UNSUPPORTED"));
-            }
-            return new MarketCapability(instrument, true, orderTypes,
+        if (!orderTypes.contains("MARKET")) {
+            return new MarketCapability(instrument, false, orderTypes,
                     value.supportedBuyLeverageLevels(), value.supportedSellLeverageLevels(),
-                    value.sourceVersion(), value.observedAt(), provider, List.of());
-        } catch (RuntimeException unavailable) {
-            return unavailable(instrument);
+                    value.sourceVersion(), value.observedAt(), value.provider(),
+                    List.of("BROKER_MARKET_ORDER_UNSUPPORTED"));
         }
+        return new MarketCapability(instrument, true, orderTypes,
+                value.supportedBuyLeverageLevels(), value.supportedSellLeverageLevels(),
+                value.sourceVersion(), value.observedAt(), value.provider(), List.of());
     }
 
     private MarketCapability unavailable(String instrument) {

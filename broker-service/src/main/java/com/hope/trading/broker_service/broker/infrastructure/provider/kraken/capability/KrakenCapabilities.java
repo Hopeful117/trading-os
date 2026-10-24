@@ -10,6 +10,7 @@ import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.map
 import com.hope.trading.broker_service.broker.infrastructure.provider.kraken.mapper.KrakenAssetNormalizer;
 import com.hope.trading.broker_service.kraken.config.KrakenProperties;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.Clock;
 import java.util.*;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,7 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
     private final KrakenOrderMapper mapper;
     private final Clock clock;
     private final KrakenProperties properties;
+    private volatile AssetPairsCache assetPairsCache;
     public KrakenCapabilities(ProviderCredentialSession sessions,KrakenProviderClient client,KrakenOrderMapper mapper,Clock clock){this(sessions,client,mapper,clock,new KrakenProperties());}
     @Autowired
     public KrakenCapabilities(ProviderCredentialSession sessions,KrakenProviderClient client,KrakenOrderMapper mapper,Clock clock,KrakenProperties properties){this.sessions=sessions;this.client=client;this.mapper=mapper;this.clock=clock;this.properties=properties;}
@@ -59,14 +61,26 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
             if(matches.isEmpty())return new ConfirmedAbsent();if(matches.size()>1)return new Inconsistent("MULTIPLE_MATCHING_ORDERS");OrderSnapshot order=matches.get(0);return new ReconciledOrder(order.externalOrderId(),request.executionAttemptId().toString(),order.status());});
         }catch(BrokerTechnicalException e){return new Inconsistent(safeCode(e));}
     }
-    @Override public TechnicalCapabilities capabilities(UUID accountId,String instrument) {
-          MarginFacts facts = marginFacts(instrument);
-           if ((!properties.getSupportedInstruments().isEmpty() && properties.getSupportedInstruments().stream()
-                   .noneMatch(value -> value.equalsIgnoreCase(instrument))))
-              throw new BrokerTechnicalException("Instrument capability is unavailable");
-          return new TechnicalCapabilities(accountId,PROVIDER,instrument,properties.getCapabilityVersion(),clock.instant(),
-                  List.of(OrderType.MARKET,OrderType.LIMIT),List.copyOf(facts.buy()),List.copyOf(facts.sell()));
-     }
+      @Override public TechnicalCapabilities capabilities(UUID accountId,String instrument) {
+           return capabilities(accountId, List.of(instrument)).stream().findFirst()
+                   .orElseThrow(() -> new BrokerTechnicalException("Instrument capability is unavailable"));
+      }
+      @Override public List<TechnicalCapabilities> capabilities(UUID accountId, List<String> instruments) {
+           if (instruments == null || instruments.isEmpty()) return List.of();
+           JsonNode assetPairs = assetPairs();
+           return instruments.stream().filter(Objects::nonNull).map(String::trim).filter(value -> !value.isBlank())
+                   .distinct().map(instrument -> {
+                       try {
+                           MarginFacts facts = marginFacts(assetPairs, instrument);
+                           return new TechnicalCapabilities(accountId, PROVIDER, instrument,
+                                   properties.getCapabilityVersion(), clock.instant(),
+                                   List.of(OrderType.MARKET, OrderType.LIMIT),
+                                   List.copyOf(facts.buy()), List.copyOf(facts.sell()));
+                       } catch (RuntimeException unavailable) {
+                           return null;
+                       }
+                   }).filter(Objects::nonNull).toList();
+      }
     @Override public MarginPreview preview(MarginPreviewRequest request) {
           MarginFacts facts = marginFacts(request.instrument());
           BigDecimal leverage = request.leverage() == null ? CASH_LEVERAGE : request.leverage();
@@ -76,20 +90,39 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
           return new MarginPreview(request.brokerAccountId(),request.instrument(),amount,facts.quoteCurrency(),MARGIN_SOURCE,
                   properties.getCapabilityVersion(),clock.instant());
      }
-     private MarginFacts marginFacts(String instrument) {
-          if (instrument == null || instrument.isBlank() || (!properties.getSupportedInstruments().isEmpty() && properties.getSupportedInstruments().stream()
-                  .noneMatch(value -> value.equalsIgnoreCase(instrument))))
-              throw new BrokerTechnicalException("Instrument capability is unavailable");
-          JsonNode result = client.publicGet(ASSET_PAIRS_PATH,Map.of("pair",instrument,"info","info","assetVersion","1"));
-          JsonNode pair = findPair(result,instrument);
+      private MarginFacts marginFacts(String instrument) {
+           return marginFacts(assetPairs(), instrument);
+      }
+      private MarginFacts marginFacts(JsonNode result, String instrument) {
+           if (instrument == null || instrument.isBlank() || (!properties.getSupportedInstruments().isEmpty() && properties.getSupportedInstruments().stream()
+                   .noneMatch(value -> value.equalsIgnoreCase(instrument))))
+               throw new BrokerTechnicalException("Instrument capability is unavailable");
+           JsonNode pair = findPair(result,instrument);
           if (pair == null) throw new BrokerTechnicalException("Instrument capability is unavailable");
           String quote = pair.path("quote").asText("").trim();
           if (quote.isBlank()) throw new BrokerTechnicalException("Margin currency is unavailable");
           Set<BigDecimal> buy = leverageLevels(pair.path("leverage_buy"));
           Set<BigDecimal> sell = leverageLevels(pair.path("leverage_sell"));
           buy.add(CASH_LEVERAGE); sell.add(CASH_LEVERAGE);
-          return new MarginFacts(KrakenAssetNormalizer.asset(quote),buy,sell);
-     }
+           return new MarginFacts(KrakenAssetNormalizer.asset(quote),buy,sell);
+      }
+      private JsonNode assetPairs() {
+           Instant now = clock.instant();
+           AssetPairsCache current = assetPairsCache;
+           if (current != null && current.observedAt().plus(properties.getAssetPairsCacheTtl()).isAfter(now)) {
+               return current.value();
+           }
+           synchronized (this) {
+               current = assetPairsCache;
+               if (current != null && current.observedAt().plus(properties.getAssetPairsCacheTtl()).isAfter(now)) {
+                   return current.value();
+               }
+               JsonNode value = client.publicGet(ASSET_PAIRS_PATH,
+                       Map.of("info", "info", "assetVersion", "1"));
+               assetPairsCache = new AssetPairsCache(value, now);
+               return value;
+           }
+      }
      private JsonNode findPair(JsonNode result,String instrument) {
           Iterator<JsonNode> pairs=result.elements();
           while(pairs.hasNext()) {
@@ -112,9 +145,10 @@ public final class KrakenCapabilities implements AuthenticationCapability,Accoun
           }
           return levels;
       }
-     private record MarginFacts(String quoteCurrency,Set<BigDecimal> buy,Set<BigDecimal> sell) {
-          Set<BigDecimal> leverageFor(Side side){return side==Side.BUY?buy:sell;}
-     }
+      private record MarginFacts(String quoteCurrency,Set<BigDecimal> buy,Set<BigDecimal> sell) {
+           Set<BigDecimal> leverageFor(Side side){return side==Side.BUY?buy:sell;}
+      }
+      private record AssetPairsCache(JsonNode value, Instant observedAt) { }
     private List<OrderSnapshot> readOrders(com.hope.trading.broker_service.credential.domain.CredentialMaterial c,String clientId){
         List<OrderSnapshot> result=new ArrayList<>();collect(client.privatePost("/0/private/OpenOrders",Map.of(),c).path("open"),clientId,result);collect(client.privatePost("/0/private/ClosedOrders",Map.of(),c).path("closed"),clientId,result);return List.copyOf(result);
     }

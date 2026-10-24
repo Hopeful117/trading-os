@@ -14,6 +14,7 @@ import { TrendAttention, TrendContextReadModel } from '../../core/models/trend-c
 import { TrendContextService } from '../../core/services/trend-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketService } from '../../core/services/market.service';
+import { ActiveScanService } from '../../core/services/active-scan.service';
 import { OpportunityService } from '../../core/services/opportunity.service';
 import { TradePlanService } from '../../core/services/trade-plan.service';
 import { OhlcInterval } from '../../core/models/ohlc-interval';
@@ -29,6 +30,7 @@ describe('DecisionWorkspace', () => {
   let marketServiceMock: {
     findById: ReturnType<typeof vi.fn>;
     findOhlcHistory: ReturnType<typeof vi.fn>;
+    findAll: ReturnType<typeof vi.fn>;
     subscribe: ReturnType<typeof vi.fn>;
     unsubscribe: ReturnType<typeof vi.fn>;
   };
@@ -44,6 +46,11 @@ describe('DecisionWorkspace', () => {
     createFromOpportunity: ReturnType<typeof vi.fn>;
   };
   let opportunityServiceMock: { findById: ReturnType<typeof vi.fn> };
+  let activeScanServiceMock: {
+    createScan: ReturnType<typeof vi.fn>;
+    findScan: ReturnType<typeof vi.fn>;
+    resolveScope: ReturnType<typeof vi.fn>;
+  };
   let routeQueryParamMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
   const account: Account = {
@@ -187,6 +194,7 @@ describe('DecisionWorkspace', () => {
     marketServiceMock = {
       findById: vi.fn().mockReturnValue(of(market)),
       findOhlcHistory: vi.fn().mockReturnValue(of([])),
+      findAll: vi.fn().mockReturnValue(of([market])),
       subscribe: vi.fn().mockReturnValue(of(undefined)),
       unsubscribe: vi.fn().mockReturnValue(of(undefined)),
     };
@@ -204,6 +212,11 @@ describe('DecisionWorkspace', () => {
         .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
     };
     opportunityServiceMock = { findById: vi.fn() };
+    activeScanServiceMock = {
+      createScan: vi.fn(),
+      findScan: vi.fn(),
+      resolveScope: vi.fn(),
+    };
     routeQueryParamMap = new BehaviorSubject(convertToParamMap({}));
     vi.stubGlobal(
       'ResizeObserver',
@@ -235,6 +248,7 @@ describe('DecisionWorkspace', () => {
         { provide: DecisionContextService, useValue: contextServiceMock },
         { provide: TrendContextService, useValue: trendContextServiceMock },
         { provide: MarketService, useValue: marketServiceMock },
+        { provide: ActiveScanService, useValue: activeScanServiceMock },
         { provide: MarketDataStreamService, useValue: marketDataStreamServiceMock },
         { provide: OpportunityService, useValue: opportunityServiceMock },
         { provide: TradePlanService, useValue: tradePlanServiceMock },
@@ -267,7 +281,17 @@ describe('DecisionWorkspace', () => {
 
     expect(contextServiceMock.resolve).toHaveBeenCalledWith(account.accountId);
     expect(fixture.nativeElement.querySelector('[data-testid="market-search-hint"]')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('[data-testid="excluded-markets"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="excluded-markets"]')).toBeNull();
+  });
+
+  it('embeds one account-scoped market navigator without a second account selector', async () => {
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const navigator = fixture.nativeElement.querySelector('[data-testid="market-navigator"]');
+    expect(navigator).toBeTruthy();
+    expect(navigator.querySelector('[data-testid="account-select"]')).toBeNull();
   });
 
   it('loads the account cockpit from the authoritative dashboard contract', async () => {
@@ -383,21 +407,6 @@ describe('DecisionWorkspace', () => {
     expect(element.textContent).not.toContain('ETH/USD');
   });
 
-  it('keeps unavailable markets collapsed until explicitly opened', async () => {
-    component.selectAccount(account.accountId);
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    const element = fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('.excluded-markets-content')).toBeNull();
-
-    (element.querySelector('.disclosure-button') as HTMLButtonElement).click();
-    fixture.detectChanges();
-
-    expect(element.querySelector('.excluded-markets-content')).toBeTruthy();
-    expect(element.textContent).toContain('MARKET_NOT_TRADABLE');
-  });
-
   it('clears the selected market when the account changes', () => {
     component.selectedAccountId = 'account-1';
     component.selectedMarketId = 'market-1';
@@ -411,6 +420,28 @@ describe('DecisionWorkspace', () => {
     component.selectMarket('market-2', context);
 
     expect(component.selectedMarketId).toBeNull();
+  });
+
+  it('synchronizes a Navigator Opportunity through the existing route context', () => {
+    const opportunity = {
+      id: 'opportunity-1',
+      marketId: 'market-1',
+    } as OpportunityResponse;
+
+    component.selectNavigatorOpportunity(opportunity, context);
+
+    expect(component.selectedMarketId).toBe('market-1');
+    expect(routerMock.navigate).toHaveBeenLastCalledWith([], {
+      queryParams: { marketId: 'market-1', opportunityId: 'opportunity-1' },
+      queryParamsHandling: 'merge',
+    });
+  });
+
+  it('ignores a Navigator Opportunity without an eligible market identity', () => {
+    component.selectNavigatorOpportunity({ id: 'opportunity-1' } as OpportunityResponse, context);
+
+    expect(component.selectedMarketId).toBeNull();
+    expect(routerMock.navigate).not.toHaveBeenCalled();
   });
 
   it('creates an opportunity Trade Plan from the selected account', () => {

@@ -1,17 +1,19 @@
 import { AsyncPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, effect, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   catchError,
   exhaustMap,
   map,
+  merge,
   Observable,
   of,
   shareReplay,
   startWith,
   Subject,
   switchMap,
+  takeUntil,
   takeWhile,
   tap,
   timer,
@@ -75,7 +77,11 @@ export class ScanPanel {
   /** Emitted once when a tracked scan reaches any terminal backend status. */
   readonly scanCompleted = output<ActiveScanResponse>();
   readonly accountSelected = output<string>();
+  readonly marketSelected = output<string>();
   readonly opportunitySelected = output<OpportunityResponse>();
+  readonly embeddedAccountId = input<string | null | undefined>(undefined);
+  readonly selectableMarketIds = input<readonly string[] | null>(null);
+  readonly showAccountSelector = input(true);
   readonly openingOpportunityId = input<string | null>(null);
   readonly preparationErrors = input<Record<string, TradePreparationFailure>>({});
 
@@ -87,9 +93,11 @@ export class ScanPanel {
   catalogueAvailable = false;
 
   private readonly runSubject = new Subject<CreateActiveScanRequest>();
+  private readonly resetSubject = new Subject<void>();
   private readonly accountsRefreshSubject = new Subject<void>();
   private readonly marketsRefreshSubject = new Subject<void>();
   private marketById = new Map<string, MarketResponse>();
+  private embeddedAccountInitialized = false;
 
   readonly view$: Observable<ScanPanelView>;
   readonly busy$: Observable<boolean>;
@@ -145,8 +153,15 @@ export class ScanPanel {
       }),
     );
 
-    this.view$ = this.runSubject.pipe(
-      exhaustMap((command) => this.runSession(command, pollIntervalMs)),
+    const resetView$: Observable<ScanPanelView> = this.resetSubject.pipe(
+      map((): ScanPanelView => ({ status: 'idle' })),
+    );
+    const scanView$: Observable<ScanPanelView> = this.runSubject.pipe(
+      exhaustMap((command) =>
+        this.runSession(command, pollIntervalMs).pipe(takeUntil(this.resetSubject)),
+      ),
+    );
+    this.view$ = merge(resetView$, scanView$).pipe(
       startWith<ScanPanelView>({ status: 'idle' }),
       shareReplay({
         bufferSize: 1,
@@ -157,6 +172,24 @@ export class ScanPanel {
     this.busy$ = this.view$.pipe(
       map((view) => view.status === 'submitting' || view.status === 'running'),
     );
+
+    effect(() => {
+      const accountId = this.embeddedAccountId();
+      if (accountId === undefined) {
+        return;
+      }
+
+      if (!this.embeddedAccountInitialized) {
+        this.embeddedAccountInitialized = true;
+        this.accountId = accountId ?? '';
+        return;
+      }
+
+      if (this.accountId !== (accountId ?? '')) {
+        this.accountId = accountId ?? '';
+        this.resetForAccount();
+      }
+    });
   }
 
   reloadAccounts(): void {
@@ -239,7 +272,32 @@ export class ScanPanel {
   }
 
   selectOpportunity(opportunity: OpportunityResponse): void {
+    if (opportunity.marketId !== null && opportunity.marketId !== undefined) {
+      if (!this.canSelectMarket(opportunity.marketId)) {
+        return;
+      }
+    }
     this.opportunitySelected.emit(opportunity);
+  }
+
+  selectMarket(marketId: string): void {
+    if (!this.canSelectMarket(marketId)) {
+      return;
+    }
+    this.marketSelected.emit(marketId);
+  }
+
+  canSelectMarket(marketId: string): boolean {
+    const selectableMarketIds = this.selectableMarketIds();
+    return selectableMarketIds === null || selectableMarketIds.includes(marketId);
+  }
+
+  private resetForAccount(): void {
+    this.objective = '';
+    this.scopeMode = '';
+    this.selectedMarketIds = [];
+    this.resultFilter = 'ALL';
+    this.resetSubject.next();
   }
 
   private runSession(

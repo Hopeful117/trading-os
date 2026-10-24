@@ -327,15 +327,14 @@ dl {
   margin: 1.25rem 0 0;
 }
 
-dl div,
-.excluded-markets li {
+dl div {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
 }
 
 dt,
-.excluded-markets span {
+dt {
   color: #91a4ba;
 }
 
@@ -368,9 +367,7 @@ dd {
 }
 
 .market-search small,
-.market-list-note,
-.excluded-markets-content > p,
-.excluded-markets-content > small {
+.market-list-note {
   color: #91a4ba;
   font-size: 0.78rem;
 }
@@ -417,33 +414,6 @@ dd {
 .market-option.selected {
   border-color: #65a9e8;
   box-shadow: 0 0 0 1px #65a9e8;
-}
-
-.excluded-markets {
-  margin-top: 1.25rem;
-}
-
-.excluded-markets ul {
-  display: grid;
-  gap: 0.75rem;
-  margin: 1rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.excluded-markets-content {
-  margin-top: 1rem;
-  border-top: 1px solid #26384d;
-  padding-top: 1rem;
-}
-
-.excluded-markets-content > p {
-  margin: 0;
-}
-
-.excluded-markets-content > small {
-  display: block;
-  margin-top: 0.75rem;
 }
 
 .state-card {
@@ -517,8 +487,7 @@ dd {
   .page-header,
   .section-heading,
   .trading-actions,
-  dl div,
-  .excluded-markets li {
+  dl div {
     align-items: flex-start;
     flex-direction: column;
   }

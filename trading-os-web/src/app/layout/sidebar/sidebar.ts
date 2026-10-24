@@ -43,6 +43,7 @@ export class Sidebar {
       id: 'trading',
       label: 'Trading',
       items: [
+        { label: 'Decision Cockpit', route: '/decision-workspace', exact: true },
         { label: 'Opportunities', route: '/opportunities', exact: false },
         { label: 'Positions', route: '/positions', exact: false },
         { label: 'Trade History', route: '/analytics', exact: false },

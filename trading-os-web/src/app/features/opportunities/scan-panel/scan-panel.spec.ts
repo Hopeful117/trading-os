@@ -145,6 +145,7 @@ describe('ScanPanel', () => {
       validUntil: null,
       createdAt: '2026-08-25T10:00:00Z',
       strategyMatchId: `match-${id}`,
+      marketId: 'm1',
     };
   }
 
@@ -238,6 +239,40 @@ describe('ScanPanel', () => {
       await fixture.whenStable();
 
       expect(accountServiceMock.getAccounts).toHaveBeenCalled();
+    });
+
+    it('supports an embedded account context without a second account selector', async () => {
+      await createComponent();
+      fixture.componentRef.setInput('embeddedAccountId', 'a2');
+      fixture.componentRef.setInput('showAccountSelector', false);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.nativeElement.querySelector('[data-testid="account-select"]')).toBeNull();
+      expect(fixture.componentInstance.accountId).toBe('a2');
+    });
+
+    it('replaces the active scan view when the embedded account changes', async () => {
+      const never = new Subject<ActiveScanResponse>();
+      activeScanServiceMock.createScan.mockReturnValue(never.asObservable());
+      await createComponent();
+      fixture.componentRef.setInput('embeddedAccountId', 'a1');
+      fixture.componentRef.setInput('showAccountSelector', false);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      fixture.componentInstance.scopeMode = 'ALL_ELIGIBLE';
+      fixture.componentInstance.runScan();
+      await fixture.whenStable();
+      expect(fixture.componentInstance.accountId).toBe('a1');
+
+      fixture.componentRef.setInput('embeddedAccountId', 'a2');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.accountId).toBe('a2');
+      expect(fixture.componentInstance.view$).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('[data-testid="scan-running"]')).toBeNull();
     });
   });
 
@@ -569,6 +604,16 @@ describe('ScanPanel', () => {
   });
 
   describe('per-market results', () => {
+    it('emits the selected market for investigation', async () => {
+      await createComponent();
+      const selected: string[] = [];
+      fixture.componentInstance.marketSelected.subscribe((value) => selected.push(value));
+
+      fixture.componentInstance.selectMarket('m1');
+
+      expect(selected).toEqual(['m1']);
+    });
+
     it('emits the selected opportunity for direct plan creation', async () => {
       const first = opportunity('o1', 'BTC/EUR');
       const second = opportunity('o2', 'BTC/EUR');
@@ -590,6 +635,7 @@ describe('ScanPanel', () => {
 
       const links = fixture.nativeElement.querySelectorAll('.opportunity-chip');
       expect(links.length).toBe(2);
+      expect(fixture.nativeElement.querySelectorAll('[data-testid="focus-market"]').length).toBe(0);
       links[1].click();
       expect(selected).toEqual([second]);
     });
