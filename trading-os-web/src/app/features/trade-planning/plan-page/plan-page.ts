@@ -702,12 +702,13 @@ export class PlanPage implements OnDestroy {
   }
 
   private loadProposalView(plan: TradePlanResponse, marketId: string | null): Observable<PlanView> {
-    const projection$ = typeof this.tradePlanService.getProjection === 'function'
-      ? this.tradePlanService.getProjection(plan.id, plan.version).pipe(
-          map((projection) => ({ projection, projectionFailure: false })),
-          catchError(() => of({ projection: null, projectionFailure: true })),
-        )
-      : of({ projection: null, projectionFailure: false });
+    const projection$ =
+      typeof this.tradePlanService.getProjection === 'function'
+        ? this.tradePlanService.getProjection(plan.id, plan.version).pipe(
+            map((projection) => ({ projection, projectionFailure: false })),
+            catchError(() => of({ projection: null, projectionFailure: true })),
+          )
+        : of({ projection: null, projectionFailure: false });
     const market$ = this.marketService.findAll().pipe(
       map((markets) => {
         const market = marketId
