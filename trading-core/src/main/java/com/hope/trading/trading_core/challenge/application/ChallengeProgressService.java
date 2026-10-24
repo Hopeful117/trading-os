@@ -46,7 +46,7 @@ public class ChallengeProgressService {
         this.clock = clock;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = ChallengeNotStartedException.class)
     public ChallengeProgress get(UUID accountId, UUID ownerId) {
         Account account = accounts.findById(accountId)
                 .orElseThrow(() -> new ChallengeNotFoundException("Account does not exist"));

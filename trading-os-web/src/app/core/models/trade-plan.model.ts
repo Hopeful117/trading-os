@@ -74,3 +74,53 @@ export interface RiskDecisionResponse {
   evaluatedAt: string;
   metrics?: Record<string, number>;
 }
+
+export interface TradeScenarioProjection {
+  tradePlanId: string;
+  tradePlanVersion: number;
+  accountId: string;
+  observedAt: string | null;
+  projectedAt: string;
+  economicsBasis: 'GROSS';
+  current: TradeScenario;
+  stop: TradeScenario;
+  target: TradeScenario;
+  challenge: {
+    availability: 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'NOT_APPLICABLE';
+    reasons: string[];
+    currentValue: number | null;
+    targetValue: number | null;
+    targetRemaining: number | null;
+  };
+  provenance: {
+    accountVersion: number;
+    accountObservedAt: string | null;
+    valuationSnapshotId: string | null;
+    valuationSourceVersion: number;
+    valuationTimestamp: string | null;
+    valuationPolicyVersion: string | null;
+    challengeId: string | null;
+    riskContextEvaluatedAt: string | null;
+    challengeEvaluatedAt: string | null;
+  };
+  economics: {
+    availability: 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'NOT_APPLICABLE';
+    reasons: string[];
+    monetaryRisk: number | null;
+    monetaryReward: number | null;
+    riskReward: number | null;
+  };
+}
+
+export interface TradeScenario {
+  type: 'CURRENT' | 'STOP' | 'TARGET';
+  availability: 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'NOT_APPLICABLE';
+  reasons: string[];
+  projectedPnl: number | null;
+  projectedBalance: number | null;
+  projectedEquity: number | null;
+  dailyLossRemaining: number | null;
+  totalLossRemaining: number | null;
+  challengeValue: number | null;
+  challengeTargetRemaining: number | null;
+}

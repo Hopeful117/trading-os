@@ -6,6 +6,7 @@ import {
   EMPTY,
   expand,
   finalize,
+  forkJoin,
   map,
   merge,
   Observable,
@@ -19,7 +20,11 @@ import {
   take,
 } from 'rxjs';
 
-import { RiskDecisionResponse, TradePlanResponse } from '../../../core/models/trade-plan.model';
+import {
+  RiskDecisionResponse,
+  TradePlanResponse,
+  TradeScenarioProjection,
+} from '../../../core/models/trade-plan.model';
 import {
   ExecutionDto,
   ExecutionStatus,
@@ -62,6 +67,8 @@ export type PlanView =
   | {
       status: 'proposal';
       plan: TradePlanResponse;
+      projection?: TradeScenarioProjection | null;
+      projectionFailure?: boolean;
       market?: MarketResponse;
       candles?: OhlcEvent[];
       ticker$?: Observable<TickerEvent>;
@@ -695,7 +702,14 @@ export class PlanPage implements OnDestroy {
   }
 
   private loadProposalView(plan: TradePlanResponse, marketId: string | null): Observable<PlanView> {
-    return this.marketService.findAll().pipe(
+    const projection$ =
+      typeof this.tradePlanService.getProjection === 'function'
+        ? this.tradePlanService.getProjection(plan.id, plan.version).pipe(
+            map((projection) => ({ projection, projectionFailure: false })),
+            catchError(() => of({ projection: null, projectionFailure: true })),
+          )
+        : of({ projection: null, projectionFailure: false });
+    const market$ = this.marketService.findAll().pipe(
       map((markets) => {
         const market = marketId
           ? markets.find((candidate) => candidate.marketId === marketId)
@@ -705,11 +719,15 @@ export class PlanPage implements OnDestroy {
         if (!market) throw new Error(`Market data is unavailable for ${plan.instrument}.`);
         return market;
       }),
-      switchMap((market) =>
+    );
+    return forkJoin({ market: market$, projection: projection$ }).pipe(
+      switchMap(({ market, projection: projectionState }) =>
         this.marketService.findOhlcHistory(market.marketId, OhlcInterval.ONE_HOUR, 24).pipe(
           map((candles) => ({
             status: 'proposal' as const,
             plan,
+            projection: projectionState.projection,
+            projectionFailure: projectionState.projectionFailure,
             market,
             candles,
             ticker$: this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
