@@ -6,6 +6,7 @@ import {
   CreateTradePlanResponse,
   ManualTradePlanRequest,
   RiskDecisionResponse,
+  TradeScenarioProjection,
   TradePlanResponse,
 } from '../models/trade-plan.model';
 
@@ -65,6 +66,12 @@ export class TradePlanService {
       `${environment.gatewayUrl}v1/trade-plans/${planId}/versions/${version}/risk-evaluations`,
       { accountId },
       { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
+  }
+
+  getProjection(planId: string, version: number): Observable<TradeScenarioProjection> {
+    return this.http.get<TradeScenarioProjection>(
+      `${environment.gatewayUrl}v1/trade-plans/${planId}/versions/${version}/projection`,
     );
   }
 }

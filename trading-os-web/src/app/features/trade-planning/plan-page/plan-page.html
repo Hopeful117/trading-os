@@ -101,9 +101,59 @@
               <span class="label">Expires</span>
               <span class="value">{{ view.plan.expiresAt | date: 'MMM d, HH:mm' }}</span>
             </div>
-          </section>
+           </section>
 
-          <section class="market-context" data-testid="market-context">
+           @if (view.projection; as projection) {
+             <section class="scenario-projection" data-testid="scenario-projection">
+               <div class="market-context-header">
+                 <div>
+                   <h2>Scenario projection</h2>
+                   <p>Read-only gross projection · {{ projection.economicsBasis }}</p>
+                 </div>
+                 <span class="market-updated">Projected {{ projection.projectedAt | date: 'MMM d, HH:mm' }}</span>
+               </div>
+               <div class="facts-grid">
+                 @for (scenario of [projection.current, projection.stop, projection.target]; track scenario.type) {
+                   <div class="fact">
+                     <span class="label">{{ scenario.type }}</span>
+                     <span class="value" [class.loss]="scenario.projectedPnl !== null && scenario.projectedPnl < 0">
+                       {{ scenario.projectedPnl === null ? 'Unavailable' : (scenario.projectedPnl | number: '1.2-2') }}
+                     </span>
+                     <small>Balance {{ scenario.projectedBalance === null ? 'Unavailable' : (scenario.projectedBalance | number: '1.2-2') }}</small>
+                     <small>{{ scenario.availability }}</small>
+                   @if (scenario.reasons.length > 0) {
+                     <small>{{ scenario.reasons.join(', ') }}</small>
+                   }
+                 </div>
+                 }
+               </div>
+               <p class="empty">
+                 Risk {{ projection.economics.monetaryRisk | number: '1.2-2' }} ·
+                 Reward {{ projection.economics.monetaryReward | number: '1.2-2' }} ·
+                 R/R {{ projection.economics.riskReward === null ? 'Unavailable' : (projection.economics.riskReward | number: '1.1-1') }}
+               </p>
+               <p class="empty">
+                 Challenge: {{ projection.challenge.availability }}
+                 @if (projection.challenge.reasons.length > 0) {
+                   · {{ projection.challenge.reasons.join(', ') }}
+                 }
+                 · Account {{ projection.provenance.accountObservedAt | date: 'MMM d, HH:mm' }}
+                 · Valuation {{ projection.provenance.valuationTimestamp | date: 'MMM d, HH:mm' }}
+                 · Snapshot {{ projection.provenance.valuationSnapshotId ?? 'Unavailable' }} v{{ projection.provenance.valuationSourceVersion }}
+                 · Policy {{ projection.provenance.valuationPolicyVersion ?? 'Unavailable' }}
+                 · Risk {{ projection.provenance.riskContextEvaluatedAt | date: 'MMM d, HH:mm' }}
+                 · Challenge {{ projection.provenance.challengeEvaluatedAt | date: 'MMM d, HH:mm' }}
+                 · Challenge value {{ projection.challenge.currentValue === null ? 'Unavailable' : (projection.challenge.currentValue | number: '1.2-2') }}
+               </p>
+             </section>
+           } @else if (view.projectionFailure) {
+             <section class="scenario-projection" data-testid="scenario-projection-unavailable">
+               <h2>Scenario projection</h2>
+               <p class="empty">Projection unavailable. No financial values were inferred.</p>
+             </section>
+           }
+
+           <section class="market-context" data-testid="market-context">
             <div class="market-context-header">
               <div>
                 <h2>Market context</h2>
