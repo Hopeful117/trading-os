@@ -149,7 +149,7 @@ public class RiskPersistence {
                         RiskProfileRuleEntity.class).setParameter("id", profile.id)
                 .setParameter("version", profile.semanticVersion).getResultList().stream()
                 .map(r -> new ProfileRule(r.ruleId, r.ruleVersion, r.category, r.severity,
-                        r.priority, r.maximumRatio, r.provenance)).toList();
+                        r.priority, r.maximumRatio, r.provenance, r.breachBoundary)).toList();
         return new Profile(profile.id, profile.semanticVersion, profile.policyId,
                 profile.policyVersion, profile.authority, profile.createdAt, profile.provenance,
                 assignedAt, assignmentProvenance, rules);
@@ -391,7 +391,13 @@ public class RiskPersistence {
                           String authority, Instant createdAt, String provenance,
                           Instant assignedAt, String assignmentProvenance, List<ProfileRule> rules) { }
     public record ProfileRule(String ruleId, String ruleVersion, String category, String severity,
-                              int priority, BigDecimal maximumRatio, String provenance) { }
+                              int priority, BigDecimal maximumRatio, String provenance,
+                              String breachBoundary) {
+        public ProfileRule(String ruleId, String ruleVersion, String category, String severity,
+                           int priority, BigDecimal maximumRatio, String provenance) {
+            this(ruleId, ruleVersion, category, severity, priority, maximumRatio, provenance, "INCLUSIVE");
+        }
+    }
 
     public record ProfileKey(UUID id, String semanticVersion) implements Serializable { }
     public record ProfileRuleKey(UUID profileId, String profileSemanticVersion, String ruleId) implements Serializable { }
@@ -428,6 +434,7 @@ class RiskProfileRuleEntity {
     @Column(nullable=false) int priority;
     @Column(name="maximum_ratio", nullable=false, precision=30, scale=12) BigDecimal maximumRatio;
     @Column(nullable=false, columnDefinition="text") String provenance;
+    @Column(name="breach_boundary", nullable=false, length=16) String breachBoundary;
 }
 
 @Entity(name = "AccountRiskConfigurationEntity") @Table(name = "account_risk_configuration")

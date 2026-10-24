@@ -294,7 +294,7 @@ public class ExecutionTimeRiskRevalidationService {
                         "brokerSource", brokerSnapshot.sourcePayload())));
         long marketVersion = persistence.component(t1EvaluationId, "MARKET",
                 "market-data:" + current.sourceVersion(), current.capturedAt(), persistence.write(Map.of(
-                        "start", startValuation.sourcePayload(), "current", current.sourcePayload())));
+                         "start", startValuation.sourcePayload(), "current", current.sourcePayload())));
         long ruleVersion = persistence.component(t1EvaluationId, "RULE_SET",
                 profile.id() + ":" + profile.semanticVersion(), now, persistence.write(profile));
 

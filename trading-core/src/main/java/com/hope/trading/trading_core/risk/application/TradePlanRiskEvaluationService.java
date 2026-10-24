@@ -305,7 +305,7 @@ public class TradePlanRiskEvaluationService {
                         "brokerSource", brokerSnapshot.sourcePayload())));
         long marketVersion = persistence.component(evaluationId, "MARKET",
                 "market-data:" + current.sourceVersion(), current.capturedAt(), persistence.write(Map.of(
-                        "start", startValuation.sourcePayload(), "current", current.sourcePayload())));
+                         "start", startValuation.sourcePayload(), "current", current.sourcePayload())));
         long ruleVersion = persistence.component(evaluationId, "RULE_SET",
                 profile.id() + ":" + profile.semanticVersion(), command.requestedAt(), persistence.write(profile));
 

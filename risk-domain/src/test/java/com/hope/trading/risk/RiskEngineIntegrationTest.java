@@ -113,6 +113,22 @@ class RiskEngineIntegrationTest {
                 result.globalMetrics().dailyDrawdownRatio().value());
     }
 
+    @Test void strictDailyDrawdownKeepsExactLimitSafeAndBreachesAboveIt() {
+        var exact = new DeterministicRiskEngine("28.1", registry, clock).evaluate(
+                context(rules(strictDailyRule("0.03")), new AccountSnapshot(ACCOUNT_ID, 3, NOW,
+                        usd("48500"), usd("48500"), usd("0"), java.util.Optional.of(usd("50000")),
+                        new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0")), null));
+        var above = new DeterministicRiskEngine("28.1", registry, clock).evaluate(
+                context(rules(strictDailyRule("0.03")), new AccountSnapshot(ACCOUNT_ID, 3, NOW,
+                        usd("48499.99"), usd("48499.99"), usd("0"), java.util.Optional.of(usd("50000")),
+                        new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0")), null));
+
+        assertEquals(RiskDecision.APPROVED, exact.decision().orElseThrow());
+        assertEquals(RuleStatus.PASS, exact.ruleResults().getFirst().status());
+        assertEquals(RiskDecision.REJECTED, above.decision().orElseThrow());
+        assertEquals(RuleStatus.FAILURE, above.ruleResults().getFirst().status());
+    }
+
     @Test void totalDrawdownRetainsItsInclusiveBreachBoundary() {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500.01"),
                 usd("0"), java.util.Optional.of(usd("50000")),

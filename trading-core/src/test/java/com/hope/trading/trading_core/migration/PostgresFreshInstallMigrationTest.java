@@ -49,10 +49,11 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(35);
+        assertMigrationHistory(36);
+        assertDailyDrawdownBoundarySchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("35");
+                 String.class)).isEqualTo("36");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -89,7 +90,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(35);
+                 Integer.class)).isEqualTo(36);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -108,7 +109,8 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(35);
+        assertMigrationHistory(36);
+        assertDailyDrawdownBoundarySchema();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
         assertThat(jdbc.queryForObject(
                 "select count(*) from challenge_definition where id = ? and definition_version = '1.0.0'",
@@ -156,6 +158,21 @@ class PostgresFreshInstallMigrationTest {
         assertThat(jdbc.queryForObject(
                 "select to_regclass(current_schema() || '.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
+    }
+
+    private void assertDailyDrawdownBoundarySchema() {
+        assertThat(jdbc.queryForObject("select count(*) from information_schema.columns "
+                        + "where table_schema = current_schema() and table_name = 'risk_profile_rule' "
+                        + "and column_name = 'breach_boundary'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select column_default from information_schema.columns "
+                        + "where table_schema = current_schema() and table_name = 'risk_profile_rule' "
+                        + "and column_name = 'breach_boundary'", String.class))
+                .contains("INCLUSIVE");
+        assertThat(jdbc.queryForObject("select count(*) from pg_constraint c "
+                        + "join pg_class t on t.oid = c.conrelid "
+                        + "where t.relnamespace = current_schema()::regnamespace "
+                        + "and t.relname = 'risk_profile_rule' "
+                        + "and c.conname = 'risk_profile_rule_breach_boundary_check'", Integer.class)).isEqualTo(1);
     }
 
     private void assertMigrationHistory(int expectedVersion) {
