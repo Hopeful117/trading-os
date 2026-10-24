@@ -41,13 +41,16 @@ class RiskProfileValidatorTest {
     }
 
     @Test
-    void strictBoundaryIsAcceptedOnlyForDailyDrawdown() {
+    void strictBoundaryIsAcceptedForDrawdownRules() {
         var effective = validator.validate(profile(List.of(
                 rule("MAX_POSITION_RISK", "POSITION", "0.01"),
                 rule("MAX_EXPOSURE", "PORTFOLIO", "0.03"),
-                rule("DAILY_DRAWDOWN", "ACCOUNT", "0.03", "STRICT"))), false);
+                rule("DAILY_DRAWDOWN", "ACCOUNT", "0.03", "STRICT"),
+                rule("MAX_TOTAL_DRAWDOWN", "ACCOUNT", "0.10", "STRICT"))), false);
 
         assertThat(effective.rules()).filteredOn(rule -> "DAILY_DRAWDOWN".equals(rule.ruleId()))
+                .singleElement().satisfies(rule -> assertThat(rule.parameters().get("breachBoundary")).isEqualTo("STRICT"));
+        assertThat(effective.rules()).filteredOn(rule -> "MAX_TOTAL_DRAWDOWN".equals(rule.ruleId()))
                 .singleElement().satisfies(rule -> assertThat(rule.parameters().get("breachBoundary")).isEqualTo("STRICT"));
         assertThatThrownBy(() -> validator.validate(profile(List.of(
                 rule("MAX_POSITION_RISK", "POSITION", "0.01", "STRICT"),

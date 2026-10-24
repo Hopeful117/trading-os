@@ -49,11 +49,11 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(36);
+        assertMigrationHistory(38);
         assertDailyDrawdownBoundarySchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("36");
+                 String.class)).isEqualTo("38");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -90,7 +90,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(36);
+                 Integer.class)).isEqualTo(38);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -109,7 +109,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(36);
+        assertMigrationHistory(38);
         assertDailyDrawdownBoundarySchema();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
         assertThat(jdbc.queryForObject(

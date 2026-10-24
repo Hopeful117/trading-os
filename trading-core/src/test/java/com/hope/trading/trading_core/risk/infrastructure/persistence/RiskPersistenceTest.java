@@ -73,6 +73,8 @@ class RiskPersistenceTest {
                 Instant.now(), "COMPLETED", "APPROVED", null, java.util.Map.of("result", "official"));
         persistence.accountMonitoringEvaluation(UUID.randomUUID(), user, "monitoring-key", account,
                 Instant.now(), "COMPLETED", "BREACHED", null, java.util.Map.of("result", "replay"));
+        persistence.accountMonitoringEvaluation(UUID.randomUUID(), user, "challenge:challenge-1:account:0:evaluation:2",
+                account, Instant.now(), "COMPLETED", "APPROVED", null, java.util.Map.of("result", "fresh"));
 
         RiskPersistence.StoredEvaluation stored = persistence.evaluationById(evaluation).orElseThrow();
 
@@ -83,6 +85,8 @@ class RiskPersistenceTest {
         assertThat(persistence.evaluation(user, "monitoring-key")).isEmpty();
         assertThat(jdbc.queryForObject("select count(*) from risk_evaluation where actor_id=? and idempotency_key=?",
                 Integer.class, user, "monitoring-key")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from risk_evaluation where actor_id=? and idempotency_key like ?",
+                Integer.class, user, "challenge:challenge-1:account:%:evaluation:%")).isEqualTo(1);
     }
 
     @Test

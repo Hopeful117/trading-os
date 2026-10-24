@@ -81,10 +81,11 @@ class AccountRiskMonitoringServiceTest {
                 persistence, new RiskProfileValidator(), Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.evaluate(challenge, account, NOW);
+        service.evaluate(challenge, account, NOW.plusSeconds(5));
 
         assertThat(captured.get()).isEqualByComparingTo("5100");
-        verify(persistence).accountMonitoringEvaluation(any(), eq(owner.getUserId()), any(), eq(accountId),
-                eq(NOW), any(), any(), anyLong(), any());
+        verify(persistence, org.mockito.Mockito.times(2)).accountMonitoringEvaluation(any(), eq(owner.getUserId()), any(), eq(accountId),
+                any(), any(), any(), anyLong(), any(), eq(new BigDecimal("5100")), any());
     }
 
     private RiskPersistence.Profile profile(UUID id) {

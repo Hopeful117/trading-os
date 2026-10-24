@@ -55,6 +55,14 @@ public class StartChallengeService {
         if (riskPersistence.profile(definition.riskPolicyId(), definition.riskPolicyVersion()).isEmpty()) {
             throw new ChallengeConfigurationException("Challenge Risk Policy does not exist");
         }
+        if (definition.riskTimeZone() != null) {
+            RiskPersistence.AccountConfiguration configuration = riskPersistence.configuration(account.getAccountId())
+                    .orElseThrow(() -> new ChallengeConfigurationException("Challenge Risk-day configuration is missing"));
+            if (!definition.riskTimeZone().equals(configuration.riskTimeZone())
+                    || !definition.riskDayResetTime().equals(java.time.LocalTime.parse(configuration.riskDayResetTime()))) {
+                throw new ChallengeValidationException("Account Risk-day configuration does not match Challenge definition");
+            }
+        }
 
         BigDecimal accountStartingBalance = account.getStartingBalance();
         if (accountStartingBalance == null || accountStartingBalance.signum() <= 0) {
