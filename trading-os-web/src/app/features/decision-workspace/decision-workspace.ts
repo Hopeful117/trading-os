@@ -94,6 +94,9 @@ export type DecisionWorkspaceTrendContextView =
 export type StreamView<T> =
   { status: 'waiting' } | { status: 'live'; data: T } | { status: 'error' };
 export type MarketFreshness = 'LIVE' | 'RECENT' | 'STALE' | 'UNAVAILABLE';
+export type OpportunityValidity =
+  'VALID' | 'NOT_YET_VALID' | 'EXPIRED' | 'NON_ACTIONABLE' | 'UNKNOWN';
+export type OpportunityDecision = 'NO_TRADE' | null;
 
 export type HistoryView<T> =
   { status: 'loading'; data: T } | { status: 'loaded'; data: T } | { status: 'error'; data: T };
@@ -145,8 +148,10 @@ export class DecisionWorkspace {
   );
   private readonly opportunitySubject = new BehaviorSubject<OpportunityResponse | null>(null);
   private readonly opportunityRequestCancelSubject = new Subject<void>();
+  private readonly opportunityPreparationCancelSubject = new Subject<void>();
   private pendingOpportunityId: string | null = null;
   private pendingOpportunityMarketId: string | null = null;
+  private opportunityPreparationKey: string | null = null;
 
   private activeOhlcSubscription: ActiveSubscription | null = null;
   private activeOrderBookSubscription: ActiveSubscription | null = null;
@@ -159,10 +164,12 @@ export class DecisionWorkspace {
   marketSearch = '';
   showTrendContextDetails = false;
   opportunity: OpportunityResponse | null = null;
+  opportunityDecision: OpportunityDecision = null;
   opportunityPreparing = false;
+  opportunityPreparationError = false;
   opportunityError = false;
   private opportunityRequestKey: string | null = null;
-  private opportunityRequestInFlight = false;
+  opportunityRequestInFlight = false;
 
   readonly accounts$ = this.accountsRefreshSubject.pipe(
     startWith(undefined),
@@ -426,8 +433,10 @@ export class DecisionWorkspace {
         opportunityId !== this.opportunity?.id || marketContextChanged;
 
       if (opportunityId === null || marketContextChanged) {
+        this.cancelOpportunityPreparation();
         this.opportunityRequestCancelSubject.next();
         this.opportunity = null;
+        this.opportunityDecision = null;
         this.opportunitySubject.next(null);
         this.opportunityError = marketContextChanged;
         this.opportunityRequestKey = null;
@@ -436,8 +445,10 @@ export class DecisionWorkspace {
 
       if (opportunityId !== null && opportunityContextChanged && !marketContextChanged) {
         if (this.opportunityRequestKey !== opportunityId) {
+          this.cancelOpportunityPreparation();
           this.opportunityRequestCancelSubject.next();
           this.opportunity = null;
+          this.opportunityDecision = null;
           this.opportunitySubject.next(null);
           this.opportunityError = false;
           this.opportunityRequestKey = opportunityId;
@@ -486,10 +497,12 @@ export class DecisionWorkspace {
       }
 
       if (accountId !== this.selectedAccountId) {
+        this.cancelOpportunityPreparation();
         const marketToRestore = this.selectedAccountId === null ? marketId : null;
         this.selectedAccountId = accountId;
         this.selectedMarketId = null;
         this.manualTradeOpen = false;
+        this.opportunityDecision = null;
         this.showTrendContextDetails = false;
         this.dashboardAccountSubject.next(accountId);
         this.clearActiveSubscriptions().subscribe(() => {
@@ -504,8 +517,10 @@ export class DecisionWorkspace {
       }
 
       if (marketId !== this.selectedMarketId) {
+        this.cancelOpportunityPreparation();
         this.selectedMarketId = marketId;
         this.manualTradeOpen = false;
+        this.opportunityDecision = null;
         this.showTrendContextDetails = false;
         this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
       }
@@ -517,12 +532,14 @@ export class DecisionWorkspace {
   }
 
   selectAccount(accountId: string): void {
+    this.cancelOpportunityPreparation();
     const preserveContext = this.selectedAccountId === null || this.selectedAccountId === accountId;
     const marketIdToRestore = preserveContext ? this.selectedMarketId : null;
     const opportunityIdToRestore = this.opportunity?.id ?? this.pendingOpportunityId;
     this.selectedAccountId = accountId || null;
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
+    this.opportunityDecision = null;
     this.marketSearch = '';
     this.showTrendContextDetails = false;
     this.dashboardAccountSubject.next(accountId || null);
@@ -545,9 +562,11 @@ export class DecisionWorkspace {
   }
 
   refreshAccounts(): void {
+    this.cancelOpportunityPreparation();
     this.selectedAccountId = null;
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
+    this.opportunityDecision = null;
     this.marketSearch = '';
     this.showTrendContextDetails = false;
     this.opportunityRequestKey = null;
@@ -596,8 +615,10 @@ export class DecisionWorkspace {
   }
 
   private activateMarket(marketId: string): void {
+    this.cancelOpportunityPreparation();
     this.selectedMarketId = marketId;
     this.manualTradeOpen = false;
+    this.opportunityDecision = null;
     this.showTrendContextDetails = false;
     this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
   }
@@ -632,19 +653,34 @@ export class DecisionWorkspace {
   }
 
   prepareFromOpportunity(): void {
-    if (this.opportunity === null || this.selectedAccountId === null) {
+    if (
+      this.opportunity === null ||
+      this.selectedAccountId === null ||
+      !this.canPrepareOpportunity()
+    ) {
       return;
     }
 
+    this.opportunityDecision = null;
     this.opportunityPreparing = true;
+    this.opportunityPreparationError = false;
+    const preparationKey = `${this.opportunity.id}:${this.selectedAccountId}:${this.selectedMarketId}`;
+    this.opportunityPreparationKey = preparationKey;
     this.tradePlanService
       .createFromOpportunity(
         this.opportunity.id,
         this.selectedAccountId,
         `${this.opportunity.id}:${this.selectedAccountId}`,
       )
+      .pipe(takeUntil(this.opportunityPreparationCancelSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (created) => {
+          if (this.opportunityPreparationKey !== preparationKey) {
+            return;
+          }
+
+          this.opportunityPreparing = false;
           void this.router.navigate([
             '/trade-planning',
             'plans',
@@ -653,8 +689,65 @@ export class DecisionWorkspace {
             created.tradePlanVersion,
           ]);
         },
-        error: () => (this.opportunityPreparing = false),
+        error: () => {
+          if (this.opportunityPreparationKey === preparationKey) {
+            this.opportunityPreparing = false;
+            this.opportunityPreparationError = true;
+          }
+        },
       });
+  }
+
+  chooseNoTrade(): void {
+    if (this.opportunity === null) {
+      return;
+    }
+
+    this.opportunityDecision = 'NO_TRADE';
+  }
+
+  opportunityValidity(): OpportunityValidity {
+    if (this.opportunity === null) {
+      return 'UNKNOWN';
+    }
+
+    if (this.opportunity.status === 'EXPIRED') {
+      return 'EXPIRED';
+    }
+
+    if (this.opportunity.status !== 'ACTIVE') {
+      return 'NON_ACTIONABLE';
+    }
+
+    const now = Date.now();
+    const validFrom = Date.parse(this.opportunity.validFrom);
+    const validUntil =
+      this.opportunity.validUntil === null ? null : Date.parse(this.opportunity.validUntil);
+
+    if (!Number.isFinite(validFrom) || (validUntil !== null && !Number.isFinite(validUntil))) {
+      return 'UNKNOWN';
+    }
+
+    if (now < validFrom) {
+      return 'NOT_YET_VALID';
+    }
+
+    if (validUntil !== null && now >= validUntil) {
+      return 'EXPIRED';
+    }
+
+    return 'VALID';
+  }
+
+  canPrepareOpportunity(): boolean {
+    return this.opportunity?.status === 'ACTIVE' && this.opportunityValidity() === 'VALID';
+  }
+
+  private cancelOpportunityPreparation(): void {
+    this.opportunityPreparationCancelSubject.next();
+    this.opportunityPreparationKey = null;
+    this.opportunityPreparing = false;
+    this.opportunityPreparationError = false;
   }
 
   closeManualTrade(): void {

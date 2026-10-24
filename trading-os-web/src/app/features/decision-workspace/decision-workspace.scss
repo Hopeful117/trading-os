@@ -454,6 +454,37 @@ dd {
   padding: 1.25rem;
 }
 
+.opportunity-decision {
+  display: grid;
+  gap: 1rem;
+}
+
+.opportunity-validity--warning {
+  border-color: #a8753e;
+  color: #f2d6a0;
+}
+
+.opportunity-stages {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.opportunity-triggers {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.opportunity-triggers strong {
+  color: #e6eef8;
+}
+
+.active-decision {
+  border-color: #d49a43;
+  background: #2b2417;
+  color: #f2d6a0;
+}
+
 .trading-actions h3 {
   margin: 0.25rem 0;
 }
@@ -563,11 +594,16 @@ dd {
     grid-template-columns: 1fr;
   }
   .trend-context-summary,
+  .opportunity-stages,
   .order-flow-panel,
   .constraints-panel .detail-grid {
     grid-template-columns: 1fr;
   }
   .chart-panel app-market-chart {
     height: 18rem;
+  }
+
+  .opportunity-actions button {
+    flex: 1;
   }
 }

@@ -866,6 +866,252 @@
                       }
 
                       <section class="decision-action-region" aria-label="Decision actions">
+                        @if (opportunityRequestInFlight) {
+                          <section class="market-section" data-testid="opportunity-loading">
+                            <span class="eyebrow">Evidence-led decision</span>
+                            <h3>Opportunity review</h3>
+                            <p class="section-placeholder">Loading Opportunity evidence...</p>
+                          </section>
+                        } @else if (opportunity; as activeOpportunity) {
+                          <section
+                            class="market-section opportunity-decision"
+                            data-testid="opportunity-decision"
+                            aria-labelledby="opportunity-decision-title"
+                          >
+                            <div class="section-heading">
+                              <div>
+                                <span class="eyebrow">Evidence-led decision</span>
+                                <h3 id="opportunity-decision-title">Opportunity review</h3>
+                              </div>
+                              <span
+                                class="stream-badge opportunity-validity"
+                                [class.opportunity-validity--warning]="
+                                  opportunityValidity() !== 'VALID'
+                                "
+                              >
+                                {{ opportunityValidity() }}
+                              </span>
+                            </div>
+
+                            <div class="detail-grid opportunity-stages">
+                              <article class="detail-card opportunity-stage">
+                                <span class="eyebrow">Understand</span>
+                                <strong
+                                  >{{ activeOpportunity.direction }} ·
+                                  {{ activeOpportunity.scenario }}</strong
+                                >
+                                <span>{{ activeOpportunity.explanation }}</span>
+                                <div class="trend-context-meta opportunity-facts">
+                                  <span>Type {{ activeOpportunity.type }}</span>
+                                  <span>Timeframe {{ activeOpportunity.timeframe }}</span>
+                                  <span>Status {{ activeOpportunity.status }}</span>
+                                  <span>Score {{ activeOpportunity.score }}</span>
+                                </div>
+                              </article>
+
+                              <article class="detail-card opportunity-stage">
+                                <span class="eyebrow">Challenge</span>
+                                @if (activeOpportunity.setup; as setup) {
+                                  <strong>{{ setup.description }}</strong>
+                                  @if (setup.triggers.length > 0) {
+                                    <ul class="opportunity-triggers">
+                                      @for (trigger of setup.triggers; track trigger.condition) {
+                                        <li>
+                                          <strong>{{ trigger.condition }}</strong>
+                                          @if (trigger.observedValue) {
+                                            · observed {{ trigger.observedValue }}
+                                          } @else {
+                                            · observation unavailable
+                                          }
+                                        </li>
+                                      }
+                                    </ul>
+                                  } @else {
+                                    <span>No setup trigger was provided.</span>
+                                  }
+                                } @else {
+                                  <span>No setup evidence was provided.</span>
+                                }
+                                <span>
+                                  Valid from {{ activeOpportunity.validFrom | date: 'medium' }}
+                                  @if (activeOpportunity.validUntil) {
+                                    · until {{ activeOpportunity.validUntil | date: 'medium' }}
+                                  }
+                                </span>
+
+                                @if (trendContext$ | async; as trendContext) {
+                                  @switch (trendContext.status) {
+                                    @case ('loading') {
+                                      <span data-testid="opportunity-challenge-loading"
+                                        >Trend Context is loading.</span
+                                      >
+                                    }
+                                    @case ('unavailable') {
+                                      <span
+                                        class="error"
+                                        data-testid="opportunity-challenge-unavailable"
+                                        >Trend Context unavailable; this is not a negative trading
+                                        conclusion.</span
+                                      >
+                                    }
+                                    @case ('loaded') {
+                                      <div
+                                        class="trend-context-meta opportunity-challenge-context"
+                                        data-testid="opportunity-challenge-context"
+                                      >
+                                        <strong
+                                          >Trend Context
+                                          {{ trendContext.readModel.operationalStatus }} ·
+                                          {{ trendContext.readModel.assessmentValidity }}</strong
+                                        >
+                                        @if (trendContext.readModel.assessment; as assessment) {
+                                          <span
+                                            >Assessed
+                                            {{ assessment.assessmentAt | date: 'medium' }} · cut-off
+                                            {{ assessment.cutOffAt | date: 'medium' }}</span
+                                          >
+                                          @if (assessment.findings.length > 0) {
+                                            <ul>
+                                              @for (
+                                                finding of assessment.findings;
+                                                track finding.code + finding.role
+                                              ) {
+                                                <li>
+                                                  <strong>{{ finding.code }}</strong>
+                                                  {{ finding.message }}
+                                                </li>
+                                              }
+                                            </ul>
+                                          }
+                                          @if (assessment.contradictions.length > 0) {
+                                            <ul>
+                                              @for (
+                                                contradiction of assessment.contradictions;
+                                                track contradiction.code
+                                              ) {
+                                                <li>
+                                                  <strong
+                                                    >Contradiction {{ contradiction.code }}</strong
+                                                  >
+                                                  {{ contradiction.message }}
+                                                </li>
+                                              }
+                                            </ul>
+                                          }
+                                          @if (assessment.invalidations.length > 0) {
+                                            <ul>
+                                              @for (
+                                                invalidation of assessment.invalidations;
+                                                track invalidation.ruleId + invalidation.level
+                                              ) {
+                                                <li>
+                                                  <strong
+                                                    >Invalidation {{ invalidation.ruleId }}</strong
+                                                  >
+                                                  {{ invalidation.thesisDirection }} · level
+                                                  {{ valueOrUnavailable(invalidation.level) }}
+                                                </li>
+                                              }
+                                            </ul>
+                                          }
+                                        }
+                                        @if (trendContext.readModel.diagnostics.length > 0) {
+                                          <ul>
+                                            @for (
+                                              diagnostic of trendContext.readModel.diagnostics;
+                                              track diagnostic
+                                            ) {
+                                              <li><strong>Diagnostic</strong> {{ diagnostic }}</li>
+                                            }
+                                          </ul>
+                                        }
+                                        @if (trendContext.readModel.validUntil) {
+                                          <span
+                                            >Trend Context valid until
+                                            {{
+                                              trendContext.readModel.validUntil | date: 'medium'
+                                            }}</span
+                                          >
+                                        }
+                                      </div>
+                                    }
+                                  }
+                                }
+                              </article>
+
+                              <article class="detail-card opportunity-stage">
+                                <span class="eyebrow">Decide</span>
+                                <strong>Choose the next human-controlled step</strong>
+                                <span
+                                  >No trade stays local to this workspace. Prepare trade opens the
+                                  existing TradePlan validation flow.</span
+                                >
+                                @if (opportunityDecision === 'NO_TRADE') {
+                                  <div
+                                    class="market-notice opportunity-no-trade"
+                                    data-testid="opportunity-no-trade"
+                                  >
+                                    <strong>NO TRADE</strong>
+                                    <span
+                                      >Standing aside is recorded for this current workspace
+                                      only.</span
+                                    >
+                                  </div>
+                                }
+                                @if (opportunityPreparationError) {
+                                  <p
+                                    class="state-message error"
+                                    data-testid="opportunity-preparation-error"
+                                  >
+                                    Trade Plan preparation is currently unavailable. Review the
+                                    evidence and try again later.
+                                  </p>
+                                }
+
+                                <div class="trading-actions opportunity-actions">
+                                  <button
+                                    type="button"
+                                    class="secondary-button"
+                                    [class.active-decision]="opportunityDecision === 'NO_TRADE'"
+                                    (click)="chooseNoTrade()"
+                                    data-testid="no-trade"
+                                  >
+                                    No trade
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class="primary-button"
+                                    [disabled]="opportunityPreparing || !canPrepareOpportunity()"
+                                    (click)="prepareFromOpportunity()"
+                                    data-testid="prepare-from-opportunity"
+                                  >
+                                    {{ opportunityPreparing ? 'Preparing...' : 'Prepare trade' }}
+                                  </button>
+                                </div>
+                              </article>
+                            </div>
+
+                            <div class="trend-context-meta opportunity-provenance">
+                              <span>Origin {{ activeOpportunity.origin }}</span>
+                              <span
+                                >Evaluated
+                                {{ activeOpportunity.evaluatedAt | date: 'medium' }}</span
+                              >
+                              <span
+                                >Observations {{ activeOpportunity.observationIds.length }}</span
+                              >
+                              @if (activeOpportunity.analysisExecutionId) {
+                                <span>Analysis {{ activeOpportunity.analysisExecutionId }}</span>
+                              }
+                            </div>
+                          </section>
+                        } @else if (opportunityError) {
+                          <p class="state-message error" data-testid="opportunity-error">
+                            Opportunity context is unavailable. You can still prepare a manual
+                            proposal.
+                          </p>
+                        }
+
                         @if (manualTradeOpen) {
                           <app-manual-trade-ticket
                             [account]="view.context.account"
@@ -898,34 +1144,6 @@
                             >
                               Prepare manual trade
                             </button>
-                            @if (opportunity; as activeOpportunity) {
-                              <div class="opportunity-action" data-testid="opportunity-context">
-                                <span class="eyebrow">Opportunity context</span>
-                                <strong
-                                  >{{ activeOpportunity.direction }} ·
-                                  {{ activeOpportunity.scenario }}</strong
-                                >
-                                <span>{{ activeOpportunity.explanation }}</span>
-                                <button
-                                  type="button"
-                                  class="secondary-button"
-                                  [disabled]="opportunityPreparing"
-                                  (click)="prepareFromOpportunity()"
-                                  data-testid="prepare-from-opportunity"
-                                >
-                                  {{
-                                    opportunityPreparing
-                                      ? 'Preparing...'
-                                      : 'Prepare from opportunity'
-                                  }}
-                                </button>
-                              </div>
-                            } @else if (opportunityError) {
-                              <p class="state-message error" data-testid="opportunity-error">
-                                Opportunity context is unavailable. You can still prepare a manual
-                                proposal.
-                              </p>
-                            }
                           </section>
                         }
                       </section>

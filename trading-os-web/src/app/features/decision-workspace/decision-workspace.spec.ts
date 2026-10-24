@@ -10,7 +10,11 @@ import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { AccountService } from '../../core/services/account.service';
 import { DashboardService } from '../../core/services/dashboard.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
-import { TrendAttention, TrendContextReadModel } from '../../core/models/trend-context.model';
+import {
+  TrendAttention,
+  TrendContextAssessment,
+  TrendContextReadModel,
+} from '../../core/models/trend-context.model';
 import { TrendContextService } from '../../core/services/trend-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketService } from '../../core/services/market.service';
@@ -446,7 +450,12 @@ describe('DecisionWorkspace', () => {
 
   it('creates an opportunity Trade Plan from the selected account', () => {
     component.selectedAccountId = account.accountId;
-    component.opportunity = { id: 'opportunity-1' } as OpportunityResponse;
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+    } as OpportunityResponse;
 
     component.prepareFromOpportunity();
 
@@ -462,6 +471,287 @@ describe('DecisionWorkspace', () => {
       'versions',
       1,
     ]);
+  });
+
+  it('renders a preparation error when Trade Plan creation fails', () => {
+    tradePlanServiceMock.createFromOpportunity.mockReturnValue(
+      throwError(() => new Error('service unavailable')),
+    );
+    component.selectAccount(account.accountId);
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+    } as OpportunityResponse;
+
+    component.prepareFromOpportunity();
+    fixture.detectChanges();
+
+    expect(component.opportunityPreparing).toBe(false);
+    expect(component.opportunityPreparationError).toBe(true);
+  });
+
+  it('ignores a late Trade Plan response after the market context changes', () => {
+    const response = new Subject<{ tradePlanId: string; tradePlanVersion: number }>();
+    tradePlanServiceMock.createFromOpportunity.mockReturnValue(response.asObservable());
+    component.selectedAccountId = account.accountId;
+    component.selectedMarketId = 'market-1';
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+    } as OpportunityResponse;
+
+    component.prepareFromOpportunity();
+    component.selectMarket('market-3', context);
+    response.next({ tradePlanId: 'plan-1', tradePlanVersion: 1 });
+
+    expect(component.opportunityPreparing).toBe(false);
+    expect(routerMock.navigate).not.toHaveBeenCalledWith([
+      '/trade-planning',
+      'plans',
+      'plan-1',
+      'versions',
+      1,
+    ]);
+  });
+
+  it('cancels preparation when the account context changes', () => {
+    const response = new Subject<{ tradePlanId: string; tradePlanVersion: number }>();
+    tradePlanServiceMock.createFromOpportunity.mockReturnValue(response.asObservable());
+    component.selectedAccountId = account.accountId;
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+    } as OpportunityResponse;
+
+    component.prepareFromOpportunity();
+    component.selectAccount('account-2');
+    response.next({ tradePlanId: 'plan-1', tradePlanVersion: 1 });
+
+    expect(component.opportunityPreparing).toBe(false);
+    expect(routerMock.navigate).not.toHaveBeenCalledWith(
+      expect.arrayContaining(['/trade-planning', 'plans']),
+    );
+  });
+
+  it('cancels preparation when the Opportunity route context changes', () => {
+    const response = new Subject<{ tradePlanId: string; tradePlanVersion: number }>();
+    tradePlanServiceMock.createFromOpportunity.mockReturnValue(response.asObservable());
+    component.selectedAccountId = account.accountId;
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+    } as OpportunityResponse;
+
+    component.prepareFromOpportunity();
+    opportunityServiceMock.findById.mockReturnValue(NEVER);
+    routeQueryParamMap.next(convertToParamMap({ opportunityId: 'opportunity-2' }));
+    response.next({ tradePlanId: 'plan-1', tradePlanVersion: 1 });
+
+    expect(component.opportunityPreparing).toBe(false);
+    expect(routerMock.navigate).not.toHaveBeenCalledWith(
+      expect.arrayContaining(['/trade-planning', 'plans']),
+    );
+  });
+
+  it('cancels preparation when the workspace is destroyed', () => {
+    const response = new Subject<{ tradePlanId: string; tradePlanVersion: number }>();
+    tradePlanServiceMock.createFromOpportunity.mockReturnValue(response.asObservable());
+    component.selectedAccountId = account.accountId;
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+    } as OpportunityResponse;
+
+    component.prepareFromOpportunity();
+    fixture.destroy();
+    response.next({ tradePlanId: 'plan-1', tradePlanVersion: 1 });
+
+    expect(routerMock.navigate).not.toHaveBeenCalledWith(
+      expect.arrayContaining(['/trade-planning', 'plans']),
+    );
+  });
+
+  it('records NO TRADE only in the current workspace', () => {
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+    } as OpportunityResponse;
+
+    component.chooseNoTrade();
+
+    expect(component.opportunityDecision).toBe('NO_TRADE');
+    expect(tradePlanServiceMock.createFromOpportunity).not.toHaveBeenCalled();
+    expect(routerMock.navigate).not.toHaveBeenCalled();
+  });
+
+  it('renders the evidence-led Opportunity decision flow', async () => {
+    const assessment = {
+      ...minimalAssessment('market-1', 'WATCH'),
+      findings: [
+        {
+          code: 'SUPPORT-1',
+          ruleId: 'rule-1',
+          role: 'BIAS',
+          message: 'Bias supports the setup.',
+          evidence: [],
+        },
+      ],
+      contradictions: [
+        { code: 'CONFLICT-1', message: 'Trigger conflicts with bias.', evidence: [] },
+      ],
+      invalidations: [
+        {
+          ruleId: 'INVALIDATION-1',
+          thesisDirection: 'UP',
+          protectedLevel: null,
+          candle: null,
+          level: 98,
+          evidence: null,
+        },
+      ],
+    } as TrendContextAssessment;
+    trendContextServiceMock.findTrendContext.mockReturnValue(
+      of({
+        ...unavailableTrendContext,
+        operationalStatus: 'AVAILABLE',
+        assessmentValidity: 'VALID',
+        validUntil: new Date(Date.now() + 60_000).toISOString(),
+        diagnostics: ['Feed arrived late.'],
+        assessment,
+      }),
+    );
+    component.opportunity = {
+      id: 'opportunity-1',
+      version: 1,
+      status: 'ACTIVE',
+      instrument: 'BTC/USD',
+      direction: 'LONG',
+      scenario: 'Breakout continuation',
+      timeframe: '1h',
+      type: 'INTRADAY',
+      origin: 'ACTIVE_SCAN',
+      score: 0.82,
+      explanation: 'Price holds above the protected level.',
+      observationIds: ['observation-1'],
+      aiAnalysisIds: [],
+      evaluatedAt: new Date().toISOString(),
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      strategyMatchId: 'strategy-1',
+      marketId: 'market-1',
+      setup: {
+        referencePrice: 100,
+        referencePriceAt: new Date().toISOString(),
+        description: 'Wait for continuation above the level.',
+        triggers: [{ condition: 'Close above 100', observedValue: '101' }],
+        detectedAt: new Date().toISOString(),
+      },
+    };
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('[data-testid="opportunity-decision"]')).toBeTruthy();
+    expect(element.textContent).toContain('Understand');
+    expect(element.textContent).toContain('Challenge');
+    expect(element.textContent).toContain('Breakout continuation');
+    expect(element.textContent).toContain('Close above 100');
+    expect(element.textContent).toContain('Bias supports the setup.');
+    expect(element.textContent).toContain('Trigger conflicts with bias.');
+    expect(element.textContent).toContain('INVALIDATION-1');
+    expect(element.textContent).toContain('Feed arrived late.');
+
+    (element.querySelector('[data-testid="no-trade"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(element.querySelector('[data-testid="opportunity-no-trade"]')).toBeTruthy();
+  });
+
+  it('clears NO TRADE when the selected market changes', () => {
+    component.opportunity = { id: 'opportunity-1' } as OpportunityResponse;
+    component.opportunityDecision = 'NO_TRADE';
+
+    component.selectMarket('market-1', context);
+
+    expect(component.opportunityDecision).toBeNull();
+  });
+
+  it.each([
+    { status: 'EXPIRED' as const, validUntil: null, expected: 'EXPIRED' as const },
+    { status: 'DETECTED' as const, validUntil: null, expected: 'NON_ACTIONABLE' as const },
+    { status: 'CONSUMED' as const, validUntil: null, expected: 'NON_ACTIONABLE' as const },
+    {
+      status: 'ACTIVE' as const,
+      validFrom: new Date(Date.now() + 60_000).toISOString(),
+      validUntil: null,
+      expected: 'NOT_YET_VALID' as const,
+    },
+    {
+      status: 'ACTIVE' as const,
+      validFrom: 'not-a-timestamp',
+      validUntil: null,
+      expected: 'UNKNOWN' as const,
+    },
+  ])('does not prepare an $expected Opportunity', ({ status, validFrom, validUntil, expected }) => {
+    component.selectedAccountId = account.accountId;
+    component.opportunity = {
+      id: 'opportunity-1',
+      status,
+      validFrom: validFrom ?? new Date(Date.now() - 60_000).toISOString(),
+      validUntil: validUntil ?? null,
+    } as OpportunityResponse;
+
+    expect(component.opportunityValidity()).toBe(expected);
+    component.prepareFromOpportunity();
+
+    expect(tradePlanServiceMock.createFromOpportunity).not.toHaveBeenCalled();
+  });
+
+  it('treats an Opportunity at its validity boundary as expired', () => {
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now()).toISOString(),
+    } as OpportunityResponse;
+
+    expect(component.opportunityValidity()).toBe('EXPIRED');
+    expect(component.canPrepareOpportunity()).toBe(false);
+  });
+
+  it('renders Opportunity loading state while the request is in flight', () => {
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    (component as unknown as { opportunityRequestInFlight: boolean }).opportunityRequestInFlight =
+      true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="opportunity-loading"]')).toBeTruthy();
+  });
+
+  it('renders an unavailable Opportunity state without exposing decision actions', () => {
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    (component as unknown as { opportunityError: boolean }).opportunityError = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="opportunity-error"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="prepare-from-opportunity"]'),
+    ).toBeNull();
   });
 
   it('loads only the selected eligible market', () => {
