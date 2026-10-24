@@ -62,6 +62,7 @@ class GatewayExecutionRouteTest {
                 "accounts",
                 "trades",
                 "broker-credential-commands",
+                "ctrader-authorization",
                 "broker-accounts",
                 "trade-plan-risk-evaluations",
                 "markets",
@@ -69,6 +70,23 @@ class GatewayExecutionRouteTest {
                 "executions",
                 "risk-profile-catalog"
         );
+    }
+
+    @Test
+    void ctraderAuthorizationRoutesToBrokerServiceBeforeBroadBrokerAccountRoute() {
+        Route route = route("ctrader-authorization");
+
+        assertThat(route).isNotNull();
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://broker-service"));
+        assertThat(matches(route, HttpMethod.POST,
+                "/api/v1/broker-accounts/4075e131-45ee-4ff5-85b7-052ac5ede330/ctrader/authorization"))
+                .as("cTrader authorization initiation must route to Broker Service").isTrue();
+        assertThat(matches(route, HttpMethod.GET,
+                "/api/v1/broker-accounts/ctrader/authorization/callback"))
+                .as("cTrader authorization callback must route to Broker Service").isTrue();
+        assertThat(matches(route, HttpMethod.POST,
+                "/api/v1/broker-accounts/4075e131-45ee-4ff5-85b7-052ac5ede330/ctrader/authorization/11111111-1111-1111-1111-111111111111/binding"))
+                .as("cTrader binding must route to Broker Service").isTrue();
     }
 
     @Test

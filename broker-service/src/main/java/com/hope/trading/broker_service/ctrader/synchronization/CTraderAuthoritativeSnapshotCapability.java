@@ -88,7 +88,8 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                 observation.equity(), observation.usedMargin(), observation.freeMargin());
         List<PositionSnapshot> positions = observation.positions().stream()
                 .map(position -> new PositionSnapshot(position.instrument(), position.signedQuantity(),
-                        position.entryPrice(), position.observedAt(), position.providerReference()))
+                        position.entryPrice(), position.observedAt(), position.providerReference(),
+                        position.margin(), position.stopLoss()))
                 .toList();
         List<OrderSnapshot> orders = observation.orders().stream()
                 .map(order -> new OrderSnapshot(order.providerReference(), order.clientReference(),

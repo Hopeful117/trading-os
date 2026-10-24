@@ -110,10 +110,13 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
             complete = false;
             reasons.add("ACCOUNT_RISK_FACTS_INCOMPLETE");
         }
-        if (snapshot.positions() != null && !snapshot.positions().isEmpty()) {
-            // v2 currently carries no provider margin or protective-stop facts.
-            complete = false;
-            reasons.add("POSITION_RISK_FACTS_UNAVAILABLE");
+        if (snapshot.positions() != null) {
+            for (var position : snapshot.positions()) {
+                if (position.margin() == null) {
+                    complete = false;
+                    reasons.add("POSITION_MARGIN_UNAVAILABLE:" + position.brokerPositionReference());
+                }
+            }
         }
 
         List<RiskFactsProvider.Position> positions = snapshot.positions() == null ? List.of()
@@ -121,8 +124,12 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                         UUID.nameUUIDFromBytes((sourceId(snapshot) + ":" + position.brokerPositionReference())
                                 .getBytes(StandardCharsets.UTF_8)),
                         position.brokerPositionReference(), "BROKER_AUTHORITATIVE_V2", position.instrument(),
-                        position.signedQuantity(), position.entryPrice(), null, null, null, List.of()))
-                        .toList();
+                        position.signedQuantity(), position.entryPrice(), null, position.margin(),
+                        position.stopLoss() == null ? BigDecimal.ZERO : position.signedQuantity().abs(),
+                        position.stopLoss() == null ? List.of() : List.of(new RiskFactsProvider.Stop(
+                                 position.brokerPositionReference() + ":stop-loss",
+                                 "BROKER_POSITION_STOP_LOSS", position.signedQuantity().abs(), position.stopLoss()))))
+                         .toList();
         List<RiskFactsProvider.ClosedTrade> closedTrades = snapshot.deals() == null ? List.of()
                 : snapshot.deals().stream().map(deal -> new RiskFactsProvider.ClosedTrade(
                         deal.providerTradeReference(), deal.instrument(), deal.settlementAsset(), deal.fee(),

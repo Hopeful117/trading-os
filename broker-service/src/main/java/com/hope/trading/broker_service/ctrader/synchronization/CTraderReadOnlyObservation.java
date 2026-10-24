@@ -39,12 +39,20 @@ public record CTraderReadOnlyObservation(
     }
 
     public record Position(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
-                           Instant observedAt, String providerReference) {
+                           Instant observedAt, String providerReference, BigDecimal margin,
+                           BigDecimal stopLoss) {
+        public Position(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
+                        Instant observedAt, String providerReference) {
+            this(instrument, signedQuantity, entryPrice, observedAt, providerReference, null, null);
+        }
+
         public Position {
             if (instrument == null || instrument.isBlank()) throw new IllegalArgumentException("instrument is required");
             if (signedQuantity == null || signedQuantity.signum() == 0) throw new IllegalArgumentException("signedQuantity must be non-zero");
             if (entryPrice == null) throw new IllegalArgumentException("entryPrice is required");
             if (observedAt == null || providerReference == null || providerReference.isBlank()) throw new IllegalArgumentException("position identity is required");
+            if (margin != null && margin.signum() < 0) throw new IllegalArgumentException("margin cannot be negative");
+            if (stopLoss != null && stopLoss.signum() <= 0) throw new IllegalArgumentException("stopLoss must be positive");
         }
     }
 

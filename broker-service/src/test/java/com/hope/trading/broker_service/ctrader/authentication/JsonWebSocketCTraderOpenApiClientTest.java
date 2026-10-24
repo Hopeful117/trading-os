@@ -45,7 +45,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
                 {"ctidTraderAccountId":9001,"symbol":[{"symbolId":7,"symbolName":"EUR/USD"}]}
                 """);
         JsonNode reconcile = mapper.readTree("""
-                {"ctidTraderAccountId":9001,"position":[{"positionId":10,"price":1.1,"usedMargin":500,"moneyDigits":2,"utcLastUpdateTimestamp":1792756800000,"tradeData":{"symbolId":7,"volume":200,"tradeSide":"BUY"}}],"order":[{"orderId":99,"orderStatus":"ACCEPTED","executedVolume":100,"utcLastUpdateTimestamp":1792756900000,"tradeData":{"symbolId":7,"volume":500,"clientOrderId":"client-1"}}]}
+                {"ctidTraderAccountId":9001,"position":[{"positionId":10,"price":1.1,"usedMargin":500,"moneyDigits":2,"stopLoss":1.05,"utcLastUpdateTimestamp":1792756800000,"tradeData":{"symbolId":7,"volume":200,"tradeSide":"BUY"}}],"order":[{"orderId":99,"orderStatus":"ACCEPTED","executedVolume":100,"utcLastUpdateTimestamp":1792756900000,"tradeData":{"symbolId":7,"volume":500,"clientOrderId":"client-1"}}]}
                 """);
         JsonNode pnl = mapper.readTree("""
                 {"ctidTraderAccountId":9001,"moneyDigits":2,"positionUnrealizedPnl":[{"positionId":10,"netUnrealizedPnl":1000}]}
@@ -62,6 +62,8 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThat(observation.positions()).singleElement().satisfies(position -> {
             assertThat(position.instrument()).isEqualTo("EUR/USD");
             assertThat(position.signedQuantity()).isEqualByComparingTo("2");
+            assertThat(position.margin()).isEqualByComparingTo("5");
+            assertThat(position.stopLoss()).isEqualByComparingTo("1.05");
         });
         assertThat(observation.orders()).singleElement().satisfies(order -> {
             assertThat(order.providerReference()).isEqualTo("99");
@@ -78,6 +80,66 @@ class JsonWebSocketCTraderOpenApiClientTest {
             assertThat(deal.realizedPnl()).isEqualByComparingTo("0.2");
         });
         assertThat(observation.startedAt()).isEqualTo(started);
+    }
+
+    @Test
+    void treatsZeroStopLossAsExplicitlyUnprotected() throws Exception {
+        Instant started = Instant.parse("2026-10-23T12:00:00Z");
+        JsonNode trader = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"depositAssetId":1,"moneyDigits":2}}
+                """);
+        JsonNode assets = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
+                """);
+        JsonNode symbols = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"symbol":[{"symbolId":7,"symbolName":"EUR/USD"}]}
+                """);
+        JsonNode reconcile = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"position":[{"positionId":10,"price":1.1,"usedMargin":500,"moneyDigits":2,"stopLoss":0,"utcLastUpdateTimestamp":1792756800000,"tradeData":{"symbolId":7,"volume":200,"tradeSide":"BUY"}}],"order":[]}
+                """);
+        JsonNode pnl = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"moneyDigits":2,"positionUnrealizedPnl":[]}
+                """);
+        JsonNode deals = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"deal":[],"hasMore":false}
+                """);
+
+        var observation = invokeMapper(trader, assets, symbols, reconcile, pnl, deals, started);
+
+        assertThat(observation.complete()).isTrue();
+        assertThat(observation.reasons()).doesNotContain("POSITION_STOP_LOSS_INVALID:10");
+        assertThat(observation.positions()).singleElement()
+                .satisfies(position -> assertThat(position.stopLoss()).isNull());
+    }
+
+    @Test
+    void preservesPositionButMarksObservationIncompleteWhenMarginIsMissing() throws Exception {
+        Instant started = Instant.parse("2026-10-23T12:00:00Z");
+        JsonNode trader = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"depositAssetId":1,"moneyDigits":2}}
+                """);
+        JsonNode assets = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
+                """);
+        JsonNode symbols = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"symbol":[{"symbolId":7,"symbolName":"EUR/USD"}]}
+                """);
+        JsonNode reconcile = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"position":[{"positionId":10,"price":1.1,"moneyDigits":2,"stopLoss":0,"utcLastUpdateTimestamp":1792756800000,"tradeData":{"symbolId":7,"volume":200,"tradeSide":"BUY"}}],"order":[]}
+                """);
+        JsonNode pnl = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"moneyDigits":2,"positionUnrealizedPnl":[]}
+                """);
+        JsonNode deals = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"deal":[],"hasMore":false}
+                """);
+
+        var observation = invokeMapper(trader, assets, symbols, reconcile, pnl, deals, started);
+
+        assertThat(observation.complete()).isFalse();
+        assertThat(observation.reasons()).contains("POSITION_MARGIN_UNAVAILABLE:10");
+        assertThat(observation.positions()).singleElement()
+                .satisfies(position -> assertThat(position.margin()).isNull());
     }
 
     @Test

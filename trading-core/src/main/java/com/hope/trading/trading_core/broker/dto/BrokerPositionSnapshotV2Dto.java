@@ -8,5 +8,11 @@ public record BrokerPositionSnapshotV2Dto(
         BigDecimal signedQuantity,
         BigDecimal entryPrice,
         Instant observedAt,
-        String brokerPositionReference) {
+        String brokerPositionReference,
+        BigDecimal margin,
+        BigDecimal stopLoss) {
+    public BrokerPositionSnapshotV2Dto(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
+                                       Instant observedAt, String brokerPositionReference) {
+        this(instrument, signedQuantity, entryPrice, observedAt, brokerPositionReference, null, null);
+    }
 }
