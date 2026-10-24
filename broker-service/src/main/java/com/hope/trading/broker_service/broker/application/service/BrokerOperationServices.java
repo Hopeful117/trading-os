@@ -55,25 +55,33 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
     @Service public static final class CancelOrderService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final com.hope.trading.broker_service.connection.application.BrokerConnectionRepository connections;public CancelOrderService(BrokerProviderResolver p,BrokerOperationsMetrics m,com.hope.trading.broker_service.connection.application.BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public void cancel(UUID id,String order,UUID ownerId){requireOwnership(connections,id,ownerId);metrics.record("cancel",()->require(providers.resolve(id),OrderCapability.class).cancel(id,order));}}
     @Service public static final class ReconcileExecutionService {private static final Logger log=LoggerFactory.getLogger(ReconcileExecutionService.class);private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final com.hope.trading.broker_service.connection.application.BrokerConnectionRepository connections;public ReconcileExecutionService(BrokerProviderResolver p,BrokerOperationsMetrics m,com.hope.trading.broker_service.connection.application.BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public ReconciliationResult reconcile(ReconciliationRequest r,UUID ownerId){log.info("broker_reconciliation providerAccount={} attempt={}",r.brokerAccountId(),r.executionAttemptId());requireOwnership(connections,r.brokerAccountId(),ownerId);return metrics.record("reconciliation",()->require(providers.resolve(r.brokerAccountId()),ReconciliationCapability.class).reconcile(r));}}
     @Service public static class GetRiskSnapshotService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final BrokerConnectionRepository connections;public GetRiskSnapshotService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public RiskSnapshot get(UUID ownerId,UUID id,java.time.Instant from,java.time.Instant to){Objects.requireNonNull(ownerId,"ownerId");Objects.requireNonNull(from,"from");Objects.requireNonNull(to,"to");if(!from.isBefore(to))throw new IllegalArgumentException("from must be before to");if(connections.findByBrokerAccountIdAndOwnerId(id,ownerId).isEmpty())throw new BrokerAuthorizationException("Broker account is not accessible");return metrics.record("risk_snapshot",()->require(providers.resolve(id),RiskSnapshotCapability.class).snapshot(id,from,to));}}
-     @Service public static class GetTechnicalCapabilitiesService {
+      @Service public static class GetTechnicalCapabilitiesService {
         private final BrokerProviderResolver providers;
         private final BrokerOperationsMetrics metrics;
         private final BrokerConnectionRepository connections;
         public GetTechnicalCapabilitiesService(BrokerProviderResolver p,BrokerOperationsMetrics m,BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}
-         public TechnicalCapabilities get(UUID ownerId,UUID id,String instrument){
-             requireOwnership(connections,id,ownerId);
-             return metrics.record("capabilities",()->require(providers.resolve(id),TechnicalCapability.class).capabilities(id,instrument));
-         }
-     }
+          public TechnicalCapabilities get(UUID ownerId,UUID id,String instrument){
+              requireOwnership(connections,id,ownerId);
+              return metrics.record("capabilities",()->require(providers.resolve(id),TechnicalCapability.class).capabilities(id,instrument));
+          }
+          public List<TechnicalCapabilities> get(UUID ownerId,UUID id,List<String> instruments){
+              requireOwnership(connections,id,ownerId);
+              return metrics.record("capabilities_batch",()->require(providers.resolve(id),TechnicalCapability.class).capabilities(id,instruments));
+          }
+      }
      @Service public static class GetProviderTechnicalCapabilitiesService {
          private final BrokerProviderRegistry providers;
          private final BrokerOperationsMetrics metrics;
          public GetProviderTechnicalCapabilitiesService(BrokerProviderRegistry p,BrokerOperationsMetrics m){providers=p;metrics=m;}
-         public TechnicalCapabilities get(BrokerProviderId provider, UUID accountId, String instrument){
-             return metrics.record("provider_capabilities",()->require(providers.resolve(provider),TechnicalCapability.class)
-                     .capabilities(accountId,instrument));
-         }
-     }
+          public TechnicalCapabilities get(BrokerProviderId provider, UUID accountId, String instrument){
+              return metrics.record("provider_capabilities",()->require(providers.resolve(provider),TechnicalCapability.class)
+                      .capabilities(accountId,instrument));
+          }
+          public List<TechnicalCapabilities> get(BrokerProviderId provider, UUID accountId, List<String> instruments){
+              return metrics.record("provider_capabilities_batch",()->require(providers.resolve(provider),TechnicalCapability.class)
+                      .capabilities(accountId,instruments));
+          }
+      }
      @Service public static class PreviewMarginService {
         private final BrokerProviderResolver providers;
         private final BrokerOperationsMetrics metrics;

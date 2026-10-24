@@ -19,6 +19,7 @@ public class KrakenProperties {
     private Duration readTimeout;
     private int readMaxAttempts = 3;
     private int requestsPerSecond = 15;
+    private Duration assetPairsCacheTtl = Duration.ofMinutes(5);
     private long capabilityVersion = 1;
     private String marginCurrency = "USD";
     private List<BigDecimal> supportedLeverageLevels = new ArrayList<>(List.of(BigDecimal.ONE));

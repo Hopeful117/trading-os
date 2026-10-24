@@ -1,35 +1,43 @@
-<section class="scan-panel">
+<section class="scan-panel" [class.scan-panel--embedded]="!showAccountSelector()">
   <header class="panel-header">
-    <h2>Market scan</h2>
-    <p>Choose the markets Market Intelligence should analyze now.</p>
+    <h2>{{ showAccountSelector() ? 'Market scan' : 'Market navigator' }}</h2>
+    <p>
+      {{
+        showAccountSelector()
+          ? 'Choose the markets Market Intelligence should analyze now.'
+          : 'Scan the eligible universe, then focus the investigation on one result.'
+      }}
+    </p>
   </header>
 
   <div class="controls" data-testid="scan-form">
-    <label class="field">
-      <span>Account</span>
-      @if (accounts$ | async; as state) {
-        @if (!state.loaded) {
-          <p class="inline-error" data-testid="accounts-error">Unable to load your accounts.</p>
-          <button type="button" class="retry-button" (click)="reloadAccounts()">Retry</button>
-        } @else if (state.accounts.length === 0) {
-          <p class="inline-error" data-testid="accounts-empty">
-            No account available for scanning.
-          </p>
-        } @else {
-          <select
-            name="scanAccountId"
-            [(ngModel)]="accountId"
-            (ngModelChange)="selectAccount($event)"
-            data-testid="account-select"
-          >
-            <option value="" disabled>Select an account</option>
-            @for (account of state.accounts; track account.accountId) {
-              <option [value]="account.accountId">{{ account.name }}</option>
-            }
-          </select>
+    @if (showAccountSelector()) {
+      <label class="field">
+        <span>Account</span>
+        @if (accounts$ | async; as state) {
+          @if (!state.loaded) {
+            <p class="inline-error" data-testid="accounts-error">Unable to load your accounts.</p>
+            <button type="button" class="retry-button" (click)="reloadAccounts()">Retry</button>
+          } @else if (state.accounts.length === 0) {
+            <p class="inline-error" data-testid="accounts-empty">
+              No account available for scanning.
+            </p>
+          } @else {
+            <select
+              name="scanAccountId"
+              [(ngModel)]="accountId"
+              (ngModelChange)="selectAccount($event)"
+              data-testid="account-select"
+            >
+              <option value="" disabled>Select an account</option>
+              @for (account of state.accounts; track account.accountId) {
+                <option [value]="account.accountId">{{ account.name }}</option>
+              }
+            </select>
+          }
         }
-      }
-    </label>
+      </label>
+    }
 
     <label class="field objective-field">
       <span>Provenance / context</span>
@@ -284,6 +292,20 @@
                     }
                     <small>{{ marketProductType(market.marketId) }}</small>
                     <code>{{ market.marketId }}</code>
+                    @if (
+                      !showAccountSelector() && market.eligible && canSelectMarket(market.marketId)
+                    ) {
+                      <button
+                        type="button"
+                        class="retry-button"
+                        data-testid="focus-market"
+                        (click)="selectMarket(market.marketId)"
+                      >
+                        Inspect market
+                      </button>
+                    } @else if (!showAccountSelector() && market.eligible) {
+                      <small class="reason">Unavailable in the current account context</small>
+                    }
                   </td>
                   <td data-label="Eligibility">
                     <span class="status-pill" [class.positive]="market.eligible">
@@ -318,7 +340,10 @@
                             type="button"
                             class="opportunity-chip"
                             (click)="selectOpportunity(opportunity)"
-                            [disabled]="openingOpportunityId() === opportunity.id"
+                            [disabled]="
+                              openingOpportunityId() === opportunity.id ||
+                              !canSelectMarket(opportunity.marketId ?? '')
+                            "
                             [attr.data-opportunity-id]="opportunity.id"
                           >
                             <strong

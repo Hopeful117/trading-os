@@ -7,7 +7,9 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 @FeignClient(name = "broker-service", contextId = "brokerTechnicalCapabilitiesClient",
@@ -16,11 +18,21 @@ interface BrokerTechnicalCapabilitiesFeignClient {
     @GetMapping("/internal/v1/broker-accounts/{id}/capabilities")
     BrokerTechnicalCapabilities get(@PathVariable UUID id, @RequestParam String instrument);
 
+    @PostMapping("/internal/v1/broker-accounts/{id}/capabilities/batch")
+    List<BrokerTechnicalCapabilities> getBatch(@PathVariable UUID id, @RequestBody MarketCapabilityRequest request);
+
     @GetMapping("/internal/v1/broker-providers/{provider}/capabilities")
     BrokerTechnicalCapabilities getByProvider(@PathVariable String provider,
-                                              @RequestParam UUID brokerAccountId,
-                                              @RequestParam String instrument);
+                                               @RequestParam UUID brokerAccountId,
+                                               @RequestParam String instrument);
+
+    @PostMapping("/internal/v1/broker-providers/{provider}/capabilities/batch")
+    List<BrokerTechnicalCapabilities> getByProviderBatch(@PathVariable String provider,
+                                                          @RequestParam UUID brokerAccountId,
+                                                          @RequestBody MarketCapabilityRequest request);
 }
+
+record MarketCapabilityRequest(List<String> instruments) { }
 
 record BrokerTechnicalCapabilities(UUID brokerAccountId, String provider, String instrument, long sourceVersion,
                                    Instant observedAt, List<String> supportedOrderTypes,

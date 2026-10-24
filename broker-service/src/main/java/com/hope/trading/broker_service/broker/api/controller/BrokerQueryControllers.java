@@ -114,6 +114,16 @@ public final class BrokerQueryControllers {
             requireDelegatedActor(principal);
             return ResponseEntity.ok(service.get(principal.userId(), id, instrument));
         }
+
+        @PostMapping("/{id}/capabilities/batch")
+        public ResponseEntity<List<TechnicalCapabilities>> getBatch(
+                @PathVariable UUID id,
+                @RequestBody TechnicalCapabilitiesRequest request,
+                @AuthenticationPrincipal BrokerPrincipal principal) {
+            requireDelegatedActor(principal);
+            return ResponseEntity.ok(service.get(principal.userId(), id,
+                    request == null || request.instruments() == null ? List.of() : request.instruments()));
+        }
     }
 
     @RestController
@@ -137,7 +147,20 @@ public final class BrokerQueryControllers {
             requireDelegatedActor(principal);
             return ResponseEntity.ok(service.get(registrations.resolve(provider), brokerAccountId, instrument));
         }
+
+        @PostMapping("/{provider}/capabilities/batch")
+        public ResponseEntity<List<TechnicalCapabilities>> getBatch(
+                @PathVariable UUID provider,
+                @RequestParam UUID brokerAccountId,
+                @RequestBody TechnicalCapabilitiesRequest request,
+                @AuthenticationPrincipal BrokerPrincipal principal) {
+            requireDelegatedActor(principal);
+            return ResponseEntity.ok(service.get(registrations.resolve(provider), brokerAccountId,
+                    request == null || request.instruments() == null ? List.of() : request.instruments()));
+        }
     }
+
+    public record TechnicalCapabilitiesRequest(List<String> instruments) { }
 
     @RestController
     @RequestMapping("/internal/v1/broker-accounts")

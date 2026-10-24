@@ -58,6 +58,7 @@ import {
   WorkspaceContextView,
 } from './workspace-context/workspace-context-strip';
 import { DisclosureSection } from '../../shared/workstation/disclosure-section/disclosure-section';
+import { ScanPanel } from '../opportunities/scan-panel/scan-panel';
 
 export type DecisionWorkspaceContextView =
   | { status: 'select-account' }
@@ -113,6 +114,7 @@ export type HistoryView<T> =
     MarketQuotePanel,
     DisclosureSection,
     WorkspaceContextStrip,
+    ScanPanel,
   ],
   templateUrl: './decision-workspace.html',
   styleUrl: './decision-workspace.scss',
@@ -155,7 +157,6 @@ export class DecisionWorkspace {
   selectedMarketId: string | null = null;
   manualTradeOpen = false;
   marketSearch = '';
-  showUnavailableMarkets = false;
   showTrendContextDetails = false;
   opportunity: OpportunityResponse | null = null;
   opportunityPreparing = false;
@@ -523,7 +524,6 @@ export class DecisionWorkspace {
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
     this.marketSearch = '';
-    this.showUnavailableMarkets = false;
     this.showTrendContextDetails = false;
     this.dashboardAccountSubject.next(accountId || null);
     this.clearActiveSubscriptions().subscribe(() => {
@@ -549,7 +549,6 @@ export class DecisionWorkspace {
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
     this.marketSearch = '';
-    this.showUnavailableMarkets = false;
     this.showTrendContextDetails = false;
     this.opportunityRequestKey = null;
     this.dashboardAccountSubject.next(null);
@@ -569,14 +568,38 @@ export class DecisionWorkspace {
       return;
     }
 
-    this.selectedMarketId = marketId;
-    this.manualTradeOpen = false;
-    this.showTrendContextDetails = false;
-    this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
+    this.activateMarket(marketId);
     void this.router.navigate([], {
       queryParams: { marketId },
       queryParamsHandling: 'merge',
     });
+  }
+
+  selectNavigatorOpportunity(
+    opportunity: OpportunityResponse,
+    context: DecisionContextResponse,
+  ): void {
+    const marketId = opportunity.marketId;
+    if (marketId === null || marketId === undefined) {
+      return;
+    }
+
+    if (!context.eligibleMarketIds.includes(marketId)) {
+      return;
+    }
+
+    this.activateMarket(marketId);
+    void this.router.navigate([], {
+      queryParams: { marketId, opportunityId: opportunity.id },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private activateMarket(marketId: string): void {
+    this.selectedMarketId = marketId;
+    this.manualTradeOpen = false;
+    this.showTrendContextDetails = false;
+    this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
   }
 
   setMarketSearch(value: string): void {
@@ -598,10 +621,6 @@ export class DecisionWorkspace {
         );
       })
       .slice(0, 40);
-  }
-
-  unavailableMarkets(context: DecisionContextResponse): DecisionContextResponse['markets'] {
-    return context.markets.filter((market) => !market.eligible).slice(0, 40);
   }
 
   openManualTrade(): void {

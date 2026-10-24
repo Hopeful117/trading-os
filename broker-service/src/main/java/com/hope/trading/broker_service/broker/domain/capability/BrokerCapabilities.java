@@ -21,6 +21,12 @@ public final class BrokerCapabilities {
     }
     public interface TechnicalCapability {
         TechnicalCapabilities capabilities(UUID brokerAccountId, String instrument);
+
+        default List<TechnicalCapabilities> capabilities(UUID brokerAccountId, List<String> instruments) {
+            return instruments.stream()
+                    .map(instrument -> capabilities(brokerAccountId, instrument))
+                    .toList();
+        }
     }
     public interface MarginCapability {
         MarginPreview preview(MarginPreviewRequest request);

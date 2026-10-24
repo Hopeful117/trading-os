@@ -339,39 +339,14 @@
               </article>
             </section>
 
-            @if (view.context.markets.length > view.context.eligibleMarketIds.length) {
-              <app-disclosure-section
-                class="context-card excluded-markets"
-                data-testid="excluded-markets"
-                title="Unavailable markets"
-                eyebrow="Backend decision"
-                contentId="unavailable-markets-content"
-                [summary]="
-                  view.context.markets.length - view.context.eligibleMarketIds.length + ' hidden'
-                "
-                [expanded]="showUnavailableMarkets"
-                (expandedChange)="showUnavailableMarkets = $event"
-              >
-                @if (showUnavailableMarkets) {
-                  <div class="excluded-markets-content">
-                    <p>
-                      These markets are excluded from this account context and cannot be selected.
-                    </p>
-                    <ul>
-                      @for (market of unavailableMarkets(view.context); track market.marketId) {
-                        <li>
-                          <strong>{{ market.symbol ?? market.marketId }}</strong>
-                          <span>{{ market.reasons.join(', ') }}</span>
-                        </li>
-                      }
-                    </ul>
-                    @if (view.context.markets.length - view.context.eligibleMarketIds.length > 40) {
-                      <small>Showing the first 40 unavailable markets.</small>
-                    }
-                  </div>
-                }
-              </app-disclosure-section>
-            }
+            <app-scan-panel
+              data-testid="market-navigator"
+              [embeddedAccountId]="selectedAccountId"
+              [selectableMarketIds]="view.context.eligibleMarketIds"
+              [showAccountSelector]="false"
+              (marketSelected)="selectMarket($event, view.context)"
+              (opportunitySelected)="selectNavigatorOpportunity($event, view.context)"
+            />
           </aside>
 
           <section class="active-workspace" aria-label="Active market investigation">
