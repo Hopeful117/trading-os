@@ -79,9 +79,10 @@ public interface MarketIntelligenceTradePlanningClient {
                          BigDecimal notional, BigDecimal monetaryRisk, BigDecimal riskReward,
                          Instant expiresAt, String thesis, java.util.Set<UUID> opportunityIds,
                          java.util.Set<UUID> observationIds, java.util.Set<UUID> aiAnalysisIds,
-                         java.util.Set<String> confirmationConditions,
-                          java.util.Set<String> invalidationConditions,
-                          java.util.Set<String> managementRules, Instant createdAt, UUID tradingAccountId) {
+                          java.util.Set<String> confirmationConditions,
+                           java.util.Set<String> invalidationConditions,
+                           java.util.Set<String> managementRules, Instant createdAt, UUID tradingAccountId,
+                           OriginContextTransport originContext) {
         public PlanTransport(UUID id, long version, Long previousVersion, String status,
                              String origin, UUID authorId, UUID planningContextId,
                              long planningContextVersion, Instant contextCapturedAt,
@@ -96,11 +97,25 @@ public interface MarketIntelligenceTradePlanningClient {
                              java.util.Set<String> managementRules, Instant createdAt,
                              UUID tradingAccountId) {
             this(id, version, previousVersion, status, origin, authorId, planningContextId,
-                    planningContextVersion, contextCapturedAt, instrument, null, null, direction,
-                    entryType, entryPrice, stopLoss, takeProfits, quantity, notional, monetaryRisk,
-                    riskReward, expiresAt, thesis, opportunityIds, observationIds, aiAnalysisIds,
-                    confirmationConditions, invalidationConditions, managementRules, createdAt,
-                    tradingAccountId);
+                    planningContextVersion, contextCapturedAt, instrument, direction, entryType,
+                    null, null, entryPrice, stopLoss, takeProfits, quantity, notional,
+                    monetaryRisk, riskReward, expiresAt, thesis, opportunityIds, observationIds,
+                    aiAnalysisIds, confirmationConditions, invalidationConditions, managementRules,
+                    createdAt, tradingAccountId, null);
         }
     }
+
+    record OriginContextTransport(
+            String originType,
+            UUID accountId,
+            UUID opportunityId,
+            Long opportunityVersion,
+            UUID marketId,
+            UUID sourceScanId,
+            String currentOpportunityStatus,
+            Instant currentValidFrom,
+            Instant currentValidUntil,
+            boolean returnAvailable,
+            String unavailableReason
+    ) { }
 }

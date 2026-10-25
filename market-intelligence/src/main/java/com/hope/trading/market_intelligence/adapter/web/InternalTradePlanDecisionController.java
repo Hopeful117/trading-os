@@ -2,11 +2,13 @@ package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanDecisionService;
+import com.hope.trading.market_intelligence.application.tradeplan.TradePlanOriginContextResolver;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlanVersion;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,18 +20,31 @@ import java.util.Objects;
 public class InternalTradePlanDecisionController {
     private final TradePlanDecisionService service;
     private final TradePlanningContextRepository contexts;
+    private final TradePlanOriginContextResolver originContextResolver;
 
     public InternalTradePlanDecisionController(
             TradePlanDecisionService service, TradePlanningContextRepository contexts) {
+        this(service, contexts, null);
+    }
+
+    @Autowired
+    public InternalTradePlanDecisionController(
+            TradePlanDecisionService service,
+            TradePlanningContextRepository contexts,
+            TradePlanOriginContextResolver originContextResolver) {
         this.service = service;
         this.contexts = contexts;
+        this.originContextResolver = originContextResolver;
     }
 
     private TradePlanResponse view(com.hope.trading.market_intelligence.domain.tradeplan.TradePlan plan) {
         var context = contexts.find(
                         plan.planningContext().id(), plan.planningContext().version())
                 .orElseThrow();
-        return TradePlanResponse.from(plan, context);
+        return TradePlanResponse.from(
+                plan,
+                context,
+                originContextResolver == null ? null : originContextResolver.resolve(plan, context));
     }
 
     @PostMapping("/decisions")

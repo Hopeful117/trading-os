@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.domain.tradeplan.*;
+import com.hope.trading.market_intelligence.application.tradeplan.TradePlanOriginContext;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
@@ -17,9 +18,16 @@ public record TradePlanResponse(
         Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Set<String> confirmationConditions, Set<String> invalidationConditions,
          Set<String> managementRules, Instant createdAt, java.util.UUID tradingAccountId,
-         java.util.UUID decisionActorId, Instant decisionAt
+         java.util.UUID decisionActorId, Instant decisionAt,
+         TradePlanOriginContextResponse originContext
 ) {
     static TradePlanResponse from(TradePlan plan, TradePlanningContext context) {
+        return from(plan, context, null);
+    }
+
+    static TradePlanResponse from(
+            TradePlan plan, TradePlanningContext context,
+            TradePlanOriginContext originContext) {
         ExecutionParameters execution = plan.execution();
         TradingRationale rationale = plan.rationale();
         return new TradePlanResponse(
@@ -45,7 +53,7 @@ public record TradePlanResponse(
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
                 rationale.confirmationConditions(), rationale.invalidationConditions(),
                  execution.managementRules(), plan.createdAt(),
-                 context.tradingAccountId(), plan.decisionActorId().orElse(null),
-                 plan.decisionAt().orElse(null));
+                  context.tradingAccountId(), plan.decisionActorId().orElse(null),
+                   plan.decisionAt().orElse(null), TradePlanOriginContextResponse.from(originContext));
     }
 }

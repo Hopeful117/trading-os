@@ -452,6 +452,8 @@ dd {
   border-radius: 0.8rem;
   background: #14263a;
   padding: 1.25rem;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .opportunity-decision {
@@ -465,7 +467,7 @@ dd {
 }
 
 .opportunity-stages {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .opportunity-triggers {
