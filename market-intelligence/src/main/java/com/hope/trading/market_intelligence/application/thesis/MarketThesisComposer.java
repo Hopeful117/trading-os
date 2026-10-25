@@ -4,6 +4,9 @@ import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.ObservationEvidence;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
+import com.hope.trading.market_intelligence.domain.observation.MarketThesisObservationPayload;
+import com.hope.trading.market_intelligence.domain.momentum.MomentumAssessment;
+import com.hope.trading.market_intelligence.domain.momentum.MomentumCapabilityContent;
 import com.hope.trading.market_intelligence.domain.thesis.*;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 
@@ -54,6 +57,7 @@ public final class MarketThesisComposer {
         Objects.requireNonNull(observation, "observation");
 
         TrendContextAssessment assessment = trendAssessment(observation);
+        MomentumCapabilityContent momentum = momentumContent(observation);
         Instant evaluatedAt = observation.createdAt() == null
                 ? observation.validFrom() : observation.createdAt();
         Instant sourceCutoff = authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff;
@@ -81,9 +85,7 @@ public final class MarketThesisComposer {
                 assessmentCompatible ? assessment : null,
                 referencePrice.price(), referencePrice.observedAt(), sourceCutoff);
         evidence.addAll(structural.missingEvidence());
-        addMissing(evidence, "MOMENTUM", "MOMENTUM_NOT_IMPLEMENTED",
-                MarketThesisAvailability.NOT_IMPLEMENTED, sourceCutoff,
-                "Momentum analysis is not implemented");
+        addMomentumEvidence(evidence, momentum, assessment, sourceCutoff);
         addMissing(evidence, "VOLUME", "VOLUME_NOT_IMPLEMENTED",
                 MarketThesisAvailability.NOT_IMPLEMENTED, sourceCutoff,
                 "Volume semantics are not implemented");
@@ -94,10 +96,10 @@ public final class MarketThesisComposer {
         List<String> reasons = new ArrayList<>();
         reasons.addAll(structural.reasons());
         MarketThesisScenario scenario = scenario(
-                assessmentCompatible ? assessment : null, reasons, structural.levels());
+                assessmentCompatible ? assessment : null, momentum, reasons, structural.levels());
         MarketThesisState state = state(scenario, evidence, reasons);
         String fingerprint = fingerprint(marketId, analysisExecutionId, observation,
-                assessmentCompatible ? assessment : null, scenario, reasons,
+                assessmentCompatible ? assessment : null, momentum, scenario, reasons,
                 evaluatedAt, sourceCutoff, evidence);
         UUID lineageId = deterministicId("lineage", marketId, observation.lineageId(),
                 observation.id());
@@ -210,6 +212,56 @@ public final class MarketThesisComposer {
         }
     }
 
+    private static void addMomentumEvidence(
+            List<MarketThesisEvidence> target, MomentumCapabilityContent content,
+            TrendContextAssessment assessment, Instant cutoff) {
+        if (content == null || content.assessment() == null) {
+            addMissing(target, "MOMENTUM", "MOMENTUM_UNAVAILABLE",
+                    MarketThesisAvailability.UNAVAILABLE, cutoff,
+                    "Momentum analysis is unavailable", true);
+            return;
+        }
+        MomentumAssessment momentum = content.assessment();
+        if (momentum.cutoff() != null && momentum.cutoff().isAfter(cutoff)) {
+            addMissing(target, "MOMENTUM", "MOMENTUM_CUTOFF_INCOMPATIBLE",
+                    MarketThesisAvailability.UNKNOWN, cutoff,
+                    "Momentum assessment is newer than the requested source cutoff", true);
+            return;
+        }
+        if (content.validUntil().isBefore(cutoff)) {
+            addMissing(target, "MOMENTUM", "MOMENTUM_STALE",
+                    MarketThesisAvailability.STALE, cutoff,
+                    "Momentum assessment is stale for the requested source cutoff", true);
+            return;
+        }
+        if (assessment == null || assessment.direction() == TrendDirection.NEUTRAL
+                || momentum.direction() == MomentumAssessment.Direction.NEUTRAL
+                || momentum.direction() == MomentumAssessment.Direction.UNKNOWN) {
+            addMissing(target, "MOMENTUM", "MOMENTUM_NEUTRAL",
+                    MarketThesisAvailability.AVAILABLE, momentum.cutoff(),
+                    "Momentum does not provide directional confirmation", true);
+            return;
+        }
+        boolean aligned = (assessment.direction() == TrendDirection.UP
+                && momentum.direction() == MomentumAssessment.Direction.UP
+                && momentum.directionalPersistence().compareTo(BigDecimal.valueOf(0.5)) >= 0)
+                || (assessment.direction() == TrendDirection.DOWN
+                && momentum.direction() == MomentumAssessment.Direction.DOWN
+                && momentum.directionalPersistence().compareTo(BigDecimal.valueOf(0.5)) >= 0);
+        boolean supporting = aligned
+                && momentum.acceleration() != MomentumAssessment.Acceleration.DECELERATING;
+        target.add(new MarketThesisEvidence(
+                deterministicId("momentum", momentum.resultFingerprint()),
+                supporting ? MarketThesisEvidenceRole.SUPPORTING : MarketThesisEvidenceRole.CONTRADICTING,
+                MarketThesisAvailability.AVAILABLE,
+                supporting ? null : (aligned
+                        ? MarketThesisContradictionSeverity.WEAKENING
+                        : MarketThesisContradictionSeverity.BLOCKING),
+                "MOMENTUM", momentum.direction().name(), momentum.acceleration().name(),
+                content.operationalStatus(), momentum.cutoff(), null, null,
+                assessment.symbol(), momentum.resultFingerprint(), momentum.policyVersion(), cutoff, true));
+    }
+
     private static MarketThesisContradictionSeverity severity(String code) {
         String normalized = code.toUpperCase();
         return normalized.contains("BLOCK") || normalized.contains("INVALID")
@@ -244,7 +296,8 @@ public final class MarketThesisComposer {
     }
 
     private static MarketThesisScenario scenario(
-            TrendContextAssessment assessment, List<String> reasons,
+            TrendContextAssessment assessment, MomentumCapabilityContent momentum,
+            List<String> reasons,
             List<MarketThesisLevel> structuralLevels) {
         if (assessment == null) {
             reasons.add("TREND_CONTEXT_UNAVAILABLE");
@@ -258,10 +311,24 @@ public final class MarketThesisComposer {
                 yield MarketThesisScenario.Direction.NONE;
             }
         };
-        List<MarketThesisCondition> confirmations = List.of(new MarketThesisCondition(
+        List<MarketThesisCondition> confirmations = new ArrayList<>(List.of(new MarketThesisCondition(
                 "TREND_DIRECTIONAL", direction == MarketThesisScenario.Direction.NONE
                         ? MarketThesisConditionStatus.PENDING : MarketThesisConditionStatus.SATISFIED,
-                assessment.fingerprint(), "A directional Trend Context assessment is required"));
+                assessment.fingerprint(), "A directional Trend Context assessment is required")));
+        MomentumAssessment momentumAssessment = momentum == null ? null : momentum.assessment();
+        boolean momentumConfirms = momentumAssessment != null
+                && ((assessment.direction() == TrendDirection.UP
+                && momentumAssessment.direction() == MomentumAssessment.Direction.UP)
+                || (assessment.direction() == TrendDirection.DOWN
+                && momentumAssessment.direction() == MomentumAssessment.Direction.DOWN))
+                && momentumAssessment.directionalPersistence().compareTo(BigDecimal.valueOf(0.5)) >= 0
+                && momentumAssessment.acceleration() != MomentumAssessment.Acceleration.DECELERATING;
+        confirmations.add(new MarketThesisCondition(
+                "MOMENTUM_CONFIRMATION",
+                momentumConfirms
+                        ? MarketThesisConditionStatus.SATISFIED : MarketThesisConditionStatus.PENDING,
+                momentumAssessment == null ? "MOMENTUM_UNAVAILABLE" : momentumAssessment.resultFingerprint(),
+                "Current OHLC Momentum confirmation is required"));
         List<MarketThesisCondition> invalidations = assessment.invalidations().stream()
                 .map(value -> new MarketThesisCondition(
                         "INVALIDATE_" + value.ruleId(), MarketThesisConditionStatus.PENDING,
@@ -292,6 +359,13 @@ public final class MarketThesisComposer {
             return MarketThesisState.NO_TRADE;
         }
         if (evidence.stream().anyMatch(value ->
+                value.role() == MarketThesisEvidenceRole.CONTRADICTING
+                        && value.severity() == MarketThesisContradictionSeverity.WEAKENING
+                        && "MOMENTUM".equals(value.source()))) {
+            reasons.add("MOMENTUM_WEAKENING");
+            return MarketThesisState.WATCH;
+        }
+        if (evidence.stream().anyMatch(value ->
                 value.role() == MarketThesisEvidenceRole.MISSING
                         && value.required()
                         && (value.availability() == MarketThesisAvailability.STALE
@@ -310,10 +384,23 @@ public final class MarketThesisComposer {
 
     private static TrendContextAssessment trendAssessment(Observation observation) {
         return observation.payload()
-                .filter(TrendContextObservationPayload.class::isInstance)
-                .map(TrendContextObservationPayload.class::cast)
-                .map(TrendContextObservationPayload::content)
-                .map(value -> value.assessment())
+                .filter(MarketThesisObservationPayload.class::isInstance)
+                .map(MarketThesisObservationPayload.class::cast)
+                .map(MarketThesisObservationPayload::trendContext)
+                .map(value -> value == null ? null : value.assessment())
+                .orElseGet(() -> observation.payload()
+                        .filter(TrendContextObservationPayload.class::isInstance)
+                        .map(TrendContextObservationPayload.class::cast)
+                        .map(TrendContextObservationPayload::content)
+                        .map(value -> value.assessment())
+                        .orElse(null));
+    }
+
+    private static MomentumCapabilityContent momentumContent(Observation observation) {
+        return observation.payload()
+                .filter(MarketThesisObservationPayload.class::isInstance)
+                .map(MarketThesisObservationPayload.class::cast)
+                .map(MarketThesisObservationPayload::momentum)
                 .orElse(null);
     }
 
@@ -334,6 +421,7 @@ public final class MarketThesisComposer {
     private static String fingerprint(
             UUID marketId, UUID analysisExecutionId, Observation observation,
             TrendContextAssessment assessment,
+            MomentumCapabilityContent momentum,
             MarketThesisScenario scenario, List<String> reasons, Instant evaluatedAt,
             Instant sourceCutoff, List<MarketThesisEvidence> evidence) {
         List<String> inputs = new ArrayList<>(List.of(
@@ -350,6 +438,10 @@ public final class MarketThesisComposer {
             inputs.add(assessment.fingerprint());
             inputs.add(assessment.ruleVersion());
             inputs.add(assessment.profileVersion());
+        }
+        if (momentum != null && momentum.assessment() != null) {
+            inputs.add(momentum.assessment().resultFingerprint());
+            inputs.add(momentum.assessment().policyVersion());
         }
         evidence.stream().map(value -> String.join("|",
                 value.evidenceId().toString(), value.role().name(), value.availability().name(),

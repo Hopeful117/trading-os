@@ -2,6 +2,11 @@ package com.hope.trading.market_intelligence.application.thesis;
 
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
+import com.hope.trading.market_intelligence.domain.observation.MarketThesisObservationPayload;
+import com.hope.trading.market_intelligence.domain.momentum.MomentumAssessment;
+import com.hope.trading.market_intelligence.domain.momentum.MomentumCapabilityContent;
+import com.hope.trading.market_intelligence.domain.momentum.MomentumPolicy;
+import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesisState;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,8 +46,11 @@ class MarketThesisComposerTest {
 
         assertEquals(com.hope.trading.market_intelligence.domain.thesis.MarketThesisState.NO_TRADE,
                 thesis.state());
-        assertEquals(3, thesis.evidence().stream()
+        assertEquals(2, thesis.evidence().stream()
                 .filter(value -> value.availability().name().equals("NOT_IMPLEMENTED"))
+                .count());
+        assertEquals(1, thesis.evidence().stream()
+                .filter(value -> value.source().equals("MOMENTUM"))
                 .count());
     }
 
@@ -63,7 +71,7 @@ class MarketThesisComposerTest {
     }
 
     @Test
-    void directionalTrendWithoutBlockingEvidenceProducesCandidate() {
+    void directionalTrendWithoutMomentumConfirmationRemainsNoTrade() {
         Observation observation = missingObservation();
         TrendContextAssessment assessment = assessment(Map.of(
                 TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
@@ -73,8 +81,8 @@ class MarketThesisComposerTest {
 
         var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
 
-        assertSame(MarketThesisState.CANDIDATE, thesis.state());
-        assertEquals(1, thesis.scenario().orElseThrow().confirmationConditions().size());
+        assertSame(MarketThesisState.NO_TRADE, thesis.state());
+        assertEquals(2, thesis.scenario().orElseThrow().confirmationConditions().size());
         assertEquals(false, thesis.evidence().stream()
                 .filter(value -> value.reference().equals("TRIGGER"))
                 .findFirst().orElseThrow().required());
@@ -109,7 +117,7 @@ class MarketThesisComposerTest {
 
         var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
 
-        assertSame(MarketThesisState.WATCH, thesis.state());
+        assertSame(MarketThesisState.NO_TRADE, thesis.state());
     }
 
     @Test
@@ -127,6 +135,35 @@ class MarketThesisComposerTest {
         assertThat(thesis.scenario()).isEmpty();
         assertThat(thesis.evidence()).anyMatch(value ->
                 value.reference().equals("TREND_CONTEXT_CUTOFF_INCOMPATIBLE"));
+    }
+
+    @Test
+    void deceleratingAlignedMomentumProducesWatchAndPendingConfirmation() {
+        Observation observation = missingObservation();
+        TrendContextAssessment trend = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        MomentumAssessment momentum = new MomentumAssessment(
+                marketId, "15m", NOW.minusSeconds(9000), NOW, NOW,
+                MomentumAssessment.Status.AVAILABLE, MomentumAssessment.Direction.UP,
+                new java.math.BigDecimal("0.01"), new java.math.BigDecimal("1.0"),
+                new java.math.BigDecimal("0.8"), new java.math.BigDecimal("0.2"),
+                MomentumAssessment.Acceleration.DECELERATING, MomentumPolicy.V1.version(),
+                MomentumAssessment.ALGORITHM_VERSION, ArtifactFingerprint.empty().value(),
+                ArtifactFingerprint.ofInputs(List.of("momentum-result")).value(), "test");
+        TrendContextCapabilityContent trendContent = mock(TrendContextCapabilityContent.class);
+        when(trendContent.assessment()).thenReturn(trend);
+        MarketThesisObservationPayload payload = new MarketThesisObservationPayload(
+                trendContent, new MomentumCapabilityContent(momentum, "AVAILABLE", List.of(), NOW.plusSeconds(900)));
+        when(observation.payload()).thenReturn(Optional.of(payload));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
+
+        assertThat(thesis.state()).isEqualTo(MarketThesisState.WATCH);
+        assertThat(thesis.reasons()).contains("MOMENTUM_WEAKENING");
+        assertThat(thesis.scenario().orElseThrow().confirmationConditions())
+                .anyMatch(condition -> condition.code().equals("MOMENTUM_CONFIRMATION")
+                        && condition.status().name().equals("PENDING"));
     }
 
     private Observation missingObservation() {

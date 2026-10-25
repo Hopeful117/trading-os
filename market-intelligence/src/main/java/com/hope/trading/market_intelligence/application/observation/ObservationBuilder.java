@@ -85,14 +85,26 @@ public final class ObservationBuilder {
     }
 
     private boolean isOlderTrendContextResult(Observation current, ObservationPayload payload) {
-        if (!(current.payload().orElse(null) instanceof TrendContextObservationPayload(
-                var currentContent))) {
-            return false;
+        java.time.Instant currentCutoff = payloadCutoff(current.payload().orElse(null));
+        java.time.Instant nextCutoff = payloadCutoff(payload);
+        return currentCutoff != null && nextCutoff != null && nextCutoff.isBefore(currentCutoff);
+    }
+
+    private java.time.Instant payloadCutoff(ObservationPayload payload) {
+        if (payload instanceof TrendContextObservationPayload(var content)
+                && content.assessment() != null) {
+            return content.assessment().cutOffAt();
         }
-        if (!(payload instanceof TrendContextObservationPayload(var nextContent))) {
-            return false;
+        if (payload instanceof MarketThesisObservationPayload(var trend, var momentum)) {
+            java.time.Instant trendCutoff = trend == null || trend.assessment() == null
+                    ? null : trend.assessment().cutOffAt();
+            java.time.Instant momentumCutoff = momentum == null || momentum.assessment() == null
+                    ? null : momentum.assessment().cutoff();
+            if (trendCutoff == null) return momentumCutoff;
+            if (momentumCutoff == null) return trendCutoff;
+            return trendCutoff.isAfter(momentumCutoff) ? trendCutoff : momentumCutoff;
         }
-        return nextContent.assessment().cutOffAt().isBefore(currentContent.assessment().cutOffAt());
+        return null;
     }
 
     private List<String> evidenceFingerprint(List<ObservationEvidence> evidence) {

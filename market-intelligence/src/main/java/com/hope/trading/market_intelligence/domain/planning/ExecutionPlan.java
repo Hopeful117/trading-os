@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.domain.capability.*;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.time.Instant;
 
 public final class ExecutionPlan {
     private final UUID id;
@@ -17,15 +18,16 @@ public final class ExecutionPlan {
     private final List<PlanningDecision> decisions;
     private final List<PlanningDecision> exclusions;
     private final String contextFingerprint;
+    private final Instant evaluationCutoff;
 
     /** Constructor retained for persisted plan rehydration compatibility. */
     @SuppressWarnings("java:S107")
     public ExecutionPlan(
             UUID id, UUID analysisExecutionId, Collection<ExecutionNode> nodes,
             Set<PlanEdge> edges, Map<RequirementBinding, Set<UUID>> selectedProducers,
-            List<AdapterBinding> adapters, List<String> constraints,
-            List<PlanningDecision> decisions, List<PlanningDecision> exclusions,
-            String contextFingerprint) {
+             List<AdapterBinding> adapters, List<String> constraints,
+             List<PlanningDecision> decisions, List<PlanningDecision> exclusions,
+             String contextFingerprint, Instant evaluationCutoff) {
         this.id = Objects.requireNonNull(id);
         this.analysisExecutionId = Objects.requireNonNull(analysisExecutionId);
         this.nodes = nodes.stream().collect(Collectors.toUnmodifiableMap(
@@ -39,7 +41,19 @@ public final class ExecutionPlan {
         this.decisions = List.copyOf(decisions);
         this.exclusions = List.copyOf(exclusions);
         this.contextFingerprint = contextFingerprint;
+        this.evaluationCutoff = evaluationCutoff;
         validate();
+    }
+
+    @SuppressWarnings("java:S107")
+    public ExecutionPlan(
+            UUID id, UUID analysisExecutionId, Collection<ExecutionNode> nodes,
+            Set<PlanEdge> edges, Map<RequirementBinding, Set<UUID>> selectedProducers,
+            List<AdapterBinding> adapters, List<String> constraints,
+            List<PlanningDecision> decisions, List<PlanningDecision> exclusions,
+            String contextFingerprint) {
+        this(id, analysisExecutionId, nodes, edges, selectedProducers, adapters,
+                constraints, decisions, exclusions, contextFingerprint, null);
     }
 
     @SuppressWarnings("java:S107")
@@ -50,7 +64,7 @@ public final class ExecutionPlan {
             List<PlanningDecision> decisions, List<PlanningDecision> exclusions
     ) {
         this(id, analysisExecutionId, nodes, edges, selectedProducers, adapters,
-                constraints, decisions, exclusions, null);
+                constraints, decisions, exclusions, null, null);
     }
 
     private void validate() {
@@ -96,5 +110,6 @@ public final class ExecutionPlan {
     public List<PlanningDecision> decisions() { return decisions; }
     public List<PlanningDecision> exclusions() { return exclusions; }
     public String contextFingerprint() { return contextFingerprint; }
+    public Instant evaluationCutoff() { return evaluationCutoff; }
     public record PlanEdge(UUID from, UUID to, ArtifactRequirement requirement) {}
 }

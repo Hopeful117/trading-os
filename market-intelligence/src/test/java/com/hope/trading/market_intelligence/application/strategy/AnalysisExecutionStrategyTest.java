@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.strategy;
 
 import com.hope.trading.market_intelligence.application.capability.OhlcRangeAnalysisCapability;
+import com.hope.trading.market_intelligence.application.capability.OhlcMomentumAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
 import com.hope.trading.market_intelligence.domain.*;
 import org.junit.jupiter.api.Test;
@@ -65,7 +66,8 @@ class AnalysisExecutionStrategyTest {
                 .doesNotContain(ContextSectionType.MARKET_SNAPSHOT);
         assertThat(plan.capabilityIds()).containsExactlyInAnyOrder(
                 TrendContextAnalysisCapability.CAPABILITY_ID,
-                OhlcRangeAnalysisCapability.CAPABILITY_ID);
+                OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                OhlcMomentumAnalysisCapability.CAPABILITY_ID);
     }
 
     @Test
@@ -92,7 +94,8 @@ class AnalysisExecutionStrategyTest {
         assertThat(plan.capabilityIds())
                 .containsExactlyInAnyOrder(
                         TrendContextAnalysisCapability.CAPABILITY_ID,
-                        OhlcRangeAnalysisCapability.CAPABILITY_ID);
+                        OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                        OhlcMomentumAnalysisCapability.CAPABILITY_ID);
     }
 
     private IntelligenceAnalysisRequest request(AnalysisExecutionMode mode) {

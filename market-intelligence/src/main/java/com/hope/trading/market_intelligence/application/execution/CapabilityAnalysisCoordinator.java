@@ -66,7 +66,7 @@ public class CapabilityAnalysisCoordinator {
             ExecutionSummary summary = engine.execute(
                     planner.plan(new PlanningRequest(
                             analysisExecutionId, selected, Set.of(), descriptors,
-                            context.fingerprint().value())), control);
+                             context.fingerprint().value(), request.evaluationCutoff())), control);
             return consolidate(request, context, summary, startedAt, strategy.timeout());
         } finally {
             controls.remove(analysisExecutionId);
