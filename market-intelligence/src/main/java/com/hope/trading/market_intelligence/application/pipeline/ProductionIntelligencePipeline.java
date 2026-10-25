@@ -4,6 +4,8 @@ import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
 import com.hope.trading.market_intelligence.adapter.persistence.*;
 import com.hope.trading.market_intelligence.application.observation.ObservationBuilder;
 import com.hope.trading.market_intelligence.application.opportunity.*;
+import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
+import com.hope.trading.market_intelligence.application.thesis.MarketThesisComposer;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
@@ -69,7 +71,10 @@ public class ProductionIntelligencePipeline {
     private final StrategyMatchOpportunityFactory matchOpportunities;
     private final StrategyDefinitionRepository definitions;
     private final TrendContextEvidenceSelector trendContextEvidence;
+    private final MarketThesisComposer thesisComposer;
+    private final MarketThesisRepository theses;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ProductionIntelligencePipeline(
             ObservationBuilder observations, OpportunityEngine opportunities,
             MarketDataClient marketData, JpaIntelligencePipelineRunRepository runs,
@@ -78,7 +83,9 @@ public class ProductionIntelligencePipeline {
             ShadowStrategyParityMonitor parity, StrategyMatchPersister matches,
             StrategyMatchOpportunityFactory matchOpportunities,
             StrategyDefinitionRepository definitions,
-            TrendContextEvidenceSelector trendContextEvidence) {
+            TrendContextEvidenceSelector trendContextEvidence,
+            MarketThesisComposer thesisComposer,
+            MarketThesisRepository theses) {
         this.observations = observations;
         this.opportunities = opportunities;
         this.marketData = marketData;
@@ -91,6 +98,8 @@ public class ProductionIntelligencePipeline {
         this.matchOpportunities = matchOpportunities;
         this.definitions = definitions;
         this.trendContextEvidence = trendContextEvidence;
+        this.thesisComposer = thesisComposer;
+        this.theses = theses;
     }
 
     @Transactional
@@ -129,6 +138,7 @@ public class ProductionIntelligencePipeline {
             }
         } catch (RuntimeException exception) {
             run.fail("OBSERVATION", controlledMessage(exception), clock.instant());
+            persistDegradedThesis(analysisExecutionId, marketId, marketId.toString(), exception);
             return runs.save(run);
         }
         Observation observation;
@@ -137,11 +147,15 @@ public class ProductionIntelligencePipeline {
                     analysisExecutionId, instrument, new OhlcTrendObservationRule());
         } catch (java.util.NoSuchElementException exception) {
             run.noSignal(exception.getMessage(), clock.instant());
+            persistDegradedThesis(analysisExecutionId, marketId, instrument, exception);
             return runs.save(run);
         } catch (RuntimeException exception) {
             run.fail("OBSERVATION", controlledMessage(exception), clock.instant());
+            persistDegradedThesis(analysisExecutionId, marketId, instrument, exception);
             return runs.save(run);
         }
+
+        persistThesis(analysisExecutionId, marketId, observation, request.evaluationCutoff());
 
         // Runtime source of truth: persisted definitions (ADR-037), seeded at
         // startup by BuiltinStrategyBootstrap. Never the in-memory catalogue.
@@ -207,6 +221,20 @@ public class ProductionIntelligencePipeline {
             run.complete(observation.id(), observation.version(), null, 0, clock.instant());
         }
         return runs.save(run);
+    }
+
+    private void persistThesis(UUID analysisExecutionId, UUID marketId, Observation observation,
+                               Instant authoritativeCutoff) {
+        var candidate = thesisComposer.compose(
+                marketId, analysisExecutionId, observation, authoritativeCutoff);
+        theses.saveIfAbsent(candidate);
+    }
+
+    private void persistDegradedThesis(
+            UUID analysisExecutionId, UUID marketId, String instrument, RuntimeException exception) {
+        theses.saveIfAbsent(thesisComposer.composeDegraded(
+                marketId, instrument, analysisExecutionId, controlledMessage(exception),
+                clock.instant()));
     }
 
     private TradingOpportunity handleMatch(

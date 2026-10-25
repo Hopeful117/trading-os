@@ -1,0 +1,337 @@
+package com.hope.trading.market_intelligence.application.thesis;
+
+import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
+import com.hope.trading.market_intelligence.domain.observation.Observation;
+import com.hope.trading.market_intelligence.domain.observation.ObservationEvidence;
+import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
+import com.hope.trading.market_intelligence.domain.thesis.*;
+import com.hope.trading.market_intelligence.domain.trendcontext.*;
+
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+
+public final class MarketThesisComposer {
+    public static final String VERSION = "market-thesis-composer/v1";
+    private final TrendContextProfile trendContextProfile;
+
+    public MarketThesisComposer(Clock clock) {
+        this(clock, defaultProfile());
+    }
+
+    public MarketThesisComposer(Clock clock, TrendContextProfile trendContextProfile) {
+        Objects.requireNonNull(clock, "clock");
+        this.trendContextProfile = Objects.requireNonNull(trendContextProfile, "trendContextProfile");
+    }
+
+    private static TrendContextProfile defaultProfile() {
+        return TrendContextProfile.conservativeSwingV1(java.util.Map.of(
+                TrendContextRole.BIAS, new TrendContextRoleDefinition(
+                        TrendContextRole.BIAS, "BIAS", java.time.Duration.ofHours(4), true, 1, 1),
+                TrendContextRole.SETUP, new TrendContextRoleDefinition(
+                        TrendContextRole.SETUP, "SETUP", java.time.Duration.ofHours(1), true, 1, 1),
+                TrendContextRole.TRIGGER, new TrendContextRoleDefinition(
+                        TrendContextRole.TRIGGER, "TRIGGER", java.time.Duration.ofMinutes(15), false, 1, 1)));
+    }
+
+    public MarketThesis compose(
+            UUID marketId, UUID analysisExecutionId, Observation observation) {
+        return compose(marketId, analysisExecutionId, observation, null);
+    }
+
+    public MarketThesis compose(
+            UUID marketId, UUID analysisExecutionId, Observation observation,
+            Instant authoritativeCutoff) {
+        Objects.requireNonNull(marketId, "marketId");
+        Objects.requireNonNull(observation, "observation");
+
+        TrendContextAssessment assessment = trendAssessment(observation);
+        Instant evaluatedAt = observation.createdAt() == null
+                ? observation.validFrom() : observation.createdAt();
+        Instant sourceCutoff = authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff;
+        List<MarketThesisEvidence> evidence = new ArrayList<>();
+
+        observation.evidence().forEach(value -> evidence.add(observationEvidence(
+                marketId, observation, value, sourceCutoff)));
+        if (assessment == null) {
+            addMissing(evidence, "TREND_CONTEXT", "TREND_CONTEXT_UNAVAILABLE",
+                    MarketThesisAvailability.UNAVAILABLE, sourceCutoff,
+                    "Trend Context assessment is unavailable");
+        } else {
+            addTrendEvidence(evidence, assessment, sourceCutoff);
+        }
+        addMissing(evidence, "MOMENTUM", "MOMENTUM_NOT_IMPLEMENTED",
+                MarketThesisAvailability.NOT_IMPLEMENTED, sourceCutoff,
+                "Momentum analysis is not implemented");
+        addMissing(evidence, "VOLUME", "VOLUME_NOT_IMPLEMENTED",
+                MarketThesisAvailability.NOT_IMPLEMENTED, sourceCutoff,
+                "Volume semantics are not implemented");
+        addMissing(evidence, "LIQUIDITY", "LIQUIDITY_NOT_IMPLEMENTED",
+                MarketThesisAvailability.NOT_IMPLEMENTED, sourceCutoff,
+                "Advanced liquidity analysis is not implemented");
+
+        List<String> reasons = new ArrayList<>();
+        MarketThesisScenario scenario = scenario(assessment, reasons);
+        MarketThesisState state = state(scenario, evidence, reasons);
+        String fingerprint = fingerprint(marketId, analysisExecutionId, observation, assessment, scenario, reasons,
+                evaluatedAt, sourceCutoff, evidence);
+        UUID lineageId = deterministicId("lineage", marketId, observation.lineageId(),
+                observation.id());
+        UUID thesisId = deterministicId("thesis", lineageId, observation.version(), fingerprint);
+        return new MarketThesis(
+                thesisId, lineageId, observation.version(), marketId, observation.instrument(),
+                state, scenario, evidence, reasons, evaluatedAt, sourceCutoff,
+                observation.validFrom(), observation.validUntil().orElse(null),
+                analysisExecutionId, VERSION, fingerprint, null);
+    }
+
+    public MarketThesis composeDegraded(
+            UUID marketId, String instrument, UUID analysisExecutionId,
+            String reason, Instant evaluatedAt) {
+        String normalizedInstrument = instrument == null || instrument.isBlank()
+                ? marketId.toString() : instrument;
+        MarketThesisEvidence missing = new MarketThesisEvidence(
+                deterministicId("degraded-evidence", marketId, normalizedInstrument, reason),
+                MarketThesisEvidenceRole.MISSING, MarketThesisAvailability.UNAVAILABLE, null,
+                "MARKET_INTELLIGENCE", "DEGRADED_COMPOSITION", null, reason,
+                evaluatedAt, null, null, normalizedInstrument, null, VERSION, evaluatedAt);
+        String fingerprint = ArtifactFingerprint.ofInputs(List.of(
+                VERSION, marketId.toString(), normalizedInstrument, reason,
+                evaluatedAt.toString())).value();
+        UUID lineageId = deterministicId("degraded-lineage", marketId, normalizedInstrument,
+                fingerprint);
+        return new MarketThesis(
+                deterministicId("degraded-thesis", lineageId, fingerprint), lineageId, 1,
+                marketId, normalizedInstrument, MarketThesisState.NO_TRADE, null,
+                List.of(missing), List.of("DEGRADED_COMPOSITION"), evaluatedAt, evaluatedAt,
+                evaluatedAt, null, analysisExecutionId, VERSION, fingerprint, null);
+    }
+
+    private static MarketThesisEvidence observationEvidence(
+            UUID marketId, Observation observation, ObservationEvidence value, Instant cutoff) {
+        MarketThesisAvailability availability = value.observedAt().isAfter(cutoff)
+                ? MarketThesisAvailability.UNKNOWN : observation.validUntil()
+                .filter(validUntil -> validUntil.isBefore(cutoff))
+                .map(unused -> MarketThesisAvailability.STALE)
+                .orElse(MarketThesisAvailability.AVAILABLE);
+        return new MarketThesisEvidence(
+                value.evidenceId(), availability == MarketThesisAvailability.AVAILABLE
+                        ? MarketThesisEvidenceRole.SUPPORTING : MarketThesisEvidenceRole.MISSING,
+                availability, null,
+                value.origin(), value.capabilityResult().capabilityExecutionId().toString(),
+                observation.horizon(), value.explanation(), value.observedAt(),
+                observation.validUntil().orElse(null), null, observation.instrument(),
+                value.evidenceId().toString(), value.capabilityResult().capabilityVersion(), cutoff,
+                true);
+    }
+
+    private void addTrendEvidence(
+            List<MarketThesisEvidence> target, TrendContextAssessment assessment, Instant cutoff) {
+        assessment.findings().forEach(value -> target.add(new MarketThesisEvidence(
+                deterministicId("finding", assessment.fingerprint(), value.code(), value.ruleId()),
+                MarketThesisEvidenceRole.SUPPORTING, MarketThesisAvailability.AVAILABLE, null,
+                "TREND_CONTEXT", value.code(), value.role().name(), value.message(),
+                assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
+                assessment.fingerprint(), assessment.ruleVersion(), cutoff, false)));
+        assessment.contradictions().forEach(value -> target.add(new MarketThesisEvidence(
+                deterministicId("contradiction", assessment.fingerprint(), value.code()),
+                MarketThesisEvidenceRole.CONTRADICTING, MarketThesisAvailability.AVAILABLE,
+                severity(value.code()), "TREND_CONTEXT", value.code(), null, value.message(),
+                assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
+                assessment.fingerprint(), assessment.ruleVersion(), cutoff, false)));
+        assessment.exclusions().forEach(value -> target.add(new MarketThesisEvidence(
+                deterministicId("exclusion", assessment.fingerprint(), value.code()),
+                MarketThesisEvidenceRole.MISSING, MarketThesisAvailability.UNKNOWN, null,
+                "TREND_CONTEXT", value.code(), value.role().name(), value.detail(),
+                assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
+                assessment.fingerprint(), assessment.ruleVersion(), cutoff, false)));
+        assessment.invalidations().forEach(value -> target.add(new MarketThesisEvidence(
+                deterministicId("invalidation", assessment.fingerprint(), value.ruleId()),
+                MarketThesisEvidenceRole.CONTRADICTING, MarketThesisAvailability.AVAILABLE,
+                MarketThesisContradictionSeverity.BLOCKING, "TREND_CONTEXT", value.ruleId(),
+                null, "Structural invalidation is active", assessment.assessmentAt(), null,
+                assessment.provider(), assessment.symbol(), assessment.fingerprint(),
+                 assessment.ruleVersion(), cutoff, false)));
+        trendContextProfile.roles().forEach((role, definition) -> {
+            var value = assessment.timeframes().get(role);
+            if (value == null) {
+                addMissing(target, "TREND_CONTEXT", role.name(),
+                        MarketThesisAvailability.UNAVAILABLE, assessment.assessmentAt(),
+                        "Trend timeframe evidence is unavailable", definition.required());
+                return;
+            }
+            target.add(new MarketThesisEvidence(
+                    deterministicId("timeframe", assessment.fingerprint(), value.role(), value.interval()),
+                    value.fresh() ? MarketThesisEvidenceRole.SUPPORTING
+                            : MarketThesisEvidenceRole.MISSING,
+                    value.fresh() ? MarketThesisAvailability.AVAILABLE
+                            : MarketThesisAvailability.STALE, null,
+                    "TREND_CONTEXT", value.role().name(), value.interval(),
+                    value.fresh() ? "Trend timeframe evidence is available"
+                            : "Trend timeframe evidence is stale", assessment.assessmentAt(), null,
+                    assessment.provider(), assessment.symbol(), assessment.fingerprint(),
+                    assessment.ruleVersion(), cutoff, definition.required()));
+        });
+        if (assessment.alignment() == TrendTimeframeAlignment.CONFLICTING
+                || assessment.alignment() == TrendTimeframeAlignment.TRIGGER_CONTRADICTION) {
+            target.add(new MarketThesisEvidence(
+                    deterministicId("timeframe-conflict", assessment.fingerprint()),
+                    MarketThesisEvidenceRole.CONTRADICTING, MarketThesisAvailability.AVAILABLE,
+                    MarketThesisContradictionSeverity.WEAKENING, "TREND_CONTEXT",
+                    assessment.alignment().name(), null,
+                    "Trend timeframes are not aligned", assessment.assessmentAt(), null,
+                    assessment.provider(), assessment.symbol(), assessment.fingerprint(),
+                     assessment.ruleVersion(), cutoff, false));
+        }
+    }
+
+    private static MarketThesisContradictionSeverity severity(String code) {
+        String normalized = code.toUpperCase();
+        return normalized.contains("BLOCK") || normalized.contains("INVALID")
+                ? MarketThesisContradictionSeverity.BLOCKING
+                : MarketThesisContradictionSeverity.WEAKENING;
+    }
+
+    private static void addMissing(
+            List<MarketThesisEvidence> target, String source, String reference,
+            MarketThesisAvailability availability, Instant observedAt, String explanation) {
+        addMissing(target, source, reference, availability, observedAt, explanation,
+                source.equals("TREND_CONTEXT"));
+    }
+
+    private static void addMissing(
+            List<MarketThesisEvidence> target, String source, String reference,
+            MarketThesisAvailability availability, Instant observedAt, String explanation,
+            boolean required) {
+        target.add(new MarketThesisEvidence(
+                deterministicId("missing", source, reference), MarketThesisEvidenceRole.MISSING,
+                availability, null, source, reference, null, explanation, observedAt, null,
+                null, null, null, VERSION, observedAt, required));
+    }
+
+    private static MarketThesisScenario scenario(
+            TrendContextAssessment assessment, List<String> reasons) {
+        if (assessment == null) {
+            reasons.add("TREND_CONTEXT_UNAVAILABLE");
+            return null;
+        }
+        MarketThesisScenario.Direction direction = switch (assessment.direction()) {
+            case UP -> MarketThesisScenario.Direction.LONG;
+            case DOWN -> MarketThesisScenario.Direction.SHORT;
+            case NEUTRAL, UNKNOWN -> {
+                reasons.add("NO_DIRECTIONAL_SCENARIO");
+                yield MarketThesisScenario.Direction.NONE;
+            }
+        };
+        List<MarketThesisCondition> confirmations = List.of(new MarketThesisCondition(
+                "TREND_DIRECTIONAL", direction == MarketThesisScenario.Direction.NONE
+                        ? MarketThesisConditionStatus.PENDING : MarketThesisConditionStatus.SATISFIED,
+                assessment.fingerprint(), "A directional Trend Context assessment is required"));
+        List<MarketThesisCondition> invalidations = assessment.invalidations().stream()
+                .map(value -> new MarketThesisCondition(
+                        "INVALIDATE_" + value.ruleId(), MarketThesisConditionStatus.PENDING,
+                        value.ruleId(), "Invalidate when the structural condition is met"))
+                .toList();
+        List<MarketThesisLevel> levels = assessment.timeframes().values().stream()
+                .flatMap(value -> value.levels().stream().map(level -> new MarketThesisLevel(
+                        level.type().name(), "STRUCTURAL", value.interval(), level.price())))
+                .toList();
+        List<MarketThesisLevel> invalidationLevels = assessment.invalidations().stream()
+                .filter(value -> value.level() != null)
+                .map(value -> new MarketThesisLevel(
+                        value.ruleId(), "INVALIDATION", "UNKNOWN", value.level()))
+                .toList();
+        levels = java.util.stream.Stream.concat(levels.stream(), invalidationLevels.stream()).toList();
+        return new MarketThesisScenario(direction,
+                "Conditional scenario derived from deterministic Trend Context evidence",
+                confirmations,
+                invalidations.isEmpty()
+                        ? List.of(new MarketThesisCondition(
+                                "STRUCTURAL_INVALIDATION", MarketThesisConditionStatus.PENDING,
+                                assessment.fingerprint(), "Structural invalidation evidence is required"))
+                        : invalidations,
+                levels);
+    }
+
+    private static MarketThesisState state(
+            MarketThesisScenario scenario, List<MarketThesisEvidence> evidence,
+            List<String> reasons) {
+        if (scenario == null || scenario.direction() == MarketThesisScenario.Direction.NONE) {
+            return MarketThesisState.NO_TRADE;
+        }
+        if (evidence.stream().anyMatch(value ->
+                value.role() == MarketThesisEvidenceRole.CONTRADICTING
+                        && value.severity() == MarketThesisContradictionSeverity.BLOCKING)) {
+            reasons.add("BLOCKING_CONTRADICTION");
+            return MarketThesisState.NO_TRADE;
+        }
+        if (evidence.stream().anyMatch(value ->
+                value.role() == MarketThesisEvidenceRole.MISSING
+                        && value.required()
+                        && (value.availability() == MarketThesisAvailability.STALE
+                        || value.availability() == MarketThesisAvailability.UNAVAILABLE
+                        || value.availability() == MarketThesisAvailability.UNKNOWN))) {
+            boolean unavailable = evidence.stream().anyMatch(value -> value.required()
+                    && value.role() == MarketThesisEvidenceRole.MISSING
+                    && (value.availability() == MarketThesisAvailability.UNAVAILABLE
+                    || value.availability() == MarketThesisAvailability.UNKNOWN));
+            reasons.add(unavailable ? "REQUIRED_EVIDENCE_UNAVAILABLE" : "REQUIRED_EVIDENCE_STALE");
+            return unavailable ? MarketThesisState.NO_TRADE : MarketThesisState.WATCH;
+        }
+        reasons.add("CONFIRMATION_SATISFIED");
+        return MarketThesisState.CANDIDATE;
+    }
+
+    private static TrendContextAssessment trendAssessment(Observation observation) {
+        return observation.payload()
+                .filter(TrendContextObservationPayload.class::isInstance)
+                .map(TrendContextObservationPayload.class::cast)
+                .map(TrendContextObservationPayload::content)
+                .map(value -> value.assessment())
+                .orElse(null);
+    }
+
+    private static String fingerprint(
+            UUID marketId, UUID analysisExecutionId, Observation observation,
+            TrendContextAssessment assessment,
+            MarketThesisScenario scenario, List<String> reasons, Instant evaluatedAt,
+            Instant sourceCutoff, List<MarketThesisEvidence> evidence) {
+        List<String> inputs = new ArrayList<>(List.of(
+                VERSION, marketId.toString(), observation.id().toString(),
+                Long.toString(observation.version()), observation.instrument()));
+        inputs.add(String.valueOf(analysisExecutionId));
+        inputs.add(String.valueOf(observation.horizon()));
+        inputs.add(observation.validFrom().toString());
+        inputs.add(String.valueOf(observation.validUntil()));
+        inputs.add(evaluatedAt.toString());
+        inputs.add(sourceCutoff.toString());
+        if (assessment != null) {
+            inputs.add(assessment.fingerprint());
+            inputs.add(assessment.ruleVersion());
+            inputs.add(assessment.profileVersion());
+        }
+        evidence.stream().map(value -> String.join("|",
+                value.evidenceId().toString(), value.role().name(), value.availability().name(),
+                String.valueOf(value.severity()), value.source(), value.reference(),
+                String.valueOf(value.timeframe()), value.explanation(),
+                value.observedAt().toString(), String.valueOf(value.validUntil()),
+                String.valueOf(value.provider()), String.valueOf(value.instrument()),
+                 String.valueOf(value.sourceFingerprint()), String.valueOf(value.ruleVersion()),
+                 String.valueOf(value.sourceCutoff()), Boolean.toString(value.required())))
+                .sorted().forEach(inputs::add);
+        inputs.add(String.valueOf(scenario));
+        reasons.stream().sorted().forEach(inputs::add);
+        return ArtifactFingerprint.ofInputs(inputs).value();
+    }
+
+    private static UUID deterministicId(Object... values) {
+        String value = java.util.Arrays.stream(values)
+                .map(String::valueOf).reduce((left, right) -> left + "|" + right).orElse("");
+        return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8));
+    }
+}
