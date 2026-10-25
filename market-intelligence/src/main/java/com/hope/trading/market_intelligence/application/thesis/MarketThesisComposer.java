@@ -7,6 +7,8 @@ import com.hope.trading.market_intelligence.domain.observation.TrendContextObser
 import com.hope.trading.market_intelligence.domain.observation.MarketThesisObservationPayload;
 import com.hope.trading.market_intelligence.domain.momentum.MomentumAssessment;
 import com.hope.trading.market_intelligence.domain.momentum.MomentumCapabilityContent;
+import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityAssessment;
+import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent;
 import com.hope.trading.market_intelligence.domain.thesis.*;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 
@@ -58,9 +60,12 @@ public final class MarketThesisComposer {
 
         TrendContextAssessment assessment = trendAssessment(observation);
         MomentumCapabilityContent momentum = momentumContent(observation);
+        TradeabilityCapabilityContent tradeability = tradeabilityContent(observation);
         Instant evaluatedAt = observation.createdAt() == null
                 ? observation.validFrom() : observation.createdAt();
         Instant sourceCutoff = authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff;
+        boolean tradeabilityCompatible = tradeabilityCompatible(tradeability, marketId,
+                observation.instrument(), sourceCutoff);
         boolean assessmentCompatible = assessment == null
                 || (!assessment.cutOffAt().isAfter(sourceCutoff)
                 && marketId.equals(assessment.marketId())
@@ -86,6 +91,7 @@ public final class MarketThesisComposer {
                 referencePrice.price(), referencePrice.observedAt(), sourceCutoff);
         evidence.addAll(structural.missingEvidence());
         addMomentumEvidence(evidence, momentum, assessment, sourceCutoff);
+        addTradeabilityEvidence(evidence, tradeability, marketId, observation.instrument(), sourceCutoff);
         addMissing(evidence, "VOLUME", "VOLUME_NOT_IMPLEMENTED",
                 MarketThesisAvailability.NOT_IMPLEMENTED, sourceCutoff,
                 "Volume semantics are not implemented");
@@ -96,10 +102,13 @@ public final class MarketThesisComposer {
         List<String> reasons = new ArrayList<>();
         reasons.addAll(structural.reasons());
         MarketThesisScenario scenario = scenario(
-                assessmentCompatible ? assessment : null, momentum, reasons, structural.levels());
+                assessmentCompatible ? assessment : null, momentum,
+                tradeabilityCompatible ? tradeability : null, reasons,
+                structural.levels());
         MarketThesisState state = state(scenario, evidence, reasons);
         String fingerprint = fingerprint(marketId, analysisExecutionId, observation,
-                assessmentCompatible ? assessment : null, momentum, scenario, reasons,
+                assessmentCompatible ? assessment : null, momentum,
+                tradeabilityCompatible ? tradeability : null, scenario, reasons,
                 evaluatedAt, sourceCutoff, evidence);
         UUID lineageId = deterministicId("lineage", marketId, observation.lineageId(),
                 observation.id());
@@ -262,6 +271,64 @@ public final class MarketThesisComposer {
                 assessment.symbol(), momentum.resultFingerprint(), momentum.policyVersion(), cutoff, true));
     }
 
+    private static void addTradeabilityEvidence(
+            List<MarketThesisEvidence> target, TradeabilityCapabilityContent content,
+            UUID marketId, String instrument, Instant cutoff) {
+        if (content == null || content.assessment() == null) {
+            addMissing(target, "TRADEABILITY", "TRADEABILITY_UNAVAILABLE",
+                    MarketThesisAvailability.UNAVAILABLE, cutoff,
+                    "Tradeability evidence is unavailable", true);
+            return;
+        }
+        TradeabilityAssessment assessment = content.assessment();
+        if (!marketId.equals(assessment.marketId()) || !instrument.equals(assessment.instrument())) {
+            addMissing(target, "TRADEABILITY", "TRADEABILITY_IDENTITY_INCOMPATIBLE",
+                    MarketThesisAvailability.UNKNOWN, cutoff,
+                    "Tradeability assessment does not match the market or instrument", true);
+            return;
+        }
+        if (assessment.cutoff().isAfter(cutoff)
+                || assessment.observedAt().isAfter(cutoff)) {
+            addMissing(target, "TRADEABILITY", "TRADEABILITY_CUTOFF_INCOMPATIBLE",
+                    MarketThesisAvailability.UNKNOWN, cutoff,
+                    "Tradeability assessment is newer than the requested source cutoff", true);
+            return;
+        }
+        if (content.validUntil().isBefore(cutoff)) {
+            addMissing(target, "TRADEABILITY", "TRADEABILITY_STALE",
+                    MarketThesisAvailability.STALE, cutoff,
+                    "Tradeability assessment is stale for the requested source cutoff", true);
+            return;
+        }
+        for (TradeabilityAssessment.Evidence value : assessment.evidence()) {
+            if (value.role() == TradeabilityAssessment.Role.INFORMATIONAL) continue;
+            MarketThesisEvidenceRole role = switch (value.role()) {
+                case SUPPORTING -> MarketThesisEvidenceRole.SUPPORTING;
+                case MISSING -> MarketThesisEvidenceRole.MISSING;
+                case WEAKENING, BLOCKING -> MarketThesisEvidenceRole.CONTRADICTING;
+                case INFORMATIONAL -> throw new IllegalStateException("Informational evidence is not composed");
+            };
+            target.add(new MarketThesisEvidence(
+                    deterministicId("tradeability", assessment.resultFingerprint(), value.code()), role,
+                    value.availability(), value.severity(), value.source(), value.code(), value.timeframe(),
+                    value.explanation(), value.observedAt(), null, value.provider(),
+                    value.instrument() == null ? assessment.instrument() : value.instrument(),
+                    value.sourceFingerprint() == null ? assessment.resultFingerprint() : value.sourceFingerprint(),
+                    assessment.policyVersion(), cutoff, value.required()));
+        }
+    }
+
+    private static boolean tradeabilityCompatible(
+            TradeabilityCapabilityContent content, UUID marketId, String instrument, Instant cutoff) {
+        if (content == null || content.assessment() == null) return false;
+        TradeabilityAssessment assessment = content.assessment();
+        return marketId.equals(assessment.marketId())
+                && instrument.equals(assessment.instrument())
+                && !assessment.cutoff().isAfter(cutoff)
+                && !assessment.observedAt().isAfter(cutoff)
+                && !content.validUntil().isBefore(cutoff);
+    }
+
     private static MarketThesisContradictionSeverity severity(String code) {
         String normalized = code.toUpperCase();
         return normalized.contains("BLOCK") || normalized.contains("INVALID")
@@ -297,6 +364,7 @@ public final class MarketThesisComposer {
 
     private static MarketThesisScenario scenario(
             TrendContextAssessment assessment, MomentumCapabilityContent momentum,
+            TradeabilityCapabilityContent tradeability,
             List<String> reasons,
             List<MarketThesisLevel> structuralLevels) {
         if (assessment == null) {
@@ -329,6 +397,18 @@ public final class MarketThesisComposer {
                         ? MarketThesisConditionStatus.SATISFIED : MarketThesisConditionStatus.PENDING,
                 momentumAssessment == null ? "MOMENTUM_UNAVAILABLE" : momentumAssessment.resultFingerprint(),
                 "Current OHLC Momentum confirmation is required"));
+        boolean tradeabilityClear = tradeability != null && tradeability.assessment() != null
+                && tradeability.assessment().evidence().stream().noneMatch(value ->
+                value.role() == TradeabilityAssessment.Role.MISSING
+                        || value.role() == TradeabilityAssessment.Role.WEAKENING
+                        || value.role() == TradeabilityAssessment.Role.BLOCKING);
+        confirmations.add(new MarketThesisCondition(
+                "TRADEABILITY_CONTEXT",
+                tradeabilityClear ? MarketThesisConditionStatus.SATISFIED
+                        : MarketThesisConditionStatus.PENDING,
+                tradeability == null || tradeability.assessment() == null
+                        ? "TRADEABILITY_UNAVAILABLE" : tradeability.assessment().resultFingerprint(),
+                "Current execution-context evidence is available without inferring suitability"));
         List<MarketThesisCondition> invalidations = assessment.invalidations().stream()
                 .map(value -> new MarketThesisCondition(
                         "INVALIDATE_" + value.ruleId(), MarketThesisConditionStatus.PENDING,
@@ -361,8 +441,13 @@ public final class MarketThesisComposer {
         if (evidence.stream().anyMatch(value ->
                 value.role() == MarketThesisEvidenceRole.CONTRADICTING
                         && value.severity() == MarketThesisContradictionSeverity.WEAKENING
-                        && "MOMENTUM".equals(value.source()))) {
-            reasons.add("MOMENTUM_WEAKENING");
+                        && ("MOMENTUM".equals(value.source())
+                        || "NEWS_SERVICE".equals(value.source())))) {
+            reasons.add(evidence.stream().anyMatch(value ->
+                    value.role() == MarketThesisEvidenceRole.CONTRADICTING
+                            && "MOMENTUM".equals(value.source())
+                            && value.severity() == MarketThesisContradictionSeverity.WEAKENING)
+                    ? "MOMENTUM_WEAKENING" : "TRADEABILITY_WEAKENING");
             return MarketThesisState.WATCH;
         }
         if (evidence.stream().anyMatch(value ->
@@ -404,6 +489,14 @@ public final class MarketThesisComposer {
                 .orElse(null);
     }
 
+    private static TradeabilityCapabilityContent tradeabilityContent(Observation observation) {
+        return observation.payload()
+                .filter(MarketThesisObservationPayload.class::isInstance)
+                .map(MarketThesisObservationPayload.class::cast)
+                .map(MarketThesisObservationPayload::tradeability)
+                .orElse(null);
+    }
+
     private static ReferencePrice referencePrice(Observation observation, Instant cutoff) {
         return observation.evidence().stream()
                 .filter(value -> value.measurements() != null
@@ -422,6 +515,7 @@ public final class MarketThesisComposer {
             UUID marketId, UUID analysisExecutionId, Observation observation,
             TrendContextAssessment assessment,
             MomentumCapabilityContent momentum,
+            TradeabilityCapabilityContent tradeability,
             MarketThesisScenario scenario, List<String> reasons, Instant evaluatedAt,
             Instant sourceCutoff, List<MarketThesisEvidence> evidence) {
         List<String> inputs = new ArrayList<>(List.of(
@@ -442,6 +536,10 @@ public final class MarketThesisComposer {
         if (momentum != null && momentum.assessment() != null) {
             inputs.add(momentum.assessment().resultFingerprint());
             inputs.add(momentum.assessment().policyVersion());
+        }
+        if (tradeability != null && tradeability.assessment() != null) {
+            inputs.add(tradeability.assessment().resultFingerprint());
+            inputs.add(tradeability.assessment().policyVersion());
         }
         evidence.stream().map(value -> String.join("|",
                 value.evidenceId().toString(), value.role().name(), value.availability().name(),

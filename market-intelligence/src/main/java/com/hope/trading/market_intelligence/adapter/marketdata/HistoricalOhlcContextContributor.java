@@ -140,8 +140,8 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                 section.type(), section.status(), section.sensitivity(), section.payload(),
                 new ContextProvenance("market-data", section.provenance().sourceOccurredAt(),
                         section.provenance().fetchedAt(), sourceReference, provider,
-                        batch.normalizationVersion(), request.evidencePolicy(),
-                        batch.evidenceFingerprint(), batch.observationCount()),
+                         batch.normalizationVersion(), request.evidencePolicy(),
+                         batch.evidenceFingerprint(), batch.observationCount(), request.evaluationCutoff()),
                 section.message());
     }
 

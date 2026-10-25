@@ -31,9 +31,9 @@ public class PassiveAnalysisStrategy implements AnalysisExecutionStrategy {
         boolean strictObserved = request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED;
         List<ContextRequirement> baselineContext = strictObserved
                 ? List.of(
-                        ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
-                        ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
-                        ContextRequirement.requiredPublic(ContextSectionType.TREND_CONTEXT)
+                         ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
+                         ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
+                         ContextRequirement.requiredPublic(ContextSectionType.TREND_CONTEXT)
                 )
                 : List.of(
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY),
@@ -41,13 +41,13 @@ public class PassiveAnalysisStrategy implements AnalysisExecutionStrategy {
                 );
         List<String> capabilities = strictObserved
                 ? List.of(
-                         TrendContextAnalysisCapability.CAPABILITY_ID,
-                         OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                         OhlcMomentumAnalysisCapability.CAPABILITY_ID)
+                           TrendContextAnalysisCapability.CAPABILITY_ID,
+                           OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                           OhlcMomentumAnalysisCapability.CAPABILITY_ID)
                 : List.of(
                         TrendContextAnalysisCapability.CAPABILITY_ID,
                         SpreadAnalysisCapability.CAPABILITY_ID
-                );
+                 );
         return new AnalysisExecutionPlan(
                 capabilities,
                 baselineContext,

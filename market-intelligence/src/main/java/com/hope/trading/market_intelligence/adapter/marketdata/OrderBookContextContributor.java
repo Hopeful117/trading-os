@@ -53,9 +53,9 @@ public class OrderBookContextContributor implements ContextContributor {
                 context,
                 new ContextProvenance(
                         "market-data", context.latestOccurredAt(), context.latestKnownAt(),
-                        context.sequenceId().toString(), REPLAY_VERSION, context.normalizationVersion(),
-                        request.evidencePolicy(), context.sourceEvidenceFingerprint(),
-                        context.bids().size() + context.asks().size()),
+                         context.sequenceId().toString(), REPLAY_VERSION, context.normalizationVersion(),
+                         request.evidencePolicy(), context.sourceEvidenceFingerprint(),
+                         context.bids().size() + context.asks().size(), request.evaluationCutoff()),
                 null);
     }
 

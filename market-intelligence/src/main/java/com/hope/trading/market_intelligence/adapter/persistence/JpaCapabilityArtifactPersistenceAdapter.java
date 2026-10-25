@@ -69,14 +69,18 @@ public class JpaCapabilityArtifactPersistenceAdapter implements ArtifactPersiste
         reusedBy.addAll(incomingProvenance.reusedByExecutions());
         var mergedPersistedProvenance = new ArtifactProvenance(
                 persistedProvenance.producerId(), persistedProvenance.producerVersion(),
-                persistedProvenance.producingExecutionId(), persistedProvenance.producedAt(),
-                persistedProvenance.inputArtifacts(), reusedBy,
-                persistedProvenance.contextFingerprint(), persistedProvenance.evidenceFingerprint());
+                 persistedProvenance.producingExecutionId(), persistedProvenance.producedAt(),
+                 persistedProvenance.inputArtifacts(), reusedBy,
+                 persistedProvenance.contextFingerprint(), persistedProvenance.evidenceFingerprint(),
+                 persistedProvenance.evidencePolicy(), persistedProvenance.observationCount(),
+                 persistedProvenance.evaluationCutoff());
         var mergedIncomingProvenance = new ArtifactProvenance(
                 incomingProvenance.producerId(), incomingProvenance.producerVersion(),
-                incomingProvenance.producingExecutionId(), incomingProvenance.producedAt(),
-                incomingProvenance.inputArtifacts(), reusedBy,
-                incomingProvenance.contextFingerprint(), incomingProvenance.evidenceFingerprint());
+                 incomingProvenance.producingExecutionId(), incomingProvenance.producedAt(),
+                 incomingProvenance.inputArtifacts(), reusedBy,
+                 incomingProvenance.contextFingerprint(), incomingProvenance.evidenceFingerprint(),
+                 incomingProvenance.evidencePolicy(), incomingProvenance.observationCount(),
+                 incomingProvenance.evaluationCutoff());
         if (!sameExceptReuse(persisted, mergedPersistedProvenance, incoming, mergedIncomingProvenance)) {
             throw new IllegalStateException("Artifact identity has conflicting payload");
         }

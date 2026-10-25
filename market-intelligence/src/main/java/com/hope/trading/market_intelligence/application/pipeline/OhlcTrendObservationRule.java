@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.observation.ObservationType;
 import com.hope.trading.market_intelligence.domain.observation.MarketThesisObservationPayload;
 import com.hope.trading.market_intelligence.domain.momentum.MomentumCapabilityContent;
+import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent;
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapabilityContent;
 
 import java.math.BigDecimal;
@@ -74,7 +75,10 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                 TrendContextCapabilityContent.class);
         MomentumCapabilityContent momentum = content(results, ProductionArtifactTypes.OHLC_MOMENTUM_ANALYSIS,
                 MomentumCapabilityContent.class);
-        return trend == null && momentum == null ? null : new MarketThesisObservationPayload(trend, momentum);
+        TradeabilityCapabilityContent tradeability = content(results,
+                ProductionArtifactTypes.TRADEABILITY_ASSESSMENT, TradeabilityCapabilityContent.class);
+        return trend == null && momentum == null && tradeability == null
+                ? null : new MarketThesisObservationPayload(trend, momentum, tradeability);
     }
 
     private <T> T content(List<CapabilityExecution> results, ArtifactType type, Class<T> contentType) {

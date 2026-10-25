@@ -8,6 +8,7 @@ import com.hope.trading.market_intelligence.application.port.ArtifactPersistence
 import com.hope.trading.market_intelligence.application.strategy.AnalysisExecutionPlan;
 import com.hope.trading.market_intelligence.application.strategy.AnalysisStrategyRegistry;
 import com.hope.trading.market_intelligence.domain.*;
+import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent;
 import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.planning.ArtifactDescriptor;
@@ -125,10 +126,11 @@ public class CapabilityAnalysisCoordinator {
                         case ORDER_BOOK -> ProductionArtifactTypes.ORDER_BOOK_REPLAY;
                         case HISTORICAL_OHLC -> ProductionArtifactTypes.OHLC_HISTORY;
                         case TREND_CONTEXT -> ProductionArtifactTypes.TREND_CONTEXT_HISTORY;
+                        case NEWS -> ProductionArtifactTypes.NEWS_CONTEXT;
                         default -> null;
                     };
                     if (type == null) return;
-                    Instant occurredAt = section.provenance().sourceOccurredAt();
+                     Instant occurredAt = producedAt(section);
                     Instant producedAt = occurredAt == null
                             ? section.provenance().fetchedAt() : occurredAt;
                     String sourceVersion = sourceVersion(section);
@@ -145,8 +147,11 @@ public class CapabilityAnalysisCoordinator {
                                     producedAt, producedAt.plus(Duration.ofMinutes(15)), sourceVersion),
                             new ArtifactProvenance(
                                      "market-data", sourceVersion, null, producedAt, Set.of(), Set.of())
-                                              .withContextFingerprint(context.fingerprint().value())
-                                              .withEvidenceFingerprint(section.provenance().evidenceFingerprint()),
+                                               .withContextFingerprint(context.fingerprint().value())
+                                               .withEvidenceFingerprint(section.provenance().evidenceFingerprint())
+                                               .withEvidenceContext(section.provenance().evidencePolicy(),
+                                                       section.provenance().observationCount(),
+                                                       section.provenance().evaluationCutoff()),
                             section.status() == ContextSectionStatus.STALE
                                     ? AnalysisResultQuality.DEGRADED
                                      : AnalysisResultQuality.COMPLETE,
@@ -222,6 +227,16 @@ public class CapabilityAnalysisCoordinator {
                     "Deterministic liquidity measurements from a strict Order Book replay.",
                     result.metrics(), BigDecimal.ONE, Set.of(ContextSectionType.ORDER_BOOK), generatedAt);
         }
+        if (content instanceof TradeabilityCapabilityContent details) {
+            return new IntelligenceFinding(
+                    capabilityId + ":" + request.marketId() + ":" + details.assessment().cutoff(),
+                    capabilityId, AnalysisOrigin.DETERMINISTIC,
+                    FindingType.DETERMINISTIC_FINDING, "Market tradeability evidence",
+                    "Structured execution-context evidence without an implicit suitability score.",
+                    result.metrics(), BigDecimal.ONE,
+                    Set.of(ContextSectionType.MARKET_SNAPSHOT, ContextSectionType.ORDER_BOOK,
+                            ContextSectionType.HISTORICAL_OHLC, ContextSectionType.NEWS), generatedAt);
+        }
         DeterministicMeasurements details = (DeterministicMeasurements) content;
         return new IntelligenceFinding(
                 capabilityId + ":" + request.marketId() + ":" + details.observedAt(),
@@ -235,7 +250,8 @@ public class CapabilityAnalysisCoordinator {
                 .map(ProducedArtifact::artifact)
                 .map(StoredArtifact::content)
                 .anyMatch(value -> value instanceof DeterministicMeasurements
-                        || value instanceof OrderBookLiquidityFeatureSet);
+                        || value instanceof OrderBookLiquidityFeatureSet
+                        || value instanceof TradeabilityCapabilityContent);
     }
 
     private ContextSectionSummary summary(ContextSection section) {
@@ -256,6 +272,25 @@ public class CapabilityAnalysisCoordinator {
                 String.valueOf(provenance.evidencePolicy()),
                 String.valueOf(provenance.evidenceFingerprint()),
                 String.valueOf(provenance.normalizationVersion()));
+    }
+
+    private Instant producedAt(ContextSection section) {
+        if (section.payload() instanceof NewsContext news) {
+            return java.util.stream.Stream.concat(
+                            news.events().stream().flatMap(value -> java.util.stream.Stream.of(
+                                    value.sourceUpdatedAt(), value.fetchedAt())),
+                            news.news().stream().flatMap(value -> java.util.stream.Stream.of(
+                                    value.sourceUpdatedAt(), value.fetchedAt())))
+                    .filter(Objects::nonNull)
+                    .max(Comparator.naturalOrder())
+                    .orElseGet(() -> fallbackProducedAt(section));
+        }
+        return fallbackProducedAt(section);
+    }
+
+    private Instant fallbackProducedAt(ContextSection section) {
+        Instant sourceOccurredAt = section.provenance().sourceOccurredAt();
+        return sourceOccurredAt == null ? section.provenance().fetchedAt() : sourceOccurredAt;
     }
 
     private String timeframe(ContextSection section) {
