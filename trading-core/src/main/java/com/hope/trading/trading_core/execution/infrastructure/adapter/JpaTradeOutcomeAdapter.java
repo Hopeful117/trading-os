@@ -52,6 +52,11 @@ public class JpaTradeOutcomeAdapter implements TradeOutcomeRepositoryPort {
     }
 
     @Override @Transactional(readOnly = true)
+    public Optional<TradeOutcome> findByTradeId(UUID id) {
+        return repository.findFirstByTradeIdOrderByCreatedAtDesc(id).map(this::toDomain);
+    }
+
+    @Override @Transactional(readOnly = true)
     public List<TradeOutcome> findByAccountId(UUID id) {
         return repository.findByAccountIdOrderByCreatedAtDesc(id).stream().map(this::toDomain).toList();
     }

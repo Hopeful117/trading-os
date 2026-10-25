@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.dashboard.integration.BrokerDashboardMapper;
 import com.hope.trading.trading_core.dashboard.model.OpenPositionDashboardView;
 import com.hope.trading.trading_core.dashboard.service.PositionQueryService;
+import com.hope.trading.trading_core.dashboard.service.PositionIntelligenceQueryService;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
@@ -33,6 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -45,9 +48,10 @@ class PositionControllerTest {
     private final BrokerAccountRepository brokerAccountRepository = mock(BrokerAccountRepository.class);
     private final BrokerDashboardMapper brokerMapper = new BrokerDashboardMapper();
     private final PositionQueryService positionQueryService = mock(PositionQueryService.class);
+    private final PositionIntelligenceQueryService positionIntelligenceQueryService = mock(PositionIntelligenceQueryService.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
-            new PositionController(accountService, brokerApiClient, brokerMapper, positionQueryService,
-                    brokerAccountRepository)
+             new PositionController(accountService, brokerApiClient, brokerMapper, positionQueryService,
+                     positionIntelligenceQueryService, brokerAccountRepository)
     ).build();
 
     private UUID accountId;
@@ -115,6 +119,34 @@ class PositionControllerTest {
 
         org.mockito.Mockito.verifyNoInteractions(brokerApiClient);
         org.mockito.Mockito.verify(positionQueryService).findPaperPositions(eq(account), any());
+    }
+
+    @Test
+    void positionIntelligenceUsesTheSelectedPaperPositionAndPreservesAccountContext() throws Exception {
+        when(accountService.getAccountById(accountId, username)).thenReturn(account);
+        BrokerAccount paper = mock(BrokerAccount.class);
+        when(paper.ownerId()).thenReturn(userId);
+        when(paper.executionMode()).thenReturn(ExecutionMode.PAPER);
+        when(brokerAccountRepository.findById(brokerAccountId)).thenReturn(java.util.Optional.of(paper));
+        OpenPositionDashboardView position = new OpenPositionDashboardView(
+                "paper-position", accountId, UUID.randomUUID(), "BTC/USD", TradeType.BUY,
+                new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("101"), null, null,
+                new BigDecimal("1"), new BigDecimal("1"), null, BigDecimal.ZERO, BigDecimal.ZERO,
+                new BigDecimal("101"), com.hope.trading.trading_core.dashboard.model.PositionProtectionStatus.UNKNOWN,
+                true, Instant.now(), Instant.now(), Instant.now(),
+                com.hope.trading.trading_core.dashboard.model.PositionSource.TRADING_CORE,
+                com.hope.trading.trading_core.dashboard.model.PositionValuationStatus.FRESH, "USD");
+        when(positionQueryService.findPaperPositions(eq(account), any(), any())).thenReturn(List.of(position));
+        var intelligence = mock(com.hope.trading.trading_core.dashboard.model.PositionIntelligenceView.class);
+        when(positionIntelligenceQueryService.query(eq(userId), eq(account), eq(position), any(), any()))
+                .thenReturn(intelligence);
+
+        mvc.perform(get("/api/v1/accounts/{accountId}/positions/{positionId}/intelligence", accountId,
+                        "paper-position").principal(authentication()))
+                .andExpect(status().isOk());
+
+        verify(positionIntelligenceQueryService).query(eq(userId), eq(account), eq(position), any(), any());
+        verifyNoInteractions(brokerApiClient);
     }
 
     @Test

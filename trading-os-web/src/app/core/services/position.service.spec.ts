@@ -30,6 +30,16 @@ describe('PositionService', () => {
     req.flush([]);
   });
 
+  it('should get position intelligence with canonical account and position identity', () => {
+    service.getPositionIntelligence('acc-1', 'position/1').subscribe();
+
+    const req = httpMock.expectOne(
+      `${environment.gatewayUrl}v1/accounts/acc-1/positions/position%2F1/intelligence`,
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({});
+  });
+
   it('should close position', () => {
     service.closePosition('acc-1', 'txid-123', 'idem-key').subscribe();
 

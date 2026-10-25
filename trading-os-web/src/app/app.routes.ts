@@ -13,6 +13,7 @@ import { Opportunities } from './features/opportunities/opportunities';
 import { OpportunityDetail } from './features/opportunities/opportunity-details/opportunity-details';
 import { PlanPage } from './features/trade-planning/plan-page/plan-page';
 import { Positions } from './features/positions/pages/positions/positions';
+import { PositionIntelligence } from './features/positions/pages/position-intelligence/position-intelligence';
 import { ExecutionHistory } from './features/executions/pages/execution-history/execution-history';
 import { DecisionWorkspace } from './features/decision-workspace/decision-workspace';
 import { ManualTradePage } from './features/trade-planning/manual-trade-page/manual-trade-page';
@@ -96,6 +97,11 @@ export const routes: Routes = [
   {
     path: 'positions',
     component: Positions,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'positions/intelligence',
+    component: PositionIntelligence,
     canActivate: [authGuard],
   },
   {

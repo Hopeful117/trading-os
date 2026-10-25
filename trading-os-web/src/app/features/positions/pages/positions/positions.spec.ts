@@ -61,6 +61,18 @@ describe('Positions', () => {
     expect(text()).toContain('2 position(s) ouverte(s)');
   });
 
+  it('preserves both account and position identity in the intelligence link', async () => {
+    await create();
+
+    const links = fixture.nativeElement.querySelectorAll(
+      '[data-testid="position-intelligence-link"]',
+    ) as NodeListOf<HTMLAnchorElement>;
+
+    expect(links[0].getAttribute('href')).toContain(
+      '/positions/intelligence?accountId=account-1&positionId=p1',
+    );
+  });
+
   it('displays empty state when no positions', async () => {
     positionService.getPositions.mockReturnValue(of([]));
     await create();

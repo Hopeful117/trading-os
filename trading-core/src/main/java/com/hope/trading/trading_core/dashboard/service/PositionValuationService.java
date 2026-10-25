@@ -20,7 +20,7 @@ public class PositionValuationService {
                     ? BigDecimal.ZERO
                     : position.exposure().abs();
             return new PositionValuation(
-                    null, null, exposure, BigDecimal.ZERO, BigDecimal.ZERO
+                    null, null, exposure, null, null
             );
         }
         BigDecimal fallbackExposure = position.exposure() != null
@@ -49,7 +49,7 @@ public class PositionValuationService {
 
     private BigDecimal risk(PositionFact position) {
         if (position.stopLoss() == null) {
-            return BigDecimal.ZERO;
+            return null;
         }
         return tradingCalculatorService.calculateTradeRisk(
                 position.entryPrice(), position.stopLoss(), position.quantity()
@@ -58,7 +58,7 @@ public class PositionValuationService {
 
     private BigDecimal percentage(BigDecimal value, BigDecimal reference) {
         if (value == null || reference == null || reference.signum() == 0) {
-            return BigDecimal.ZERO;
+            return null;
         }
         return value.multiply(BigDecimal.valueOf(100))
                 .divide(reference.abs(), PERCENT_SCALE, RoundingMode.HALF_UP);

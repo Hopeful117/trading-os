@@ -8,6 +8,7 @@ import java.util.UUID;
 public interface TradeOutcomeRepositoryPort {
     TradeOutcome save(TradeOutcome outcome);
     Optional<TradeOutcome> findByExecutionIntentId(UUID executionIntentId);
+    Optional<TradeOutcome> findByTradeId(UUID tradeId);
     List<TradeOutcome> findByAccountId(UUID accountId);
     Optional<TradeOutcome> findById(UUID id);
 }

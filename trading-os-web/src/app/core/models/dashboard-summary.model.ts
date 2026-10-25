@@ -38,8 +38,8 @@ export interface OpenPositionDashboardView {
   unrealizedPnl: number | null;
   unrealizedPnlPercentage: number | null;
   brokerUnrealizedPnl: number | null;
-  riskAmount: number;
-  riskPercentage: number;
+  riskAmount: number | null;
+  riskPercentage: number | null;
   exposure: number | null;
   protectionStatus: PositionProtectionStatus;
   marketTradable: boolean;

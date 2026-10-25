@@ -43,6 +43,19 @@ class PositionValuationServiceTest {
         assertThat(result.exposure()).isEqualByComparingTo("200");
     }
 
+    @Test
+    void keepsRiskUnavailableWhenStopLossIsMissing() {
+        PositionFact position = new PositionFact(
+                "p1", "BTC/USD", TradeType.BUY, new BigDecimal("2"),
+                new BigDecimal("100"), null, null, null, null, null, null, null
+        );
+
+        PositionValuation result = service.value(position, new BigDecimal("110"), new BigDecimal("1000"));
+
+        assertThat(result.riskAmount()).isNull();
+        assertThat(result.riskPercentage()).isNull();
+    }
+
     private PositionValuation value(TradeType side, String price) {
         return service.value(position(side), new BigDecimal(price), new BigDecimal("1000"));
     }
