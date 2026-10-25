@@ -18,7 +18,10 @@ export class PositionService {
     );
   }
 
-  getPositionIntelligence(accountId: string, positionId: string): Observable<PositionIntelligenceView> {
+  getPositionIntelligence(
+    accountId: string,
+    positionId: string,
+  ): Observable<PositionIntelligenceView> {
     return this.http.get<PositionIntelligenceView>(
       `${environment.gatewayUrl}v1/accounts/${accountId}/positions/${encodeURIComponent(positionId)}/intelligence`,
     );

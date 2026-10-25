@@ -18,7 +18,9 @@
           <p class="eyebrow">Position Intelligence</p>
           <h1>
             {{ vm.intelligence.position.symbol }}
-            <span class="side">{{ vm.intelligence.position.side === 'BUY' ? 'Long' : 'Short' }}</span>
+            <span class="side">{{
+              vm.intelligence.position.side === 'BUY' ? 'Long' : 'Short'
+            }}</span>
           </h1>
           <p class="muted">
             Source {{ vm.intelligence.position.source }} · Calculé
@@ -73,16 +75,33 @@
       <section class="panel facts-panel">
         <h2>Faits actuels</h2>
         <div class="facts-grid">
-          <div><span>Entrée</span><strong>{{ vm.intelligence.position.entryPrice }}</strong></div>
-          <div><span>Prix courant</span><strong>{{ vm.intelligence.position.currentPrice ?? 'Indisponible' }}</strong></div>
-          <div><span>P/L</span><strong>{{ vm.intelligence.position.unrealizedPnl ?? 'Indisponible' }}</strong></div>
-          <div><span>Risque</span><strong>{{ vm.intelligence.position.riskAmount ?? 'Indisponible' }}</strong></div>
-          <div><span>Stop</span><strong>{{ vm.intelligence.position.stopLoss ?? 'Indisponible' }}</strong></div>
-          <div><span>Target</span><strong>{{ vm.intelligence.position.takeProfit ?? 'Indisponible' }}</strong></div>
+          <div>
+            <span>Entrée</span><strong>{{ vm.intelligence.position.entryPrice }}</strong>
+          </div>
+          <div>
+            <span>Prix courant</span
+            ><strong>{{ vm.intelligence.position.currentPrice ?? 'Indisponible' }}</strong>
+          </div>
+          <div>
+            <span>P/L</span
+            ><strong>{{ vm.intelligence.position.unrealizedPnl ?? 'Indisponible' }}</strong>
+          </div>
+          <div>
+            <span>Risque</span
+            ><strong>{{ vm.intelligence.position.riskAmount ?? 'Indisponible' }}</strong>
+          </div>
+          <div>
+            <span>Stop</span
+            ><strong>{{ vm.intelligence.position.stopLoss ?? 'Indisponible' }}</strong>
+          </div>
+          <div>
+            <span>Target</span
+            ><strong>{{ vm.intelligence.position.takeProfit ?? 'Indisponible' }}</strong>
+          </div>
         </div>
         <p class="muted">
-          Prix observé : {{ vm.intelligence.position.priceOccurredAt | date: 'medium' }} ·
-          État : {{ vm.intelligence.position.valuationStatus }}
+          Prix observé : {{ vm.intelligence.position.priceOccurredAt | date: 'medium' }} · État :
+          {{ vm.intelligence.position.valuationStatus }}
         </p>
         <div class="source-statuses">
           <span>Compte : {{ vm.intelligence.accountData.status }}</span>
@@ -96,10 +115,24 @@
           <h2>Depuis l'entrée</h2>
           <p class="state-label">{{ vm.intelligence.comparisons.status }}</p>
           <div class="facts-grid compact">
-            <div><span>Variation prix</span><strong>{{ vm.intelligence.comparisons.priceChange ?? 'Indisponible' }}</strong></div>
-            <div><span>Variation %</span><strong>{{ vm.intelligence.comparisons.priceChangePercentage ?? 'Indisponible' }}</strong></div>
-            <div><span>Distance Stop</span><strong>{{ vm.intelligence.comparisons.distanceToStop ?? 'Indisponible' }}</strong></div>
-            <div><span>Distance Target</span><strong>{{ vm.intelligence.comparisons.distanceToTarget ?? 'Indisponible' }}</strong></div>
+            <div>
+              <span>Variation prix</span
+              ><strong>{{ vm.intelligence.comparisons.priceChange ?? 'Indisponible' }}</strong>
+            </div>
+            <div>
+              <span>Variation %</span
+              ><strong>{{
+                vm.intelligence.comparisons.priceChangePercentage ?? 'Indisponible'
+              }}</strong>
+            </div>
+            <div>
+              <span>Distance Stop</span
+              ><strong>{{ vm.intelligence.comparisons.distanceToStop ?? 'Indisponible' }}</strong>
+            </div>
+            <div>
+              <span>Distance Target</span
+              ><strong>{{ vm.intelligence.comparisons.distanceToTarget ?? 'Indisponible' }}</strong>
+            </div>
           </div>
           @if (vm.intelligence.comparisons.unavailableReasons.length > 0) {
             <p class="muted">{{ vm.intelligence.comparisons.unavailableReasons.join(', ') }}</p>
@@ -110,24 +143,40 @@
           <h2>Décision d'origine</h2>
           <p class="state-label">Lineage : {{ vm.intelligence.lineage.status }}</p>
           @if (vm.intelligence.lineage.tradePlanId) {
-            <p>TradePlan {{ vm.intelligence.lineage.tradePlanId }} · v{{ vm.intelligence.lineage.tradePlanVersion }}</p>
+            <p>
+              TradePlan {{ vm.intelligence.lineage.tradePlanId }} · v{{
+                vm.intelligence.lineage.tradePlanVersion
+              }}
+            </p>
             <p>Origine : {{ vm.intelligence.lineage.origin }}</p>
             <p class="thesis">{{ vm.intelligence.rationale.thesis ?? 'Thèse indisponible' }}</p>
           } @else {
             <p class="muted">{{ vm.intelligence.lineage.reason ?? 'Lineage indisponible.' }}</p>
           }
-          <p class="muted">Les conditions historiques ne sont pas interprétées comme des règles exécutables.</p>
+          <p class="muted">
+            Les conditions historiques ne sont pas interprétées comme des règles exécutables.
+          </p>
         </article>
       </section>
 
       <section class="panel">
         <h2>Conséquences déterministes</h2>
         <div class="scenario-grid">
-          @for (scenario of [vm.intelligence.scenarios.current, vm.intelligence.scenarios.stop, vm.intelligence.scenarios.target]; track scenario.type) {
+          @for (
+            scenario of [
+              vm.intelligence.scenarios.current,
+              vm.intelligence.scenarios.stop,
+              vm.intelligence.scenarios.target,
+            ];
+            track scenario.type
+          ) {
             <article [class]="'scenario ' + scenarioClass(scenario)">
               <h3>{{ scenario.type }}</h3>
               <span>{{ scenario.availability }}</span>
-              <p>P/L projeté : {{ scenarioValue(scenario.projectedPnl, vm.intelligence.position.quoteAsset) }}</p>
+              <p>
+                P/L projeté :
+                {{ scenarioValue(scenario.projectedPnl, vm.intelligence.position.quoteAsset) }}
+              </p>
               @if (scenario.reasons.length > 0) {
                 <p class="muted">{{ scenario.reasons.join(', ') }}</p>
               }

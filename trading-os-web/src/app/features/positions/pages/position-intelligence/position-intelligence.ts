@@ -1,15 +1,30 @@
 import { AsyncPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, combineLatest, map, Observable, of, shareReplay, startWith, switchMap } from 'rxjs';
+import {
+  catchError,
+  combineLatest,
+  map,
+  Observable,
+  of,
+  shareReplay,
+  startWith,
+  switchMap,
+} from 'rxjs';
 import {
   PositionIntelligenceView,
   PositionScenario,
 } from '../../../../core/models/position-intelligence.model';
 import { PositionService } from '../../../../core/services/position.service';
-import { FreshnessIndicator, FreshnessIndicatorValue } from '../../../../shared/workstation/freshness-indicator/freshness-indicator';
+import {
+  FreshnessIndicator,
+  FreshnessIndicatorValue,
+} from '../../../../shared/workstation/freshness-indicator/freshness-indicator';
 import { MetricValue } from '../../../../shared/workstation/metric-value/metric-value';
-import { StatusBadge, StatusBadgeTone } from '../../../../shared/workstation/status-badge/status-badge';
+import {
+  StatusBadge,
+  StatusBadgeTone,
+} from '../../../../shared/workstation/status-badge/status-badge';
 
 type PositionIntelligencePageView =
   | { status: 'loading' }
@@ -27,7 +42,7 @@ export class PositionIntelligence {
   private readonly positionService = inject(PositionService);
 
   readonly viewModel$: Observable<PositionIntelligencePageView> = combineLatest([
-     this.route.queryParamMap,
+    this.route.queryParamMap,
   ]).pipe(
     switchMap(([query]) => {
       const accountId = query.get('accountId');
