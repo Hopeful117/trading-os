@@ -1,6 +1,6 @@
 import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject, OnDestroy } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   catchError,
   EMPTY,
@@ -120,6 +120,7 @@ const BROKER_ORDER_LABELS: Record<string, string> = {
 })
 export class PlanPage implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly tradePlanService = inject(TradePlanService);
   private readonly executionService = inject(ExecutionService);
   private readonly marketService = inject(MarketService);
@@ -524,6 +525,20 @@ export class PlanPage implements OnDestroy {
     this.reloadSubject.next();
   }
 
+  returnToCockpit(plan: TradePlanResponse): void {
+    const origin = plan.originContext;
+    if (!origin?.returnAvailable || !origin.opportunityId || !origin.marketId) return;
+    void this.router.navigate(['/decision-workspace'], {
+      queryParams: {
+        accountId: origin.accountId,
+        marketId: origin.marketId,
+        opportunityId: origin.opportunityId,
+        opportunityVersion: origin.opportunityVersion,
+        sourceScanId: origin.sourceScanId,
+      },
+    });
+  }
+
   retryCommand(view: Extract<PlanView, { status: 'error' }>): void {
     if (!view.plan || !view.retryAction) return;
     switch (view.retryAction) {
@@ -565,6 +580,10 @@ export class PlanPage implements OnDestroy {
 
   statusLabel(status: ExecutionStatus): string {
     return STATUS_LABELS[status] ?? status;
+  }
+
+  planForView(view: PlanView): TradePlanResponse | null {
+    return 'plan' in view ? (view.plan ?? null) : null;
   }
 
   brokerOrderLabel(status: string | null): string {

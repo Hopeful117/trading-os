@@ -1,7 +1,9 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanDecisionService;
+import com.hope.trading.market_intelligence.application.tradeplan.TradePlanOriginContextResolver;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanTestFixtures;
+import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanningResult;
 import com.hope.trading.market_intelligence.domain.tradeplan.TradePlan;
 import com.hope.trading.market_intelligence.security.MiServicePrincipal;
@@ -16,6 +18,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class InternalTradePlanDecisionControllerTest {
     @ParameterizedTest
@@ -29,7 +35,8 @@ class InternalTradePlanDecisionControllerTest {
                 new InternalTradePlanDecisionController(
                         new TradePlanDecisionService(
                                 environment.plans(), environment.contexts(), environment.service()),
-                        environment.contexts())).build();
+                        environment.contexts(),
+                        new TradePlanOriginContextResolver(environment.opportunities()))).build();
         var authentication = new TestingAuthenticationToken(
                 new MiServicePrincipal("trading-core", "market-intelligence", environment.owner()), null);
         String basePath = "/internal/v1/trade-plans/%s/versions/%d"
@@ -47,6 +54,12 @@ class InternalTradePlanDecisionControllerTest {
                         .value(decision == TradePlanDecisionService.Decision.ACCEPT
                                 ? "ACCEPTED" : "REJECTED"))
                 .andExpect(jsonPath("$.decisionActorId").value(environment.owner().toString()))
+                .andExpect(jsonPath("$.originContext.originType").value("OPPORTUNITY"))
+                .andExpect(jsonPath("$.originContext.opportunityId")
+                        .value(environment.opportunity().id().value().toString()))
+                .andExpect(jsonPath("$.originContext.marketId")
+                        .value(environment.opportunity().marketId().orElseThrow().toString()))
+                .andExpect(jsonPath("$.originContext.returnAvailable").value(true))
                 .andExpect(jsonPath("$.decisionAt").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
 
@@ -58,7 +71,8 @@ class InternalTradePlanDecisionControllerTest {
         mvc.perform(get(decidedPath).principal(authentication))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.decisionActorId").value(environment.owner().toString()))
-                .andExpect(jsonPath("$.decisionAt").isNotEmpty());
+                .andExpect(jsonPath("$.decisionAt").isNotEmpty())
+                .andExpect(jsonPath("$.originContext.returnAvailable").value(true));
     }
 
     @org.junit.jupiter.api.Test
@@ -71,5 +85,37 @@ class InternalTradePlanDecisionControllerTest {
                         proposed.id(), com.hope.trading.market_intelligence.domain.tradeplan.TradePlanStatus.ACCEPTED))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("decision actor");
+    }
+
+    @org.junit.jupiter.api.Test
+    void hidesOriginWhenOpportunityCannotBeResolved() {
+        var environment = TradePlanTestFixtures.environment();
+        TradePlan proposed = ((TradePlanningResult.Success) environment.service().create(
+                TradePlanTestFixtures.request(environment))).plan();
+        TradingOpportunityRepository repository = mock(TradingOpportunityRepository.class);
+        when(repository.find(any(), any())).thenReturn(java.util.Optional.empty());
+
+        var origin = new TradePlanOriginContextResolver(repository).resolve(
+                proposed, environment.context());
+
+        assertThat(origin.returnAvailable()).isFalse();
+        assertThat(origin.unavailableReason()).isEqualTo("ORIGIN_UNAVAILABLE");
+        assertThat(origin.opportunityId()).isNull();
+    }
+
+    @org.junit.jupiter.api.Test
+    void hidesOriginWhenOpportunityAccountDoesNotMatchPlanContext() {
+        var environment = TradePlanTestFixtures.environment();
+        TradePlan proposed = ((TradePlanningResult.Success) environment.service().create(
+                TradePlanTestFixtures.request(environment))).plan();
+        var mismatchedContext = TradePlanTestFixtures.context(
+                java.util.UUID.randomUUID(), 1, environment.owner(), java.util.UUID.randomUUID());
+
+        var origin = new TradePlanOriginContextResolver(environment.opportunities()).resolve(
+                proposed, mismatchedContext);
+
+        assertThat(origin.returnAvailable()).isFalse();
+        assertThat(origin.unavailableReason()).isEqualTo("ORIGIN_ACCOUNT_MISMATCH");
+        assertThat(origin.opportunityId()).isNull();
     }
 }

@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
@@ -112,6 +112,8 @@ const marketDataStreamServiceMock = {
     }),
 };
 
+const routerMock = { navigate: vi.fn() };
+
 describe('PlanPage', () => {
   let fixture: ComponentFixture<PlanPage>;
 
@@ -146,6 +148,7 @@ describe('PlanPage', () => {
       imports: [PlanPage],
       providers: [
         { provide: ActivatedRoute, useValue: mockActivatedRoute(params) },
+        { provide: Router, useValue: routerMock },
         { provide: TradePlanService, useValue: tradePlanService },
         { provide: ExecutionService, useValue: executionService },
         { provide: MarketService, useValue: marketServiceMock },
@@ -170,8 +173,60 @@ describe('PlanPage', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="reject-button"]')).toBeTruthy();
   });
 
+  it('shows origin context and returns to the decision cockpit', () => {
+    const plan = {
+      ...fakePlan('PROPOSED'),
+      originContext: {
+        originType: 'OPPORTUNITY' as const,
+        accountId: 'acc-1',
+        opportunityId: 'opp-1',
+        opportunityVersion: 2,
+        marketId: 'market-1',
+        sourceScanId: 'scan-1',
+        currentOpportunityStatus: 'EXPIRED',
+        currentValidFrom: '2025-01-01T00:00:00Z',
+        currentValidUntil: '2025-01-02T00:00:00Z',
+        returnAvailable: true,
+        unavailableReason: null,
+      },
+    };
+    configureMocks(of(plan));
+    fixture = TestBed.createComponent(PlanPage);
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="origin-context"]')).toBeTruthy();
+    fixture.nativeElement.querySelector('[data-testid="return-to-cockpit-button"]').click();
+    expect(routerMock.navigate).toHaveBeenCalledWith(['/decision-workspace'], {
+      queryParams: {
+        accountId: 'acc-1',
+        marketId: 'market-1',
+        opportunityId: 'opp-1',
+        opportunityVersion: 2,
+        sourceScanId: 'scan-1',
+      },
+    });
+  });
+
   it('shows accepted state with evaluate risk button', () => {
-    configureMocks(of(fakePlan('ACCEPTED')));
+    configureMocks(
+      of({
+        ...fakePlan('ACCEPTED'),
+        originContext: {
+          originType: 'OPPORTUNITY',
+          accountId: 'acc-1',
+          opportunityId: 'opp-1',
+          opportunityVersion: 1,
+          marketId: 'market-1',
+          sourceScanId: null,
+          currentOpportunityStatus: 'ACTIVE',
+          currentValidFrom: '2025-01-01T00:00:00Z',
+          currentValidUntil: null,
+          returnAvailable: true,
+          unavailableReason: null,
+        },
+      }),
+    );
     fixture = TestBed.createComponent(PlanPage);
     fixture.detectChanges();
     fixture.detectChanges();
@@ -179,6 +234,7 @@ describe('PlanPage', () => {
     expect(
       fixture.nativeElement.querySelector('[data-testid="evaluate-risk-button"]'),
     ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="origin-context"]')).toBeTruthy();
   });
 
   it('shows rejected state', () => {

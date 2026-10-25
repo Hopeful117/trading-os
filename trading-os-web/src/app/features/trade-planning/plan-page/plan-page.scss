@@ -1,6 +1,7 @@
 .plan-page {
   padding: 2rem;
   color: #e2e8f0;
+  min-width: 0;
 }
 
 .back-link {
@@ -76,6 +77,28 @@
   p {
     margin-top: 0.5rem;
     color: #94a3b8;
+  }
+}
+
+.origin-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  margin: -0.75rem 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: 10px;
+  background: #0f1d32;
+  color: #bfdbfe;
+  overflow-wrap: anywhere;
+
+  strong {
+    color: #e2e8f0;
+  }
+
+  button {
+    margin-left: auto;
   }
 }
 
@@ -475,6 +498,16 @@
 
   .badges {
     flex-wrap: wrap;
+  }
+
+  .origin-context {
+    align-items: flex-start;
+    flex-direction: column;
+
+    button {
+      width: 100%;
+      margin-left: 0;
+    }
   }
 
   .card-actions {

@@ -1,5 +1,29 @@
 <div class="plan-page">
   @if (view$ | async; as view) {
+    @if (planForView(view); as plan) {
+      @if (plan.originContext; as origin) {
+        <section class="origin-context" data-testid="origin-context">
+          <strong>Origin: {{ origin.originType }}</strong>
+          @if (origin.originType === 'OPPORTUNITY') {
+            <span>Status: {{ origin.currentOpportunityStatus ?? 'Unavailable' }}</span>
+            <span>Valid from: {{ origin.currentValidFrom | date: 'MMM d, HH:mm' }}</span>
+            <span>Valid until: {{ origin.currentValidUntil | date: 'MMM d, HH:mm' }}</span>
+          }
+          @if (origin.returnAvailable) {
+            <button
+              type="button"
+              class="btn-secondary"
+              data-testid="return-to-cockpit-button"
+              (click)="returnToCockpit(plan)"
+            >
+              Return to Cockpit
+            </button>
+          } @else if (origin.unavailableReason) {
+            <span>Return unavailable: {{ origin.unavailableReason }}</span>
+          }
+        </section>
+      }
+    }
     @switch (view.status) {
       @case ('loading') {
         <div class="state-card" data-testid="loading-state">
@@ -62,7 +86,6 @@
               <span class="entry-type">{{ view.plan.entryType }}</span>
             </div>
           </header>
-
           <section class="facts-grid">
             <div class="fact">
               <span class="label">Entry price</span>

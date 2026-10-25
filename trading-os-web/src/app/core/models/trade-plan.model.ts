@@ -51,6 +51,21 @@ export interface TradePlanResponse {
   managementRules: string[];
   createdAt: string;
   tradingAccountId: string;
+  originContext?: TradePlanOriginContext | null;
+}
+
+export interface TradePlanOriginContext {
+  originType: 'OPPORTUNITY' | 'MANUAL';
+  accountId: string;
+  opportunityId: string | null;
+  opportunityVersion: number | null;
+  marketId: string | null;
+  sourceScanId: string | null;
+  currentOpportunityStatus: string | null;
+  currentValidFrom: string | null;
+  currentValidUntil: string | null;
+  returnAvailable: boolean;
+  unavailableReason: string | null;
 }
 
 export interface RiskReason {
