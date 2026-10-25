@@ -192,6 +192,14 @@
             </div>
 
             <div class="position-actions">
+              <a
+                class="btn-details"
+                [routerLink]="['/positions/intelligence']"
+                [queryParams]="{ accountId: position.accountId, positionId: position.positionId }"
+                data-testid="position-intelligence-link"
+              >
+                Comprendre la position
+              </a>
               @if (position.source === 'BROKER' || position.source === 'TRADING_CORE') {
                 @if (!getCloseState(position.positionId, position.accountId).showConfirmation) {
                   <button

@@ -7,5 +7,6 @@ import java.util.UUID;
 
 public interface JpaTradeOutcomeRepository extends JpaRepository<TradeOutcomeEntity, UUID> {
     Optional<TradeOutcomeEntity> findByExecutionIntentId(UUID executionIntentId);
+    Optional<TradeOutcomeEntity> findFirstByTradeIdOrderByCreatedAtDesc(UUID tradeId);
     List<TradeOutcomeEntity> findByAccountIdOrderByCreatedAtDesc(UUID accountId);
 }

@@ -1,0 +1,141 @@
+<main class="intelligence-container">
+  @if (viewModel$ | async; as vm) {
+    @if (vm.status === 'loading') {
+      <section class="state-panel">Chargement de l'intelligence de position…</section>
+    } @else if (vm.status === 'error') {
+      <section class="state-panel error">{{ vm.message }}</section>
+      <a routerLink="/positions" class="back-link">Retour aux positions</a>
+    } @else {
+      <header class="intelligence-header">
+        <div>
+          <a
+            class="back-link"
+            [routerLink]="['/positions']"
+            [queryParams]="{ accountId: vm.intelligence.position.accountId }"
+          >
+            ← Positions du compte
+          </a>
+          <p class="eyebrow">Position Intelligence</p>
+          <h1>
+            {{ vm.intelligence.position.symbol }}
+            <span class="side">{{ vm.intelligence.position.side === 'BUY' ? 'Long' : 'Short' }}</span>
+          </h1>
+          <p class="muted">
+            Source {{ vm.intelligence.position.source }} · Calculé
+            {{ vm.intelligence.generatedAt | date: 'medium' }}
+          </p>
+        </div>
+        <span class="status-badge" [class.partial]="vm.intelligence.status !== 'AVAILABLE'">
+          {{ vm.intelligence.status }}
+        </span>
+      </header>
+
+      <section class="context-strip" data-testid="position-monitoring-context">
+        <div class="context-strip-header">
+          <div>
+            <span class="eyebrow">Position context</span>
+            <h2>Monitoring</h2>
+          </div>
+          <div class="context-next-action">
+            <span>Next safe action</span>
+            <strong>Review facts; no execution action</strong>
+          </div>
+        </div>
+        <div class="context-grid">
+          <app-metric-value
+            label="Account"
+            [value]="vm.intelligence.position.accountId"
+            detail="Account context validated server-side"
+          />
+          <app-metric-value
+            label="Market"
+            [value]="vm.intelligence.position.symbol"
+            [detail]="vm.intelligence.position.marketId ?? 'Market identity unavailable'"
+          />
+          <div class="context-metric">
+            <span>Authority</span>
+            <app-status-badge
+              [label]="sourceLabel(vm.intelligence.position.source)"
+              [tone]="'neutral'"
+            />
+            <small>Current position facts</small>
+          </div>
+          <div class="context-metric">
+            <span>Freshness</span>
+            <app-freshness-indicator
+              [freshness]="freshness(vm.intelligence.position.valuationStatus)"
+              [updatedAt]="vm.intelligence.position.priceOccurredAt | date: 'mediumTime'"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="panel facts-panel">
+        <h2>Faits actuels</h2>
+        <div class="facts-grid">
+          <div><span>Entrée</span><strong>{{ vm.intelligence.position.entryPrice }}</strong></div>
+          <div><span>Prix courant</span><strong>{{ vm.intelligence.position.currentPrice ?? 'Indisponible' }}</strong></div>
+          <div><span>P/L</span><strong>{{ vm.intelligence.position.unrealizedPnl ?? 'Indisponible' }}</strong></div>
+          <div><span>Risque</span><strong>{{ vm.intelligence.position.riskAmount ?? 'Indisponible' }}</strong></div>
+          <div><span>Stop</span><strong>{{ vm.intelligence.position.stopLoss ?? 'Indisponible' }}</strong></div>
+          <div><span>Target</span><strong>{{ vm.intelligence.position.takeProfit ?? 'Indisponible' }}</strong></div>
+        </div>
+        <p class="muted">
+          Prix observé : {{ vm.intelligence.position.priceOccurredAt | date: 'medium' }} ·
+          État : {{ vm.intelligence.position.valuationStatus }}
+        </p>
+        <div class="source-statuses">
+          <span>Compte : {{ vm.intelligence.accountData.status }}</span>
+          <span>Marché : {{ vm.intelligence.marketData.status }}</span>
+          <span>Challenge : {{ vm.intelligence.challengeData.status }}</span>
+        </div>
+      </section>
+
+      <section class="two-columns">
+        <article class="panel">
+          <h2>Depuis l'entrée</h2>
+          <p class="state-label">{{ vm.intelligence.comparisons.status }}</p>
+          <div class="facts-grid compact">
+            <div><span>Variation prix</span><strong>{{ vm.intelligence.comparisons.priceChange ?? 'Indisponible' }}</strong></div>
+            <div><span>Variation %</span><strong>{{ vm.intelligence.comparisons.priceChangePercentage ?? 'Indisponible' }}</strong></div>
+            <div><span>Distance Stop</span><strong>{{ vm.intelligence.comparisons.distanceToStop ?? 'Indisponible' }}</strong></div>
+            <div><span>Distance Target</span><strong>{{ vm.intelligence.comparisons.distanceToTarget ?? 'Indisponible' }}</strong></div>
+          </div>
+          @if (vm.intelligence.comparisons.unavailableReasons.length > 0) {
+            <p class="muted">{{ vm.intelligence.comparisons.unavailableReasons.join(', ') }}</p>
+          }
+        </article>
+
+        <article class="panel">
+          <h2>Décision d'origine</h2>
+          <p class="state-label">Lineage : {{ vm.intelligence.lineage.status }}</p>
+          @if (vm.intelligence.lineage.tradePlanId) {
+            <p>TradePlan {{ vm.intelligence.lineage.tradePlanId }} · v{{ vm.intelligence.lineage.tradePlanVersion }}</p>
+            <p>Origine : {{ vm.intelligence.lineage.origin }}</p>
+            <p class="thesis">{{ vm.intelligence.rationale.thesis ?? 'Thèse indisponible' }}</p>
+          } @else {
+            <p class="muted">{{ vm.intelligence.lineage.reason ?? 'Lineage indisponible.' }}</p>
+          }
+          <p class="muted">Les conditions historiques ne sont pas interprétées comme des règles exécutables.</p>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Conséquences déterministes</h2>
+        <div class="scenario-grid">
+          @for (scenario of [vm.intelligence.scenarios.current, vm.intelligence.scenarios.stop, vm.intelligence.scenarios.target]; track scenario.type) {
+            <article [class]="'scenario ' + scenarioClass(scenario)">
+              <h3>{{ scenario.type }}</h3>
+              <span>{{ scenario.availability }}</span>
+              <p>P/L projeté : {{ scenarioValue(scenario.projectedPnl, vm.intelligence.position.quoteAsset) }}</p>
+              @if (scenario.reasons.length > 0) {
+                <p class="muted">{{ scenario.reasons.join(', ') }}</p>
+              }
+            </article>
+          }
+        </div>
+        <p class="muted">Base économique : {{ vm.intelligence.scenarios.economicsBasis }}</p>
+      </section>
+    }
+  }
+</main>

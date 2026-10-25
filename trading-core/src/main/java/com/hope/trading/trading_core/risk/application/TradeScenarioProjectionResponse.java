@@ -80,10 +80,10 @@ public record TradeScenarioProjectionResponse(
     }
 
     public record Provenance(
-            long accountVersion,
+            Long accountVersion,
             Instant accountObservedAt,
             UUID valuationSnapshotId,
-            long valuationSourceVersion,
+            Long valuationSourceVersion,
             Instant valuationTimestamp,
             String valuationPolicyVersion,
             UUID challengeId,

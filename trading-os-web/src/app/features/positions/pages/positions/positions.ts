@@ -1,6 +1,7 @@
 import { AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import {
   BehaviorSubject,
   catchError,
@@ -64,7 +65,7 @@ interface PositionsViewModel {
 
 @Component({
   selector: 'app-positions',
-  imports: [AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe],
+  imports: [AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe, RouterLink],
   templateUrl: './positions.html',
   styleUrl: './positions.scss',
 })

@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { OpenPositionDashboardView } from '../models/dashboard-summary.model';
+import { PositionIntelligenceView } from '../models/position-intelligence.model';
 import { PositionCloseRequest, PositionCloseResponse } from '../models/position-close.model';
 
 @Injectable({
@@ -14,6 +15,12 @@ export class PositionService {
   getPositions(accountId: string): Observable<OpenPositionDashboardView[]> {
     return this.http.get<OpenPositionDashboardView[]>(
       `${environment.gatewayUrl}v1/accounts/${accountId}/positions`,
+    );
+  }
+
+  getPositionIntelligence(accountId: string, positionId: string): Observable<PositionIntelligenceView> {
+    return this.http.get<PositionIntelligenceView>(
+      `${environment.gatewayUrl}v1/accounts/${accountId}/positions/${encodeURIComponent(positionId)}/intelligence`,
     );
   }
 
