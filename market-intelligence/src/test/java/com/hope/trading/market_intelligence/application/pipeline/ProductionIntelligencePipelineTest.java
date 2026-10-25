@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.adapter.persistence.JpaIntelligenceP
 import com.hope.trading.market_intelligence.adapter.persistence.JpaIntelligencePipelineRunRepository;
 import com.hope.trading.market_intelligence.adapter.persistence.JpaPipelineRunClaimService;
 import com.hope.trading.market_intelligence.application.observation.ObservationBuilder;
+import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
 import com.hope.trading.market_intelligence.application.opportunity.CreateOpportunityCommand;
 import com.hope.trading.market_intelligence.application.opportunity.OpportunityCreationResult;
 import com.hope.trading.market_intelligence.application.opportunity.OpportunityEngine;
@@ -90,6 +91,7 @@ class ProductionIntelligencePipelineTest {
             mock(StrategyDefinitionRepository.class);
     private final com.hope.trading.market_intelligence.strategy.application.TrendContextEvidenceSelector
             trendContextEvidence = mock(com.hope.trading.market_intelligence.strategy.application.TrendContextEvidenceSelector.class);
+    private final MarketThesisRepository theses = mock(MarketThesisRepository.class);
 
     private ProductionIntelligencePipeline pipeline;
 
@@ -100,7 +102,9 @@ class ProductionIntelligencePipelineTest {
     void setUp() {
         pipeline = new ProductionIntelligencePipeline(observations, opportunities,
                 marketData, runs, runClaims, clock, evaluationRunner, parity, matchPersister,
-                matchOpportunities, definitions, trendContextEvidence);
+                matchOpportunities, definitions, trendContextEvidence,
+                new com.hope.trading.market_intelligence.application.thesis.MarketThesisComposer(clock),
+                theses);
         when(runs.findByAnalysisExecutionIdAndPipelineVersion(
                 any(UUID.class), anyString())).thenReturn(Optional.empty());
         when(runs.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -181,6 +185,7 @@ class ProductionIntelligencePipelineTest {
 
         assertThat(run.state()).isEqualTo("FAILED_OBSERVATION");
         verify(observations, never()).build(any(), anyString(), any());
+        verify(theses).saveIfAbsent(any());
     }
 
     @Test
@@ -192,6 +197,7 @@ class ProductionIntelligencePipelineTest {
                 pipeline.process(analysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE);
 
         assertThat(run.state()).isEqualTo("COMPLETED_NO_SIGNAL");
+        verify(theses).saveIfAbsent(any());
     }
 
     @Test
