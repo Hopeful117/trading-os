@@ -220,7 +220,7 @@ public class ExecutionEngine {
                         .map(StoredArtifact::provenance).toList();
         return new CapabilityContext(
                 plan.analysisExecutionId(), execution.id(), resolved, missing,
-                Map.of(), provenance, control);
+                Map.of(), provenance, control, plan.evaluationCutoff());
     }
 
     private List<StoredArtifact> initialArtifacts(

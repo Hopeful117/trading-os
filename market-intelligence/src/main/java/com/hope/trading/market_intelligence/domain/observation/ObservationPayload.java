@@ -6,7 +6,8 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 /** Optional typed extension carried by the generic immutable observation envelope. */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@class")
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = TrendContextObservationPayload.class, name = "trend-context-observation")
+        @JsonSubTypes.Type(value = TrendContextObservationPayload.class, name = "trend-context-observation"),
+        @JsonSubTypes.Type(value = MarketThesisObservationPayload.class, name = "market-thesis-observation")
 })
 public interface ObservationPayload {
 }

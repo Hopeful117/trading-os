@@ -12,6 +12,8 @@ import com.hope.trading.market_intelligence.domain.artifact.DeterministicMeasure
 import com.hope.trading.market_intelligence.domain.capability.ProducedContribution;
 import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureArtifactContent;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
+import com.hope.trading.market_intelligence.domain.observation.MarketThesisObservationPayload;
+import com.hope.trading.market_intelligence.domain.momentum.MomentumCapabilityContent;
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapabilityContent;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,12 +26,14 @@ public class JacksonPolymorphismConfiguration {
         module.registerSubtypes(aliases(DeterministicMeasurements.class, "deterministic-measurements"));
         module.registerSubtypes(aliases(MarketStructureArtifactContent.class, "market-structure"));
         module.registerSubtypes(aliases(TrendContextCapabilityContent.class, "trend-context"));
+        module.registerSubtypes(aliases(MomentumCapabilityContent.class, "ohlc-momentum"));
         module.registerSubtypes(aliases(HistoricalOhlcContext.class, "historical-ohlc"));
         module.registerSubtypes(aliases(NewsContext.class, "news"));
         module.registerSubtypes(aliases(MarketSnapshotContext.class, "market-snapshot"));
         module.registerSubtypes(aliases(MarketIdentityContext.class, "market-identity"));
         module.registerSubtypes(aliases(TrendContextRoleHistory.class, "trend-context-role-history"));
         module.registerSubtypes(aliases(TrendContextObservationPayload.class, "trend-context-observation"));
+        module.registerSubtypes(aliases(MarketThesisObservationPayload.class, "market-thesis-observation"));
         module.registerSubtypes(aliases(ProducedContribution.ArtifactContribution.class, "artifact-contribution"));
         module.registerSubtypes(aliases(ProducedContribution.ObservationContribution.class, "observation-contribution"));
         module.registerSubtypes(aliases(ProducedContribution.MetricContribution.class, "metric-contribution"));

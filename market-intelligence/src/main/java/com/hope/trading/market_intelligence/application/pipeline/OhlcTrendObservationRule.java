@@ -1,10 +1,15 @@
 package com.hope.trading.market_intelligence.application.pipeline;
 
 import com.hope.trading.market_intelligence.application.capability.OhlcRangeAnalysisCapability;
+import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
 import com.hope.trading.market_intelligence.application.observation.*;
 import com.hope.trading.market_intelligence.domain.artifact.DeterministicMeasurements;
+import com.hope.trading.market_intelligence.domain.artifact.StoredArtifact;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.observation.ObservationType;
+import com.hope.trading.market_intelligence.domain.observation.MarketThesisObservationPayload;
+import com.hope.trading.market_intelligence.domain.momentum.MomentumCapabilityContent;
+import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapabilityContent;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -38,6 +43,7 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                 .map(ProducedArtifact::artifact).map(item -> item.content())
                 .filter(DeterministicMeasurements.class::isInstance)
                 .map(DeterministicMeasurements.class::cast).findFirst().orElseThrow();
+        MarketThesisObservationPayload payload = payload(results);
         if (change.signum() == 0) {
             return new ObservationRuleResult(
                     new ObservationType("PRICE_TREND_NEUTRAL"),
@@ -47,8 +53,8 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                     details.observedAt(), details.observedAt().plus(Duration.ofMinutes(30)),
                     List.of(new ObservationEvidenceCandidate(
                             execution.id(), details.title(), details.explanation(),
-                             result.metrics(), Map.of(PRICE_CHANGE, BigDecimal.ZERO),
-                            details.observedAt(), BigDecimal.ONE)));
+                            result.metrics(), Map.of(PRICE_CHANGE, BigDecimal.ZERO),
+                            details.observedAt(), BigDecimal.ONE)), payload);
         }
         String direction = change.signum() > 0 ? "LONG" : "SHORT";
         return new ObservationRuleResult(
@@ -59,7 +65,23 @@ final class OhlcTrendObservationRule implements ObservationConsolidationRule {
                 details.observedAt(), details.observedAt().plus(Duration.ofMinutes(30)),
                 List.of(new ObservationEvidenceCandidate(
                         execution.id(), details.title(), details.explanation(),
-                         result.metrics(), Map.of(PRICE_CHANGE, change),
-                        details.observedAt(), BigDecimal.ONE)));
+                        result.metrics(), Map.of(PRICE_CHANGE, change),
+                        details.observedAt(), BigDecimal.ONE)), payload);
+    }
+
+    private MarketThesisObservationPayload payload(List<CapabilityExecution> results) {
+        TrendContextCapabilityContent trend = content(results, ProductionArtifactTypes.TREND_CONTEXT_ASSESSMENT,
+                TrendContextCapabilityContent.class);
+        MomentumCapabilityContent momentum = content(results, ProductionArtifactTypes.OHLC_MOMENTUM_ANALYSIS,
+                MomentumCapabilityContent.class);
+        return trend == null && momentum == null ? null : new MarketThesisObservationPayload(trend, momentum);
+    }
+
+    private <T> T content(List<CapabilityExecution> results, ArtifactType type, Class<T> contentType) {
+        return results.stream().flatMap(value -> value.result().stream())
+                .flatMap(value -> value.artifacts().stream())
+                .filter(value -> value.type().equals(type))
+                .map(ProducedArtifact::artifact).map(StoredArtifact::content)
+                .filter(contentType::isInstance).map(contentType::cast).findFirst().orElse(null);
     }
 }
