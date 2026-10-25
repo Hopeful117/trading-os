@@ -11,10 +11,11 @@ public record ContextProvenance(
         String normalizationVersion,
         EvidenceAcquisitionPolicy evidencePolicy,
         String evidenceFingerprint,
-        Integer observationCount
+        Integer observationCount,
+        Instant evaluationCutoff
 ) {
     public ContextProvenance(String source, Instant sourceOccurredAt, Instant fetchedAt) {
-        this(source, sourceOccurredAt, fetchedAt, null, null, null, null, null, null);
+        this(source, sourceOccurredAt, fetchedAt, null, null, null, null, null, null, null);
     }
 
     public ContextProvenance(
@@ -26,6 +27,21 @@ public record ContextProvenance(
             String normalizationVersion
     ) {
         this(source, sourceOccurredAt, fetchedAt, sourceReference, sourceVersion,
-                normalizationVersion, null, null, null);
+                normalizationVersion, null, null, null, null);
+    }
+
+    public ContextProvenance(
+            String source,
+            Instant sourceOccurredAt,
+            Instant fetchedAt,
+            String sourceReference,
+            String sourceVersion,
+            String normalizationVersion,
+            EvidenceAcquisitionPolicy evidencePolicy,
+            String evidenceFingerprint,
+            Integer observationCount
+    ) {
+        this(source, sourceOccurredAt, fetchedAt, sourceReference, sourceVersion,
+                normalizationVersion, evidencePolicy, evidenceFingerprint, observationCount, null);
     }
 }

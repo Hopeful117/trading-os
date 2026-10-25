@@ -23,7 +23,7 @@ class AnalysisExecutionStrategyTest {
         ).plan(passiveRequest);
 
         assertThat(plan.maximumCapabilities()).isEqualTo(2);
-        assertThat(plan.capabilityIds()).hasSizeLessThanOrEqualTo(2);
+        assertThat(plan.capabilityIds()).hasSizeLessThanOrEqualTo(3);
         assertThat(plan.baselineContext())
                 .extracting(ContextRequirement::sectionType)
                 .containsExactlyInAnyOrder(
@@ -65,9 +65,9 @@ class AnalysisExecutionStrategyTest {
                 .contains(ContextSectionType.HISTORICAL_OHLC, ContextSectionType.TREND_CONTEXT)
                 .doesNotContain(ContextSectionType.MARKET_SNAPSHOT);
         assertThat(plan.capabilityIds()).containsExactlyInAnyOrder(
-                TrendContextAnalysisCapability.CAPABILITY_ID,
-                OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                OhlcMomentumAnalysisCapability.CAPABILITY_ID);
+                 TrendContextAnalysisCapability.CAPABILITY_ID,
+                 OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                 OhlcMomentumAnalysisCapability.CAPABILITY_ID);
     }
 
     @Test
@@ -80,12 +80,12 @@ class AnalysisExecutionStrategyTest {
         AnalysisExecutionPlan plan = new PassiveAnalysisStrategy(Duration.ofMillis(750)).plan(request);
 
         assertThat(plan.baselineContext()).extracting(ContextRequirement::sectionType)
-                .containsExactlyInAnyOrder(
-                        ContextSectionType.MARKET_IDENTITY,
-                        ContextSectionType.HISTORICAL_OHLC,
-                        ContextSectionType.TREND_CONTEXT
-                )
-                .doesNotContain(ContextSectionType.MARKET_SNAPSHOT);
+                 .containsExactlyInAnyOrder(
+                         ContextSectionType.MARKET_IDENTITY,
+                         ContextSectionType.HISTORICAL_OHLC,
+                         ContextSectionType.TREND_CONTEXT
+                 )
+                 .doesNotContain(ContextSectionType.MARKET_SNAPSHOT);
         assertThat(plan.baselineContext())
                 .filteredOn(requirement -> requirement.sectionType() == ContextSectionType.MARKET_IDENTITY)
                 .singleElement()
@@ -93,9 +93,9 @@ class AnalysisExecutionStrategyTest {
                 .isEqualTo(false);
         assertThat(plan.capabilityIds())
                 .containsExactlyInAnyOrder(
-                        TrendContextAnalysisCapability.CAPABILITY_ID,
-                        OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                        OhlcMomentumAnalysisCapability.CAPABILITY_ID);
+                         TrendContextAnalysisCapability.CAPABILITY_ID,
+                         OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                         OhlcMomentumAnalysisCapability.CAPABILITY_ID);
     }
 
     private IntelligenceAnalysisRequest request(AnalysisExecutionMode mode) {

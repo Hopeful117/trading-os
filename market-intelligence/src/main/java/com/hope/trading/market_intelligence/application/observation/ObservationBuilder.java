@@ -6,6 +6,7 @@ import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.observation.*;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -95,14 +96,19 @@ public final class ObservationBuilder {
                 && content.assessment() != null) {
             return content.assessment().cutOffAt();
         }
-        if (payload instanceof MarketThesisObservationPayload(var trend, var momentum)) {
+        if (payload instanceof MarketThesisObservationPayload(var trend, var momentum, var tradeability)) {
             java.time.Instant trendCutoff = trend == null || trend.assessment() == null
                     ? null : trend.assessment().cutOffAt();
             java.time.Instant momentumCutoff = momentum == null || momentum.assessment() == null
                     ? null : momentum.assessment().cutoff();
             if (trendCutoff == null) return momentumCutoff;
             if (momentumCutoff == null) return trendCutoff;
-            return trendCutoff.isAfter(momentumCutoff) ? trendCutoff : momentumCutoff;
+            Instant latest = trendCutoff.isAfter(momentumCutoff) ? trendCutoff : momentumCutoff;
+            if (tradeability != null && tradeability.assessment() != null
+                    && tradeability.assessment().cutoff().isAfter(latest)) {
+                return tradeability.assessment().cutoff();
+            }
+            return latest;
         }
         return null;
     }

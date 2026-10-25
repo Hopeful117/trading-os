@@ -32,32 +32,33 @@ public class ActiveAnalysisStrategy implements AnalysisExecutionStrategy {
         if (request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED) {
             return new AnalysisExecutionPlan(
                     List.of(
-                            TrendContextAnalysisCapability.CAPABILITY_ID,
-                            OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                            OhlcMomentumAnalysisCapability.CAPABILITY_ID
+                             TrendContextAnalysisCapability.CAPABILITY_ID,
+                             OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                             OhlcMomentumAnalysisCapability.CAPABILITY_ID
                     ),
                     List.of(
-                            ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
-                            ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
-                            ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT)
-                    ),
-                    3,
+                             ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
+                             ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
+                              ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT)
+                      ),
+                      3,
                     timeout
             );
         }
         return new AnalysisExecutionPlan(
                 List.of(
-                        TrendContextAnalysisCapability.CAPABILITY_ID,
-                        SpreadAnalysisCapability.CAPABILITY_ID,
-                        OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                        OhlcMomentumAnalysisCapability.CAPABILITY_ID,
-                        DisabledAiAnalysisCapability.CAPABILITY_ID
+                         TrendContextAnalysisCapability.CAPABILITY_ID,
+                         SpreadAnalysisCapability.CAPABILITY_ID,
+                         OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                          OhlcMomentumAnalysisCapability.CAPABILITY_ID,
+                          DisabledAiAnalysisCapability.CAPABILITY_ID
                 ),
                 List.of(
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY),
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT),
                         ContextRequirement.optionalPublic(ContextSectionType.HISTORICAL_OHLC),
-                        ContextRequirement.optionalPublic(ContextSectionType.ORDER_FLOW),
+                             ContextRequirement.optionalPublic(ContextSectionType.ORDER_FLOW),
+                             ContextRequirement.optionalPublic(ContextSectionType.ORDER_BOOK),
                         ContextRequirement.optionalPublic(ContextSectionType.NEWS)
                 ),
                 8,

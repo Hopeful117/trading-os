@@ -79,8 +79,9 @@ public class MarketSnapshotContextContributor implements ContextContributor {
                 new ContextProvenance(
                         section.provenance().source(), section.provenance().sourceOccurredAt(),
                         section.provenance().fetchedAt(), snapshot.sourceSnapshotId(),
-                        snapshot.sourceSnapshotVersion() == null
-                                ? null : snapshot.sourceSnapshotVersion().toString(), null),
+                         snapshot.sourceSnapshotVersion() == null
+                                 ? null : snapshot.sourceSnapshotVersion().toString(), null,
+                        request.evidencePolicy(), null, null, request.evaluationCutoff()),
                 section.message());
     }
 }

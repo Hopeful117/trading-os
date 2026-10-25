@@ -34,17 +34,20 @@ public class NewsContextContextContributor implements ContextContributor {
             ContextSectionStatus status = statusOf(response.status());
             ContextSectionStatus terminalStatus = terminalStatus(status);
             if (terminalStatus != null) {
-                return sectionForTerminalStatus(requirement, response, terminalStatus);
-            }
-            if (isFuture(response.sourceOccurredAt(), request.evaluationCutoff())
-                    || isFuture(response.fetchedAt(), request.evaluationCutoff())) {
-                return futureSourceSection(response);
+                return sectionForTerminalStatus(requirement, response, terminalStatus,
+                        request.evaluationCutoff(), request.evidencePolicy());
             }
             List<NewsEventContext> events = mapEvents(response.events(), request.evaluationCutoff());
             List<NewsItemContext> items = mapItems(response.news(), request.evaluationCutoff());
             boolean missingTemporalFacts = missingTemporalFacts(response);
-            boolean factsExcluded = futureFactsExcluded(response, events, items) || missingTemporalFacts;
-            ContextSectionStatus effectiveStatus = effectiveStatus(status, factsExcluded);
+            boolean sourceMetadataFuture = isFuture(response.sourceOccurredAt(), request.evaluationCutoff())
+                    || isFuture(response.fetchedAt(), request.evaluationCutoff());
+            boolean factsExcluded = futureFactsExcluded(response, events, items)
+                    || sourceMetadataFuture || missingTemporalFacts;
+            if (sourceMetadataFuture && events.isEmpty() && items.isEmpty()) {
+                return futureSourceSection(response, request.evaluationCutoff(), request.evidencePolicy());
+            }
+            ContextSectionStatus effectiveStatus = effectiveStatus(status, missingTemporalFacts);
             return contextSection(request, response, events, items, effectiveStatus,
                     factsExcluded, missingTemporalFacts);
         } catch (RuntimeException unavailable) {
@@ -70,7 +73,9 @@ public class NewsContextContextContributor implements ContextContributor {
     private ContextSection sectionForTerminalStatus(
             ContextRequirement requirement,
             NewsClient.NewsContextResponse response,
-            ContextSectionStatus status
+            ContextSectionStatus status,
+            Instant cutoff,
+            com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy policy
     ) {
         if (status == ContextSectionStatus.UNSUPPORTED) {
             return ContextSection.unsupported(requirement, response.message());
@@ -79,18 +84,23 @@ public class NewsContextContextContributor implements ContextContributor {
             return ContextSection.incomplete(requirement, response.message());
         }
         String message = response.message() == null ? NEWS_UNAVAILABLE : response.message();
-        return ContextSection.unavailable(requirement, message);
+        return new ContextSection(requirement.sectionType(), status, requirement.sensitivity(), null,
+                new ContextProvenance("news-service", response.sourceOccurredAt(), response.fetchedAt(),
+                        null, null, null, policy, null, null, cutoff), message);
     }
 
     private boolean isFuture(Instant value, Instant cutoff) {
         return value != null && cutoff != null && value.isAfter(cutoff);
     }
 
-    private ContextSection futureSourceSection(NewsClient.NewsContextResponse response) {
+    private ContextSection futureSourceSection(NewsClient.NewsContextResponse response,
+                                               Instant cutoff,
+                                               com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy policy) {
         return new ContextSection(
                 sectionType(), ContextSectionStatus.INCOMPLETE,
                 ContextSensitivity.PUBLIC, null,
-                new ContextProvenance("news-service", response.sourceOccurredAt(), response.fetchedAt()),
+                new ContextProvenance("news-service", response.sourceOccurredAt(), response.fetchedAt(),
+                        null, null, null, policy, null, null, cutoff),
                 "News context is newer than the evaluation cut-off");
     }
 
@@ -100,8 +110,7 @@ public class NewsContextContextContributor implements ContextContributor {
             return List.of();
         }
         return source.stream()
-                .filter(event -> beforeCutoff(event.scheduledAt(), cutoff)
-                        && beforeCutoff(event.actualAt(), cutoff)
+                .filter(event -> beforeCutoff(event.actualAt(), cutoff)
                         && beforeCutoff(event.sourceUpdatedAt(), cutoff)
                         && beforeCutoff(event.fetchedAt(), cutoff)
                         && hasTemporalMetadata(event))
@@ -169,8 +178,8 @@ public class NewsContextContextContributor implements ContextContributor {
     }
 
     private ContextSectionStatus effectiveStatus(
-            ContextSectionStatus status, boolean futureFactsExcluded) {
-        if (futureFactsExcluded
+            ContextSectionStatus status, boolean missingTemporalFacts) {
+        if (missingTemporalFacts
                 && (status == ContextSectionStatus.AVAILABLE || status == ContextSectionStatus.STALE)) {
             return ContextSectionStatus.INCOMPLETE;
         }
@@ -189,14 +198,16 @@ public class NewsContextContextContributor implements ContextContributor {
         return new ContextSection(sectionType(), status, ContextSensitivity.PUBLIC,
                 new NewsContext(request.marketId(), events, items, response.sourceOccurredAt(),
                         response.fetchedAt()),
-                provenance(response, events, items),
+                provenance(response, events, items, request.evaluationCutoff(), request.evidencePolicy()),
                 contextMessage(status, factsExcluded, missingTemporalFacts));
     }
 
     private ContextProvenance provenance(
             NewsClient.NewsContextResponse response,
             List<NewsEventContext> events,
-            List<NewsItemContext> items
+            List<NewsItemContext> items,
+            Instant cutoff,
+            com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy policy
     ) {
         String references = java.util.stream.Stream.concat(
                         events.stream().map(NewsEventContext::sourceEventId),
@@ -214,7 +225,8 @@ public class NewsContextContextContributor implements ContextContributor {
                 .reduce((left, right) -> left + "," + right)
                 .orElse(null);
         return new ContextProvenance("news-service", response.sourceOccurredAt(), response.fetchedAt(),
-                references, null, normalization);
+                references, null, normalization, policy, null,
+                events.size() + items.size(), cutoff);
     }
 
     private String contextMessage(

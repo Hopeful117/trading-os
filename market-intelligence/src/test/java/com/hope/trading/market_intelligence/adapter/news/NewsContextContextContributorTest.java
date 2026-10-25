@@ -195,6 +195,32 @@ class NewsContextContextContributorTest {
     }
 
     @Test
+    void preservesEligibleFactsWhenSourceMetadataIsNewerThanTheEvaluationCutoff() {
+        NewsClient client = mock(NewsClient.class);
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-10-05T10:00:00Z");
+        Instant future = cutoff.plusSeconds(60);
+        when(client.findContext(marketId)).thenReturn(new NewsClient.NewsContextResponse(
+                "AVAILABLE",
+                List.of(
+                        new NewsClient.NewsEventResponse(UUID.randomUUID(), "calendar", "source", "past",
+                                "Past event", "ECONOMIC", cutoff.minusSeconds(60), null, List.of(), "LOW",
+                                "ACTUAL", null, null, null, null, cutoff.minusSeconds(30), cutoff.minusSeconds(20), "v1"),
+                        new NewsClient.NewsEventResponse(UUID.randomUUID(), "calendar", "source", "future",
+                                "Future event", "ECONOMIC", future, null, List.of(), "HIGH", "SCHEDULED",
+                                null, null, null, null, future, future, "v1")),
+                List.of(), cutoff, future, null));
+
+        ContextSection section = new NewsContextContextContributor(client).contribute(
+                new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE,
+                        "context", null, null, null, cutoff));
+
+        assertThat(section.payload()).isInstanceOf(NewsContext.class);
+        assertThat(((NewsContext) section.payload()).events()).hasSize(1);
+        assertThat(section.message()).contains("newer than the evaluation cut-off");
+    }
+
+    @Test
     void excludesFactsWhenSecondaryNewsTimestampsAreFuture() {
         NewsClient client = mock(NewsClient.class);
         UUID marketId = UUID.randomUUID();
@@ -240,7 +266,7 @@ class NewsContextContextContributorTest {
     }
 
     @Test
-    void classifiesStaleContextAsIncompleteWhenFutureFactsAreExcluded() {
+    void preservesStaleContextWhenFutureFactsAreExcluded() {
         NewsClient client = mock(NewsClient.class);
         UUID marketId = UUID.randomUUID();
         Instant cutoff = Instant.parse("2026-10-05T10:00:00Z");
@@ -256,7 +282,7 @@ class NewsContextContextContributorTest {
                 new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE,
                         "context", null, null, null, cutoff));
 
-        assertThat(section.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.STALE);
         assertThat(((NewsContext) section.payload()).events()).isEmpty();
         assertThat(section.message()).contains("newer than the evaluation cut-off");
     }

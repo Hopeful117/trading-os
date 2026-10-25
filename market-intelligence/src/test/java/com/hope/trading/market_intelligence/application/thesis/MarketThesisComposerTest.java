@@ -8,6 +8,8 @@ import com.hope.trading.market_intelligence.domain.momentum.MomentumCapabilityCo
 import com.hope.trading.market_intelligence.domain.momentum.MomentumPolicy;
 import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
+import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityAssessment;
+import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesisState;
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
@@ -82,7 +84,7 @@ class MarketThesisComposerTest {
         var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
 
         assertSame(MarketThesisState.NO_TRADE, thesis.state());
-        assertEquals(2, thesis.scenario().orElseThrow().confirmationConditions().size());
+        assertEquals(3, thesis.scenario().orElseThrow().confirmationConditions().size());
         assertEquals(false, thesis.evidence().stream()
                 .filter(value -> value.reference().equals("TRIGGER"))
                 .findFirst().orElseThrow().required());
@@ -162,8 +164,64 @@ class MarketThesisComposerTest {
         assertThat(thesis.state()).isEqualTo(MarketThesisState.WATCH);
         assertThat(thesis.reasons()).contains("MOMENTUM_WEAKENING");
         assertThat(thesis.scenario().orElseThrow().confirmationConditions())
-                .anyMatch(condition -> condition.code().equals("MOMENTUM_CONFIRMATION")
-                        && condition.status().name().equals("PENDING"));
+                 .anyMatch(condition -> condition.code().equals("MOMENTUM_CONFIRMATION")
+                         && condition.status().name().equals("PENDING"));
+    }
+
+    @Test
+    void missingTradeabilityCannotProduceCandidate() {
+        Observation observation = missingObservation();
+        TrendContextAssessment trend = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        MomentumAssessment momentum = new MomentumAssessment(
+                marketId, "15m", NOW.minusSeconds(9000), NOW, NOW,
+                MomentumAssessment.Status.AVAILABLE, MomentumAssessment.Direction.UP,
+                new java.math.BigDecimal("0.01"), new java.math.BigDecimal("1.0"),
+                new java.math.BigDecimal("0.8"), new java.math.BigDecimal("0.8"),
+                MomentumAssessment.Acceleration.ACCELERATING, MomentumPolicy.V1.version(),
+                MomentumAssessment.ALGORITHM_VERSION, ArtifactFingerprint.empty().value(),
+                ArtifactFingerprint.ofInputs(List.of("momentum-result")).value(), "test");
+        TrendContextCapabilityContent trendContent = mock(TrendContextCapabilityContent.class);
+        when(trendContent.assessment()).thenReturn(trend);
+        when(observation.payload()).thenReturn(Optional.of(new MarketThesisObservationPayload(
+                trendContent, new MomentumCapabilityContent(momentum, "AVAILABLE", List.of(), NOW.plusSeconds(900)))));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
+
+        assertThat(thesis.state()).isEqualTo(MarketThesisState.NO_TRADE);
+        assertThat(thesis.reasons()).contains("REQUIRED_EVIDENCE_UNAVAILABLE");
+    }
+
+    @Test
+    void tradeabilityNewerThanAuthoritativeCutoffCannotComposeCurrentScenario() {
+        Observation observation = missingObservation();
+        TradeabilityAssessment assessment = new TradeabilityAssessment(
+                marketId, "BTC/EUR", NOW, NOW, List.of(), "tradeability-v1", "tradeability-fingerprint");
+        when(observation.payload()).thenReturn(Optional.of(new MarketThesisObservationPayload(
+                null, null, new TradeabilityCapabilityContent(
+                        assessment, "AVAILABLE", List.of(), NOW.plusSeconds(900)))));
+
+        var thesis = composer().compose(
+                marketId, UUID.randomUUID(), observation, NOW.minusSeconds(60));
+
+        assertThat(thesis.evidence()).anyMatch(value ->
+                value.reference().equals("TRADEABILITY_CUTOFF_INCOMPATIBLE"));
+    }
+
+    @Test
+    void tradeabilityFromAnotherMarketCannotComposeCurrentScenario() {
+        Observation observation = missingObservation();
+        TradeabilityAssessment assessment = new TradeabilityAssessment(
+                UUID.randomUUID(), "BTC/EUR", NOW, NOW, List.of(), "tradeability-v1", "tradeability-fingerprint");
+        when(observation.payload()).thenReturn(Optional.of(new MarketThesisObservationPayload(
+                null, null, new TradeabilityCapabilityContent(
+                        assessment, "AVAILABLE", List.of(), NOW.plusSeconds(900)))));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
+
+        assertThat(thesis.evidence()).anyMatch(value ->
+                value.reference().equals("TRADEABILITY_IDENTITY_INCOMPATIBLE"));
     }
 
     private Observation missingObservation() {
