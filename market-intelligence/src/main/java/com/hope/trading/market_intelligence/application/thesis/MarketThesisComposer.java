@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -19,6 +20,8 @@ import java.util.UUID;
 public final class MarketThesisComposer {
     public static final String VERSION = "market-thesis-composer/v1";
     private final TrendContextProfile trendContextProfile;
+    private final StructuralLevelObjectiveComposer structuralLevels =
+            new StructuralLevelObjectiveComposer();
 
     public MarketThesisComposer(Clock clock) {
         this(clock, defaultProfile());
@@ -54,6 +57,10 @@ public final class MarketThesisComposer {
         Instant evaluatedAt = observation.createdAt() == null
                 ? observation.validFrom() : observation.createdAt();
         Instant sourceCutoff = authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff;
+        boolean assessmentCompatible = assessment == null
+                || (!assessment.cutOffAt().isAfter(sourceCutoff)
+                && marketId.equals(assessment.marketId())
+                && observation.instrument().equals(assessment.symbol()));
         List<MarketThesisEvidence> evidence = new ArrayList<>();
 
         observation.evidence().forEach(value -> evidence.add(observationEvidence(
@@ -62,9 +69,18 @@ public final class MarketThesisComposer {
             addMissing(evidence, "TREND_CONTEXT", "TREND_CONTEXT_UNAVAILABLE",
                     MarketThesisAvailability.UNAVAILABLE, sourceCutoff,
                     "Trend Context assessment is unavailable");
+        } else if (!assessmentCompatible) {
+            addMissing(evidence, "TREND_CONTEXT", "TREND_CONTEXT_CUTOFF_INCOMPATIBLE",
+                    MarketThesisAvailability.UNKNOWN, sourceCutoff,
+                    "Trend Context assessment is newer than the requested source cutoff");
         } else {
             addTrendEvidence(evidence, assessment, sourceCutoff);
         }
+        ReferencePrice referencePrice = referencePrice(observation, sourceCutoff);
+        StructuralLevelObjectiveComposer.Composition structural = structuralLevels.compose(
+                assessmentCompatible ? assessment : null,
+                referencePrice.price(), referencePrice.observedAt(), sourceCutoff);
+        evidence.addAll(structural.missingEvidence());
         addMissing(evidence, "MOMENTUM", "MOMENTUM_NOT_IMPLEMENTED",
                 MarketThesisAvailability.NOT_IMPLEMENTED, sourceCutoff,
                 "Momentum analysis is not implemented");
@@ -76,9 +92,12 @@ public final class MarketThesisComposer {
                 "Advanced liquidity analysis is not implemented");
 
         List<String> reasons = new ArrayList<>();
-        MarketThesisScenario scenario = scenario(assessment, reasons);
+        reasons.addAll(structural.reasons());
+        MarketThesisScenario scenario = scenario(
+                assessmentCompatible ? assessment : null, reasons, structural.levels());
         MarketThesisState state = state(scenario, evidence, reasons);
-        String fingerprint = fingerprint(marketId, analysisExecutionId, observation, assessment, scenario, reasons,
+        String fingerprint = fingerprint(marketId, analysisExecutionId, observation,
+                assessmentCompatible ? assessment : null, scenario, reasons,
                 evaluatedAt, sourceCutoff, evidence);
         UUID lineageId = deterministicId("lineage", marketId, observation.lineageId(),
                 observation.id());
@@ -150,7 +169,8 @@ public final class MarketThesisComposer {
                 "TREND_CONTEXT", value.code(), value.role().name(), value.detail(),
                 assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
                 assessment.fingerprint(), assessment.ruleVersion(), cutoff, false)));
-        assessment.invalidations().forEach(value -> target.add(new MarketThesisEvidence(
+        assessment.invalidations().stream().filter(value -> invalidationFresh(assessment, value))
+                .forEach(value -> target.add(new MarketThesisEvidence(
                 deterministicId("invalidation", assessment.fingerprint(), value.ruleId()),
                 MarketThesisEvidenceRole.CONTRADICTING, MarketThesisAvailability.AVAILABLE,
                 MarketThesisContradictionSeverity.BLOCKING, "TREND_CONTEXT", value.ruleId(),
@@ -197,6 +217,15 @@ public final class MarketThesisComposer {
                 : MarketThesisContradictionSeverity.WEAKENING;
     }
 
+    private static boolean invalidationFresh(
+            TrendContextAssessment assessment, TrendInvalidation value) {
+        TrendContextRole role = value.evidence() != null
+                ? value.evidence().role()
+                : value.protectedLevel() == null ? null : value.protectedLevel().source().role();
+        return role != null && assessment.timeframes().get(role) != null
+                && assessment.timeframes().get(role).fresh();
+    }
+
     private static void addMissing(
             List<MarketThesisEvidence> target, String source, String reference,
             MarketThesisAvailability availability, Instant observedAt, String explanation) {
@@ -215,7 +244,8 @@ public final class MarketThesisComposer {
     }
 
     private static MarketThesisScenario scenario(
-            TrendContextAssessment assessment, List<String> reasons) {
+            TrendContextAssessment assessment, List<String> reasons,
+            List<MarketThesisLevel> structuralLevels) {
         if (assessment == null) {
             reasons.add("TREND_CONTEXT_UNAVAILABLE");
             return null;
@@ -237,16 +267,7 @@ public final class MarketThesisComposer {
                         "INVALIDATE_" + value.ruleId(), MarketThesisConditionStatus.PENDING,
                         value.ruleId(), "Invalidate when the structural condition is met"))
                 .toList();
-        List<MarketThesisLevel> levels = assessment.timeframes().values().stream()
-                .flatMap(value -> value.levels().stream().map(level -> new MarketThesisLevel(
-                        level.type().name(), "STRUCTURAL", value.interval(), level.price())))
-                .toList();
-        List<MarketThesisLevel> invalidationLevels = assessment.invalidations().stream()
-                .filter(value -> value.level() != null)
-                .map(value -> new MarketThesisLevel(
-                        value.ruleId(), "INVALIDATION", "UNKNOWN", value.level()))
-                .toList();
-        levels = java.util.stream.Stream.concat(levels.stream(), invalidationLevels.stream()).toList();
+        List<MarketThesisLevel> levels = List.copyOf(structuralLevels);
         return new MarketThesisScenario(direction,
                 "Conditional scenario derived from deterministic Trend Context evidence",
                 confirmations,
@@ -296,13 +317,28 @@ public final class MarketThesisComposer {
                 .orElse(null);
     }
 
+    private static ReferencePrice referencePrice(Observation observation, Instant cutoff) {
+        return observation.evidence().stream()
+                .filter(value -> value.measurements() != null
+                        && value.measurements().containsKey("closePrice"))
+                .filter(value -> !value.observedAt().isAfter(cutoff))
+                .filter(value -> observation.validUntil().isEmpty()
+                        || !observation.validUntil().get().isBefore(cutoff))
+                .max(Comparator.comparing(ObservationEvidence::observedAt)
+                        .thenComparing(ObservationEvidence::evidenceId))
+                .map(value -> new ReferencePrice(
+                        value.measurements().get("closePrice"), value.observedAt()))
+                .orElse(new ReferencePrice(null, null));
+    }
+
     private static String fingerprint(
             UUID marketId, UUID analysisExecutionId, Observation observation,
             TrendContextAssessment assessment,
             MarketThesisScenario scenario, List<String> reasons, Instant evaluatedAt,
             Instant sourceCutoff, List<MarketThesisEvidence> evidence) {
         List<String> inputs = new ArrayList<>(List.of(
-                VERSION, marketId.toString(), observation.id().toString(),
+                VERSION, StructuralLevelObjectiveComposer.VERSION,
+                marketId.toString(), observation.id().toString(),
                 Long.toString(observation.version()), observation.instrument()));
         inputs.add(String.valueOf(analysisExecutionId));
         inputs.add(String.valueOf(observation.horizon()));
@@ -334,4 +370,6 @@ public final class MarketThesisComposer {
                 .map(String::valueOf).reduce((left, right) -> left + "|" + right).orElse("");
         return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8));
     }
+
+    private record ReferencePrice(BigDecimal price, Instant observedAt) { }
 }

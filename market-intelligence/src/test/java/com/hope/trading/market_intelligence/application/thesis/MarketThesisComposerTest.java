@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesisState;
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -111,6 +112,23 @@ class MarketThesisComposerTest {
         assertSame(MarketThesisState.WATCH, thesis.state());
     }
 
+    @Test
+    void assessmentNewerThanAuthoritativeCutoffCannotComposeCurrentScenario() {
+        Observation observation = missingObservation();
+        TrendContextAssessment assessment = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        TrendContextObservationPayload payload = payload(assessment);
+        when(observation.payload()).thenReturn(Optional.of(payload));
+
+        var thesis = composer().compose(
+                marketId, UUID.randomUUID(), observation, NOW.minusSeconds(60));
+
+        assertThat(thesis.scenario()).isEmpty();
+        assertThat(thesis.evidence()).anyMatch(value ->
+                value.reference().equals("TREND_CONTEXT_CUTOFF_INCOMPATIBLE"));
+    }
+
     private Observation missingObservation() {
         Observation observation = mock(Observation.class);
         when(observation.id()).thenReturn(observationId);
@@ -163,6 +181,7 @@ class MarketThesisComposerTest {
 
     private TrendContextAssessment assessment(Map<TrendContextRole, TrendContextTimeframeAssessment> timeframes) {
         TrendContextAssessment assessment = mock(TrendContextAssessment.class);
+        when(assessment.marketId()).thenReturn(marketId);
         when(assessment.direction()).thenReturn(TrendDirection.UP);
         when(assessment.assessmentAt()).thenReturn(NOW);
         when(assessment.cutOffAt()).thenReturn(NOW);
