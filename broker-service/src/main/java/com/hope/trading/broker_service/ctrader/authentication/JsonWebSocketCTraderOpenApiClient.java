@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -24,27 +26,11 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
+import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.*;
 
 @Component
 public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
-    private static final int APPLICATION_AUTH_REQUEST = 2100;
-    private static final int APPLICATION_AUTH_RESPONSE = 2101;
-    private static final int ACCOUNT_AUTH_REQUEST = 2102;
-    private static final int ACCOUNT_AUTH_RESPONSE = 2103;
-    private static final int ACCOUNT_LIST_REQUEST = 2149;
-    private static final int ACCOUNT_LIST_RESPONSE = 2150;
-    private static final int TRADER_REQUEST = 2121;
-    private static final int TRADER_RESPONSE = 2122;
-    private static final int RECONCILE_REQUEST = 2124;
-    private static final int RECONCILE_RESPONSE = 2125;
-    private static final int DEAL_LIST_REQUEST = 2133;
-    private static final int DEAL_LIST_RESPONSE = 2134;
-    private static final int ASSET_LIST_REQUEST = 2112;
-    private static final int ASSET_LIST_RESPONSE = 2113;
-    private static final int SYMBOL_LIST_REQUEST = 2114;
-    private static final int SYMBOL_LIST_RESPONSE = 2115;
-    private static final int POSITION_PNL_REQUEST = 2187;
-    private static final int POSITION_PNL_RESPONSE = 2188;
+    private static final Logger log = LoggerFactory.getLogger(JsonWebSocketCTraderOpenApiClient.class);
 
     private final CTraderProperties properties;
     private final ObjectMapper objectMapper;
@@ -66,7 +52,14 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     objectMapper.createObjectNode().put("accessToken", token.accessToken()));
             List<String> ids = new ArrayList<>();
             for (JsonNode account : response.path("ctidTraderAccount")) {
-                if (account.hasNonNull("ctidTraderAccountId")) ids.add(account.path("ctidTraderAccountId").asText());
+                if (account.hasNonNull("ctidTraderAccountId")) {
+                    String accountId = account.path("ctidTraderAccountId").asText();
+                    ids.add(accountId);
+                    log.info("ctrader_authorized_account accountId={} traderLogin={} isLive={}",
+                            accountId,
+                            account.path("traderLogin").isMissingNode() ? null : account.path("traderLogin").asText(),
+                            account.path("isLive").isMissingNode() ? null : account.path("isLive").asBoolean());
+                }
             }
             return List.copyOf(ids);
         } catch (CTraderAuthenticationException exception) {

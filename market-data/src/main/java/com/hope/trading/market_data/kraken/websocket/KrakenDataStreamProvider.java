@@ -2,6 +2,7 @@ package com.hope.trading.market_data.kraken.websocket;
 
 import com.hope.trading.market_data.brokerclient.MarketDataStreamProvider;
 import com.hope.trading.market_data.helper.InstrumentProductType;
+import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.kraken.config.KrakenProperties;
 import com.hope.trading.market_data.kraken.dto.*;
 import com.hope.trading.market_data.kraken.dto.ohlc.KrakenOhlcMessage;
@@ -69,6 +70,8 @@ import java.util.stream.Collectors;
 @Component
 @Slf4j
 public class KrakenDataStreamProvider implements MarketDataStreamProvider {
+    @Override
+    public MarketProvider provider() { return MarketProvider.KRAKEN; }
     private final KrakenStreamConnector connector;
     private final KrakenProperties krakenProperties;
     private final ObjectMapper objectMapper;

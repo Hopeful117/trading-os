@@ -1,0 +1,147 @@
+package com.hope.trading.market_data.ctrader;
+
+import com.hope.trading.ctrader.openapi.codec.CTraderPriceDecoder;
+import com.hope.trading.market_data.brokerclient.MarketDataProvider;
+import com.hope.trading.market_data.ctrader.authentication.CTraderMarketDataProperties;
+import com.hope.trading.market_data.helper.InstrumentProductType;
+import com.hope.trading.market_data.helper.MarketProvider;
+import com.hope.trading.market_data.helper.MarketStateBuilder;
+import com.hope.trading.market_data.helper.MarketAvailability;
+import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketConstraints;
+import com.hope.trading.market_data.model.MarketHistorySnapshot;
+import com.hope.trading.market_data.model.OhlcEvent;
+import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.model.TickerEvent;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@Component
+@ConditionalOnProperty(name = "ctrader.market-data.enabled", havingValue = "true")
+public class CTraderMarketData implements MarketDataProvider {
+    private final CTraderOpenApiClient client;
+    private final CTraderMarketDataProperties properties;
+    private final MarketStateBuilder marketStateBuilder;
+    private final Clock clock;
+
+    public CTraderMarketData(CTraderOpenApiClient client, CTraderMarketDataProperties properties,
+                             MarketStateBuilder marketStateBuilder, Clock clock) {
+        this.client = client;
+        this.properties = properties;
+        this.marketStateBuilder = marketStateBuilder;
+        this.clock = clock;
+    }
+
+    @Override
+    public List<Market> getMarkets() {
+        List<Market> markets = client.symbols().stream().map(this::toMarket)
+                .filter(Optional::isPresent).map(Optional::get).toList();
+        Map<String, String> providerSymbolsByIdentity = new HashMap<>();
+        for (Market market : markets) {
+            String identity = market.getSymbol() + ":" + market.getProductType();
+            String previous = providerSymbolsByIdentity.putIfAbsent(identity, market.getProviderSymbol());
+            if (previous != null && !previous.equals(market.getProviderSymbol())) {
+                throw new IllegalStateException("Ambiguous cTrader mapping for " + identity);
+            }
+        }
+        return markets;
+    }
+
+    @Override
+    public MarketProvider getName() { return MarketProvider.CTRADER; }
+
+    @Override
+    public Optional<TickerEvent> acquireCurrentSnapshot(Market market) {
+        return Optional.empty();
+    }
+
+    @Override
+    public List<OhlcEvent> findOhlcHistory(Market market, OhlcInterval interval, int limit) {
+        return findOhlcHistorySnapshot(market, interval, limit).normalizedEvents();
+    }
+
+    @Override
+    public MarketHistorySnapshot findOhlcHistorySnapshot(Market market, OhlcInterval interval, int limit) {
+        validate(market, interval, limit);
+        long symbolId = Long.parseLong(market.getProviderSymbol());
+        Instant to = clock.instant();
+        Instant from = to.minus(interval.getDuration().multipliedBy(limit + 1L));
+        CTraderOpenApiClient.CTraderSymbol symbol = client.symbol(symbolId);
+        List<OhlcEvent> events = client.trendbars(symbolId, period(interval), from, to, limit).stream()
+                .map(bar -> toEvent(market, interval, symbol, bar, to)).sorted(Comparator.comparing(OhlcEvent::openTime))
+                .toList();
+        return new MarketHistorySnapshot(events, events.stream().filter(OhlcEvent::closed).toList());
+    }
+
+    private Optional<Market> toMarket(CTraderOpenApiClient.CTraderSymbol symbol) {
+        String canonical = properties.symbolMappings().get(symbol.name());
+        if (canonical == null || canonical.isBlank()) return Optional.empty();
+        String[] assets = canonical.split("/", 2);
+        if (assets.length != 2 || assets[0].isBlank() || assets[1].isBlank()) return Optional.empty();
+        return Optional.of(Market.builder().provider(MarketProvider.CTRADER).symbol(canonical)
+                .providerSymbol(Long.toString(symbol.id())).baseAsset(assets[0]).quoteAsset(assets[1])
+                .productType(productType(symbol.name()))
+                // Symbol metadata alone is not proof that an order is executable now.
+                .marketState(marketStateBuilder.buildInitialState(MarketAvailability.UNAVAILABLE))
+                .marketConstraints(MarketConstraints.builder()
+                        // cTrader volumes are expressed in centi-units.
+                        .minimumOrderSize(BigDecimal.valueOf(symbol.minVolume()).movePointLeft(2))
+                        .maximumOrderSize(BigDecimal.valueOf(symbol.maxVolume()).movePointLeft(2))
+                        .orderStepSize(BigDecimal.valueOf(symbol.stepVolume()).movePointLeft(2))
+                        .tickSize(BigDecimal.ONE.movePointLeft(symbol.digits()))
+                .pricePrecision(symbol.digits()).build()).build());
+    }
+
+    private InstrumentProductType productType(String providerSymbol) {
+        String configured = properties.symbolProductTypes().get(providerSymbol);
+        return configured == null || configured.isBlank()
+                ? InstrumentProductType.SPOT
+                : InstrumentProductType.valueOf(configured.trim().toUpperCase());
+    }
+
+    private OhlcEvent toEvent(Market market, OhlcInterval interval, CTraderOpenApiClient.CTraderSymbol symbol,
+                              CTraderOpenApiClient.CTraderTrendbar bar, Instant cutoff) {
+        Instant open = Instant.ofEpochSecond(bar.timestamp());
+        Instant close = open.plus(interval.getDuration());
+        BigDecimal low = CTraderPriceDecoder.decode(bar.low(), symbol.digits());
+        return new OhlcEvent(market.getMarketId(), MarketProvider.CTRADER, market.getSymbol(), interval, open, close,
+                low.add(CTraderPriceDecoder.decode(bar.open(), symbol.digits())),
+                low.add(CTraderPriceDecoder.decode(bar.high(), symbol.digits())), low,
+                low.add(CTraderPriceDecoder.decode(bar.close(), symbol.digits())),
+                bar.volume() > 0 ? BigDecimal.valueOf(bar.volume()) : null, null, null,
+                !close.isAfter(cutoff), open, false,
+                new CTraderInstrumentIdentity(symbol.id(), symbol.name(), properties.environment().name()).provenance(),
+                clock.instant(), Long.toString(symbol.id()));
+    }
+
+    private String period(OhlcInterval interval) {
+        return switch (interval) {
+            case ONE_MINUTE -> "M1";
+            case FIVE_MINUTES -> "M5";
+            case FIFTEEN_MINUTES -> "M15";
+            case THIRTY_MINUTES -> "M30";
+            case ONE_HOUR -> "H1";
+            case FOUR_HOURS -> "H4";
+            case TWELVE_HOURS -> "H12";
+            case ONE_DAY -> "D1";
+            case ONE_WEEK -> "W1";
+        };
+    }
+
+    private void validate(Market market, OhlcInterval interval, int limit) {
+        if (market == null || market.getProvider() != MarketProvider.CTRADER) throw new IllegalArgumentException("cTrader market is required");
+        if (interval == null || limit < 1 || limit > 720) throw new IllegalArgumentException("bounded cTrader OHLC request is required");
+        if (market.getProviderSymbol() == null || !market.getProviderSymbol().matches("[1-9][0-9]*")) {
+            throw new IllegalArgumentException("cTrader provider symbol must be a numeric symbol id");
+        }
+    }
+}

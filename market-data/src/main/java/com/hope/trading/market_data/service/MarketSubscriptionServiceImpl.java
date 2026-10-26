@@ -3,6 +3,7 @@ package com.hope.trading.market_data.service;
 import com.hope.trading.market_data.brokerclient.MarketDataStreamProvider;
 import com.hope.trading.market_data.exception.EntityNotFoundException;
 import com.hope.trading.market_data.helper.MarketSubscriptionKey;
+import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamParameters;
@@ -10,8 +11,8 @@ import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.model.OrderBookKey;
 import com.hope.trading.market_data.repository.MarketRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,13 +22,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class MarketSubscriptionServiceImpl implements MarketSubscriptionService {
     private static final Set<Integer> SUPPORTED_ORDER_BOOK_DEPTHS =
             Set.of(10, 25);
 
-    private final MarketDataStreamProvider marketDataStreamProvider;
+    private final java.util.Map<com.hope.trading.market_data.helper.MarketProvider, MarketDataStreamProvider> streamProviders;
     private final MarketRepository marketRepository;
     private final OrderBookStateService orderBookStateService;
     private final OrderBookEvidenceCaptureService orderBookEvidenceCaptureService;
@@ -38,6 +38,38 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             MarketSubscriptionKey,
             AtomicInteger
             > activeSubscriptions = new ConcurrentHashMap<>();
+
+    public MarketSubscriptionServiceImpl(MarketDataStreamProvider marketDataStreamProvider,
+                                         MarketRepository marketRepository,
+                                         OrderBookStateService orderBookStateService,
+                                         OrderBookEvidenceCaptureService orderBookEvidenceCaptureService,
+                                         OrderBookEventPublisher orderBookEventPublisher,
+                                         RecentTradesStateService recentTradesStateService,
+                                         RecentTradesEventPublisher recentTradesEventPublisher) {
+        this(java.util.List.of(marketDataStreamProvider), marketRepository, orderBookStateService,
+                orderBookEvidenceCaptureService, orderBookEventPublisher, recentTradesStateService,
+                recentTradesEventPublisher);
+    }
+
+    @Autowired
+    public MarketSubscriptionServiceImpl(List<MarketDataStreamProvider> providers,
+                                         MarketRepository marketRepository,
+                                         OrderBookStateService orderBookStateService,
+                                         OrderBookEvidenceCaptureService orderBookEvidenceCaptureService,
+                                         OrderBookEventPublisher orderBookEventPublisher,
+                                         RecentTradesStateService recentTradesStateService,
+                                         RecentTradesEventPublisher recentTradesEventPublisher) {
+        this.streamProviders = providers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                provider -> provider.provider() == null
+                        ? com.hope.trading.market_data.helper.MarketProvider.KRAKEN : provider.provider(),
+                java.util.function.Function.identity(), (first, ignored) -> first));
+        this.marketRepository = marketRepository;
+        this.orderBookStateService = orderBookStateService;
+        this.orderBookEvidenceCaptureService = orderBookEvidenceCaptureService;
+        this.orderBookEventPublisher = orderBookEventPublisher;
+        this.recentTradesStateService = recentTradesStateService;
+        this.recentTradesEventPublisher = recentTradesEventPublisher;
+    }
 
     @Override
     public synchronized void subscribe(
@@ -79,12 +111,16 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
 
         if (currentCount == 1) {
             try {
-                marketDataStreamProvider
+                 providerFor(market)
                         .subscribe(
                                 List.of(market),
                                 request
                         )
                         .block(timeout);
+
+                if (market.getProvider() == MarketProvider.CTRADER) {
+                    marketRepository.save(market);
+                }
 
                 log.info(
                         "Started {} subscription for market {}, count {}",
@@ -155,7 +191,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                 );
 
         try {
-            marketDataStreamProvider.unsubscribe(
+            providerFor(market).unsubscribe(
                     List.of(market),
                     request
             ).block(timeout);
@@ -187,7 +223,7 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
             );
         }
 
-        if (!market.getMarketState().isTradable()) {
+        if (!market.getMarketState().isTradable() && market.getProvider() != MarketProvider.CTRADER) {
             throw new IllegalStateException("Market is not currently tradable" + market.getSymbol());
         }
 
@@ -197,6 +233,16 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
                     "Market stream type is required"
             );
         }
+    }
+
+    private MarketDataStreamProvider providerFor(Market market) {
+        MarketDataStreamProvider provider = streamProviders.get(market.getProvider());
+        if (provider == null && streamProviders.size() == 1 && market.getProvider()
+                == com.hope.trading.market_data.helper.MarketProvider.KRAKEN) {
+            provider = streamProviders.values().iterator().next();
+        }
+        if (provider == null) throw new UnsupportedOperationException("No stream provider registered for " + market.getProvider());
+        return provider;
     }
 
     private void validateRequest(MarketStreamRequest request) {

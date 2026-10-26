@@ -59,6 +59,8 @@ public final class ServiceJwtAuthenticationFilter extends OncePerRequestFilter {
                 && (path.equals("/api/v1/markets/synchronize")
                 || path.matches("/api/v1/markets/[^/]+/subscriptions")))
                 || (HttpMethod.DELETE.matches(request.getMethod())
-                && path.matches("/api/v1/markets/[^/]+/subscriptions"));
+                && path.matches("/api/v1/markets/[^/]+/subscriptions"))
+                || (HttpMethod.GET.matches(request.getMethod())
+                && path.equals("/api/v1/ctrader/authorization"));
     }
 }

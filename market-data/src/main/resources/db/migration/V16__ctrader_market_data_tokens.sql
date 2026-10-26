@@ -1,0 +1,21 @@
+CREATE TABLE ctrader_market_data_token (
+    id UUID NOT NULL,
+    environment VARCHAR(16) NOT NULL,
+    external_account_id BIGINT NOT NULL,
+    access_ciphertext TEXT NOT NULL,
+    access_iv VARCHAR(255) NOT NULL,
+    access_algorithm VARCHAR(255) NOT NULL,
+    access_key_version VARCHAR(255) NOT NULL,
+    refresh_ciphertext TEXT NOT NULL,
+    refresh_iv VARCHAR(255) NOT NULL,
+    refresh_algorithm VARCHAR(255) NOT NULL,
+    refresh_key_version VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+    credential_version BIGINT NOT NULL,
+    updated_at TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    row_version BIGINT NOT NULL,
+    CONSTRAINT pk_ctrader_market_data_token PRIMARY KEY (id),
+    CONSTRAINT ck_ctrader_market_data_token_account CHECK (external_account_id > 0),
+    CONSTRAINT ck_ctrader_market_data_token_version CHECK (credential_version > 0)
+);

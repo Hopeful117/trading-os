@@ -5,7 +5,7 @@
 | **Status** | Accepted |
 | **Date** | 2026-10-23 |
 | **Decision Makers** | Project Owner, Trading OS Architecture |
-| **Related ADRs** | ADR-024, ADR-030, ADR-041, ADR-043, ADR-071, ADR-072 |
+| **Related ADRs** | ADR-024, ADR-030, ADR-041, ADR-043, ADR-071, ADR-072, ADR-077 |
 | **Related Stories** | Story 0146, Story 0147 |
 
 ---
@@ -29,10 +29,17 @@ not create an execution path.
 
 ## 2. Decision
 
-The Broker Service SHALL own the cTrader authentication and account-binding
-boundary. Trading Core SHALL receive only provider-neutral connection and
-binding state and SHALL not receive OAuth codes, access tokens, refresh tokens,
-client secrets, cTrader DTOs, or transport/session details.
+The Broker Service SHALL own the cTrader trading authentication and
+account-binding boundary. Trading Core SHALL receive only provider-neutral
+connection and binding state and SHALL not receive OAuth codes, access tokens,
+refresh tokens, client secrets, cTrader DTOs, or transport/session details.
+
+This decision does not assign exclusive ownership of every cTrader
+authentication or authorization concern to Broker Service. Under ADR-077, Market
+Data Service may own a separate read-only cTrader Market Data authorization,
+credential reference, token lifecycle, and provider session for Market Data
+responsibilities. That Market Data authorization is not a Trading Core
+`BrokerAccount` binding and must not reuse or copy Broker Service token material.
 
 The lifecycle SHALL remain explicitly staged:
 
@@ -95,7 +102,7 @@ Documented facts:
   connections when both environments are used;
 - token invalidation and account disconnect events can terminate account access.
 
-Trading OS decisions derived from those facts:
+Trading OS decisions derived from those facts for the trading-account flow:
 
 - request `accounts` scope for this Story;
 - never persist an authorization code;
@@ -105,6 +112,17 @@ Trading OS decisions derived from those facts:
   is revoked;
 - treat transport/session usability as separate from durable binding;
 - keep all execution capabilities absent and fail closed.
+
+For the separate Market Data flow authorized by ADR-077:
+
+- use a service-owned read-only Market Data authorization and credential
+  boundary;
+- keep Market Data account authorization separate from Trading Core account
+  ownership and Broker Service trading-account binding;
+- keep Market Data session, subscription, reconnect, and normalization ownership
+  in Market Data Service;
+- never copy trading tokens or expose either service's token material across the
+  service boundary.
 
 ---
 
@@ -198,3 +216,19 @@ Story 0147 must obtain Repository Analysis approval and then produce an
 implementation plan. Any change to the secret-storage boundary, external
 identity authority, execution capability boundary or scope model requires a new
 ADR or an explicit amendment to this ADR.
+
+## 9. Narrow ADR-077 Amendment
+
+ADR-077 is accepted as the architecture for Story 0167. This section is a
+narrow clarification only:
+
+- Broker Service remains the owner of cTrader trading authentication and
+  explicit external trading-account binding.
+- Market Data Service may independently authorize cTrader Market Data access
+  for its own market-data session.
+- The two authorizations may target the same cTrader account but use separate
+  service-owned credential material and lifecycle.
+- This clarification does not move trading-account binding into Market Data,
+  does not change Trading Core authority, and does not authorize execution.
+- This clarification does not authorize a shared token store, shared session,
+  shared subscription registry, or shared runtime.
