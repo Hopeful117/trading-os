@@ -51,6 +51,19 @@ jobs:
           chmod +x ../trading-core/mvnw
           ../trading-core/mvnw -B -DskipTests install
 
+      # broker-service and market-data depend on Story 0167's local shared
+      # modules, which are not published to a remote Maven repository.
+      - name: Provision local cTrader shared artifacts
+        if: matrix.module == 'broker-service' || matrix.module == 'market-data'
+        run: |
+          MVN="mvn"
+          if ! command -v "$MVN" >/dev/null 2>&1; then
+            chmod +x trading-core/mvnw
+            MVN="./trading-core/mvnw"
+          fi
+          $MVN -B -DskipTests -f secret-crypto/pom.xml install
+          $MVN -B -DskipTests -f ctrader-openapi-technical/pom.xml install
+
       # market-intelligence, news-service, and risk-domain may not have a
       # module-local wrapper. Prefer the Maven installation already provided
       # by the runner before falling back to the shared wrapper, so a transient
