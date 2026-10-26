@@ -128,11 +128,13 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 for (JsonNode bar : payload.path("trendbar")) {
                     long barTimestamp = trendbarTimestamp(bar);
                     String period = periodName(bar.path("period"));
+                    boolean closeAvailable = bar.has("deltaClose");
                     if (symbolId > 0 && barTimestamp > 0 && !period.isBlank()
-                            && bar.has("low") && bar.has("deltaOpen") && bar.has("deltaHigh") && bar.has("deltaClose")) {
+                            && bar.has("low") && bar.has("deltaOpen") && bar.has("deltaHigh")) {
                         events.accept(new CTraderLiveTrendbarEvent(symbolId, period,
-                                decodeTrendbar(bar),
-                                Instant.ofEpochSecond(barTimestamp)));
+                                decodeTrendbar(bar), Instant.ofEpochSecond(barTimestamp),
+                                payload.has("bid") ? payload.path("bid").asLong() : null,
+                                closeAvailable));
                     }
                 }
             }
@@ -142,7 +144,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     static CTraderTrendbar decodeTrendbar(JsonNode node) {
         if (!node.isObject() || trendbarTimestamp(node) <= 0 || !node.has("low")
-                || !node.has("deltaOpen") || !node.has("deltaHigh") || !node.has("deltaClose")) {
+                || !node.has("deltaOpen") || !node.has("deltaHigh")) {
             throw new IllegalStateException("cTrader trendbar wire payload is incomplete");
         }
         return new CTraderTrendbar(trendbarTimestamp(node), node.path("deltaOpen").asLong(),
@@ -304,7 +306,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
         @Override public void subscribeSpots(long symbolId) {
             session.request(SUBSCRIBE_SPOTS_REQUEST, SUBSCRIBE_SPOTS_RESPONSE,
-                    accountPayload().put("symbolId", symbolId));
+                    spotSubscriptionPayload(objectMapper, accountId, symbolId));
         }
 
         @Override public void unsubscribeSpots(long symbolId) {
@@ -322,6 +324,14 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         @Override public void close() { session.close(); }
 
         private ObjectNode accountPayload() { return objectMapper.createObjectNode().put("ctidTraderAccountId", accountId); }
+    }
+
+    static ObjectNode spotSubscriptionPayload(ObjectMapper objectMapper, long accountId, long symbolId) {
+        ObjectNode payload = objectMapper.createObjectNode()
+                .put("ctidTraderAccountId", accountId)
+                .put("subscribeToSpotTimestamp", true);
+        payload.putArray("symbolId").add(symbolId);
+        return payload;
     }
 
     private static final class Listener implements WebSocket.Listener {

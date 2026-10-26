@@ -44,6 +44,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     private final Clock clock;
     private final CTraderMarketDataProperties properties;
     private final MarketStateBuilder marketStateBuilder;
+    private final Duration[] reconnectDelays;
     private final Map<String, ActiveSubscription> desired = new ConcurrentHashMap<>();
     private final Map<String, OhlcEvent> forming = new ConcurrentHashMap<>();
     private final Set<Long> subscribedSpots = ConcurrentHashMap.newKeySet();
@@ -58,23 +59,35 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     public CTraderDataStreamProvider(CTraderOpenApiClient client, TickerEventPublisher tickerPublisher,
                                      OhlcEventPublisher ohlcPublisher, Clock clock,
                                      CTraderMarketDataProperties properties, MarketStateBuilder marketStateBuilder) {
+        this(client, tickerPublisher, ohlcPublisher, clock, properties, marketStateBuilder, RECONNECT_DELAYS);
+    }
+
+    CTraderDataStreamProvider(CTraderOpenApiClient client, TickerEventPublisher tickerPublisher,
+                              OhlcEventPublisher ohlcPublisher, Clock clock,
+                              CTraderMarketDataProperties properties, MarketStateBuilder marketStateBuilder,
+                              Duration[] reconnectDelays) {
         this.client = client;
         this.tickerPublisher = tickerPublisher;
         this.ohlcPublisher = ohlcPublisher;
         this.clock = clock;
         this.properties = properties;
         this.marketStateBuilder = marketStateBuilder;
+        this.reconnectDelays = reconnectDelays.clone();
     }
 
     @Override public MarketProvider provider() { return MarketProvider.CTRADER; }
 
     @Override
     public synchronized Mono<Void> connect() {
+        return connect(true);
+    }
+
+    private synchronized Mono<Void> connect(boolean resetReconnectAttempts) {
         intentionallyDisconnected = false;
         if (stream != null) return Mono.empty();
+        if (resetReconnectAttempts) reconnectAttempts.set(0);
         long generation = ++connectionGeneration;
         stream = client.openStream(event -> handleEvent(generation, event), () -> handleTermination(generation));
-        reconnectAttempts.set(0);
         return resubscribe();
     }
 
@@ -179,8 +192,8 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         OhlcEvent previous = forming.get(key);
         if (previous != null && open.isBefore(previous.openTime())) return;
         if (previous != null && open.equals(previous.openTime())
-                && sameBar(previous, event.trendbar(), active.market())) return;
-        if (previous != null && open.isAfter(previous.openTime()) && !previous.closed()) {
+                && sameBar(previous, event, active.market())) return;
+        if (previous != null && open.isAfter(previous.openTime()) && !previous.closed() && previous.close() != null) {
             ohlcPublisher.publish(new OhlcEvent(previous.marketId(), previous.provider(), previous.symbol(),
                     previous.interval(), previous.openTime(), previous.closeTime(), previous.open(), previous.high(),
                     previous.low(), previous.close(), previous.volume(), previous.vwap(), previous.trades(), true,
@@ -191,13 +204,18 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         ohlcPublisher.publish(current);
     }
 
-    private boolean sameBar(OhlcEvent previous, CTraderOpenApiClient.CTraderTrendbar bar, Market market) {
+    private boolean sameBar(OhlcEvent previous, CTraderOpenApiClient.CTraderLiveTrendbarEvent event, Market market) {
+        CTraderOpenApiClient.CTraderTrendbar bar = event.trendbar();
         BigDecimal low = decode(bar.low(), market);
         return previous.open().compareTo(low.add(decode(bar.open(), market))) == 0
                 && previous.high().compareTo(low.add(decode(bar.high(), market))) == 0
                 && previous.low().compareTo(low) == 0
-                && previous.close().compareTo(low.add(decode(bar.close(), market))) == 0
+                && samePrice(previous.close(), effectiveClose(event, low, market))
                 && Objects.equals(previous.volume(), bar.volume() > 0 ? BigDecimal.valueOf(bar.volume()) : null);
+    }
+
+    private boolean samePrice(BigDecimal previous, BigDecimal current) {
+        return previous == null ? current == null : current != null && previous.compareTo(current) == 0;
     }
 
     private OhlcEvent toEvent(Market market, OhlcInterval interval,
@@ -207,9 +225,10 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         BigDecimal low = decode(bar.low(), market);
         Instant received = clock.instant();
         String source = new CTraderInstrumentIdentity(event.symbolId(), market.getSymbol(), properties.environment().name()).provenance();
+        BigDecimal closePrice = effectiveClose(event, low, market);
         return new OhlcEvent(market.getMarketId(), MarketProvider.CTRADER, market.getSymbol(), interval, open, close,
                 low.add(decode(bar.open(), market)), low.add(decode(bar.high(), market)), low,
-                low.add(decode(bar.close(), market)), bar.volume() > 0 ? BigDecimal.valueOf(bar.volume()) : null,
+                closePrice, bar.volume() > 0 ? BigDecimal.valueOf(bar.volume()) : null,
                 null, null, closed, event.occurredAt(), false, source, received, Long.toString(event.symbolId()));
     }
 
@@ -222,9 +241,9 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         if (intentionallyDisconnected || desired.isEmpty()) return;
         int attempt = reconnectAttempts.incrementAndGet();
         if (attempt > MAX_RECONNECT_ATTEMPTS) return;
-        reactor.core.publisher.Mono.delay(RECONNECT_DELAYS[attempt - 1]).subscribe(ignored -> {
+        reactor.core.publisher.Mono.delay(reconnectDelays[attempt - 1]).subscribe(ignored -> {
             synchronized (this) {
-                if (!intentionallyDisconnected && stream == null) connect().subscribe();
+                if (!intentionallyDisconnected && stream == null) connect(false).subscribe();
             }
         });
     }
@@ -277,8 +296,18 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     }
 
     private BigDecimal decode(Long value, Market market) {
-        return value == null ? null : com.hope.trading.ctrader.openapi.codec.CTraderPriceDecoder.decode(
-                value, market.getMarketConstraints().pricePrecision());
+        if (value == null) return null;
+        Integer precision = market.getMarketConstraints() == null
+                ? null : market.getMarketConstraints().pricePrecision();
+        return com.hope.trading.ctrader.openapi.codec.CTraderPriceDecoder.decode(
+                value, precision == null ? 5 : precision);
+    }
+
+    private BigDecimal effectiveClose(CTraderOpenApiClient.CTraderLiveTrendbarEvent event,
+                                      BigDecimal low, Market market) {
+        return event.closeAvailable()
+                ? low.add(decode(event.trendbar().close(), market))
+                : decode(event.spotBid(), market);
     }
 
     private long symbolId(Market market) {

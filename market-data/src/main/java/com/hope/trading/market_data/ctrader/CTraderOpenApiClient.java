@@ -28,7 +28,13 @@ public interface CTraderOpenApiClient {
     record CTraderSpotEvent(long symbolId, Long bid, Long ask, Instant occurredAt)
             implements CTraderStreamEvent { }
     record CTraderLiveTrendbarEvent(long symbolId, String period, CTraderTrendbar trendbar,
-                                    Instant occurredAt) implements CTraderStreamEvent { }
+                                    Instant occurredAt, Long spotBid, boolean closeAvailable)
+            implements CTraderStreamEvent {
+        CTraderLiveTrendbarEvent(long symbolId, String period, CTraderTrendbar trendbar,
+                                 Instant occurredAt) {
+            this(symbolId, period, trendbar, occurredAt, null, true);
+        }
+    }
 
     sealed interface CTraderStreamEvent permits CTraderSpotEvent, CTraderLiveTrendbarEvent { }
 

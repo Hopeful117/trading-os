@@ -14,6 +14,11 @@ class CTraderPriceDecoderTest {
     }
 
     @Test
+    void roundsFixedProviderScaleToSymbolDigits() {
+        assertEquals(new BigDecimal("123.46"), CTraderPriceDecoder.decode(12345678, 2));
+    }
+
+    @Test
     void rejectsInvalidDigits() {
         assertThrows(IllegalArgumentException.class, () -> CTraderPriceDecoder.decode(1, -1));
         assertThrows(IllegalArgumentException.class, () -> CTraderPriceDecoder.decode(1, 19));
