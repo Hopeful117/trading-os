@@ -7,34 +7,30 @@ import com.hope.trading.broker_service.secret.application.SecretEncryptionExcept
 import com.hope.trading.broker_service.secret.domain.EncryptedSecret;
 import com.hope.trading.broker_service.secret.domain.PlainSecret;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 
 public class AesGcmSecretCipher implements SecretCipher {
-    public static final String ALGORITHM = "AES/GCM/NoPadding";
-    private static final int IV_BYTES = 12;
-    private static final int TAG_BITS = 128;
+    public static final String ALGORITHM = com.hope.trading.security.crypto.AesGcmCipher.ALGORITHM;
 
-    private final KeyProvider keyProvider;
-    private final SecureRandom secureRandom;
+    private final com.hope.trading.security.crypto.AesGcmCipher delegate;
 
     public AesGcmSecretCipher(KeyProvider keyProvider, SecureRandom secureRandom) {
-        this.keyProvider = keyProvider;
-        this.secureRandom = secureRandom;
+        this.delegate = new com.hope.trading.security.crypto.AesGcmCipher(
+                new com.hope.trading.security.crypto.KeyProvider() {
+                    @Override public String activeVersion() { return keyProvider.activeVersion(); }
+                    @Override public javax.crypto.SecretKey activeKey() { return keyProvider.activeKey(); }
+                    @Override public javax.crypto.SecretKey key(String version) { return keyProvider.key(version); }
+                }, secureRandom);
     }
 
     @Override
     public EncryptedSecret encrypt(PlainSecret secret) {
         byte[] plain = secret.copyValue();
         try {
-            byte[] iv = new byte[IV_BYTES];
-            secureRandom.nextBytes(iv);
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.ENCRYPT_MODE, keyProvider.activeKey(), new GCMParameterSpec(TAG_BITS, iv));
-            return new EncryptedSecret(cipher.doFinal(plain), iv, ALGORITHM, keyProvider.activeVersion());
-        } catch (GeneralSecurityException exception) {
+            var encrypted = delegate.encrypt(plain);
+            return new EncryptedSecret(encrypted.ciphertext(), encrypted.initializationVector(),
+                    encrypted.algorithm(), encrypted.keyVersion());
+        } catch (com.hope.trading.security.crypto.CryptoException exception) {
             throw new SecretEncryptionException();
         } finally {
             java.util.Arrays.fill(plain, (byte) 0);
@@ -43,13 +39,11 @@ public class AesGcmSecretCipher implements SecretCipher {
 
     @Override
     public PlainSecret decrypt(EncryptedSecret encrypted) {
-        if (!ALGORITHM.equals(encrypted.algorithm())) throw new SecretDecryptionException();
         try {
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.DECRYPT_MODE, keyProvider.key(encrypted.keyVersion()),
-                    new GCMParameterSpec(TAG_BITS, encrypted.initializationVector()));
-            return new PlainSecret(cipher.doFinal(encrypted.ciphertext()));
-        } catch (GeneralSecurityException | IllegalStateException exception) {
+            return new PlainSecret(delegate.decrypt(new com.hope.trading.security.crypto.EncryptedPayload(
+                    encrypted.ciphertext(), encrypted.initializationVector(), encrypted.algorithm(),
+                    encrypted.keyVersion())));
+        } catch (com.hope.trading.security.crypto.CryptoException exception) {
             throw new SecretDecryptionException();
         }
     }

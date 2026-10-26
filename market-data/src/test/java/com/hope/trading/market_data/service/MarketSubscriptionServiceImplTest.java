@@ -177,4 +177,25 @@ class MarketSubscriptionServiceImplTest {
         verify(recentTradesStateService).clear(MARKET_ID);
         verify(recentTradesEventPublisher).clear(MARKET_ID);
     }
+
+    @Test
+    void allowsCTraderSubscriptionToEstablishProviderAvailability() {
+        Market cTraderMarket = Market.builder()
+                .marketId(MARKET_ID)
+                .provider(MarketProvider.CTRADER)
+                .symbol("EUR/USD")
+                .marketState(MarketState.builder().tradable(false).build())
+                .build();
+        when(marketRepository.findById(MARKET_ID)).thenReturn(Optional.of(cTraderMarket));
+        when(streamProvider.provider()).thenReturn(MarketProvider.CTRADER);
+        when(streamProvider.subscribe(List.of(cTraderMarket), request)).thenReturn(Mono.empty());
+        MarketSubscriptionServiceImpl cTraderService = new MarketSubscriptionServiceImpl(
+                List.of(streamProvider), marketRepository, stateService, evidenceCaptureService,
+                eventPublisher, recentTradesStateService, recentTradesEventPublisher);
+
+        cTraderService.subscribe(MARKET_ID, request);
+
+        verify(streamProvider).subscribe(List.of(cTraderMarket), request);
+        verify(marketRepository).save(cTraderMarket);
+    }
 }

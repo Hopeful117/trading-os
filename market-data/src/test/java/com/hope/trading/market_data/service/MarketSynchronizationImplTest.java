@@ -14,6 +14,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -89,5 +90,29 @@ class MarketSynchronizationImplTest {
 
         // Both passes update the same persisted row: no duplicates inserted.
         verify(marketRepository, times(2)).saveAll(anyList());
+    }
+
+    @Test
+    void synchronizesMarketsFromEveryRegisteredProvider() {
+        MarketDataProvider cTraderProvider = mock(MarketDataProvider.class);
+        Market krakenMarket = market("XBT/EUR", "XBT", "EUR");
+        Market cTraderMarket = market("EUR/USD", "EUR", "USD");
+        cTraderMarket.setProvider(MarketProvider.CTRADER);
+
+        when(marketDataProvider.getName()).thenReturn(MarketProvider.KRAKEN);
+        when(cTraderProvider.getName()).thenReturn(MarketProvider.CTRADER);
+        when(marketDataProvider.getMarkets()).thenReturn(List.of(krakenMarket));
+        when(cTraderProvider.getMarkets()).thenReturn(List.of(cTraderMarket));
+        when(marketRepository.findByProviderAndSymbolAndProductType(any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        service = new MarketSynchronizationImpl(List.of(marketDataProvider, cTraderProvider), marketRepository);
+        service.synchronizeMarkets();
+
+        verify(marketRepository).saveAll(argThat(markets -> {
+            List<Market> saved = java.util.stream.StreamSupport.stream(
+                    markets.spliterator(), false).toList();
+            return saved.containsAll(List.of(krakenMarket, cTraderMarket)) && saved.size() == 2;
+        }));
     }
 }

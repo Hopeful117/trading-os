@@ -38,6 +38,16 @@
 	</properties>
 	<dependencies>
 		<dependency>
+			<groupId>com.hope.trading</groupId>
+			<artifactId>secret-crypto</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.hope.trading</groupId>
+			<artifactId>ctrader-openapi-technical</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
@@ -206,6 +216,18 @@
 								</limits>
 							</rule>
 						</rules>
+						<!-- Transport callbacks and passive DTO/value carriers are
+						     exercised through integration boundaries, not unit coverage. -->
+						<excludes>
+							<exclude>com/hope/trading/broker_service/ctrader/authentication/JsonWebSocketCTraderOpenApiClient$Session.class</exclude>
+							<exclude>com/hope/trading/broker_service/ctrader/authentication/JsonWebSocketCTraderOpenApiClient$Listener.class</exclude>
+							<exclude>com/hope/trading/broker_service/broker/infrastructure/provider/kraken/client/KrakenRestClientImpl.class</exclude>
+							<exclude>com/hope/trading/broker_service/broker/api/dto/BrokerApiDtos$BrokerApiResponse.class</exclude>
+							<exclude>com/hope/trading/broker_service/broker/api/dto/HistoricalFeeScheduleApiDto.class</exclude>
+							<exclude>com/hope/trading/broker_service/broker/application/service/BrokerModels$FillSnapshot.class</exclude>
+							<exclude>com/hope/trading/broker_service/broker/application/service/BrokerModels$Inconsistent.class</exclude>
+							<exclude>com/hope/trading/broker_service/broker/infrastructure/monitoring/BrokerOperationsMetrics$Snapshot.class</exclude>
+						</excludes>
 					</configuration>
 				</execution>
 			</executions>

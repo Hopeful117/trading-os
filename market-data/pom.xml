@@ -35,6 +35,16 @@
 	</properties>
 	<dependencies>
 		<dependency>
+			<groupId>com.hope.trading</groupId>
+			<artifactId>ctrader-openapi-technical</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.hope.trading</groupId>
+			<artifactId>secret-crypto</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
