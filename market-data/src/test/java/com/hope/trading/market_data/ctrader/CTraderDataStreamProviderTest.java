@@ -49,8 +49,8 @@ class CTraderDataStreamProviderTest {
                 RECEIVED));
 
         assertThat(fixture.tickers).hasSize(1);
-        assertThat(fixture.tickers.getFirst().bid()).isEqualByComparingTo("1.2345");
-        assertThat(fixture.tickers.getFirst().ask()).isEqualByComparingTo("1.2355");
+        assertThat(fixture.tickers.getFirst().bid()).isEqualByComparingTo("12345");
+        assertThat(fixture.tickers.getFirst().ask()).isEqualByComparingTo("12355");
         assertThat(fixture.tickers.getFirst().last()).isNull();
         assertThat(fixture.tickers.getFirst().fetchedAt()).isEqualTo(RECEIVED);
         assertThat(fixture.tickers.getFirst().providerSymbol()).isEqualTo("42");
@@ -76,6 +76,39 @@ class CTraderDataStreamProviderTest {
     }
 
     @Test
+    void usesSpotBidAsFormingCloseWhenProviderOmitsDeltaClose() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(1, null));
+        fixture.provider.subscribe(List.of(fixture.market), request).block();
+
+        fixture.emit(new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1",
+                new CTraderOpenApiClient.CTraderTrendbar(600, 1, 3, 100, 0, 100),
+                RECEIVED, 12345L, false));
+
+        assertThat(fixture.ohlc).hasSize(1);
+        assertThat(fixture.ohlc.getFirst().closed()).isFalse();
+        assertThat(fixture.ohlc.getFirst().close()).isEqualByComparingTo("12345");
+    }
+
+    @Test
+    void deduplicatesRepeatedFormingUpdatesWithoutDeltaClose() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(1, null));
+        fixture.provider.subscribe(List.of(fixture.market), request).block();
+        CTraderOpenApiClient.CTraderTrendbar bar =
+                new CTraderOpenApiClient.CTraderTrendbar(600, 1, 3, 100, 0, 100);
+
+        fixture.emit(new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1", bar,
+                RECEIVED, 12345L, false));
+        fixture.emit(new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1", bar,
+                RECEIVED, 12345L, false));
+
+        assertThat(fixture.ohlc).hasSize(1);
+    }
+
+    @Test
     void doesNotDuplicateSubscriptionsAndReplaysThemAfterTermination() throws Exception {
         Fixture fixture = new Fixture();
         MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
@@ -87,6 +120,20 @@ class CTraderDataStreamProviderTest {
         Thread.sleep(1_200);
         assertThat(fixture.client.streams).hasSize(2);
         assertThat(fixture.client.streams.get(1).spotSubscriptions).containsExactly(42L);
+    }
+
+    @Test
+    void stopsAutomaticReconnectAfterMaximumAttempts() throws Exception {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        fixture.provider.subscribe(List.of(fixture.market), request).block();
+
+        for (int attempt = 0; attempt <= 3; attempt++) {
+            fixture.terminate();
+            Thread.sleep(50);
+        }
+
+        assertThat(fixture.client.streams).hasSize(4);
     }
 
     @Test
@@ -115,7 +162,7 @@ class CTraderDataStreamProviderTest {
         private final Market market = Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.CTRADER)
                 .symbol("EUR/USD").providerSymbol("42").baseAsset("EUR").quoteAsset("USD")
                 .productType(InstrumentProductType.SPOT)
-                .marketConstraints(MarketConstraints.builder().pricePrecision(4).build())
+                .marketConstraints(MarketConstraints.builder().pricePrecision(0).build())
                 .marketState(new MarketStateBuilder().buildInitialState(
                         com.hope.trading.market_data.helper.MarketAvailability.AVAILABLE)).build();
         private final FakeClient client = new FakeClient();
@@ -124,7 +171,8 @@ class CTraderDataStreamProviderTest {
         private final CTraderDataStreamProvider provider = new CTraderDataStreamProvider(client,
                 tickerPublisher, ohlcPublisher, Clock.fixed(RECEIVED, ZoneOffset.UTC),
                 new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "client", "secret", "wss://fixture",
-                        java.time.Duration.ofSeconds(1), Map.of()), new MarketStateBuilder());
+                        java.time.Duration.ofSeconds(1), Map.of()), new MarketStateBuilder(),
+                new java.time.Duration[]{java.time.Duration.ZERO, java.time.Duration.ZERO, java.time.Duration.ZERO});
 
         private Fixture() {
             doAnswer(invocation -> { tickers.add(invocation.getArgument(0)); return null; })

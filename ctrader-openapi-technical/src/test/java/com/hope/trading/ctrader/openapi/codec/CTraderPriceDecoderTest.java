@@ -9,8 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CTraderPriceDecoderTest {
     @Test
-    void decodesProviderScaledPrice() {
+    void decodesUsingSymbolDigits() {
         assertEquals(new BigDecimal("123.45678"), CTraderPriceDecoder.decode(12345678, 5));
+    }
+
+    @Test
+    void preservesZeroDigits() {
+        assertEquals(new BigDecimal("12345"), CTraderPriceDecoder.decode(12345, 0));
     }
 
     @Test
