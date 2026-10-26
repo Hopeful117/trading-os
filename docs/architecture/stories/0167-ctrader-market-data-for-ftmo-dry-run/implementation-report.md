@@ -67,6 +67,8 @@ subscriptions. Live quote/trendbar delivery remains unvalidated.
 - `secret-crypto` and `ctrader-openapi-technical` `mvn verify`: passed.
 - `git diff --check`: passed.
 - `cd market-data && mvn -q clean test`: passed after the final connection-generation fix.
+- `cd broker-service && mvn -B clean verify`: passed with 290 tests and the
+  repository's 80% JaCoCo line threshold.
 - `docker compose build market-data`: passed.
 - `docker compose up -d --force-recreate market-data`: passed.
 - cTrader OAuth authorization completed for LIVE account `49289512`; the
