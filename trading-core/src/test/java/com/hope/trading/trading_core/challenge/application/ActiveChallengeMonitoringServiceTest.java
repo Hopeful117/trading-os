@@ -31,7 +31,7 @@ class ActiveChallengeMonitoringServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-14T10:00:00Z");
 
     @Test
-    void monitorsLiveAndPaperChallengesAndContinuesAfterOneFailure() {
+    void monitorsPaperChallengesAndContinuesAfterOneFailure() {
         Candidate paper = candidate(ExecutionMode.PAPER, "paper-a");
         Candidate failed = candidate(ExecutionMode.PAPER, "paper-b");
         Candidate live = candidate(ExecutionMode.LIVE, "live");
@@ -50,7 +50,6 @@ class ActiveChallengeMonitoringServiceTest {
         when(brokers.findById(failed.broker.id())).thenReturn(Optional.of(failed.broker));
         when(brokers.findById(live.broker.id())).thenReturn(Optional.of(live.broker));
         when(reevaluation.reevaluate(paper.challenge.id())).thenReturn(ChallengeStatus.ACTIVE);
-        when(reevaluation.reevaluate(live.challenge.id())).thenReturn(ChallengeStatus.ACTIVE);
         doThrow(new IllegalStateException("valuation unavailable"))
                 .when(reevaluation).reevaluate(failed.challenge.id());
 
@@ -59,12 +58,12 @@ class ActiveChallengeMonitoringServiceTest {
         ActiveChallengeMonitoringService.MonitoringCycle result = service.monitor();
 
         assertThat(result.discovered()).isEqualTo(3);
-        assertThat(result.evaluated()).isEqualTo(2);
-        assertThat(result.skipped()).isZero();
+        assertThat(result.evaluated()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(1);
         assertThat(result.failed()).isEqualTo(1);
         verify(reevaluation).reevaluate(paper.challenge.id());
         verify(reevaluation).reevaluate(failed.challenge.id());
-        verify(reevaluation).reevaluate(live.challenge.id());
+        verify(reevaluation, never()).reevaluate(live.challenge.id());
     }
 
     @Test
