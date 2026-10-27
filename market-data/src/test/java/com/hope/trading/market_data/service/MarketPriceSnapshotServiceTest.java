@@ -26,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MarketPriceSnapshotServiceTest {
@@ -265,6 +267,67 @@ class MarketPriceSnapshotServiceTest {
     }
 
     @Test
+    void unavailableCTraderMarketCanBootstrapThroughARealTickerSubscription() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, MarketProvider.CTRADER, "EUR/USD", false);
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        when(repository.findById(marketId)).thenReturn(Optional.of(market));
+
+        StubProvider cTraderProvider = new StubProvider() {
+            @Override
+            public MarketProvider getName() {
+                return MarketProvider.CTRADER;
+            }
+        };
+        MarketSubscriptionService subscriptions = new MarketSubscriptionService() {
+            @Override
+            public void subscribe(UUID ignored, com.hope.trading.market_data.model.MarketStreamRequest request) {
+                publisher.publish(new TickerEvent(marketId, MarketProvider.CTRADER, "EUR/USD",
+                        new BigDecimal("1.1000"), new BigDecimal("1.1002"), new BigDecimal("1.1001"),
+                        null, Instant.parse("2026-08-01T12:00:00Z")));
+            }
+
+            @Override
+            public void unsubscribe(UUID ignored, com.hope.trading.market_data.model.MarketStreamRequest request) {
+            }
+        };
+        MarketPriceSnapshotService bounded = new MarketPriceSnapshotService(
+                repository, publisher, List.of(cTraderProvider), clock, Duration.ofSeconds(30), subscriptions);
+
+        var result = bounded.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofSeconds(1), "CONFIRM_OR_ACQUIRE"));
+
+        assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.FRESH);
+        assertThat(result.getFirst().tradable()).isTrue();
+        assertThat(market.getMarketState().isTradable()).isTrue();
+        assertThat(result.getFirst().bid()).isEqualByComparingTo("1.1000");
+    }
+
+    @Test
+    void unavailableCTraderMarketRemainsClosedWhenSubscriptionProducesNoQuote() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, MarketProvider.CTRADER, "EUR/USD", false);
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        StubProvider cTraderProvider = new StubProvider() {
+            @Override
+            public MarketProvider getName() {
+                return MarketProvider.CTRADER;
+            }
+        };
+        MarketSubscriptionService subscriptions = mock(MarketSubscriptionService.class);
+        MarketPriceSnapshotService bounded = new MarketPriceSnapshotService(
+                repository, publisher, List.of(cTraderProvider), clock, Duration.ofSeconds(30), subscriptions);
+
+        var result = bounded.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofMillis(10), "CONFIRM_OR_ACQUIRE"));
+
+        assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.TIMEOUT);
+        assertThat(result.getFirst().tradable()).isFalse();
+        assertThat(market.getMarketState().isTradable()).isFalse();
+        verify(subscriptions).subscribe(eq(marketId), any(com.hope.trading.market_data.model.MarketStreamRequest.class), any(Duration.class));
+    }
+
+    @Test
     void providerAcquisitionIsBoundedByTheRequestedDeadline() {
         UUID marketId = UUID.randomUUID();
         Market market = market(marketId, "ETH/USD", true);
@@ -324,9 +387,13 @@ class MarketPriceSnapshotServiceTest {
     }
 
     private Market market(UUID id, String symbol, boolean tradable) {
+        return market(id, MarketProvider.KRAKEN, symbol, tradable);
+    }
+
+    private Market market(UUID id, MarketProvider provider, String symbol, boolean tradable) {
         return Market.builder()
                 .marketId(id)
-                .provider(MarketProvider.KRAKEN)
+                .provider(provider)
                 .symbol(symbol)
                 .marketState(MarketState.builder().tradable(tradable).build())
                 .build();
@@ -352,7 +419,7 @@ class MarketPriceSnapshotServiceTest {
         );
     }
 
-    private static final class StubProvider implements MarketDataProvider {
+    private static class StubProvider implements MarketDataProvider {
         private final AtomicInteger calls = new AtomicInteger();
         private final ConcurrentMap<UUID, Optional<TickerEvent>> responses = new ConcurrentHashMap<>();
         private volatile Optional<TickerEvent> next = Optional.empty();

@@ -3,6 +3,7 @@ package com.hope.trading.trading_core.controller;
 import com.hope.trading.trading_core.dto.AccountDto;
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.service.AccountService;
+import com.hope.trading.trading_core.challenge.application.ChallengeReadinessService;
 import com.hope.trading.trading_core.broker.service.BrokerSynchronizationService;
 import com.hope.trading.trading_core.risk.infrastructure.client.BrokerCapabilityQueryService;
 import lombok.extern.slf4j.Slf4j;
@@ -26,19 +27,35 @@ public class AccountController {
     private final AccountService accountService;
     private final BrokerSynchronizationService brokerSynchronizationService;
     private final BrokerCapabilityQueryService brokerCapabilityQueryService;
+    private final ChallengeReadinessService challengeReadinessService;
 
     public AccountController(AccountService accountService,
                               BrokerSynchronizationService brokerSynchronizationService) {
-        this(accountService, brokerSynchronizationService, null);
+        this(accountService, brokerSynchronizationService, null, null);
+    }
+
+    public AccountController(AccountService accountService,
+                              BrokerSynchronizationService brokerSynchronizationService,
+                              BrokerCapabilityQueryService brokerCapabilityQueryService) {
+        this(accountService, brokerSynchronizationService, brokerCapabilityQueryService, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public AccountController(AccountService accountService,
                               BrokerSynchronizationService brokerSynchronizationService,
-                              BrokerCapabilityQueryService brokerCapabilityQueryService) {
+                              BrokerCapabilityQueryService brokerCapabilityQueryService,
+                              ChallengeReadinessService challengeReadinessService) {
         this.accountService = accountService;
         this.brokerSynchronizationService = brokerSynchronizationService;
         this.brokerCapabilityQueryService = brokerCapabilityQueryService;
+        this.challengeReadinessService = challengeReadinessService;
+    }
+
+    @GetMapping("/{accountId}/challenge-readiness")
+    public ResponseEntity<ChallengeReadinessService.ChallengeReadiness> challengeReadiness(
+            @PathVariable UUID accountId, Authentication authentication) {
+        UserDto user = (UserDto) authentication.getPrincipal();
+        return ResponseEntity.ok(challengeReadinessService.resolve(user.getUserId(), accountId));
     }
 
 

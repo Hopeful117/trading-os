@@ -88,8 +88,10 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
             AcquisitionResult acquired = acquire(request, limits);
             Map<TrendContextRole, List<OhlcResponse>> acquiredResponses = acquired.responses();
             metadata = acquired.metadata();
-            evidenceExcludedByCutoff |= containsEvidenceAfterCutoff(acquiredResponses, boundary);
-            responses = filterToCutoff(acquiredResponses, boundary);
+            boolean strictFetchedAtCutoff = request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED;
+            evidenceExcludedByCutoff |= containsEvidenceAfterCutoff(
+                    acquiredResponses, boundary, strictFetchedAtCutoff);
+            responses = filterToCutoff(acquiredResponses, boundary, strictFetchedAtCutoff);
             boolean retry = false;
             try {
                 mapped = inputMapper.map(
@@ -143,7 +145,8 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
 
     private Map<TrendContextRole, List<OhlcResponse>> filterToCutoff(
             Map<TrendContextRole, List<OhlcResponse>> responses,
-            Instant cutoff
+            Instant cutoff,
+            boolean strictFetchedAtCutoff
     ) {
         EnumMap<TrendContextRole, List<OhlcResponse>> filtered =
                 new EnumMap<>(TrendContextRole.class);
@@ -151,18 +154,20 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 .filter(value -> !after(value.openTime(), cutoff)
                         && !after(value.closeTime(), cutoff)
                         && !after(value.occurredAt(), cutoff)
-                        && !after(value.fetchedAt(), cutoff))
+                        && (!strictFetchedAtCutoff || !after(value.fetchedAt(), cutoff)))
                 .toList()));
         return Map.copyOf(filtered);
     }
 
     private boolean containsEvidenceAfterCutoff(
-            Map<TrendContextRole, List<OhlcResponse>> responses, Instant cutoff) {
+            Map<TrendContextRole, List<OhlcResponse>> responses,
+            Instant cutoff,
+            boolean strictFetchedAtCutoff) {
         return responses.values().stream().flatMap(Collection::stream)
                 .anyMatch(value -> after(value.openTime(), cutoff)
                         || after(value.closeTime(), cutoff)
                         || after(value.occurredAt(), cutoff)
-                        || after(value.fetchedAt(), cutoff));
+                        || (strictFetchedAtCutoff && after(value.fetchedAt(), cutoff)));
     }
 
     private boolean after(Instant value, Instant cutoff) {

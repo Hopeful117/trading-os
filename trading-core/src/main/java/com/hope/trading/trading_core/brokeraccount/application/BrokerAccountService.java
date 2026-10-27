@@ -39,6 +39,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Transactional
 public class BrokerAccountService {
+    private static final UUID CTRADER_PROVIDER = UUID.fromString("3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012");
     private static final BigDecimal PAPER_STOP_DISTANCE_PERCENT = BigDecimal.ONE;
     private final BrokerAccountRepository repository;
     private final AccountRepository accountRepository;
@@ -51,6 +52,13 @@ public class BrokerAccountService {
     private final TradePlanningProfileService tradePlanningProfiles;
 
     public BrokerAccountResponse create(UUID ownerId, CreateBrokerAccountRequest request) {
+        if (CTRADER_PROVIDER.equals(request.providerRegistrationReference())) {
+            var existing = repository.findFirstByOwnerIdAndProviderRegistrationReferenceAndDisplayName(
+                    ownerId, request.providerRegistrationReference(), request.displayName().strip());
+            if (existing.isPresent() && existing.get().connectionStatus() != BrokerConnectionStatus.REVOKED) {
+                return map(existing.get());
+            }
+        }
         RiskProfileReference profileReference = request.riskProfile();
         EffectiveRiskRuleSet effectiveRiskProfile = null;
         if (request.executionMode() == ExecutionMode.PAPER) {

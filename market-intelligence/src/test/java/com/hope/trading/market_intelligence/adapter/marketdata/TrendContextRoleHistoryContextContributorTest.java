@@ -83,6 +83,32 @@ class TrendContextRoleHistoryContextContributorTest {
     }
 
     @Test
+    void liveEvidenceMayBeFetchedAfterCutoffWhenMarketTimestampsAreHistorical() {
+        Instant cutoff = BOUNDARY.minus(Duration.ofMinutes(5));
+        Instant fetchedAt = cutoff.plusSeconds(2);
+        MarketDataClient client = mock(MarketDataClient.class);
+        when(client.findOhlc(MARKET_ID, "FOUR_HOURS", 1)).thenReturn(
+                List.of(responseAt("FOUR_HOURS", cutoff.minus(Duration.ofHours(5)), "bias", fetchedAt)));
+        when(client.findOhlc(MARKET_ID, "ONE_HOUR", 1)).thenReturn(
+                List.of(responseAt("ONE_HOUR", cutoff.minus(Duration.ofHours(2)), "setup", fetchedAt)));
+        when(client.findOhlc(MARKET_ID, "FIFTEEN_MINUTES", 1)).thenReturn(
+                List.of(responseAt("FIFTEEN_MINUTES", cutoff.minus(Duration.ofMinutes(30)), "trigger", fetchedAt)));
+
+        TrendContextRoleHistoryContextContributor contributor =
+                new TrendContextRoleHistoryContextContributor(
+                        client, new TrendContextInputMapper(), profile(),
+                        Clock.fixed(BOUNDARY, ZoneOffset.UTC));
+
+        ContextSection section = contributor.contribute(new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), MARKET_ID, AnalysisExecutionMode.ACTIVE, "trend-context",
+                null, null, null, cutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT));
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.AVAILABLE);
+        assertThat(((TrendContextRoleHistory) section.payload()).responsesByRole())
+                .containsKeys(TrendContextRole.BIAS, TrendContextRole.SETUP, TrendContextRole.TRIGGER);
+    }
+
+    @Test
     void classifiesHistoryWithNoEvidenceAtCutoffAsIncomplete() {
         Instant cutoff = BOUNDARY.minus(Duration.ofDays(1));
         MarketDataClient client = mock(MarketDataClient.class);

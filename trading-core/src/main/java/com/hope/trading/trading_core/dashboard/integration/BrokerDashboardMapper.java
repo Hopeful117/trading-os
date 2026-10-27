@@ -1,6 +1,8 @@
 package com.hope.trading.trading_core.dashboard.integration;
 
 import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
 import com.hope.trading.trading_core.dto.Position;
 import com.hope.trading.trading_core.helper.TradeType;
 import org.springframework.stereotype.Component;
@@ -33,6 +35,36 @@ public class BrokerDashboardMapper {
                 positions,
                 dto.getDataAt() == null ? Instant.now() : dto.getDataAt(),
                 PositionPnlTreatment.ADDITIVE
+        );
+    }
+
+    public BrokerAccountFact toFact(BrokerAccountSnapshotV2Dto snapshot, String broker, String fallbackCurrency) {
+        var account = snapshot.account();
+        String currency = account != null && account.valuationAsset() != null
+                ? account.valuationAsset() : fallbackCurrency;
+        BigDecimal equity = account == null ? null : account.equity();
+        boolean complete = "COMPLETE".equals(snapshot.completeness())
+                && "FRESH".equals(snapshot.freshness());
+        List<PositionFact> positions = snapshot.positions() == null
+                ? List.of() : snapshot.positions().stream().map(this::toPositionFact).toList();
+
+        return new BrokerAccountFact(
+                snapshot.brokerAccountId().toString(), broker, currency,
+                snapshot.balances(), snapshot.balances() != null,
+                equity, complete && equity != null, positions,
+                snapshot.observedAt(), PositionPnlTreatment.ADDITIVE
+        );
+    }
+
+    private PositionFact toPositionFact(BrokerPositionSnapshotV2Dto position) {
+        BigDecimal signedQuantity = position.signedQuantity();
+        TradeType side = signedQuantity != null && signedQuantity.signum() < 0
+                ? TradeType.SELL : TradeType.BUY;
+        BigDecimal quantity = signedQuantity == null ? null : signedQuantity.abs();
+        return new PositionFact(
+                position.brokerPositionReference(), position.instrument(), side, quantity,
+                position.entryPrice(), position.stopLoss(), null, null, position.margin(), null,
+                position.observedAt(), position.observedAt()
         );
     }
 

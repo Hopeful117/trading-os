@@ -2,7 +2,9 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketState;
 import com.hope.trading.market_data.model.PriceObservation;
+import com.hope.trading.market_data.helper.TradingStatus;
 import com.hope.trading.market_data.repository.MarketRepository;
 import com.hope.trading.market_data.repository.PriceObservationRepository;
 import lombok.RequiredArgsConstructor;
@@ -68,6 +70,14 @@ public class TickerEventPublisher {
             log.warn("Ignoring ticker observation for unknown marketId={}", event.marketId());
             return;
         }
+        if (event.bid() != null && event.ask() != null && event.occurredAt() != null) {
+            market.setMarketState(MarketState.builder()
+                    .tradingStatus(TradingStatus.OPEN)
+                    .tradable(true)
+                    .lastUpdated(Instant.now(clock))
+                    .build());
+            marketRepository.save(market);
+        }
         priceObservationRepository.save(new PriceObservation(
                 UUID.randomUUID(), event.marketId(), event.provider(), event.symbol(),
                 market.getBaseAsset(), market.getQuoteAsset(), event.bid(), event.ask(), event.last(),
@@ -90,6 +100,18 @@ public class TickerEventPublisher {
                         normalize(event.symbol())
                                 .equals(normalizedSymbol)
                 );
+
+        return Flux.concat(snapshot, liveStream);
+    }
+
+    public Flux<TickerEvent> streamByMarketId(UUID marketId) {
+        Flux<TickerEvent> snapshot = Flux.defer(() -> {
+            TickerEvent latest = latestEventsByMarketId.get(marketId);
+            return latest == null ? Flux.empty() : Flux.just(latest);
+        });
+
+        Flux<TickerEvent> liveStream = sink.asFlux()
+                .filter(event -> marketId.equals(event.marketId()));
 
         return Flux.concat(snapshot, liveStream);
     }

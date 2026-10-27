@@ -48,8 +48,13 @@ public final class MarketDataServiceAuthorizationFilter implements GlobalFilter,
     private boolean requiresServiceDelegation(ServerWebExchange exchange) {
         String path = exchange.getRequest().getPath().value();
         boolean subscription = path.matches(marketDataPath + "[^/]+/subscriptions");
+        boolean cTraderAuthorizationStart = "/api/v1/ctrader/authorization".equals(path)
+                && HttpMethod.GET.equals(exchange.getRequest().getMethod());
+        boolean cTraderAuthorizationStatus = path.matches("/api/v1/ctrader/authorization/[0-9a-fA-F-]{36}")
+                && HttpMethod.GET.equals(exchange.getRequest().getMethod());
         return subscription && (HttpMethod.POST.equals(exchange.getRequest().getMethod())
-                || HttpMethod.DELETE.equals(exchange.getRequest().getMethod()));
+                || HttpMethod.DELETE.equals(exchange.getRequest().getMethod()))
+                || cTraderAuthorizationStart || cTraderAuthorizationStatus;
     }
 
     private String issueToken() {

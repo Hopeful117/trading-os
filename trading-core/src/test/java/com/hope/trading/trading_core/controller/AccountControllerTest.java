@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.dto.AccountDto;
 import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.service.AccountService;
 import com.hope.trading.trading_core.risk.infrastructure.client.BrokerCapabilityQueryService;
+import com.hope.trading.trading_core.challenge.application.ChallengeReadinessService;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
@@ -28,8 +29,10 @@ class AccountControllerTest {
             mock(BrokerSynchronizationService.class);
     private final BrokerCapabilityQueryService brokerCapabilityQueryService =
             mock(BrokerCapabilityQueryService.class);
+    private final ChallengeReadinessService challengeReadinessService = mock(ChallengeReadinessService.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
-            new AccountController(accountService, brokerSynchronizationService, brokerCapabilityQueryService)).build();
+            new AccountController(accountService, brokerSynchronizationService, brokerCapabilityQueryService,
+                    challengeReadinessService)).build();
 
     @Test
     void singularAccountEndpointReturnsEnrichedProfiles() throws Exception {
@@ -74,5 +77,24 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$[0].provider").value("KRAKEN"));
 
         verify(brokerCapabilityQueryService).resolve(accountId, "trader", java.util.List.of("BTC/USD"));
+    }
+
+    @Test
+    void challengeReadinessUsesAuthenticatedPrincipalForOwnership() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(challengeReadinessService.resolve(userId, accountId))
+                .thenReturn(new ChallengeReadinessService.ChallengeReadiness(
+                        accountId, true, "BROKER_NOT_READY", "The broker is not connected", UUID.randomUUID(),
+                        "1.0.0", "CHALLENGE", null, null, null, null, null, null, UUID.randomUUID(),
+                        "CTRADER", UUID.randomUUID()));
+
+        mvc.perform(get("/api/v1/accounts/{accountId}/challenge-readiness", accountId)
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                UserDto.builder().userId(userId).username("trader").build(), null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BROKER_NOT_READY"));
+
+        verify(challengeReadinessService).resolve(userId, accountId);
     }
 }

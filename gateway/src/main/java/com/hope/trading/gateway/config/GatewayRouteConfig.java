@@ -65,19 +65,30 @@ public class GatewayRouteConfig {
                 )
                 .route("broker-credential-commands", r -> r
                         .path(
-                                "/api/v1/broker-accounts/*/credentials",
-                                "/api/v1/broker-accounts/*/validate",
-                                "/api/v1/broker-accounts/*/connection-status"
-                        )
-                        .uri(uriFor.apply("broker-service", "lb://broker-service"))
+                                 "/api/v1/broker-accounts/*/credentials",
+                                 "/api/v1/broker-accounts/*/validate",
+                                 "/api/v1/broker-accounts/*/connection-status"
+                         )
+                         .uri(uriFor.apply("broker-service", "lb://broker-service"))
                 )
-                .route("ctrader-authorization", r -> r
+                .route("broker-account-provisioning", r -> r
+                        .path("/api/v1/broker-accounts/*/provision-account")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                 )
+                 .route("ctrader-authorization", r -> r
                         .path(
                                 "/api/v1/broker-accounts/ctrader/authorization/callback",
                                 "/api/v1/broker-accounts/*/ctrader/authorization",
                                 "/api/v1/broker-accounts/*/ctrader/authorization/**"
                         )
-                        .uri(uriFor.apply("broker-service", "lb://broker-service"))
+                         .uri(uriFor.apply("broker-service", "lb://broker-service"))
+                 )
+                .route("ctrader-market-data-authorization", r -> r
+                        .path(
+                                "/api/v1/ctrader/authorization",
+                                "/api/v1/ctrader/authorization/**"
+                        )
+                        .uri(uriFor.apply("market-data", "lb://market-data"))
                 )
                 .route("broker-accounts", r -> r
                         .path("/api/v1/broker-accounts/**")

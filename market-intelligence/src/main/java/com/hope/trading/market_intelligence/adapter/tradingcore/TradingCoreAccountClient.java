@@ -24,6 +24,9 @@ public interface TradingCoreAccountClient {
     List<MarketCapabilityResponse> marketCapabilities(@PathVariable UUID accountId,
                                                       @RequestBody MarketCapabilityRequest request);
 
+    @GetMapping("/api/v1/accounts/{accountId}/challenge-readiness")
+    ChallengeReadinessResponse challengeReadiness(@PathVariable UUID accountId);
+
     record TradingCoreAccountResponse(
             UUID accountId,
             UUID brokerAccountId,
@@ -46,4 +49,14 @@ public interface TradingCoreAccountClient {
                                     List<BigDecimal> supportedBuyLeverageLevels,
                                     List<BigDecimal> supportedSellLeverageLevels, long sourceVersion,
                                     Instant observedAt, String provider, List<String> reasons) { }
+
+    record ChallengeReadinessResponse(
+            UUID accountId, boolean challengeActive, String status, String message,
+            UUID challengeId, String challengeDefinitionVersion, String phase,
+            BigDecimal challengeStartingCapital, String challengeCurrency,
+            BigDecimal accountStartingBalance, BigDecimal accountEquity,
+            UUID riskPolicyId, String riskPolicyVersion,
+            UUID brokerAccountId, String requiredMarketProvider, UUID requiredProviderRegistrationReference) {
+        public boolean ready() { return "READY".equals(status); }
+    }
 }

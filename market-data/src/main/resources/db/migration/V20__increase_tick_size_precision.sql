@@ -1,0 +1,2 @@
+ALTER TABLE markets
+    ALTER COLUMN tick_size TYPE NUMERIC(38, 10);

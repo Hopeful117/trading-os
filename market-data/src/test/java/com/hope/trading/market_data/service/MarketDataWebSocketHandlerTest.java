@@ -85,6 +85,19 @@ class MarketDataWebSocketHandlerTest {
     }
 
     @Test
+    void tickerSubscriptionUsesMarketIdWhenProvided() throws Exception {
+        givenSession();
+        UUID marketId = UUID.randomUUID();
+        connect("/ws/market-data?symbol=EUR%2FUSD&marketId=" + marketId + "&type=TICKER");
+        when(tickerPublisher.streamByMarketId(marketId)).thenReturn(Flux.never());
+
+        handler.afterConnectionEstablished(session);
+
+        verify(tickerPublisher).streamByMarketId(marketId);
+        verify(tickerPublisher, never()).streamBySymbol("EUR/USD");
+    }
+
+    @Test
     void ohlcSubscriptionForwardsEventsForMarketAndInterval() throws Exception {
         givenSession();
         UUID marketId = UUID.randomUUID();

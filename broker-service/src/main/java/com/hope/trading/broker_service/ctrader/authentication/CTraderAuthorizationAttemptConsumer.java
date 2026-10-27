@@ -19,6 +19,12 @@ public class CTraderAuthorizationAttemptConsumer {
     public UUID consume(String stateHash, Instant now) {
         CTraderAuthorizationAttempt attempt = attempts.findByStateHashForUpdate(stateHash)
                 .orElseThrow(() -> new CTraderAuthenticationException("Authorization state is invalid"));
+        if (attempt.status() != CTraderAuthorizationAttemptStatus.INITIATED) {
+            return attempt.id();
+        }
+        if (attempt.consumedAt() != null) {
+            throw new CTraderAuthenticationException("Authorization attempt has already been consumed");
+        }
         try {
             attempt.consume(now);
         } catch (CTraderAuthenticationException exception) {
@@ -29,5 +35,15 @@ public class CTraderAuthorizationAttemptConsumer {
         }
         attempts.saveAndFlush(attempt);
         return attempt.id();
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void fail(UUID attemptId, String code) {
+        attempts.findById(attemptId).ifPresent(attempt -> {
+            if (attempt.status() == CTraderAuthorizationAttemptStatus.INITIATED) {
+                attempt.fail(code);
+                attempts.saveAndFlush(attempt);
+            }
+        });
     }
 }

@@ -14,15 +14,19 @@ public class RiskProfileCatalogService {
     private final RiskPersistence persistence;
     private final RiskProfileValidator validator;
 
-    public List<RiskProfileCatalogResponse> eligiblePlatformProfiles() {
+    public List<RiskProfileCatalogResponse> eligibleProfiles() {
         return persistence.profiles().stream()
-                .filter(profile -> "PLATFORM".equals(profile.authority()))
+                .filter(profile -> isSelectableAuthority(profile.authority()))
                 .filter(this::isEligible)
                 .map(this::toResponse)
                 .sorted(Comparator.comparing(RiskProfileCatalogResponse::policyId)
                         .thenComparing(RiskProfileCatalogResponse::semanticVersion)
                         .thenComparing(RiskProfileCatalogResponse::profileId))
                 .toList();
+    }
+
+    private boolean isSelectableAuthority(String authority) {
+        return "PLATFORM".equals(authority) || "PROP_FIRM".equals(authority);
     }
 
     private boolean isEligible(RiskPersistence.Profile profile) {

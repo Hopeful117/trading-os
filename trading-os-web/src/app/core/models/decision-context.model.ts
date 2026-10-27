@@ -28,4 +28,26 @@ export interface DecisionContextResponse {
   markets: DecisionContextMarket[];
   eligibleMarketIds: string[];
   resolvedAt: string;
+  readiness?: ChallengeReadiness | null;
+  scopeStatus?: string | null;
+  scopeMessage?: string | null;
+}
+
+export interface ChallengeReadiness {
+  accountId: string;
+  challengeActive: boolean;
+  status: string;
+  message: string | null;
+  challengeId: string | null;
+  challengeDefinitionVersion: string | null;
+  phase: string | null;
+  challengeStartingCapital: number | null;
+  challengeCurrency: string | null;
+  accountStartingBalance: number | null;
+  accountEquity: number | null;
+  riskPolicyId: string | null;
+  riskPolicyVersion: string | null;
+  brokerAccountId: string | null;
+  requiredMarketProvider: string | null;
+  requiredProviderRegistrationReference: string | null;
 }

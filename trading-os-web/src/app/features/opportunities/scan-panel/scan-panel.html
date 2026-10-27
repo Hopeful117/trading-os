@@ -52,6 +52,23 @@
     </label>
   </div>
 
+  @if (readiness(); as readiness) {
+    <div
+      class="state-card"
+      [class.error]="readiness.status !== 'READY'"
+      data-testid="challenge-readiness"
+    >
+      <strong>Challenge readiness: {{ readiness.status }}</strong>
+      <p>{{ readiness.message ?? 'Challenge context is compatible with this scan.' }}</p>
+      @if (readiness.challengeActive) {
+        <small>
+          {{ readiness.challengeStartingCapital }} {{ readiness.challengeCurrency }} ·
+          {{ readiness.requiredMarketProvider ?? 'account provider' }}
+        </small>
+      }
+    </div>
+  }
+
   @if (markets$ | async; as catalogue) {
     <fieldset class="scope-picker" data-testid="scope-picker">
       <legend>Scan scope</legend>

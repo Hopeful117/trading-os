@@ -15,9 +15,10 @@ import { RecentTradesSnapshot } from '../models/recent-trades-snapshot.model';
 export class MarketDataStreamService {
   private readonly authService = inject(AuthService);
 
-  streamTicker(symbol: string): Observable<TickerEvent> {
+  streamTicker(symbol: string, marketId?: string): Observable<TickerEvent> {
     return this.createStream<TickerEvent>({
       symbol,
+      marketId,
       type: MarketStreamType.TICKER,
     });
   }

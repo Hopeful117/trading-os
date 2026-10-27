@@ -109,9 +109,28 @@ class TickerEventPublisherTest {
     }
 
     @Test
+    void streamByMarketIdDoesNotMixSameSymbolAcrossProviders() {
+        UUID otherMarketId = UUID.randomUUID();
+        TickerEvent target = ticker("EUR/USD", "100");
+        TickerEvent other = new TickerEvent(otherMarketId, MarketProvider.KRAKEN, "EUR/USD",
+                new BigDecimal("200"), new BigDecimal("201"), new BigDecimal("200.5"),
+                BigDecimal.ONE, Instant.now());
+
+        publisher.publish(target);
+        List<TickerEvent> received = new java.util.ArrayList<>();
+        publisher.streamByMarketId(marketId).take(Duration.ofMillis(200)).subscribe(received::add);
+        publisher.publish(other);
+        publisher.publish(target);
+
+        assertThat(received).extracting(TickerEvent::marketId).containsOnly(marketId);
+    }
+
+    @Test
     void observationsArePersistedOnlyForKnownMarkets() {
         publisher.publish(ticker("BTC/EUR", "100"));
         verify(priceObservationRepository).save(any());
+        assertThat(market.getMarketState().isTradable()).isTrue();
+        verify(marketRepository).save(market);
 
         var unknownMarketEvent = new TickerEvent(
                 UUID.randomUUID(), null, "DOGE/EUR",

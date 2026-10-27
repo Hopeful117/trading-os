@@ -42,6 +42,12 @@ public class ChallengeInstance {
     @Column(name = "risk_day_reset_time", length = 16, updatable = false)
     private java.time.LocalTime riskDayResetTime;
 
+    @Column(name = "required_market_provider", length = 32, updatable = false)
+    private String requiredMarketProvider;
+
+    @Column(name = "required_provider_registration_reference", updatable = false)
+    private UUID requiredProviderRegistrationReference;
+
     @Column(name = "active_risk_policy_id")
     private UUID activeRiskPolicyId;
 
@@ -106,6 +112,8 @@ public class ChallengeInstance {
         this.riskPolicyVersion = definition.riskPolicyVersion();
         this.riskTimeZone = definition.riskTimeZone();
         this.riskDayResetTime = definition.riskDayResetTime();
+        this.requiredMarketProvider = definition.requiredMarketProvider();
+        this.requiredProviderRegistrationReference = definition.requiredProviderRegistrationReference();
         ChallengePhaseDefinition first = definition.effectivePhases().get(0);
         this.activeRiskPolicyId = first.riskPolicyId();
         this.activeRiskPolicyVersion = first.riskPolicyVersion();
@@ -215,6 +223,8 @@ public class ChallengeInstance {
     public String definitionVersion() { return definitionVersion; }
     public String riskTimeZone() { return riskTimeZone; }
     public java.time.LocalTime riskDayResetTime() { return riskDayResetTime; }
+    public String requiredMarketProvider() { return requiredMarketProvider; }
+    public UUID requiredProviderRegistrationReference() { return requiredProviderRegistrationReference; }
     public UUID riskPolicyId() { return riskPolicyId; }
     public String riskPolicyVersion() { return riskPolicyVersion; }
     public UUID activeRiskPolicyId() { return activeRiskPolicyId == null ? riskPolicyId : activeRiskPolicyId; }

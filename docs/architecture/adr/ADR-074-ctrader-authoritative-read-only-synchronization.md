@@ -79,9 +79,15 @@ TRANSPORT_FAILURE
 ```
 
 Only `COMPLETE` and `FRESH` facts may be used by Trading Core as current
-authoritative input. A missing provider field is not converted to zero, an empty
-collection or an inferred value. If cTrader does not provide a required fact for
-the configured account, the observation remains incomplete.
+authoritative input. A missing scalar provider fact is not converted to zero or
+an inferred value. cTrader may omit collection fields when the corresponding
+account state is empty; for the position, order, unrealized-PnL and deal
+collections, omission is therefore normalized to an empty collection only after
+the response identity, account balance, valuation asset and pagination facts
+have been validated. When no provider event timestamp exists because all event
+collections are empty, the bounded synchronization capture time is used as the
+observation timestamp and remains distinct from any provider event timestamp.
+If cTrader omits a required scalar fact, the observation remains incomplete.
 
 Freshness is based on explicit synchronization completion and a configured
 staleness policy. An observation persisted for history or diagnostics does not

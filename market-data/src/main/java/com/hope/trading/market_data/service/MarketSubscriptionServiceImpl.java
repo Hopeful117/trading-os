@@ -13,6 +13,7 @@ import com.hope.trading.market_data.model.OrderBookKey;
 import com.hope.trading.market_data.repository.MarketRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -82,61 +83,79 @@ public class MarketSubscriptionServiceImpl implements MarketSubscriptionService 
     @Override
     public synchronized void subscribe(UUID marketId, MarketStreamRequest request, java.time.Duration timeout) {
         validateRequest(request);
-
-
         Market market = marketRepository.findById(marketId)
-                .orElseThrow(() ->
-                        new EntityNotFoundException(
-                                "Market not found: " + marketId
-                        )
-                );
-
+                .orElseThrow(() -> new EntityNotFoundException("Market not found: " + marketId));
         validateSubscription(market, request.type());
+        subscribeInternal(market, request, timeout);
+    }
 
-        MarketSubscriptionKey key =
-                new MarketSubscriptionKey(
-                        marketId,
-                        request.type(),
-                        request.parameters()
-                );
+    @Override
+    public synchronized void subscribe(List<UUID> marketIds, MarketStreamRequest request, java.time.Duration timeout) {
+        validateRequest(request);
 
-        AtomicInteger subscriberCount =
-                activeSubscriptions.computeIfAbsent(
-                        key,
-                        ignored -> new AtomicInteger(0)
-                );
+        List<Market> markets = marketRepository.findAllById(marketIds);
+        if (markets.size() != marketIds.stream().distinct().count()) {
+            throw new EntityNotFoundException("One or more markets were not found");
+        }
+        markets.forEach(market -> validateSubscription(market, request.type()));
 
-        int currentCount =
-                subscriberCount.incrementAndGet();
+        String previousDiagnosticId = MDC.get("ctraderDiagnosticId");
+        String diagnosticId = previousDiagnosticId == null ? UUID.randomUUID().toString() : previousDiagnosticId;
+        MDC.put("ctraderDiagnosticId", diagnosticId);
+        long startedNanos = System.nanoTime();
+        log.info("CTRADER_SUBSCRIPTION_SERVICE_ENTER diagnosticId={} marketIds={} symbols={} provider={} thread={} virtual={}",
+                diagnosticId, marketIds, markets.stream().map(Market::getSymbol).toList(),
+                markets.stream().map(Market::getProvider).distinct().toList(), Thread.currentThread().getName(),
+                Thread.currentThread().isVirtual());
+        try {
+            markets.stream().collect(java.util.stream.Collectors.groupingBy(Market::getProvider))
+                    .values().forEach(group -> subscribeInternal(group, request, timeout));
+            log.info("CTRADER_SUBSCRIPTION_SERVICE_EXIT diagnosticId={} marketIds={} durationMs={}",
+                    diagnosticId, marketIds, elapsedMillis(startedNanos));
+        } catch (RuntimeException exception) {
+            log.warn("CTRADER_SUBSCRIPTION_SERVICE_ERROR diagnosticId={} marketIds={} durationMs={} errorType={} message={}",
+                    diagnosticId, marketIds, elapsedMillis(startedNanos), exception.getClass().getSimpleName(),
+                    exception.getMessage());
+            throw exception;
+        } finally {
+            if (previousDiagnosticId == null) MDC.remove("ctraderDiagnosticId");
+            else MDC.put("ctraderDiagnosticId", previousDiagnosticId);
+        }
+    }
 
-        if (currentCount == 1) {
-            try {
-                 providerFor(market)
-                        .subscribe(
-                                List.of(market),
-                                request
-                        )
-                        .block(timeout);
+    private void subscribeInternal(Market market, MarketStreamRequest request, java.time.Duration timeout) {
+        subscribeInternal(List.of(market), request, timeout);
+    }
 
-                if (market.getProvider() == MarketProvider.CTRADER) {
-                    marketRepository.save(market);
-                }
+    private void subscribeInternal(List<Market> markets, MarketStreamRequest request, java.time.Duration timeout) {
+        List<Market> newlySubscribed = markets.stream().filter(market -> incrementSubscription(market, request)).toList();
+        if (newlySubscribed.isEmpty()) return;
 
-                log.info(
-                        "Started {} subscription for market {}, count {}",
-                        request.type(),
-                        market.getSymbol(),
-                        currentCount
-                );
-
-            } catch (RuntimeException exception) {
-                if (subscriberCount.decrementAndGet() <= 0) {
-                    activeSubscriptions.remove(key, subscriberCount);
-                }
-                throw exception;
-            }
+        try {
+            providerFor(newlySubscribed.getFirst()).subscribe(newlySubscribed, request).block(timeout);
+            newlySubscribed.stream().filter(market -> market.getProvider() == MarketProvider.CTRADER)
+                    .forEach(marketRepository::save);
+            newlySubscribed.forEach(market -> log.info("Started {} subscription for market {}", request.type(), market.getSymbol()));
+        } catch (RuntimeException exception) {
+            newlySubscribed.forEach(market -> decrementSubscription(market, request));
+            throw exception;
         }
 
+    }
+
+    private boolean incrementSubscription(Market market, MarketStreamRequest request) {
+        MarketSubscriptionKey key = new MarketSubscriptionKey(market.getMarketId(), request.type(), request.parameters());
+        return activeSubscriptions.computeIfAbsent(key, ignored -> new AtomicInteger(0)).incrementAndGet() == 1;
+    }
+
+    private void decrementSubscription(Market market, MarketStreamRequest request) {
+        MarketSubscriptionKey key = new MarketSubscriptionKey(market.getMarketId(), request.type(), request.parameters());
+        AtomicInteger count = activeSubscriptions.get(key);
+        if (count != null && count.decrementAndGet() <= 0) activeSubscriptions.remove(key, count);
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 
     @Override

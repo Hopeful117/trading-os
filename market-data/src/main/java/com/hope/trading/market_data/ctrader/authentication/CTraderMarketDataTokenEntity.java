@@ -41,6 +41,8 @@ class CTraderMarketDataTokenEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private CTraderTokenStatus status;
+    @Column(name = "active_marker", length = 16)
+    private String activeMarker;
     @Version
     @Column(name = "row_version", nullable = false)
     private long rowVersion;
@@ -57,6 +59,7 @@ class CTraderMarketDataTokenEntity {
         entity.externalAccountId = accountId;
         entity.replace(access, refresh, expiresAt, version, now);
         entity.status = CTraderTokenStatus.ACTIVE;
+        entity.activeMarker = "ACTIVE";
         return entity;
     }
 
@@ -76,8 +79,8 @@ class CTraderMarketDataTokenEntity {
         expiresAt = expiry; credentialVersion = version; updatedAt = now;
     }
 
-    void invalidate(Instant now) { status = CTraderTokenStatus.INVALID; updatedAt = now; }
-    void revoke(Instant now) { status = CTraderTokenStatus.REVOKED; updatedAt = now; }
+    void invalidate(Instant now) { status = CTraderTokenStatus.INVALID; activeMarker = null; updatedAt = now; }
+    void revoke(Instant now) { status = CTraderTokenStatus.REVOKED; activeMarker = null; updatedAt = now; }
     UUID id() { return id; }
     CTraderEnvironment environment() { return environment; }
     long externalAccountId() { return externalAccountId; }

@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.application.capability.SpreadAnalysi
 import com.hope.trading.market_intelligence.application.capability.OhlcRangeAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.OhlcMomentumAnalysisCapability;
+import com.hope.trading.market_intelligence.application.capability.TradeabilityAnalysisCapability;
 import com.hope.trading.market_intelligence.domain.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -34,14 +35,15 @@ public class ActiveAnalysisStrategy implements AnalysisExecutionStrategy {
                     List.of(
                              TrendContextAnalysisCapability.CAPABILITY_ID,
                              OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                             OhlcMomentumAnalysisCapability.CAPABILITY_ID
+                             OhlcMomentumAnalysisCapability.CAPABILITY_ID,
+                             TradeabilityAnalysisCapability.CAPABILITY_ID
                     ),
                     List.of(
                              ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
                              ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
                               ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT)
                       ),
-                      3,
+                      4,
                     timeout
             );
         }

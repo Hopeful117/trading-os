@@ -25,6 +25,8 @@ class PostgresFreshInstallMigrationTest {
             "0a10c7e2-9d1e-4f5a-b6c8-123456789089");
     private static final UUID BENCHMARK_DEFINITION_ID = UUID.fromString(
             "00890000-0000-4000-8000-000000000050");
+    private static final UUID FTMO_DEFINITION_ID = UUID.fromString(
+            "00890000-0000-4000-8000-000000000051");
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(POSTGRES_IMAGE)
@@ -49,18 +51,31 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(41);
+        assertMigrationHistory(42);
         assertDailyDrawdownBoundarySchema();
         assertTradeExecutionProvenanceConstraints();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("41");
+                 String.class)).isEqualTo("42");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
         assertThat(tableExists("risk_evaluation_t1")).isTrue();
         assertThat(tableExists("challenge_definition")).isTrue();
         assertThat(tableExists("challenge_instance")).isTrue();
+        assertThat(jdbc.queryForObject(
+                "select count(*) from information_schema.columns "
+                        + "where table_schema = current_schema() "
+                        + "and table_name in ('challenge_definition', 'challenge_instance') "
+                        + "and column_name in ('required_market_provider', "
+                        + "'required_provider_registration_reference')",
+                Integer.class)).isEqualTo(4);
+        assertThat(jdbc.queryForObject(
+                "select count(*) from challenge_definition "
+                        + "where provider = 'FTMO' and product = '2_STEP' and plan_code = 'STANDARD' "
+                        + "and required_market_provider = 'CTRADER' "
+                        + "and required_provider_registration_reference = ?",
+                Integer.class, UUID.fromString("3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012"))).isEqualTo(1);
         assertThat(tableExists("challenge_reevaluation_outbox")).isTrue();
         assertThat(jdbc.queryForObject(
                 "select count(*) from pg_indexes where schemaname = current_schema() "
@@ -91,7 +106,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(41);
+                 Integer.class)).isEqualTo(42);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -106,16 +121,39 @@ class PostgresFreshInstallMigrationTest {
         assertThat(tableExists("risk_evaluation_t1")).isTrue();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isFalse();
 
+        Flyway beforeProviderContext = flyway(jdbcUrlSchema(), "41");
+        beforeProviderContext.migrate();
+
+        UUID userId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        jdbc.update("insert into users(user_id, username, password, email, role) values (?, ?, ?, ?, 'TRADER')",
+                userId, "legacy-challenge-user", "password", "legacy-challenge@example.com");
+        jdbc.update("insert into accounts(account_id, name, base_currency, peak_equity, equity, user_id, "
+                        + "settlement_model, starting_balance) values (?, 'Legacy Challenge', 'USD', 50000, 50000, ?, 'INVENTORY', 50000)",
+                accountId, userId);
+        jdbc.update("insert into challenge_instance(id, account_id, definition_id, definition_version, risk_policy_id, "
+                        + "risk_policy_version, starting_capital, capital_currency, started_at, status, active_marker, version) "
+                        + "values (?, ?, ?, '1.0.0', ?, '1.0.0', 50000, 'USD', current_timestamp, 'ACTIVE', 'ACTIVE', 0)",
+                instanceId, accountId, FTMO_DEFINITION_ID,
+                UUID.fromString("0a10c7e2-9d1e-4f5a-b6c8-123456789090"));
+
         Flyway current = flyway(jdbcUrlSchema());
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(41);
+        assertMigrationHistory(42);
         assertDailyDrawdownBoundarySchema();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
         assertThat(jdbc.queryForObject(
                 "select count(*) from challenge_definition where id = ? and definition_version = '1.0.0'",
                 Integer.class, BENCHMARK_DEFINITION_ID)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "select required_market_provider from challenge_instance where id = ?",
+                String.class, instanceId)).isEqualTo("CTRADER");
+        assertThat(jdbc.queryForObject(
+                "select required_provider_registration_reference from challenge_instance where id = ?",
+                UUID.class, instanceId)).isEqualTo(UUID.fromString("3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012"));
         assertRiskImmutabilityTriggers();
         assertImmutableRiskEvaluationT1();
     }

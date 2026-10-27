@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.ctrader;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -11,10 +12,12 @@ final class CTraderTrendbarPagination {
     private CTraderTrendbarPagination() { }
 
     static List<CTraderOpenApiClient.CTraderTrendbar> collect(
-            Instant from, Instant to, int count, int maxPages, int maxRows,
+            Instant from, Instant to, int count, int maxPages, int maxRows, Duration pageStep,
             Function<PageRequest, CTraderOpenApiClient.CTraderTrendbarPage> fetch) {
         if (from == null || to == null || !from.isBefore(to) || count < 1
-                || maxPages < 1 || maxRows < 1) throw new IllegalArgumentException("invalid trendbar bounds");
+                || maxPages < 1 || maxRows < 1 || pageStep == null || pageStep.isZero() || pageStep.isNegative()) {
+            throw new IllegalArgumentException("invalid trendbar bounds");
+        }
         Map<Long, CTraderOpenApiClient.CTraderTrendbar> unique = new HashMap<>();
         Instant pageTo = to;
         boolean hasMore = true;
@@ -24,6 +27,7 @@ final class CTraderTrendbarPagination {
             int remaining = Math.min(count, maxRows) - unique.size();
             CTraderOpenApiClient.CTraderTrendbarPage page = fetch.apply(new PageRequest(from, pageTo, remaining));
             if (page == null) throw new IllegalStateException("cTrader trendbar response is missing");
+            int uniqueBefore = unique.size();
             for (CTraderOpenApiClient.CTraderTrendbar bar : page.trendbars()) {
                 if (bar == null) throw new IllegalStateException("cTrader trendbar is missing");
                 Instant open = Instant.ofEpochSecond(bar.timestamp());
@@ -33,10 +37,11 @@ final class CTraderTrendbarPagination {
                     throw new IllegalStateException("conflicting cTrader trendbar timestamp");
                 }
             }
+            if (unique.size() == uniqueBefore) break;
             hasMore = page.hasMore();
             if (!hasMore || page.trendbars().isEmpty()) break;
             long oldest = page.trendbars().stream().mapToLong(CTraderOpenApiClient.CTraderTrendbar::timestamp).min().orElseThrow();
-            Instant nextPageTo = Instant.ofEpochSecond(oldest).minusNanos(1);
+            Instant nextPageTo = Instant.ofEpochSecond(oldest).minus(pageStep);
             if (!nextPageTo.isBefore(pageTo)) throw new IllegalStateException("cTrader trendbar pagination did not advance");
             pageTo = nextPageTo;
         }

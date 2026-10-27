@@ -292,8 +292,30 @@ describe('DecisionWorkspace', () => {
     await fixture.whenStable();
 
     expect(contextServiceMock.resolve).toHaveBeenCalledWith(account.accountId);
-    expect(fixture.nativeElement.querySelector('[data-testid="market-search-hint"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="eligible-markets"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('BTC/USD');
     expect(fixture.nativeElement.querySelector('[data-testid="excluded-markets"]')).toBeNull();
+  });
+
+  it('renders a structured block when the Challenge has no compatible market universe', async () => {
+    contextServiceMock.resolve.mockReturnValueOnce(
+      of({
+        ...context,
+        markets: [],
+        eligibleMarketIds: [],
+        scopeStatus: 'NO_COMPATIBLE_MARKETS',
+        scopeMessage: 'No market is available for the active Challenge provider',
+      }),
+    );
+
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="decision-context-scope-blocked"]'),
+    ).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('No market is available');
   });
 
   it('embeds one account-scoped market navigator without a second account selector', async () => {
@@ -407,14 +429,18 @@ describe('DecisionWorkspace', () => {
     expect(text).not.toContain('No account selected');
   });
 
-  it('filters the market catalogue only after a focused search', async () => {
+  it('shows the available market catalogue and filters it by search', async () => {
     component.selectAccount(account.accountId);
-    component.setMarketSearch('btc');
     fixture.detectChanges();
     await fixture.whenStable();
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('[data-testid="eligible-markets"]')).toBeTruthy();
+    expect(element.textContent).toContain('BTC/USD');
+    expect(element.textContent).toContain('ETH/USD');
+
+    component.setMarketSearch('btc');
+    fixture.detectChanges();
     expect(element.textContent).toContain('BTC/USD');
     expect(element.textContent).not.toContain('ETH/USD');
   });

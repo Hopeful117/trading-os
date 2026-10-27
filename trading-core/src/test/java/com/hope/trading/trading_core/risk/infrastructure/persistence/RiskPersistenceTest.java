@@ -110,7 +110,7 @@ class RiskPersistenceTest {
         assertThat(profile.rules()).filteredOn(rule -> "DAILY_DRAWDOWN".equals(rule.ruleId()))
                 .singleElement().extracting(RiskPersistence.ProfileRule::maximumRatio)
                 .isEqualTo(new BigDecimal("0.030000000000"));
-        assertThat(catalog.eligiblePlatformProfiles()).anySatisfy(entry -> {
+        assertThat(catalog.eligibleProfiles()).anySatisfy(entry -> {
             assertThat(entry.profileId()).isEqualTo(PAPER_STANDARD_ID);
             assertThat(entry.semanticVersion()).isEqualTo("1.0.0");
         });

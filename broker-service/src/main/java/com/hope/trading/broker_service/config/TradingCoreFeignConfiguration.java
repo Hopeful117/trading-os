@@ -25,7 +25,8 @@ public class TradingCoreFeignConfiguration {
             UUID actorId = authentication != null && authentication.getPrincipal() instanceof BrokerPrincipal principal
                     ? principal.userId()
                     : null;
-            if (!template.headers().containsKey("X-Service-Authorization")) {
+            var serviceHeaders = template.headers().get("X-Service-Authorization");
+            if (serviceHeaders == null || serviceHeaders.stream().allMatch(value -> value == null || value.isBlank())) {
                 template.header("X-Service-Authorization",
                         "Bearer " + serviceJwtService.issue(TRADING_CORE_AUDIENCE, actorId));
             }

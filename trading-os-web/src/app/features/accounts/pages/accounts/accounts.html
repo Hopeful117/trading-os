@@ -17,6 +17,13 @@
   <form [formGroup]="brokerForm" (ngSubmit)="connectBroker()" autocomplete="off">
     @if (!recoveryAccount()) {
       <label>
+        Broker
+        <select formControlName="provider" data-testid="provider-select">
+          <option value="KRAKEN">Kraken</option>
+          <option value="CTRADER">cTrader</option>
+        </select>
+      </label>
+      <label>
         Nom d’affichage
         <input formControlName="displayName" maxlength="80" autocomplete="off" />
       </label>
@@ -75,6 +82,11 @@
           }
         }
       }
+    } @else if (!recoveryAccount() && isCTrader()) {
+      <p data-testid="ctrader-connection-help">
+        La connexion cTrader ouvre l’autorisation officielle, puis vous permet de sélectionner
+        explicitement le compte externe à lier.
+      </p>
     } @else {
       <label>
         API key
@@ -106,9 +118,11 @@
             : 'Création…'
           : recoveryAccount()
             ? 'Rétablir la connexion'
-            : isPaper()
-              ? 'Créer le compte PAPER'
-              : 'Connecter le compte LIVE'
+            : isCTrader()
+              ? 'Connecter cTrader'
+              : isPaper()
+                ? 'Créer le compte PAPER'
+                : 'Connecter le compte LIVE'
       }}
     </button>
   </form>
@@ -121,6 +135,43 @@
       role="status"
     >
       {{ feedback.message }}
+    </p>
+  }
+  @if (cTraderAuthorization(); as authorization) {
+    <section class="ctrader-flow" data-testid="ctrader-flow">
+      <h3>Connexion cTrader</h3>
+      <p>{{ authorization.safeMessage }}</p>
+      @if (authorization.status === 'ACCOUNT_SELECTION_REQUIRED') {
+        <p>Sélectionnez le compte cTrader à lier :</p>
+        @for (externalAccountId of authorization.discoveredAccountIds; track externalAccountId) {
+          <button
+            type="button"
+            class="secondary-button"
+            [disabled]="lifecycleBusy()"
+            (click)="bindCTraderAccount(externalAccountId)"
+            data-testid="ctrader-account-option"
+          >
+            Lier {{ externalAccountId }}
+          </button>
+        }
+      }
+      @if (authorization.status === 'BOUND') {
+        <p data-testid="ctrader-bound-state">Compte cTrader lié et authentifié.</p>
+        <button
+          type="button"
+          class="secondary-button"
+          [disabled]="lifecycleBusy()"
+          (click)="startCTraderMarketDataAuthorization()"
+          data-testid="ctrader-market-data-button"
+        >
+          Autoriser Market Data cTrader (connexion workspace)
+        </button>
+      }
+    </section>
+  }
+  @if (cTraderMarketDataUrl(); as marketDataUrl) {
+    <p class="connection-message success" data-testid="ctrader-market-data-started">
+      Autorisation Market Data ouverte. Revenez ici après validation cTrader.
     </p>
   }
 </section>
@@ -149,6 +200,17 @@
       {{ feedback.message }}
     </p>
   }
+  @if (provisioningFeedback(); as feedback) {
+    <p
+      class="connection-message"
+      [class.success]="feedback.kind === 'success'"
+      [class.error]="feedback.kind === 'error'"
+      data-testid="provisioning-feedback"
+      role="status"
+    >
+      {{ feedback.message }}
+    </p>
+  }
   @if (accountState | async; as state) {
     @for (brokerAccount of state.brokerAccounts; track brokerAccount.id) {
       <article>
@@ -162,12 +224,37 @@
             class="secondary-button"
             data-testid="recover-broker-account-button"
             [disabled]="lifecycleBusy()"
-            (click)="startRecovery(brokerAccount)"
+            (click)="
+              isCTraderAccount(brokerAccount)
+                ? connectExistingCTrader(brokerAccount)
+                : startRecovery(brokerAccount)
+            "
           >
-            {{ brokerAccount.connectionStatus === 'CONNECTED' ? 'Mettre à jour' : 'Connecter' }}
+            {{
+              isCTraderAccount(brokerAccount)
+                ? 'Autoriser cTrader'
+                : brokerAccount.connectionStatus === 'CONNECTED'
+                  ? 'Mettre à jour'
+                  : 'Connecter'
+            }}
           </button>
         }
         @if (brokerAccount.connectionStatus === 'CONNECTED') {
+          @if (!hasTradingAccount(brokerAccount, state.accounts)) {
+            <button
+              type="button"
+              class="secondary-button"
+              data-testid="provision-trading-account-button"
+              [disabled]="lifecycleBusy()"
+              (click)="provisionTradingAccount(brokerAccount, state.accounts)"
+            >
+              {{
+                provisioningAccountId() === brokerAccount.id
+                  ? 'Création…'
+                  : 'Créer le compte Trading Core'
+              }}
+            </button>
+          }
           <button
             type="button"
             class="secondary-button"

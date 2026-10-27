@@ -15,7 +15,7 @@ public interface BrokerExecutionClient {
     void cancel(@PathVariable String externalOrderId,@RequestParam UUID brokerAccountId);
     record BrokerRequest(UUID executionIntentId,UUID executionAttemptId,String idempotencyKey,
                          UUID brokerAccountId,String instrument,String side,String orderType,
-                         BigDecimal quantity,BigDecimal limitPrice){}
+                         BigDecimal quantity,BigDecimal limitPrice,BigDecimal stopLossPrice){}
     record ReconcileRequest(UUID executionIntentId,UUID executionAttemptId,String idempotencyKey,
                             UUID brokerAccountId){}
     record BrokerResponse(String outcome,String externalOrderId,String correlationId,

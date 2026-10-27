@@ -18,4 +18,12 @@ public interface RiskEngine {
             BigDecimal drawdownPercentage,
             BigDecimal usedRiskPercentage
     );
+
+    DashboardRiskEvaluation evaluateDashboard(
+            Account account,
+            Rules rules,
+            BigDecimal dailyLossPercentage,
+            BigDecimal drawdownPercentage,
+            BigDecimal usedRiskPercentage
+    );
 }

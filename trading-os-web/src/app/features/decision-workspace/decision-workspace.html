@@ -249,6 +249,51 @@
         </section>
       }
       @case ('ready') {
+        @if (view.context.scopeStatus; as scopeStatus) {
+          <section class="state-card error" data-testid="decision-context-scope-blocked">
+            <h2>Market universe unavailable</h2>
+            <p>{{ view.context.scopeMessage ?? scopeStatus }}</p>
+          </section>
+        }
+        @if (view.context.readiness; as readiness) {
+          <section class="context-card" data-testid="challenge-readiness">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">Challenge context</span>
+                <h2>
+                  {{ readiness.challengeActive ? 'Active Challenge' : 'No active Challenge' }}
+                </h2>
+              </div>
+              <span class="count-badge">{{ readiness.status }}</span>
+            </div>
+            <div class="detail-grid cockpit-metrics">
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Phase</span><strong>{{ readiness.phase ?? 'N/A' }}</strong>
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Challenge identity</span
+                ><strong>{{ readiness.challengeId ?? 'N/A' }}</strong
+                ><small>Definition {{ readiness.challengeDefinitionVersion ?? 'N/A' }}</small>
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Size</span
+                ><strong
+                  >{{ readiness.challengeStartingCapital ?? 'N/A' }}
+                  {{ readiness.challengeCurrency ?? '' }}</strong
+                >
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Provider / universe</span
+                ><strong>{{ readiness.requiredMarketProvider ?? 'Account default' }}</strong
+                ><small>{{ view.context.eligibleMarketIds.length }} eligible markets</small>
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Readiness</span><strong>{{ readiness.status }}</strong
+                ><small>{{ readiness.message ?? 'Context is ready for scanning.' }}</small>
+              </article>
+            </div>
+          </section>
+        }
         <div class="workstation-layout">
           <aside class="selector-rail" aria-label="Account and market selection">
             <section class="context-grid">
@@ -298,19 +343,12 @@
                       (input)="setMarketSearch($any($event.target).value)"
                     />
                     <small
-                      >Type at least 2 characters to search
+                      >Filter the available markets
                       {{ view.context.eligibleMarketIds.length }} markets.</small
                     >
                   </label>
 
-                  @if (marketSearch.length < 2) {
-                    <div class="market-picker-empty" data-testid="market-search-hint">
-                      <strong>Search when you know what to inspect</strong>
-                      <span
-                        >The full market catalogue stays out of the way until you filter it.</span
-                      >
-                    </div>
-                  } @else if (eligibleMarkets(view.context).length === 0) {
+                  @if (eligibleMarkets(view.context).length === 0) {
                     <p class="state-message" data-testid="market-search-empty">
                       No eligible market matches “{{ marketSearch }}”.
                     </p>
@@ -338,18 +376,19 @@
                 }
               </article>
             </section>
+          </aside>
 
+          <section class="active-workspace" aria-label="Active market investigation">
             <app-scan-panel
               data-testid="market-navigator"
               [embeddedAccountId]="selectedAccountId"
               [selectableMarketIds]="view.context.eligibleMarketIds"
+              [readiness]="view.context.readiness"
               [showAccountSelector]="false"
               (marketSelected)="selectMarket($event, view.context)"
               (opportunitySelected)="selectNavigatorOpportunity($event, view.context)"
             />
-          </aside>
 
-          <section class="active-workspace" aria-label="Active market investigation">
             @if (selectedMarketId === null) {
               <section class="workspace-empty-state" data-testid="workspace-select-market-state">
                 <span class="eyebrow">Investigation surface</span>

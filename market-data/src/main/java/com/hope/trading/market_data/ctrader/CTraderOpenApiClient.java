@@ -40,6 +40,11 @@ public interface CTraderOpenApiClient {
 
     interface CTraderStream extends AutoCloseable {
         void subscribeSpots(long symbolId);
+
+        default void subscribeSpots(List<Long> symbolIds) {
+            symbolIds.forEach(this::subscribeSpots);
+        }
+
         void unsubscribeSpots(long symbolId);
         void subscribeLiveTrendbar(long symbolId, String period);
         void unsubscribeLiveTrendbar(long symbolId, String period);

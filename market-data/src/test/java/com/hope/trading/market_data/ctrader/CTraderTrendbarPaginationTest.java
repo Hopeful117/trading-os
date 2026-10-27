@@ -3,6 +3,7 @@ package com.hope.trading.market_data.ctrader;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -16,9 +17,10 @@ class CTraderTrendbarPaginationTest {
     void followsHasMoreWithBoundedDeterministicOrderingAndCutoffFiltering() {
         AtomicInteger calls = new AtomicInteger();
         List<CTraderOpenApiClient.CTraderTrendbar> bars = CTraderTrendbarPagination.collect(
-                FROM, TO, 3, 3, 3, request -> {
+                FROM, TO, 3, 3, 3, Duration.ofSeconds(1), request -> {
                     calls.incrementAndGet();
                     if (request.to().equals(TO)) return page(true, bar(240), bar(180));
+                    assertEquals(FROM.plusSeconds(179), request.to());
                     return page(false, bar(60), bar(120));
                 });
 
@@ -31,10 +33,22 @@ class CTraderTrendbarPaginationTest {
     @Test
     void rejectsConflictingDuplicateAndDoesNotExceedPageBound() {
         assertThrows(IllegalStateException.class, () -> CTraderTrendbarPagination.collect(
-                FROM, TO, 2, 2, 2, request -> page(true, bar(60),
-                        new CTraderOpenApiClient.CTraderTrendbar(60, 9, 2, 1, 2, 1))));
+                FROM, TO, 2, 2, 2, Duration.ofSeconds(1), request -> page(true, bar(60),
+                        new CTraderOpenApiClient.CTraderTrendbar(FROM.getEpochSecond() + 60, 9, 2, 1, 2, 1))));
+        AtomicInteger calls = new AtomicInteger();
         assertThrows(IllegalStateException.class, () -> CTraderTrendbarPagination.collect(
-                FROM, TO, 2, 1, 2, request -> page(true, bar(60))));
+                FROM, TO, 3, 2, 3, Duration.ofSeconds(1), request ->
+                        page(true, bar(60 + calls.getAndIncrement() * 60L))));
+    }
+
+    @Test
+    void stopsWhenProviderHasMoreHistoryOutsideRequestedRange() {
+        List<CTraderOpenApiClient.CTraderTrendbar> bars = CTraderTrendbarPagination.collect(
+                FROM, TO, 2, 2, 2, Duration.ofSeconds(1), request -> page(true, bar(60)));
+
+        assertEquals(List.of(60L), bars.stream()
+                .map(CTraderOpenApiClient.CTraderTrendbar::timestamp)
+                .map(value -> value - FROM.getEpochSecond()).toList());
     }
 
     private static CTraderOpenApiClient.CTraderTrendbarPage page(boolean more,

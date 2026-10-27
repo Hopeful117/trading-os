@@ -113,6 +113,29 @@ class JsonWebSocketCTraderOpenApiClientTest {
     }
 
     @Test
+    void treatsOmittedEmptyCollectionsAsEmptyAccountState() throws Exception {
+        Instant started = Instant.parse("2026-10-23T12:00:00Z");
+        JsonNode trader = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"depositAssetId":1,"moneyDigits":2}}
+                """);
+        JsonNode assets = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
+                """);
+        JsonNode symbols = mapper.readTree("{\"ctidTraderAccountId\":9001,\"symbol\":[]}");
+        JsonNode reconcile = mapper.readTree("{\"ctidTraderAccountId\":9001}");
+        JsonNode pnl = mapper.readTree("{\"ctidTraderAccountId\":9001,\"moneyDigits\":2}");
+        JsonNode deals = mapper.readTree("{\"ctidTraderAccountId\":9001,\"hasMore\":false}");
+
+        var observation = invokeMapper(trader, assets, symbols, reconcile, pnl, deals, started);
+
+        assertThat(observation.complete()).isTrue();
+        assertThat(observation.positions()).isEmpty();
+        assertThat(observation.orders()).isEmpty();
+        assertThat(observation.deals()).isEmpty();
+        assertThat(observation.providerObservedAt()).isEqualTo(started);
+    }
+
+    @Test
     void preservesPositionButMarksObservationIncompleteWhenMarginIsMissing() throws Exception {
         Instant started = Instant.parse("2026-10-23T12:00:00Z");
         JsonNode trader = mapper.readTree("""

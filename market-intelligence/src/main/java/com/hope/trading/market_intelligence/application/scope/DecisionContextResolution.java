@@ -5,6 +5,19 @@ import com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResoluti
 
 public record DecisionContextResolution(
         TradingCoreAccountClient.TradingCoreAccountResponse account,
-        ActiveScanScopeResolutionResult scope
+        ActiveScanScopeResolutionResult scope,
+        TradingCoreAccountClient.ChallengeReadinessResponse readiness,
+        String scopeStatus,
+        String scopeMessage
 ) {
+    public DecisionContextResolution(TradingCoreAccountClient.TradingCoreAccountResponse account,
+                                     ActiveScanScopeResolutionResult scope) {
+        this(account, scope, null);
+    }
+
+    public DecisionContextResolution(TradingCoreAccountClient.TradingCoreAccountResponse account,
+                                     ActiveScanScopeResolutionResult scope,
+                                     TradingCoreAccountClient.ChallengeReadinessResponse readiness) {
+        this(account, scope, readiness, null, null);
+    }
 }

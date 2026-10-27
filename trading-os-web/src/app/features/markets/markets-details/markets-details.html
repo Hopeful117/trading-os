@@ -52,17 +52,22 @@
 
             <article class="ticker-card">
               <span>Bid</span>
-              <strong>{{ ticker.bid }}</strong>
+              <strong>{{ formatMarketPrice(ticker.bid, marketPricePrecision(market)) }}</strong>
             </article>
 
             <article class="ticker-card">
               <span>Ask</span>
-              <strong>{{ ticker.ask }}</strong>
+              <strong>{{ formatMarketPrice(ticker.ask, marketPricePrecision(market)) }}</strong>
             </article>
 
             <article class="ticker-card">
               <span>Spread</span>
-              <strong>{{ ticker.ask - ticker.bid }}</strong>
+              <strong>{{
+                formatMarketPrice(
+                  calculateMarketSpread(ticker.bid, ticker.ask, marketPricePrecision(market)),
+                  marketPricePrecision(market)
+                )
+              }}</strong>
             </article>
 
             @if (ticker.volume !== null) {

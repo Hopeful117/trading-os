@@ -27,6 +27,8 @@ public class SpringSecurityConfig {
                         .pathMatchers(
                                 "/api/v1/users/login",
                                 "/api/v1/users/register",
+                                "/api/v1/broker-accounts/ctrader/authorization/callback",
+                                "/api/v1/ctrader/authorization/callback",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()

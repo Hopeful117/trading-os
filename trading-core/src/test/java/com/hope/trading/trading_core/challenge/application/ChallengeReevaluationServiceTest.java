@@ -128,7 +128,7 @@ class ChallengeReevaluationServiceTest {
     }
 
     @Test
-    void identifierReevaluationSkipsLiveAccountAfterAuthoritativeReload() {
+    void identifierReevaluationSupportsLiveAccountAfterAuthoritativeReload() {
         UUID accountId = UUID.randomUUID();
         UUID challengeId = UUID.randomUUID();
         UUID brokerId = UUID.randomUUID();
@@ -141,20 +141,25 @@ class ChallengeReevaluationServiceTest {
         AccountRepository accounts = mock(AccountRepository.class);
         BrokerAccountRepository brokerAccounts = mock(BrokerAccountRepository.class);
         ChallengeInstanceRepository instances = mock(ChallengeInstanceRepository.class);
+        ChallengeDefinitionRepository definitions = mock(ChallengeDefinitionRepository.class);
         AccountRiskMonitoringService monitoring = mock(AccountRiskMonitoringService.class);
         when(instances.findById(challengeId)).thenReturn(Optional.of(challenge));
         when(accounts.findById(accountId)).thenReturn(Optional.of(account));
         BrokerAccount liveBroker = BrokerAccount.create(user.getUserId(), BrokerProvider.KRAKEN,
                 ExecutionMode.LIVE, "live", NOW);
         when(brokerAccounts.findById(brokerId)).thenReturn(Optional.of(liveBroker));
+        when(definitions.findById(any())).thenReturn(Optional.of(definition));
+        RiskValidationResult liveRisk = risk(policyId);
+        when(monitoring.evaluate(same(challenge), same(account), any()))
+                .thenReturn(new AccountRiskMonitoringService.Evaluation(UUID.randomUUID(), liveRisk,
+                        new BigDecimal("10000"), 1));
 
         ChallengeReevaluationService service = new ChallengeReevaluationService(accounts, brokerAccounts,
-                mock(ChallengeDefinitionRepository.class), instances, monitoring, new ChallengeEvaluator(),
+                definitions, instances, monitoring, new ChallengeEvaluator(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
 
-        assertThat(service.reevaluate(challengeId)).isNull();
-        verifyNoInteractions(monitoring);
-        verify(instances, never()).save(any());
+        assertThat(service.reevaluate(challengeId)).isEqualTo(ChallengeStatus.ACTIVE);
+        verify(monitoring).evaluate(same(challenge), same(account), any());
     }
 
     private ChallengeDefinition definition(UUID policyId) {

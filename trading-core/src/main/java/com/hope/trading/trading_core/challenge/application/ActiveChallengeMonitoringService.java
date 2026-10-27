@@ -79,7 +79,7 @@ public class ActiveChallengeMonitoringService {
                     ChallengeStatus status = reevaluation.reevaluate(challenge.id());
                     if (status == null) {
                         skipped++;
-                        log.info("active_challenge_monitoring_skipped challengeId={} reason=NO_LONGER_PAPER",
+                        log.info("active_challenge_monitoring_skipped challengeId={} reason=NO_LONGER_AVAILABLE",
                                 challenge.id());
                         continue;
                     }

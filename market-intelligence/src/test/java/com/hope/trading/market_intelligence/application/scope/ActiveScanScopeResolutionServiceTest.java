@@ -18,6 +18,7 @@ import java.time.ZoneOffset;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,6 +40,8 @@ class ActiveScanScopeResolutionServiceTest {
                 market(zzz, "KRAKEN", "ZZZ", true),
                 market(aaa, "KRAKEN", "AAA", true)
         ));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(
+                capability("ZZZ", "KRAKEN"), capability("AAA", "KRAKEN")));
 
         ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
                 new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
@@ -62,6 +65,7 @@ class ActiveScanScopeResolutionServiceTest {
                 market(tradable, "KRAKEN", "BTC/USD", true),
                 market(closed, "KRAKEN", "ETH/USD", false)
         ));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("BTC/USD", "KRAKEN")));
 
         ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
                 new ActiveScanScopeResolutionRequest(
@@ -126,6 +130,8 @@ class ActiveScanScopeResolutionServiceTest {
                 market(tradable, "KRAKEN", "BTC/EUR", true),
                 market(closed, "KRAKEN", "ETH/EUR", false),
                 market(deferred, "KRAKEN", "SOL/EUR", true)));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(
+                capability("BTC/EUR", "KRAKEN"), capability("SOL/EUR", "KRAKEN")));
         when(marketData.findMarketFacts(eq(tradable), any(), anyLong(), anyInt(), anyInt(), anyLong()))
                 .thenReturn(availableFacts(tradable));
 
@@ -243,9 +249,214 @@ class ActiveScanScopeResolutionServiceTest {
                 .resolveDecisionContext(accountId);
 
         assertThat(result.scope().effectiveScope().marketIds()).isEmpty();
-        assertThat(result.scope().decisions()).singleElement()
-                .satisfies(decision -> assertThat(decision.reasons())
-                        .containsExactly(MarketEligibilityReason.BROKER_CAPABILITY_UNAVAILABLE));
+        assertThat(result.scope().candidateMarketIds()).isEmpty();
+        assertThat(result.scope().decisions()).isEmpty();
+    }
+
+    @Test
+    void blocksActiveScanBeforeLoadingMarketsWhenChallengeReadinessIsBlocked() {
+        UUID accountId = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.challengeReadiness(accountId)).thenReturn(readiness(accountId, "ACCOUNT_BALANCE_MISMATCH", false, null));
+
+        assertThatThrownBy(() -> service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE)))
+                .isInstanceOf(ActiveScanScopeResolutionException.class)
+                .hasMessageContaining("does not match");
+        verifyNoInteractions(marketData);
+    }
+
+    @Test
+    void challengeScopeOnlyUsesRequiredProviderAndDoesNotFallbackToKraken() {
+        UUID accountId = UUID.randomUUID();
+        UUID kraken = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.challengeReadiness(accountId)).thenReturn(readiness(accountId, "READY", true, "CTRADER"));
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(kraken, "KRAKEN", "BTC/USD", true),
+                market(ctrader, "CTRADER", "EUR/USD", true)));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.candidateMarketIds()).containsExactly(ctrader);
+        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+    }
+
+    @Test
+    void challengeScopeFailsClosedWhenNoRequiredProviderMarketExists() {
+        UUID accountId = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.challengeReadiness(accountId)).thenReturn(readiness(accountId, "READY", true, "CTRADER"));
+        when(marketData.findAllMarkets()).thenReturn(List.of(market(UUID.randomUUID(), "KRAKEN", "BTC/USD", true)));
+
+        assertThatThrownBy(() -> service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE)))
+                .isInstanceOf(ActiveScanScopeResolutionException.class)
+                .extracting("code").isEqualTo("NO_COMPATIBLE_MARKETS");
+    }
+
+    @Test
+    void selectedScopeRejectsKrakenMarketInsteadOfSilentlyDroppingIt() {
+        UUID accountId = UUID.randomUUID();
+        UUID kraken = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.challengeReadiness(accountId)).thenReturn(readiness(accountId, "READY", true, "CTRADER"));
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(kraken, "KRAKEN", "BTC/USD", true),
+                market(ctrader, "CTRADER", "EUR/USD", true)));
+
+        assertThatThrownBy(() -> service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", List.of(kraken, ctrader), MarketScopeMode.SELECTED)))
+                .isInstanceOf(ActiveScanScopeResolutionException.class)
+                .extracting("code").isEqualTo("PROVIDER_MISMATCH");
+    }
+
+    @Test
+    void activeScanUsesOnlyMarketsAvailableToTheSelectedAccountProvider() {
+        UUID accountId = UUID.randomUUID();
+        UUID kraken = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(
+                capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(kraken, "KRAKEN", "BTC/USD", true),
+                market(ctrader, "CTRADER", "EUR/USD", true)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+        assertThat(result.decisions()).filteredOn(MarketEligibilityDecision::eligible)
+                .extracting(MarketEligibilityDecision::marketId).containsExactly(ctrader);
+    }
+
+    @Test
+    void removesOtherProvidersFromAllEligibleCandidateScope() {
+        UUID accountId = UUID.randomUUID();
+        UUID kraken = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(
+                capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(kraken, "KRAKEN", "BTC/USD", true),
+                market(ctrader, "CTRADER", "EUR/USD", true)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.candidateMarketIds()).containsExactly(ctrader);
+        assertThat(result.decisions()).extracting(MarketEligibilityDecision::marketId)
+                .containsExactly(ctrader);
+    }
+
+    @Test
+    void unavailableCTraderMarketIsBootstrappedBeforeTradabilityEvaluation() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(
+                List.of(market(ctrader, "CTRADER", "EUR/USD", false)),
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true)));
+        when(marketData.findPriceSnapshots(any())).thenReturn(List.of(
+                new com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse(
+                        ctrader, "EUR/USD", new BigDecimal("1.1"), new BigDecimal("1.0"),
+                        new BigDecimal("1.2"), true, NOW, "FRESH", "ticker:ctrader", 1L, NOW)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+        assertThat(result.decisions()).singleElement().satisfies(decision -> assertThat(decision.eligible()).isTrue());
+        verify(marketData).findPriceSnapshots(argThat(request -> request.marketIds().size() == 1
+                && request.marketIds().contains(ctrader)
+                && "CONFIRM_OR_ACQUIRE".equals(request.acquisitionMode())));
+    }
+
+    @Test
+    void unavailableCTraderMarketRemainsExcludedWhenBootstrapProducesNoQuote() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(List.of(market(ctrader, "CTRADER", "EUR/USD", false)));
+        when(marketData.findPriceSnapshots(any())).thenReturn(List.of(
+                new com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse(
+                        ctrader, "EUR/USD", null, null, null, false, null, "TIMEOUT", null, null, NOW)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).isEmpty();
+        assertThat(result.decisions()).singleElement().satisfies(decision -> assertThat(decision.eligible()).isFalse());
+        verify(marketData).findPriceSnapshots(any());
+    }
+
+    @Test
+    void strictObservedEvidenceFailureMakesMarketNotEvaluableBeforeDispatch() {
+        UUID accountId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        StrictObservedMarketEvidenceGate evidenceGate = mock(StrictObservedMarketEvidenceGate.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(List.of(market(marketId, "CTRADER", "EUR/USD", true)));
+        when(evidenceGate.ruleVersion()).thenReturn("strict-observed-ohlc:v1");
+        when(evidenceGate.evaluate(eq(marketId), eq(NOW))).thenReturn(Optional.of(
+                new StrictObservedMarketEvidenceGate.MarketEvidenceFailure(
+                        MarketEligibilityReason.DATA_UNAVAILABLE,
+                        "Strict observed OHLC is unavailable")));
+
+        ActiveScanScopeResolutionResult result = new ActiveScanScopeResolutionService(
+                accounts, marketData, Clock.fixed(NOW, ZoneOffset.UTC), null, evidenceGate).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).isEmpty();
+        assertThat(result.decisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.status()).isEqualTo(MarketEligibilityStatus.NOT_EVALUABLE);
+            assertThat(decision.reasons()).containsExactly(MarketEligibilityReason.DATA_UNAVAILABLE);
+        });
+        assertThat(result.ruleVersions()).contains("strict-observed-ohlc:v1");
+    }
+
+    @Test
+    void decisionContextReturnsStructuredBlockWhenChallengeHasNoCompatibleMarket() {
+        UUID accountId = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.challengeReadiness(accountId)).thenReturn(readiness(accountId, "READY", true, "CTRADER"));
+        when(marketData.findAllMarkets()).thenReturn(List.of(
+                market(UUID.randomUUID(), "KRAKEN", "BTC/USD", true)));
+
+        DecisionContextResolution result = service(accounts, marketData).resolveDecisionContext(accountId);
+
+        assertThat(result.scopeStatus()).isEqualTo("NO_COMPATIBLE_MARKETS");
+        assertThat(result.scope().effectiveScope().marketIds()).isEmpty();
+        assertThat(result.scopeMessage()).contains("No market is available");
     }
 
     private ActiveScanScopeResolutionService service(
@@ -262,6 +473,15 @@ class ActiveScanScopeResolutionServiceTest {
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "1.0.0", UUID.randomUUID(), 1L);
     }
 
+    private TradingCoreAccountClient.ChallengeReadinessResponse readiness(
+            UUID accountId, String status, boolean active, String provider) {
+        return new TradingCoreAccountClient.ChallengeReadinessResponse(accountId, active, status,
+                status.equals("READY") ? null : "Account starting balance does not match the Challenge definition",
+                active ? UUID.randomUUID() : null, active ? "1.0.0" : null, active ? "CHALLENGE" : null,
+                active ? new BigDecimal("50000") : null, active ? "USD" : null,
+                active ? new BigDecimal("10000") : null, BigDecimal.TEN, null, null, UUID.randomUUID(), provider, null);
+    }
+
     private MarketResponse market(UUID marketId, String provider, String symbol, boolean tradable) {
         String[] parts = symbol.contains("/") ? symbol.split("/") : new String[] {symbol, symbol};
         return new MarketResponse(
@@ -274,6 +494,12 @@ class ActiveScanScopeResolutionServiceTest {
                         "OPEN", tradable, null, NOW
                 )
         );
+    }
+
+    private TradingCoreAccountClient.MarketCapabilityResponse capability(String instrument, String provider) {
+        return new TradingCoreAccountClient.MarketCapabilityResponse(
+                instrument, true, List.of("MARKET"), List.of(BigDecimal.ONE), List.of(BigDecimal.ONE),
+                1, NOW, provider, List.of());
     }
 
     private MarketFactsResponse availableFacts(UUID marketId) {

@@ -223,18 +223,18 @@
             @if (view.ticker$ | async; as ticker) {
               <div class="ticker-grid" data-testid="market-ticker">
                 <article class="ticker-card ticker-card--primary">
-                  <span>Last</span><strong>{{ ticker.last | number: '1.2-8' }}</strong
+                  <span>Last</span><strong>{{ formatMarketPrice(ticker.last, view.market) }}</strong
                   ><small>{{ ticker.occurredAt | date: 'mediumTime' }}</small>
                 </article>
                 <article class="ticker-card">
-                  <span>Bid</span><strong>{{ ticker.bid | number: '1.2-8' }}</strong>
+                  <span>Bid</span><strong>{{ formatMarketPrice(ticker.bid, view.market) }}</strong>
                 </article>
                 <article class="ticker-card">
-                  <span>Ask</span><strong>{{ ticker.ask | number: '1.2-8' }}</strong>
+                  <span>Ask</span><strong>{{ formatMarketPrice(ticker.ask, view.market) }}</strong>
                 </article>
                 <article class="ticker-card">
                   <span>Spread</span
-                  ><strong>{{ ticker.ask - ticker.bid | number: '1.2-8' }}</strong>
+                  ><strong>{{ marketSpread(ticker.bid, ticker.ask, view.market) }}</strong>
                 </article>
                 @if (ticker.volume !== null) {
                   <article class="ticker-card">

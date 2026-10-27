@@ -84,6 +84,11 @@ public class CTraderAuthorizationAttempt {
         status = CTraderAuthorizationAttemptStatus.ACCOUNT_SELECTION_REQUIRED;
     }
 
+    public void permissionScope(String scope) {
+        if (scope == null || scope.isBlank()) throw new IllegalArgumentException("permission scope is required");
+        permissionScope = scope;
+    }
+
     public void bind(String externalAccountId) {
         if (!discoveredAccountIds().stream().anyMatch(externalAccountId::equals)) {
             throw new CTraderAuthenticationException("External account was not authorized");
@@ -102,6 +107,10 @@ public class CTraderAuthorizationAttempt {
         failureCode = code;
     }
 
+    public void expire() {
+        if (status == CTraderAuthorizationAttemptStatus.INITIATED) status = CTraderAuthorizationAttemptStatus.EXPIRED;
+    }
+
     public UUID id() { return id; }
     public UUID ownerId() { return ownerId; }
     public UUID brokerAccountId() { return brokerAccountId; }
@@ -109,6 +118,7 @@ public class CTraderAuthorizationAttempt {
     public String stateHash() { return stateHash; }
     public String environment() { return environment; }
     public Instant expiresAt() { return expiresAt; }
+    public Instant consumedAt() { return consumedAt; }
     public UUID tokenCredentialReference() { return tokenCredentialReference; }
     public List<String> discoveredAccountIds() {
         if (discoveredAccountIds == null || discoveredAccountIds.isBlank()) return List.of();

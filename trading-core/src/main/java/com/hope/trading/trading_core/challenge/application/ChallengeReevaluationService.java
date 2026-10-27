@@ -1,7 +1,6 @@
 package com.hope.trading.trading_core.challenge.application;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
-import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinition;
 import com.hope.trading.trading_core.challenge.domain.ChallengeDefinitionKey;
 import com.hope.trading.trading_core.challenge.domain.ChallengeInstance;
@@ -82,8 +81,7 @@ public class ChallengeReevaluationService {
         Account account = accounts.findById(accountId).orElse(null);
         if (account == null) return;
         if (account.getBrokerAccountId() == null
-                || brokerAccounts.findById(account.getBrokerAccountId())
-                .filter(broker -> broker.executionMode() == ExecutionMode.PAPER).isEmpty()) {
+                || brokerAccounts.findById(account.getBrokerAccountId()).isEmpty()) {
             return;
         }
         reevaluateLoaded(challenge, account, null);
@@ -98,8 +96,7 @@ public class ChallengeReevaluationService {
         Account account = accounts.findById(challenge.accountId())
                 .orElseThrow(() -> new IllegalStateException("Challenge Account does not exist"));
         if (account.getBrokerAccountId() == null
-                || brokerAccounts.findById(account.getBrokerAccountId())
-                .filter(broker -> broker.executionMode() == ExecutionMode.PAPER).isEmpty()) {
+                || brokerAccounts.findById(account.getBrokerAccountId()).isEmpty()) {
             return null;
         }
         return reevaluateLoaded(challenge, account, null);
@@ -114,8 +111,7 @@ public class ChallengeReevaluationService {
         Account account = accounts.findById(challenge.accountId())
                 .orElseThrow(() -> new IllegalStateException("Challenge Account does not exist"));
         if (account.getBrokerAccountId() == null
-                || brokerAccounts.findById(account.getBrokerAccountId())
-                .filter(broker -> broker.executionMode() == ExecutionMode.PAPER).isEmpty()) {
+                || brokerAccounts.findById(account.getBrokerAccountId()).isEmpty()) {
             return null;
         }
         return reevaluateLoaded(challenge, account, evidence);
