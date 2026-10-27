@@ -90,7 +90,12 @@ export class OpportunityDetail {
     }),
   );
 
-  prepareTradePlan(opportunityId: string, accountId: string, marketId: string | null = null): void {
+  prepareTradePlan(
+    opportunityId: string,
+    opportunityVersion: number,
+    accountId: string,
+    marketId: string | null = null,
+  ): void {
     if (this.preparing || !accountId) {
       return;
     }
@@ -100,7 +105,12 @@ export class OpportunityDetail {
     this.preparationFailure = null;
     this.preparationErrorMessage = '';
     this.tradePlanService
-      .createFromOpportunity(opportunityId, accountId, `${opportunityId}:${accountId}`)
+      .createFromOpportunity(
+        opportunityId,
+        opportunityVersion,
+        accountId,
+        `${opportunityId}:${accountId}`,
+      )
       .subscribe({
         next: (created) => {
           this.preparing = false;
@@ -130,5 +140,12 @@ export class OpportunityDetail {
 
   metricEntries(failure: TradePreparationFailure): [string, number][] {
     return Object.entries(failure.metrics) as [string, number][];
+  }
+
+  canPrepare(opportunity: OpportunityResponse): boolean {
+    return opportunity.status === 'ACTIVE'
+      && opportunity.thesis?.state === 'CANDIDATE'
+      && opportunity.marketThesis !== null
+      && opportunity.marketThesis !== undefined;
   }
 }

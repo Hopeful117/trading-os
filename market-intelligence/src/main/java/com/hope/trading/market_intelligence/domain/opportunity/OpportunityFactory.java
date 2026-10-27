@@ -13,7 +13,7 @@ public final class OpportunityFactory {
                 values.explanation(), values.observations(), values.aiAnalyses(), values.evaluatedAt(),
                 values.validFrom(), values.validUntil(), values.createdAt(), values.strategyMatchId(),
                 values.setupSnapshot(), values.marketId(), values.accountId(), values.sourceScanId(),
-                values.sourceScanMarketId(), values.analysisExecutionId());
+                values.sourceScanMarketId(), values.analysisExecutionId(), values.marketThesis());
     }
 
     public record Values(OpportunityId id, OpportunityVersion version, OpportunityStatus status,
@@ -23,7 +23,7 @@ public final class OpportunityFactory {
             Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
             UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot,
              UUID marketId, UUID accountId, UUID sourceScanId, UUID sourceScanMarketId,
-             UUID analysisExecutionId) {
+              UUID analysisExecutionId, MarketThesisReference marketThesis) {
         public Values(
                 OpportunityId id, OpportunityVersion version, OpportunityStatus status,
                 String instrument, OpportunityDirection direction, String scenario,
@@ -35,7 +35,23 @@ public final class OpportunityFactory {
             this(id, version, status, instrument, direction, scenario, timeframe, type, origin,
                     score, explanation, observations, aiAnalyses, evaluatedAt, validFrom,
                     validUntil, createdAt, strategyMatchId, setupSnapshot, marketId,
-                    null, null, null, null);
+                     null, null, null, null, null);
+        }
+
+        public Values(
+                OpportunityId id, OpportunityVersion version, OpportunityStatus status,
+                String instrument, OpportunityDirection direction, String scenario,
+                String timeframe, OpportunityType type, OpportunityOrigin origin,
+                OpportunityScore score, String explanation,
+                Set<ObservationReference> observations, Set<AiAnalysisReference> aiAnalyses,
+                Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
+                UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId,
+                UUID accountId, UUID sourceScanId, UUID sourceScanMarketId,
+                UUID analysisExecutionId) {
+            this(id, version, status, instrument, direction, scenario, timeframe, type, origin,
+                    score, explanation, observations, aiAnalyses, evaluatedAt, validFrom,
+                    validUntil, createdAt, strategyMatchId, setupSnapshot, marketId, accountId,
+                    sourceScanId, sourceScanMarketId, analysisExecutionId, null);
         }
     }
 }

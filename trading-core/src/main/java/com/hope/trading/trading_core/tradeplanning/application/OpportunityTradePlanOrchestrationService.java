@@ -37,7 +37,8 @@ public class OpportunityTradePlanOrchestrationService {
     }
 
     public Response createFromOpportunity(
-            UUID actorId, UUID opportunityId, UUID accountId, String idempotencyKey) {
+            UUID actorId, UUID opportunityId, long opportunityVersion,
+            UUID accountId, String idempotencyKey) {
         var account = accounts.findById(accountId)
                 .orElseThrow(() -> failure(HttpStatus.NOT_FOUND,
                         "ACCOUNT_NOT_FOUND", "Trading account does not exist"));
@@ -55,7 +56,8 @@ public class OpportunityTradePlanOrchestrationService {
         try {
             var response = marketIntelligence.generateFromOpportunity(
                     opportunityId, idempotencyKey,
-                    new MarketIntelligenceTradePlanningClient.Request(actorId, accountId, context));
+                    new MarketIntelligenceTradePlanningClient.Request(
+                            actorId, accountId, opportunityVersion, context));
             boolean retryRejectedPreflight = response.reused()
                     && risk.hasRejectedPreflight(actorId, response.tradePlanId(),
                     response.tradePlanVersion(), accountId);
@@ -81,6 +83,11 @@ public class OpportunityTradePlanOrchestrationService {
                     "MARKET_INTELLIGENCE_REJECTED",
                     "Market Intelligence could not generate the Trade Plan");
         }
+    }
+
+    public Response createFromOpportunity(
+            UUID actorId, UUID opportunityId, UUID accountId, String idempotencyKey) {
+        return createFromOpportunity(actorId, opportunityId, 1, accountId, idempotencyKey);
     }
 
     public MarketIntelligenceTradePlanningClient.PlanTransport decide(

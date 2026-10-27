@@ -5,6 +5,7 @@ import com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirect
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityOrigin;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunitySetupSnapshot;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityTrigger;
+import com.hope.trading.market_intelligence.domain.opportunity.MarketThesisReference;
 import com.hope.trading.market_intelligence.strategy.domain.ConditionResult;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluation;
@@ -75,8 +76,9 @@ public class StrategyMatchOpportunityFactory {
                  match.matchId(),
                    deriveOpportunityLineageId(match.matchId(), provenance.accountId()),
                    setupSnapshot(match, evaluation, referencePrice, referencePriceAt),
-                   match.marketId(), provenance.accountId(), provenance.sourceScanId(),
-                   provenance.sourceScanMarketId(), provenance.analysisExecutionId());
+                    match.marketId(), provenance.accountId(), provenance.sourceScanId(),
+                    provenance.sourceScanMarketId(), provenance.analysisExecutionId(),
+                    provenance.marketThesis());
     }
 
     /**
@@ -172,8 +174,13 @@ public class StrategyMatchOpportunityFactory {
             UUID accountId,
             UUID sourceScanId,
             UUID sourceScanMarketId,
-            UUID analysisExecutionId
+            UUID analysisExecutionId,
+            MarketThesisReference marketThesis
     ) {
+        public OpportunityProvenance(UUID accountId, UUID sourceScanId,
+                                     UUID sourceScanMarketId, UUID analysisExecutionId) {
+            this(accountId, sourceScanId, sourceScanMarketId, analysisExecutionId, null);
+        }
         public static OpportunityProvenance none() {
             return new OpportunityProvenance(null, null, null, null);
         }

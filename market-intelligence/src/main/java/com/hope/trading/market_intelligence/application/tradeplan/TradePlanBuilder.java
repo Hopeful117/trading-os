@@ -55,8 +55,12 @@ final class TradePlanBuilder {
         Set<AiAnalysisReference> ai = input.opportunities().stream()
                 .flatMap(item -> item.aiAnalyses().stream())
                 .collect(Collectors.toUnmodifiableSet());
+        Set<com.hope.trading.market_intelligence.domain.opportunity.MarketThesisReference> theses =
+                input.opportunities().stream()
+                        .flatMap(item -> item.marketThesis().stream())
+                        .collect(Collectors.toUnmodifiableSet());
         TradingRationale rationale = new TradingRationale(
-                opportunities, observations, ai, thesis, confirmation, invalidation);
+                opportunities, observations, ai, thesis, confirmation, invalidation, theses);
         return factory.create(new TradePlanFactory.Values(
                 id, version, previous, TradePlanStatus.PROPOSED, input.context().reference(),
                 execution, rationale, createdAt, TradePlanOrigin.OPPORTUNITY, authorId));

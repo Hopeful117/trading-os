@@ -9,11 +9,14 @@ import com.hope.trading.market_intelligence.domain.execution.IllegalExecutionTra
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 @RestControllerAdvice
 public class MarketIntelligenceExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(MarketIntelligenceExceptionHandler.class);
     private static final String ERROR = "error";
     @ExceptionHandler(TradePlanRiskHandoffException.class)
     ResponseEntity<Map<String, String>> tradePlanRiskHandoff(
@@ -49,6 +52,7 @@ public class MarketIntelligenceExceptionHandler {
 
     @ExceptionHandler({IllegalExecutionTransitionException.class, IllegalArgumentException.class})
     ResponseEntity<Map<String, String>> conflict(RuntimeException exception) {
+        log.warn("Runtime request rejected as conflict: {}", exception.getMessage());
         return ResponseEntity.status(409).body(Map.of(ERROR, exception.getMessage()));
     }
 }

@@ -48,6 +48,7 @@ describe('DecisionWorkspace', () => {
   let tradePlanServiceMock: {
     createManual: ReturnType<typeof vi.fn>;
     createFromOpportunity: ReturnType<typeof vi.fn>;
+    recordNoTrade: ReturnType<typeof vi.fn>;
   };
   let opportunityServiceMock: { findById: ReturnType<typeof vi.fn> };
   let activeScanServiceMock: {
@@ -56,6 +57,12 @@ describe('DecisionWorkspace', () => {
     resolveScope: ReturnType<typeof vi.fn>;
   };
   let routeQueryParamMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+
+  const candidateLineage = {
+    version: 1,
+    marketThesis: { thesisId: 'thesis-1', thesisVersion: 1 },
+    thesis: { state: 'CANDIDATE' },
+  } as unknown as Partial<OpportunityResponse>;
 
   const account: Account = {
     accountId: 'account-1',
@@ -214,6 +221,7 @@ describe('DecisionWorkspace', () => {
       createFromOpportunity: vi
         .fn()
         .mockReturnValue(of({ tradePlanId: 'plan-1', tradePlanVersion: 1 })),
+      recordNoTrade: vi.fn().mockReturnValue(of({ id: 'decision-1', decision: 'NO_TRADE' })),
     };
     opportunityServiceMock = { findById: vi.fn() };
     activeScanServiceMock = {
@@ -451,6 +459,7 @@ describe('DecisionWorkspace', () => {
   it('creates an opportunity Trade Plan from the selected account', () => {
     component.selectedAccountId = account.accountId;
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       status: 'ACTIVE',
       validFrom: new Date(Date.now() - 60_000).toISOString(),
@@ -461,6 +470,7 @@ describe('DecisionWorkspace', () => {
 
     expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith(
       'opportunity-1',
+      1,
       account.accountId,
       expect.any(String),
     );
@@ -479,6 +489,7 @@ describe('DecisionWorkspace', () => {
     );
     component.selectAccount(account.accountId);
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       status: 'ACTIVE',
       validFrom: new Date(Date.now() - 60_000).toISOString(),
@@ -498,6 +509,7 @@ describe('DecisionWorkspace', () => {
     component.selectedAccountId = account.accountId;
     component.selectedMarketId = 'market-1';
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       status: 'ACTIVE',
       validFrom: new Date(Date.now() - 60_000).toISOString(),
@@ -523,6 +535,7 @@ describe('DecisionWorkspace', () => {
     tradePlanServiceMock.createFromOpportunity.mockReturnValue(response.asObservable());
     component.selectedAccountId = account.accountId;
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       status: 'ACTIVE',
       validFrom: new Date(Date.now() - 60_000).toISOString(),
@@ -544,6 +557,7 @@ describe('DecisionWorkspace', () => {
     tradePlanServiceMock.createFromOpportunity.mockReturnValue(response.asObservable());
     component.selectedAccountId = account.accountId;
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       status: 'ACTIVE',
       validFrom: new Date(Date.now() - 60_000).toISOString(),
@@ -566,6 +580,7 @@ describe('DecisionWorkspace', () => {
     tradePlanServiceMock.createFromOpportunity.mockReturnValue(response.asObservable());
     component.selectedAccountId = account.accountId;
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       status: 'ACTIVE',
       validFrom: new Date(Date.now() - 60_000).toISOString(),
@@ -582,7 +597,9 @@ describe('DecisionWorkspace', () => {
   });
 
   it('records NO TRADE only in the current workspace', () => {
+    component.selectedAccountId = account.accountId;
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       status: 'ACTIVE',
     } as OpportunityResponse;
@@ -631,6 +648,7 @@ describe('DecisionWorkspace', () => {
       }),
     );
     component.opportunity = {
+      ...candidateLineage,
       id: 'opportunity-1',
       version: 1,
       status: 'ACTIVE',

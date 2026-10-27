@@ -219,7 +219,7 @@ class MiSecurityIntegrationTest {
         UUID signedActor = UUID.randomUUID();
         UUID bodyActor = UUID.randomUUID();
         String body = """
-                {"actorId":"%s","accountId":"%s","context":{"id":"%s","version":1,
+                {"actorId":"%s","opportunityVersion":1,"accountId":"%s","context":{"id":"%s","version":1,
                 "capturedAt":"2026-09-15T12:00:00Z","ownerId":"%s","tradingAccountId":"%s",
                 "accountCurrency":"USD","riskBudget":{"amount":100,"currency":"USD",
                 "sourceId":"%s","sourceVersion":1},"preferences":{"id":"%s","version":1,

@@ -50,6 +50,8 @@ describe('OpportunityDetail', () => {
     createdAt: '2026-08-24T09:55:00Z',
     strategyMatchId: 'match-1',
     marketId: 'market-1',
+    marketThesis: { thesisId: 'thesis-1', thesisVersion: 1 },
+    thesis: { state: 'CANDIDATE' } as OpportunityResponse['thesis'],
     setup,
   };
 
@@ -159,6 +161,7 @@ describe('OpportunityDetail', () => {
 
       expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith(
         'o1',
+        3,
         'account-1',
         expect.any(String),
       );

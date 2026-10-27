@@ -108,6 +108,7 @@ class ProductionIntelligencePipelineTest {
         when(runs.findByAnalysisExecutionIdAndPipelineVersion(
                 any(UUID.class), anyString())).thenReturn(Optional.empty());
         when(runs.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(theses.saveIfAbsent(any())).thenAnswer(inv -> inv.getArgument(0));
         when(runClaims.create(any(UUID.class), anyString(), any(Instant.class)))
                 .thenAnswer(invocation -> JpaIntelligencePipelineRunEntity.running(
                         invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));

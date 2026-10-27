@@ -198,21 +198,25 @@ describe('Opportunities', () => {
       expect(routerMock.navigate).toHaveBeenCalledWith(['/opportunities', 'o1']);
     });
 
-    it('creates or reuses the plan and opens its page when an account is selected', () => {
+    it('opens the gated Decision Workspace when an account is selected', () => {
       component.accountSelected('a1');
       component.openOpportunity(mockOpportunities[0]);
 
-      expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith('o1', 'a1', 'o1:a1');
       expect(routerMock.navigate).toHaveBeenCalledWith(
-        ['/trade-planning', 'plans', 'plan-1', 'versions', 1],
-        { queryParams: { marketId: 'market-1' } },
+        ['/decision-workspace'],
+        { queryParams: { opportunityId: 'o1', opportunityVersion: 2,
+          marketId: 'market-1', accountId: 'a1' } },
       );
     });
 
-    it('uses the opportunity account when no account has been selected in the scan panel', () => {
+    it('uses the opportunity account when opening the gated workspace', () => {
       component.openOpportunity({ ...mockOpportunities[0], accountId: 'a1' });
 
-      expect(tradePlanServiceMock.createFromOpportunity).toHaveBeenCalledWith('o1', 'a1', 'o1:a1');
+      expect(routerMock.navigate).toHaveBeenCalledWith(
+        ['/decision-workspace'],
+        { queryParams: { opportunityId: 'o1', opportunityVersion: 2,
+          marketId: 'market-1', accountId: 'a1' } },
+      );
     });
   });
 

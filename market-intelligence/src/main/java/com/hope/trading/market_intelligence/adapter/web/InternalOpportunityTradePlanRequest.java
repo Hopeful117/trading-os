@@ -12,6 +12,7 @@ import java.util.UUID;
 public record InternalOpportunityTradePlanRequest(
         @NotNull UUID actorId,
         @NotNull UUID accountId,
+        @NotNull Long opportunityVersion,
         @NotNull @Valid Context context
 ) {
     public record Context(

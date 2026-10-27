@@ -196,21 +196,28 @@
           @if (view.opportunity.status === 'ACTIVE') {
             <footer class="cta-section">
               @if (view.accountId; as accountId) {
-                <button
+                @if (canPrepare(view.opportunity)) {
+                  <button
                   type="button"
                   class="btn-create-plan"
                   (click)="
                     prepareTradePlan(
                       view.opportunity.id,
+                      view.opportunity.version,
                       accountId,
                       view.opportunity.marketId ?? null
                     )
                   "
                   [disabled]="preparing"
                   data-testid="create-trade-plan-button"
-                >
+                  >
                   {{ preparing ? 'Creating Trade Plan...' : 'Create Trade Plan' }}
-                </button>
+                  </button>
+                } @else {
+                  <p class="state-message" data-testid="preparation-blocked">
+                    Trade Plan preparation is available only for a current CANDIDATE Thesis.
+                  </p>
+                }
                 <a
                   class="btn-secondary"
                   [routerLink]="['/decision-workspace']"

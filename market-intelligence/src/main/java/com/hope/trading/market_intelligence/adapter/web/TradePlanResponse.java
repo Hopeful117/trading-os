@@ -15,9 +15,11 @@ public record TradePlanResponse(
         BigDecimal stopLoss, List<BigDecimal> takeProfits, BigDecimal quantity,
         BigDecimal notional, BigDecimal monetaryRisk, BigDecimal riskReward,
         Instant expiresAt, String thesis, Set<UUID> opportunityIds,
-        Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
-        Set<String> confirmationConditions, Set<String> invalidationConditions,
-         Set<String> managementRules, Instant createdAt, java.util.UUID tradingAccountId,
+         Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
+         Set<String> confirmationConditions, Set<String> invalidationConditions,
+          Set<String> managementRules,
+          Set<com.hope.trading.market_intelligence.domain.opportunity.MarketThesisReference> marketTheses,
+          Instant createdAt, java.util.UUID tradingAccountId,
          java.util.UUID decisionActorId, Instant decisionAt,
          TradePlanOriginContextResponse originContext
 ) {
@@ -51,8 +53,8 @@ public record TradePlanResponse(
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
                 rationale.aiAnalyses().stream().map(item -> item.analysisId())
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
-                rationale.confirmationConditions(), rationale.invalidationConditions(),
-                 execution.managementRules(), plan.createdAt(),
+                 rationale.confirmationConditions(), rationale.invalidationConditions(),
+                  execution.managementRules(), rationale.marketTheses(), plan.createdAt(),
                   context.tradingAccountId(), plan.decisionActorId().orElse(null),
                    plan.decisionAt().orElse(null), TradePlanOriginContextResponse.from(originContext));
     }

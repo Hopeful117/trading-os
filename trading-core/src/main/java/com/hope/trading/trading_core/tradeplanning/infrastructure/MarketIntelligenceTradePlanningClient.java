@@ -19,9 +19,12 @@ public interface MarketIntelligenceTradePlanningClient {
 
     @PostMapping("/internal/v1/intelligence/opportunities/{opportunityId}/trade-plans")
     Response generateFromOpportunity(
-            @PathVariable UUID opportunityId,
-            @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @RequestBody Request request);
+             @PathVariable UUID opportunityId,
+             @RequestHeader("Idempotency-Key") String idempotencyKey,
+             @RequestBody Request request);
+
+    @GetMapping("/internal/v1/intelligence/opportunities/{opportunityId}/versions/{version}")
+    OpportunityAuthorityResponse authority(@PathVariable UUID opportunityId, @PathVariable long version);
 
     @PostMapping("/internal/v1/intelligence/trade-plans/manual")
     PlanTransport createManual(
@@ -43,7 +46,17 @@ public interface MarketIntelligenceTradePlanningClient {
         return load(planId, version);
     }
 
-    record Request(UUID actorId, UUID accountId, Context context) { }
+    record Request(UUID actorId, UUID accountId, long opportunityVersion, Context context) {
+        public Request(UUID actorId, UUID accountId, Context context) {
+            this(actorId, accountId, 1, context);
+        }
+    }
+    record OpportunityAuthorityResponse(UUID opportunityId, long opportunityVersion, UUID accountId,
+                                        UUID marketId, String instrument, String direction,
+                                        UUID thesisId, long thesisVersion, String thesisState,
+                                        UUID thesisMarketId, String thesisInstrument,
+                                        Instant thesisValidFrom, Instant thesisValidUntil,
+                                        Instant thesisSourceCutoff, Instant thesisEvaluatedAt) { }
     record ManualRequest(UUID actorId, UUID accountId, Context context,
                           String instrument, String direction, String entryType,
                           String instrumentProvider, String instrumentProductType,

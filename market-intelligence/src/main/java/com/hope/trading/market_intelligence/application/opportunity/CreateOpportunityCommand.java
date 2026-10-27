@@ -24,7 +24,8 @@ public record CreateOpportunityCommand(
         UUID accountId,
         UUID sourceScanId,
         UUID sourceScanMarketId,
-        UUID analysisExecutionId
+         UUID analysisExecutionId,
+         MarketThesisReference marketThesis
 ) {
     public CreateOpportunityCommand(
             String instrument,
@@ -42,7 +43,7 @@ public record CreateOpportunityCommand(
     ) {
         this(instrument, direction, scenario, timeframe, origin, observations, aiAnalyses,
                 evaluatedAt, validUntil, strategyMatchId, opportunityId, setupSnapshot,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     public CreateOpportunityCommand(
@@ -53,7 +54,19 @@ public record CreateOpportunityCommand(
             UUID marketId) {
         this(instrument, direction, scenario, timeframe, origin, observations, aiAnalyses,
                 evaluatedAt, validUntil, strategyMatchId, opportunityId, setupSnapshot,
-                marketId, null, null, null, null);
+                marketId, null, null, null, null, null);
+    }
+
+    public CreateOpportunityCommand(
+            String instrument, OpportunityDirection direction, String scenario,
+            String timeframe, OpportunityOrigin origin, Set<ObservationReference> observations,
+            Set<AiAnalysisReference> aiAnalyses, Instant evaluatedAt, Instant validUntil,
+            UUID strategyMatchId, UUID opportunityId, OpportunitySetupSnapshot setupSnapshot,
+            UUID marketId, UUID accountId, UUID sourceScanId, UUID sourceScanMarketId,
+            UUID analysisExecutionId) {
+        this(instrument, direction, scenario, timeframe, origin, observations, aiAnalyses,
+                evaluatedAt, validUntil, strategyMatchId, opportunityId, setupSnapshot,
+                marketId, accountId, sourceScanId, sourceScanMarketId, analysisExecutionId, null);
     }
 
     public CreateOpportunityCommand {
