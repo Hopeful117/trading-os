@@ -1,6 +1,8 @@
 package com.hope.trading.broker_service.ctrader;
 
 import com.hope.trading.broker_service.broker.domain.capability.BrokerCapabilities.AuthoritativeSnapshotCapability;
+import com.hope.trading.broker_service.broker.domain.capability.BrokerCapabilities.TechnicalCapability;
+import com.hope.trading.broker_service.broker.domain.model.BrokerModels.OrderType;
 import com.hope.trading.broker_service.connection.application.BrokerConnectionRepository;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
@@ -26,7 +28,7 @@ import static org.mockito.Mockito.mock;
 class CTraderBrokerProviderTest {
 
     @Test
-    void exposesOnlyTheAuthoritativeSnapshotCapability() {
+    void exposesAuthoritativeSnapshotAndConfiguredTechnicalCapabilities() {
         CTraderAuthoritativeSnapshotCapability snapshots = new CTraderAuthoritativeSnapshotCapability(
                 mock(BrokerConnectionRepository.class),
                 new BrokerProviderRegistrationCatalog(),
@@ -38,6 +40,7 @@ class CTraderBrokerProviderTest {
 
         assertThat(provider.id()).isEqualTo(BrokerProviderId.CTRADER);
         assertThat(provider.capability(AuthoritativeSnapshotCapability.class)).containsSame(snapshots);
+        assertThat(provider.capability(TechnicalCapability.class)).isEmpty();
         assertThat(provider.capability(String.class)).isEmpty();
         assertThatThrownBy(() -> snapshots.snapshot(UUID.randomUUID()))
                 .isInstanceOf(CTraderAuthenticationException.class)
@@ -66,5 +69,22 @@ class CTraderBrokerProviderTest {
     @Test
     void bindRequestCarriesTheSelectedExternalAccount() {
         assertThat(new CTraderBindAccountRequest("account-1").externalAccountId()).isEqualTo("account-1");
+    }
+
+    @Test
+    void exposesOnlyConfiguredMarketOrderCapabilities() {
+        CTraderTechnicalCapabilities technical = new CTraderTechnicalCapabilities(
+                new CTraderProperties(null, null, null, null, "demo", null, null, 300),
+                Clock.fixed(Instant.parse("2026-10-27T00:00:00Z"), ZoneOffset.UTC));
+
+        var capability = technical.capabilities(UUID.randomUUID(), "eur/usd");
+
+        assertThat(capability.provider()).isEqualTo("CTRADER");
+        assertThat(capability.instrument()).isEqualTo("EUR/USD");
+        assertThat(capability.supportedOrderTypes()).containsExactly(OrderType.MARKET);
+        assertThat(technical.capabilities(UUID.randomUUID(), List.of("EUR/USD", "BTC/USD")))
+                .hasSize(1);
+        assertThatThrownBy(() -> technical.capabilities(UUID.randomUUID(), "BTC/USD"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

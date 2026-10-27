@@ -2,11 +2,29 @@ import { Component, signal } from '@angular/core';
 import { AccountService } from '../../../../core/services/account.service';
 import { Account } from '../../../../core/models/account.model';
 import { AccountCard } from '../../components/account-card/account-card';
-import { catchError, combineLatest, map, Observable, of, shareReplay, startWith } from 'rxjs';
+import {
+  catchError,
+  combineLatest,
+  map,
+  Observable,
+  of,
+  shareReplay,
+  startWith,
+  Subscription,
+  switchMap,
+  takeWhile,
+  timer,
+} from 'rxjs';
 import { AsyncPipe } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
-import { BrokerAccount } from '../../../../core/models/broker-account.model';
+import {
+  BrokerAccount,
+  BrokerProvider,
+  CTraderAuthorization,
+  CTraderMarketDataAuthorizationState,
+  CTRADER_PROVIDER_REGISTRATION_REFERENCE,
+} from '../../../../core/models/broker-account.model';
 import { RiskProfileCatalogEntry } from '../../../../core/models/risk-profile.model';
 
 type RiskProfileState = {
@@ -37,12 +55,19 @@ export class Accounts {
   readonly revokeFeedback = signal<ConnectionFeedback>(null);
   readonly disconnectingAccountId = signal<string | null>(null);
   readonly disconnectFeedback = signal<ConnectionFeedback>(null);
+  readonly provisioningAccountId = signal<string | null>(null);
+  readonly provisioningFeedback = signal<ConnectionFeedback>(null);
   readonly syncing = signal(false);
   readonly syncFeedback = signal<ConnectionFeedback>(null);
+  readonly cTraderAuthorization = signal<CTraderAuthorization | null>(null);
+  readonly cTraderFlowAccountId = signal<string | null>(null);
+  readonly cTraderMarketDataUrl = signal<string | null>(null);
   readonly riskProfileSelection = new FormControl('', { nonNullable: true });
+  private cTraderPoll?: Subscription;
+  private cTraderMarketDataPoll?: Subscription;
 
   readonly brokerForm = new FormGroup({
-    provider: new FormControl<'KRAKEN'>('KRAKEN', { nonNullable: true }),
+    provider: new FormControl<BrokerProvider>('KRAKEN', { nonNullable: true }),
     executionMode: new FormControl<'LIVE' | 'PAPER'>('LIVE', { nonNullable: true }),
     displayName: new FormControl('', {
       nonNullable: true,
@@ -71,6 +96,7 @@ export class Accounts {
     this.loadAccounts();
     this.loadBrokerAccounts();
     this.loadRiskProfiles();
+    this.restoreCTraderAuthorization();
   }
 
   connectBroker(): void {
@@ -79,6 +105,10 @@ export class Accounts {
     }
 
     const command = this.brokerForm.getRawValue();
+    if (command.provider === 'CTRADER') {
+      this.connectCTrader(command.displayName);
+      return;
+    }
     const recovery = this.recoveryAccount();
     if (recovery) {
       if (this.brokerForm.invalid) {
@@ -120,6 +150,80 @@ export class Accounts {
       next: (result) => this.handleCredentialResult(result, false),
       error: () => this.handleCredentialError(),
     });
+  }
+
+  bindCTraderAccount(externalAccountId: string): void {
+    const authorization = this.cTraderAuthorization();
+    const accountId = this.cTraderFlowAccountId();
+    if (this.lifecycleBusy() || !authorization || !accountId || !externalAccountId) return;
+
+    this.provisioningAccountId.set(accountId);
+    this.provisioningFeedback.set(null);
+    this.brokerAccountService
+      .bindCTraderAccount(accountId, authorization.attemptId, externalAccountId)
+      .pipe(switchMap((bound) => {
+        this.cTraderAuthorization.set(bound);
+        return this.brokerAccountService.provisionTradingAccount(accountId);
+      }))
+      .subscribe({
+        next: () => {
+          this.provisioningAccountId.set(null);
+          this.provisioningFeedback.set({
+            kind: 'success',
+            message: 'Compte cTrader lié et compte Trading Core provisionné.',
+          });
+          this.loadBrokerAccounts();
+          this.loadAccounts();
+        },
+        error: () => {
+          this.provisioningAccountId.set(null);
+          this.provisioningFeedback.set({
+            kind: 'error',
+            message: 'Le binding cTrader ou le provisionnement Trading Core a échoué.',
+          });
+          this.loadBrokerAccounts();
+        },
+      });
+  }
+
+  startCTraderMarketDataAuthorization(): void {
+    if (this.lifecycleBusy()) return;
+    this.brokerAccountService.startCTraderMarketDataAuthorization().subscribe({
+      next: (start) => {
+        this.cTraderMarketDataUrl.set(start.authorizationUrl);
+        window.open(start.authorizationUrl, 'ctrader-market-data-oauth', 'popup,width=720,height=800');
+        this.pollCTraderMarketDataAuthorization(start.attemptId);
+      },
+      error: () => this.connectionFeedback.set({
+        kind: 'error',
+        message: 'L’autorisation Market Data cTrader n’a pas pu être démarrée.',
+      }),
+    });
+  }
+
+  private pollCTraderMarketDataAuthorization(attemptId: string): void {
+    this.cTraderMarketDataPoll?.unsubscribe();
+    this.cTraderMarketDataPoll = timer(1500, 1500)
+      .pipe(
+        switchMap(() => this.brokerAccountService.getCTraderMarketDataAuthorization(attemptId)),
+        takeWhile((current) => current.status === 'INITIATED', true),
+      )
+      .subscribe({
+        next: (current: CTraderMarketDataAuthorizationState) => {
+          if (current.status !== 'INITIATED') {
+            this.connectionFeedback.set({
+              kind: current.status === 'COMPLETED' ? 'success' : 'error',
+              message: current.status === 'COMPLETED'
+                ? 'L’autorisation Market Data cTrader est terminée.'
+                : 'L’autorisation Market Data cTrader a échoué ou a expiré.',
+            });
+          }
+        },
+        error: () => this.connectionFeedback.set({
+          kind: 'error',
+          message: 'L’état de l’autorisation Market Data cTrader n’a pas pu être récupéré.',
+        }),
+      });
   }
 
   startRecovery(account: BrokerAccount): void {
@@ -187,6 +291,41 @@ export class Accounts {
     });
   }
 
+  provisionTradingAccount(brokerAccount: BrokerAccount, accounts: Account[]): void {
+    if (
+      this.lifecycleBusy() ||
+      this.provisioningAccountId() !== null ||
+      brokerAccount.connectionStatus !== 'CONNECTED' ||
+      this.hasTradingAccount(brokerAccount, accounts)
+    ) {
+      return;
+    }
+
+    this.provisioningAccountId.set(brokerAccount.id);
+    this.provisioningFeedback.set(null);
+    this.brokerAccountService.provisionTradingAccount(brokerAccount.id).subscribe({
+      next: () => {
+        this.provisioningAccountId.set(null);
+        this.provisioningFeedback.set({
+          kind: 'success',
+          message: `Le compte Trading Core « ${brokerAccount.displayName} » a été créé et synchronisé.`,
+        });
+        this.loadAccounts();
+      },
+      error: () => {
+        this.provisioningAccountId.set(null);
+        this.provisioningFeedback.set({
+          kind: 'error',
+          message: 'Le compte Trading Core n’a pas pu être créé. Vérifiez le snapshot broker.',
+        });
+      },
+    });
+  }
+
+  hasTradingAccount(brokerAccount: BrokerAccount, accounts: Account[]): boolean {
+    return accounts.some((account) => account.brokerAccountId === brokerAccount.id);
+  }
+
   canRecover(account: BrokerAccount): boolean {
     return (
       account.executionMode === 'LIVE' &&
@@ -199,11 +338,25 @@ export class Accounts {
     return this.brokerForm.controls.executionMode.value === 'PAPER';
   }
 
+  isCTrader(): boolean {
+    return this.brokerForm.controls.provider.value === 'CTRADER';
+  }
+
+  connectExistingCTrader(account: BrokerAccount): void {
+    if (this.lifecycleBusy() || !this.isCTraderAccount(account)) return;
+    this.startCTraderAuthorization(account.id);
+  }
+
+  isCTraderAccount(account: BrokerAccount): boolean {
+    return account.provider === CTRADER_PROVIDER_REGISTRATION_REFERENCE;
+  }
+
   lifecycleBusy(): boolean {
     return (
       this.connecting() ||
       this.revokingAccountId() !== null ||
       this.disconnectingAccountId() !== null
+      || this.provisioningAccountId() !== null
     );
   }
 
@@ -238,7 +391,7 @@ export class Accounts {
   }
 
   private createPaperAccount(command: {
-    provider: 'KRAKEN';
+    provider: BrokerProvider;
     executionMode: 'LIVE' | 'PAPER';
     displayName: string;
     initialCapital: number | null;
@@ -276,6 +429,111 @@ export class Accounts {
               'Le compte PAPER n’a pas pu être créé. La politique sélectionnée est peut-être devenue indisponible. Rechargez les politiques puis réessayez.',
           });
         },
+      });
+  }
+
+  private connectCTrader(displayName: string): void {
+    if (!displayName.trim()) {
+      this.brokerForm.controls.displayName.markAsTouched();
+      return;
+    }
+    this.connecting.set(true);
+    this.connectionFeedback.set(null);
+    this.brokerAccountService
+      .createCTrader(displayName.trim())
+      .pipe(switchMap((account) => {
+        this.cTraderFlowAccountId.set(account.id);
+        return this.brokerAccountService.startCTraderAuthorization(account.id);
+      }))
+      .subscribe({
+        next: (authorization) => {
+          this.connecting.set(false);
+          this.handleCTraderAuthorization(authorization);
+        },
+        error: () => {
+          this.connecting.set(false);
+          this.connectionFeedback.set({
+            kind: 'error',
+            message: 'Le compte cTrader n’a pas pu être créé ou l’autorisation n’a pas démarré.',
+          });
+        },
+      });
+  }
+
+  private startCTraderAuthorization(accountId: string): void {
+    if (this.lifecycleBusy()) return;
+    this.connecting.set(true);
+    this.connectionFeedback.set(null);
+    this.cTraderFlowAccountId.set(accountId);
+    this.brokerAccountService.startCTraderAuthorization(accountId).subscribe({
+      next: (authorization) => {
+        this.connecting.set(false);
+        this.handleCTraderAuthorization(authorization);
+      },
+      error: () => {
+        this.connecting.set(false);
+        this.connectionFeedback.set({
+          kind: 'error',
+          message: 'L’autorisation cTrader n’a pas pu être démarrée.',
+        });
+      },
+    });
+  }
+
+  private handleCTraderAuthorization(authorization: CTraderAuthorization): void {
+    this.cTraderAuthorization.set(authorization);
+    localStorage.setItem('ctrader-flow-account-id', this.cTraderFlowAccountId() ?? '');
+    localStorage.setItem('ctrader-attempt-id', authorization.attemptId);
+    if (authorization.authorizationUrl) {
+      window.open(authorization.authorizationUrl, 'ctrader-oauth', 'popup,width=720,height=800');
+    }
+    if (authorization.status === 'INITIATED') {
+      this.pollCTraderAuthorization(authorization);
+    }
+  }
+
+  private restoreCTraderAuthorization(): void {
+    const accountId = localStorage.getItem('ctrader-flow-account-id');
+    const attemptId = localStorage.getItem('ctrader-attempt-id');
+    if (!accountId || !attemptId) return;
+    this.cTraderFlowAccountId.set(accountId);
+    const status$ = this.brokerAccountService.getCTraderAuthorization(accountId, attemptId);
+    if (!status$) return;
+    status$.subscribe({
+      next: (authorization) => {
+        this.handleCTraderAuthorization(authorization);
+      },
+      error: () => {
+        localStorage.removeItem('ctrader-flow-account-id');
+        localStorage.removeItem('ctrader-attempt-id');
+      },
+    });
+  }
+
+  private pollCTraderAuthorization(authorization: CTraderAuthorization): void {
+    const accountId = this.cTraderFlowAccountId();
+    if (!accountId) return;
+    this.cTraderPoll?.unsubscribe();
+    this.cTraderPoll = timer(1500, 1500)
+      .pipe(
+        switchMap(() => this.brokerAccountService.getCTraderAuthorization(
+          accountId, authorization.attemptId)),
+        takeWhile((current) => current.status === 'INITIATED', true),
+      )
+      .subscribe({
+        next: (current) => {
+          this.cTraderAuthorization.set(current);
+          if (current.status !== 'ACCOUNT_SELECTION_REQUIRED') {
+            this.connectionFeedback.set({
+              kind: current.status === 'BOUND' ? 'success' : 'error',
+              message: current.safeMessage,
+            });
+          }
+        },
+        error: () => this.connectionFeedback.set({
+          kind: 'error',
+          message: 'L’état de l’autorisation cTrader n’a pas pu être récupéré.',
+        }),
       });
   }
 

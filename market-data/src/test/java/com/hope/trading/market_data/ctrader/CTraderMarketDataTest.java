@@ -4,6 +4,7 @@ import com.hope.trading.market_data.ctrader.authentication.CTraderEnvironment;
 import com.hope.trading.market_data.ctrader.authentication.CTraderMarketDataProperties;
 import com.hope.trading.market_data.helper.MarketStateBuilder;
 import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -57,6 +58,21 @@ class CTraderMarketDataTest {
         var snapshot = provider.findOhlcHistorySnapshot(market, OhlcInterval.ONE_MINUTE, 1);
         assertThat(snapshot.observedEvents()).hasSize(1);
         assertThat(snapshot.normalizedEvents()).isEmpty();
+    }
+
+    @Test
+    void declaresCloseFallbackWhenCTraderHistoryHasNoVwap() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient(), properties(), new MarketStateBuilder(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        var market = provider.getMarkets().getFirst();
+        market.setMarketId(UUID.randomUUID());
+
+        var snapshot = provider.findOhlcHistorySnapshot(market, OhlcInterval.ONE_MINUTE, 1);
+
+        assertThat(snapshot.activityCalculationBasis())
+                .isEqualTo(MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK);
+        assertThat(snapshot.observedEvents()).singleElement()
+                .satisfies(event -> assertThat(event.vwap()).isNull());
     }
 
     @Test

@@ -54,6 +54,21 @@ class GatewayMarketIntelligenceRouteTest {
     }
 
     @Test
+    void cTraderBrokerAuthorizationRoutesToBrokerService() {
+        Route route = matchedRoute(HttpMethod.POST,
+                "/api/v1/broker-accounts/" + UUID.randomUUID() + "/ctrader/authorization");
+        assertThat(route.getId()).isEqualTo("ctrader-authorization");
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://broker-service"));
+    }
+
+    @Test
+    void cTraderMarketDataAuthorizationRoutesToMarketData() {
+        Route route = matchedRoute(HttpMethod.GET, "/api/v1/ctrader/authorization");
+        assertThat(route.getId()).isEqualTo("ctrader-market-data-authorization");
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://market-data"));
+    }
+
+    @Test
     void opportunityListRoutesToMarketIntelligence() {
         Route route = matchedRoute(HttpMethod.GET, "/api/v1/opportunities");
         assertThat(route.getId()).isEqualTo("opportunities");

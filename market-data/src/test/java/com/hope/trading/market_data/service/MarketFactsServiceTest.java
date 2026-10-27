@@ -178,6 +178,22 @@ class MarketFactsServiceTest {
     }
 
     @Test
+    void closeFallbackWithoutAValidCloseCannotProduceAvailableActivity() {
+        List<OhlcEvent> evidence = List.of(
+                eventWithMissingClose("2026-10-03T11:57:00Z", "1"),
+                eventWithoutVwap("2026-10-03T11:58:00Z", "1"),
+                eventWithoutVwap("2026-10-03T11:59:00Z", "1"));
+        when(historyService.findOhlcHistorySnapshot(MARKET_ID, OhlcInterval.ONE_MINUTE, 4))
+                .thenReturn(new MarketHistorySnapshot(
+                        evidence, evidence, MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK));
+
+        MarketFactsResponse response = service.find(request(3));
+
+        assertThat(response.activity().status()).isEqualTo(MarketFactStatus.INSUFFICIENT_DATA);
+        assertThat(response.activity().incompleteCandleCount()).isEqualTo(1);
+    }
+
+    @Test
     void excludesSyntheticCandlesAndReportsIncompleteEvidence() {
         OhlcEvent first = event("2026-10-03T11:57:00Z", true, "2", "100");
         OhlcEvent last = event("2026-10-03T11:59:00Z", true, "4", "100");
@@ -479,6 +495,15 @@ class MarketFactsServiceTest {
                 MARKET_ID, MarketProvider.KRAKEN, "XBT/EUR", OhlcInterval.ONE_MINUTE,
                 open, open.plusSeconds(60), new BigDecimal("100"), new BigDecimal("101"),
                 new BigDecimal("99"), new BigDecimal(close), new BigDecimal(volume), null,
+                10, true, open, false, "source-" + openTime, BOUNDARY);
+    }
+
+    private OhlcEvent eventWithMissingClose(String openTime, String volume) {
+        Instant open = Instant.parse(openTime);
+        return new OhlcEvent(
+                MARKET_ID, MarketProvider.KRAKEN, "XBT/EUR", OhlcInterval.ONE_MINUTE,
+                open, open.plusSeconds(60), new BigDecimal("100"), new BigDecimal("101"),
+                new BigDecimal("99"), null, new BigDecimal(volume), null,
                 10, true, open, false, "source-" + openTime, BOUNDARY);
     }
 

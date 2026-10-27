@@ -1,9 +1,11 @@
 import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, map, Observable, of, shareReplay, startWith, Subject, switchMap } from 'rxjs';
+import { BehaviorSubject, catchError, map, Observable, of, shareReplay, startWith, Subject, switchMap } from 'rxjs';
 
 import { MarketResponse, marketProductTypeLabel } from '../../core/models/market-response';
+import { ChallengeReadiness } from '../../core/models/decision-context.model';
+import { DecisionContextService } from '../../core/services/decision-context.service';
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { MarketService } from '../../core/services/market.service';
 import { OpportunityService } from '../../core/services/opportunity.service';
@@ -24,6 +26,7 @@ export type OpportunitiesView =
 export class Opportunities {
   private readonly opportunityService = inject(OpportunityService);
   private readonly marketService = inject(MarketService);
+  private readonly decisionContextService = inject(DecisionContextService);
   private readonly router = inject(Router);
 
   selectedAccountId = '';
@@ -32,6 +35,20 @@ export class Opportunities {
 
   private readonly refreshSubject = new Subject<void>();
   private readonly refresh$ = this.refreshSubject.pipe(startWith(undefined));
+  private readonly accountSelectionSubject = new BehaviorSubject<string>('');
+
+  readonly readiness$: Observable<ChallengeReadiness | null> = this.accountSelectionSubject.pipe(
+    switchMap((accountId) =>
+      accountId
+        ? this.decisionContextService.resolve(accountId).pipe(
+            map((context) => context.readiness ?? null),
+            catchError(() => of(null)),
+          )
+        : of(null),
+    ),
+    startWith(null),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
 
   readonly marketsById$: Observable<Map<string, MarketResponse>> = this.marketService
     .findAll()
@@ -74,6 +91,7 @@ export class Opportunities {
 
   accountSelected(accountId: string): void {
     this.selectedAccountId = accountId;
+    this.accountSelectionSubject.next(accountId);
   }
 
   refreshOpportunities(): void {

@@ -62,6 +62,15 @@ describe('MarketDataStreamService', () => {
     subscription.unsubscribe();
   });
 
+  it('opens a ticker stream scoped to a market', () => {
+    const subscription = service.streamTicker('EUR/USD', 'ctrader-market').subscribe();
+
+    expect(openedUrl).toContain('marketId=ctrader-market');
+    expect(openedUrl).toContain('type=TICKER');
+
+    subscription.unsubscribe();
+  });
+
   it('opens an OHLC stream with interval parameter', () => {
     const subscription = service.streamOhlc('market-id', 'BTC/EUR', 5).subscribe();
 

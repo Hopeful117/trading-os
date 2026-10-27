@@ -57,6 +57,18 @@ class CTraderDataStreamProviderTest {
     }
 
     @Test
+    void marksTheSubscribedMarketTradableWhenACompleteSpotArrives() {
+        Fixture fixture = new Fixture();
+        fixture.market.setMarketState(new MarketStateBuilder().buildInitialState(
+                com.hope.trading.market_data.helper.MarketAvailability.UNAVAILABLE));
+        fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
+
+        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 12345L, 12355L, RECEIVED));
+
+        assertThat(fixture.market.getMarketState().isTradable()).isTrue();
+    }
+
+    @Test
     void publishesFormingBarsAndClosesThePreviousBarOnlyWhenNextProviderBarArrives() {
         Fixture fixture = new Fixture();
         MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.OHLC,
@@ -120,6 +132,22 @@ class CTraderDataStreamProviderTest {
         Thread.sleep(1_200);
         assertThat(fixture.client.streams).hasSize(2);
         assertThat(fixture.client.streams.get(1).spotSubscriptions).containsExactly(42L);
+    }
+
+    @Test
+    void batchesSpotSubscriptionsForMultipleMarkets() {
+        Fixture fixture = new Fixture();
+        Market secondMarket = Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.CTRADER)
+                .symbol("GBP/USD").providerSymbol("43").baseAsset("GBP").quoteAsset("USD")
+                .productType(InstrumentProductType.SPOT)
+                .marketConstraints(fixture.market.getMarketConstraints())
+                .marketState(fixture.market.getMarketState()).build();
+
+        fixture.provider.subscribe(List.of(fixture.market, secondMarket),
+                new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
+
+        assertThat(fixture.client.streams.getFirst().spotSubscriptionBatches)
+                .containsExactly(List.of(42L, 43L));
     }
 
     @Test
@@ -202,9 +230,14 @@ class CTraderDataStreamProviderTest {
     private static final class FakeStream implements CTraderOpenApiClient.CTraderStream {
         private final Runnable termination;
         private final List<Long> spotSubscriptions = new ArrayList<>();
+        private final List<List<Long>> spotSubscriptionBatches = new ArrayList<>();
         private boolean closed;
         private FakeStream(Runnable termination) { this.termination = termination; }
         @Override public void subscribeSpots(long symbolId) { if (!spotSubscriptions.contains(symbolId)) spotSubscriptions.add(symbolId); }
+        @Override public void subscribeSpots(List<Long> symbolIds) {
+            spotSubscriptionBatches.add(List.copyOf(symbolIds));
+            symbolIds.forEach(this::subscribeSpots);
+        }
         @Override public void unsubscribeSpots(long symbolId) { }
         @Override public void subscribeLiveTrendbar(long symbolId, String period) { }
         @Override public void unsubscribeLiveTrendbar(long symbolId, String period) { }

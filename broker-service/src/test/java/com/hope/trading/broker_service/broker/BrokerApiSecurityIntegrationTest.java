@@ -51,7 +51,8 @@ class BrokerApiSecurityIntegrationTest {
     @Test void ctraderOAuthCallbackIsReachableWithoutUserJwt() throws Exception {
         mvc.perform(get("/api/v1/broker-accounts/ctrader/authorization/callback")
                 .queryParam("state", "invalid"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isSeeOther())
+                .andExpect(header().string("Location", "/accounts?ctrader=failed"));
     }
 
     @Test void historicalFeesAllowsAuthorizedServiceOnly() throws Exception {

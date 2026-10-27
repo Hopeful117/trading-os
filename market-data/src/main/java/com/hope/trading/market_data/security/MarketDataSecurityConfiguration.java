@@ -35,6 +35,7 @@ public class MarketDataSecurityConfiguration {
                         .requestMatchers("/internal/**").hasAuthority(ROLE_SERVICE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/ctrader/authorization/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/ctrader/authorization").hasAuthority(ROLE_SERVICE)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ctrader/authorization/*").hasAuthority(ROLE_SERVICE)
                         .requestMatchers(HttpMethod.POST, "/api/v1/markets/synchronize").hasAuthority(ROLE_SERVICE)
                         .requestMatchers(HttpMethod.POST, "/api/v1/markets/*/subscriptions").hasAuthority(ROLE_SERVICE)
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/markets/*/subscriptions").hasAuthority(ROLE_SERVICE)

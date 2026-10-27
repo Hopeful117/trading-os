@@ -20,6 +20,14 @@ public interface ChallengeInstanceRepository extends JpaRepository<ChallengeInst
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ChallengeInstance> findByAccountIdAndStatus(UUID accountId, ChallengeStatus status);
 
+    @Query("""
+            select c from ChallengeInstance c
+            where c.accountId = :accountId
+              and c.status = :status
+            """)
+    Optional<ChallengeInstance> findForReadiness(@Param("accountId") UUID accountId,
+                                                 @Param("status") ChallengeStatus status);
+
     @Override
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ChallengeInstance> findById(UUID id);

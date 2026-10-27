@@ -88,6 +88,104 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     }
 
     @Override
+    public boolean isDemoAccount(CTraderToken token, String externalAccountId) {
+        try (Session session = new Session()) {
+            authenticateApplication(session);
+            JsonNode response = session.request(ACCOUNT_LIST_REQUEST, ACCOUNT_LIST_RESPONSE,
+                    objectMapper.createObjectNode().put("accessToken", token.accessToken()));
+            for (JsonNode account : response.path("ctidTraderAccount")) {
+                if (externalAccountId.equals(account.path("ctidTraderAccountId").asText())) {
+                    if (!account.has("isLive")) {
+                        throw new CTraderAuthenticationException("cTrader account environment is unavailable");
+                    }
+                    boolean providerLive = account.path("isLive").asBoolean();
+                    if (!providerLive) return true;
+                    // FTMO FREE accounts are simulated even when cTrader reports isLive=true.
+                    // Their provider transport can nevertheless be the live endpoint.
+                    return "FTMO_FREE".equalsIgnoreCase(properties.accountProgram())
+                            && ("demo".equalsIgnoreCase(properties.environment())
+                            || "live".equalsIgnoreCase(properties.environment()));
+                }
+            }
+            throw new CTraderAuthenticationException("cTrader account is not authorized");
+        } catch (CTraderAuthenticationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new CTraderAuthenticationException("cTrader account environment discovery failed", exception);
+        }
+    }
+
+    @Override
+    public CTraderOrderResponse submitOrder(CTraderToken token, CTraderOrderRequest request) {
+        if (request.stopLossPrice() == null) {
+            throw new CTraderAuthenticationException("cTrader demo execution requires a protective stop");
+        }
+        if ("MARKET".equalsIgnoreCase(request.orderType())) {
+            throw new CTraderAuthenticationException("cTrader absolute stop loss requires a non-market order");
+        }
+        try (Session session = new Session()) {
+            validateEnvironment();
+            authenticateApplication(session);
+            long accountId = Long.parseLong(request.externalAccountId());
+            requireAccountResponse(session.request(ACCOUNT_AUTH_REQUEST, ACCOUNT_AUTH_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)
+                            .put("accessToken", token.accessToken())), accountId);
+            long symbolId = resolveSymbolId(session, accountId, request.instrument());
+            ObjectNode payload = objectMapper.createObjectNode()
+                    .put("ctidTraderAccountId", accountId)
+                    .put("symbolId", symbolId)
+                    .put("orderType", orderType(request.orderType()))
+                    .put("tradeSide", tradeSide(request.side()))
+                    .put("volume", volume(request.quantity()))
+                    .put("clientOrderId", request.clientOrderId())
+                    .put("stopLoss", request.stopLossPrice().doubleValue());
+            if (request.limitPrice() != null) payload.put("limitPrice", request.limitPrice().doubleValue());
+            JsonNode response = requireAccountResponse(session.request(NEW_ORDER_REQUEST, NEW_ORDER_RESPONSE, payload), accountId);
+            String orderId = response.path("orderId").asText("");
+            if (orderId.isBlank()) throw new CTraderAuthenticationException("cTrader order response did not contain an order id");
+            return new CTraderOrderResponse(orderId);
+        } catch (CTraderAuthenticationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new CTraderAuthenticationException("cTrader order submission failed", exception);
+        }
+    }
+
+    private long resolveSymbolId(Session session, long accountId, String instrument) {
+        JsonNode response = requireAccountResponse(session.request(SYMBOL_LIST_REQUEST, SYMBOL_LIST_RESPONSE,
+                objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
+        for (JsonNode symbol : response.path("symbol")) {
+            if (instrument.equalsIgnoreCase(symbol.path("symbolName").asText())) {
+                long symbolId = symbol.path("symbolId").asLong(0);
+                if (symbolId > 0) return symbolId;
+            }
+        }
+        throw new CTraderAuthenticationException("cTrader symbol is unavailable");
+    }
+
+    private int orderType(String value) {
+        return switch (value.toUpperCase(java.util.Locale.ROOT)) {
+            case "MARKET" -> 1;
+            case "LIMIT" -> 2;
+            default -> throw new CTraderAuthenticationException("cTrader order type is unsupported");
+        };
+    }
+
+    private int tradeSide(String value) {
+        if ("BUY".equalsIgnoreCase(value)) return 1;
+        if ("SELL".equalsIgnoreCase(value)) return 2;
+        throw new CTraderAuthenticationException("cTrader trade side is unsupported");
+    }
+
+    private long volume(BigDecimal quantity) {
+        try {
+            return quantity.movePointRight(2).longValueExact();
+        } catch (ArithmeticException exception) {
+            throw new CTraderAuthenticationException("cTrader volume precision is invalid", exception);
+        }
+    }
+
+    @Override
     public CTraderReadOnlyObservation readOnlyObservation(CTraderToken token, String externalAccountId,
                                                            java.time.Instant from, java.time.Instant to) {
         Instant started = Instant.now();
@@ -134,14 +232,16 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     private CTraderReadOnlyObservation mapObservation(String externalAccountId, JsonNode trader,
                                                        JsonNode assets, JsonNode symbols, JsonNode reconcile,
                                                        JsonNode pnl, JsonNode deals, Instant started) {
+        log.info("ctrader_observation_response_fields accountId={} trader={} assets={} symbols={} reconcile={} pnl={} deals={}",
+                externalAccountId, fields(trader), fields(assets), fields(symbols), fields(reconcile), fields(pnl), fields(deals));
         List<String> reasons = new java.util.ArrayList<>();
         requireObject(trader, "trader", reasons);
         requireArray(assets, "asset", reasons);
         requireArray(symbols, "symbol", reasons);
-        requireArray(reconcile, "position", reasons);
-        requireArray(reconcile, "order", reasons);
-        requireArray(pnl, "positionUnrealizedPnl", reasons);
-        requireArray(deals, "deal", reasons);
+        allowOmittedArray(reconcile, "position", reasons);
+        allowOmittedArray(reconcile, "order", reasons);
+        allowOmittedArray(pnl, "positionUnrealizedPnl", reasons);
+        allowOmittedArray(deals, "deal", reasons);
 
         int moneyDigits = trader.path("trader").path("moneyDigits").asInt(0);
         JsonNode traderNode = trader.path("trader");
@@ -303,10 +403,22 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
     }
 
+    private void allowOmittedArray(JsonNode response, String field, List<String> reasons) {
+        if (response.has(field) && !response.path(field).isArray()) {
+            reasons.add("RESPONSE_FIELD_UNAVAILABLE:" + field);
+        }
+    }
+
     private void requireObject(JsonNode response, String field, List<String> reasons) {
         if (!response.has(field) || !response.path(field).isObject()) {
             reasons.add("RESPONSE_FIELD_UNAVAILABLE:" + field);
         }
+    }
+
+    private List<String> fields(JsonNode response) {
+        List<String> fields = new ArrayList<>();
+        response.fieldNames().forEachRemaining(fields::add);
+        return fields;
     }
 
     private Instant latestProviderTimestamp(JsonNode trader, JsonNode reconcile, JsonNode deals,
@@ -322,11 +434,10 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             latest = latest(latest, instantOrNull(deal.path("utcLastUpdateTimestamp")));
             latest = latest(latest, instantOrNull(deal.path("executionTimestamp")));
         }
-        if (latest == null) {
-            reasons.add("PROVIDER_TIMESTAMP_UNAVAILABLE");
-            return fallback;
-        }
-        return latest;
+        // cTrader omits event collections, and therefore their timestamps, when
+        // an account has no positions, orders, or deals. The successful response
+        // identity and balance facts still establish the bounded observation.
+        return latest == null ? fallback : latest;
     }
 
     private Instant latest(Instant current, Instant candidate) {

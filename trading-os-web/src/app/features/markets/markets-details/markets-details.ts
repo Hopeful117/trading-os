@@ -23,6 +23,11 @@ import { OhlcInterval } from '../../../core/models/ohlc-interval';
 import { OrderBookComponent } from '../order-book-component/order-book-component';
 import { RecentTradesComponent } from '../recent-trades-component/recent-trades-component';
 import { marketProductTypeLabel } from '../../../core/models/market-response';
+import {
+  calculateMarketSpread,
+  formatMarketPrice,
+  marketPricePrecision,
+} from '../../../core/utils/market-price';
 
 @Component({
   selector: 'app-market-details',
@@ -39,6 +44,9 @@ import { marketProductTypeLabel } from '../../../core/models/market-response';
 })
 export class MarketDetail {
   readonly productTypeLabel = marketProductTypeLabel;
+  readonly marketPricePrecision = marketPricePrecision;
+  readonly formatMarketPrice = formatMarketPrice;
+  readonly calculateMarketSpread = calculateMarketSpread;
   private readonly route = inject(ActivatedRoute);
   private readonly marketService = inject(MarketService);
   private readonly destroyRef = inject(DestroyRef);
@@ -125,7 +133,7 @@ export class MarketDetail {
             marketId: market.marketId,
           };
         }),
-        switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
+        switchMap(() => this.marketDataStreamService.streamTicker(market.symbol, market.marketId)),
       );
     }),
     shareReplay({

@@ -124,6 +124,31 @@ class ActiveScanApplicationServiceTest {
     }
 
     @Test
+    void activeExecutionUsesResolvedScopeCutoff() {
+        UUID actorId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+        Instant resolvedCutoff = now.minusSeconds(30);
+        when(scopeResolution.resolve(any())).thenReturn(new ActiveScanScopeResolutionResult(
+                accountId, "scan", MarketScopeMode.SELECTED, null, null,
+                List.of(marketId), List.of(marketId),
+                List.of(new MarketEligibilityDecision(marketId, "ACH/EUR", "KRAKEN", true, List.of())),
+                new EffectiveScanScope(List.of(marketId)), now, resolvedCutoff, List.of("test:v1")));
+
+        TransactionSynchronizationManager.initSynchronization();
+        ActiveScanApplicationService.ActiveScanView created = service.findOwned(actorId, service.create(
+                new CreateActiveScanCommand(actorId, "cutoff-key", accountId, "scan", List.of(marketId),
+                        MarketScopeMode.SELECTED)).scanId());
+
+        executions.dispatchRegistered(created.markets().getFirst().analysisExecutionId());
+
+        assertThat(dispatcher.request).isNotNull();
+        assertThat(dispatcher.request.evaluationCutoff()).isEqualTo(resolvedCutoff);
+        assertThat(dispatcher.request.evidencePolicy())
+                .isEqualTo(com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy.STRICT_OBSERVED);
+    }
+
+    @Test
     void createPersistsIneligibleSelectedScopeWithDiagnostics() {
         UUID actorId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
@@ -392,10 +417,12 @@ class ActiveScanApplicationServiceTest {
     private static final class CountingDispatcher
             implements com.hope.trading.market_intelligence.application.port.AnalysisExecutionDispatcher {
         private final AtomicInteger dispatches = new AtomicInteger();
+        private IntelligenceAnalysisRequest request;
 
         @Override
         public void dispatch(UUID executionId, IntelligenceAnalysisRequest request) {
             dispatches.incrementAndGet();
+            this.request = request;
         }
 
         @Override

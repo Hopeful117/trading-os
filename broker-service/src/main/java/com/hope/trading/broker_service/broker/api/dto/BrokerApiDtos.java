@@ -9,8 +9,15 @@ public final class BrokerApiDtos {private BrokerApiDtos(){}
     public record ExecutionApiRequest(@NotNull UUID executionIntentId,@NotNull UUID executionAttemptId,
         @NotBlank @Size(max=200) String idempotencyKey,@NotNull UUID brokerAccountId,
         @NotBlank @Size(max=40) String instrument,@NotNull Side side,@NotNull OrderType orderType,
-        @NotNull @DecimalMin(value="0",inclusive=false) BigDecimal quantity,@DecimalMin(value="0",inclusive=false) BigDecimal limitPrice){
-        public ExecutionRequest toModel(){return new ExecutionRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId,instrument,side,orderType,quantity,limitPrice);}}
+        @NotNull @DecimalMin(value="0",inclusive=false) BigDecimal quantity,@DecimalMin(value="0",inclusive=false) BigDecimal limitPrice,
+        @DecimalMin(value="0",inclusive=false) BigDecimal stopLossPrice){
+        public ExecutionApiRequest(UUID executionIntentId, UUID executionAttemptId, String idempotencyKey,
+                UUID brokerAccountId, String instrument, Side side, OrderType orderType,
+                BigDecimal quantity, BigDecimal limitPrice) {
+            this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
+                    instrument, side, orderType, quantity, limitPrice, null);
+        }
+        public ExecutionRequest toModel(){return new ExecutionRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId,instrument,side,orderType,quantity,limitPrice,stopLossPrice);}}
     public record ReconcileApiRequest(@NotNull UUID executionIntentId,@NotNull UUID executionAttemptId,
         @NotBlank @Size(max=200) String idempotencyKey,@NotNull UUID brokerAccountId){public ReconciliationRequest toModel(){return new ReconciliationRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId);}}
     public record BrokerApiResponse(String outcome,String externalOrderId,String correlationId,String status,String reasonCode){

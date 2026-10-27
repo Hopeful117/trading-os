@@ -3,6 +3,7 @@ package com.hope.trading.broker_service.ctrader.authentication;
 import com.hope.trading.broker_service.security.BrokerPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.net.URI;
 
 @RestController
 @RequestMapping("/api/v1/broker-accounts")
@@ -32,10 +34,20 @@ public class CTraderAuthenticationController {
     }
 
     @GetMapping("/ctrader/authorization/callback")
-    public ResponseEntity<CTraderAuthorizationResponse> callback(@RequestParam(required = false) String state,
-                                                                  @RequestParam(required = false) String code,
-                                                                  @RequestParam(required = false) String error) {
-        return ResponseEntity.ok(service.callback(state, code, error));
+    public ResponseEntity<Void> callback(@RequestParam(required = false) String state,
+                                                                   @RequestParam(required = false) String code,
+                                                                   @RequestParam(required = false) String error) {
+        try {
+            service.callback(state, code, error);
+            return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                    .location(URI.create("/accounts?ctrader=completed")).build();
+        } catch (CTraderAuthenticationException exception) {
+            return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                    .location(URI.create("/accounts?ctrader=failed")).build();
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                    .location(URI.create("/accounts?ctrader=failed")).build();
+        }
     }
 
     @GetMapping("/{accountId}/ctrader/authorization/{attemptId}")

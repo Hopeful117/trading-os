@@ -1,13 +1,20 @@
 package com.hope.trading.trading_core.dashboard.service;
 
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
+import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
+import com.hope.trading.trading_core.challenge.application.ChallengeInstanceRepository;
+import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import com.hope.trading.trading_core.dashboard.integration.*;
 import com.hope.trading.trading_core.dashboard.model.*;
 import com.hope.trading.trading_core.market_data.dto.*;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
+import com.hope.trading.trading_core.model.Rules;
+import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.risk.domain.RiskRuleIds;
 import com.hope.trading.trading_core.service.AccountService;
 import com.hope.trading.trading_core.service.RiskEngine;
 import com.hope.trading.trading_core.service.TradeAnalyticsService;
@@ -29,6 +36,10 @@ public class DashboardQueryService {
     private final AccountService accountService;
     private final BrokerAccountRepository brokerAccounts;
     private final BrokerApiClient brokerApiClient;
+    private final BrokerAccountSnapshotV2Client brokerAccountSnapshotV2Client;
+    private final ChallengeInstanceRepository challengeInstances;
+    private final RiskPersistence riskPersistence;
+    private final RiskProfileValidator riskProfileValidator;
     private final BrokerDashboardMapper brokerMapper;
     private final PositionQueryService positionQueryService;
     private final AccountBalanceValuationService balanceValuationService;
@@ -48,7 +59,7 @@ public class DashboardQueryService {
         try {
             broker = paper
                     ? paperFact(account, generatedAt)
-                    : brokerMapper.toFact(brokerApiClient.getAccount());
+                    : liveFact(account);
         } catch (RuntimeException exception) {
             log.warn("Dashboard account data unavailable accountId={}", accountId);
             return unavailable(account, generatedAt);
@@ -91,12 +102,13 @@ public class DashboardQueryService {
         BigDecimal dailyPnlPercentage = percentage(dailyPnl, balance);
         BigDecimal drawdownPercentage = percentage(drawdown, account.getPeakEquity());
         BigDecimal usedRiskPercentage = percentage(usedRisk, equity.equity());
+        Rules riskRules = dashboardRules(account);
 
         DashboardRiskEvaluation riskEvaluation = riskEngine.evaluateDashboard(
-                account, positive(dailyPnlPercentage.negate()), drawdownPercentage, usedRiskPercentage
+                account, riskRules, positive(dailyPnlPercentage.negate()), drawdownPercentage, usedRiskPercentage
         );
         RiskDashboardSummary risk = riskSummary(
-                account, riskEvaluation, usedRisk, usedRiskPercentage,
+                riskRules, riskEvaluation, usedRisk, usedRiskPercentage,
                 dailyPnl, dailyPnlPercentage, drawdown, drawdownPercentage, equity.equity()
         );
 
@@ -124,6 +136,16 @@ public class DashboardQueryService {
         );
     }
 
+    private BrokerAccountFact liveFact(Account account) {
+        if (account.getBrokerAccountId() != null) {
+            return brokerMapper.toFact(
+                    brokerAccountSnapshotV2Client.getAccountSnapshot(account.getBrokerAccountId()),
+                    account.getBroker(), account.getBaseCurrency()
+            );
+        }
+        return brokerMapper.toFact(brokerApiClient.getAccount());
+    }
+
     private boolean marketDataAvailable(AccountValuationResult balanceValuation,
                                         List<OpenPositionDashboardView> positions) {
         return "COMPLETE".equals(balanceValuation.status())
@@ -143,8 +165,8 @@ public class DashboardQueryService {
         RiskDashboardSummary risk = new RiskDashboardSummary(
                 RiskStatus.UNAVAILABLE, BigDecimal.ZERO, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                ruleValue(account, RuleType.DAILY), BigDecimal.ZERO, BigDecimal.ZERO,
-                ruleValue(account, RuleType.DRAWDOWN), List.of()
+                ruleValue(account.getRules(), RuleType.DAILY), BigDecimal.ZERO, BigDecimal.ZERO,
+                ruleValue(account.getRules(), RuleType.DRAWDOWN), List.of()
         );
         return new DashboardSummary(
                 summary, risk, List.of(),
@@ -172,8 +194,8 @@ public class DashboardQueryService {
         RiskDashboardSummary risk = new RiskDashboardSummary(
                 RiskStatus.UNAVAILABLE, BigDecimal.ZERO, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                ruleValue(account, RuleType.DAILY), BigDecimal.ZERO, BigDecimal.ZERO,
-                ruleValue(account, RuleType.DRAWDOWN), List.of()
+                ruleValue(account.getRules(), RuleType.DAILY), BigDecimal.ZERO, BigDecimal.ZERO,
+                ruleValue(account.getRules(), RuleType.DRAWDOWN), List.of()
         );
         return new DashboardSummary(
                 summary, risk, positions,
@@ -183,33 +205,68 @@ public class DashboardQueryService {
     }
 
     private RiskDashboardSummary riskSummary(
-            Account account, DashboardRiskEvaluation evaluation,
+            Rules riskRules, DashboardRiskEvaluation evaluation,
             BigDecimal usedRisk, BigDecimal usedRiskPercentage,
             BigDecimal dailyPnl, BigDecimal dailyPnlPercentage,
             BigDecimal drawdown, BigDecimal drawdownPercentage,
             BigDecimal equity
     ) {
-        BigDecimal riskLimitPercentage = ruleValue(account, RuleType.RISK);
+        BigDecimal riskLimitPercentage = ruleValue(riskRules, RuleType.RISK);
         BigDecimal riskLimitAmount = equity.multiply(riskLimitPercentage)
                 .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+        BigDecimal remainingRisk = positive(riskLimitPercentage.subtract(usedRiskPercentage));
+        BigDecimal remainingRiskPercentage = riskLimitPercentage.signum() == 0
+                ? BigDecimal.ZERO
+                : remainingRisk.multiply(BigDecimal.valueOf(100))
+                .divide(riskLimitPercentage, 4, RoundingMode.HALF_UP);
         return new RiskDashboardSummary(
                 evaluation.status(), usedRisk, usedRiskPercentage,
                 positive(riskLimitAmount.subtract(usedRisk)),
-                positive(riskLimitPercentage.subtract(usedRiskPercentage)),
+                remainingRiskPercentage,
                 positive(dailyPnl.negate()), positive(dailyPnlPercentage.negate()),
-                ruleValue(account, RuleType.DAILY), drawdown, drawdownPercentage,
-                ruleValue(account, RuleType.DRAWDOWN), evaluation.rules()
+                 ruleValue(riskRules, RuleType.DAILY), drawdown, drawdownPercentage,
+                 ruleValue(riskRules, RuleType.DRAWDOWN), evaluation.rules()
         );
     }
 
-    private BigDecimal ruleValue(Account account, RuleType type) {
-        if (account.getRules() == null) {
+    private Rules dashboardRules(Account account) {
+        if (account.getRules() != null) return account.getRules();
+        var challenge = challengeInstances.findForReadiness(account.getAccountId(), ChallengeStatus.ACTIVE)
+                .orElse(null);
+        if (challenge == null) return null;
+
+        try {
+            var profile = riskPersistence.profile(challenge.activeRiskPolicyId(), challenge.activeRiskPolicyVersion())
+                    .orElse(null);
+            var effective = riskProfileValidator.validate(profile, false);
+            return Rules.builder()
+                    .name("Challenge " + challenge.id())
+                    .active(true)
+                    .maxRiskPerTrade(maximumRatio(effective, RiskRuleIds.MAX_POSITION_RISK))
+                    .maxDailyLoss(maximumRatio(effective, RiskRuleIds.DAILY_DRAWDOWN))
+                    .maxTotalDrawdown(maximumRatio(effective, RiskRuleIds.MAX_TOTAL_DRAWDOWN))
+                    .build();
+        } catch (RuntimeException invalidPolicy) {
+            return null;
+        }
+    }
+
+    private BigDecimal maximumRatio(com.hope.trading.risk.policy.EffectiveRiskRuleSet rules, String ruleId) {
+        return rules.rules().stream()
+                .filter(rule -> rule.ruleId().equals(ruleId))
+                .findFirst()
+                .map(rule -> rule.requiredParameter("maximumRatio"))
+                .orElse(null);
+    }
+
+    private BigDecimal ruleValue(Rules rules, RuleType type) {
+        if (rules == null) {
             return BigDecimal.ZERO;
         }
         BigDecimal fraction = switch (type) {
-            case RISK -> account.getRules().getMaxRiskPerTrade();
-            case DAILY -> account.getRules().getMaxDailyLoss();
-            case DRAWDOWN -> account.getRules().getMaxTotalDrawdown();
+            case RISK -> rules.getMaxRiskPerTrade();
+            case DAILY -> rules.getMaxDailyLoss();
+            case DRAWDOWN -> rules.getMaxTotalDrawdown();
         };
         return fraction == null ? BigDecimal.ZERO : fraction.multiply(BigDecimal.valueOf(100));
     }

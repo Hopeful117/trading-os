@@ -2,10 +2,12 @@ package com.hope.trading.broker_service.ctrader.authentication;
 
 import com.hope.trading.broker_service.connection.application.BrokerConnectionRepository;
 import com.hope.trading.broker_service.connection.domain.BrokerConnection;
+import com.hope.trading.broker_service.connection.domain.BrokerConnectionStatus;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
 import com.hope.trading.broker_service.connection.integration.TradingCoreBrokerAccountClient;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
+import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
 import com.hope.trading.broker_service.secret.application.SecretReader;
 import com.hope.trading.broker_service.secret.application.SecretRotator;
 import com.hope.trading.broker_service.secret.application.SecretWriter;
@@ -19,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,20 +57,20 @@ class CTraderAuthenticationServiceTest {
     @Test
     void initiationIsOwnerScopedAndRequestsViewOnlyAccess() {
         when(tradingCore.findOwned(brokerAccountId, AUTHORIZATION)).thenReturn(account());
-        when(connections.findByBrokerAccountId(brokerAccountId)).thenReturn(Optional.of(
+        when(connections.findByBrokerAccountIdForUpdate(brokerAccountId)).thenReturn(Optional.of(
                 BrokerConnection.create(brokerAccountId, owner, BrokerProviderId.CTRADER, NOW)));
 
         CTraderAuthorizationResponse response = service().initiate(owner, brokerAccountId, AUTHORIZATION);
 
         assertEquals(CTraderAuthorizationAttemptStatus.INITIATED, response.status());
-        org.junit.jupiter.api.Assertions.assertTrue(response.authorizationUrl().contains("scope=accounts"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.authorizationUrl().contains("scope=trading"));
         verify(connections).save(any(BrokerConnection.class));
     }
 
     @Test
     void callbackStoresOnlyEncryptedTokenReferenceAndRequiresExplicitSelection() {
         when(tradingCore.findOwned(brokerAccountId, AUTHORIZATION)).thenReturn(account());
-        when(connections.findByBrokerAccountId(brokerAccountId)).thenReturn(Optional.of(
+        when(connections.findByBrokerAccountIdForUpdate(brokerAccountId)).thenReturn(Optional.of(
                 BrokerConnection.create(brokerAccountId, owner, BrokerProviderId.CTRADER, NOW)));
         final CTraderAuthorizationAttempt[] holder = new CTraderAuthorizationAttempt[1];
         when(attempts.save(any())).thenAnswer(invocation -> {
@@ -100,8 +103,10 @@ class CTraderAuthenticationServiceTest {
         attempt.consume(NOW);
         attempt.discovered(UUID.randomUUID(), List.of("1001"));
         when(attempts.findByStateHashForUpdate(any())).thenReturn(Optional.of(attempt));
+        when(attempts.findById(attempt.id())).thenReturn(Optional.of(attempt));
 
-        assertThrows(CTraderAuthenticationException.class, () -> service().callback("state", "code", null));
+        CTraderAuthorizationResponse response = service().callback("state", "code", null);
+        assertEquals(CTraderAuthorizationAttemptStatus.ACCOUNT_SELECTION_REQUIRED, response.status());
         assertEquals(CTraderAuthorizationAttemptStatus.ACCOUNT_SELECTION_REQUIRED, attempt.status());
         verify(tokenClient, never()).exchangeAuthorizationCode(any(), any());
     }
@@ -110,7 +115,7 @@ class CTraderAuthenticationServiceTest {
     void callbackStateRemainsConsumedWhenSecretPersistenceFails() {
         when(tradingCore.findOwned(brokerAccountId, AUTHORIZATION)).thenReturn(account());
         BrokerConnection connection = BrokerConnection.create(brokerAccountId, owner, BrokerProviderId.CTRADER, NOW);
-        when(connections.findByBrokerAccountId(brokerAccountId)).thenReturn(Optional.of(connection));
+        when(connections.findByBrokerAccountIdForUpdate(brokerAccountId)).thenReturn(Optional.of(connection));
         when(connections.findByBrokerAccountIdAndOwnerIdForUpdate(brokerAccountId, owner))
                 .thenReturn(Optional.of(connection));
         final CTraderAuthorizationAttempt[] holder = new CTraderAuthorizationAttempt[1];
@@ -129,7 +134,8 @@ class CTraderAuthenticationServiceTest {
         String state = initiated.authorizationUrl().substring(initiated.authorizationUrl().indexOf("state=") + 6);
 
         assertThrows(IllegalStateException.class, () -> service().callback(state, "code", null));
-        assertThrows(CTraderAuthenticationException.class, () -> service().callback(state, "code", null));
+        CTraderAuthorizationResponse failed = service().callback(state, "code", null);
+        assertEquals(CTraderAuthorizationAttemptStatus.FAILED, failed.status());
         verify(tokenClient).exchangeAuthorizationCode("code", properties.redirectUri());
     }
 
@@ -138,6 +144,7 @@ class CTraderAuthenticationServiceTest {
         UUID tokenReference = UUID.randomUUID();
         CTraderAuthorizationAttempt attempt = CTraderAuthorizationAttempt.initiate(owner, brokerAccountId,
                 BrokerProviderRegistrationCatalog.CTRADER, "hash", "demo", NOW, NOW.plusSeconds(600));
+        attempt.permissionScope("trading");
         attempt.consume(NOW);
         attempt.discovered(tokenReference, List.of("1001"));
         when(attempts.findByIdAndOwnerId(attempt.id(), owner)).thenReturn(Optional.of(attempt));
@@ -146,12 +153,21 @@ class CTraderAuthenticationServiceTest {
          when(connections.findByBrokerAccountIdAndOwnerIdForUpdate(brokerAccountId, owner)).thenReturn(Optional.of(connection));
         when(secretReader.read(new CredentialReference(tokenReference)))
                 .thenReturn(new PlainSecret(CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
+        when(openApi.readOnlyObservation(any(), eq("1001"), any(), any()))
+                .thenReturn(new CTraderReadOnlyObservation("1001", "USD", BigDecimal.valueOf(50000),
+                        BigDecimal.valueOf(50000), BigDecimal.ZERO, BigDecimal.valueOf(50000),
+                        List.of(), List.of(), List.of(), NOW, NOW, NOW, true, List.of()));
+        when(openApi.isDemoAccount(any(), eq("1001"))).thenReturn(true);
 
         CTraderAuthorizationResponse response = service().bind(owner, brokerAccountId, attempt.id(), "1001", AUTHORIZATION);
 
         assertEquals(CTraderAuthorizationAttemptStatus.BOUND, response.status());
         assertEquals("1001", connection.externalAccountId());
+        assertEquals(BrokerConnectionStatus.CONNECTED, connection.technicalStatus());
+        org.junit.jupiter.api.Assertions.assertTrue(connection.detectedPermissions().contains(
+                com.hope.trading.broker_service.connection.domain.BrokerPermission.TRADE));
         verify(openApi).authorizeAccount(any(), eq("1001"));
+        verify(tradingCore).updateStatusWithServiceAuthorization(eq(brokerAccountId), any(), any());
     }
 
     private CTraderAuthenticationService service() {

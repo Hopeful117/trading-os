@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.strategy;
 import com.hope.trading.market_intelligence.application.capability.OhlcRangeAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.OhlcMomentumAnalysisCapability;
 import com.hope.trading.market_intelligence.application.capability.TrendContextAnalysisCapability;
+import com.hope.trading.market_intelligence.application.capability.TradeabilityAnalysisCapability;
 import com.hope.trading.market_intelligence.domain.*;
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +68,8 @@ class AnalysisExecutionStrategyTest {
         assertThat(plan.capabilityIds()).containsExactlyInAnyOrder(
                  TrendContextAnalysisCapability.CAPABILITY_ID,
                  OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                 OhlcMomentumAnalysisCapability.CAPABILITY_ID);
+                 OhlcMomentumAnalysisCapability.CAPABILITY_ID,
+                  TradeabilityAnalysisCapability.CAPABILITY_ID);
     }
 
     @Test

@@ -14,14 +14,18 @@ public record DecisionContextResponse(
         AccountResponse account,
         List<MarketDecisionResponse> markets,
         List<UUID> eligibleMarketIds,
-        Instant resolvedAt
+        Instant resolvedAt,
+        ChallengeReadinessResponse readiness,
+        String scopeStatus,
+        String scopeMessage
 ) {
     static DecisionContextResponse from(DecisionContextResolution value) {
         return new DecisionContextResponse(
                 AccountResponse.from(value.account()),
                 value.scope().decisions().stream().map(MarketDecisionResponse::from).toList(),
                 value.scope().effectiveScope().marketIds(),
-                value.scope().resolvedAt()
+                value.scope().resolvedAt(), ChallengeReadinessResponse.from(value.readiness()),
+                value.scopeStatus(), value.scopeMessage()
         );
     }
 
@@ -72,6 +76,24 @@ public record DecisionContextResponse(
                     value.eligible(),
                     value.reasons()
             );
+        }
+    }
+
+    public record ChallengeReadinessResponse(
+            UUID accountId, boolean challengeActive, String status, String message,
+            UUID challengeId, String challengeDefinitionVersion, String phase,
+            BigDecimal challengeStartingCapital, String challengeCurrency,
+            BigDecimal accountStartingBalance, BigDecimal accountEquity,
+            UUID riskPolicyId, String riskPolicyVersion,
+            UUID brokerAccountId, String requiredMarketProvider, UUID requiredProviderRegistrationReference) {
+        static ChallengeReadinessResponse from(
+                TradingCoreAccountClient.ChallengeReadinessResponse value) {
+            if (value == null) return null;
+            return new ChallengeReadinessResponse(value.accountId(), value.challengeActive(), value.status(), value.message(),
+                    value.challengeId(), value.challengeDefinitionVersion(), value.phase(), value.challengeStartingCapital(),
+                    value.challengeCurrency(), value.accountStartingBalance(), value.accountEquity(), value.riskPolicyId(),
+                    value.riskPolicyVersion(), value.brokerAccountId(), value.requiredMarketProvider(),
+                    value.requiredProviderRegistrationReference());
         }
     }
 }

@@ -18,4 +18,8 @@ public interface BrokerConnectionRepository extends JpaRepository<BrokerConnecti
     @Query("select connection from BrokerConnection connection where connection.brokerAccountId = :accountId and connection.ownerId = :ownerId")
     Optional<BrokerConnection> findByBrokerAccountIdAndOwnerIdForUpdate(@Param("accountId") UUID accountId,
                                                                           @Param("ownerId") UUID ownerId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select connection from BrokerConnection connection where connection.brokerAccountId = :accountId")
+    Optional<BrokerConnection> findByBrokerAccountIdForUpdate(@Param("accountId") UUID accountId);
 }

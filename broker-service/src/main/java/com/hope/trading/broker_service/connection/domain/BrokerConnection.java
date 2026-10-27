@@ -37,6 +37,7 @@ public class BrokerConnection {
     private String externalAccountId;
     @Column(length = 16)
     private String providerEnvironment;
+    private Boolean providerAccountLive;
     private String apiKeyHint;
     private Instant lastValidatedAt;
     @Column(nullable = false, updatable = false)
@@ -114,6 +115,11 @@ public class BrokerConnection {
         updatedAt = at;
     }
 
+    public void confirmProviderAccountEnvironment(boolean live, Instant at) {
+        providerAccountLive = live;
+        updatedAt = at;
+    }
+
     public void disconnect(Instant at) {
         technicalStatus = BrokerConnectionStatus.DISCONNECTED;
         updatedAt = at;
@@ -139,6 +145,7 @@ public class BrokerConnection {
     }
     public String externalAccountId() { return externalAccountId; }
     public String providerEnvironment() { return providerEnvironment; }
+    public Boolean providerAccountLive() { return providerAccountLive; }
     public String apiKeyHint() { return apiKeyHint; }
     public Instant lastValidatedAt() { return lastValidatedAt; }
 }

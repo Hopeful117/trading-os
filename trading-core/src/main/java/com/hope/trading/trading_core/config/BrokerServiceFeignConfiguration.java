@@ -22,11 +22,19 @@ public class BrokerServiceFeignConfiguration {
     public RequestInterceptor brokerServiceAuthenticationInterceptor() {
         return template -> {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            UUID actorId = authentication != null && authentication.getPrincipal() instanceof UserDto user
-                    ? user.getUserId()
-                    : null;
+            UUID actorId = delegatedActor(template);
+            if (actorId == null && authentication != null && authentication.getPrincipal() instanceof UserDto user) {
+                actorId = user.getUserId();
+            }
             template.header("X-Service-Authorization",
                     "Bearer " + serviceJwtService.issue(BROKER_AUDIENCE, actorId));
         };
+    }
+
+    private UUID delegatedActor(feign.RequestTemplate template) {
+        var values = template.headers().get("X-Delegated-Actor");
+        if (values == null || values.isEmpty()) return null;
+        String value = values.iterator().next();
+        return value == null || value.isBlank() ? null : UUID.fromString(value);
     }
 }

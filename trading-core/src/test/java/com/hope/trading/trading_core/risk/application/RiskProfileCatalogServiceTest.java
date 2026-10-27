@@ -18,17 +18,18 @@ class RiskProfileCatalogServiceTest {
             new RiskProfileCatalogService(persistence, new RiskProfileValidator());
 
     @Test
-    void returnsOnlyValidPlatformProfiles() {
+    void returnsOnlyValidSelectableProfiles() {
         RiskPersistence.Profile valid = profile("PLATFORM", "valid");
+        RiskPersistence.Profile propFirm = profile("PROP_FIRM", "ftmo");
         RiskPersistence.Profile invalid = new RiskPersistence.Profile(
                 UUID.randomUUID(), "1.0.0", "policy", "1.0.0", "PLATFORM", Instant.EPOCH,
                 "provenance", null, null, List.of());
         RiskPersistence.Profile nonPlatform = profile("BROKER", "broker");
-        when(persistence.profiles()).thenReturn(List.of(invalid, nonPlatform, valid));
+        when(persistence.profiles()).thenReturn(List.of(invalid, nonPlatform, valid, propFirm));
 
-        assertThat(service.eligiblePlatformProfiles())
+        assertThat(service.eligibleProfiles())
                 .extracting(response -> response.policyId())
-                .containsExactly("valid");
+                .containsExactly("ftmo", "valid");
     }
 
     private RiskPersistence.Profile profile(String authority, String policyId) {

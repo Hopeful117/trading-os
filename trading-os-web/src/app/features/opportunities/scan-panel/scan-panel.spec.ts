@@ -396,6 +396,21 @@ describe('ScanPanel', () => {
       ).toEqual(['m1', 'm2']);
     });
 
+    it('limits the specific-market catalogue to the account eligible universe', async () => {
+      await createComponent();
+      fixture.componentRef.setInput('selectableMarketIds', ['m2']);
+      fixture.detectChanges();
+
+      fixture.nativeElement.querySelector('[data-testid="specific-scope"]').click();
+      await fixture.whenStable();
+
+      const options = fixture.nativeElement.querySelectorAll(
+        '[data-testid="market-select"] option',
+      );
+      expect(options.length).toBe(1);
+      expect(options[0].textContent).toContain('ETH/EUR');
+    });
+
     it('sorts the specific-market catalogue without changing selected scan ids', async () => {
       marketServiceMock.findAll.mockReturnValue(of([markets[1], markets[0], markets[2]]));
       activeScanServiceMock.resolveScope.mockReturnValue(

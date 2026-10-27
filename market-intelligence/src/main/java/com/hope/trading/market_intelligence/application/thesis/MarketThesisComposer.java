@@ -249,7 +249,7 @@ public final class MarketThesisComposer {
                 || momentum.direction() == MomentumAssessment.Direction.NEUTRAL
                 || momentum.direction() == MomentumAssessment.Direction.UNKNOWN) {
             addMissing(target, "MOMENTUM", "MOMENTUM_NEUTRAL",
-                    MarketThesisAvailability.AVAILABLE, momentum.cutoff(), cutoff,
+                    MarketThesisAvailability.UNKNOWN, momentum.cutoff(), cutoff,
                     "Momentum does not provide directional confirmation", true);
             return;
         }

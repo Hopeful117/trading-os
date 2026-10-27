@@ -331,7 +331,7 @@ describe('MarketsDetails', () => {
         'mkt-1',
         expect.objectContaining({ type: 'TICKER' }),
       );
-      expect(streamServiceMock.streamTicker).toHaveBeenCalledWith('BTC/USD');
+      expect(streamServiceMock.streamTicker).toHaveBeenCalledWith('BTC/USD', 'mkt-1');
     });
 
     it('should call findOhlcHistory with market and timeframe', async () => {

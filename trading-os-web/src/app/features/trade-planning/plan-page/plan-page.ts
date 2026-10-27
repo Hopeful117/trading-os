@@ -43,6 +43,11 @@ import { MarketStreamRequest } from '../../../core/models/market-stream-request'
 import { MarketStreamType } from '../../../core/models/market-stream-type';
 import { MarketChartComponent } from '../../markets/market-chart-component/market-chart-component';
 import { tradeFlowErrorMessage } from '../../../core/utils/trade-flow-error';
+import {
+  calculateMarketSpread,
+  formatMarketPrice,
+  marketPricePrecision,
+} from '../../../core/utils/market-price';
 
 export type PlanView =
   | { status: 'loading' }
@@ -125,6 +130,16 @@ export class PlanPage implements OnDestroy {
   private readonly executionService = inject(ExecutionService);
   private readonly marketService = inject(MarketService);
   private readonly marketDataStreamService = inject(MarketDataStreamService);
+
+  formatMarketPrice(value: number, market: MarketResponse | undefined): string {
+    const precision = marketPricePrecision(market);
+    return formatMarketPrice(value, precision);
+  }
+
+  marketSpread(bid: number, ask: number, market: MarketResponse | undefined): string {
+    const precision = marketPricePrecision(market);
+    return formatMarketPrice(calculateMarketSpread(bid, ask, precision), precision);
+  }
   private readonly tickerRequest: MarketStreamRequest = {
     type: MarketStreamType.TICKER,
     parameters: null,
@@ -730,8 +745,9 @@ export class PlanPage implements OnDestroy {
         : of({ projection: null, projectionFailure: false });
     const market$ = this.marketService.findAll().pipe(
       map((markets) => {
-        const market = marketId
-          ? markets.find((candidate) => candidate.marketId === marketId)
+        const selectedMarketId = marketId ?? plan.originContext?.marketId ?? null;
+        const market = selectedMarketId
+          ? markets.find((candidate) => candidate.marketId === selectedMarketId)
           : markets.find(
               (candidate) => candidate.symbol.toUpperCase() === plan.instrument.toUpperCase(),
             );
@@ -750,7 +766,7 @@ export class PlanPage implements OnDestroy {
             market,
             candles,
             ticker$: this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
-              switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
+              switchMap(() => this.marketDataStreamService.streamTicker(market.symbol, market.marketId)),
               shareReplay({ bufferSize: 1, refCount: true }),
             ),
           })),

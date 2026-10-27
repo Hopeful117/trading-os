@@ -17,6 +17,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -32,6 +34,7 @@ import java.util.Set;
 
 @Component
 @ConditionalOnProperty(name = "ctrader.market-data.enabled", havingValue = "true")
+@Slf4j
 public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     private static final int MAX_RECONNECT_ATTEMPTS = 3;
     private static final Duration[] RECONNECT_DELAYS = {
@@ -87,7 +90,22 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         if (stream != null) return Mono.empty();
         if (resetReconnectAttempts) reconnectAttempts.set(0);
         long generation = ++connectionGeneration;
-        stream = client.openStream(event -> handleEvent(generation, event), () -> handleTermination(generation));
+        long startedNanos = System.nanoTime();
+        String diagnosticId = diagnosticId();
+        log.info("CTRADER_OPEN_STREAM_ENTER diagnosticId={} accountId=unknown environment={} generation={} thread={} virtual={}",
+                diagnosticId, properties.environment(), generation,
+                Thread.currentThread().getName(), Thread.currentThread().isVirtual());
+        try {
+            stream = client.openStream(event -> handleEvent(generation, event), () -> handleTermination(generation));
+            log.info("CTRADER_OPEN_STREAM_EXIT diagnosticId={} accountId=unknown environment={} generation={} durationMs={}",
+                    diagnosticId, properties.environment(), generation,
+                    elapsedMillis(startedNanos));
+        } catch (RuntimeException exception) {
+            log.warn("CTRADER_OPEN_STREAM_ERROR diagnosticId={} accountId=unknown environment={} generation={} durationMs={} errorType={} message={}",
+                    diagnosticId, properties.environment(), generation,
+                    elapsedMillis(startedNanos), exception.getClass().getSimpleName(), exception.getMessage());
+            throw exception;
+        }
         return resubscribe();
     }
 
@@ -105,11 +123,14 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     @Override
     public synchronized Mono<Void> subscribe(List<Market> markets, MarketStreamRequest request) {
         validate(markets, request);
-        return connect().then(Mono.fromRunnable(() -> markets.stream().filter(Objects::nonNull).forEach(market -> {
-            String key = key(market, request);
-            if (desired.putIfAbsent(key, new ActiveSubscription(market, request)) != null) return;
-            subscribeProvider(market, request);
-        })));
+        return connect().then(Mono.fromRunnable(() -> {
+            List<Market> added = markets.stream().filter(Objects::nonNull)
+                    .filter(market -> desired.putIfAbsent(key(market, request), new ActiveSubscription(market, request)) == null)
+                    .toList();
+            subscribeSpots(added, request);
+            added.stream().filter(market -> request.type() == MarketStreamType.OHLC)
+                    .forEach(market -> subscribeTrendbar(market, request));
+        }));
     }
 
     @Override
@@ -122,17 +143,28 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     }
 
     private void subscribeProvider(Market market, MarketStreamRequest request) {
-        long symbolId = symbolId(market);
-        if (request.type() == MarketStreamType.TICKER) subscribeSpots(symbolId);
-        if (request.type() == MarketStreamType.OHLC) {
-            subscribeSpots(symbolId);
-            String trendbarKey = symbolId + ":" + period(request.parameters().interval());
-            if (subscribedTrendbars.add(trendbarKey)) stream.subscribeLiveTrendbar(symbolId, period(request.parameters().interval()));
-        }
+        subscribeSpots(List.of(market), request);
+        if (request.type() == MarketStreamType.OHLC) subscribeTrendbar(market, request);
     }
 
     private void subscribeSpots(long symbolId) {
-        if (subscribedSpots.add(symbolId)) stream.subscribeSpots(symbolId);
+        subscribeSpots(List.of(symbolId));
+    }
+
+    private void subscribeSpots(List<Market> markets, MarketStreamRequest request) {
+        if (request.type() != MarketStreamType.TICKER && request.type() != MarketStreamType.OHLC) return;
+        subscribeSpots(markets.stream().map(this::symbolId).distinct().toList());
+    }
+
+    private void subscribeSpots(List<Long> symbolIds) {
+        List<Long> newSymbolIds = symbolIds.stream().filter(subscribedSpots::add).toList();
+        if (!newSymbolIds.isEmpty()) stream.subscribeSpots(newSymbolIds);
+    }
+
+    private void subscribeTrendbar(Market market, MarketStreamRequest request) {
+        long symbolId = symbolId(market);
+        String trendbarKey = symbolId + ":" + period(request.parameters().interval());
+        if (subscribedTrendbars.add(trendbarKey)) stream.subscribeLiveTrendbar(symbolId, period(request.parameters().interval()));
     }
 
     private void unsubscribeProvider(Market market, MarketStreamRequest request) {
@@ -168,12 +200,21 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                         && symbolId(active.market()) == spot.symbolId()).forEach(active -> {
             Instant received = clock.instant();
             lastProviderEvents.put(key(active.market(), active.request()), received);
+            active.market().setMarketState(MarketState.builder()
+                    .tradingStatus(com.hope.trading.market_data.helper.TradingStatus.OPEN)
+                    .tradable(true)
+                    .lastUpdated(received)
+                    .build());
             tickerPublisher.publish(new TickerEvent(active.market().getMarketId(), MarketProvider.CTRADER,
                     active.market().getSymbol(), decode(spot.bid(), active.market()), decode(spot.ask(), active.market()),
                     null, null, spot.occurredAt(),
                     new CTraderInstrumentIdentity(spot.symbolId(), active.market().getSymbol(), properties.environment().name()).provenance(),
                     received, Long.toString(spot.symbolId())));
-                });
+            log.info("CTRADER_SPOT_EVENT_NORMALIZED diagnosticId={} marketId={} symbol={} symbolId={} hasBid=true hasAsk=true bid={} ask={} marketTradable={}",
+                    diagnosticId(), active.market().getMarketId(), active.market().getSymbol(), spot.symbolId(),
+                    decode(spot.bid(), active.market()), decode(spot.ask(), active.market()),
+                    active.market().getMarketState() != null && active.market().getMarketState().isTradable());
+        });
     }
 
     private void handleTrendbar(CTraderOpenApiClient.CTraderLiveTrendbarEvent event) {
@@ -291,7 +332,15 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     }
 
     private Mono<Void> resubscribe() {
-        desired.values().forEach(active -> subscribeProvider(active.market(), active.request()));
+        desired.values().stream()
+                .collect(java.util.stream.Collectors.groupingBy(ActiveSubscription::request))
+                .forEach((request, subscriptions) -> {
+                    List<Market> markets = subscriptions.stream().map(ActiveSubscription::market).toList();
+                    subscribeSpots(markets, request);
+                    if (request.type() == MarketStreamType.OHLC) {
+                        markets.forEach(market -> subscribeTrendbar(market, request));
+                    }
+                });
         return Mono.empty();
     }
 
@@ -316,6 +365,15 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
             throw new IllegalArgumentException("cTrader market requires a numeric provider symbol");
         }
         return Long.parseLong(market.getProviderSymbol());
+    }
+
+    private String diagnosticId() {
+        String value = MDC.get("ctraderDiagnosticId");
+        return value == null ? "none" : value;
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 
     private String key(Market market, MarketStreamRequest request) {

@@ -72,6 +72,18 @@ public class BrokerAccount {
                 executionMode, displayName, now);
     }
 
+    public static BrokerAccount importConnected(UUID id, UUID ownerId, UUID providerRegistrationReference,
+                                                ExecutionMode executionMode, String displayName,
+                                                String externalAccountId, Instant validatedAt) {
+        BrokerAccount account = new BrokerAccount(new BrokerAccountId(id), ownerId,
+                providerRegistrationReference, executionMode, displayName, validatedAt);
+        account.connectionStatus = BrokerConnectionStatus.CONNECTED;
+        account.externalAccountId = externalAccountId;
+        account.lastValidatedAt = validatedAt;
+        account.updatedAt = validatedAt;
+        return account;
+    }
+
     public void markPendingValidation(Instant now) {
         transitionTo(BrokerConnectionStatus.PENDING_VALIDATION, now);
     }

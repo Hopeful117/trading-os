@@ -17,6 +17,6 @@ public class RiskProfileCatalogController {
 
     @GetMapping("/eligible")
     public ResponseEntity<List<RiskProfileCatalogResponse>> eligible() {
-        return ResponseEntity.ok(service.eligiblePlatformProfiles());
+        return ResponseEntity.ok(service.eligibleProfiles());
     }
 }

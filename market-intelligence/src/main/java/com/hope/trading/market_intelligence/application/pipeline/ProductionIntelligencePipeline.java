@@ -122,6 +122,16 @@ public class ProductionIntelligencePipeline {
         } catch (org.springframework.dao.DataIntegrityViolationException race) {
             return runs.findByAnalysisExecutionIdAndPipelineVersion(analysisExecutionId, VERSION)
                     .orElseThrow(() -> race);
+        } catch (RuntimeException exception) {
+            return runs.findByAnalysisExecutionIdAndPipelineVersion(analysisExecutionId, VERSION)
+                    .map(run -> {
+                        if ("RUNNING".equals(run.state())) {
+                            run.fail("OPPORTUNITY", controlledMessage(exception), clock.instant());
+                            return runs.save(run);
+                        }
+                        return run;
+                    })
+                    .orElseThrow(() -> exception);
         }
     }
 
@@ -184,6 +194,11 @@ public class ProductionIntelligencePipeline {
             Observation strategyEvidence = trendContextEvidence
                     .select(analysisExecutionId, marketId, definition.requiredInputs(), evaluatedAt)
                     .orElse(observation);
+            if (!isCurrentAt(strategyEvidence, evaluatedAt)) {
+                log.info("Strategy {}v{} skipped for market {} because evidence is outside its validity window",
+                        definition.name(), definition.version(), marketId);
+                continue;
+            }
             var evaluation = strategyEvaluation.evaluate(
                     definition, strategyEvidence, marketId, evaluatedAt);
 
@@ -314,6 +329,11 @@ public class ProductionIntelligencePipeline {
                     && applicability.providers().stream()
                         .anyMatch(p -> p.equalsIgnoreCase(provider)));
         return timeframeApplicable && providerApplicable;
+    }
+
+    private static boolean isCurrentAt(Observation observation, Instant evaluatedAt) {
+        return (observation.validFrom() == null || !observation.validFrom().isAfter(evaluatedAt))
+                && observation.validUntil().map(evaluatedAt::isBefore).orElse(true);
     }
 
     private String controlledMessage(RuntimeException exception) {

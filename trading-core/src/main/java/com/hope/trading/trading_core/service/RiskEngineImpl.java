@@ -88,7 +88,18 @@ public class RiskEngineImpl implements RiskEngine {
             BigDecimal drawdownPercentage,
             BigDecimal usedRiskPercentage
     ) {
-        Rules rules = account.getRules();
+        return evaluateDashboard(account, account.getRules(), dailyLossPercentage,
+                drawdownPercentage, usedRiskPercentage);
+    }
+
+    @Override
+    public DashboardRiskEvaluation evaluateDashboard(
+            Account account,
+            Rules rules,
+            BigDecimal dailyLossPercentage,
+            BigDecimal drawdownPercentage,
+            BigDecimal usedRiskPercentage
+    ) {
         if (rules == null || !rules.isActive()) {
             return new DashboardRiskEvaluation(RiskStatus.UNAVAILABLE, List.of());
         }

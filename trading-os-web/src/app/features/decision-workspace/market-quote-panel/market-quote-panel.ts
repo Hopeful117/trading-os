@@ -11,6 +11,11 @@ import {
 } from '../../../shared/workstation/status-badge/status-badge';
 import { WorkspacePanelHeader } from '../../../shared/workstation/workspace-panel-header/workspace-panel-header';
 import { WorkspacePanel } from '../../../shared/workstation/workspace-panel/workspace-panel';
+import {
+  calculateMarketSpread,
+  formatMarketPrice,
+  marketPricePrecision,
+} from '../../../core/utils/market-price';
 
 export type MarketQuoteStreamView =
   { status: 'waiting' } | { status: 'live'; data: TickerEvent } | { status: 'error' };
@@ -35,6 +40,15 @@ export class MarketQuotePanel {
   @Input({ required: true }) market!: MarketResponse;
   @Input({ required: true }) ticker!: MarketQuoteStreamView;
   @Input({ required: true }) freshness!: MarketQuoteFreshness;
+
+  formatPrice(value: number): string {
+    return formatMarketPrice(value, marketPricePrecision(this.market));
+  }
+
+  spread(bid: number, ask: number): string {
+    const precision = marketPricePrecision(this.market);
+    return formatMarketPrice(calculateMarketSpread(bid, ask, precision), precision);
+  }
 
   marketStatusTone(): StatusBadgeTone {
     return this.market.marketState.tradable ? 'positive' : 'warning';

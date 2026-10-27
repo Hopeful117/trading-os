@@ -351,6 +351,8 @@ export class DecisionWorkspace {
     switchMap(([market, depth]) =>
       market === null
         ? of<StreamView<OrderBookSnapshot>>({ status: 'waiting' })
+        : market.provider === 'CTRADER'
+          ? of<StreamView<OrderBookSnapshot>>({ status: 'error' })
         : this.orderBookStream(market, depth),
     ),
     shareReplay({ bufferSize: 1, refCount: true }),
@@ -360,6 +362,8 @@ export class DecisionWorkspace {
     switchMap((market) =>
       market === null
         ? of<StreamView<RecentTradesSnapshot>>({ status: 'waiting' })
+        : market.provider === 'CTRADER'
+          ? of<StreamView<RecentTradesSnapshot>>({ status: 'error' })
         : this.recentTradesStream(market),
     ),
     shareReplay({ bufferSize: 1, refCount: true }),
@@ -633,8 +637,8 @@ export class DecisionWorkspace {
     return context.markets
       .filter((market) => market.eligible)
       .filter((market) => {
-        if (query.length < 2) {
-          return false;
+        if (query.length === 0) {
+          return true;
         }
 
         return (
@@ -908,7 +912,7 @@ export class DecisionWorkspace {
       tap(() => (this.activeTickerSubscription = null)),
       switchMap(() => this.marketService.subscribe(market.marketId, request)),
       tap(() => (this.activeTickerSubscription = { marketId: market.marketId, request })),
-      switchMap(() => this.marketDataStreamService.streamTicker(market.symbol)),
+      switchMap(() => this.marketDataStreamService.streamTicker(market.symbol, market.marketId)),
       map((data) => ({ status: 'live' as const, data })),
       catchError(() => of<StreamView<TickerEvent>>({ status: 'error' })),
       startWith<StreamView<TickerEvent>>({ status: 'waiting' }),

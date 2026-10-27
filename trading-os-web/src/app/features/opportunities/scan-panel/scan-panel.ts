@@ -31,6 +31,7 @@ import {
 import { MarketResponse } from '../../../core/models/market-response';
 import { marketProductTypeLabel } from '../../../core/models/market-response';
 import { OpportunityResponse } from '../../../core/models/opportunity.model';
+import { ChallengeReadiness } from '../../../core/models/decision-context.model';
 import { TradePreparationFailure } from '../../../core/utils/trade-flow-error';
 import { AccountService } from '../../../core/services/account.service';
 import { ActiveScanService } from '../../../core/services/active-scan.service';
@@ -84,6 +85,7 @@ export class ScanPanel {
   readonly showAccountSelector = input(true);
   readonly openingOpportunityId = input<string | null>(null);
   readonly preparationErrors = input<Record<string, TradePreparationFailure>>({});
+  readonly readiness = input<ChallengeReadiness | null | undefined>(undefined);
 
   accountId = '';
   objective = '';
@@ -131,7 +133,7 @@ export class ScanPanel {
             this.marketById = new Map(sortedMarkets.map((market) => [market.marketId, market]));
             const selectableIds = new Set(
               sortedMarkets
-                .filter((market) => market.marketState.tradable)
+                .filter((market) => market.marketState.tradable && this.canSelectMarket(market.marketId))
                 .map((market) => market.marketId),
             );
             this.selectedMarketIds = this.selectedMarketIds.filter((marketId) =>
@@ -209,6 +211,10 @@ export class ScanPanel {
     if (!this.accountId || !this.scopeMode) {
       return false;
     }
+    const readiness = this.readiness();
+    if (readiness !== undefined && readiness !== null && readiness.status !== 'READY') {
+      return false;
+    }
     return (
       this.scopeMode === 'ALL_ELIGIBLE' ||
       (this.catalogueAvailable && this.selectedMarketIds.length > 0)
@@ -264,7 +270,9 @@ export class ScanPanel {
   }
 
   selectableMarkets(markets: MarketResponse[]): MarketResponse[] {
-    return markets.filter((market) => market.marketState.tradable);
+    return markets.filter(
+      (market) => market.marketState.tradable && this.canSelectMarket(market.marketId),
+    );
   }
 
   readable(value: string): string {

@@ -5,6 +5,15 @@
   background: #111827;
 }
 
+.scan-panel--embedded {
+  padding: 1.25rem;
+}
+
+.scan-panel--embedded .controls,
+.scan-panel--embedded .scope-picker {
+  grid-template-columns: 1fr;
+}
+
 .panel-header {
   h2 {
     margin: 0;

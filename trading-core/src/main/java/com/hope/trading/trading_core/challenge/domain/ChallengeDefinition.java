@@ -66,6 +66,12 @@ public class ChallengeDefinition {
     @Column(name = "required_instrument_product_type", length = 32, updatable = false)
     private InstrumentProductType requiredInstrumentProductType;
 
+    @Column(name = "required_market_provider", length = 32, updatable = false)
+    private String requiredMarketProvider;
+
+    @Column(name = "required_provider_registration_reference", updatable = false)
+    private UUID requiredProviderRegistrationReference;
+
     @Column(name = "risk_policy_id", nullable = false, updatable = false)
     private UUID riskPolicyId;
 
@@ -112,8 +118,9 @@ public class ChallengeDefinition {
                                   InstrumentProductType requiredInstrumentProductType,
                                  UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
                                  Instant retrievedAt, Instant effectiveFrom, String provenance, Instant createdAt,
-                                  List<ChallengePhaseDefinition> phases, String riskTimeZone,
-                                  LocalTime riskDayResetTime) {
+                                   List<ChallengePhaseDefinition> phases, String riskTimeZone,
+                                   LocalTime riskDayResetTime, String requiredMarketProvider,
+                                   UUID requiredProviderRegistrationReference) {
         this.id = requireId(id, "id");
         this.definitionVersion = required(definitionVersion, "definitionVersion", 64);
         this.provider = required(provider, "provider", MAX_IDENTIFIER_LENGTH);
@@ -138,6 +145,8 @@ public class ChallengeDefinition {
         if (riskTimeZone != null) ZoneId.of(riskTimeZone);
         this.riskTimeZone = riskTimeZone;
         this.riskDayResetTime = riskDayResetTime;
+        this.requiredMarketProvider = requiredMarketProvider == null ? null : requiredMarketProvider.strip().toUpperCase();
+        this.requiredProviderRegistrationReference = requiredProviderRegistrationReference;
         this.phases = validatedPhases(phases);
     }
 
@@ -161,11 +170,10 @@ public class ChallengeDefinition {
                                               UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
                                              Instant retrievedAt, Instant effectiveFrom, String provenance,
                                              Instant createdAt) {
-        return new ChallengeDefinition(id, definitionVersion, provider, product, planCode, capitalCurrency,
-                startingCapital, profitTargetRatio, progressionValueSource, requiredSettlementModel,
-                requiredInstrumentProductType,
-                riskPolicyId, riskPolicyVersion,
-                sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt, List.of(), null, null);
+        return create(id, definitionVersion, provider, product, planCode, capitalCurrency, startingCapital,
+                profitTargetRatio, progressionValueSource, requiredSettlementModel, requiredInstrumentProductType,
+                riskPolicyId, riskPolicyVersion, sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt,
+                List.of(), null, null);
     }
 
     public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
@@ -191,10 +199,28 @@ public class ChallengeDefinition {
                                               Instant retrievedAt, Instant effectiveFrom, String provenance,
                                               Instant createdAt, List<ChallengePhaseDefinition> phases,
                                               String riskTimeZone, LocalTime riskDayResetTime) {
+        return create(id, definitionVersion, provider, product, planCode, capitalCurrency, startingCapital,
+                profitTargetRatio, progressionValueSource, requiredSettlementModel, requiredInstrumentProductType,
+                riskPolicyId, riskPolicyVersion, sourceUrl, retrievedAt, effectiveFrom, provenance, createdAt,
+                phases, riskTimeZone, riskDayResetTime, null, null);
+    }
+
+    public static ChallengeDefinition create(UUID id, String definitionVersion, String provider, String product,
+                                              String planCode, String capitalCurrency, BigDecimal startingCapital,
+                                              BigDecimal profitTargetRatio, ProgressionValueSource progressionValueSource,
+                                              SettlementModel requiredSettlementModel,
+                                              InstrumentProductType requiredInstrumentProductType,
+                                              UUID riskPolicyId, String riskPolicyVersion, String sourceUrl,
+                                              Instant retrievedAt, Instant effectiveFrom, String provenance,
+                                              Instant createdAt, List<ChallengePhaseDefinition> phases,
+                                              String riskTimeZone, LocalTime riskDayResetTime,
+                                              String requiredMarketProvider,
+                                              UUID requiredProviderRegistrationReference) {
         return new ChallengeDefinition(id, definitionVersion, provider, product, planCode, capitalCurrency,
                 startingCapital, profitTargetRatio, progressionValueSource, requiredSettlementModel,
                 requiredInstrumentProductType, riskPolicyId, riskPolicyVersion, sourceUrl, retrievedAt,
-                effectiveFrom, provenance, createdAt, phases, riskTimeZone, riskDayResetTime);
+                effectiveFrom, provenance, createdAt, phases, riskTimeZone, riskDayResetTime,
+                requiredMarketProvider, requiredProviderRegistrationReference);
     }
 
     @PreUpdate
@@ -240,6 +266,8 @@ public class ChallengeDefinition {
     public Instant createdAt() { return createdAt; }
     public String riskTimeZone() { return riskTimeZone; }
     public LocalTime riskDayResetTime() { return riskDayResetTime; }
+    public String requiredMarketProvider() { return requiredMarketProvider; }
+    public UUID requiredProviderRegistrationReference() { return requiredProviderRegistrationReference; }
 
     /** Returns explicit phases, or a deterministic single legacy phase. */
     public List<ChallengePhaseDefinition> effectivePhases() {

@@ -65,7 +65,10 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
             if (authoritativeSnapshots != null) {
                 BrokerAccountSnapshotV2Dto authoritative = null;
                 try {
-                    authoritative = authoritativeSnapshots.getAccountSnapshot(sourceId);
+                    UUID actorId = account.getUser() == null ? null : account.getUser().getUserId();
+                    authoritative = actorId == null
+                            ? authoritativeSnapshots.getAccountSnapshot(sourceId)
+                            : authoritativeSnapshots.getAccountSnapshot(actorId, sourceId);
                 } catch (RetryableException ignored) {
                     // The v2 compatibility route is unavailable for Kraken in
                     // this state. Its established RiskSnapshot route remains

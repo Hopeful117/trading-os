@@ -87,7 +87,35 @@ class MarketThesisComposerTest {
         assertEquals(3, thesis.scenario().orElseThrow().confirmationConditions().size());
         assertEquals(false, thesis.evidence().stream()
                 .filter(value -> value.reference().equals("TRIGGER"))
-                .findFirst().orElseThrow().required());
+                 .findFirst().orElseThrow().required());
+    }
+
+    @Test
+    void neutralMomentumIsMissingUnknownEvidenceWithoutBreakingComposition() {
+        Observation observation = missingObservation();
+        TrendContextAssessment trend = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        MomentumAssessment momentum = new MomentumAssessment(
+                marketId, "15m", NOW.minusSeconds(9000), NOW, NOW,
+                MomentumAssessment.Status.AVAILABLE, MomentumAssessment.Direction.NEUTRAL,
+                new java.math.BigDecimal("0.0"), new java.math.BigDecimal("0.0"),
+                new java.math.BigDecimal("0.8"), new java.math.BigDecimal("0.8"),
+                MomentumAssessment.Acceleration.STEADY, MomentumPolicy.V1.version(),
+                MomentumAssessment.ALGORITHM_VERSION, ArtifactFingerprint.empty().value(),
+                ArtifactFingerprint.ofInputs(List.of("neutral-momentum")).value(), "neutral");
+        TrendContextCapabilityContent trendContent = mock(TrendContextCapabilityContent.class);
+        when(trendContent.assessment()).thenReturn(trend);
+        when(observation.payload()).thenReturn(Optional.of(new MarketThesisObservationPayload(
+                trendContent, new MomentumCapabilityContent(momentum, "AVAILABLE", List.of(), NOW.plusSeconds(900)))));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
+
+        assertThat(thesis.state()).isEqualTo(MarketThesisState.NO_TRADE);
+        assertThat(thesis.evidence()).anyMatch(value ->
+                value.reference().equals("MOMENTUM_NEUTRAL")
+                        && value.role().name().equals("MISSING")
+                        && value.availability().name().equals("UNKNOWN"));
     }
 
     @Test

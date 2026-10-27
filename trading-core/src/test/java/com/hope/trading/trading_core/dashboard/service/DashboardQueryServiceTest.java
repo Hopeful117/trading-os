@@ -1,8 +1,12 @@
 package com.hope.trading.trading_core.dashboard.service;
 
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
+import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.broker.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.challenge.application.ChallengeInstanceRepository;
 import com.hope.trading.trading_core.dashboard.integration.BrokerDashboardMapper;
 import com.hope.trading.trading_core.dashboard.integration.MarketDataDashboardMapper;
 import com.hope.trading.trading_core.dashboard.model.*;
@@ -18,6 +22,8 @@ import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.Rules;
 import com.hope.trading.trading_core.service.*;
+import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
+import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +42,10 @@ class DashboardQueryServiceTest {
     private final AccountService accountService = mock(AccountService.class);
     private final BrokerAccountRepository brokerAccounts = mock(BrokerAccountRepository.class);
     private final BrokerApiClient brokerClient = mock(BrokerApiClient.class);
+    private final BrokerAccountSnapshotV2Client brokerSnapshotClient = mock(BrokerAccountSnapshotV2Client.class);
+    private final ChallengeInstanceRepository challengeInstances = mock(ChallengeInstanceRepository.class);
+    private final RiskPersistence riskPersistence = mock(RiskPersistence.class);
+    private final RiskProfileValidator riskProfileValidator = mock(RiskProfileValidator.class);
     private final MarketDataClient marketClient = mock(MarketDataClient.class);
     private final AccountBalanceValuationService balanceValuation = mock(AccountBalanceValuationService.class);
     private final TradeAnalyticsService analytics = mock(TradeAnalyticsService.class);
@@ -59,6 +69,10 @@ class DashboardQueryServiceTest {
                 accountService,
                 brokerAccounts,
                 brokerClient,
+                brokerSnapshotClient,
+                challengeInstances,
+                riskPersistence,
+                riskProfileValidator,
                 new BrokerDashboardMapper(),
                 positionQueryService,
                 balanceValuation,
@@ -73,7 +87,7 @@ class DashboardQueryServiceTest {
                 .thenReturn(new AccountValuationResult(new BigDecimal("1000"), "COMPLETE",
                         Instant.now(), "test-policy", null));
         when(analytics.getTodayPnL(account.getAccountId())).thenReturn(new BigDecimal("-10"));
-        when(riskEngine.evaluateDashboard(any(), any(), any(), any()))
+        when(riskEngine.evaluateDashboard(any(), any(), any(), any(), any()))
                 .thenReturn(new DashboardRiskEvaluation(RiskStatus.SAFE, List.of()));
     }
 
@@ -85,6 +99,7 @@ class DashboardQueryServiceTest {
 
         assertThat(result.openPositions()).isEmpty();
         assertThat(result.account().equity()).isEqualByComparingTo("1000");
+        assertThat(result.risk().remainingRiskPercentage()).isEqualByComparingTo("100");
         assertThat(result.freshness().status()).isEqualTo(DashboardDataStatus.LIVE);
         verify(marketClient, never()).findPriceSnapshots(any());
     }
@@ -187,6 +202,26 @@ class DashboardQueryServiceTest {
         verifyNoInteractions(brokerClient);
         verify(balanceValuation).value(eq("USD"), argThat(values ->
                 values.size() == 1 && values.get("USD").compareTo(new BigDecimal("1000")) == 0));
+    }
+
+    @Test
+    void usesAuthoritativeSnapshotForLinkedLiveAccounts() {
+        UUID brokerAccountId = UUID.randomUUID();
+        account.setBrokerAccountId(brokerAccountId);
+        Instant observedAt = Instant.now();
+        when(brokerSnapshotClient.getAccountSnapshot(brokerAccountId)).thenReturn(
+                new BrokerAccountSnapshotV2Dto(
+                        brokerAccountId, UUID.randomUUID(), "external-1",
+                        Map.of("USD", new BigDecimal("1000")), List.of(), observedAt,
+                        new BrokerAccountFactsV2Dto("USD", new BigDecimal("1000"),
+                                new BigDecimal("998"), new BigDecimal("100"), new BigDecimal("898")),
+                        List.of(), List.of(), "COMPLETE", "FRESH", observedAt, observedAt, List.of()));
+
+        DashboardSummary result = service.findDashboard(account.getAccountId(), "alice");
+
+        assertThat(result.account().equity()).isEqualByComparingTo("998");
+        assertThat(result.account().equitySource()).isEqualTo("BROKER");
+        verifyNoInteractions(brokerClient);
     }
 
     @Test

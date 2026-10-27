@@ -65,8 +65,9 @@ public class MarketDataWebSocketHandler
         Flux<?> stream = switch (streamType) {
 
             case TICKER ->
-                    tickerEventPublisher
-                            .streamBySymbol(symbol);
+                    extractOptionalMarketId(uri)
+                            .map(tickerEventPublisher::streamByMarketId)
+                            .orElseGet(() -> tickerEventPublisher.streamBySymbol(symbol));
 
 
             case OHLC -> {
@@ -251,6 +252,16 @@ public class MarketDataWebSocketHandler
             );
         }
         return values.get(0);
+    }
+
+    private java.util.Optional<UUID> extractOptionalMarketId(URI uri) {
+        String query = uri.getQuery();
+        if (query == null) return java.util.Optional.empty();
+        return Arrays.stream(query.split("&"))
+                .map(parameter -> parameter.split("=", 2))
+                .filter(parameter -> parameter.length == 2 && parameter[0].equals(MARKET_ID_PARAMETER))
+                .map(parameter -> UUID.fromString(URLDecoder.decode(parameter[1], StandardCharsets.UTF_8)))
+                .findFirst();
     }
 
     private int parseIntegerParameter(URI uri, String parameterName) {

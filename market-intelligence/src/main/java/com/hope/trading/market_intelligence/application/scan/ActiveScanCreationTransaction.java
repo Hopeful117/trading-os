@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.application.execution.AnalysisExecut
 import com.hope.trading.market_intelligence.application.port.ActiveScanRepository;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
+import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.scan.*;
@@ -62,7 +63,7 @@ public class ActiveScanCreationTransaction {
             return existing;
         }
 
-        Instant now = clock.instant();
+        Instant createdAt = clock.instant();
         ActiveScanScopeResolutionResult resolved = scopeResolution.resolve(
                 new ActiveScanScopeResolutionRequest(
                         command.accountId(),
@@ -76,14 +77,14 @@ public class ActiveScanCreationTransaction {
         ActiveScan scan = snapshot.effectiveMarketIds().isEmpty()
                 ? ActiveScan.completedNoWork(
                 scanId, command.actorId(), command.accountId(), resolved.objective(),
-                command.idempotencyKey(), fingerprint, snapshot, now
+                command.idempotencyKey(), fingerprint, snapshot, createdAt
         )
                 : ActiveScan.readyToDispatch(
                 scanId, command.actorId(), command.accountId(), resolved.objective(),
-                command.idempotencyKey(), fingerprint, snapshot, now
+                command.idempotencyKey(), fingerprint, snapshot, createdAt
         );
         scans.save(scan);
-        scans.saveMarkets(buildMarkets(scan, resolved, now));
+        scans.saveMarkets(buildMarkets(scan, resolved, resolved.assessmentCutoff()));
         registerAfterCommitIfNeeded(scan);
         return scan;
     }
@@ -120,7 +121,9 @@ public class ActiveScanCreationTransaction {
                             scan.objective(),
                             scan.accountId(),
                             scan.scanId(),
-                            scanMarketId
+                            scanMarketId,
+                            now,
+                            EvidenceAcquisitionPolicy.STRICT_OBSERVED
                     ),
                     childKeys.forMarket(scan.scanId(), decision.marketId()),
                     scan.scanId().toString(),

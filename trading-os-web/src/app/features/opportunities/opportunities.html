@@ -13,6 +13,7 @@
     (opportunitySelected)="openOpportunity($event)"
     [openingOpportunityId]="openingOpportunityId"
     [preparationErrors]="preparationErrors"
+    [readiness]="readiness$ | async"
     (scanCompleted)="refreshOpportunities()"
   />
 

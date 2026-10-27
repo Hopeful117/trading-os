@@ -16,6 +16,7 @@ import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
 import com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity;
+import com.hope.trading.market_intelligence.application.thesis.MarketThesisComposer;
 import com.hope.trading.market_intelligence.strategy.application.LiveStrategyEvaluationRunner;
 import com.hope.trading.market_intelligence.strategy.application.ShadowStrategyParityMonitor;
 import com.hope.trading.market_intelligence.strategy.application.StrategyDefinitionRepository;
@@ -47,7 +48,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -92,6 +95,7 @@ class ProductionIntelligencePipelineTest {
     private final com.hope.trading.market_intelligence.strategy.application.TrendContextEvidenceSelector
             trendContextEvidence = mock(com.hope.trading.market_intelligence.strategy.application.TrendContextEvidenceSelector.class);
     private final MarketThesisRepository theses = mock(MarketThesisRepository.class);
+    private final MarketThesisComposer thesisComposer = spy(new MarketThesisComposer(clock));
 
     private ProductionIntelligencePipeline pipeline;
 
@@ -103,7 +107,7 @@ class ProductionIntelligencePipelineTest {
         pipeline = new ProductionIntelligencePipeline(observations, opportunities,
                 marketData, runs, runClaims, clock, evaluationRunner, parity, matchPersister,
                 matchOpportunities, definitions, trendContextEvidence,
-                new com.hope.trading.market_intelligence.application.thesis.MarketThesisComposer(clock),
+                thesisComposer,
                 theses);
         when(runs.findByAnalysisExecutionIdAndPipelineVersion(
                 any(UUID.class), anyString())).thenReturn(Optional.empty());
@@ -202,6 +206,26 @@ class ProductionIntelligencePipelineTest {
     }
 
     @Test
+    void unexpectedPostObservationFailureFinalizesPipelineAsOpportunityFailure() {
+        JpaIntelligencePipelineRunEntity persistedRun = JpaIntelligencePipelineRunEntity.running(
+                analysisExecutionId, ProductionIntelligencePipeline.VERSION, clock.instant());
+        when(runs.findByAnalysisExecutionIdAndPipelineVersion(
+                analysisExecutionId, ProductionIntelligencePipeline.VERSION))
+                .thenReturn(Optional.empty(), Optional.of(persistedRun));
+        doThrow(new IllegalArgumentException("thesis composition failed"))
+                .when(thesisComposer).compose(any(UUID.class), any(UUID.class), any(Observation.class), any());
+
+        JpaIntelligencePipelineRunEntity run =
+                pipeline.process(analysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE);
+
+        assertThat(run).isSameAs(persistedRun);
+        assertThat(run.state()).isEqualTo("FAILED_OPPORTUNITY");
+        assertThat(run.failureCode()).isEqualTo("PIPELINE_OPPORTUNITY_FAILED");
+        assertThat(run.failureMessage()).contains("thesis composition failed");
+        assertThat(run.completedAt()).isEqualTo(clock.instant());
+    }
+
+    @Test
     void singleMatchCompletesRunWithThatOpportunityId() {
         StrategyDefinition definition = enabledStrategy("Only Strategy");
         when(definitions.findAll()).thenReturn(List.of(definition));
@@ -214,6 +238,28 @@ class ProductionIntelligencePipelineTest {
         assertThat(run.opportunityId()).isNotNull();
         verify(matchPersister).persist(any(), any(UUID.class), any(UUID.class));
         verify(opportunities).create(any());
+    }
+
+    @Test
+    void expiredEvidenceProducesNoSignalWithoutCreatingAnOpportunity() {
+        StrategyDefinition definition = enabledStrategy("Only Strategy");
+        when(definitions.findAll()).thenReturn(List.of(definition));
+        Observation expired = mock(Observation.class);
+        when(expired.id()).thenReturn(UUID.randomUUID());
+        when(expired.version()).thenReturn(1L);
+        when(expired.instrument()).thenReturn("BTC/EUR");
+        when(expired.validFrom()).thenReturn(clock.instant().minusSeconds(600));
+        when(expired.validUntil()).thenReturn(Optional.of(clock.instant().minusSeconds(1)));
+        when(expired.horizon()).thenReturn("15m");
+        when(observations.build(any(UUID.class), anyString(), any())).thenReturn(expired);
+
+        JpaIntelligencePipelineRunEntity run =
+                pipeline.process(analysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE);
+
+        assertThat(run.state()).isEqualTo("COMPLETED_NO_SIGNAL");
+        verify(evaluationRunner, never()).evaluate(any(), any(), any(), any());
+        verify(matchPersister, never()).persist(any(), any(UUID.class), any(UUID.class));
+        verify(opportunities, never()).create(any());
     }
 
     @Test

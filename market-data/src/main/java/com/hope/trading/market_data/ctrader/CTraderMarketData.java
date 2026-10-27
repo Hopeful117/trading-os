@@ -8,6 +8,7 @@ import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.helper.MarketStateBuilder;
 import com.hope.trading.market_data.helper.MarketAvailability;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import com.hope.trading.market_data.model.MarketConstraints;
 import com.hope.trading.market_data.model.MarketHistorySnapshot;
 import com.hope.trading.market_data.model.OhlcEvent;
@@ -74,12 +75,24 @@ public class CTraderMarketData implements MarketDataProvider {
         validate(market, interval, limit);
         long symbolId = Long.parseLong(market.getProviderSymbol());
         Instant to = clock.instant();
-        Instant from = to.minus(interval.getDuration().multipliedBy(limit + 1L));
-        CTraderOpenApiClient.CTraderSymbol symbol = client.symbol(symbolId);
+        // Leave room for the current and boundary bars; the normalized result
+        // still returns at most the requested number of closed candles.
+        Instant from = to.minus(interval.getDuration().multipliedBy(limit + 3L));
+        CTraderOpenApiClient.CTraderSymbol symbol = new CTraderOpenApiClient.CTraderSymbol(
+                symbolId,
+                market.getSymbol(),
+                market.getMarketConstraints().pricePrecision(),
+                0,
+                0,
+                0
+        );
         List<OhlcEvent> events = client.trendbars(symbolId, period(interval), from, to, limit).stream()
                 .map(bar -> toEvent(market, interval, symbol, bar, to)).sorted(Comparator.comparing(OhlcEvent::openTime))
                 .toList();
-        return new MarketHistorySnapshot(events, events.stream().filter(OhlcEvent::closed).toList());
+        return new MarketHistorySnapshot(
+                events,
+                events.stream().filter(OhlcEvent::closed).toList(),
+                MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK);
     }
 
     private Optional<Market> toMarket(CTraderOpenApiClient.CTraderSymbol symbol) {

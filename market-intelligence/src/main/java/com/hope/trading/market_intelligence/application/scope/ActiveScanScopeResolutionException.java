@@ -24,6 +24,10 @@ public final class ActiveScanScopeResolutionException extends RuntimeException {
         return new ActiveScanScopeResolutionException("INVALID_ACTIVE_SCAN_SCOPE", 400, message);
     }
 
+    public static ActiveScanScopeResolutionException challenge(String code, String message) {
+        return new ActiveScanScopeResolutionException(code, 422, message);
+    }
+
     public String code() {
         return code;
     }

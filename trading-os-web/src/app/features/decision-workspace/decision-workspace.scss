@@ -67,6 +67,7 @@ select {
   display: grid;
   grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.5fr);
   gap: 1.25rem;
+  min-width:0;
 }
 
 .market-context {
@@ -530,7 +531,6 @@ dd {
   }
 }
 
-/* Story 0136 workstation composition. */
 .workstation-layout {
   display: grid;
   grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
@@ -540,16 +540,23 @@ dd {
   display: grid;
   gap: 0.75rem;
 }
+.selector-rail > * {
+  width: 100%;
+  min-width: 0;
+}
 .selector-rail .context-grid {
   grid-template-columns: 1fr;
 }
 .active-workspace {
   min-width: 0;
 }
+.active-workspace > app-scan-panel {
+  display: block;
+}
 .market-context {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
-  grid-template-areas: 'quote quote' 'trend action' 'chart action' 'order order' 'constraints constraints';
+  grid-template-areas: 'quote quote' 'trend trend' 'chart chart' 'action action' 'order order' 'constraints constraints';
   gap: 0.75rem;
   margin-top: 0;
 }

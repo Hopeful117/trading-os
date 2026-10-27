@@ -94,13 +94,31 @@ public class MarketPriceSnapshotService {
                 .stream()
                 .collect(Collectors.toMap(Market::getMarketId, Function.identity()));
 
+        MarketStreamRequest tickerRequest = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        List<UUID> preSubscribedIds = requestedIds.stream()
+                .map(markets::get)
+                .filter(market -> market != null && market.getProvider() == MarketProvider.CTRADER)
+                .filter(market -> confirm || tickerEventPublisher.latestByMarketId(market.getMarketId())
+                        .map(ticker -> !isFresh(ticker, freshness)).orElse(true))
+                .map(Market::getMarketId)
+                .toList();
+        if (subscriptionService != null && !preSubscribedIds.isEmpty()) {
+            if (preSubscribedIds.size() == 1) {
+                subscriptionService.subscribe(preSubscribedIds.getFirst(), tickerRequest, boundedTimeout);
+            } else {
+                subscriptionService.subscribe(preSubscribedIds, tickerRequest, boundedTimeout);
+            }
+        }
+
         return requestedIds.stream()
-                .map(marketId -> toSnapshot(marketId, markets.get(marketId), freshness, boundedTimeout, confirm, structured))
+                .map(marketId -> toSnapshot(marketId, markets.get(marketId), freshness, boundedTimeout, confirm,
+                        structured, preSubscribedIds.contains(marketId)))
                 .toList();
     }
 
     private MarketPriceSnapshot toSnapshot(UUID marketId, Market market, Duration freshness,
-                                           Duration timeout, boolean confirm, boolean structured) {
+                                           Duration timeout, boolean confirm, boolean structured,
+                                           boolean preSubscribed) {
         if (market == null) {
             return new MarketPriceSnapshot(
                     marketId, null, null, null, null, false, null,
@@ -116,7 +134,7 @@ public class MarketPriceSnapshotService {
             return toSnapshot(marketId, market, tradable, ticker, MarketPriceSnapshotStatus.FRESH);
         }
 
-        Acquisition acquisition = acquireCurrentState(market, freshness, timeout, confirm, ticker);
+        Acquisition acquisition = acquireCurrentState(market, freshness, timeout, confirm, ticker, preSubscribed);
         Optional<TickerEvent> refreshed = acquisition.event();
         return resolveAcquiredSnapshot(marketId, market, tradable,
                 new SnapshotResolution(ticker, refreshed, structured, acquisition, freshness));
@@ -132,23 +150,25 @@ public class MarketPriceSnapshotService {
         boolean structured = resolution.structured();
         Acquisition acquisition = resolution.acquisition();
         Duration freshness = resolution.freshness();
+        boolean currentTradable = market.getMarketState() != null
+                && market.getMarketState().isTradable();
         if (refreshed.isPresent() && isFresh(refreshed.get(), freshness)) {
-            return toSnapshot(marketId, market, tradable, refreshed.get(), MarketPriceSnapshotStatus.FRESH);
+            return toSnapshot(marketId, market, currentTradable, refreshed.get(), MarketPriceSnapshotStatus.FRESH);
         }
         if (structured && acquisition.timedOut()) {
             return new MarketPriceSnapshot(
-                    marketId, market.getSymbol(), null, null, null, tradable, null,
+                    marketId, market.getSymbol(), null, null, null, currentTradable, null,
                     MarketPriceSnapshotStatus.TIMEOUT, null, null, clock.instant());
         }
         if (ticker != null && hasUsablePrice(ticker)) {
-            return toSnapshot(marketId, market, tradable, ticker, fallbackStatus(structured, acquisition));
+            return toSnapshot(marketId, market, currentTradable, ticker, fallbackStatus(structured, acquisition));
         }
         if (refreshed.isPresent() && hasUsablePrice(refreshed.get())) {
-            return toSnapshot(marketId, market, tradable, refreshed.get(), fallbackStatus(structured, acquisition));
+            return toSnapshot(marketId, market, currentTradable, refreshed.get(), fallbackStatus(structured, acquisition));
         }
         if (ticker == null || !hasUsablePrice(ticker)) {
             return new MarketPriceSnapshot(
-                    marketId, market.getSymbol(), null, null, null, tradable, null,
+                    marketId, market.getSymbol(), null, null, null, currentTradable, null,
                     structured && acquisition.timedOut()
                             ? MarketPriceSnapshotStatus.TIMEOUT
                             : MarketPriceSnapshotStatus.UNAVAILABLE,
@@ -196,7 +216,7 @@ public class MarketPriceSnapshotService {
     }
 
     private Acquisition acquireCurrentState(Market market, Duration freshness, Duration timeout,
-                                            boolean confirm, TickerEvent previous) {
+                                            boolean confirm, TickerEvent previous, boolean preSubscribed) {
         MarketDataProvider provider = providers.get(market.getProvider());
         if (provider == null) {
             log.warn("No MarketDataProvider registered for provider={}", market.getProvider());
@@ -224,7 +244,7 @@ public class MarketPriceSnapshotService {
                     Optional<TickerEvent> acquired = providerResult.event();
                     acquired.ifPresent(tickerEventPublisher::recordCurrentState);
                     Acquisition result = acquireAlternateIfNeeded(market, acquired, freshness,
-                            remaining(deadlineNanos), previous);
+                            remaining(deadlineNanos), previous, preSubscribed);
                     claim.complete(result);
                     return result;
                 } catch (RuntimeException exception) {
@@ -262,7 +282,7 @@ public class MarketPriceSnapshotService {
 
     private Acquisition acquireAlternateIfNeeded(Market market, Optional<TickerEvent> acquired,
                                                   Duration freshness, Duration timeout,
-                                                  TickerEvent previous) {
+                                                  TickerEvent previous, boolean preSubscribed) {
         if (timeout.isZero() || timeout.isNegative()) {
             return new Acquisition(acquired, true, acquired.isPresent());
         }
@@ -270,13 +290,15 @@ public class MarketPriceSnapshotService {
             return new Acquisition(acquired, false, true);
         }
         if (subscriptionService == null || market.getMarketState() == null
-                || !market.getMarketState().isTradable()) {
+                || (!market.getMarketState().isTradable() && market.getProvider() != MarketProvider.CTRADER)) {
             return new Acquisition(acquired, false, acquired.isPresent());
         }
         MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
         long deadlineNanos = System.nanoTime() + timeout.toNanos();
         try {
-            subscriptionService.subscribe(market.getMarketId(), request, remaining(deadlineNanos));
+            if (!preSubscribed) {
+                subscriptionService.subscribe(market.getMarketId(), request, remaining(deadlineNanos));
+            }
             Duration streamTimeout = remaining(deadlineNanos);
             if (streamTimeout.isZero() || streamTimeout.isNegative()) {
                 return new Acquisition(acquired, true, acquired.isPresent());

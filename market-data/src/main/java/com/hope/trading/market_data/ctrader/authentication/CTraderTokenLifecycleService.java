@@ -64,26 +64,30 @@ public class CTraderTokenLifecycleService {
             throw new CTraderAuthenticationRequiredException();
         }
         UUID id = token.record().id();
+        token.close();
         synchronized (refreshLocks.computeIfAbsent(id, ignored -> new Object())) {
-            try (token) {
-                CTraderTokenStore.StoredCTraderToken current = store.findActive()
-                        .orElseThrow(CTraderAuthenticationRequiredException::new);
-                if (!matchesConfiguration(current.record())) {
-                    current.close();
-                    throw new CTraderAuthenticationRequiredException();
-                }
-                if (current.record().usableAt(clock.instant())) {
-                    return current;
-                }
-                char[] refresh = current.material().copyRefreshToken();
-                try (current; CTraderTokenMaterial replacement = refreshClient.refresh(refresh)) {
-                    return store.rotate(current.record().id(), current.record().credentialVersion(), replacement);
-                } catch (CTraderTokenRefreshException exception) {
-                    if (exception.confirmedInvalid()) store.markInvalid(id);
-                    throw new CTraderAuthenticationRequiredException();
-                } finally {
-                    java.util.Arrays.fill(refresh, '\0');
-                }
+            CTraderTokenStore.StoredCTraderToken current = store.findActive()
+                    .orElseThrow(CTraderAuthenticationRequiredException::new);
+            if (!matchesConfiguration(current.record())) {
+                current.close();
+                throw new CTraderAuthenticationRequiredException();
+            }
+            if (current.record().usableAt(clock.instant())) return current;
+            char[] refresh = current.material().copyRefreshToken();
+            try (CTraderTokenMaterial replacement = refreshClient.refresh(refresh)) {
+                CTraderTokenStore.StoredCTraderToken rotated = store.rotate(
+                        current.record().id(), current.record().credentialVersion(), replacement);
+                current.close();
+                return rotated;
+            } catch (CTraderTokenRefreshException exception) {
+                current.close();
+                if (exception.confirmedInvalid()) store.markInvalid(id);
+                throw new CTraderAuthenticationRequiredException();
+            } catch (RuntimeException exception) {
+                current.close();
+                throw exception;
+            } finally {
+                java.util.Arrays.fill(refresh, '\0');
             }
         }
     }

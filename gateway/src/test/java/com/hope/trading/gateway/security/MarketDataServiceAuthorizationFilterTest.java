@@ -49,4 +49,22 @@ class MarketDataServiceAuthorizationFilterTest {
         assertThat(forwarded.get().getRequest().getHeaders().getFirst("X-Service-Authorization"))
                 .isNull();
     }
+
+    @Test
+    void delegatesCTraderAuthorizationStatusWithServiceCredential() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/ctrader/authorization/11111111-1111-1111-1111-111111111111")
+                        .build());
+        AtomicReference<ServerWebExchange> forwarded = new AtomicReference<>();
+        GatewayFilterChain chain = value -> {
+            forwarded.set(value);
+            value.getResponse().setStatusCode(HttpStatus.OK);
+            return value.getResponse().setComplete();
+        };
+
+        new MarketDataServiceAuthorizationFilter(SECRET, "/api/v1/markets/").filter(exchange, chain).block();
+
+        assertThat(forwarded.get().getRequest().getHeaders().getFirst("X-Service-Authorization"))
+                .startsWith("Bearer ");
+    }
 }

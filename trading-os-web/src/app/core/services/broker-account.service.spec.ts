@@ -144,6 +144,55 @@ describe('BrokerAccountService', () => {
     });
   });
 
+  it('starts and completes the cTrader authorization workflow', () => {
+    service.createCTrader('FTMO cTrader').subscribe((account) => {
+      service.startCTraderAuthorization(account.id).subscribe((authorization) => {
+        service.getCTraderAuthorization(account.id, authorization.attemptId).subscribe();
+        service.bindCTraderAccount(account.id, authorization.attemptId, '49289512').subscribe();
+      });
+    });
+
+    const create = http.expectOne('/api/v1/broker-accounts');
+    expect(create.request.body).toEqual({
+      provider: '3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012',
+      displayName: 'FTMO cTrader',
+      executionMode: 'LIVE',
+    });
+    create.flush({ id: 'ctrader-account-1' });
+
+    const start = http.expectOne('/api/v1/broker-accounts/ctrader-account-1/ctrader/authorization');
+    expect(start.request.method).toBe('POST');
+    start.flush({
+      attemptId: 'attempt-1',
+      authorizationUrl: 'https://id.ctrader.com/authorize',
+      status: 'INITIATED',
+      discoveredAccountIds: [],
+      selectedExternalAccountId: null,
+      expiresAt: '2026-10-27T10:00:00Z',
+      safeMessage: 'Authorization initiated',
+    });
+
+    const status = http.expectOne(
+      '/api/v1/broker-accounts/ctrader-account-1/ctrader/authorization/attempt-1',
+    );
+    expect(status.request.method).toBe('GET');
+    status.flush({});
+
+    const binding = http.expectOne(
+      '/api/v1/broker-accounts/ctrader-account-1/ctrader/authorization/attempt-1/binding',
+    );
+    expect(binding.request.body).toEqual({ externalAccountId: '49289512' });
+    binding.flush({});
+  });
+
+  it('starts the separate Market Data cTrader authorization', () => {
+    service.startCTraderMarketDataAuthorization().subscribe();
+
+    const request = http.expectOne('/api/v1/ctrader/authorization');
+    expect(request.request.method).toBe('GET');
+    request.flush({ authorizationUrl: 'https://id.ctrader.com/authorize', redirectUri: 'callback', scope: 'accounts' });
+  });
+
   it('disconnect terminates the broker connection', () => {
     service.disconnect('acc-1').subscribe();
 
