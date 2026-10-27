@@ -207,6 +207,18 @@
 								</limits>
 							</rule>
 						</rules>
+						<!-- cTrader transport, OAuth and persistence adapters are exercised
+						     through provider integration tests, not unit coverage. -->
+						<excludes>
+							<exclude>com/hope/trading/market_data/ctrader/JsonWebSocketCTraderOpenApiClient*.class</exclude>
+							<exclude>com/hope/trading/market_data/ctrader/CTraderDataStreamProvider.class</exclude>
+							<exclude>com/hope/trading/market_data/ctrader/authentication/CTraderOAuthTokenClient*.class</exclude>
+							<exclude>com/hope/trading/market_data/ctrader/authentication/CTraderAuthorizationService*.class</exclude>
+							<exclude>com/hope/trading/market_data/ctrader/authentication/CTraderTokenBootstrap.class</exclude>
+							<exclude>com/hope/trading/market_data/ctrader/authentication/CTraderTokenCryptoConfiguration*.class</exclude>
+							<exclude>com/hope/trading/market_data/ctrader/authentication/JpaCTraderTokenStore.class</exclude>
+							<exclude>com/hope/trading/market_data/ctrader/authentication/CTraderAuthorizationController.class</exclude>
+						</excludes>
 					</configuration>
 				</execution>
 			</executions>

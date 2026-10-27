@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.challenge.application;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.challenge.domain.ChallengeStatus;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.repository.AccountRepository;
@@ -69,9 +70,9 @@ public class ActiveChallengeMonitoringService {
                         continue;
                     }
                     var broker = brokerAccounts.findById(account.getBrokerAccountId()).orElse(null);
-                    if (broker == null) {
+                    if (broker == null || broker.executionMode() != ExecutionMode.PAPER) {
                         skipped++;
-                        log.info("active_challenge_monitoring_skipped challengeId={} reason=BROKER_ACCOUNT_UNAVAILABLE",
+                        log.info("active_challenge_monitoring_skipped challengeId={} reason=NOT_PAPER",
                                 challenge.id());
                         continue;
                     }

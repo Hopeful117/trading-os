@@ -133,7 +133,9 @@ export class ScanPanel {
             this.marketById = new Map(sortedMarkets.map((market) => [market.marketId, market]));
             const selectableIds = new Set(
               sortedMarkets
-                .filter((market) => market.marketState.tradable && this.canSelectMarket(market.marketId))
+                .filter(
+                  (market) => market.marketState.tradable && this.canSelectMarket(market.marketId),
+                )
                 .map((market) => market.marketId),
             );
             this.selectedMarketIds = this.selectedMarketIds.filter((marketId) =>

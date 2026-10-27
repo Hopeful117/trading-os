@@ -7,7 +7,7 @@ describe('market price utilities', () => {
   });
 
   it('preserves a one-tick forex spread', () => {
-    const spread = calculateMarketSpread(1.08500, 1.08501, 5);
+    const spread = calculateMarketSpread(1.085, 1.08501, 5);
 
     expect(formatMarketPrice(spread, 5)).toBe('0.00001');
   });

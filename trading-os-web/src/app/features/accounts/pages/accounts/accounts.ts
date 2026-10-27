@@ -161,10 +161,12 @@ export class Accounts {
     this.provisioningFeedback.set(null);
     this.brokerAccountService
       .bindCTraderAccount(accountId, authorization.attemptId, externalAccountId)
-      .pipe(switchMap((bound) => {
-        this.cTraderAuthorization.set(bound);
-        return this.brokerAccountService.provisionTradingAccount(accountId);
-      }))
+      .pipe(
+        switchMap((bound) => {
+          this.cTraderAuthorization.set(bound);
+          return this.brokerAccountService.provisionTradingAccount(accountId);
+        }),
+      )
       .subscribe({
         next: () => {
           this.provisioningAccountId.set(null);
@@ -191,13 +193,18 @@ export class Accounts {
     this.brokerAccountService.startCTraderMarketDataAuthorization().subscribe({
       next: (start) => {
         this.cTraderMarketDataUrl.set(start.authorizationUrl);
-        window.open(start.authorizationUrl, 'ctrader-market-data-oauth', 'popup,width=720,height=800');
+        window.open(
+          start.authorizationUrl,
+          'ctrader-market-data-oauth',
+          'popup,width=720,height=800',
+        );
         this.pollCTraderMarketDataAuthorization(start.attemptId);
       },
-      error: () => this.connectionFeedback.set({
-        kind: 'error',
-        message: 'L’autorisation Market Data cTrader n’a pas pu être démarrée.',
-      }),
+      error: () =>
+        this.connectionFeedback.set({
+          kind: 'error',
+          message: 'L’autorisation Market Data cTrader n’a pas pu être démarrée.',
+        }),
     });
   }
 
@@ -213,16 +220,18 @@ export class Accounts {
           if (current.status !== 'INITIATED') {
             this.connectionFeedback.set({
               kind: current.status === 'COMPLETED' ? 'success' : 'error',
-              message: current.status === 'COMPLETED'
-                ? 'L’autorisation Market Data cTrader est terminée.'
-                : 'L’autorisation Market Data cTrader a échoué ou a expiré.',
+              message:
+                current.status === 'COMPLETED'
+                  ? 'L’autorisation Market Data cTrader est terminée.'
+                  : 'L’autorisation Market Data cTrader a échoué ou a expiré.',
             });
           }
         },
-        error: () => this.connectionFeedback.set({
-          kind: 'error',
-          message: 'L’état de l’autorisation Market Data cTrader n’a pas pu être récupéré.',
-        }),
+        error: () =>
+          this.connectionFeedback.set({
+            kind: 'error',
+            message: 'L’état de l’autorisation Market Data cTrader n’a pas pu être récupéré.',
+          }),
       });
   }
 
@@ -355,8 +364,8 @@ export class Accounts {
     return (
       this.connecting() ||
       this.revokingAccountId() !== null ||
-      this.disconnectingAccountId() !== null
-      || this.provisioningAccountId() !== null
+      this.disconnectingAccountId() !== null ||
+      this.provisioningAccountId() !== null
     );
   }
 
@@ -441,10 +450,12 @@ export class Accounts {
     this.connectionFeedback.set(null);
     this.brokerAccountService
       .createCTrader(displayName.trim())
-      .pipe(switchMap((account) => {
-        this.cTraderFlowAccountId.set(account.id);
-        return this.brokerAccountService.startCTraderAuthorization(account.id);
-      }))
+      .pipe(
+        switchMap((account) => {
+          this.cTraderFlowAccountId.set(account.id);
+          return this.brokerAccountService.startCTraderAuthorization(account.id);
+        }),
+      )
       .subscribe({
         next: (authorization) => {
           this.connecting.set(false);
@@ -516,8 +527,9 @@ export class Accounts {
     this.cTraderPoll?.unsubscribe();
     this.cTraderPoll = timer(1500, 1500)
       .pipe(
-        switchMap(() => this.brokerAccountService.getCTraderAuthorization(
-          accountId, authorization.attemptId)),
+        switchMap(() =>
+          this.brokerAccountService.getCTraderAuthorization(accountId, authorization.attemptId),
+        ),
         takeWhile((current) => current.status === 'INITIATED', true),
       )
       .subscribe({
@@ -530,10 +542,11 @@ export class Accounts {
             });
           }
         },
-        error: () => this.connectionFeedback.set({
-          kind: 'error',
-          message: 'L’état de l’autorisation cTrader n’a pas pu être récupéré.',
-        }),
+        error: () =>
+          this.connectionFeedback.set({
+            kind: 'error',
+            message: 'L’état de l’autorisation cTrader n’a pas pu être récupéré.',
+          }),
       });
   }
 

@@ -111,7 +111,9 @@ export class BrokerAccountService {
     );
   }
 
-  getCTraderMarketDataAuthorization(attemptId: string): Observable<CTraderMarketDataAuthorizationState> {
+  getCTraderMarketDataAuthorization(
+    attemptId: string,
+  ): Observable<CTraderMarketDataAuthorizationState> {
     return this.http.get<CTraderMarketDataAuthorizationState>(
       `${environment.gatewayUrl}v1/ctrader/authorization/${attemptId}`,
     );

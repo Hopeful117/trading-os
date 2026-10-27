@@ -766,7 +766,9 @@ export class PlanPage implements OnDestroy {
             market,
             candles,
             ticker$: this.marketService.subscribe(market.marketId, this.tickerRequest).pipe(
-              switchMap(() => this.marketDataStreamService.streamTicker(market.symbol, market.marketId)),
+              switchMap(() =>
+                this.marketDataStreamService.streamTicker(market.symbol, market.marketId),
+              ),
               shareReplay({ bufferSize: 1, refCount: true }),
             ),
           })),

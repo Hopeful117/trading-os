@@ -353,7 +353,7 @@ export class DecisionWorkspace {
         ? of<StreamView<OrderBookSnapshot>>({ status: 'waiting' })
         : market.provider === 'CTRADER'
           ? of<StreamView<OrderBookSnapshot>>({ status: 'error' })
-        : this.orderBookStream(market, depth),
+          : this.orderBookStream(market, depth),
     ),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
@@ -364,7 +364,7 @@ export class DecisionWorkspace {
         ? of<StreamView<RecentTradesSnapshot>>({ status: 'waiting' })
         : market.provider === 'CTRADER'
           ? of<StreamView<RecentTradesSnapshot>>({ status: 'error' })
-        : this.recentTradesStream(market),
+          : this.recentTradesStream(market),
     ),
     shareReplay({ bufferSize: 1, refCount: true }),
   );

@@ -30,9 +30,9 @@
           [value]="ticker.data.last"
           [detail]="ticker.data.occurredAt | date: 'mediumTime'"
         />
-         <app-metric-value label="Bid" [value]="formatPrice(ticker.data.bid)" />
-         <app-metric-value label="Ask" [value]="formatPrice(ticker.data.ask)" />
-         <app-metric-value label="Spread" [value]="spread(ticker.data.bid, ticker.data.ask)" />
+        <app-metric-value label="Bid" [value]="formatPrice(ticker.data.bid)" />
+        <app-metric-value label="Ask" [value]="formatPrice(ticker.data.ask)" />
+        <app-metric-value label="Spread" [value]="spread(ticker.data.bid, ticker.data.ask)" />
         @if (ticker.data.volume !== null) {
           <app-metric-value label="Volume" [value]="ticker.data.volume" />
         }

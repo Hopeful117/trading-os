@@ -4,9 +4,14 @@ export interface MarketPricePrecisionSource {
   } | null;
 }
 
-export function marketPricePrecision(market: MarketPricePrecisionSource | null | undefined): number {
+export function marketPricePrecision(
+  market: MarketPricePrecisionSource | null | undefined,
+): number {
   const precision = market?.marketConstraints?.pricePrecision;
-  return typeof precision === 'number' && Number.isInteger(precision) && precision >= 0 && precision <= 18
+  return typeof precision === 'number' &&
+    Number.isInteger(precision) &&
+    precision >= 0 &&
+    precision <= 18
     ? precision
     : 8;
 }

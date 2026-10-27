@@ -36,12 +36,7 @@ export interface CredentialValidation {
 }
 
 export type CTraderAuthorizationStatus =
-  | 'INITIATED'
-  | 'ACCOUNT_SELECTION_REQUIRED'
-  | 'BOUND'
-  | 'FAILED'
-  | 'EXPIRED'
-  | 'REVOKED';
+  'INITIATED' | 'ACCOUNT_SELECTION_REQUIRED' | 'BOUND' | 'FAILED' | 'EXPIRED' | 'REVOKED';
 
 export interface CTraderAuthorization {
   attemptId: string;

@@ -224,13 +224,19 @@
             class="secondary-button"
             data-testid="recover-broker-account-button"
             [disabled]="lifecycleBusy()"
-            (click)="isCTraderAccount(brokerAccount)
-              ? connectExistingCTrader(brokerAccount)
-              : startRecovery(brokerAccount)"
+            (click)="
+              isCTraderAccount(brokerAccount)
+                ? connectExistingCTrader(brokerAccount)
+                : startRecovery(brokerAccount)
+            "
           >
-            {{ isCTraderAccount(brokerAccount)
-              ? 'Autoriser cTrader'
-              : brokerAccount.connectionStatus === 'CONNECTED' ? 'Mettre à jour' : 'Connecter' }}
+            {{
+              isCTraderAccount(brokerAccount)
+                ? 'Autoriser cTrader'
+                : brokerAccount.connectionStatus === 'CONNECTED'
+                  ? 'Mettre à jour'
+                  : 'Connecter'
+            }}
           </button>
         }
         @if (brokerAccount.connectionStatus === 'CONNECTED') {
@@ -242,7 +248,11 @@
               [disabled]="lifecycleBusy()"
               (click)="provisionTradingAccount(brokerAccount, state.accounts)"
             >
-              {{ provisioningAccountId() === brokerAccount.id ? 'Création…' : 'Créer le compte Trading Core' }}
+              {{
+                provisioningAccountId() === brokerAccount.id
+                  ? 'Création…'
+                  : 'Créer le compte Trading Core'
+              }}
             </button>
           }
           <button

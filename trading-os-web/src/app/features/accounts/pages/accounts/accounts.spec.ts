@@ -21,10 +21,10 @@ describe('Accounts', () => {
     connectExisting: ReturnType<typeof vi.fn>;
     createCTrader: ReturnType<typeof vi.fn>;
     startCTraderAuthorization: ReturnType<typeof vi.fn>;
-     getCTraderAuthorization: ReturnType<typeof vi.fn>;
-     bindCTraderAccount: ReturnType<typeof vi.fn>;
-     startCTraderMarketDataAuthorization: ReturnType<typeof vi.fn>;
-     getCTraderMarketDataAuthorization: ReturnType<typeof vi.fn>;
+    getCTraderAuthorization: ReturnType<typeof vi.fn>;
+    bindCTraderAccount: ReturnType<typeof vi.fn>;
+    startCTraderMarketDataAuthorization: ReturnType<typeof vi.fn>;
+    getCTraderMarketDataAuthorization: ReturnType<typeof vi.fn>;
     provisionTradingAccount: ReturnType<typeof vi.fn>;
     disconnect: ReturnType<typeof vi.fn>;
     revoke: ReturnType<typeof vi.fn>;
@@ -44,21 +44,25 @@ describe('Accounts', () => {
       createAndConnect: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
       connectExisting: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
       createCTrader: vi.fn(() => of({ id: 'ctrader-account-1', provider: 'CTRADER' })),
-      startCTraderAuthorization: vi.fn(() => of({
-        attemptId: 'attempt-1',
-        authorizationUrl: 'https://id.ctrader.com/authorize',
-        status: 'ACCOUNT_SELECTION_REQUIRED',
-        discoveredAccountIds: ['49289512'],
-        selectedExternalAccountId: null,
-        expiresAt: '2026-10-27T10:00:00Z',
-        safeMessage: 'Select an account',
-      })),
+      startCTraderAuthorization: vi.fn(() =>
+        of({
+          attemptId: 'attempt-1',
+          authorizationUrl: 'https://id.ctrader.com/authorize',
+          status: 'ACCOUNT_SELECTION_REQUIRED',
+          discoveredAccountIds: ['49289512'],
+          selectedExternalAccountId: null,
+          expiresAt: '2026-10-27T10:00:00Z',
+          safeMessage: 'Select an account',
+        }),
+      ),
       getCTraderAuthorization: vi.fn(),
       bindCTraderAccount: vi.fn(() => of({ status: 'BOUND' })),
-      startCTraderMarketDataAuthorization: vi.fn(() => of({
-        attemptId: 'market-data-attempt-1',
-        authorizationUrl: 'https://id.ctrader.com/authorize',
-      })),
+      startCTraderMarketDataAuthorization: vi.fn(() =>
+        of({
+          attemptId: 'market-data-attempt-1',
+          authorizationUrl: 'https://id.ctrader.com/authorize',
+        }),
+      ),
       getCTraderMarketDataAuthorization: vi.fn(),
       provisionTradingAccount: vi.fn(() => of({ accountId: 'trading-account-1' })),
       disconnect: vi.fn(() => of(brokerAccount('account-1', 'DISCONNECTED'))),
@@ -169,7 +173,9 @@ describe('Accounts', () => {
     await fixture.whenStable();
 
     expect(brokerAccountService.createCTrader).toHaveBeenCalledWith('FTMO cTrader');
-    expect(brokerAccountService.startCTraderAuthorization).toHaveBeenCalledWith('ctrader-account-1');
+    expect(brokerAccountService.startCTraderAuthorization).toHaveBeenCalledWith(
+      'ctrader-account-1',
+    );
     expect(window.open).toHaveBeenCalledWith(
       'https://id.ctrader.com/authorize',
       'ctrader-oauth',
@@ -190,8 +196,9 @@ describe('Accounts', () => {
     });
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="ctrader-account-option"]'))
-      .not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="ctrader-account-option"]'),
+    ).not.toBeNull();
   });
 
   it('shows visible error feedback and clears sensitive fields when connection fails', async () => {

@@ -219,6 +219,11 @@
 						<!-- Transport callbacks and passive DTO/value carriers are
 						     exercised through integration boundaries, not unit coverage. -->
 						<excludes>
+							<!-- cTrader transport and HTTP adapters are exercised through
+							     provider integration tests, not unit coverage. -->
+							<exclude>com/hope/trading/broker_service/ctrader/authentication/JsonWebSocketCTraderOpenApiClient*.class</exclude>
+							<exclude>com/hope/trading/broker_service/ctrader/authentication/HttpCTraderTokenClient*.class</exclude>
+							<exclude>com/hope/trading/broker_service/ctrader/authentication/CTraderAuthenticationController.class</exclude>
 							<exclude>com/hope/trading/broker_service/ctrader/authentication/JsonWebSocketCTraderOpenApiClient$Session.class</exclude>
 							<exclude>com/hope/trading/broker_service/ctrader/authentication/JsonWebSocketCTraderOpenApiClient$Listener.class</exclude>
 							<exclude>com/hope/trading/broker_service/broker/infrastructure/provider/kraken/client/KrakenRestClientImpl.class</exclude>

@@ -190,7 +190,11 @@ describe('BrokerAccountService', () => {
 
     const request = http.expectOne('/api/v1/ctrader/authorization');
     expect(request.request.method).toBe('GET');
-    request.flush({ authorizationUrl: 'https://id.ctrader.com/authorize', redirectUri: 'callback', scope: 'accounts' });
+    request.flush({
+      authorizationUrl: 'https://id.ctrader.com/authorize',
+      redirectUri: 'callback',
+      scope: 'accounts',
+    });
   });
 
   it('disconnect terminates the broker connection', () => {

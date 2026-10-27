@@ -260,16 +260,37 @@
             <div class="section-heading">
               <div>
                 <span class="eyebrow">Challenge context</span>
-                <h2>{{ readiness.challengeActive ? 'Active Challenge' : 'No active Challenge' }}</h2>
+                <h2>
+                  {{ readiness.challengeActive ? 'Active Challenge' : 'No active Challenge' }}
+                </h2>
               </div>
               <span class="count-badge">{{ readiness.status }}</span>
             </div>
             <div class="detail-grid cockpit-metrics">
-              <article class="detail-card cockpit-metric"><span class="card-label">Phase</span><strong>{{ readiness.phase ?? 'N/A' }}</strong></article>
-              <article class="detail-card cockpit-metric"><span class="card-label">Challenge identity</span><strong>{{ readiness.challengeId ?? 'N/A' }}</strong><small>Definition {{ readiness.challengeDefinitionVersion ?? 'N/A' }}</small></article>
-              <article class="detail-card cockpit-metric"><span class="card-label">Size</span><strong>{{ readiness.challengeStartingCapital ?? 'N/A' }} {{ readiness.challengeCurrency ?? '' }}</strong></article>
-              <article class="detail-card cockpit-metric"><span class="card-label">Provider / universe</span><strong>{{ readiness.requiredMarketProvider ?? 'Account default' }}</strong><small>{{ view.context.eligibleMarketIds.length }} eligible markets</small></article>
-              <article class="detail-card cockpit-metric"><span class="card-label">Readiness</span><strong>{{ readiness.status }}</strong><small>{{ readiness.message ?? 'Context is ready for scanning.' }}</small></article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Phase</span><strong>{{ readiness.phase ?? 'N/A' }}</strong>
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Challenge identity</span
+                ><strong>{{ readiness.challengeId ?? 'N/A' }}</strong
+                ><small>Definition {{ readiness.challengeDefinitionVersion ?? 'N/A' }}</small>
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Size</span
+                ><strong
+                  >{{ readiness.challengeStartingCapital ?? 'N/A' }}
+                  {{ readiness.challengeCurrency ?? '' }}</strong
+                >
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Provider / universe</span
+                ><strong>{{ readiness.requiredMarketProvider ?? 'Account default' }}</strong
+                ><small>{{ view.context.eligibleMarketIds.length }} eligible markets</small>
+              </article>
+              <article class="detail-card cockpit-metric">
+                <span class="card-label">Readiness</span><strong>{{ readiness.status }}</strong
+                ><small>{{ readiness.message ?? 'Context is ready for scanning.' }}</small>
+              </article>
             </div>
           </section>
         }
@@ -355,7 +376,6 @@
                 }
               </article>
             </section>
-
           </aside>
 
           <section class="active-workspace" aria-label="Active market investigation">

@@ -1,7 +1,17 @@
 import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { BehaviorSubject, catchError, map, Observable, of, shareReplay, startWith, Subject, switchMap } from 'rxjs';
+import {
+  BehaviorSubject,
+  catchError,
+  map,
+  Observable,
+  of,
+  shareReplay,
+  startWith,
+  Subject,
+  switchMap,
+} from 'rxjs';
 
 import { MarketResponse, marketProductTypeLabel } from '../../core/models/market-response';
 import { ChallengeReadiness } from '../../core/models/decision-context.model';
