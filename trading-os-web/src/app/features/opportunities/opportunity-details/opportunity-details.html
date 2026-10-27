@@ -198,20 +198,20 @@
               @if (view.accountId; as accountId) {
                 @if (canPrepare(view.opportunity)) {
                   <button
-                  type="button"
-                  class="btn-create-plan"
-                  (click)="
-                    prepareTradePlan(
-                      view.opportunity.id,
-                      view.opportunity.version,
-                      accountId,
-                      view.opportunity.marketId ?? null
-                    )
-                  "
-                  [disabled]="preparing"
-                  data-testid="create-trade-plan-button"
+                    type="button"
+                    class="btn-create-plan"
+                    (click)="
+                      prepareTradePlan(
+                        view.opportunity.id,
+                        view.opportunity.version,
+                        accountId,
+                        view.opportunity.marketId ?? null
+                      )
+                    "
+                    [disabled]="preparing"
+                    data-testid="create-trade-plan-button"
                   >
-                  {{ preparing ? 'Creating Trade Plan...' : 'Create Trade Plan' }}
+                    {{ preparing ? 'Creating Trade Plan...' : 'Create Trade Plan' }}
                   </button>
                 } @else {
                   <p class="state-message" data-testid="preparation-blocked">

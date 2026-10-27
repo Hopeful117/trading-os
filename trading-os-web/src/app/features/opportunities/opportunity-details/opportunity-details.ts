@@ -143,9 +143,11 @@ export class OpportunityDetail {
   }
 
   canPrepare(opportunity: OpportunityResponse): boolean {
-    return opportunity.status === 'ACTIVE'
-      && opportunity.thesis?.state === 'CANDIDATE'
-      && opportunity.marketThesis !== null
-      && opportunity.marketThesis !== undefined;
+    return (
+      opportunity.status === 'ACTIVE' &&
+      opportunity.thesis?.state === 'CANDIDATE' &&
+      opportunity.marketThesis !== null &&
+      opportunity.marketThesis !== undefined
+    );
   }
 }

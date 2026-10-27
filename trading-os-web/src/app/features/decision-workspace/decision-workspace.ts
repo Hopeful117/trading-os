@@ -706,8 +706,12 @@ export class DecisionWorkspace {
       return;
     }
     const thesis = this.opportunity.thesis;
-    if (thesis === null || thesis === undefined || this.opportunity.marketThesis === null
-      || this.opportunity.marketThesis === undefined) {
+    if (
+      thesis === null ||
+      thesis === undefined ||
+      this.opportunity.marketThesis === null ||
+      this.opportunity.marketThesis === undefined
+    ) {
       this.opportunityNoTradeError = true;
       return;
     }
@@ -762,11 +766,13 @@ export class DecisionWorkspace {
   }
 
   canPrepareOpportunity(): boolean {
-    return this.opportunity?.status === 'ACTIVE'
-      && this.opportunityValidity() === 'VALID'
-      && this.opportunity.thesis?.state === 'CANDIDATE'
-      && this.opportunity.marketThesis !== null
-      && this.opportunity.marketThesis !== undefined;
+    return (
+      this.opportunity?.status === 'ACTIVE' &&
+      this.opportunityValidity() === 'VALID' &&
+      this.opportunity.thesis?.state === 'CANDIDATE' &&
+      this.opportunity.marketThesis !== null &&
+      this.opportunity.marketThesis !== undefined
+    );
   }
 
   private cancelOpportunityPreparation(): void {

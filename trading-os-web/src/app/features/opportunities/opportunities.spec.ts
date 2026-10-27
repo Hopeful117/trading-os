@@ -202,21 +202,27 @@ describe('Opportunities', () => {
       component.accountSelected('a1');
       component.openOpportunity(mockOpportunities[0]);
 
-      expect(routerMock.navigate).toHaveBeenCalledWith(
-        ['/decision-workspace'],
-        { queryParams: { opportunityId: 'o1', opportunityVersion: 2,
-          marketId: 'market-1', accountId: 'a1' } },
-      );
+      expect(routerMock.navigate).toHaveBeenCalledWith(['/decision-workspace'], {
+        queryParams: {
+          opportunityId: 'o1',
+          opportunityVersion: 2,
+          marketId: 'market-1',
+          accountId: 'a1',
+        },
+      });
     });
 
     it('uses the opportunity account when opening the gated workspace', () => {
       component.openOpportunity({ ...mockOpportunities[0], accountId: 'a1' });
 
-      expect(routerMock.navigate).toHaveBeenCalledWith(
-        ['/decision-workspace'],
-        { queryParams: { opportunityId: 'o1', opportunityVersion: 2,
-          marketId: 'market-1', accountId: 'a1' } },
-      );
+      expect(routerMock.navigate).toHaveBeenCalledWith(['/decision-workspace'], {
+        queryParams: {
+          opportunityId: 'o1',
+          opportunityVersion: 2,
+          marketId: 'market-1',
+          accountId: 'a1',
+        },
+      });
     });
   });
 

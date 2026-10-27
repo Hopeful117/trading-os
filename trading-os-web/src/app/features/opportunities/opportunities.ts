@@ -7,9 +7,7 @@ import { MarketResponse, marketProductTypeLabel } from '../../core/models/market
 import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { MarketService } from '../../core/services/market.service';
 import { OpportunityService } from '../../core/services/opportunity.service';
-import {
-  TradePreparationFailure,
-} from '../../core/utils/trade-flow-error';
+import { TradePreparationFailure } from '../../core/utils/trade-flow-error';
 import { ScanPanel } from './scan-panel/scan-panel';
 
 export type OpportunitiesView =
@@ -61,8 +59,8 @@ export class Opportunities {
   openOpportunity(opportunity: OpportunityResponse): void {
     const accountId = this.selectedAccountId || opportunity.accountId || '';
     if (!accountId) {
-        void this.router.navigate(['/opportunities', opportunity.id]);
-        return;
+      void this.router.navigate(['/opportunities', opportunity.id]);
+      return;
     }
     void this.router.navigate(['/decision-workspace'], {
       queryParams: {
