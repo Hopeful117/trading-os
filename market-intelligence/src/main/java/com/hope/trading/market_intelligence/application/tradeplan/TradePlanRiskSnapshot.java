@@ -39,7 +39,8 @@ public record TradePlanRiskSnapshot(
     public record Rationale(
             Set<Opportunity> opportunities, Set<UUID> observationIds,
             Set<UUID> aiAnalysisIds, String thesis, Set<String> confirmationConditions,
-            Set<String> invalidationConditions
+            Set<String> invalidationConditions,
+            Set<com.hope.trading.market_intelligence.domain.opportunity.MarketThesisReference> marketTheses
     ) { }
 
     public record Opportunity(UUID id, long version, UUID strategyMatchId,

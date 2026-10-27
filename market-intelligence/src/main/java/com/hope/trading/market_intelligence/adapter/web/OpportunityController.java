@@ -1,7 +1,9 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
+import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,9 +18,17 @@ import java.util.*;
 @RequestMapping("/api/v1/opportunities")
 public final class OpportunityController {
     private final TradingOpportunityRepository repository;
+    private final MarketThesisRepository theses;
+
+    @Autowired
+    public OpportunityController(TradingOpportunityRepository repository,
+                                 MarketThesisRepository theses) {
+        this.repository = repository;
+        this.theses = theses;
+    }
 
     public OpportunityController(TradingOpportunityRepository repository) {
-        this.repository = repository;
+        this(repository, null);
     }
 
     @GetMapping
@@ -51,7 +61,7 @@ public final class OpportunityController {
         int from = Math.min(page * size, filtered.size());
         int to = Math.min(from + size, filtered.size());
         List<OpportunityResponse> items = filtered.subList(from, to).stream()
-                .map(OpportunityResponse::from).toList();
+                .map(value -> response(value, false)).toList();
         return ResponseEntity.ok(new OpportunityPageResponse(
                 items, page, size, filtered.size()));
     }
@@ -59,22 +69,35 @@ public final class OpportunityController {
     @GetMapping("/{id}")
     public ResponseEntity<OpportunityResponse> latest(@PathVariable UUID id) {
         return repository.findLatest(new OpportunityId(id))
-                .map(OpportunityResponse::from).map(ResponseEntity::ok)
+                .map(value -> response(value, true)).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/active")
     public ResponseEntity<List<OpportunityResponse>> active() {
         return ResponseEntity.ok(repository.findActive().stream()
-                .map(OpportunityResponse::from).toList());
+                .map(value -> response(value, false)).toList());
     }
 
     @GetMapping("/history/{id}")
     public ResponseEntity<List<OpportunityResponse>> history(@PathVariable UUID id) {
         List<OpportunityResponse> history = repository.findHistory(
-                new OpportunityId(id)).stream().map(OpportunityResponse::from).toList();
+                new OpportunityId(id)).stream().map(value -> response(value, false)).toList();
         return history.isEmpty() ? ResponseEntity.notFound().build()
                 : ResponseEntity.ok(history);
+    }
+
+    private OpportunityResponse response(TradingOpportunity value) {
+        return response(value, true);
+    }
+
+    private OpportunityResponse response(TradingOpportunity value, boolean includeThesis) {
+        MarketThesisResponse thesis = !includeThesis || theses == null ? null : value.marketThesis()
+                .flatMap(reference -> theses.findByIdAndVersion(
+                        reference.thesisId(), reference.thesisVersion()))
+                .map(MarketThesisResponse::from)
+                .orElse(null);
+        return OpportunityResponse.from(value, thesis);
     }
 
     private Comparator<TradingOpportunity> comparator(String sort) {

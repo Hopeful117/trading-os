@@ -28,11 +28,12 @@ public class OpportunityTradePlanController {
             Authentication authentication) {
         UserDto user = authenticated(authentication);
         var response = orchestration.createFromOpportunity(
-                user.getUserId(), opportunityId, request.accountId(), idempotencyKey);
+                user.getUserId(), opportunityId, request.opportunityVersion(),
+                request.accountId(), idempotencyKey);
         return ResponseEntity.ok(new Response(response.tradePlanId(), response.tradePlanVersion()));
     }
 
-    public record Request(@NotNull UUID accountId) { }
+    public record Request(@NotNull UUID accountId, @NotNull Long opportunityVersion) { }
     public record Response(UUID tradePlanId, long tradePlanVersion) { }
 
     static UserDto authenticated(Authentication authentication) {

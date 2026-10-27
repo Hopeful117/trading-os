@@ -6,6 +6,7 @@ import com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapsh
 import com.hope.trading.market_intelligence.application.port.TradePlanningContextRepository;
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
 import com.hope.trading.market_intelligence.application.port.TradePlanRepository;
+import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanApplicationService;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanningResult;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanningRequest;
@@ -20,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class OpportunityTradePlanGenerationService {
     private final TradingOpportunityRepository opportunities;
+    private final MarketThesisRepository theses;
     private final TradePlanningContextRepository contexts;
     private final MarketDataClient marketData;
     private final TradePlanApplicationService tradePlans;
@@ -42,13 +45,16 @@ public class OpportunityTradePlanGenerationService {
     private final Duration maximumPriceAge;
     private final PlanningPriceSelector priceSelector = new PlanningPriceSelector();
 
+    @Autowired
     public OpportunityTradePlanGenerationService(
             TradingOpportunityRepository opportunities,
+            MarketThesisRepository theses,
             TradePlanningContextRepository contexts,
             MarketDataClient marketData,
             TradePlanApplicationService tradePlans, TradePlanRepository plans, Clock clock,
             @Value("${intelligence.planning.price-max-age:30s}") Duration maximumPriceAge) {
         this.opportunities = opportunities;
+        this.theses = theses;
         this.contexts = contexts;
         this.marketData = marketData;
         this.tradePlans = tradePlans;
@@ -57,21 +63,79 @@ public class OpportunityTradePlanGenerationService {
         this.maximumPriceAge = maximumPriceAge;
     }
 
-    @Transactional
+    public OpportunityTradePlanGenerationService(
+            TradingOpportunityRepository opportunities,
+            TradePlanningContextRepository contexts,
+            MarketDataClient marketData,
+            TradePlanApplicationService tradePlans, TradePlanRepository plans, Clock clock,
+            Duration maximumPriceAge) {
+        this(opportunities, null, contexts, marketData, tradePlans, plans, clock, maximumPriceAge);
+    }
+
     public GenerationResponse generate(
             UUID opportunityId, UUID actorId, UUID accountId, TradePlanningContext context) {
+        var opportunity = opportunities.findLatest(new OpportunityId(opportunityId))
+                .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY, "OPPORTUNITY_NOT_ELIGIBLE"));
+        return generate(opportunityId, actorId, opportunity.version().value(), accountId, context);
+    }
+
+    @Transactional
+    public GenerationResponse generate(
+            UUID opportunityId, UUID actorId, long opportunityVersion,
+            UUID accountId, TradePlanningContext context) {
         if (!context.ownerId().equals(actorId)
                 || !context.tradingAccountId().equals(accountId)) {
             throw failure(HttpStatus.FORBIDDEN, "PLANNING_CONTEXT_FORBIDDEN");
         }
-        var opportunity = opportunities.findLatest(new OpportunityId(opportunityId))
+        var opportunity = opportunities.find(new OpportunityId(opportunityId),
+                        new com.hope.trading.market_intelligence.domain.opportunity.OpportunityVersion(
+                                opportunityVersion))
                 .filter(item -> item.status() == OpportunityStatus.ACTIVE)
                 .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY, "OPPORTUNITY_NOT_ELIGIBLE"));
+        if (theses != null) {
+            var thesisReference = opportunity.marketThesis()
+                    .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "MARKET_THESIS_LINEAGE_UNAVAILABLE"));
+            var thesis = theses.findByIdAndVersion(thesisReference.thesisId(), thesisReference.thesisVersion())
+                    .orElseThrow(() -> failure(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "MARKET_THESIS_UNAVAILABLE"));
+            if (thesis.validUntil().map(value -> !value.isAfter(clock.instant())).orElse(false)) {
+                throw failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_THESIS_EXPIRED");
+            }
+            if (thesis.validFrom().isAfter(clock.instant())) {
+                throw failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_THESIS_NOT_YET_VALID");
+            }
+            if (thesis.sourceCutoff().isAfter(clock.instant())
+                    || thesis.evaluatedAt().isAfter(clock.instant())) {
+                throw failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_THESIS_FRESHNESS_INVALID");
+            }
+            if (!thesis.marketId().equals(opportunity.marketId().orElse(null))
+                    || !thesis.instrument().equalsIgnoreCase(opportunity.instrument())) {
+                throw failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_THESIS_OPPORTUNITY_MISMATCH");
+            }
+            thesis.scenario().ifPresent(scenario -> {
+                boolean compatible = scenario.direction() == com.hope.trading.market_intelligence.domain.thesis.MarketThesisScenario.Direction.NONE
+                        || (scenario.direction() == com.hope.trading.market_intelligence.domain.thesis.MarketThesisScenario.Direction.LONG
+                        && opportunity.direction() == com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection.LONG)
+                        || (scenario.direction() == com.hope.trading.market_intelligence.domain.thesis.MarketThesisScenario.Direction.SHORT
+                        && opportunity.direction() == com.hope.trading.market_intelligence.domain.opportunity.OpportunityDirection.SHORT);
+                if (!compatible) {
+                    throw failure(HttpStatus.UNPROCESSABLE_ENTITY, "MARKET_THESIS_OPPORTUNITY_MISMATCH");
+                }
+            });
+            if (thesis.state() != com.hope.trading.market_intelligence.domain.thesis.MarketThesisState.CANDIDATE) {
+                throw failure(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "MARKET_THESIS_PREPARATION_BLOCKED_" + thesis.state().name());
+            }
+        }
         UUID opportunityAccountId = opportunity.accountId().orElse(null);
         if (opportunityAccountId == null || !opportunityAccountId.equals(accountId)) {
             throw failure(HttpStatus.FORBIDDEN, "OPPORTUNITY_ACCOUNT_MISMATCH");
         }
         var existing = plans.findLatestForOpportunity(new OpportunityId(opportunityId)).stream()
+                .filter(plan -> plan.rationale().opportunities().stream()
+                        .anyMatch(reference -> reference.id().value().equals(opportunityId)
+                                && reference.version().value() == opportunityVersion))
                 .filter(plan -> plan.authorId().map(actorId::equals).orElse(false))
                 .filter(plan -> contexts.find(plan.planningContext().id(), plan.planningContext().version())
                         .map(saved -> saved.tradingAccountId().equals(accountId)).orElse(false))

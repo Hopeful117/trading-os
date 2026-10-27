@@ -167,6 +167,7 @@ export class DecisionWorkspace {
   opportunityDecision: OpportunityDecision = null;
   opportunityPreparing = false;
   opportunityPreparationError = false;
+  opportunityNoTradeError = false;
   opportunityError = false;
   private opportunityRequestKey: string | null = null;
   opportunityRequestInFlight = false;
@@ -664,11 +665,13 @@ export class DecisionWorkspace {
     this.opportunityDecision = null;
     this.opportunityPreparing = true;
     this.opportunityPreparationError = false;
+    this.opportunityNoTradeError = false;
     const preparationKey = `${this.opportunity.id}:${this.selectedAccountId}:${this.selectedMarketId}`;
     this.opportunityPreparationKey = preparationKey;
     this.tradePlanService
       .createFromOpportunity(
         this.opportunity.id,
+        this.opportunity.version,
         this.selectedAccountId,
         `${this.opportunity.id}:${this.selectedAccountId}`,
       )
@@ -699,11 +702,34 @@ export class DecisionWorkspace {
   }
 
   chooseNoTrade(): void {
-    if (this.opportunity === null) {
+    if (this.opportunity === null || this.selectedAccountId === null) {
       return;
     }
-
-    this.opportunityDecision = 'NO_TRADE';
+    const thesis = this.opportunity.thesis;
+    if (
+      thesis === null ||
+      thesis === undefined ||
+      this.opportunity.marketThesis === null ||
+      this.opportunity.marketThesis === undefined
+    ) {
+      this.opportunityNoTradeError = true;
+      return;
+    }
+    this.opportunityNoTradeError = false;
+    this.tradePlanService
+      .recordNoTrade(
+        this.selectedAccountId,
+        this.opportunity.id,
+        this.opportunity.version,
+        this.opportunity.marketThesis.thesisId,
+        this.opportunity.marketThesis.thesisVersion,
+        `no-trade:${this.opportunity.id}:${this.opportunity.version}:${this.selectedAccountId}`,
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => (this.opportunityDecision = 'NO_TRADE'),
+        error: () => (this.opportunityNoTradeError = true),
+      });
   }
 
   opportunityValidity(): OpportunityValidity {
@@ -740,7 +766,13 @@ export class DecisionWorkspace {
   }
 
   canPrepareOpportunity(): boolean {
-    return this.opportunity?.status === 'ACTIVE' && this.opportunityValidity() === 'VALID';
+    return (
+      this.opportunity?.status === 'ACTIVE' &&
+      this.opportunityValidity() === 'VALID' &&
+      this.opportunity.thesis?.state === 'CANDIDATE' &&
+      this.opportunity.marketThesis !== null &&
+      this.opportunity.marketThesis !== undefined
+    );
   }
 
   private cancelOpportunityPreparation(): void {
@@ -748,6 +780,7 @@ export class DecisionWorkspace {
     this.opportunityPreparationKey = null;
     this.opportunityPreparing = false;
     this.opportunityPreparationError = false;
+    this.opportunityNoTradeError = false;
   }
 
   closeManualTrade(): void {

@@ -240,9 +240,9 @@ public class TradePlanRiskHandoffService {
                                 .collect(Collectors.toUnmodifiableSet()),
                         plan.rationale().aiAnalyses().stream()
                                 .map(AiAnalysisReference::analysisId)
-                                .collect(Collectors.toUnmodifiableSet()),
-                        plan.rationale().thesis(), plan.rationale().confirmationConditions(),
-                        plan.rationale().invalidationConditions()));
+                         .collect(Collectors.toUnmodifiableSet()),
+                         plan.rationale().thesis(), plan.rationale().confirmationConditions(),
+                         plan.rationale().invalidationConditions(), plan.rationale().marketTheses()));
     }
 
     private TradePlanRiskSnapshot.Opportunity opportunity(UUID id, long version) {

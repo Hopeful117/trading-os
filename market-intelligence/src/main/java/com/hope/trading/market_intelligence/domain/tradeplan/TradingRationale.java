@@ -9,8 +9,20 @@ public record TradingRationale(
         Set<AiAnalysisReference> aiAnalyses,
         String thesis,
         Set<String> confirmationConditions,
-        Set<String> invalidationConditions
+        Set<String> invalidationConditions,
+        Set<com.hope.trading.market_intelligence.domain.opportunity.MarketThesisReference> marketTheses
 ) {
+    public TradingRationale(
+            Set<OpportunityPlanReference> opportunities,
+            Set<ObservationReference> observations,
+            Set<AiAnalysisReference> aiAnalyses,
+            String thesis,
+            Set<String> confirmationConditions,
+            Set<String> invalidationConditions) {
+        this(opportunities, observations, aiAnalyses, thesis, confirmationConditions,
+                invalidationConditions, Set.of());
+    }
+
     public TradingRationale {
         opportunities = Set.copyOf(opportunities);
         observations = Set.copyOf(observations);
@@ -19,6 +31,7 @@ public record TradingRationale(
         if (thesis.isEmpty()) throw new IllegalArgumentException("thesis is required");
         confirmationConditions = Set.copyOf(confirmationConditions);
         invalidationConditions = Set.copyOf(invalidationConditions);
+        marketTheses = Set.copyOf(marketTheses);
         if (confirmationConditions.isEmpty() || invalidationConditions.isEmpty()) {
             throw new IllegalArgumentException("Confirmation and invalidation rules are required");
         }

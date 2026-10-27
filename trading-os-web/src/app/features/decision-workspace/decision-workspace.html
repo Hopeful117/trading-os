@@ -893,6 +893,143 @@
                               </span>
                             </div>
 
+                            @if (activeOpportunity.thesis; as thesis) {
+                              <section
+                                class="market-section thesis-gate"
+                                data-testid="market-thesis"
+                              >
+                                <div class="section-heading">
+                                  <div>
+                                    <span class="eyebrow">Market Thesis</span>
+                                    <h3>{{ thesis.state }}</h3>
+                                  </div>
+                                  <span class="stream-badge">v{{ thesis.version }}</span>
+                                </div>
+                                @if (thesis.scenario; as scenario) {
+                                  <p>
+                                    <strong>{{ scenario.direction }}</strong> ·
+                                    {{ scenario.statement }}
+                                  </p>
+                                }
+                                <div class="detail-grid thesis-gate-grid">
+                                  <article class="detail-card">
+                                    <span class="eyebrow">Confirmation</span>
+                                    @if (thesis.scenario?.confirmationConditions?.length) {
+                                      <ul>
+                                        @for (
+                                          condition of thesis.scenario?.confirmationConditions;
+                                          track condition.code
+                                        ) {
+                                          <li>
+                                            <strong>{{ condition.code }}</strong> ·
+                                            {{ condition.status }} · {{ condition.explanation }}
+                                          </li>
+                                        }
+                                      </ul>
+                                    } @else {
+                                      <span>Unavailable</span>
+                                    }
+                                  </article>
+                                  <article class="detail-card">
+                                    <span class="eyebrow">Invalidation</span>
+                                    @if (thesis.scenario?.invalidationConditions?.length) {
+                                      <ul>
+                                        @for (
+                                          condition of thesis.scenario?.invalidationConditions;
+                                          track condition.code
+                                        ) {
+                                          <li>
+                                            <strong>{{ condition.code }}</strong> ·
+                                            {{ condition.explanation }}
+                                          </li>
+                                        }
+                                      </ul>
+                                    } @else {
+                                      <span>Unavailable</span>
+                                    }
+                                  </article>
+                                  <article class="detail-card">
+                                    <span class="eyebrow">Objective / obstacles</span>
+                                    @for (
+                                      level of thesis.scenario?.relevantLevels ?? [];
+                                      track level.reference + level.role
+                                    ) {
+                                      <span
+                                        ><strong>{{ level.role }}</strong> · {{ level.reference }} ·
+                                        {{ level.value }} · {{ level.timeframe }}</span
+                                      >
+                                    } @empty {
+                                      <span>Unavailable</span>
+                                    }
+                                  </article>
+                                </div>
+                                <div class="thesis-evidence-grid">
+                                  <article class="detail-card">
+                                    <span class="eyebrow">Supporting evidence</span>
+                                    @for (
+                                      evidence of thesis.supportingEvidence;
+                                      track evidence.evidenceId
+                                    ) {
+                                      <span
+                                        ><strong>{{ evidence.source }}</strong> ·
+                                        {{ evidence.reference }} · {{ evidence.explanation }}</span
+                                      >
+                                    } @empty {
+                                      <span>None available</span>
+                                    }
+                                  </article>
+                                  <article class="detail-card thesis-contradictions">
+                                    <span class="eyebrow">Contradictions</span>
+                                    @for (
+                                      evidence of thesis.contradictingEvidence;
+                                      track evidence.evidenceId
+                                    ) {
+                                      <span
+                                        ><strong>{{ evidence.severity ?? 'UNKNOWN' }}</strong> ·
+                                        {{ evidence.source }} · {{ evidence.explanation }}</span
+                                      >
+                                    } @empty {
+                                      <span>None recorded</span>
+                                    }
+                                  </article>
+                                  <article class="detail-card thesis-missing">
+                                    <span class="eyebrow">Missing evidence</span>
+                                    @for (
+                                      evidence of thesis.missingEvidence;
+                                      track evidence.evidenceId
+                                    ) {
+                                      <span
+                                        ><strong>{{ evidence.availability }}</strong> ·
+                                        {{ evidence.source }} · {{ evidence.explanation }}</span
+                                      >
+                                    } @empty {
+                                      <span>None recorded</span>
+                                    }
+                                  </article>
+                                </div>
+                                <div class="trend-context-meta">
+                                  <span>Evaluated {{ thesis.evaluatedAt | date: 'medium' }}</span>
+                                  <span>Cut-off {{ thesis.sourceCutoff | date: 'medium' }}</span>
+                                  <span
+                                    >Valid until
+                                    {{
+                                      thesis.validUntil
+                                        ? (thesis.validUntil | date: 'medium')
+                                        : 'Unavailable'
+                                    }}</span
+                                  >
+                                  <span>Fingerprint {{ thesis.inputFingerprint }}</span>
+                                </div>
+                              </section>
+                            } @else {
+                              <p
+                                class="section-placeholder"
+                                data-testid="market-thesis-unavailable"
+                              >
+                                Exact Market Thesis is unavailable. Trade preparation is blocked.
+                              </p>
+                            }
+
                             <div class="detail-grid opportunity-stages">
                               <article class="detail-card opportunity-stage">
                                 <span class="eyebrow">Understand</span>
@@ -1065,6 +1202,14 @@
                                   >
                                     Trade Plan preparation is currently unavailable. Review the
                                     evidence and try again later.
+                                  </p>
+                                }
+                                @if (opportunityNoTradeError) {
+                                  <p
+                                    class="state-message error"
+                                    data-testid="opportunity-no-trade-error"
+                                  >
+                                    NO TRADE could not be recorded. The decision was not assumed.
                                   </p>
                                 }
 

@@ -20,9 +20,10 @@ final class TradingOpportunityMapper {
                         .collect(Collectors.toUnmodifiableSet()),
                 value.evaluatedAt(), value.validFrom(), value.validUntil().orElse(null),
                   value.createdAt(), value.strategyMatchId().orElse(null),
-                  value.setup().orElse(null), value.marketId().orElse(null),
-                  value.accountId().orElse(null), value.sourceScanId().orElse(null),
-                  value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null));
+                   value.setup().orElse(null), value.marketId().orElse(null),
+                   value.accountId().orElse(null), value.sourceScanId().orElse(null),
+                   value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null),
+                   value.marketThesis().orElse(null));
     }
 
     TradingOpportunity toDomain(TradingOpportunityEntity value) {
@@ -41,6 +42,6 @@ final class TradingOpportunityMapper {
                         value.evaluatedAt(), value.validFrom(), value.validUntil(), value.createdAt(),
                          value.strategyMatchId(), value.setupSnapshot(), value.marketId(),
                          value.accountId(), value.sourceScanId(), value.sourceScanMarketId(),
-                         value.analysisExecutionId()));
+                         value.analysisExecutionId(), value.marketThesis()));
     }
 }

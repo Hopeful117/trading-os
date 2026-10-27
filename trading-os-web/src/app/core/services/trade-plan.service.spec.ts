@@ -20,12 +20,12 @@ describe('TradePlanService', () => {
   afterEach(() => http.verify());
 
   it('creates from opportunity with idempotency key', () => {
-    service.createFromOpportunity('opp-1', 'acc-1', 'key-1').subscribe();
+    service.createFromOpportunity('opp-1', 1, 'acc-1', 'key-1').subscribe();
     const req = http.expectOne(
       `${environment.gatewayUrl}v1/trade-plans/opportunities/opp-1/trade-plans`,
     );
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ accountId: 'acc-1' });
+    expect(req.request.body).toEqual({ accountId: 'acc-1', opportunityVersion: 1 });
     expect(req.request.headers.get('Idempotency-Key')).toBe('key-1');
     req.flush({ tradePlanId: 'tp-1', tradePlanVersion: 1 });
   });

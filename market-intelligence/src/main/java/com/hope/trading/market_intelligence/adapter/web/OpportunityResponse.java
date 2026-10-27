@@ -11,10 +11,15 @@ public record OpportunityResponse(
         String scenario, String timeframe, String type, String origin, BigDecimal score,
         String explanation, Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-         UUID strategyMatchId, UUID marketId, UUID accountId, UUID sourceScanId,
-         UUID sourceScanMarketId, UUID analysisExecutionId, OpportunitySetupResponse setup
+          UUID strategyMatchId, UUID marketId, UUID accountId, UUID sourceScanId,
+          UUID sourceScanMarketId, UUID analysisExecutionId, MarketThesisReference marketThesis,
+          OpportunitySetupResponse setup, MarketThesisResponse thesis
 ) {
     static OpportunityResponse from(TradingOpportunity value) {
+        return from(value, null);
+    }
+
+    static OpportunityResponse from(TradingOpportunity value, MarketThesisResponse thesis) {
         return new OpportunityResponse(
                 value.id().value(), value.version().value(), value.status().name(),
                 value.instrument(), value.direction().name(), value.scenario(),
@@ -26,8 +31,9 @@ public record OpportunityResponse(
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
                 value.evaluatedAt(), value.validFrom(), value.validUntil().orElse(null),
                   value.createdAt(), value.strategyMatchId().orElse(null), value.marketId().orElse(null),
-                  value.accountId().orElse(null), value.sourceScanId().orElse(null),
-                  value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null),
-                  OpportunitySetupResponse.from(value.setup().orElse(null)).orElse(null));
+                   value.accountId().orElse(null), value.sourceScanId().orElse(null),
+                   value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null),
+                   value.marketThesis().orElse(null),
+                   OpportunitySetupResponse.from(value.setup().orElse(null)).orElse(null), thesis);
     }
 }

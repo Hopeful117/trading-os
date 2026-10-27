@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunitySetupSnapshot;
+import com.hope.trading.market_intelligence.domain.opportunity.MarketThesisReference;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -12,8 +13,9 @@ record TradingOpportunityEntity(
         String scenario, String timeframe, String type, String origin, BigDecimal score,
         String explanation, Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-        UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId,
-        UUID accountId, UUID sourceScanId, UUID sourceScanMarketId, UUID analysisExecutionId
+         UUID strategyMatchId, OpportunitySetupSnapshot setupSnapshot, UUID marketId,
+         UUID accountId, UUID sourceScanId, UUID sourceScanMarketId, UUID analysisExecutionId,
+         MarketThesisReference marketThesis
 ) {
     TradingOpportunityEntity {
         observationIds = Set.copyOf(observationIds);

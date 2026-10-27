@@ -18,12 +18,29 @@ export class TradePlanService {
 
   createFromOpportunity(
     opportunityId: string,
+    opportunityVersion: number,
     accountId: string,
     idempotencyKey: string,
   ): Observable<CreateTradePlanResponse> {
     return this.http.post<CreateTradePlanResponse>(
       `${environment.gatewayUrl}v1/trade-plans/opportunities/${opportunityId}/trade-plans`,
-      { accountId },
+      { accountId, opportunityVersion },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    );
+  }
+
+  recordNoTrade(
+    accountId: string,
+    opportunityId: string,
+    opportunityVersion: number,
+    thesisId: string,
+    thesisVersion: number,
+    idempotencyKey: string,
+    rationale?: string,
+  ): Observable<{ id: string; decision: 'NO_TRADE' }> {
+    return this.http.post<{ id: string; decision: 'NO_TRADE' }>(
+      `${environment.gatewayUrl}v1/accounts/${accountId}/opportunity-decisions`,
+      { opportunityId, opportunityVersion, thesisId, thesisVersion, rationale },
       { headers: { 'Idempotency-Key': idempotencyKey } },
     );
   }

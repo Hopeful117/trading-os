@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -63,7 +64,8 @@ public final class MarketThesisComposer {
         TradeabilityCapabilityContent tradeability = tradeabilityContent(observation);
         Instant evaluatedAt = observation.createdAt() == null
                 ? observation.validFrom() : observation.createdAt();
-        Instant sourceCutoff = authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff;
+        Instant sourceCutoff = (authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff)
+                .truncatedTo(ChronoUnit.MICROS);
         boolean tradeabilityCompatible = tradeabilityCompatible(tradeability, marketId,
                 observation.instrument(), sourceCutoff);
         boolean assessmentCompatible = assessment == null
@@ -192,7 +194,7 @@ public final class MarketThesisComposer {
             var value = assessment.timeframes().get(role);
             if (value == null) {
                 addMissing(target, "TREND_CONTEXT", role.name(),
-                        MarketThesisAvailability.UNAVAILABLE, assessment.assessmentAt(),
+                        MarketThesisAvailability.UNAVAILABLE, assessment.assessmentAt(), cutoff,
                         "Trend timeframe evidence is unavailable", definition.required());
                 return;
             }
@@ -247,7 +249,7 @@ public final class MarketThesisComposer {
                 || momentum.direction() == MomentumAssessment.Direction.NEUTRAL
                 || momentum.direction() == MomentumAssessment.Direction.UNKNOWN) {
             addMissing(target, "MOMENTUM", "MOMENTUM_NEUTRAL",
-                    MarketThesisAvailability.AVAILABLE, momentum.cutoff(),
+                    MarketThesisAvailability.AVAILABLE, momentum.cutoff(), cutoff,
                     "Momentum does not provide directional confirmation", true);
             return;
         }
@@ -356,10 +358,18 @@ public final class MarketThesisComposer {
             List<MarketThesisEvidence> target, String source, String reference,
             MarketThesisAvailability availability, Instant observedAt, String explanation,
             boolean required) {
+        addMissing(target, source, reference, availability, observedAt, observedAt,
+                explanation, required);
+    }
+
+    private static void addMissing(
+            List<MarketThesisEvidence> target, String source, String reference,
+            MarketThesisAvailability availability, Instant observedAt, Instant sourceCutoff,
+            String explanation, boolean required) {
         target.add(new MarketThesisEvidence(
                 deterministicId("missing", source, reference), MarketThesisEvidenceRole.MISSING,
                 availability, null, source, reference, null, explanation, observedAt, null,
-                null, null, null, VERSION, observedAt, required));
+                null, null, null, VERSION, sourceCutoff, required));
     }
 
     private static MarketThesisScenario scenario(

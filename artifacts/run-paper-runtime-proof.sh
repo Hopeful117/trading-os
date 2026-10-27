@@ -5,9 +5,12 @@ set -euo pipefail
 BASE_URL="${BASE_URL:-http://localhost:17080}"
 OUTPUT_FILE="${1:-artifacts/paper-runtime-proof.json}"
 EXECUTE_PAPER="${EXECUTE_PAPER:-false}"
+PAPER_OUTCOME="${PAPER_OUTCOME:-TRADE_PLAN}"
 REFRESH_MARKETS="${REFRESH_MARKETS:-false}"
 STRICT_PAPER_ENTRY="${STRICT_PAPER_ENTRY:-false}"
 ALLOW_PAPER_SHORT="${ALLOW_PAPER_SHORT:-false}"
+SCAN_MAX_ATTEMPTS="${SCAN_MAX_ATTEMPTS:-180}"
+REQUESTED_MARKET_IDS="${REQUESTED_MARKET_IDS:-}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -88,10 +91,18 @@ require_status account_detail '^2[0-9][0-9]$'
 ACCOUNT_BALANCE="$(jq -r '.balances.balances.USD // empty' "$TMP_DIR/account_detail.body")"
 ACCOUNT_CURRENCY="$(jq -r '.baseCurrency // empty' "$TMP_DIR/account_detail.body")"
 
+REQUESTED_MARKET_IDS_JSON="null"
+if [[ -n "$REQUESTED_MARKET_IDS" ]]; then
+    REQUESTED_MARKET_IDS_JSON="$(jq -cn --arg value "$REQUESTED_MARKET_IDS" '$value | split(",") | map(select(length > 0))')"
+fi
+SCOPE_MODE="ALL_ELIGIBLE"
+if [[ -n "$REQUESTED_MARKET_IDS" ]]; then
+    SCOPE_MODE="SELECTED"
+fi
 request scope -X POST "$BASE_URL/api/v1/intelligence/scans/scope" \
     -H "Authorization: Bearer $TOKEN" \
     -H 'Content-Type: application/json' \
-    --data "{\"accountId\":\"$ACCOUNT_ID\",\"objective\":\"runtime PAPER risk proof\",\"requestedMarketIds\":null,\"scopeMode\":\"ALL_ELIGIBLE\"}"
+    --data "{\"accountId\":\"$ACCOUNT_ID\",\"objective\":\"runtime PAPER risk proof\",\"requestedMarketIds\":$REQUESTED_MARKET_IDS_JSON,\"scopeMode\":\"$SCOPE_MODE\"}"
 require_status scope '^2[0-9][0-9]$'
 
 SCAN_KEY="runtime-scan-$USERNAME"
@@ -99,12 +110,12 @@ request scan -X POST "$BASE_URL/api/v1/intelligence/scans" \
     -H "Authorization: Bearer $TOKEN" \
     -H 'Content-Type: application/json' \
     -H "Idempotency-Key: $SCAN_KEY" \
-    --data "{\"accountId\":\"$ACCOUNT_ID\",\"objective\":\"runtime PAPER risk proof\",\"requestedMarketIds\":null,\"scopeMode\":\"ALL_ELIGIBLE\"}"
+    --data "{\"accountId\":\"$ACCOUNT_ID\",\"objective\":\"runtime PAPER risk proof\",\"requestedMarketIds\":$REQUESTED_MARKET_IDS_JSON,\"scopeMode\":\"$SCOPE_MODE\"}"
 require_status scan '^2[0-9][0-9]$'
 SCAN_ID="$(jq -r '.scanId' "$TMP_DIR/scan.body")"
 [[ -n "$SCAN_ID" && "$SCAN_ID" != "null" ]] || { printf 'Scan creation returned no ID\n' >&2; exit 1; }
 
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 "$SCAN_MAX_ATTEMPTS"); do
     request scan_state -X GET "$BASE_URL/api/v1/intelligence/scans/$SCAN_ID" \
         -H "Authorization: Bearer $TOKEN"
     SCAN_STATE="$(jq -r '.status // .state // .phase // empty' "$TMP_DIR/scan_state.body")"
@@ -114,7 +125,8 @@ for attempt in $(seq 1 30); do
     sleep 2
 done
 if [[ "$SCAN_STATE" != "COMPLETED" && "$SCAN_STATE" != "SUCCEEDED" ]]; then
-    printf 'Scan did not complete successfully: %s\n' "$(body_of scan_state)" >&2
+    printf 'Scan did not complete successfully after %s attempts: state=%s\n' \
+        "$SCAN_MAX_ATTEMPTS" "$SCAN_STATE" >&2
     exit 1
 fi
 
@@ -122,11 +134,11 @@ request opportunities -X GET "$BASE_URL/api/v1/opportunities/active" \
     -H "Authorization: Bearer $TOKEN"
 require_status opportunities '^2[0-9][0-9]$'
 if [[ "$STRICT_PAPER_ENTRY" == "true" ]]; then
-    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
+    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" --arg accountId "$ACCOUNT_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.accountId == $accountId) and (.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
 elif [[ "$ALLOW_PAPER_SHORT" == "true" ]]; then
-    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.direction // .tradeDirection // "") == "SHORT" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
+    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" --arg accountId "$ACCOUNT_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.accountId == $accountId) and (.direction // .tradeDirection // "") == "SHORT" and ((.instrument // "") | endswith("/USD"))))[0].id // empty' "$TMP_DIR/opportunities.body")"
 else
-    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD")))) | .[0].id // .[0].opportunityId // empty' "$TMP_DIR/opportunities.body")"
+    OPPORTUNITY_ID="$(jq -r --arg scanId "$SCAN_ID" --arg accountId "$ACCOUNT_ID" 'map(select((.sourceScanId == null or .sourceScanId == $scanId) and (.accountId == $accountId) and (.direction // .tradeDirection // "") == "LONG" and ((.instrument // "") | endswith("/USD")))) | .[0].id // .[0].opportunityId // empty' "$TMP_DIR/opportunities.body")"
 fi
 if [[ -z "$OPPORTUNITY_ID" || "$OPPORTUNITY_ID" == "null" ]]; then
     printf 'No compatible PAPER opportunity was produced by scan %s. Candidates: %s\n' "$SCAN_ID" \
@@ -134,6 +146,54 @@ if [[ -z "$OPPORTUNITY_ID" || "$OPPORTUNITY_ID" == "null" ]]; then
     exit 1
 fi
 OPPORTUNITY_JSON="$(jq -c --arg id "$OPPORTUNITY_ID" 'map(select(.id == $id or .opportunityId == $id))[0]' "$TMP_DIR/opportunities.body")"
+OPPORTUNITY_VERSION="$(jq -r '.version // .opportunityVersion // empty' <<< "$OPPORTUNITY_JSON")"
+if [[ -z "$OPPORTUNITY_VERSION" || "$OPPORTUNITY_VERSION" == "null" ]]; then
+    printf 'Selected opportunity did not return a version: %s\n' "$OPPORTUNITY_JSON" >&2
+    exit 1
+fi
+if [[ "$PAPER_OUTCOME" == "NO_TRADE" ]]; then
+    request opportunity_detail -X GET "$BASE_URL/api/v1/opportunities/$OPPORTUNITY_ID" \
+        -H "Authorization: Bearer $TOKEN"
+    require_status opportunity_detail '^2[0-9][0-9]$'
+    THESIS_ID="$(jq -r '.marketThesis.thesisId // .thesis.id // empty' "$TMP_DIR/opportunity_detail.body")"
+    THESIS_VERSION="$(jq -r '.marketThesis.thesisVersion // .thesis.version // empty' "$TMP_DIR/opportunity_detail.body")"
+    if [[ -z "$THESIS_ID" || "$THESIS_ID" == "null" || -z "$THESIS_VERSION" || "$THESIS_VERSION" == "null" ]]; then
+        printf 'Selected opportunity did not return thesis lineage: %s\n' "$(body_of opportunity_detail)" >&2
+        exit 1
+    fi
+    request no_trade -X POST "$BASE_URL/api/v1/accounts/$ACCOUNT_ID/opportunity-decisions" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: runtime-no-trade-$USERNAME" \
+        --data "{\"opportunityId\":\"$OPPORTUNITY_ID\",\"opportunityVersion\":$OPPORTUNITY_VERSION,\"thesisId\":\"$THESIS_ID\",\"thesisVersion\":$THESIS_VERSION,\"rationale\":\"Runtime PAPER validation: no trade approved.\"}"
+    if [[ "$(status_of no_trade)" == "403" ]]; then
+        printf 'NO_TRADE authorization diagnostic: accountId=%s opportunityId=%s opportunityVersion=%s opportunityAccountId=%s thesisId=%s thesisVersion=%s thesisState=%s response=%s\n' \
+            "$ACCOUNT_ID" "$OPPORTUNITY_ID" "$OPPORTUNITY_VERSION" \
+            "$(jq -r '.accountId // empty' "$TMP_DIR/opportunity_detail.body")" \
+            "$THESIS_ID" "$THESIS_VERSION" \
+            "$(jq -r '.thesis.state // empty' "$TMP_DIR/opportunity_detail.body")" \
+            "$(body_of no_trade)" >&2
+    fi
+    require_status no_trade '^2[0-9][0-9]$'
+    mkdir -p "$(dirname "$OUTPUT_FILE")"
+    jq -n \
+        --arg generatedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+        --arg baseUrl "$BASE_URL" \
+        --arg username "$USERNAME" \
+        --arg accountId "$ACCOUNT_ID" \
+        --arg brokerAccountId "$BROKER_ACCOUNT_ID" \
+        --arg scanId "$SCAN_ID" \
+        --arg opportunityId "$OPPORTUNITY_ID" \
+        --arg opportunityVersion "$OPPORTUNITY_VERSION" \
+        --arg thesisId "$THESIS_ID" \
+        --arg thesisVersion "$THESIS_VERSION" \
+        --arg noTradeStatus "$(status_of no_trade)" \
+        --arg noTradeResponse "$(body_of no_trade)" \
+        '{generatedAt: $generatedAt, baseUrl: $baseUrl, username: $username, paper: {brokerAccountId: $brokerAccountId, accountId: $accountId}, scan: {status: "completed", id: $scanId}, opportunity: {id: $opportunityId, version: ($opportunityVersion | tonumber)}, decision: {type: "NO_TRADE", status: ($noTradeStatus | tonumber), thesisId: $thesisId, thesisVersion: ($thesisVersion | tonumber), response: ($noTradeResponse | fromjson)}}' \
+        > "$OUTPUT_FILE"
+    jq . "$OUTPUT_FILE"
+    exit 0
+fi
 MARKET_ID="$(jq -r '.marketId // empty' <<< "$OPPORTUNITY_JSON")"
 MARKET_SYMBOL="$(jq -r '.instrument // empty' <<< "$OPPORTUNITY_JSON")"
 REFERENCE_PRICE="$(jq -r '.setup.referencePrice // empty' <<< "$OPPORTUNITY_JSON")"
@@ -190,7 +250,7 @@ request plan -X POST "$BASE_URL/api/v1/trade-plans/opportunities/$OPPORTUNITY_ID
     -H "Authorization: Bearer $TOKEN" \
     -H 'Content-Type: application/json' \
     -H "Idempotency-Key: $PLAN_KEY" \
-    --data "{\"accountId\":\"$ACCOUNT_ID\"}"
+    --data "{\"accountId\":\"$ACCOUNT_ID\",\"opportunityVersion\":$OPPORTUNITY_VERSION}"
 require_status plan '^2[0-9][0-9]$'
 TRADE_PLAN_ID="$(jq -r '.tradePlanId // empty' "$TMP_DIR/plan.body")"
 TRADE_PLAN_VERSION="$(jq -r '.tradePlanVersion // 1' "$TMP_DIR/plan.body")"

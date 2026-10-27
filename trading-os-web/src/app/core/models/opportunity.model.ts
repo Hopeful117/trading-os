@@ -44,6 +44,8 @@ export interface OpportunityResponse {
   sourceScanId?: string | null;
   sourceScanMarketId?: string | null;
   analysisExecutionId?: string | null;
+  marketThesis?: MarketThesisReference | null;
+  thesis?: MarketThesisResponse | null;
   setup?: OpportunitySetup | null;
 }
 
@@ -53,3 +55,4 @@ export interface OpportunityPageResponse {
   size: number;
   total: number;
 }
+import { MarketThesisReference, MarketThesisResponse } from './market-thesis.model';

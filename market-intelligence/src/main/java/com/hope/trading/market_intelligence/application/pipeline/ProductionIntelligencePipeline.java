@@ -10,6 +10,7 @@ import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
+import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
 import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
 import com.hope.trading.market_intelligence.strategy.application.LiveStrategyEvaluationRunner;
 import com.hope.trading.market_intelligence.strategy.application.ShadowStrategyParityMonitor;
@@ -155,7 +156,8 @@ public class ProductionIntelligencePipeline {
             return runs.save(run);
         }
 
-        persistThesis(analysisExecutionId, marketId, observation, request.evaluationCutoff());
+        MarketThesis thesis = persistThesis(
+                analysisExecutionId, marketId, observation, request.evaluationCutoff());
 
         // Runtime source of truth: persisted definitions (ADR-037), seeded at
         // startup by BuiltinStrategyBootstrap. Never the in-memory catalogue.
@@ -194,7 +196,7 @@ public class ProductionIntelligencePipeline {
             if (evaluation.status() == StrategyEvaluationStatus.MATCH) {
                 TradingOpportunity opportunity = handleMatch(
                         evaluation, definition, analysisExecutionId, strategyEvidence,
-                        instrument, mode, request);
+                        instrument, mode, request, thesis);
                 createdOpportunities.add(opportunity);
                 completionEvidence = strategyEvidence;
                 log.info("Strategy {}v{} MATCH for market {}: created opportunity {}",
@@ -223,11 +225,11 @@ public class ProductionIntelligencePipeline {
         return runs.save(run);
     }
 
-    private void persistThesis(UUID analysisExecutionId, UUID marketId, Observation observation,
-                               Instant authoritativeCutoff) {
+    private MarketThesis persistThesis(UUID analysisExecutionId, UUID marketId, Observation observation,
+                                       Instant authoritativeCutoff) {
         var candidate = thesisComposer.compose(
                 marketId, analysisExecutionId, observation, authoritativeCutoff);
-        theses.saveIfAbsent(candidate);
+        return theses.saveIfAbsent(candidate);
     }
 
     private void persistDegradedThesis(
@@ -242,9 +244,10 @@ public class ProductionIntelligencePipeline {
             StrategyDefinition definition,
             UUID analysisExecutionId,
             Observation observation,
-            String instrument,
-            AnalysisExecutionMode mode,
-            IntelligenceAnalysisRequest request
+             String instrument,
+             AnalysisExecutionMode mode,
+             IntelligenceAnalysisRequest request,
+             MarketThesis thesis
     ) {
         var persisted = matches.persist(
                 evaluation, analysisExecutionId, observation.id()).orElseThrow();
@@ -257,7 +260,9 @@ public class ProductionIntelligencePipeline {
                             new ObservationReference(observation.id()), evaluation.evaluatedAt(),
                             observation.validFrom(), observation.validUntil().orElse(null), evaluation,
                             reference.price(), reference.observedAt(),
-                            StrategyMatchOpportunityFactory.OpportunityProvenance.none()));
+                             new StrategyMatchOpportunityFactory.OpportunityProvenance(
+                                     null, null, null, null,
+                                     new MarketThesisReference(thesis.id(), thesis.version()))));
         } else {
             command = matchOpportunities.command(
                     new StrategyMatchOpportunityFactory.OpportunityCommandInput(
@@ -265,9 +270,10 @@ public class ProductionIntelligencePipeline {
                             new ObservationReference(observation.id()), evaluation.evaluatedAt(),
                             observation.validFrom(), observation.validUntil().orElse(null), evaluation,
                             reference.price(), reference.observedAt(),
-                            new StrategyMatchOpportunityFactory.OpportunityProvenance(
-                                    request.accountId(), request.scanId(), request.scanMarketId(),
-                                    analysisExecutionId)));
+                             new StrategyMatchOpportunityFactory.OpportunityProvenance(
+                                     request.accountId(), request.scanId(), request.scanMarketId(),
+                                     analysisExecutionId,
+                                     new MarketThesisReference(thesis.id(), thesis.version()))));
         }
         OpportunityCreationResult created = opportunities.create(command);
         TradingOpportunity analyzed = opportunities.transition(
