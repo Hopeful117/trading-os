@@ -221,9 +221,7 @@ export class MarketDetail {
     this.selectedTimeframe$,
     this.ticker$.pipe(
       switchMap((ticker) =>
-        ticker === null
-          ? throwError(() => new Error('Ticker acquisition failed'))
-          : of(ticker),
+        ticker === null ? throwError(() => new Error('Ticker acquisition failed')) : of(ticker),
       ),
       take(1),
     ),
