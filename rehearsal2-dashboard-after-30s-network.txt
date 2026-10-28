@@ -1,0 +1,15 @@
+4. [GET] http://localhost:17085/api/v1/accounts => [200] OK
+5. [GET] http://localhost:17085/api/v1/opportunities/active => [200] OK
+6. [GET] http://localhost:17085/api/v1/intelligence/scans?limit=1 => [200] OK
+7. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+8. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+9. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+10. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+11. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+12. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+13. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+14. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+15. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+16. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/dashboard => [200] OK
+
+Note: 3 static requests not shown, run with "static" option to see them.
