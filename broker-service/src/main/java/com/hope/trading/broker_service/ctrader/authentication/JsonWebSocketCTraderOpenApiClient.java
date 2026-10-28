@@ -33,17 +33,20 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     private static final Logger log = LoggerFactory.getLogger(JsonWebSocketCTraderOpenApiClient.class);
 
     private final CTraderProperties properties;
+    private final CTraderRequestSafetyGuard safety;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    public JsonWebSocketCTraderOpenApiClient(CTraderProperties properties, ObjectMapper objectMapper) {
+    public JsonWebSocketCTraderOpenApiClient(CTraderProperties properties, CTraderRequestSafetyGuard safety,
+                                             ObjectMapper objectMapper) {
         this.properties = properties;
+        this.safety = safety;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public List<String> discoverAuthorizedAccountIds(CTraderToken token) {
-        try (Session session = new Session()) {
+        try (Session session = new Session(null)) {
             session.request(APPLICATION_AUTH_REQUEST, APPLICATION_AUTH_RESPONSE,
                     objectMapper.createObjectNode()
                             .put("clientId", required(properties.clientId()))
@@ -71,7 +74,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     @Override
     public void authorizeAccount(CTraderToken token, String externalAccountId) {
-        try (Session session = new Session()) {
+        try (Session session = new Session(externalAccountId)) {
             session.request(APPLICATION_AUTH_REQUEST, APPLICATION_AUTH_RESPONSE,
                     objectMapper.createObjectNode()
                             .put("clientId", required(properties.clientId()))
@@ -89,7 +92,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     @Override
     public boolean isDemoAccount(CTraderToken token, String externalAccountId) {
-        try (Session session = new Session()) {
+        try (Session session = new Session(null)) {
             authenticateApplication(session);
             JsonNode response = session.request(ACCOUNT_LIST_REQUEST, ACCOUNT_LIST_RESPONSE,
                     objectMapper.createObjectNode().put("accessToken", token.accessToken()));
@@ -117,13 +120,14 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     @Override
     public CTraderOrderResponse submitOrder(CTraderToken token, CTraderOrderRequest request) {
+        safety.requireExecutionEnabled();
         if (request.stopLossPrice() == null) {
             throw new CTraderAuthenticationException("cTrader demo execution requires a protective stop");
         }
         if ("MARKET".equalsIgnoreCase(request.orderType())) {
             throw new CTraderAuthenticationException("cTrader absolute stop loss requires a non-market order");
         }
-        try (Session session = new Session()) {
+        try (Session session = new Session(request.externalAccountId())) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(request.externalAccountId());
@@ -189,7 +193,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     public CTraderReadOnlyObservation readOnlyObservation(CTraderToken token, String externalAccountId,
                                                            java.time.Instant from, java.time.Instant to) {
         Instant started = Instant.now();
-        try (Session session = new Session()) {
+        try (Session session = new Session(externalAccountId)) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(externalAccountId);
@@ -468,8 +472,11 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     private final class Session implements AutoCloseable {
         private final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
         private final WebSocket socket;
+        private final String externalAccountId;
 
-        private Session() {
+        private Session(String externalAccountId) {
+            this.externalAccountId = externalAccountId;
+            safety.reserveRequest(externalAccountId, 0);
             try {
                 socket = httpClient.newWebSocketBuilder()
                         .connectTimeout(Duration.ofSeconds(10))
@@ -481,6 +488,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
 
         private JsonNode request(int requestType, int responseType, ObjectNode payload) {
+            safety.reserveRequest(externalAccountId, requestType);
             String clientMsgId = UUID.randomUUID().toString();
             ObjectNode message = objectMapper.createObjectNode()
                     .put("clientMsgId", clientMsgId)

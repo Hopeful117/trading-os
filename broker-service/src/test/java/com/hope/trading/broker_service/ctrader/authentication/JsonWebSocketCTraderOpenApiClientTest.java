@@ -3,23 +3,42 @@ package com.hope.trading.broker_service.ctrader.authentication;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
+import com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class JsonWebSocketCTraderOpenApiClientTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final JsonWebSocketCTraderOpenApiClient client = new JsonWebSocketCTraderOpenApiClient(
             new CTraderProperties("client", "secret", "redirect", "auth", "demo", "token",
-                    "wss://demo.ctraderapi.com:5035", 60), mapper);
+                    "wss://demo.ctraderapi.com:5035", 60),
+            new CTraderRequestSafetyGuard(mock(JdbcTemplate.class),
+                    new CTraderSafetyProperties(false, 1000, 700, 800,
+                            Duration.ofMinutes(20), Duration.ofMinutes(30)), Clock.systemUTC()), mapper);
+
+    @Test
+    void directOrderSubmissionIsBlockedBeforeOpeningASocket() {
+        var request = new CTraderOpenApiClient.CTraderOrderRequest(
+                "49289512", "EUR/USD", "BUY", "LIMIT", BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.ONE, "client-order");
+
+        assertThatThrownBy(() -> client.submitOrder(null, request))
+                .isInstanceOf(CTraderSafetyException.class)
+                .hasMessage("cTrader execution is disabled by safety policy");
+    }
 
     @Test
     void rejectsAccountScopedResponseForAnotherAccount() throws Exception {

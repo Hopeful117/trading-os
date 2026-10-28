@@ -8,6 +8,7 @@ import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrat
 import com.hope.trading.broker_service.connection.domain.BrokerConnectionStatus;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderAuthenticationException;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderOpenApiClient;
+import com.hope.trading.broker_service.ctrader.authentication.CTraderRequestSafetyGuard;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderToken;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderTokenCodec;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
@@ -32,19 +33,22 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
     private final CTraderOpenApiClient client;
     private final CTraderProperties properties;
     private final Clock clock;
+    private final CTraderRequestSafetyGuard safety;
 
     public CTraderAuthoritativeSnapshotCapability(BrokerConnectionRepository connections,
                                                   BrokerProviderRegistrationCatalog providers,
                                                   SecretReader secrets,
-                                                  CTraderOpenApiClient client,
-                                                  CTraderProperties properties,
-                                                  Clock clock) {
+                                                   CTraderOpenApiClient client,
+                                                   CTraderProperties properties,
+                                                   Clock clock,
+                                                   CTraderRequestSafetyGuard safety) {
         this.connections = connections;
         this.providers = providers;
         this.secrets = secrets;
         this.client = client;
         this.properties = properties;
         this.clock = clock;
+        this.safety = safety;
     }
 
     @Override
@@ -69,7 +73,8 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
             throw new CTraderAuthenticationException("cTrader connection is not usable");
         }
         Instant now = clock.instant();
-        try (PlainSecret secret = secrets.read(new CredentialReference(connection.activeCredentialReference()))) {
+        try (CTraderRequestSafetyGuard.SnapshotLease ignored = safety.acquireSnapshot(connection.externalAccountId());
+             PlainSecret secret = secrets.read(new CredentialReference(connection.activeCredentialReference()))) {
             CTraderToken token = CTraderTokenCodec.decode(secret.copyValue());
             if (!token.expiresAt().isAfter(now)) {
                 throw new CTraderAuthenticationException("cTrader authentication has expired");

@@ -7,6 +7,7 @@ import com.hope.trading.broker_service.connection.domain.BrokerPermission;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderOpenApiClient;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
+import com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderToken;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderTokenCodec;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -29,6 +31,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,6 +44,22 @@ class CTraderExecutionCapabilityTest {
     @Mock BrokerConnectionRepository connections;
     @Mock SecretReader secrets;
     @Mock CTraderOpenApiClient client;
+
+    @Test
+    void safetyPolicyRejectsExecutionBeforeResolvingConnection() {
+        var result = new CTraderExecutionCapability(connections, secrets, client,
+                new CTraderProperties("client", "secret", "https://callback", "https://auth", "demo",
+                        "https://token", "wss://demo.ctraderapi.com:5036", 600),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new CTraderSafetyProperties(true, false, 1000, 700, 800,
+                        Duration.ofMinutes(20), Duration.ofMinutes(30))).execute(new BrokerModels.ExecutionRequest(
+                UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
+                BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.valueOf(.99)));
+
+        assertInstanceOf(BrokerModels.Rejected.class, result);
+        verifyNoInteractions(connections, secrets, client);
+    }
 
     @Test
     void submitsOnlyToAConnectedProviderConfirmedDemoWithTradePermission() {
@@ -90,7 +109,7 @@ class CTraderExecutionCapabilityTest {
         var result = new CTraderExecutionCapability(connections, secrets, client,
                 new CTraderProperties("client", "secret", "https://callback", "https://auth", "demo",
                         "FTMO_FREE", "https://token", "wss://demo.ctraderapi.com:5036", 600),
-                Clock.fixed(NOW, ZoneOffset.UTC)).execute(new BrokerModels.ExecutionRequest(
+                Clock.fixed(NOW, ZoneOffset.UTC), enabledSafety()).execute(new BrokerModels.ExecutionRequest(
                 UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
                 BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.valueOf(.99)));
@@ -112,6 +131,11 @@ class CTraderExecutionCapabilityTest {
         return new CTraderExecutionCapability(connections, secrets, client,
                 new CTraderProperties("client", "secret", "https://callback", "https://auth", "demo",
                         "https://token", "wss://demo.ctraderapi.com:5036", 600),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), enabledSafety());
+    }
+
+    private CTraderSafetyProperties enabledSafety() {
+        return new CTraderSafetyProperties(true, true, 1000, 700, 800,
+                Duration.ofMinutes(20), Duration.ofMinutes(30));
     }
 }

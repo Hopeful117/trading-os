@@ -9,11 +9,13 @@ import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrat
 import com.hope.trading.broker_service.ctrader.authentication.CTraderAuthenticationException;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderBindAccountRequest;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderOpenApiClient;
+import com.hope.trading.broker_service.ctrader.authentication.CTraderRequestSafetyGuard;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderToken;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderAuthoritativeSnapshotCapability;
 import com.hope.trading.broker_service.secret.application.SecretReader;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -35,7 +37,11 @@ class CTraderBrokerProviderTest {
                 mock(SecretReader.class),
                 mock(CTraderOpenApiClient.class),
                 new CTraderProperties(null, null, null, null, "demo", null, null, 300),
-                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                new CTraderRequestSafetyGuard(mock(JdbcTemplate.class),
+                        new com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties(
+                                false, 1000, 700, 800, java.time.Duration.ofMinutes(15),
+                                java.time.Duration.ofMinutes(30)), Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)));
         CTraderBrokerProvider provider = new CTraderBrokerProvider(snapshots);
 
         assertThat(provider.id()).isEqualTo(BrokerProviderId.CTRADER);

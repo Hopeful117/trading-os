@@ -7,6 +7,7 @@ import com.hope.trading.broker_service.connection.domain.BrokerConnection;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderOpenApiClient;
+import com.hope.trading.broker_service.ctrader.authentication.CTraderRequestSafetyGuard;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderToken;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderTokenCodec;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
@@ -14,6 +15,7 @@ import com.hope.trading.broker_service.secret.application.SecretReader;
 import com.hope.trading.broker_service.secret.domain.CredentialReference;
 import com.hope.trading.broker_service.secret.domain.PlainSecret;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -37,8 +39,12 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
     private final Clock clock = Clock.fixed(now, ZoneOffset.UTC);
     private final CTraderAuthoritativeSnapshotCapability capability =
             new CTraderAuthoritativeSnapshotCapability(connections, new BrokerProviderRegistrationCatalog(),
-                    secrets, client, new CTraderProperties("client", "secret", "redirect", "auth", "demo",
-                    "token", "wss://demo.ctraderapi.com:5035", 60), clock);
+                     secrets, client, new CTraderProperties("client", "secret", "redirect", "auth", "demo",
+                     "token", "wss://demo.ctraderapi.com:5035", 60), clock,
+                     new CTraderRequestSafetyGuard(mock(JdbcTemplate.class),
+                             new com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties(
+                                     false, 1000, 700, 800, java.time.Duration.ofMinutes(15),
+                                     java.time.Duration.ofMinutes(30)), clock));
 
     @Test
     void completeFreshObservationIsMappedToNeutralFacts() {
