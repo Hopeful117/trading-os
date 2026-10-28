@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
-import { BehaviorSubject, NEVER, Observable, of, Subject, throwError } from 'rxjs';
+import { BehaviorSubject, map, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 
 import { Account } from '../../core/models/account.model';
 import { DashboardSummary } from '../../core/models/dashboard-summary.model';
@@ -28,7 +28,7 @@ describe('DecisionWorkspace', () => {
   let fixture: ComponentFixture<DecisionWorkspace>;
   let component: DecisionWorkspace;
   let accountServiceMock: { getAccounts: ReturnType<typeof vi.fn> };
-  let dashboardServiceMock: { findDashboard: ReturnType<typeof vi.fn> };
+  let dashboardServiceMock: { pollDashboard: ReturnType<typeof vi.fn> };
   let contextServiceMock: { resolve: ReturnType<typeof vi.fn> };
   let trendContextServiceMock: { findTrendContext: ReturnType<typeof vi.fn> };
   let marketServiceMock: {
@@ -153,6 +153,10 @@ describe('DecisionWorkspace', () => {
     generatedAt: '2026-09-20T10:00:00Z',
   };
 
+  function pollSuccess(summary: DashboardSummary) {
+    return { dashboard: summary, error: null, deferred: false };
+  }
+
   const market = {
     marketId: 'market-1',
     provider: 'KRAKEN',
@@ -196,7 +200,7 @@ describe('DecisionWorkspace', () => {
   beforeEach(async () => {
     accountServiceMock = { getAccounts: vi.fn().mockReturnValue(of([account])) };
     dashboardServiceMock = {
-      findDashboard: vi.fn().mockReturnValue(of(dashboardSummary)),
+      pollDashboard: vi.fn().mockReturnValue(of(pollSuccess(dashboardSummary))),
     };
     contextServiceMock = { resolve: vi.fn().mockReturnValue(of(context)) };
     trendContextServiceMock = {
@@ -335,7 +339,7 @@ describe('DecisionWorkspace', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(dashboardServiceMock.findDashboard).toHaveBeenCalledWith(account.accountId);
+    expect(dashboardServiceMock.pollDashboard).toHaveBeenCalledWith(account.accountId);
     expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('SAFE');
     expect(fixture.nativeElement.textContent).toContain('Balance');
@@ -345,8 +349,46 @@ describe('DecisionWorkspace', () => {
     expect(fixture.nativeElement.textContent).toContain('Open positions');
   });
 
+  it('marks the last cockpit snapshot stale after a refresh failure', async () => {
+    dashboardServiceMock.pollDashboard.mockReturnValue(
+      of(pollSuccess(dashboardSummary), {
+        dashboard: null,
+        error: new Error('temporary failure'),
+        deferred: false,
+      }),
+    );
+
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context-stale"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('Risk and position facts may be outdated');
+  });
+
+  it('clears the deferred cockpit state after a successful refresh', async () => {
+    dashboardServiceMock.pollDashboard.mockReturnValue(
+      of(
+        { dashboard: null, error: { status: 409 }, deferred: true },
+        pollSuccess(dashboardSummary),
+      ),
+    );
+
+    component.selectAccount(account.accountId);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context-deferred"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context-stale"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('1,000');
+  });
+
   it('clears the previous cockpit while the next account is loading', () => {
-    dashboardServiceMock.findDashboard.mockReturnValue(NEVER);
+    dashboardServiceMock.pollDashboard.mockReturnValue(NEVER);
 
     component.selectAccount(account.accountId);
     fixture.detectChanges();
@@ -358,7 +400,7 @@ describe('DecisionWorkspace', () => {
   });
 
   it('does not imply a currency when position exposure has no quote asset', async () => {
-    dashboardServiceMock.findDashboard.mockReturnValue(
+    dashboardServiceMock.pollDashboard.mockReturnValue(
       of({
         ...dashboardSummary,
         openPositions: [
@@ -389,7 +431,7 @@ describe('DecisionWorkspace', () => {
             quoteAsset: null,
           },
         ],
-      }),
+      }).pipe(map((summary) => pollSuccess(summary as DashboardSummary))),
     );
 
     component.selectAccount(account.accountId);
@@ -408,7 +450,7 @@ describe('DecisionWorkspace', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    dashboardServiceMock.findDashboard.mockReturnValue(NEVER);
+    dashboardServiceMock.pollDashboard.mockReturnValue(NEVER);
     component.selectAccount('account-2');
     fixture.detectChanges();
 

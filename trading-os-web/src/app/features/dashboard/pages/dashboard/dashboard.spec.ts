@@ -17,7 +17,7 @@ import { Dashboard } from './dashboard';
 
 describe('Dashboard', () => {
   let fixture: ComponentFixture<Dashboard>;
-  let dashboardService: { findDashboard: ReturnType<typeof vi.fn> };
+  let dashboardService: { pollDashboard: ReturnType<typeof vi.fn> };
   let opportunityService: { findActive: ReturnType<typeof vi.fn> };
   let activeScanService: { findRecent: ReturnType<typeof vi.fn> };
 
@@ -50,7 +50,7 @@ describe('Dashboard', () => {
   ];
 
   beforeEach(async () => {
-    dashboardService = { findDashboard: vi.fn(() => of(summary())) };
+    dashboardService = { pollDashboard: vi.fn(() => of(pollSuccess(summary()))) };
     opportunityService = { findActive: vi.fn(() => of(activeOpps)) };
     activeScanService = { findRecent: vi.fn(() => of([])) };
     await configureTestingModule(
@@ -71,7 +71,7 @@ describe('Dashboard', () => {
   it('displays multiple positions and positive or negative pnl classes', async () => {
     const data = summary();
     data.openPositions = [pos('p1', 'BTC/USD', 25), pos('p2', 'ETH/USD', -15)];
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     expect(text()).toContain('BTC/USD');
     expect(text()).toContain('ETH/USD');
@@ -94,14 +94,14 @@ describe('Dashboard', () => {
         occurredAt: new Date().toISOString(),
       },
     ];
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     expect(text()).toContain('DEGRADED');
     expect(text()).toContain('Position non protégée');
   });
 
   it('keeps an explicit error state', async () => {
-    dashboardService.findDashboard.mockReturnValue(throwError(() => new Error('unavailable')));
+    dashboardService.pollDashboard.mockReturnValue(of(pollError(new Error('unavailable'))));
     await create();
     expect(text()).toContain('Dashboard est temporairement indisponible');
   });
@@ -119,7 +119,7 @@ describe('Dashboard', () => {
     fixture.componentInstance.selectAccount('account-2');
     await nextTask();
     fixture.detectChanges();
-    expect(dashboardService.findDashboard).toHaveBeenCalledWith('account-2');
+    expect(dashboardService.pollDashboard).toHaveBeenCalledWith('account-2');
   });
 
   it('persists account selection in the route', () => {
@@ -144,12 +144,12 @@ describe('Dashboard', () => {
     );
     const data = summary();
     data.account = { ...data.account, accountId: 'account-2', accountName: 'Secondary' };
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     await nextTask();
     fixture.detectChanges();
 
-    expect(dashboardService.findDashboard).toHaveBeenCalledWith('account-2');
+    expect(dashboardService.pollDashboard).toHaveBeenCalledWith('account-2');
     expect(text()).toContain('Secondary');
     expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe(
       'account-2',
@@ -164,7 +164,7 @@ describe('Dashboard', () => {
       activeScanService,
     );
     expect(text()).toContain('Aucun compte');
-    expect(dashboardService.findDashboard).not.toHaveBeenCalled();
+    expect(dashboardService.pollDashboard).not.toHaveBeenCalled();
   });
 
   it('displays null fields as unavailable and renders risk rules', async () => {
@@ -181,7 +181,7 @@ describe('Dashboard', () => {
         status: 'WARNING',
       },
     ];
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     const t = text();
     expect(t).toContain('Indisponible');
@@ -194,7 +194,7 @@ describe('Dashboard', () => {
     const position = pos('p1', 'BTC/USD', 25);
     position.quoteAsset = null;
     data.openPositions = [position];
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
 
     await create();
 
@@ -209,13 +209,13 @@ describe('Dashboard', () => {
       activeScanService,
     );
     expect(text()).toContain('Impossible de charger les comptes');
-    expect(dashboardService.findDashboard).not.toHaveBeenCalled();
+    expect(dashboardService.pollDashboard).not.toHaveBeenCalled();
   });
 
   it('shows CALCULATED equity source label', async () => {
     const data = summary();
     data.account.equitySource = 'CALCULATED';
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     expect(text()).toContain('calculé à partir du compte broker');
   });
@@ -223,7 +223,7 @@ describe('Dashboard', () => {
   it('shows BROKER equity source label', async () => {
     const data = summary();
     data.account.equitySource = 'BROKER';
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     expect(text()).toContain('Provenance : broker');
   });
@@ -232,7 +232,7 @@ describe('Dashboard', () => {
     const data = summary();
     data.risk.status = 'UNAVAILABLE';
     data.risk.rules = [];
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     expect(text()).toContain('Aucune règle de risque configurée');
   });
@@ -249,7 +249,7 @@ describe('Dashboard', () => {
         status: 'SAFE',
       },
     ];
-    dashboardService.findDashboard.mockReturnValue(of(data));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(data)));
     await create();
     expect(text()).toContain('Perte max/jour');
     expect(text()).not.toContain('Aucune règle de risque configurée');
@@ -289,7 +289,7 @@ describe('Dashboard', () => {
 
   it('MI failure does not break account dashboard', async () => {
     opportunityService.findActive.mockReturnValue(throwError(() => new Error('mi down')));
-    dashboardService.findDashboard.mockReturnValue(of(summary()));
+    dashboardService.pollDashboard.mockReturnValue(of(pollSuccess(summary())));
     await create();
     expect(text()).toContain('1,020');
     expect(text()).toContain('LIVE');
@@ -297,7 +297,7 @@ describe('Dashboard', () => {
   });
 
   it('account dashboard failure does not fabricate MI values', async () => {
-    dashboardService.findDashboard.mockReturnValue(throwError(() => new Error('tc down')));
+    dashboardService.pollDashboard.mockReturnValue(of(pollError(new Error('tc down'))));
     opportunityService.findActive.mockReturnValue(of(activeOpps));
     await create();
     expect(text()).toContain('Dashboard est temporairement indisponible');
@@ -422,7 +422,7 @@ describe('Dashboard', () => {
 
   async function configureTestingModule(
     accountProvider: { getAccounts: () => Observable<Account[]> },
-    dashService: { findDashboard: ReturnType<typeof vi.fn> },
+     dashService: { pollDashboard: ReturnType<typeof vi.fn> },
     oppService: { findActive: ReturnType<typeof vi.fn> },
     scanService: { findRecent: ReturnType<typeof vi.fn> } = { findRecent: vi.fn(() => of([])) },
     routeAccountId: string | null = null,
@@ -455,7 +455,7 @@ describe('Dashboard', () => {
 
   async function reconfigure(
     accountProvider: { getAccounts: () => Observable<Account[]> },
-    dashService: { findDashboard: ReturnType<typeof vi.fn> },
+     dashService: { pollDashboard: ReturnType<typeof vi.fn> },
     oppService: { findActive: ReturnType<typeof vi.fn> },
     scanService: { findRecent: ReturnType<typeof vi.fn> } = { findRecent: vi.fn(() => of([])) },
   ): Promise<void> {
@@ -475,6 +475,14 @@ describe('Dashboard', () => {
 
   function nextTask(): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  function pollSuccess(data: DashboardSummary) {
+    return { dashboard: data, error: null, deferred: false };
+  }
+
+  function pollError(error: unknown) {
+    return { dashboard: null, error, deferred: false };
   }
 
   function text(): string {

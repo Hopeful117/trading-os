@@ -28,6 +28,13 @@
           </p>
         </section>
       }
+      @case ('deferred') {
+        <section class="state-card" data-testid="cockpit-context-deferred">
+          <span class="eyebrow">Account cockpit</span>
+          <h2>Broker refresh temporarily deferred</h2>
+          <p>The last authoritative broker snapshot is protected by its safety window.</p>
+        </section>
+      }
       @case ('ready') {
         <section
           class="context-card"
@@ -47,6 +54,16 @@
               Open full dashboard
             </a>
           </div>
+          @if (dashboard.stale) {
+            <p class="state-card error" role="status" data-testid="cockpit-context-stale">
+              The last authoritative broker snapshot is displayed, but the latest refresh failed.
+              Risk and position facts may be outdated.
+            </p>
+          } @else if (dashboard.deferred) {
+            <p class="state-card" role="status">
+              Broker refresh temporarily deferred; the last valid snapshot is displayed.
+            </p>
+          }
 
           <div class="detail-grid cockpit-metrics">
             <article class="detail-card cockpit-metric">

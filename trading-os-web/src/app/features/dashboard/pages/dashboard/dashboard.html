@@ -39,8 +39,13 @@
       <section class="state-panel">Aucun compte n'est disponible.</section>
     } @else if (vm.dashboardLoading) {
       <section class="state-panel">Chargement des données du compte…</section>
-    } @else if (vm.dashboardError) {
+    } @else if (vm.dashboardError && !vm.dashboard) {
       <section class="state-panel error">{{ vm.dashboardError }}</section>
+    } @else if (vm.dashboardDeferred && !vm.dashboard) {
+      <section class="state-panel" role="status">
+        Actualisation broker temporairement différée pour respecter la fenêtre de sécurité.
+        Nouvelle tentative bornée en cours.
+      </section>
     } @else if (!vm.selectedAccountId) {
       <section class="state-panel">Aucun compte sélectionné.</section>
     } @else if (vm.dashboard; as dashboard) {
@@ -51,6 +56,14 @@
           <span>{{ warning }}</span>
         }
       </section>
+      @if (vm.dashboardDeferred) {
+        <section class="state-panel" role="status">
+          Actualisation broker temporairement différée pour respecter la fenêtre de sécurité.
+          Dernières données valides affichées.
+        </section>
+      } @else if (vm.dashboardError) {
+        <section class="state-panel error" role="status">{{ vm.dashboardError }}</section>
+      }
 
       <section class="stats-grid">
         <article class="stat-card">
