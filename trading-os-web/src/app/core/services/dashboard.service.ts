@@ -37,17 +37,16 @@ export class DashboardService {
             error,
             deferred:
               (error as { status?: number; error?: { code?: string } })?.status === 409 &&
-              (error as { error?: { code?: string } })?.error?.code ===
-                'BROKER_SNAPSHOT_DEFERRED',
+              (error as { error?: { code?: string } })?.error?.code === 'BROKER_SNAPSHOT_DEFERRED',
           }),
         ),
       );
 
     return defer(request).pipe(
       expand((event) =>
-        timer(
-          event.deferred ? DASHBOARD_DEFERRED_BACKOFF_MS : DASHBOARD_POLL_INTERVAL_MS,
-        ).pipe(switchMap(request)),
+        timer(event.deferred ? DASHBOARD_DEFERRED_BACKOFF_MS : DASHBOARD_POLL_INTERVAL_MS).pipe(
+          switchMap(request),
+        ),
       ),
     );
   }

@@ -364,7 +364,9 @@ describe('DecisionWorkspace', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context-stale"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="cockpit-context-stale"]'),
+    ).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Risk and position facts may be outdated');
   });
 
@@ -382,7 +384,9 @@ describe('DecisionWorkspace', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context"]')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context-deferred"]')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="cockpit-context-deferred"]'),
+    ).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="cockpit-context-stale"]')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('1,000');
   });

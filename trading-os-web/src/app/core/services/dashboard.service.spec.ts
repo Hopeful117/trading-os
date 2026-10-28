@@ -25,7 +25,9 @@ describe('DashboardService polling', () => {
     http.get.mockReturnValue(of(dashboard));
     const events: unknown[] = [];
     vi.useFakeTimers();
-    const subscription = service.pollDashboard('account-a').subscribe((event) => events.push(event));
+    const subscription = service
+      .pollDashboard('account-a')
+      .subscribe((event) => events.push(event));
 
     expect(http.get).toHaveBeenCalledTimes(1);
     expect(events).toEqual([{ dashboard, error: null, deferred: false }]);
@@ -45,7 +47,9 @@ describe('DashboardService polling', () => {
       .mockReturnValue(of(dashboard));
 
     vi.useFakeTimers();
-    const subscription = service.pollDashboard('account-a').subscribe((event) => events.push(event));
+    const subscription = service
+      .pollDashboard('account-a')
+      .subscribe((event) => events.push(event));
 
     expect(events).toHaveLength(1);
     vi.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS);
@@ -85,7 +89,9 @@ describe('DashboardService polling', () => {
   it('resumes after the bounded deferred backoff', () => {
     const dashboard = { account: { accountId: 'account-a' } } as never;
     http.get
-      .mockReturnValueOnce(throwError(() => ({ status: 409, error: { code: 'BROKER_SNAPSHOT_DEFERRED' } })))
+      .mockReturnValueOnce(
+        throwError(() => ({ status: 409, error: { code: 'BROKER_SNAPSHOT_DEFERRED' } })),
+      )
       .mockReturnValue(of(dashboard));
 
     vi.useFakeTimers();
@@ -98,12 +104,20 @@ describe('DashboardService polling', () => {
   });
 
   it('does not classify an unrelated conflict as broker deferral', () => {
-    http.get.mockReturnValue(throwError(() => ({ status: 409, error: { code: 'OTHER_CONFLICT' } })));
+    http.get.mockReturnValue(
+      throwError(() => ({ status: 409, error: { code: 'OTHER_CONFLICT' } })),
+    );
     const events: unknown[] = [];
-    const subscription = service.pollDashboard('account-a').subscribe((event) => events.push(event));
+    const subscription = service
+      .pollDashboard('account-a')
+      .subscribe((event) => events.push(event));
 
     expect(events).toEqual([
-      { dashboard: null, error: { status: 409, error: { code: 'OTHER_CONFLICT' } }, deferred: false },
+      {
+        dashboard: null,
+        error: { status: 409, error: { code: 'OTHER_CONFLICT' } },
+        deferred: false,
+      },
     ]);
     subscription.unsubscribe();
   });

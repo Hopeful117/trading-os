@@ -24,10 +24,7 @@ import { DashboardSummary } from '../../../../core/models/dashboard-summary.mode
 import { OpportunityResponse } from '../../../../core/models/opportunity.model';
 import { AccountService } from '../../../../core/services/account.service';
 import { ActiveScanService } from '../../../../core/services/active-scan.service';
-import {
-  DashboardPollEvent,
-  DashboardService,
-} from '../../../../core/services/dashboard.service';
+import { DashboardPollEvent, DashboardService } from '../../../../core/services/dashboard.service';
 import { OpportunityService } from '../../../../core/services/opportunity.service';
 
 interface AccountsState {

@@ -422,7 +422,7 @@ describe('Dashboard', () => {
 
   async function configureTestingModule(
     accountProvider: { getAccounts: () => Observable<Account[]> },
-     dashService: { pollDashboard: ReturnType<typeof vi.fn> },
+    dashService: { pollDashboard: ReturnType<typeof vi.fn> },
     oppService: { findActive: ReturnType<typeof vi.fn> },
     scanService: { findRecent: ReturnType<typeof vi.fn> } = { findRecent: vi.fn(() => of([])) },
     routeAccountId: string | null = null,
@@ -455,7 +455,7 @@ describe('Dashboard', () => {
 
   async function reconfigure(
     accountProvider: { getAccounts: () => Observable<Account[]> },
-     dashService: { pollDashboard: ReturnType<typeof vi.fn> },
+    dashService: { pollDashboard: ReturnType<typeof vi.fn> },
     oppService: { findActive: ReturnType<typeof vi.fn> },
     scanService: { findRecent: ReturnType<typeof vi.fn> } = { findRecent: vi.fn(() => of([])) },
   ): Promise<void> {

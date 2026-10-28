@@ -41,10 +41,7 @@ import {
   TrendContextTimeframeAssessment,
 } from '../../core/models/trend-context.model';
 import { AccountService } from '../../core/services/account.service';
-import {
-  DashboardPollEvent,
-  DashboardService,
-} from '../../core/services/dashboard.service';
+import { DashboardPollEvent, DashboardService } from '../../core/services/dashboard.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
@@ -212,7 +209,7 @@ export class DecisionWorkspace {
 
       return this.dashboardService.pollDashboard(accountId).pipe(
         scan(
-            (previous, event: DashboardPollEvent): DecisionWorkspaceDashboardView => {
+          (previous, event: DashboardPollEvent): DecisionWorkspaceDashboardView => {
             if (event.dashboard) {
               return {
                 status: 'ready',
