@@ -40,6 +40,7 @@ describe('MarketChartComponent', () => {
 
     fixture = TestBed.createComponent(MarketChartComponent);
     component = fixture.componentInstance;
+    fixture.detectChanges();
     await fixture.whenStable();
   });
 
