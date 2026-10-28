@@ -86,6 +86,66 @@ button {
   color: #cbd5e1;
 }
 
+.execution-mode-help {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  width: min(22rem, calc(100vw - 3rem));
+  padding: 0.65rem 0.75rem;
+  border-left: 2px solid #38bdf8;
+  border-radius: 0.35rem;
+  background: rgba(14, 165, 233, 0.08);
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.2rem);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.execution-mode-label {
+  position: relative;
+}
+
+.execution-mode-label-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.execution-mode-help-trigger {
+  display: inline-grid;
+  width: 1.1rem;
+  min-height: 1.1rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(125, 211, 252, 0.7);
+  border-radius: 50%;
+  background: transparent;
+  color: #bae6fd;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.execution-mode-help-trigger:hover,
+.execution-mode-help-trigger:focus-visible {
+  transform: none;
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  box-shadow: none;
+}
+
+.execution-mode-label-text:hover + .execution-mode-help,
+.execution-mode-label-text:focus-within + .execution-mode-help {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .broker-connect input,
 .broker-connect select {
   width: 100%;

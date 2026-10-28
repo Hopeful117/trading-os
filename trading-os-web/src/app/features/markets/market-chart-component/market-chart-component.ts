@@ -24,6 +24,10 @@ import {
 
 import { OhlcEvent } from '../../../core/models/ohlc-event.model';
 
+export function shouldApplyLiveCandle(latestTimestamp: number | null, timestamp: number): boolean {
+  return latestTimestamp === null || timestamp >= latestTimestamp;
+}
+
 @Component({
   selector: 'app-market-chart',
   templateUrl: './market-chart-component.html',
@@ -124,7 +128,7 @@ export class MarketChartComponent implements AfterViewInit {
 
       // Streams can replay a candle that predates the loaded history. The
       // chart only accepts updates at or after its latest known timestamp.
-      if (this.latestChartTimestamp !== null && timestamp < this.latestChartTimestamp) {
+      if (!shouldApplyLiveCandle(this.latestChartTimestamp, timestamp)) {
         return;
       }
 

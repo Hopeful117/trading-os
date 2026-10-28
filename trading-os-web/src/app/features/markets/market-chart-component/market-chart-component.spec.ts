@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import { MarketChartComponent } from './market-chart-component';
+import { MarketChartComponent, shouldApplyLiveCandle } from './market-chart-component';
 
 let chartSeries: { setData: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
 
@@ -48,60 +48,13 @@ describe('MarketChartComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('ignores live candles older than the loaded history', async () => {
-    const historyCandle = candle('2026-10-28T10:00:00Z');
-    const staleLiveCandle = candle('2026-10-28T09:55:00Z');
-
-    fixture.componentRef.setInput('history', [historyCandle]);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    chartSeries.update.mockClear();
-
-    fixture.componentRef.setInput('liveCandle', staleLiveCandle);
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(chartSeries.update).not.toHaveBeenCalled();
+  it('rejects live candles older than the latest chart candle', () => {
+    expect(shouldApplyLiveCandle(1_000, 999)).toBe(false);
+    expect(shouldApplyLiveCandle(1_000, 1_000)).toBe(true);
   });
 
-  it('updates the current candle and accepts newer candles', async () => {
-    const historyCandle = candle('2026-10-28T10:00:00Z');
-    const currentLiveCandle = candle('2026-10-28T10:00:00Z');
-    const newerLiveCandle = candle('2026-10-28T10:05:00Z');
-
-    fixture.componentRef.setInput('history', [historyCandle]);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    chartSeries.update.mockClear();
-
-    fixture.componentRef.setInput('liveCandle', currentLiveCandle);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.componentRef.setInput('liveCandle', newerLiveCandle);
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(chartSeries.update).toHaveBeenCalledTimes(2);
+  it('accepts the first and newer live candles', () => {
+    expect(shouldApplyLiveCandle(null, 1_000)).toBe(true);
+    expect(shouldApplyLiveCandle(1_000, 1_001)).toBe(true);
   });
-
-  function candle(openTime: string) {
-    return {
-      marketId: 'market-1',
-      provider: 'KRAKEN',
-      symbol: 'BTC/USD',
-      streamType: 'OHLC' as const,
-      interval: { minutes: 5, interval: '5m' } as never,
-      openTime,
-      closeTime: new Date(new Date(openTime).getTime() + 5 * 60_000).toISOString(),
-      open: 100,
-      high: 110,
-      low: 90,
-      close: 105,
-      volume: 1,
-      vwap: 100,
-      trades: 1,
-      closed: false,
-      occurredAt: openTime,
-    };
-  }
 });

@@ -1,0 +1,5 @@
+7. [GET] http://localhost:17085/api/v1/accounts/bd0dcf4f-884b-41d0-8745-65955daa62b4/dashboard => [FAILED] net::ERR_ABORTED
+8. [GET] http://localhost:17085/api/v1/accounts/bd0dcf4f-884b-41d0-8745-65955daa62b4/dashboard => [FAILED] net::ERR_ABORTED
+9. [GET] http://localhost:17085/api/v1/accounts/bd0dcf4f-884b-41d0-8745-65955daa62b4/dashboard => [200] OK
+
+Note: 3 static requests not shown, run with "static" option to see them.

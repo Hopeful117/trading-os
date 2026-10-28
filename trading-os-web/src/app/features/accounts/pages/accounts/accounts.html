@@ -27,17 +27,31 @@
         Nom d’affichage
         <input formControlName="displayName" maxlength="80" autocomplete="off" />
       </label>
-      <label>
-        Mode d’exécution
+      <label class="execution-mode-label">
+        <span class="execution-mode-label-text">
+          Mode d’exécution
+          <button
+            type="button"
+            class="execution-mode-help-trigger"
+            aria-label="À propos des modes d’exécution"
+            aria-describedby="execution-mode-help"
+          >
+            i
+          </button>
+        </span>
+        <span
+          class="execution-mode-help"
+          id="execution-mode-help"
+          data-testid="execution-mode-help"
+        >
+          PAPER simule entièrement les opérations dans Trading OS. LIVE signifie que le compte est
+          connecté à un broker externe; cela ne signifie pas nécessairement argent réel.
+        </span>
         <select formControlName="executionMode" data-testid="execution-mode-select">
           <option value="LIVE">LIVE</option>
           <option value="PAPER">PAPER</option>
         </select>
       </label>
-      <p data-testid="execution-mode-help">
-        PAPER simule entièrement les opérations dans Trading OS. LIVE signifie que le compte est
-        connecté à un broker externe; cela ne signifie pas nécessairement argent réel.
-      </p>
     }
     @if (!recoveryAccount() && isPaper()) {
       <label>
