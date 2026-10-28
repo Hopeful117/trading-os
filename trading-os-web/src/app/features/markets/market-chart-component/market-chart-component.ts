@@ -45,6 +45,8 @@ export class MarketChartComponent implements AfterViewInit {
 
   private candlestickSeries: ISeriesApi<'Candlestick', Time> | null = null;
 
+  private latestChartTimestamp: number | null = null;
+
   private resizeObserver: ResizeObserver | null = null;
 
   constructor() {
@@ -80,6 +82,7 @@ export class MarketChartComponent implements AfterViewInit {
       }
 
       this.candlestickSeries.setData([]);
+      this.latestChartTimestamp = null;
 
       this.chart?.timeScale().setVisibleLogicalRange({
         from: -40,
@@ -103,6 +106,7 @@ export class MarketChartComponent implements AfterViewInit {
       const candles = this.toHistoricalCandlestickData(history);
 
       this.candlestickSeries.setData(candles);
+      this.latestChartTimestamp = Number(candles.at(-1)?.time ?? null);
       this.chart?.timeScale().fitContent();
     });
   }
@@ -115,7 +119,17 @@ export class MarketChartComponent implements AfterViewInit {
         return;
       }
 
-      this.candlestickSeries.update(this.toCandlestickData(candle));
+      const data = this.toCandlestickData(candle);
+      const timestamp = Number(data.time);
+
+      // Streams can replay a candle that predates the loaded history. The
+      // chart only accepts updates at or after its latest known timestamp.
+      if (this.latestChartTimestamp !== null && timestamp < this.latestChartTimestamp) {
+        return;
+      }
+
+      this.candlestickSeries.update(data);
+      this.latestChartTimestamp = timestamp;
     });
   }
 

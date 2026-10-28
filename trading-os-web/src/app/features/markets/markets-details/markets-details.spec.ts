@@ -145,6 +145,55 @@ describe('MarketsDetails', () => {
     expect(marketServiceMock.findById).not.toHaveBeenCalled();
   });
 
+  it('does not request unsupported depth and trade streams for cTrader markets', async () => {
+    marketServiceMock = createMarketService({
+      findById: vi.fn().mockReturnValue(of({ ...mockMarket, provider: 'CTRADER' })),
+    });
+    streamServiceMock = createStreamService();
+
+    await TestBed.configureTestingModule({
+      imports: [
+        MockMarketChartComponent,
+        MockOrderBookComponent,
+        MockRecentTradesComponent,
+        MarketDetail,
+      ],
+      providers: [
+        { provide: ActivatedRoute, useValue: createActivatedRoute('mkt-1') },
+        { provide: MarketService, useValue: marketServiceMock },
+        { provide: MarketDataStreamService, useValue: streamServiceMock },
+      ],
+    })
+      .overrideComponent(MarketDetail, {
+        remove: { imports: [MarketChartComponent, OrderBookComponent, RecentTradesComponent] },
+        add: {
+          imports: [MockMarketChartComponent, MockOrderBookComponent, MockRecentTradesComponent],
+        },
+      })
+      .compileComponents();
+
+    fixture = TestBed.createComponent(MarketDetail);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(marketServiceMock.subscribe).not.toHaveBeenCalledWith(
+      'mkt-1',
+      expect.objectContaining({ type: 'ORDER_BOOK' }),
+    );
+    expect(marketServiceMock.subscribe).not.toHaveBeenCalledWith(
+      'mkt-1',
+      expect.objectContaining({ type: 'TRADES' }),
+    );
+    expect(streamServiceMock.streamOrderBook).not.toHaveBeenCalled();
+    expect(streamServiceMock.streamRecentTrades).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain(
+      'Order-book data is not available for this provider.',
+    );
+    expect(fixture.nativeElement.textContent).toContain(
+      'Recent-trades data is not available for this provider.',
+    );
+  });
+
   describe('timeframe selection', () => {
     it('should default to 5m timeframe (index 1)', async () => {
       await setup();

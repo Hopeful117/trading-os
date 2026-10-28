@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { Account } from '../../../../core/models/account.model';
 import { ActiveScanSummary } from '../../../../core/models/active-scan.model';
@@ -104,6 +104,27 @@ describe('Dashboard', () => {
     dashboardService.pollDashboard.mockReturnValue(of(pollError(new Error('unavailable'))));
     await create();
     expect(text()).toContain('Dashboard est temporairement indisponible');
+  });
+
+  it('keeps the last valid dashboard visible while broker refresh is deferred', async () => {
+    const events$ = new Subject<ReturnType<typeof pollSuccess> | ReturnType<typeof pollError>>();
+    dashboardService.pollDashboard.mockReturnValue(events$);
+
+    await create();
+    events$.next(pollSuccess(summary()));
+    fixture.detectChanges();
+    expect(text()).toContain('1,020');
+
+    events$.next({
+      dashboard: null,
+      error: { status: 409, error: { code: 'BROKER_SNAPSHOT_DEFERRED' } },
+      deferred: true,
+    });
+    fixture.detectChanges();
+
+    expect(text()).toContain('1,020');
+    expect(text()).toContain('Dernières données valides affichées');
+    events$.complete();
   });
 
   it('returns empty string for null or zero pnl', () => {

@@ -272,6 +272,10 @@ export class MarketDetail {
 
   readonly orderBook$ = combineLatest([this.market$, this.selectedOrderBookDepth$]).pipe(
     switchMap(([market, depth]) => {
+      if (!supportsDepthAndTrades(market)) {
+        return of(null);
+      }
+
       const nextRequest: MarketStreamRequest = {
         type: MarketStreamType.ORDER_BOOK,
         parameters: {
@@ -316,6 +320,10 @@ export class MarketDetail {
 
   readonly recentTrades$ = this.market$.pipe(
     switchMap((market) => {
+      if (!supportsDepthAndTrades(market)) {
+        return of(null);
+      }
+
       const previousSubscription = this.activeRecentTradesSubscription;
       const unsubscribePrevious$ =
         previousSubscription === null
@@ -349,6 +357,10 @@ export class MarketDetail {
       refCount: true,
     }),
   );
+}
+
+function supportsDepthAndTrades(market: { provider: string }): boolean {
+  return market.provider === 'KRAKEN';
 }
 
 type OhlcTimeframe = (typeof OHLC_TIMEFRAMES)[number];
