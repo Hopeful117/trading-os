@@ -47,33 +47,38 @@ describe('MarketChartComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('ignores live candles older than the loaded history', () => {
+  it('ignores live candles older than the loaded history', async () => {
     const historyCandle = candle('2026-10-28T10:00:00Z');
     const staleLiveCandle = candle('2026-10-28T09:55:00Z');
 
     fixture.componentRef.setInput('history', [historyCandle]);
     fixture.detectChanges();
+    await fixture.whenStable();
     chartSeries.update.mockClear();
 
     fixture.componentRef.setInput('liveCandle', staleLiveCandle);
     fixture.detectChanges();
+    await fixture.whenStable();
 
     expect(chartSeries.update).not.toHaveBeenCalled();
   });
 
-  it('updates the current candle and accepts newer candles', () => {
+  it('updates the current candle and accepts newer candles', async () => {
     const historyCandle = candle('2026-10-28T10:00:00Z');
     const currentLiveCandle = candle('2026-10-28T10:00:00Z');
     const newerLiveCandle = candle('2026-10-28T10:05:00Z');
 
     fixture.componentRef.setInput('history', [historyCandle]);
     fixture.detectChanges();
+    await fixture.whenStable();
     chartSeries.update.mockClear();
 
     fixture.componentRef.setInput('liveCandle', currentLiveCandle);
     fixture.detectChanges();
+    await fixture.whenStable();
     fixture.componentRef.setInput('liveCandle', newerLiveCandle);
     fixture.detectChanges();
+    await fixture.whenStable();
 
     expect(chartSeries.update).toHaveBeenCalledTimes(2);
   });
