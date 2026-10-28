@@ -13,4 +13,11 @@ public class CTraderAuthenticationExceptionHandler {
     public ResponseEntity<Map<String, String>> handle(CTraderAuthenticationException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", exception.getMessage()));
     }
+
+    @ExceptionHandler(CTraderSnapshotDeferredException.class)
+    public ResponseEntity<Map<String, String>> handleSnapshotDeferred(
+            CTraderSnapshotDeferredException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("code", "BROKER_SNAPSHOT_DEFERRED", "message", exception.getMessage()));
+    }
 }

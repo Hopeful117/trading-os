@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.dashboard.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
@@ -22,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import feign.FeignException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -48,6 +50,7 @@ public class DashboardQueryService {
     private final DashboardAlertService alertService;
     private final TradeAnalyticsService tradeAnalyticsService;
     private final RiskEngine riskEngine;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public DashboardSummary findDashboard(UUID accountId, String username) {
@@ -60,6 +63,8 @@ public class DashboardQueryService {
             broker = paper
                     ? paperFact(account, generatedAt)
                     : liveFact(account);
+        } catch (DashboardSnapshotDeferredException exception) {
+            throw exception;
         } catch (RuntimeException exception) {
             log.warn("Dashboard account data unavailable accountId={}", accountId);
             return unavailable(account, generatedAt);
@@ -137,13 +142,29 @@ public class DashboardQueryService {
     }
 
     private BrokerAccountFact liveFact(Account account) {
-        if (account.getBrokerAccountId() != null) {
-            return brokerMapper.toFact(
-                    brokerAccountSnapshotV2Client.getAccountSnapshot(account.getBrokerAccountId()),
-                    account.getBroker(), account.getBaseCurrency()
-            );
+        try {
+            if (account.getBrokerAccountId() != null) {
+                return brokerMapper.toFact(
+                        brokerAccountSnapshotV2Client.getAccountSnapshot(account.getBrokerAccountId()),
+                        account.getBroker(), account.getBaseCurrency()
+                );
+            }
+            return brokerMapper.toFact(brokerApiClient.getAccount());
+        } catch (FeignException exception) {
+            if (exception.status() == 409 && isSnapshotDeferred(exception)) {
+                throw new DashboardSnapshotDeferredException();
+            }
+            throw exception;
         }
-        return brokerMapper.toFact(brokerApiClient.getAccount());
+    }
+
+    private boolean isSnapshotDeferred(FeignException exception) {
+        try {
+            return "BROKER_SNAPSHOT_DEFERRED".equals(
+                    objectMapper.readTree(exception.contentUTF8()).path("code").asText());
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private boolean marketDataAvailable(AccountValuationResult balanceValuation,

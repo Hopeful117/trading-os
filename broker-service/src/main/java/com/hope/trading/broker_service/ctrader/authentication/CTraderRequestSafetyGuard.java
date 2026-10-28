@@ -45,7 +45,8 @@ public class CTraderRequestSafetyGuard {
                 """, leaseToken, utc(now.plus(properties.snapshotLease())), utc(now), scope, utc(now),
                 utc(now.minus(properties.snapshotCooldown())));
         if (claimed != 1) {
-            throw new CTraderSafetyException("cTrader snapshot blocked by cooldown or concurrent synchronization");
+            throw new CTraderSnapshotDeferredException(
+                    "cTrader snapshot blocked by cooldown or concurrent synchronization");
         }
         return new SnapshotLease(scope, leaseToken, true);
     }

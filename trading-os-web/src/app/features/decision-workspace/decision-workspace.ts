@@ -13,6 +13,7 @@ import {
   Observable,
   of,
   shareReplay,
+  scan,
   startWith,
   Subject,
   switchMap,
@@ -40,7 +41,7 @@ import {
   TrendContextTimeframeAssessment,
 } from '../../core/models/trend-context.model';
 import { AccountService } from '../../core/services/account.service';
-import { DashboardService } from '../../core/services/dashboard.service';
+import { DashboardPollEvent, DashboardService } from '../../core/services/dashboard.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
 import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
@@ -74,7 +75,8 @@ export type DecisionWorkspaceAccountsView =
 export type DecisionWorkspaceDashboardView =
   | { status: 'select-account'; summary: null }
   | { status: 'loading'; summary: null }
-  | { status: 'ready'; summary: DashboardSummary }
+  | { status: 'ready'; summary: DashboardSummary; deferred: boolean; stale: boolean }
+  | { status: 'deferred'; summary: null }
   | { status: 'error'; summary: null };
 
 export type DecisionWorkspaceMarketView =
@@ -205,14 +207,27 @@ export class DecisionWorkspace {
         return of<DecisionWorkspaceDashboardView>({ status: 'select-account', summary: null });
       }
 
-      return timer(0, 5_000).pipe(
-        switchMap(() =>
-          this.dashboardService.findDashboard(accountId).pipe(
-            map((summary) => ({ status: 'ready' as const, summary })),
-            catchError(() =>
-              of<DecisionWorkspaceDashboardView>({ status: 'error', summary: null }),
-            ),
-          ),
+      return this.dashboardService.pollDashboard(accountId).pipe(
+        scan(
+          (previous, event: DashboardPollEvent): DecisionWorkspaceDashboardView => {
+            if (event.dashboard) {
+              return {
+                status: 'ready',
+                summary: event.dashboard,
+                deferred: event.deferred,
+                stale: false,
+              };
+            }
+            if (event.deferred) {
+              return previous.status === 'ready'
+                ? { ...previous, deferred: true, stale: false }
+                : { status: 'deferred', summary: null };
+            }
+            return previous.status === 'ready'
+              ? { ...previous, deferred: false, stale: true }
+              : { status: 'error', summary: null };
+          },
+          { status: 'loading', summary: null } as DecisionWorkspaceDashboardView,
         ),
         startWith<DecisionWorkspaceDashboardView>({ status: 'loading', summary: null }),
       );

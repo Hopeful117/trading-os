@@ -1,5 +1,6 @@
 package com.hope.trading.trading_core.dashboard.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.broker.dto.AccountBalanceDto;
@@ -27,8 +28,12 @@ import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersist
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import feign.FeignException;
+import feign.Request;
+import feign.Response;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -80,7 +85,8 @@ class DashboardQueryServiceTest {
                 new DashboardFreshnessService(),
                 new DashboardAlertService(),
                 analytics,
-                riskEngine
+                riskEngine,
+                new ObjectMapper()
         );
         when(accountService.getAccountById(account.getAccountId(), "alice")).thenReturn(account);
         when(balanceValuation.value(anyString(), anyMap()))
@@ -222,6 +228,27 @@ class DashboardQueryServiceTest {
         assertThat(result.account().equity()).isEqualByComparingTo("998");
         assertThat(result.account().equitySource()).isEqualTo("BROKER");
         verifyNoInteractions(brokerClient);
+    }
+
+    @Test
+    void propagatesMachineReadableSnapshotDeferralFromBrokerService() {
+        UUID brokerAccountId = UUID.randomUUID();
+        account.setBrokerAccountId(brokerAccountId);
+        Request request = Request.create(Request.HttpMethod.GET, "/snapshot", Map.of(),
+                new byte[0], StandardCharsets.UTF_8, null);
+        FeignException deferred = FeignException.errorStatus("BrokerAccountSnapshotV2Client#getAccountSnapshot",
+                Response.builder()
+                        .request(request)
+                        .status(409)
+                        .reason("conflict")
+                        .headers(Map.of())
+                        .body("{\"code\":\"BROKER_SNAPSHOT_DEFERRED\",\"message\":\"deferred\"}",
+                                StandardCharsets.UTF_8)
+                        .build());
+        when(brokerSnapshotClient.getAccountSnapshot(brokerAccountId)).thenThrow(deferred);
+
+        assertThatThrownBy(() -> service.findDashboard(account.getAccountId(), "alice"))
+                .isInstanceOf(DashboardSnapshotDeferredException.class);
     }
 
     @Test

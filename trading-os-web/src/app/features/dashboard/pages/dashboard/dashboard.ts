@@ -9,10 +9,10 @@ import {
   map,
   Observable,
   of,
+  scan,
   shareReplay,
   startWith,
   switchMap,
-  timer,
 } from 'rxjs';
 import { Account } from '../../../../core/models/account.model';
 import {
@@ -24,7 +24,7 @@ import { DashboardSummary } from '../../../../core/models/dashboard-summary.mode
 import { OpportunityResponse } from '../../../../core/models/opportunity.model';
 import { AccountService } from '../../../../core/services/account.service';
 import { ActiveScanService } from '../../../../core/services/active-scan.service';
-import { DashboardService } from '../../../../core/services/dashboard.service';
+import { DashboardPollEvent, DashboardService } from '../../../../core/services/dashboard.service';
 import { OpportunityService } from '../../../../core/services/opportunity.service';
 
 interface AccountsState {
@@ -48,6 +48,7 @@ interface DashboardViewModel {
   dashboard: DashboardSummary | null;
   dashboardLoading: boolean;
   dashboardError: string | null;
+  dashboardDeferred: boolean;
   mi: MiState;
 }
 
@@ -129,32 +130,32 @@ export class Dashboard {
           dashboard: null,
           dashboardLoading: false,
           dashboardError: null,
+          dashboardDeferred: false,
           mi,
         });
       }
 
-      return timer(0, 5_000).pipe(
-        switchMap(() =>
-          this.dashboardService.findDashboard(selectedAccountId).pipe(
-            map((dashboard) => ({
-              accountsState,
-              selectedAccountId,
-              dashboard,
-              dashboardLoading: false,
-              dashboardError: null,
-              mi,
-            })),
-            catchError(() =>
-              of({
-                accountsState,
-                selectedAccountId,
-                dashboard: null,
-                dashboardLoading: false,
-                dashboardError: 'Le Dashboard est temporairement indisponible.',
-                mi,
-              }),
-            ),
-          ),
+      return this.dashboardService.pollDashboard(selectedAccountId).pipe(
+        scan(
+          (previous, event: DashboardPollEvent) => ({
+            ...previous,
+            dashboard: event.dashboard ?? previous.dashboard,
+            dashboardLoading: false,
+            dashboardError:
+              event.error && !event.deferred
+                ? 'Le Dashboard est temporairement indisponible.'
+                : null,
+            dashboardDeferred: event.deferred,
+          }),
+          {
+            accountsState,
+            selectedAccountId,
+            dashboard: null,
+            dashboardLoading: true,
+            dashboardError: null,
+            dashboardDeferred: false,
+            mi,
+          } as DashboardViewModel,
         ),
         startWith({
           accountsState,
@@ -162,6 +163,7 @@ export class Dashboard {
           dashboard: null,
           dashboardLoading: true,
           dashboardError: null,
+          dashboardDeferred: false,
           mi,
         }),
       );
