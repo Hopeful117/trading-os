@@ -50,7 +50,7 @@
             </div>
 
             <div class="fact">
-              <span class="label">Score</span>
+              <span class="label">Signal strength</span>
               <span class="value">{{ view.opportunity.score }}</span>
             </div>
 
@@ -92,6 +92,97 @@
               </span>
             </div>
           </section>
+
+          @if (view.opportunity.thesis; as thesis) {
+            @if (hasValidThesis(thesis)) {
+              <section
+                class="decision-panel"
+                [class.no-trade]="thesis.state === 'NO_TRADE'"
+                [class.watch]="thesis.state === 'WATCH'"
+                [class.candidate]="thesis.state === 'CANDIDATE'"
+                data-testid="market-thesis"
+              >
+                <div class="decision-heading">
+                  <div>
+                    <span class="label">Authoritative market decision</span>
+                    <h2>{{ thesis.state === 'NO_TRADE' ? 'NO TRADE' : thesis.state }}</h2>
+                  </div>
+                  <span class="decision-note">Signal strength is not trade authorization.</span>
+                </div>
+
+                @if (safeList(thesis.reasons).length > 0) {
+                  <div class="decision-section">
+                    <h3>Decision reasons</h3>
+                    <ul>
+                      @for (reason of safeList(thesis.reasons); track reason) {
+                        <li>{{ reason }}</li>
+                      }
+                    </ul>
+                  </div>
+                }
+
+                <div class="evidence-grid">
+                  <div>
+                    <h3>Supporting evidence ({{ safeList(thesis.supportingEvidence).length }})</h3>
+                    @if (safeList(thesis.supportingEvidence).length > 0) {
+                      <ul>
+                        @for (
+                          evidence of safeList(thesis.supportingEvidence);
+                          track evidence.evidenceId
+                        ) {
+                          <li>{{ evidence.explanation }}</li>
+                        }
+                      </ul>
+                    } @else {
+                      <p>None recorded.</p>
+                    }
+                  </div>
+                  <div>
+                    <h3>
+                      Contradicting evidence ({{ safeList(thesis.contradictingEvidence).length }})
+                    </h3>
+                    @if (safeList(thesis.contradictingEvidence).length > 0) {
+                      <ul>
+                        @for (
+                          evidence of safeList(thesis.contradictingEvidence);
+                          track evidence.evidenceId
+                        ) {
+                          <li>{{ evidence.explanation }}</li>
+                        }
+                      </ul>
+                    } @else {
+                      <p>None recorded.</p>
+                    }
+                  </div>
+                  <div>
+                    <h3>Missing evidence ({{ safeList(thesis.missingEvidence).length }})</h3>
+                    @if (safeList(thesis.missingEvidence).length > 0) {
+                      <ul>
+                        @for (
+                          evidence of safeList(thesis.missingEvidence);
+                          track evidence.evidenceId
+                        ) {
+                          <li>{{ evidence.explanation }}</li>
+                        }
+                      </ul>
+                    } @else {
+                      <p>None recorded.</p>
+                    }
+                  </div>
+                </div>
+              </section>
+            } @else {
+              <section class="decision-panel unavailable" data-testid="market-thesis-unavailable">
+                <h2>Decision not available</h2>
+                <p>This opportunity has not been evaluated by the Market Thesis pipeline.</p>
+              </section>
+            }
+          } @else {
+            <section class="decision-panel unavailable" data-testid="market-thesis-unavailable">
+              <h2>Decision not available</h2>
+              <p>This opportunity has not been evaluated by the Market Thesis pipeline.</p>
+            </section>
+          }
 
           <section class="explanation">
             <h2>Why this opportunity exists</h2>

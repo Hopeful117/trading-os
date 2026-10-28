@@ -38,12 +38,13 @@
               <table>
                 <thead>
                   <tr>
+                    <th>Decision</th>
                     <th>Instrument</th>
                     <th>Market</th>
                     <th>Direction</th>
                     <th>Type</th>
                     <th>Timeframe</th>
-                    <th>Score</th>
+                    <th>Signal strength</th>
                     <th>Ref. price</th>
                     <th>Valid until</th>
                     <th>Rationale</th>
@@ -59,6 +60,30 @@
                       (click)="openOpportunity(opportunity)"
                       (keydown.enter)="openOpportunity(opportunity)"
                     >
+                      <td class="decision-cell">
+                        @if (opportunity.thesis; as thesis) {
+                          @if (hasValidThesis(thesis)) {
+                            <span
+                              class="decision-badge"
+                              [class.no-trade]="thesis.state === 'NO_TRADE'"
+                              [class.watch]="thesis.state === 'WATCH'"
+                              [class.candidate]="thesis.state === 'CANDIDATE'"
+                            >
+                              {{ thesis.state === 'NO_TRADE' ? 'NO TRADE' : thesis.state }}
+                            </span>
+                            @if (safeList(thesis.reasons).length > 0) {
+                              <small class="decision-reason">{{
+                                safeList(thesis.reasons)[0]
+                              }}</small>
+                            }
+                          } @else {
+                            <span class="decision-badge unavailable">Not evaluated</span>
+                          }
+                        } @else {
+                          <span class="decision-badge unavailable">Not evaluated</span>
+                        }
+                      </td>
+
                       <td class="instrument">
                         {{ opportunity.instrument }}
                         @if (openingOpportunityId === opportunity.id) {

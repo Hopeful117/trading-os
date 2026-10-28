@@ -61,7 +61,7 @@ describe('DecisionWorkspace', () => {
   const candidateLineage = {
     version: 1,
     marketThesis: { thesisId: 'thesis-1', thesisVersion: 1 },
-    thesis: { state: 'CANDIDATE' },
+    thesis: { thesisId: 'thesis-1', thesisVersion: 1, state: 'CANDIDATE' },
   } as unknown as Partial<OpportunityResponse>;
 
   const account: Account = {
@@ -819,6 +819,19 @@ describe('DecisionWorkspace', () => {
     } as OpportunityResponse;
 
     expect(component.opportunityValidity()).toBe('EXPIRED');
+    expect(component.canPrepareOpportunity()).toBe(false);
+  });
+
+  it('does not prepare a state-only candidate Thesis', () => {
+    component.opportunity = {
+      id: 'opportunity-1',
+      status: 'ACTIVE',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: null,
+      marketThesis: { thesisId: 'thesis-1', thesisVersion: 1 },
+      thesis: { state: 'CANDIDATE' },
+    } as OpportunityResponse;
+
     expect(component.canPrepareOpportunity()).toBe(false);
   });
 

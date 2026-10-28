@@ -36,6 +36,12 @@ public final class OpportunityTestFixtures {
     public static TradingOpportunity opportunity(
             OpportunityId id, long version, OpportunityStatus status,
             OpportunityScore score, Instant evaluatedAt) {
+        return opportunity(id, version, status, score, evaluatedAt, null);
+    }
+
+    public static TradingOpportunity opportunity(
+            OpportunityId id, long version, OpportunityStatus status,
+            OpportunityScore score, Instant evaluatedAt, MarketThesisReference marketThesis) {
         return new OpportunityFactory().create(
                 new OpportunityFactory.Values(
                         id, new OpportunityVersion(version), status, "BTC/EUR",
@@ -43,7 +49,7 @@ public final class OpportunityTestFixtures {
                         OpportunityType.SCALPING, OpportunityOrigin.PASSIVE_SCAN, score,
                         "Confirmed", Set.of(new ObservationReference(UUID.randomUUID())), Set.of(),
                         evaluatedAt, evaluatedAt, evaluatedAt.plusSeconds(300), evaluatedAt,
-                        null, null, null));
+                        null, null, null, null, null, null, null, marketThesis));
     }
 
     private OpportunityTestFixtures() {}

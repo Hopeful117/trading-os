@@ -76,7 +76,7 @@ public final class OpportunityController {
     @GetMapping("/active")
     public ResponseEntity<List<OpportunityResponse>> active() {
         return ResponseEntity.ok(repository.findActive().stream()
-                .map(value -> response(value, false)).toList());
+                .map(value -> response(value, true)).toList());
     }
 
     @GetMapping("/history/{id}")
