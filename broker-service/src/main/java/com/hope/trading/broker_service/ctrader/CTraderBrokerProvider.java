@@ -38,6 +38,7 @@ public final class CTraderBrokerProvider implements BrokerProvider {
     public <T> Optional<T> capability(Class<T> type) {
         if (type.isInstance(snapshots)) return Optional.of(type.cast(snapshots));
         if (type.isInstance(technicalCapabilities)) return Optional.of(type.cast(technicalCapabilities));
-        return type.isInstance(execution) ? Optional.of(type.cast(execution)) : Optional.empty();
+        return execution != null && execution.enabled() && type.isInstance(execution)
+                ? Optional.of(type.cast(execution)) : Optional.empty();
     }
 }

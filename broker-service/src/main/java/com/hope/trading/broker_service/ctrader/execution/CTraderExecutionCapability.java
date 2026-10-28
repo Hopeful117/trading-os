@@ -12,11 +12,14 @@ import com.hope.trading.broker_service.ctrader.authentication.CTraderAuthenticat
 import com.hope.trading.broker_service.ctrader.authentication.CTraderOpenApiClient;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderToken;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderTokenCodec;
+import com.hope.trading.broker_service.ctrader.authentication.CTraderSafetyException;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
+import com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties;
 import com.hope.trading.broker_service.secret.application.SecretReader;
 import com.hope.trading.broker_service.secret.domain.CredentialReference;
 import com.hope.trading.broker_service.secret.domain.PlainSecret;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -31,20 +34,36 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
     private final SecretReader secrets;
     private final CTraderOpenApiClient client;
     private final CTraderProperties properties;
+    private final CTraderSafetyProperties safety;
     private final Clock clock;
 
     public CTraderExecutionCapability(BrokerConnectionRepository connections, SecretReader secrets,
                                       CTraderOpenApiClient client, CTraderProperties properties, Clock clock) {
+        this(connections, secrets, client, properties, clock,
+                new CTraderSafetyProperties(false, false, 1000, 700, 800,
+                        Duration.ofMinutes(20), Duration.ofMinutes(30)));
+    }
+
+    @Autowired
+    public CTraderExecutionCapability(BrokerConnectionRepository connections, SecretReader secrets,
+                                      CTraderOpenApiClient client, CTraderProperties properties, Clock clock,
+                                      CTraderSafetyProperties safety) {
         this.connections = connections;
         this.secrets = secrets;
         this.client = client;
         this.properties = properties;
         this.clock = clock;
+        this.safety = safety;
+    }
+
+    public boolean enabled() {
+        return safety.executionEnabled();
     }
 
     @Override
     public ExecutionResult execute(ExecutionRequest request) {
         try {
+            if (!enabled()) throw new CTraderSafetyException("cTrader execution is disabled by safety policy");
             BrokerConnection connection = requireExecutionConnection(request.brokerAccountId());
             try (PlainSecret secret = secrets.read(new CredentialReference(connection.activeCredentialReference()))) {
                 CTraderToken token = CTraderTokenCodec.decode(secret.copyValue());
