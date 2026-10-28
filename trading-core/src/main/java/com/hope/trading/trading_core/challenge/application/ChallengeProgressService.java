@@ -79,7 +79,8 @@ public class ChallengeProgressService {
         RiskHeadroom totalHeadroom = headroom(challenge, evaluation, false);
         BigDecimal dailyReferenceBalance = riskPersistence == null
                 ? null : evaluation == null ? null : evaluation.dailyReferenceBalance();
-        return new ChallengeProgress(challenge.id(), accountId, challenge.status(), challenge.startingCapital(),
+        return new ChallengeProgress(challenge.id(), accountId, challenge.definitionId(), challenge.definitionVersion(),
+                challenge.status(), challenge.startingCapital(),
                 current, target, profit, progress, dailyReferenceBalance,
                 dailyHeadroom.remaining(), totalHeadroom.remaining(),
                 dailyHeadroom, totalHeadroom,

@@ -50,6 +50,8 @@ export interface ChallengeInstance {
 export interface ChallengeProgress {
   challengeId: string;
   accountId: string;
+  definitionId: string;
+  definitionVersion: string;
   status: ChallengeStatus;
   startingCapital: number;
   currentValue: number | null;

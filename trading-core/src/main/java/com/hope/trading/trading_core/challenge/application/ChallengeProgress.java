@@ -10,6 +10,8 @@ import java.util.UUID;
 public record ChallengeProgress(
         UUID challengeId,
         UUID accountId,
+        UUID definitionId,
+        String definitionVersion,
         ChallengeStatus status,
         BigDecimal startingCapital,
         BigDecimal currentValue,

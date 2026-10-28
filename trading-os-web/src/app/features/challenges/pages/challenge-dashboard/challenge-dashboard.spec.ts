@@ -46,6 +46,20 @@ describe('ChallengeDashboard', () => {
     expect(fixture.nativeElement.querySelector('select')).not.toBeNull();
   });
 
+  it('renders the definition referenced by the active backend Challenge', async () => {
+    const ftmo = ftmoDefinition();
+    challengeService.findCatalog.mockReturnValue(of([definition, ftmo]));
+    challengeService.findProgress.mockReturnValue(
+      of(progress('account-1', 'ACTIVE', ftmo.id, ftmo.definitionVersion)),
+    );
+
+    await create();
+
+    expect(text()).toContain('2_STEP · STANDARD');
+    expect(text()).toContain('FTMO');
+    expect(text()).not.toContain('KRAKEN_PROP');
+  });
+
   it('renders the no-Challenge state only for the explicit backend code', async () => {
     challengeService.findProgress.mockReturnValue(
       throwError(
@@ -240,10 +254,17 @@ describe('ChallengeDashboard', () => {
     };
   }
 
-  function progress(accountId: string, status: ChallengeProgress['status']): ChallengeProgress {
+  function progress(
+    accountId: string,
+    status: ChallengeProgress['status'],
+    definitionId = definition.id,
+    definitionVersion = definition.definitionVersion,
+  ): ChallengeProgress {
     return {
       challengeId: `challenge-${accountId}`,
       accountId,
+      definitionId,
+      definitionVersion,
       status,
       startingCapital: 50000,
       currentValue: 52000,
@@ -259,6 +280,17 @@ describe('ChallengeDashboard', () => {
       terminalReason:
         status === 'ACTIVE' ? null : status === 'PASSED' ? 'Target reached' : 'Daily loss limit',
       terminalRiskEvaluationId: status === 'ACTIVE' ? null : 'terminal-risk-evaluation',
+    };
+  }
+
+  function ftmoDefinition(): ChallengeDefinition {
+    return {
+      ...definition,
+      id: 'definition-ftmo',
+      provider: 'FTMO',
+      product: '2_STEP',
+      planCode: 'STANDARD',
+      profitTargetRatio: 0.1,
     };
   }
 

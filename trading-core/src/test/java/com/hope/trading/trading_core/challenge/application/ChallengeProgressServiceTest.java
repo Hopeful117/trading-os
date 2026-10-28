@@ -52,6 +52,8 @@ class ChallengeProgressServiceTest {
 
         ChallengeProgress progress = service.get(ACCOUNT_ID, OWNER_ID);
 
+        assertThat(progress.definitionId()).isEqualTo(DEFINITION_ID);
+        assertThat(progress.definitionVersion()).isEqualTo("1.0.0");
         assertThat(progress.currentValue()).isEqualByComparingTo("12000");
         assertThat(progress.currentProfit()).isEqualByComparingTo("2000");
         assertThat(progress.targetProgress()).isEqualByComparingTo("1");
