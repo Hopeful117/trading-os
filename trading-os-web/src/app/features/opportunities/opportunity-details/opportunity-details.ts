@@ -150,9 +150,9 @@ export class OpportunityDetail {
     return (
       thesis !== null &&
       thesis !== undefined &&
-      typeof thesis.thesisId === 'string' &&
-      thesis.thesisId.length > 0 &&
-      thesis.thesisVersion >= 1 &&
+      typeof thesis.id === 'string' &&
+      thesis.id.length > 0 &&
+      thesis.version >= 1 &&
       (thesis.state === 'NO_TRADE' || thesis.state === 'WATCH' || thesis.state === 'CANDIDATE')
     );
   }

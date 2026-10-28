@@ -789,9 +789,9 @@ export class DecisionWorkspace {
       this.opportunity?.status === 'ACTIVE' &&
       this.opportunityValidity() === 'VALID' &&
       this.opportunity.thesis?.state === 'CANDIDATE' &&
-      typeof this.opportunity.thesis.thesisId === 'string' &&
-      this.opportunity.thesis.thesisId.length > 0 &&
-      this.opportunity.thesis.thesisVersion >= 1 &&
+      typeof this.opportunity.thesis.id === 'string' &&
+      this.opportunity.thesis.id.length > 0 &&
+      this.opportunity.thesis.version >= 1 &&
       this.opportunity.marketThesis !== null &&
       this.opportunity.marketThesis !== undefined
     );

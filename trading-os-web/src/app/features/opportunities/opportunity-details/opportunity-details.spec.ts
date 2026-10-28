@@ -52,8 +52,8 @@ describe('OpportunityDetail', () => {
     marketId: 'market-1',
     marketThesis: { thesisId: 'thesis-1', thesisVersion: 1 },
     thesis: {
-      thesisId: 'thesis-1',
-      thesisVersion: 1,
+      id: 'thesis-1',
+      version: 1,
       state: 'CANDIDATE',
     } as OpportunityResponse['thesis'],
     setup,
@@ -174,6 +174,37 @@ describe('OpportunityDetail', () => {
       expect(element.textContent).toContain('No order book snapshot');
     });
 
+    it('accepts the backend id/version Thesis contract for NO_TRADE', async () => {
+      opportunityServiceMock.findById.mockReturnValue(
+        of({
+          ...mockOpportunity,
+          direction: 'SHORT',
+          scenario: 'OHLC_TREND',
+          timeframe: 'm15',
+          score: 100,
+          thesis: {
+            id: 'thesis-5',
+            version: 5,
+            state: 'NO_TRADE',
+          } as OpportunityResponse['thesis'],
+        }),
+      );
+
+      await createComponent('o1');
+
+      expect(fixture.componentInstance.hasValidThesis(mockOpportunity.thesis)).toBe(true);
+      expect(
+        fixture.componentInstance.hasValidThesis({
+          id: 'thesis-5',
+          version: 5,
+          state: 'NO_TRADE',
+        } as OpportunityResponse['thesis']),
+      ).toBe(true);
+      expect(fixture.nativeElement.querySelector('[data-testid="market-thesis"]')).not.toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('NO TRADE');
+      expect(fixture.nativeElement.textContent).not.toContain('Not evaluated');
+    });
+
     it('does not expose Trade Plan preparation for a non-candidate thesis', async () => {
       opportunityServiceMock.findById.mockReturnValue(
         of({ ...mockOpportunity, thesis: { ...mockOpportunity.thesis, state: 'WATCH' } }),
@@ -193,7 +224,7 @@ describe('OpportunityDetail', () => {
       opportunityServiceMock.findById.mockReturnValue(
         of({
           ...mockOpportunity,
-          thesis: { thesisId: 'thesis-1', thesisVersion: 1 } as OpportunityResponse['thesis'],
+          thesis: { id: 'thesis-1', version: 1 } as OpportunityResponse['thesis'],
         }),
       );
 
