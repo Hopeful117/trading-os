@@ -396,6 +396,23 @@ describe('ScanPanel', () => {
       ).toEqual(['m1', 'm2']);
     });
 
+    it('keeps unavailable cTrader markets selectable for backend quote bootstrap', async () => {
+      await createComponent();
+
+      const ctraderMarket: MarketResponse = {
+        ...markets[2],
+        marketId: 'm4',
+        provider: 'CTRADER',
+        symbol: 'EUR/USD',
+      };
+
+      expect(
+        fixture.componentInstance
+          .selectableMarkets([...markets, ctraderMarket])
+          .map((market) => market.marketId),
+      ).toEqual(['m1', 'm2', 'm4']);
+    });
+
     it('limits the specific-market catalogue to the account eligible universe', async () => {
       await createComponent();
       fixture.componentRef.setInput('selectableMarketIds', ['m2']);

@@ -439,8 +439,12 @@ public class ActiveScanScopeResolutionService {
             marketData.findPriceSnapshots(new com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotRequest(
                     bootstrapIds, Duration.ofSeconds(30), Duration.ofSeconds(18), "CONFIRM_OR_ACQUIRE"));
             return loadCatalog();
-        } catch (RuntimeException ignored) {
-            return byId.values().stream().toList();
+        } catch (RuntimeException bootstrapFailure) {
+            try {
+                return loadCatalog();
+            } catch (RuntimeException reloadFailure) {
+                return byId.values().stream().toList();
+            }
         }
     }
 
