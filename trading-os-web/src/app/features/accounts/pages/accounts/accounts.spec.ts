@@ -90,10 +90,12 @@ describe('Accounts', () => {
   });
 
   it('explains that execution mode is an execution boundary, not real-money status', () => {
-    expect(fixture.nativeElement.querySelector('[data-testid="execution-mode-help"]')?.textContent)
-      .toContain('LIVE signifie que le compte est connecté à un broker externe');
-    expect(fixture.nativeElement.querySelector('[data-testid="execution-mode-help"]')?.textContent)
-      .toContain('ne signifie pas nécessairement argent réel');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-mode-help"]')?.textContent,
+    ).toContain('LIVE signifie que le compte est connecté à un broker externe');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="execution-mode-help"]')?.textContent,
+    ).toContain('ne signifie pas nécessairement argent réel');
   });
 
   it('should load accounts on init', () => {
