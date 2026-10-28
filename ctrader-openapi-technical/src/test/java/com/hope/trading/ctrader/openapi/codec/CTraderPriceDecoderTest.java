@@ -11,11 +11,12 @@ class CTraderPriceDecoderTest {
     @Test
     void decodesUsingSymbolDigits() {
         assertEquals(new BigDecimal("123.45678"), CTraderPriceDecoder.decode(12345678, 5));
+        assertEquals(new BigDecimal("4065.37"), CTraderPriceDecoder.decode(406537000, 2));
     }
 
     @Test
     void preservesZeroDigits() {
-        assertEquals(new BigDecimal("12345"), CTraderPriceDecoder.decode(12345, 0));
+        assertEquals(new BigDecimal("12345"), CTraderPriceDecoder.decode(1234500000, 0));
     }
 
     @Test

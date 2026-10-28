@@ -11,7 +11,8 @@ export interface DashboardPollEvent {
 }
 
 export const DASHBOARD_POLL_INTERVAL_MS = 5_000;
-export const DASHBOARD_DEFERRED_BACKOFF_MS = 60_000;
+// Keep retries outside cTrader's configured snapshot safety window.
+export const DASHBOARD_DEFERRED_BACKOFF_MS = 20 * 60_000;
 
 @Injectable({
   providedIn: 'root',

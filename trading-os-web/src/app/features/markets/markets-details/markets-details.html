@@ -120,22 +120,28 @@
               <h2 id="order-book-title">Order book</h2>
             </div>
 
-            <div class="timeframe-selector" aria-label="Order-book depth">
-              @if (selectedOrderBookDepth$ | async; as selectedDepth) {
-                @for (depth of orderBookDepths; track depth) {
-                  <button
-                    type="button"
-                    [class.active]="selectedDepth === depth"
-                    (click)="selectOrderBookDepth(depth)"
-                  >
-                    {{ depth }} levels
-                  </button>
+            @if (market.provider === 'KRAKEN') {
+              <div class="timeframe-selector" aria-label="Order-book depth">
+                @if (selectedOrderBookDepth$ | async; as selectedDepth) {
+                  @for (depth of orderBookDepths; track depth) {
+                    <button
+                      type="button"
+                      [class.active]="selectedDepth === depth"
+                      (click)="selectOrderBookDepth(depth)"
+                    >
+                      {{ depth }} levels
+                    </button>
+                  }
                 }
-              }
-            </div>
+              </div>
+            }
           </div>
 
-          @if (orderBook$ | async; as orderBook) {
+          @if (market.provider !== 'KRAKEN') {
+            <div class="section-placeholder section-placeholder--compact">
+              <p>Order-book data is not available for this provider.</p>
+            </div>
+          } @else if (orderBook$ | async; as orderBook) {
             <app-order-book [snapshot]="orderBook" />
           } @else {
             <div class="section-placeholder section-placeholder--compact">
@@ -150,10 +156,16 @@
               <h2 id="recent-trades-title">Recent trades</h2>
             </div>
 
-            <span class="stream-badge">TRADES</span>
+            @if (market.provider === 'KRAKEN') {
+              <span class="stream-badge">TRADES</span>
+            }
           </div>
 
-          @if (recentTrades$ | async; as recentTrades) {
+          @if (market.provider !== 'KRAKEN') {
+            <div class="section-placeholder section-placeholder--compact">
+              <p>Recent-trades data is not available for this provider.</p>
+            </div>
+          } @else if (recentTrades$ | async; as recentTrades) {
             <app-recent-trades [snapshot]="recentTrades" />
           } @else {
             <div class="section-placeholder section-placeholder--compact">

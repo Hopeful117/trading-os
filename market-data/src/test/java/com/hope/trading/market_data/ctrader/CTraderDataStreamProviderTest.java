@@ -41,16 +41,16 @@ class CTraderDataStreamProviderTest {
         MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
         fixture.provider.subscribe(List.of(fixture.market), request).block();
 
-        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 12345L, null,
+        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 123450L, null,
                 RECEIVED.minusSeconds(1)));
-        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, null, 12355L,
+        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, null, 123550L,
                 RECEIVED));
-        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 12345L, 12355L,
+        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 123450L, 123550L,
                 RECEIVED));
 
         assertThat(fixture.tickers).hasSize(1);
-        assertThat(fixture.tickers.getFirst().bid()).isEqualByComparingTo("12345");
-        assertThat(fixture.tickers.getFirst().ask()).isEqualByComparingTo("12355");
+        assertThat(fixture.tickers.getFirst().bid()).isEqualByComparingTo("1.2345");
+        assertThat(fixture.tickers.getFirst().ask()).isEqualByComparingTo("1.2355");
         assertThat(fixture.tickers.getFirst().last()).isNull();
         assertThat(fixture.tickers.getFirst().fetchedAt()).isEqualTo(RECEIVED);
         assertThat(fixture.tickers.getFirst().providerSymbol()).isEqualTo("42");
@@ -63,7 +63,7 @@ class CTraderDataStreamProviderTest {
                 com.hope.trading.market_data.helper.MarketAvailability.UNAVAILABLE));
         fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
 
-        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 12345L, 12355L, RECEIVED));
+        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 123450L, 123550L, RECEIVED));
 
         assertThat(fixture.market.getMarketState().isTradable()).isTrue();
     }
@@ -95,12 +95,12 @@ class CTraderDataStreamProviderTest {
         fixture.provider.subscribe(List.of(fixture.market), request).block();
 
         fixture.emit(new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1",
-                new CTraderOpenApiClient.CTraderTrendbar(600, 1, 3, 100, 0, 100),
-                RECEIVED, 12345L, false));
+                new CTraderOpenApiClient.CTraderTrendbar(600, 100, 300, 10000, 0, 100),
+                RECEIVED, 123450L, false));
 
         assertThat(fixture.ohlc).hasSize(1);
         assertThat(fixture.ohlc.getFirst().closed()).isFalse();
-        assertThat(fixture.ohlc.getFirst().close()).isEqualByComparingTo("12345");
+        assertThat(fixture.ohlc.getFirst().close()).isEqualByComparingTo("1.2345");
     }
 
     @Test
@@ -110,12 +110,12 @@ class CTraderDataStreamProviderTest {
                 new MarketStreamParameters(1, null));
         fixture.provider.subscribe(List.of(fixture.market), request).block();
         CTraderOpenApiClient.CTraderTrendbar bar =
-                new CTraderOpenApiClient.CTraderTrendbar(600, 1, 3, 100, 0, 100);
+                new CTraderOpenApiClient.CTraderTrendbar(600, 100, 300, 10000, 0, 100);
 
         fixture.emit(new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1", bar,
-                RECEIVED, 12345L, false));
+                RECEIVED, 123450L, false));
         fixture.emit(new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1", bar,
-                RECEIVED, 12345L, false));
+                RECEIVED, 123450L, false));
 
         assertThat(fixture.ohlc).hasSize(1);
     }
@@ -190,7 +190,7 @@ class CTraderDataStreamProviderTest {
         private final Market market = Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.CTRADER)
                 .symbol("EUR/USD").providerSymbol("42").baseAsset("EUR").quoteAsset("USD")
                 .productType(InstrumentProductType.SPOT)
-                .marketConstraints(MarketConstraints.builder().pricePrecision(0).build())
+                .marketConstraints(MarketConstraints.builder().pricePrecision(5).build())
                 .marketState(new MarketStateBuilder().buildInitialState(
                         com.hope.trading.market_data.helper.MarketAvailability.AVAILABLE)).build();
         private final FakeClient client = new FakeClient();

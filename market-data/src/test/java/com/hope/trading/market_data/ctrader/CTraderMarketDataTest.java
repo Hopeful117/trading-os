@@ -48,7 +48,7 @@ class CTraderMarketDataTest {
     void keepsCurrentBarObservedButExcludesItFromNormalizedHistory() {
         FakeClient client = new FakeClient() {
             @Override public List<CTraderTrendbar> trendbars(long symbolId, String period, Instant from, Instant to, int count) {
-                return List.of(new CTraderTrendbar(NOW.minusSeconds(30).getEpochSecond(), 1, 3, 12345, 2, 100));
+                return List.of(new CTraderTrendbar(NOW.minusSeconds(30).getEpochSecond(), 100, 300, 123450, 200, 100));
             }
         };
         CTraderMarketData provider = new CTraderMarketData(client, properties(), new MarketStateBuilder(),
@@ -115,7 +115,7 @@ class CTraderMarketDataTest {
         @Override public List<CTraderSymbol> symbols() { return List.of(symbol); }
         @Override public CTraderSymbol symbol(long symbolId) { return symbol; }
         @Override public List<CTraderTrendbar> trendbars(long symbolId, String period, Instant from, Instant to, int count) {
-            return List.of(new CTraderTrendbar(NOW.minusSeconds(60).getEpochSecond(), 1, 3, 12345, 2, 100));
+            return List.of(new CTraderTrendbar(NOW.minusSeconds(60).getEpochSecond(), 10, 30, 123450, 20, 100));
         }
     }
 }
