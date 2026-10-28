@@ -156,9 +156,7 @@ describe('OpportunityDetail', () => {
             supportingEvidence: [
               { evidenceId: 'support-1', explanation: 'Trend context available' },
             ],
-            contradictingEvidence: [
-              { evidenceId: 'contra-1', explanation: 'Spread is too wide' },
-            ],
+            contradictingEvidence: [{ evidenceId: 'contra-1', explanation: 'Spread is too wide' }],
             missingEvidence: [{ evidenceId: 'missing-1', explanation: 'No order book snapshot' }],
           },
         }),
@@ -169,7 +167,9 @@ describe('OpportunityDetail', () => {
       const element = fixture.nativeElement;
       expect(element.querySelector('[data-testid="market-thesis"]')).not.toBeNull();
       expect(element.textContent).toContain('NO TRADE');
-      expect(element.textContent).toContain('Contradicting evidence exceeds the tradeability threshold');
+      expect(element.textContent).toContain(
+        'Contradicting evidence exceeds the tradeability threshold',
+      );
       expect(element.textContent).toContain('Spread is too wide');
       expect(element.textContent).toContain('No order book snapshot');
     });
@@ -181,8 +181,12 @@ describe('OpportunityDetail', () => {
 
       await createComponent('o1', 'account-1');
 
-      expect(fixture.nativeElement.querySelector('[data-testid="create-trade-plan-button"]')).toBeNull();
-      expect(fixture.nativeElement.querySelector('[data-testid="preparation-blocked"]')).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="create-trade-plan-button"]'),
+      ).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="preparation-blocked"]'),
+      ).not.toBeNull();
     });
 
     it('renders incomplete Thesis payloads as unavailable', async () => {
@@ -211,8 +215,12 @@ describe('OpportunityDetail', () => {
 
       await createComponent('o1', 'account-1');
 
-      expect(fixture.nativeElement.querySelector('[data-testid="create-trade-plan-button"]')).toBeNull();
-      expect(fixture.nativeElement.querySelector('[data-testid="preparation-blocked"]')).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="create-trade-plan-button"]'),
+      ).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="preparation-blocked"]'),
+      ).not.toBeNull();
     });
 
     it('renders strategy provenance when a match exists', async () => {
