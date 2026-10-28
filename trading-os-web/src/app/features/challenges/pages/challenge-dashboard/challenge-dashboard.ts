@@ -212,13 +212,30 @@ export class ChallengeDashboard {
         accountsState,
         selectedAccountId,
         catalog,
-        selectedDefinition:
-          catalog.definitions.find(
-            (definition) => this.definitionKey(definition) === selectedDefinitionKey,
-          ) ??
-          catalog.definitions[0] ??
-          null,
-        selectedDefinitionKey,
+        selectedDefinition: (() => {
+          const activeDefinitionKey =
+            progress.kind === 'available'
+              ? this.definitionKeyFromParts(
+                  progress.progress.definitionId,
+                  progress.progress.definitionVersion,
+                )
+              : null;
+          const effectiveDefinitionKey = activeDefinitionKey ?? selectedDefinitionKey;
+          return (
+            catalog.definitions.find(
+              (definition) => this.definitionKey(definition) === effectiveDefinitionKey,
+            ) ??
+            catalog.definitions[0] ??
+            null
+          );
+        })(),
+        selectedDefinitionKey:
+          progress.kind === 'available'
+            ? this.definitionKeyFromParts(
+                progress.progress.definitionId,
+                progress.progress.definitionVersion,
+              )
+            : selectedDefinitionKey,
         progress,
         start:
           start.accountId === selectedAccountId || start.kind === 'idle'
@@ -250,7 +267,11 @@ export class ChallengeDashboard {
   }
 
   definitionKey(definition: ChallengeDefinition): string {
-    return `${definition.id}::${definition.definitionVersion}`;
+    return this.definitionKeyFromParts(definition.id, definition.definitionVersion);
+  }
+
+  private definitionKeyFromParts(id: string, definitionVersion: string): string {
+    return `${id}::${definitionVersion}`;
   }
 
   statusClass(status: ChallengeStatus): string {
