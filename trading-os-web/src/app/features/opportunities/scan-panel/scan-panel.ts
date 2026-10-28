@@ -134,7 +134,9 @@ export class ScanPanel {
             const selectableIds = new Set(
               sortedMarkets
                 .filter(
-                  (market) => market.marketState.tradable && this.canSelectMarket(market.marketId),
+                  (market) =>
+                    this.isSelectableCatalogueMarket(market) &&
+                    this.canSelectMarket(market.marketId),
                 )
                 .map((market) => market.marketId),
             );
@@ -273,7 +275,7 @@ export class ScanPanel {
 
   selectableMarkets(markets: MarketResponse[]): MarketResponse[] {
     return markets.filter(
-      (market) => market.marketState.tradable && this.canSelectMarket(market.marketId),
+      (market) => this.isSelectableCatalogueMarket(market) && this.canSelectMarket(market.marketId),
     );
   }
 
@@ -308,6 +310,11 @@ export class ScanPanel {
     this.selectedMarketIds = [];
     this.resultFilter = 'ALL';
     this.resetSubject.next();
+  }
+
+  private isSelectableCatalogueMarket(market: MarketResponse): boolean {
+    // cTrader markets are quote-bootstrapped by the backend after selection.
+    return market.marketState.tradable || market.provider.toUpperCase() === 'CTRADER';
   }
 
   private runSession(

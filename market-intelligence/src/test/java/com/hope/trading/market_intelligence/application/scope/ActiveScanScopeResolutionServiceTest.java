@@ -415,6 +415,54 @@ class ActiveScanScopeResolutionServiceTest {
     }
 
     @Test
+    void reloadsCanonicalStateWhenBootstrapFailsAfterQuoteUpdate() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(
+                List.of(market(ctrader, "CTRADER", "EUR/USD", false)),
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true)));
+        when(marketData.findPriceSnapshots(any())).thenThrow(new IllegalStateException("cTrader response timed out"));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+        assertThat(result.decisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.eligible()).isTrue();
+            assertThat(decision.reasons()).isEmpty();
+        });
+        verify(marketData, times(2)).findAllMarkets();
+    }
+
+    @Test
+    void remainsFailClosedWhenBootstrapAndCanonicalReloadFail() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(
+                List.of(market(ctrader, "CTRADER", "EUR/USD", false)))
+                .thenThrow(new IllegalStateException("market catalogue unavailable"));
+        when(marketData.findPriceSnapshots(any())).thenThrow(new IllegalStateException("cTrader response timed out"));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).isEmpty();
+        assertThat(result.decisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.eligible()).isFalse();
+            assertThat(decision.reasons()).containsExactly(MarketEligibilityReason.MARKET_NOT_TRADABLE);
+        });
+        verify(marketData, times(2)).findAllMarkets();
+    }
+
+    @Test
     void strictObservedEvidenceFailureMakesMarketNotEvaluableBeforeDispatch() {
         UUID accountId = UUID.randomUUID();
         UUID marketId = UUID.randomUUID();
