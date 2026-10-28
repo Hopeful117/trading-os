@@ -1,7 +1,7 @@
 import { Component, input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { convertToParamMap, ActivatedRoute } from '@angular/router';
-import { NEVER, of, Subject, ReplaySubject } from 'rxjs';
+import { NEVER, of, Subject, ReplaySubject, throwError } from 'rxjs';
 
 import { MarketDataStreamService } from '../../../core/services/market-data-stream.service';
 import { MarketService } from '../../../core/services/market.service';
@@ -84,9 +84,12 @@ describe('MarketsDetails', () => {
     };
   }
 
-  async function setup(marketId: string | null = 'mkt-1') {
+  async function setup(
+    marketId: string | null = 'mkt-1',
+    streamOverrides: Partial<typeof streamServiceMock> = {},
+  ) {
     marketServiceMock = createMarketService();
-    streamServiceMock = createStreamService();
+    streamServiceMock = createStreamService(streamOverrides);
 
     await TestBed.configureTestingModule({
       imports: [
@@ -381,6 +384,44 @@ describe('MarketsDetails', () => {
         expect.objectContaining({ type: 'TICKER' }),
       );
       expect(streamServiceMock.streamTicker).toHaveBeenCalledWith('BTC/USD', 'mkt-1');
+    });
+
+    it('waits for the shared ticker acquisition before starting live OHLC', async () => {
+      const ticker = new ReplaySubject<any>(1);
+      await setup('mkt-1', { streamTicker: vi.fn().mockReturnValue(ticker.asObservable()) });
+
+      expect(streamServiceMock.streamOhlc).not.toHaveBeenCalled();
+
+      ticker.next({
+        marketId: 'mkt-1',
+        provider: 'CTRADER',
+        symbol: 'BTC/USD',
+        streamType: 'TICKER',
+        bid: 100,
+        ask: 101,
+        last: 100.5,
+        volume: null,
+        occurredAt: new Date().toISOString(),
+      });
+      await fixture.whenStable();
+
+      expect(streamServiceMock.streamOhlc).toHaveBeenCalledWith('mkt-1', 'BTC/USD', 5);
+    });
+
+    it('does not wait indefinitely when ticker acquisition fails', async () => {
+      await setup('mkt-1', {
+        streamTicker: vi.fn().mockReturnValue(throwError(() => new Error('ticker failed'))),
+      });
+
+      let ticker: any = 'pending';
+      let ohlc: any = 'pending';
+      component.ticker$.subscribe((value) => (ticker = value));
+      component.ohlc$.subscribe((value) => (ohlc = value));
+      await fixture.whenStable();
+
+      expect(ticker).toBeNull();
+      expect(ohlc).toBeNull();
+      expect(streamServiceMock.streamOhlc).not.toHaveBeenCalled();
     });
 
     it('should call findOhlcHistory with market and timeframe', async () => {

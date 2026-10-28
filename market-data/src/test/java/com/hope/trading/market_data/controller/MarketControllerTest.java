@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.controller;
 
 import com.hope.trading.market_data.exception.MarketDataExceptionHandler;
+import com.hope.trading.market_data.exception.MarketDataProviderException;
 import com.hope.trading.market_data.helper.MarketMapper;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
@@ -134,6 +135,22 @@ class MarketControllerTest {
                             {"type":"OHLC","parameters":{"interval":60,"depth":null}}
                             """))
                 .andExpect(status().isNotImplemented());
+    }
+
+    @Test
+    void providerTimeoutIsNotReportedAsAuthorizationFailure() throws Exception {
+        doThrow(new MarketDataProviderException(
+                MarketDataProviderException.PROVIDER_TIMEOUT,
+                "cTrader Open API response timed out"))
+                .when(subscriptionService).subscribe(any(), any());
+
+        mockMvc.perform(post("/api/v1/markets/" + marketId + "/subscriptions")
+                        .contentType("application/json")
+                        .content("""
+                            {"type":"TICKER","parameters":null}
+                            """))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("PROVIDER_TIMEOUT"));
     }
 
     @Test

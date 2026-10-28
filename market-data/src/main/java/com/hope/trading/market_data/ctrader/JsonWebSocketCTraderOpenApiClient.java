@@ -1,5 +1,6 @@
 package com.hope.trading.market_data.ctrader;
 
+import com.hope.trading.market_data.exception.MarketDataProviderException;
 import com.hope.trading.ctrader.openapi.protocol.CTraderRequestCorrelation;
 import com.hope.trading.market_data.ctrader.authentication.CTraderMarketDataProperties;
 import com.hope.trading.market_data.ctrader.authentication.CTraderTokenLifecycleService;
@@ -27,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.*;
@@ -39,13 +41,33 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     private final CTraderTokenLifecycleService tokenLifecycle;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final WebSocketConnector webSocketConnector;
 
     public JsonWebSocketCTraderOpenApiClient(CTraderMarketDataProperties properties,
                                              CTraderTokenLifecycleService tokenLifecycle,
                                              ObjectMapper objectMapper) {
+        this(properties, tokenLifecycle, objectMapper, null);
+    }
+
+    JsonWebSocketCTraderOpenApiClient(CTraderMarketDataProperties properties,
+                                      CTraderTokenLifecycleService tokenLifecycle,
+                                      ObjectMapper objectMapper,
+                                      WebSocketConnector webSocketConnector) {
         this.properties = properties;
         this.tokenLifecycle = tokenLifecycle;
         this.objectMapper = objectMapper;
+        this.webSocketConnector = webSocketConnector == null ? this::connectWebSocket : webSocketConnector;
+    }
+
+    @FunctionalInterface
+    interface WebSocketConnector {
+        CompletableFuture<WebSocket> connect(URI endpoint, Duration timeout, WebSocket.Listener listener);
+    }
+
+    private CompletableFuture<WebSocket> connectWebSocket(URI endpoint, Duration timeout,
+                                                           WebSocket.Listener listener) {
+        return httpClient.newWebSocketBuilder().connectTimeout(timeout)
+                .buildAsync(endpoint, listener);
     }
 
     @Override
@@ -112,12 +134,13 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         log.info("CTRADER_OPEN_STREAM_ENTER diagnosticId={} accountId=unknown environment={} thread={} virtual={}",
                 diagnosticId, properties.environment(), Thread.currentThread().getName(),
                 Thread.currentThread().isVirtual());
+        Session session = null;
         try {
             required(properties.clientId(), "clientId");
             required(properties.clientSecret(), "clientSecret");
             CTraderTokenStore.StoredCTraderToken token = tokenLifecycle.requireUsableToken(true);
             long accountId = token.record().externalAccountId();
-            Session session = new Session(node -> dispatch(node, events), termination);
+            session = new Session(node -> dispatch(node, events), termination);
             try (token) {
                 log.info("CTRADER_APPLICATION_AUTH_SEND diagnosticId={} accountId={} payloadType={}",
                         diagnosticId, accountId, APPLICATION_AUTH_REQUEST);
@@ -145,11 +168,25 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             log.info("CTRADER_OPEN_STREAM_EXIT diagnosticId={} accountId={} environment={} durationMs={}",
                     diagnosticId, accountId, properties.environment(), elapsedMillis(startedNanos));
             return new Stream(session, accountId);
+        } catch (MarketDataProviderException exception) {
+            closeQuietly(session);
+            throw exception;
         } catch (RuntimeException exception) {
+            closeQuietly(session);
             log.warn("CTRADER_OPEN_STREAM_ERROR diagnosticId={} accountId=unknown environment={} durationMs={} errorType={} message={}",
                     diagnosticId, properties.environment(), elapsedMillis(startedNanos),
                     exception.getClass().getSimpleName(), exception.getMessage());
             throw new IllegalStateException("cTrader Market Data stream unavailable", exception);
+        }
+    }
+
+    private void closeQuietly(Session session) {
+        if (session == null) return;
+        try {
+            session.close();
+        } catch (RuntimeException closeException) {
+            log.warn("CTRADER_SESSION_CLOSE_AFTER_OPEN_FAILURE_ERROR errorType={} message={}",
+                    closeException.getClass().getSimpleName(), closeException.getMessage());
         }
     }
 
@@ -238,6 +275,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 Arrays.fill(access, '\0');
             }
             return work.apply(session);
+        } catch (MarketDataProviderException exception) {
+            throw exception;
         } catch (RuntimeException exception) {
             throw new IllegalStateException("cTrader Market Data operation unavailable", exception);
         }
@@ -315,12 +354,18 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         private final BlockingQueue<String> messages = new LinkedBlockingQueue<>(256);
         private final String sessionId = java.util.UUID.randomUUID().toString();
         private final String diagnosticId = JsonWebSocketCTraderOpenApiClient.this.diagnosticId();
-        private final WebSocket socket;
+        private final Runnable termination;
+        private final CTraderEventDispatcher eventDispatcher;
+        private final AtomicBoolean terminationSignalled = new AtomicBoolean();
+        private volatile WebSocket socket;
 
         private Session() { this(node -> { }, () -> { }); }
 
         private Session(Consumer<JsonNode> events, Runnable termination) {
             long startedNanos = System.nanoTime();
+            this.termination = termination;
+            this.eventDispatcher = new CTraderEventDispatcher("ctrader-events-" + sessionId,
+                    events, this::signalTermination);
             log.info("CTRADER_SESSION_CREATE diagnosticId={} sessionId={} host={} port={} environment={}",
                     diagnosticId, sessionId, endpointHost(), endpointPort(), properties.environment());
             try {
@@ -328,9 +373,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 if (!"wss".equalsIgnoreCase(URI.create(properties.websocketEndpoint()).getScheme())) {
                     throw new IllegalStateException("cTrader websocket endpoint must use WSS");
                 }
-                socket = httpClient.newWebSocketBuilder().connectTimeout(properties.requestTimeout())
-                        .buildAsync(URI.create(properties.websocketEndpoint()),
-                                new Listener(messages, events, termination, diagnosticId, sessionId,
+                socket = webSocketConnector.connect(URI.create(properties.websocketEndpoint()), properties.requestTimeout(),
+                                new Listener(messages, eventDispatcher::dispatch, this::signalTermination, diagnosticId, sessionId,
                                         endpointHost(), endpointPort()))
                         .orTimeout(properties.requestTimeout().toMillis(), TimeUnit.MILLISECONDS).join();
                 log.info("CTRADER_SESSION_CREATED diagnosticId={} sessionId={} host={} port={} durationMs={}",
@@ -339,7 +383,24 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 log.warn("CTRADER_SESSION_CREATE_ERROR diagnosticId={} sessionId={} host={} port={} durationMs={} errorType={} message={}",
                         diagnosticId, sessionId, endpointHost(), endpointPort(), elapsedMillis(startedNanos),
                         exception.getClass().getSimpleName(), exception.getMessage());
+                eventDispatcher.close();
                 throw new IllegalStateException("cTrader Open API transport unavailable", exception);
+            }
+        }
+
+        private void signalTermination() {
+            if (!terminationSignalled.compareAndSet(false, true)) return;
+            eventDispatcher.close();
+            WebSocket current = socket;
+            try {
+                if (current != null && !current.isOutputClosed()) {
+                    current.sendClose(WebSocket.NORMAL_CLOSURE, "terminated");
+                }
+            } catch (RuntimeException exception) {
+                log.warn("CTRADER_SESSION_TERMINATION_CLOSE_ERROR diagnosticId={} sessionId={} errorType={} message={}",
+                        diagnosticId, sessionId, exception.getClass().getSimpleName(), exception.getMessage());
+            } finally {
+                termination.run();
             }
         }
 
@@ -395,7 +456,9 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 }
                 log.warn("CTRADER_REQUEST_TIMEOUT diagnosticId={} sessionId={} requestPayloadType={} expectedResponseType={} clientMsgId={} durationMs={}",
                         diagnosticId, sessionId, requestType, responseType, clientMessageId, elapsedMillis(startedNanos));
-                throw new IllegalStateException("cTrader Open API response timed out");
+                throw new MarketDataProviderException(
+                        MarketDataProviderException.PROVIDER_TIMEOUT,
+                        "cTrader Open API response timed out");
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 log.warn("CTRADER_REQUEST_FAILURE diagnosticId={} sessionId={} requestPayloadType={} expectedResponseType={} clientMsgId={} phase=wait errorType={} message={}",
@@ -405,7 +468,13 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             }
         }
 
-        @Override public void close() { socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
+        @Override public void close() {
+            eventDispatcher.close();
+            WebSocket current = socket;
+            if (current != null && !current.isOutputClosed()) {
+                current.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+            }
+        }
     }
 
     private final class Stream implements CTraderStream {
@@ -469,7 +538,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         return payload;
     }
 
-    private static final class Listener implements WebSocket.Listener {
+    static final class Listener implements WebSocket.Listener {
         private final BlockingQueue<String> messages;
         private final Consumer<JsonNode> events;
         private final Runnable termination;
@@ -479,8 +548,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         private final int port;
         private final StringBuilder text = new StringBuilder();
 
-        private Listener(BlockingQueue<String> messages, Consumer<JsonNode> events, Runnable termination,
-                         String diagnosticId, String sessionId, String host, int port) {
+        Listener(BlockingQueue<String> messages, Consumer<JsonNode> events, Runnable termination,
+                 String diagnosticId, String sessionId, String host, int port) {
             this.messages = messages;
             this.events = events;
             this.termination = termination;
