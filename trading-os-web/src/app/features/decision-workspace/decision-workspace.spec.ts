@@ -61,7 +61,7 @@ describe('DecisionWorkspace', () => {
   const candidateLineage = {
     version: 1,
     marketThesis: { thesisId: 'thesis-1', thesisVersion: 1 },
-    thesis: { thesisId: 'thesis-1', thesisVersion: 1, state: 'CANDIDATE' },
+    thesis: { id: 'thesis-1', version: 1, state: 'CANDIDATE' },
   } as unknown as Partial<OpportunityResponse>;
 
   const account: Account = {

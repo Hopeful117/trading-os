@@ -51,7 +51,7 @@ export interface MarketThesisScenario {
   relevantLevels: MarketThesisLevel[];
 }
 
-export interface MarketThesisResponse extends MarketThesisReference {
+export interface MarketThesisResponse {
   id: string;
   lineageId: string;
   marketId: string;

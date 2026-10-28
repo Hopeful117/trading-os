@@ -46,6 +46,11 @@ describe('Opportunities', () => {
       createdAt: '2026-08-24T09:55:00Z',
       strategyMatchId: 'match-1',
       marketId: 'market-1',
+      thesis: {
+        id: 'thesis-1',
+        version: 5,
+        state: 'NO_TRADE',
+      } as OpportunityResponse['thesis'],
       setup: {
         referencePrice: 64120.5,
         referencePriceAt: '2026-08-24T09:59:00Z',
@@ -165,6 +170,17 @@ describe('Opportunities', () => {
       expect(fixture.nativeElement.textContent).toContain('BTC/EUR');
       expect(fixture.nativeElement.textContent).toContain('ETH/EUR');
       expect(fixture.nativeElement.textContent).toContain('Spot');
+    });
+
+    it('renders a valid backend NO_TRADE thesis before signal details', () => {
+      const firstRow = fixture.nativeElement.querySelectorAll('.opportunity-row')[0];
+      const decisionCell = firstRow.querySelector('.decision-cell');
+      const rowText = firstRow.textContent;
+
+      expect(decisionCell.textContent).toContain('NO TRADE');
+      expect(decisionCell.textContent).not.toContain('Not evaluated');
+      expect(rowText.indexOf('NO TRADE')).toBeLessThan(rowText.indexOf('LONG'));
+      expect(rowText.indexOf('LONG')).toBeLessThan(rowText.indexOf('0.72'));
     });
 
     it('renders the setup reference price with an honest fallback for legacy rows', () => {
