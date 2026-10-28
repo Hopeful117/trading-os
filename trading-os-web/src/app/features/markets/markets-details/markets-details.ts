@@ -11,7 +11,9 @@ import {
   of,
   shareReplay,
   switchMap,
+  take,
   tap,
+  throwError,
 } from 'rxjs';
 
 import { MarketDataStreamService } from '../../../core/services/market-data-stream.service';
@@ -134,6 +136,7 @@ export class MarketDetail {
           };
         }),
         switchMap(() => this.marketDataStreamService.streamTicker(market.symbol, market.marketId)),
+        catchError(() => of(null)),
       );
     }),
     shareReplay({
@@ -213,7 +216,18 @@ export class MarketDetail {
       refCount: true,
     }),
   );
-  readonly ohlc$ = combineLatest([this.market$, this.selectedTimeframe$]).pipe(
+  readonly ohlc$ = combineLatest([
+    this.market$,
+    this.selectedTimeframe$,
+    this.ticker$.pipe(
+      switchMap((ticker) =>
+        ticker === null
+          ? throwError(() => new Error('Ticker acquisition failed'))
+          : of(ticker),
+      ),
+      take(1),
+    ),
+  ]).pipe(
     switchMap(([market, timeframe]) => {
       const nextRequest: MarketStreamRequest = {
         type: MarketStreamType.OHLC,
@@ -263,6 +277,7 @@ export class MarketDetail {
         ),
       );
     }),
+    catchError(() => of(null)),
 
     shareReplay({
       bufferSize: 1,

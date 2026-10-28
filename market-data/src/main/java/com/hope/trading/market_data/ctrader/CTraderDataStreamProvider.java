@@ -127,9 +127,14 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
             List<Market> added = markets.stream().filter(Objects::nonNull)
                     .filter(market -> desired.putIfAbsent(key(market, request), new ActiveSubscription(market, request)) == null)
                     .toList();
-            subscribeSpots(added, request);
-            added.stream().filter(market -> request.type() == MarketStreamType.OHLC)
-                    .forEach(market -> subscribeTrendbar(market, request));
+            try {
+                subscribeSpots(added, request);
+                added.stream().filter(market -> request.type() == MarketStreamType.OHLC)
+                        .forEach(market -> subscribeTrendbar(market, request));
+            } catch (RuntimeException exception) {
+                rollbackSubscriptions(added, request);
+                throw exception;
+            }
         }));
     }
 
@@ -156,9 +161,61 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         subscribeSpots(markets.stream().map(this::symbolId).distinct().toList());
     }
 
-    private void subscribeSpots(List<Long> symbolIds) {
+    private synchronized void subscribeSpots(List<Long> symbolIds) {
         List<Long> newSymbolIds = symbolIds.stream().filter(subscribedSpots::add).toList();
-        if (!newSymbolIds.isEmpty()) stream.subscribeSpots(newSymbolIds);
+        if (newSymbolIds.isEmpty()) return;
+        try {
+            stream.subscribeSpots(newSymbolIds);
+        } catch (RuntimeException exception) {
+            subscribedSpots.removeAll(newSymbolIds);
+            throw exception;
+        }
+    }
+
+    private void rollbackSubscriptions(List<Market> markets, MarketStreamRequest request) {
+        boolean restartRequired = false;
+        for (Market market : markets) {
+            desired.remove(key(market, request));
+            if ((request.type() == MarketStreamType.TICKER || request.type() == MarketStreamType.OHLC)
+                    && noOtherSpotDemand(symbolId(market))) {
+                long symbolId = symbolId(market);
+                if (subscribedSpots.remove(symbolId)) {
+                    restartRequired = true;
+                }
+            }
+            if (request.type() == MarketStreamType.OHLC) {
+                subscribedTrendbars.remove(symbolId(market) + ":" + period(request.parameters().interval()));
+            }
+        }
+        if (restartRequired) restartStreamAfterFailedSubscription();
+    }
+
+    private void restartStreamAfterFailedSubscription() {
+        CTraderOpenApiClient.CTraderStream current = stream;
+        if (current == null) return;
+
+        intentionallyDisconnected = true;
+        connectionGeneration++;
+        stream = null;
+        subscribedSpots.clear();
+        subscribedTrendbars.clear();
+        try {
+            current.close();
+        } catch (RuntimeException exception) {
+            log.warn("CTRADER_FAILED_SUBSCRIPTION_SESSION_CLOSE_ERROR errorType={} message={}",
+                    exception.getClass().getSimpleName(), exception.getMessage());
+        } finally {
+            intentionallyDisconnected = false;
+        }
+
+        if (!desired.isEmpty()) {
+            try {
+                connect(false).subscribe();
+            } catch (RuntimeException exception) {
+                log.warn("CTRADER_FAILED_SUBSCRIPTION_SESSION_RECONNECT_ERROR errorType={} message={}",
+                        exception.getClass().getSimpleName(), exception.getMessage());
+            }
+        }
     }
 
     private void subscribeTrendbar(Market market, MarketStreamRequest request) {
@@ -169,23 +226,24 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
 
     private void unsubscribeProvider(Market market, MarketStreamRequest request) {
         long symbolId = symbolId(market);
-        if (request.type() == MarketStreamType.TICKER && noOtherSpotDemand(symbolId, market, request)) {
+        if (request.type() == MarketStreamType.TICKER && noOtherSpotDemand(symbolId)) {
             subscribedSpots.remove(symbolId);
             stream.unsubscribeSpots(symbolId);
         }
         if (request.type() == MarketStreamType.OHLC) {
             String trendbarKey = symbolId + ":" + period(request.parameters().interval());
             if (subscribedTrendbars.remove(trendbarKey)) stream.unsubscribeLiveTrendbar(symbolId, period(request.parameters().interval()));
-            if (noOtherSpotDemand(symbolId, market, request)) {
+            if (noOtherSpotDemand(symbolId)) {
                 subscribedSpots.remove(symbolId);
                 stream.unsubscribeSpots(symbolId);
             }
         }
     }
 
-    private boolean noOtherSpotDemand(long symbolId, Market removedMarket, MarketStreamRequest removedRequest) {
-        return desired.values().stream().noneMatch(active -> active.market() != removedMarket
-                && symbolId(active.market()) == symbolId);
+    private boolean noOtherSpotDemand(long symbolId) {
+        return desired.values().stream().noneMatch(active ->
+                (active.request().type() == MarketStreamType.TICKER || active.request().type() == MarketStreamType.OHLC)
+                        && symbolId(active.market()) == symbolId);
     }
 
     private synchronized void handleEvent(long generation, CTraderOpenApiClient.CTraderStreamEvent event) {

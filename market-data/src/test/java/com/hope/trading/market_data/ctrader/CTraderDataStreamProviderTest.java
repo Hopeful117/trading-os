@@ -25,6 +25,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -135,6 +138,85 @@ class CTraderDataStreamProviderTest {
     }
 
     @Test
+    void coordinatesConcurrentSpotBootstrapAcrossTickerAndOhlcDemand() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.client.spotStarted = new CountDownLatch(1);
+        fixture.client.allowSpot = new CountDownLatch(1);
+
+        CompletableFuture<Void> ticker = CompletableFuture.runAsync(() ->
+                fixture.provider.subscribe(List.of(fixture.market),
+                        new MarketStreamRequest(MarketStreamType.TICKER, null)).block());
+        assertThat(fixture.client.spotStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+        CompletableFuture<Void> ohlc = CompletableFuture.runAsync(() ->
+                fixture.provider.subscribe(List.of(fixture.market),
+                        new MarketStreamRequest(MarketStreamType.OHLC,
+                                new MarketStreamParameters(1, null))).block());
+        fixture.client.allowSpot.countDown();
+
+        ticker.join();
+        ohlc.join();
+
+        assertThat(fixture.client.current.spotSubscriptionBatches).hasSize(1);
+    }
+
+    @Test
+    void failedSpotBootstrapCanBeRetried() {
+        Fixture fixture = new Fixture();
+        fixture.client.failSpotSubscription = true;
+
+        assertThatThrownBy(() -> fixture.provider.subscribe(List.of(fixture.market),
+                new MarketStreamRequest(MarketStreamType.TICKER, null)).block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("spot subscription failed");
+
+        fixture.client.failSpotSubscription = false;
+        fixture.provider.subscribe(List.of(fixture.market),
+                new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
+
+        assertThat(fixture.client.current.spotSubscriptionBatches).hasSize(2);
+    }
+
+    @Test
+    void failedOhlcSetupPreservesPreExistingSharedSpotSubscription() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest ticker = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        MarketStreamRequest ohlc = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(1, null));
+        fixture.provider.subscribe(List.of(fixture.market), ticker).block();
+        fixture.client.failTrendbarSubscription = true;
+
+        assertThatThrownBy(() -> fixture.provider.subscribe(List.of(fixture.market), ohlc).block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("trendbar subscription failed");
+
+        fixture.provider.subscribe(List.of(fixture.market), ticker).block();
+
+        assertThat(fixture.client.current.spotSubscriptionBatches).hasSize(1);
+        assertThat(fixture.client.current.unsubscribedSpots).isEmpty();
+    }
+
+    @Test
+    void failedOhlcSetupRestartsSessionForOperationOwnedSpotAndAllowsRetry() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest ohlc = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(1, null));
+        fixture.client.failTrendbarSubscription = true;
+
+        assertThatThrownBy(() -> fixture.provider.subscribe(List.of(fixture.market), ohlc).block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("trendbar subscription failed");
+
+        fixture.client.failTrendbarSubscription = false;
+        fixture.provider.subscribe(List.of(fixture.market), ohlc).block();
+
+        assertThat(fixture.client.streams).hasSize(2);
+        assertThat(fixture.client.streams.get(0).closed).isTrue();
+        assertThat(fixture.client.streams.get(1).spotSubscriptionBatches).containsExactly(List.of(42L));
+        assertThat(fixture.client.streams.get(1).trendbarSubscriptions).containsExactly("42:M1");
+    }
+
+    @Test
     void batchesSpotSubscriptionsForMultipleMarkets() {
         Fixture fixture = new Fixture();
         Market secondMarket = Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.CTRADER)
@@ -216,30 +298,53 @@ class CTraderDataStreamProviderTest {
         private Consumer<CTraderStreamEvent> events;
         private FakeStream current;
         private final List<FakeStream> streams = new ArrayList<>();
+        private CountDownLatch spotStarted;
+        private CountDownLatch allowSpot;
+        private boolean failSpotSubscription;
+        private boolean failTrendbarSubscription;
         @Override public List<CTraderSymbol> symbols() { return List.of(); }
         @Override public CTraderSymbol symbol(long symbolId) { throw new UnsupportedOperationException(); }
         @Override public List<CTraderTrendbar> trendbars(long symbolId, String period, Instant from, Instant to, int count) { return List.of(); }
         @Override public CTraderStream openStream(Consumer<CTraderStreamEvent> events, Runnable termination) {
             this.events = events;
-            current = new FakeStream(termination);
+            current = new FakeStream(this, termination);
             streams.add(current);
             return current;
         }
     }
 
     private static final class FakeStream implements CTraderOpenApiClient.CTraderStream {
+        private final FakeClient client;
         private final Runnable termination;
         private final List<Long> spotSubscriptions = new ArrayList<>();
         private final List<List<Long>> spotSubscriptionBatches = new ArrayList<>();
+        private final List<Long> unsubscribedSpots = new ArrayList<>();
+        private final List<String> trendbarSubscriptions = new ArrayList<>();
         private boolean closed;
-        private FakeStream(Runnable termination) { this.termination = termination; }
+        private FakeStream(FakeClient client, Runnable termination) {
+            this.client = client;
+            this.termination = termination;
+        }
         @Override public void subscribeSpots(long symbolId) { if (!spotSubscriptions.contains(symbolId)) spotSubscriptions.add(symbolId); }
         @Override public void subscribeSpots(List<Long> symbolIds) {
             spotSubscriptionBatches.add(List.copyOf(symbolIds));
+            if (client.spotStarted != null) client.spotStarted.countDown();
+            if (client.allowSpot != null) {
+                try {
+                    client.allowSpot.await(2, TimeUnit.SECONDS);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("spot subscription interrupted", exception);
+                }
+            }
+            if (client.failSpotSubscription) throw new IllegalStateException("spot subscription failed");
             symbolIds.forEach(this::subscribeSpots);
         }
-        @Override public void unsubscribeSpots(long symbolId) { }
-        @Override public void subscribeLiveTrendbar(long symbolId, String period) { }
+        @Override public void unsubscribeSpots(long symbolId) { unsubscribedSpots.add(symbolId); }
+        @Override public void subscribeLiveTrendbar(long symbolId, String period) {
+            if (client.failTrendbarSubscription) throw new IllegalStateException("trendbar subscription failed");
+            trendbarSubscriptions.add(symbolId + ":" + period);
+        }
         @Override public void unsubscribeLiveTrendbar(long symbolId, String period) { }
         @Override public void close() { closed = true; }
     }
