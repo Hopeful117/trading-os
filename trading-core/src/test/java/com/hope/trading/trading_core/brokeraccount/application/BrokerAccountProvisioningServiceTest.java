@@ -21,13 +21,23 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class BrokerAccountProvisioningServiceTest {
     @Test
-    void importsExistingBrokerServiceReferenceBeforeProvisioning() {
+    void importsConnectedCTraderDemoAccountAsTradingOsLive() {
+        record CTraderProviderFixture(String externalAccountId, String environment, boolean isLive) {
+            BrokerAccountSnapshotV2Dto snapshot(UUID brokerAccountId, UUID providerReference, Instant observedAt) {
+                // Provider environment facts stay outside the provider-neutral Trading Core DTO.
+                return new BrokerAccountSnapshotV2Dto(
+                        brokerAccountId, providerReference, externalAccountId,
+                        Map.of("USD", new BigDecimal("10000")), java.util.List.of(), observedAt);
+            }
+        }
+
         BrokerAccountRepository brokerAccounts = mock(BrokerAccountRepository.class);
         AccountRepository accounts = mock(AccountRepository.class);
         BrokerAccountSnapshotV2Client snapshots = mock(BrokerAccountSnapshotV2Client.class);
@@ -36,9 +46,10 @@ class BrokerAccountProvisioningServiceTest {
         UUID brokerAccountId = UUID.randomUUID();
         UUID providerReference = UUID.randomUUID();
         Instant observedAt = Instant.parse("2026-10-27T04:00:00Z");
-        BrokerAccountSnapshotV2Dto snapshot = new BrokerAccountSnapshotV2Dto(
-                brokerAccountId, providerReference, "49289512", Map.of("USD", new BigDecimal("10000")),
-                java.util.List.of(), observedAt);
+        CTraderProviderFixture providerFixture = new CTraderProviderFixture(
+                "FTMO-CTRADER-DEMO-49289512", "DEMO", false);
+        BrokerAccountSnapshotV2Dto snapshot = providerFixture.snapshot(
+                brokerAccountId, providerReference, observedAt);
 
         when(brokerAccounts.findByIdAndOwnerIdForUpdate(brokerAccountId, ownerId)).thenReturn(Optional.empty());
         when(snapshots.getAccountSnapshot(brokerAccountId)).thenReturn(snapshot);
@@ -56,6 +67,10 @@ class BrokerAccountProvisioningServiceTest {
         AccountDto result = service.provision(ownerId, brokerAccountId);
 
         assertThat(result).isNull();
-        verify(brokerAccounts).save(any());
+        assertThat(providerFixture.environment()).isEqualTo("DEMO");
+        assertThat(providerFixture.isLive()).isFalse();
+        verify(brokerAccounts).save(argThat(value ->
+                value.executionMode() == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.LIVE
+                        && value.externalAccountId().equals(providerFixture.externalAccountId())));
     }
 }

@@ -149,6 +149,26 @@ The Angular frontend should use reactive data flows with Observables and the asy
 
 ## Core Architectural Principles
 
+### Execution Mode Boundary
+
+`ExecutionMode` describes the Trading OS execution boundary, not real-money
+status or the provider's technical/economic environment:
+
+```text
+Does execution remain entirely inside Trading OS?
+
+YES -> PAPER
+NO, an external broker/provider boundary is involved -> LIVE
+```
+
+`PAPER` means local Trading OS simulation. Orders, fills, settlement, and the
+position lifecycle must not reach cTrader, Kraken, or any external broker.
+`LIVE` means broker/provider-backed authority and does not itself authorize an
+order or mean real money. A connected cTrader demo, FTMO Challenge, or other
+economically simulated provider account remains Trading OS `LIVE`. Never infer
+Trading OS `ExecutionMode` from provider `isLive`, a demo label, or an economic
+environment; keep those as separate provider/business facts.
+
 ### Deterministic Core
 
 The following responsibilities must remain deterministic:

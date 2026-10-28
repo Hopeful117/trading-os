@@ -34,6 +34,10 @@
           <option value="PAPER">PAPER</option>
         </select>
       </label>
+      <p data-testid="execution-mode-help">
+        PAPER simule entièrement les opérations dans Trading OS. LIVE signifie que le compte est
+        connecté à un broker externe; cela ne signifie pas nécessairement argent réel.
+      </p>
     }
     @if (!recoveryAccount() && isPaper()) {
       <label>
