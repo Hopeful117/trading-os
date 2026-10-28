@@ -51,7 +51,11 @@ describe('OpportunityDetail', () => {
     strategyMatchId: 'match-1',
     marketId: 'market-1',
     marketThesis: { thesisId: 'thesis-1', thesisVersion: 1 },
-    thesis: { state: 'CANDIDATE' } as OpportunityResponse['thesis'],
+    thesis: {
+      thesisId: 'thesis-1',
+      thesisVersion: 1,
+      state: 'CANDIDATE',
+    } as OpportunityResponse['thesis'],
     setup,
   };
 
@@ -139,6 +143,76 @@ describe('OpportunityDetail', () => {
       await createComponent('o1');
 
       expect(fixture.nativeElement.textContent).toContain(mockOpportunity.explanation);
+    });
+
+    it('renders the authoritative thesis decision and evidence categories', async () => {
+      opportunityServiceMock.findById.mockReturnValue(
+        of({
+          ...mockOpportunity,
+          thesis: {
+            ...mockOpportunity.thesis,
+            state: 'NO_TRADE',
+            reasons: ['Contradicting evidence exceeds the tradeability threshold'],
+            supportingEvidence: [
+              { evidenceId: 'support-1', explanation: 'Trend context available' },
+            ],
+            contradictingEvidence: [
+              { evidenceId: 'contra-1', explanation: 'Spread is too wide' },
+            ],
+            missingEvidence: [{ evidenceId: 'missing-1', explanation: 'No order book snapshot' }],
+          },
+        }),
+      );
+
+      await createComponent('o1');
+
+      const element = fixture.nativeElement;
+      expect(element.querySelector('[data-testid="market-thesis"]')).not.toBeNull();
+      expect(element.textContent).toContain('NO TRADE');
+      expect(element.textContent).toContain('Contradicting evidence exceeds the tradeability threshold');
+      expect(element.textContent).toContain('Spread is too wide');
+      expect(element.textContent).toContain('No order book snapshot');
+    });
+
+    it('does not expose Trade Plan preparation for a non-candidate thesis', async () => {
+      opportunityServiceMock.findById.mockReturnValue(
+        of({ ...mockOpportunity, thesis: { ...mockOpportunity.thesis, state: 'WATCH' } }),
+      );
+
+      await createComponent('o1', 'account-1');
+
+      expect(fixture.nativeElement.querySelector('[data-testid="create-trade-plan-button"]')).toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-testid="preparation-blocked"]')).not.toBeNull();
+    });
+
+    it('renders incomplete Thesis payloads as unavailable', async () => {
+      opportunityServiceMock.findById.mockReturnValue(
+        of({
+          ...mockOpportunity,
+          thesis: { thesisId: 'thesis-1', thesisVersion: 1 } as OpportunityResponse['thesis'],
+        }),
+      );
+
+      await createComponent('o1');
+
+      expect(fixture.nativeElement.querySelector('[data-testid="market-thesis"]')).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="market-thesis-unavailable"]'),
+      ).not.toBeNull();
+    });
+
+    it('blocks Trade Plan preparation for an incomplete candidate Thesis', async () => {
+      opportunityServiceMock.findById.mockReturnValue(
+        of({
+          ...mockOpportunity,
+          thesis: { state: 'CANDIDATE' } as OpportunityResponse['thesis'],
+        }),
+      );
+
+      await createComponent('o1', 'account-1');
+
+      expect(fixture.nativeElement.querySelector('[data-testid="create-trade-plan-button"]')).toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-testid="preparation-blocked"]')).not.toBeNull();
     });
 
     it('renders strategy provenance when a match exists', async () => {

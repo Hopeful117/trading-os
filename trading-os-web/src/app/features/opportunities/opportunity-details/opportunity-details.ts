@@ -142,10 +142,26 @@ export class OpportunityDetail {
     return Object.entries(failure.metrics) as [string, number][];
   }
 
+  safeList<T>(value: T[] | undefined): T[] {
+    return value ?? [];
+  }
+
+  hasValidThesis(thesis: OpportunityResponse['thesis']): boolean {
+    return (
+      thesis !== null &&
+      thesis !== undefined &&
+      typeof thesis.thesisId === 'string' &&
+      thesis.thesisId.length > 0 &&
+      thesis.thesisVersion >= 1 &&
+      (thesis.state === 'NO_TRADE' || thesis.state === 'WATCH' || thesis.state === 'CANDIDATE')
+    );
+  }
+
   canPrepare(opportunity: OpportunityResponse): boolean {
     return (
       opportunity.status === 'ACTIVE' &&
       opportunity.thesis?.state === 'CANDIDATE' &&
+      this.hasValidThesis(opportunity.thesis) &&
       opportunity.marketThesis !== null &&
       opportunity.marketThesis !== undefined
     );
