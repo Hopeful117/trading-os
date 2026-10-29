@@ -73,12 +73,19 @@ public final class BrokerModels {
     public record ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
             String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
             OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
-            BigDecimal stopLossPrice) {
+            BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices) {
         public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
                 String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
                 OrderType orderType, BigDecimal quantity, BigDecimal limitPrice) {
             this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
-                    instrument, side, orderType, quantity, limitPrice, null);
+                    instrument, side, orderType, quantity, limitPrice, null, List.of());
+        }
+        public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
+                String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
+                OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
+                BigDecimal stopLossPrice) {
+            this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
+                    instrument, side, orderType, quantity, limitPrice, stopLossPrice, List.of());
         }
         public ExecutionRequest {
             Objects.requireNonNull(executionIntentId); Objects.requireNonNull(executionAttemptId);
@@ -90,6 +97,9 @@ public final class BrokerModels {
                 throw new IllegalArgumentException("limitPrice is required for a limit order");
             if (stopLossPrice != null && stopLossPrice.signum() <= 0)
                 throw new IllegalArgumentException("stopLossPrice must be positive");
+            takeProfitPrices = List.copyOf(takeProfitPrices == null ? List.of() : takeProfitPrices);
+            if (takeProfitPrices.stream().anyMatch(price -> price == null || price.signum() <= 0))
+                throw new IllegalArgumentException("takeProfitPrices must be positive");
         }
     }
     public sealed interface ExecutionResult permits Acknowledged, Rejected, Unknown {}

@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.config.BrokerServiceFeignConfiguration;
 import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.List;
 
 @FeignClient(name="broker-service",contextId="execution-broker-client",
         configuration = BrokerServiceFeignConfiguration.class)
@@ -15,7 +16,8 @@ public interface BrokerExecutionClient {
     void cancel(@PathVariable String externalOrderId,@RequestParam UUID brokerAccountId);
     record BrokerRequest(UUID executionIntentId,UUID executionAttemptId,String idempotencyKey,
                          UUID brokerAccountId,String instrument,String side,String orderType,
-                         BigDecimal quantity,BigDecimal limitPrice,BigDecimal stopLossPrice){}
+                          BigDecimal quantity,BigDecimal limitPrice,BigDecimal stopLossPrice,
+                          List<BigDecimal> takeProfitPrices){}
     record ReconcileRequest(UUID executionIntentId,UUID executionAttemptId,String idempotencyKey,
                             UUID brokerAccountId){}
     record BrokerResponse(String outcome,String externalOrderId,String correlationId,

@@ -5,6 +5,7 @@ import java.util.*;
 
 public interface JpaExecutionIntentRepository extends JpaRepository<ExecutionIntentEntity, UUID> {
     Optional<ExecutionIntentEntity> findByIdempotencyKey(String key);
+    Optional<ExecutionIntentEntity> findByTradePlanIdAndTradePlanVersion(UUID tradePlanId, long tradePlanVersion);
     List<ExecutionIntentEntity> findByStatusIn(Collection<String> statuses);
     List<ExecutionIntentEntity> findByInitiatorIdOrderByCreatedAtDesc(UUID initiatorId);
     List<ExecutionIntentEntity> findAllByOrderByCreatedAtDesc();

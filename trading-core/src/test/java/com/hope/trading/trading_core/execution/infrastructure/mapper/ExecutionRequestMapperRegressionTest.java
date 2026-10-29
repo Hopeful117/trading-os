@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,6 +48,20 @@ class ExecutionRequestMapperRegressionTest {
         assertThat(brokerRequest.orderType()).isEqualTo("LIMIT");
         assertThat(brokerRequest.quantity()).isEqualByComparingTo("0.5");
         assertThat(brokerRequest.limitPrice()).isEqualByComparingTo("50000");
+    }
+
+    @Test
+    void mapExecutionRequestPreservesProtectiveTargets() {
+        var params = new ExecutionParameters("BTC/USD", ExecutionParameters.Side.BUY,
+                ExecutionParameters.OrderType.MARKET, new BigDecimal("0.5"), null,
+                new BigDecimal("49000"), List.of(new BigDecimal("51000")), null, null);
+
+        var brokerRequest = mapper.map(new BrokerExecutionPort.ExecutionRequest(
+                ExecutionIntentId.newId(), ExecutionAttemptId.newId(), new IdempotencyKey("target-key"),
+                UUID.randomUUID(), params));
+
+        assertThat(brokerRequest.stopLossPrice()).isEqualByComparingTo("49000");
+        assertThat(brokerRequest.takeProfitPrices()).containsExactly(new BigDecimal("51000"));
     }
 
     @Test

@@ -4,20 +4,21 @@ import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.List;
 
 public final class BrokerApiDtos {private BrokerApiDtos(){}
     public record ExecutionApiRequest(@NotNull UUID executionIntentId,@NotNull UUID executionAttemptId,
         @NotBlank @Size(max=200) String idempotencyKey,@NotNull UUID brokerAccountId,
         @NotBlank @Size(max=40) String instrument,@NotNull Side side,@NotNull OrderType orderType,
         @NotNull @DecimalMin(value="0",inclusive=false) BigDecimal quantity,@DecimalMin(value="0",inclusive=false) BigDecimal limitPrice,
-        @DecimalMin(value="0",inclusive=false) BigDecimal stopLossPrice){
+         @DecimalMin(value="0",inclusive=false) BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices){
         public ExecutionApiRequest(UUID executionIntentId, UUID executionAttemptId, String idempotencyKey,
                 UUID brokerAccountId, String instrument, Side side, OrderType orderType,
                 BigDecimal quantity, BigDecimal limitPrice) {
             this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
-                    instrument, side, orderType, quantity, limitPrice, null);
+                    instrument, side, orderType, quantity, limitPrice, null, List.of());
         }
-        public ExecutionRequest toModel(){return new ExecutionRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId,instrument,side,orderType,quantity,limitPrice,stopLossPrice);}}
+        public ExecutionRequest toModel(){return new ExecutionRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId,instrument,side,orderType,quantity,limitPrice,stopLossPrice,takeProfitPrices);}}
     public record ReconcileApiRequest(@NotNull UUID executionIntentId,@NotNull UUID executionAttemptId,
         @NotBlank @Size(max=200) String idempotencyKey,@NotNull UUID brokerAccountId){public ReconciliationRequest toModel(){return new ReconciliationRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId);}}
     public record BrokerApiResponse(String outcome,String externalOrderId,String correlationId,String status,String reasonCode){
