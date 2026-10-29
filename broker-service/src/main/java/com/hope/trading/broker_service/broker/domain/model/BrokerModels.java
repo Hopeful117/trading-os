@@ -259,14 +259,22 @@ public final class BrokerModels {
     }
     public record ProtectiveStop(String providerOrderReference,
             String providerReferenceProvenance, BigDecimal quantity, BigDecimal stopPrice) {}
-    public record ClosedTrade(String providerTradeReference, String instrument, String settlementAsset, Side side,
-            BigDecimal quantity, BigDecimal price, BigDecimal fee, BigDecimal realizedPnl,
-            Instant closedAt, BigDecimal swap) {
+    public record ClosedTrade(String providerTradeReference, String providerPositionReference,
+            String instrument, String settlementAsset, Side side, BigDecimal quantity,
+            BigDecimal price, BigDecimal fee, BigDecimal realizedPnl,
+            Instant closedAt, BigDecimal swap, boolean closingPosition) {
         public ClosedTrade(String providerTradeReference, String instrument, String settlementAsset, Side side,
                            BigDecimal quantity, BigDecimal price, BigDecimal fee, BigDecimal realizedPnl,
                            Instant closedAt) {
-            this(providerTradeReference, instrument, settlementAsset, side, quantity, price, fee,
-                    realizedPnl, closedAt, null);
+            this(providerTradeReference, null, instrument, settlementAsset, side, quantity, price, fee,
+                    realizedPnl, closedAt, null, realizedPnl != null);
+        }
+
+        public ClosedTrade(String providerTradeReference, String instrument, String settlementAsset, Side side,
+                           BigDecimal quantity, BigDecimal price, BigDecimal fee, BigDecimal realizedPnl,
+                           Instant closedAt, BigDecimal swap) {
+            this(providerTradeReference, null, instrument, settlementAsset, side, quantity, price, fee,
+                    realizedPnl, closedAt, swap, realizedPnl != null || swap != null);
         }
     }
     public record LedgerEntry(String providerLedgerReference, String asset, String type,

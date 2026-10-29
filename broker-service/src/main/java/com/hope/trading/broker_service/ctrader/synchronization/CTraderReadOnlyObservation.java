@@ -64,9 +64,17 @@ public record CTraderReadOnlyObservation(
         }
     }
 
-    public record Deal(String providerReference, String instrument, BigDecimal quantity,
-                       String side, BigDecimal price, BigDecimal fee, BigDecimal swap, BigDecimal realizedPnl,
-                       Instant executedAt) {
+    public record Deal(String providerReference, String providerPositionReference, String instrument,
+                       BigDecimal quantity, String side, BigDecimal price, BigDecimal fee,
+                       BigDecimal swap, BigDecimal realizedPnl, Instant executedAt,
+                       boolean closingPosition) {
+        public Deal(String providerReference, String instrument, BigDecimal quantity,
+                    String side, BigDecimal price, BigDecimal fee, BigDecimal swap,
+                    BigDecimal realizedPnl, Instant executedAt) {
+            this(providerReference, null, instrument, quantity, side, price, fee, swap,
+                    realizedPnl, executedAt, realizedPnl != null || swap != null);
+        }
+
         public Deal {
             if (providerReference == null || providerReference.isBlank()) throw new IllegalArgumentException("deal identity is required");
             if (instrument == null || instrument.isBlank() || quantity == null || price == null || executedAt == null) {

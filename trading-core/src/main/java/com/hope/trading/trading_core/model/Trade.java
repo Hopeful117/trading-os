@@ -41,10 +41,34 @@ public class Trade {
     @Column(precision = 38, scale = 12)
     private BigDecimal exitPrice;
 
+    @Column(name = "broker_position_reference", length = 255)
+    private String brokerPositionReference;
+
+    @Column(name = "broker_close_deal_reference", length = 255)
+    private String brokerCloseDealReference;
+
+    @Column(name = "broker_close_deal_references", length = 4000)
+    private String brokerCloseDealReferences;
+
+    @Column(name = "broker_baseline_close_deal_references", length = 4000)
+    private String brokerBaselineCloseDealReferences;
+
+    @Column(name = "broker_closed_quantity", precision = 38, scale = 12)
+    private BigDecimal brokerClosedQuantity;
+
+    @Column(name = "broker_original_quantity", precision = 38, scale = 12)
+    private BigDecimal brokerOriginalQuantity;
+
+    @Column(name = "broker_closed_notional", precision = 38, scale = 12)
+    private BigDecimal brokerClosedNotional;
+
     @Column(nullable = false, precision = 38, scale = 12)
     private BigDecimal quantity;
 
     private BigDecimal pnl;
+
+    @Column(name = "realized_pnl", precision = 38, scale = 12)
+    private BigDecimal realizedPnl;
 
     private Instant openedAt;
 

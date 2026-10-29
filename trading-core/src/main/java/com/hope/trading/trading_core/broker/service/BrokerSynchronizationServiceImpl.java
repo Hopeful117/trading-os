@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
@@ -23,6 +24,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -88,15 +95,15 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         }
 
         replaceBalances(account, snapshot.balances());
-        replaceOpenPositions(account, snapshot.positions());
-         account.setMarketDataTimestamp(snapshot.observedAt());
-         recalculateAccount(account);
-         if (snapshot.account() != null && snapshot.account().equity() != null) {
-             account.setEquity(snapshot.account().equity());
-             if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
-                 account.setPeakEquity(account.getEquity());
-             }
-         }
+        replaceOpenPositions(account, snapshot.positions(), snapshot.deals());
+        account.setMarketDataTimestamp(snapshot.observedAt());
+        recalculateAccount(account);
+        if (snapshot.account() != null && snapshot.account().equity() != null) {
+            account.setEquity(snapshot.account().equity());
+            if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
+                account.setPeakEquity(account.getEquity());
+            }
+        }
         accountRepository.save(account);
     }
 
@@ -178,20 +185,179 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
     }
 
-    private void replaceOpenPositions(Account account, java.util.List<BrokerPositionSnapshotV2Dto> positions) {
-        account.getTrades().removeIf(trade -> trade.getTradeStatus() == TradeStatus.OPEN);
+    private void replaceOpenPositions(Account account,
+                                      List<BrokerPositionSnapshotV2Dto> positions,
+                                      List<BrokerDealSnapshotV2Dto> deals) {
+        Map<String, Trade> tradesByReference = new HashMap<>();
+        account.getTrades().stream()
+                .filter(trade -> trade.getBrokerPositionReference() != null)
+                .forEach(trade -> tradesByReference.putIfAbsent(trade.getBrokerPositionReference(), trade));
+        Set<String> observedReferences = new HashSet<>();
+
         positions.forEach(position -> {
             if (position.signedQuantity() == null || position.signedQuantity().signum() == 0) {
                 throw new IllegalStateException("Broker position quantity must be non-zero");
             }
-            account.addTrade(Trade.builder()
-                    .symbol(position.instrument())
-                    .type(position.signedQuantity().signum() > 0 ? TradeType.BUY : TradeType.SELL)
-                    .entryPrice(position.entryPrice())
-                    .quantity(position.signedQuantity().abs())
-                    .tradeStatus(TradeStatus.OPEN)
-                    .build());
+            String reference = requiredPositionReference(position);
+            observedReferences.add(reference);
+            Trade trade = tradesByReference.get(reference);
+            if (trade != null && isClosed(trade)) {
+                return;
+            }
+            boolean imported = trade == null;
+            if (trade == null) {
+                trade = Trade.builder()
+                        .symbol(position.instrument())
+                        .type(position.signedQuantity().signum() > 0 ? TradeType.BUY : TradeType.SELL)
+                        .entryPrice(position.entryPrice())
+                        .quantity(position.signedQuantity().abs())
+                        .tradeStatus(TradeStatus.OPEN)
+                        .openedAt(position.observedAt())
+                        .brokerPositionReference(reference)
+                        .brokerOriginalQuantity(position.signedQuantity().abs())
+                        .build();
+                account.addTrade(trade);
+                tradesByReference.put(reference, trade);
+            } else {
+                updateOpenPosition(trade, position);
+            }
+            List<BrokerDealSnapshotV2Dto> positionDeals = dealsForPosition(deals, reference);
+            if (imported) {
+                // The provider deal window may start after the position was opened.
+                // Establish the local baseline without applying historical closes.
+                rememberClosingDealReferences(trade, positionDeals);
+            } else {
+                applyClosingDeals(trade, positionDeals, true);
+            }
         });
+
+            account.getTrades().stream()
+                .filter(trade -> !isClosed(trade) && trade.getBrokerPositionReference() != null)
+                .filter(trade -> !observedReferences.contains(trade.getBrokerPositionReference()))
+                .forEach(trade -> applyClosingDeals(trade,
+                        dealsForPosition(deals, trade.getBrokerPositionReference()), false));
+    }
+
+    private String requiredPositionReference(BrokerPositionSnapshotV2Dto position) {
+        if (position.brokerPositionReference() == null || position.brokerPositionReference().isBlank()) {
+            throw new IllegalStateException("Broker position reference is required for reconciliation");
+        }
+        return position.brokerPositionReference();
+    }
+
+    private void updateOpenPosition(Trade trade, BrokerPositionSnapshotV2Dto position) {
+        trade.setSymbol(position.instrument());
+        trade.setType(position.signedQuantity().signum() > 0 ? TradeType.BUY : TradeType.SELL);
+        trade.setEntryPrice(position.entryPrice());
+        trade.setQuantity(position.signedQuantity().abs());
+        trade.setTradeStatus(TradeStatus.OPEN);
+        if (trade.getBrokerOriginalQuantity() == null) {
+            trade.setBrokerOriginalQuantity(position.signedQuantity().abs());
+        }
+        if (position.stopLoss() != null) {
+            trade.setStopLoss(position.stopLoss());
+        }
+    }
+
+    private List<BrokerDealSnapshotV2Dto> dealsForPosition(
+            List<BrokerDealSnapshotV2Dto> deals,
+            String positionReference) {
+        return deals.stream()
+                .filter(deal -> deal.closingPosition())
+                .filter(deal -> positionReference.equals(deal.providerPositionReference()))
+                .toList();
+    }
+
+    private void applyClosingDeals(Trade trade,
+                                   List<BrokerDealSnapshotV2Dto> deals,
+                                   boolean positionPresent) {
+        if (deals.isEmpty()) {
+            return;
+        }
+        Set<String> appliedReferences = closeDealReferences(trade.getBrokerCloseDealReferences());
+        Set<String> baselineReferences = closeDealReferences(trade.getBrokerBaselineCloseDealReferences());
+        List<BrokerDealSnapshotV2Dto> unappliedDeals = deals.stream()
+                .filter(deal -> !appliedReferences.contains(deal.providerTradeReference()))
+                .toList();
+        List<BrokerDealSnapshotV2Dto> newDeals = unappliedDeals.stream()
+                .filter(deal -> !baselineReferences.contains(deal.providerTradeReference()))
+                .toList();
+        if (!positionPresent && newDeals.isEmpty()) {
+            newDeals = unappliedDeals.stream()
+                    .filter(deal -> baselineReferences.contains(deal.providerTradeReference()))
+                    .toList();
+        }
+        if (newDeals.isEmpty()) {
+            return;
+        }
+
+        BigDecimal closeQuantity = newDeals.stream()
+                .map(BrokerDealSnapshotV2Dto::quantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal closePnl = newDeals.stream()
+                .map(BrokerDealSnapshotV2Dto::realizedPnl)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal closeNotional = newDeals.stream()
+                .map(deal -> deal.price().multiply(deal.quantity()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal originalQuantity = trade.getBrokerOriginalQuantity();
+        BigDecimal accumulatedClosedQuantity = valueOrZero(trade.getBrokerClosedQuantity());
+        if (positionPresent && originalQuantity != null
+                && accumulatedClosedQuantity.add(closeQuantity).compareTo(originalQuantity) >= 0) {
+            return;
+        }
+
+        newDeals.forEach(deal -> appliedReferences.add(deal.providerTradeReference()));
+        trade.setBrokerCloseDealReferences(String.join(",", appliedReferences));
+        trade.setBrokerCloseDealReference(newDeals.getLast().providerTradeReference());
+        trade.setBrokerClosedQuantity(valueOrZero(trade.getBrokerClosedQuantity()).add(closeQuantity));
+        trade.setBrokerClosedNotional(valueOrZero(trade.getBrokerClosedNotional()).add(closeNotional));
+        trade.setRealizedPnl(valueOrZero(trade.getRealizedPnl()).add(closePnl));
+
+        if (originalQuantity == null || trade.getBrokerClosedQuantity().compareTo(originalQuantity) < 0) {
+            return;
+        }
+
+        trade.setQuantity(originalQuantity);
+        trade.setExitPrice(trade.getBrokerClosedNotional()
+                .divide(trade.getBrokerClosedQuantity(), 12, RoundingMode.HALF_UP));
+        trade.setPnl(trade.getRealizedPnl());
+        trade.setClosedAt(newDeals.stream()
+                .map(BrokerDealSnapshotV2Dto::closedAt)
+                .max(java.util.Comparator.naturalOrder())
+                .orElse(null));
+        if (trade.getClosedAt() != null) {
+            trade.setTradeStatus(TradeStatus.CLOSED);
+        }
+    }
+
+    private void rememberClosingDealReferences(Trade trade, List<BrokerDealSnapshotV2Dto> deals) {
+        if (deals.isEmpty()) {
+            return;
+        }
+        Set<String> references = closeDealReferences(trade.getBrokerBaselineCloseDealReferences());
+        deals.forEach(deal -> references.add(deal.providerTradeReference()));
+        trade.setBrokerBaselineCloseDealReferences(String.join(",", references));
+    }
+
+    private Set<String> closeDealReferences(String value) {
+        Set<String> references = new java.util.LinkedHashSet<>();
+        if (value != null && !value.isBlank()) {
+            for (String reference : value.split(",")) {
+                if (!reference.isBlank()) references.add(reference);
+            }
+        }
+        return references;
+    }
+
+    private BigDecimal valueOrZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private boolean isClosed(Trade trade) {
+        return trade.getTradeStatus() == TradeStatus.CLOSED || trade.getClosedAt() != null;
     }
     // TODO : remplacer par un calcul basé sur la valorisation complète des actifs
     // lorsque MarketDataService sera disponible
