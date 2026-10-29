@@ -17,6 +17,9 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=builder /app/market-data/target/market-data-*.jar app.jar
 
+ARG GIT_SHA
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+
 
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

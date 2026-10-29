@@ -9,4 +9,8 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/market-intelligence-0.0.1-SNAPSHOT-exec.jar app.jar
 EXPOSE 8084
+
+ARG GIT_SHA
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+
 ENTRYPOINT ["java", "-jar", "app.jar"]

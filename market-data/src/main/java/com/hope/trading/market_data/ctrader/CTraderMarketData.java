@@ -29,6 +29,10 @@ import java.util.Optional;
 @Component
 @ConditionalOnProperty(name = "ctrader.market-data.enabled", havingValue = "true")
 public class CTraderMarketData implements MarketDataProvider {
+    // Calendar lookback must account for provider-closed periods while the row count remains bounded.
+    private static final int INITIAL_LOOKBACK_MARGIN = 3;
+    private static final int MAX_LOOKBACK_ATTEMPTS = 4;
+
     private final CTraderOpenApiClient client;
     private final CTraderMarketDataProperties properties;
     private final MarketStateBuilder marketStateBuilder;
@@ -75,9 +79,6 @@ public class CTraderMarketData implements MarketDataProvider {
         validate(market, interval, limit);
         long symbolId = Long.parseLong(market.getProviderSymbol());
         Instant to = clock.instant();
-        // Leave room for the current and boundary bars; the normalized result
-        // still returns at most the requested number of closed candles.
-        Instant from = to.minus(interval.getDuration().multipliedBy(limit + 3L));
         CTraderOpenApiClient.CTraderSymbol symbol = new CTraderOpenApiClient.CTraderSymbol(
                 symbolId,
                 market.getSymbol(),
@@ -86,12 +87,21 @@ public class CTraderMarketData implements MarketDataProvider {
                 0,
                 0
         );
-        List<OhlcEvent> events = client.trendbars(symbolId, period(interval), from, to, limit).stream()
-                .map(bar -> toEvent(market, interval, symbol, bar, to)).sorted(Comparator.comparing(OhlcEvent::openTime))
-                .toList();
-        return new MarketHistorySnapshot(
-                events,
-                events.stream().filter(OhlcEvent::closed).toList(),
+        int lookbackSlots = Math.min(properties.maxTrendbarRows(), limit + INITIAL_LOOKBACK_MARGIN);
+        List<OhlcEvent> events = List.of();
+        for (int attempt = 0; attempt < MAX_LOOKBACK_ATTEMPTS; attempt++) {
+            Instant from = to.minus(interval.getDuration().multipliedBy(lookbackSlots));
+            events = client.trendbars(symbolId, period(interval), from, to, limit).stream()
+                    .map(bar -> toEvent(market, interval, symbol, bar, to))
+                    .sorted(Comparator.comparing(OhlcEvent::openTime))
+                    .toList();
+            if (events.stream().filter(OhlcEvent::closed).count() >= limit
+                    || lookbackSlots >= properties.maxTrendbarRows()) {
+                break;
+            }
+            lookbackSlots = Math.min(properties.maxTrendbarRows(), lookbackSlots * 2);
+        }
+        return new MarketHistorySnapshot(events, events.stream().filter(OhlcEvent::closed).toList(),
                 MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK);
     }
 
