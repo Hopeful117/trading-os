@@ -394,6 +394,87 @@ class ActiveScanScopeResolutionServiceTest {
     }
 
     @Test
+    void staleTradableCTraderMarketIsBootstrappedBeforeEligibilityEvaluation() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW.minusSeconds(31))),
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW)));
+        when(marketData.findPriceSnapshots(any())).thenReturn(List.of(freshSnapshot(ctrader)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+        verify(marketData).findPriceSnapshots(any());
+        verify(marketData, times(2)).findAllMarkets();
+    }
+
+    @Test
+    void freshTradableCTraderMarketDoesNotTriggerBootstrap() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+        verify(marketData, never()).findPriceSnapshots(any());
+    }
+
+    @Test
+    void freshNonTradableSnapshotDoesNotClearBootstrapFailure() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW.minusSeconds(31))),
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW)));
+        when(marketData.findPriceSnapshots(any())).thenReturn(List.of(freshSnapshot(ctrader, false)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).isEmpty();
+        assertThat(result.decisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.status()).isEqualTo(MarketEligibilityStatus.NOT_EVALUABLE);
+            assertThat(decision.reasons()).containsExactly(MarketEligibilityReason.DATA_UNAVAILABLE);
+        });
+    }
+
+    @Test
+    void futureTradableCTraderStateTriggersBootstrap() {
+        UUID accountId = UUID.randomUUID();
+        UUID ctrader = UUID.randomUUID();
+        TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
+        MarketDataClient marketData = mock(MarketDataClient.class);
+        when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
+        when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
+        when(marketData.findAllMarkets()).thenReturn(
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW.plusSeconds(1))),
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW)));
+        when(marketData.findPriceSnapshots(any())).thenReturn(List.of(freshSnapshot(ctrader)));
+
+        ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
+                new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
+
+        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+        verify(marketData).findPriceSnapshots(any());
+    }
+
+    @Test
     void unavailableCTraderMarketRemainsExcludedWhenBootstrapProducesNoQuote() {
         UUID accountId = UUID.randomUUID();
         UUID ctrader = UUID.randomUUID();
@@ -415,7 +496,7 @@ class ActiveScanScopeResolutionServiceTest {
     }
 
     @Test
-    void reloadsCanonicalStateWhenBootstrapFailsAfterQuoteUpdate() {
+    void staleTradableMarketRemainsNotEvaluableWhenBootstrapFails() {
         UUID accountId = UUID.randomUUID();
         UUID ctrader = UUID.randomUUID();
         TradingCoreAccountClient accounts = mock(TradingCoreAccountClient.class);
@@ -423,17 +504,18 @@ class ActiveScanScopeResolutionServiceTest {
         when(accounts.findOwnedAccount(accountId)).thenReturn(account(accountId));
         when(accounts.marketCapabilities(eq(accountId), any())).thenReturn(List.of(capability("EUR/USD", "CTRADER")));
         when(marketData.findAllMarkets()).thenReturn(
-                List.of(market(ctrader, "CTRADER", "EUR/USD", false)),
+                List.of(market(ctrader, "CTRADER", "EUR/USD", true, NOW.minusSeconds(31))),
                 List.of(market(ctrader, "CTRADER", "EUR/USD", true)));
         when(marketData.findPriceSnapshots(any())).thenThrow(new IllegalStateException("cTrader response timed out"));
 
         ActiveScanScopeResolutionResult result = service(accounts, marketData).resolve(
                 new ActiveScanScopeResolutionRequest(accountId, "scan", null, MarketScopeMode.ALL_ELIGIBLE));
 
-        assertThat(result.effectiveScope().marketIds()).containsExactly(ctrader);
+        assertThat(result.effectiveScope().marketIds()).isEmpty();
         assertThat(result.decisions()).singleElement().satisfies(decision -> {
-            assertThat(decision.eligible()).isTrue();
-            assertThat(decision.reasons()).isEmpty();
+            assertThat(decision.eligible()).isFalse();
+            assertThat(decision.status()).isEqualTo(MarketEligibilityStatus.NOT_EVALUABLE);
+            assertThat(decision.reasons()).containsExactly(MarketEligibilityReason.DATA_UNAVAILABLE);
         });
         verify(marketData, times(2)).findAllMarkets();
     }
@@ -531,6 +613,11 @@ class ActiveScanScopeResolutionServiceTest {
     }
 
     private MarketResponse market(UUID marketId, String provider, String symbol, boolean tradable) {
+        return market(marketId, provider, symbol, tradable, NOW);
+    }
+
+    private MarketResponse market(UUID marketId, String provider, String symbol,
+                                  boolean tradable, Instant lastUpdated) {
         String[] parts = symbol.contains("/") ? symbol.split("/") : new String[] {symbol, symbol};
         return new MarketResponse(
                 marketId,
@@ -539,9 +626,21 @@ class ActiveScanScopeResolutionServiceTest {
                 parts[0],
                 parts[1],
                 new MarketResponse.MarketStateResponse(
-                        "OPEN", tradable, null, NOW
+                        "OPEN", tradable, null, lastUpdated
                 )
         );
+    }
+
+    private com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse freshSnapshot(
+            UUID marketId) {
+        return freshSnapshot(marketId, true);
+    }
+
+    private com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse freshSnapshot(
+            UUID marketId, boolean tradable) {
+        return new com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse(
+                marketId, "EUR/USD", new BigDecimal("1.1"), new BigDecimal("1.0"),
+                new BigDecimal("1.2"), tradable, NOW, "FRESH", "ticker:ctrader", 1L, NOW);
     }
 
     private TradingCoreAccountClient.MarketCapabilityResponse capability(String instrument, String provider) {
