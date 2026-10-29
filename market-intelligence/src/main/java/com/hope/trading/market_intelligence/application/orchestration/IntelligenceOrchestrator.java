@@ -81,7 +81,7 @@ public class IntelligenceOrchestrator {
         }
 
         List<ContextRequirement> requirements = capability.requirements(request.mode());
-        if (!canExecute(context, requirements)) {
+        if (!canExecute(context, requirements, request.evidencePolicy())) {
             return run(
                     capability, CapabilityExecutionStatus.SKIPPED,
                     startedAt, "Required context is missing or unavailable",
@@ -130,14 +130,16 @@ public class IntelligenceOrchestrator {
 
     private boolean canExecute(
             IntelligenceContext context,
-            List<ContextRequirement> requirements
+            List<ContextRequirement> requirements,
+            EvidenceAcquisitionPolicy evidencePolicy
     ) {
         return requirements.stream()
                 .filter(ContextRequirement::required)
                 .allMatch(requirement -> context.section(requirement.sectionType())
                         .filter(section -> section.sensitivity() == requirement.sensitivity())
                         .filter(section -> section.status() == ContextSectionStatus.AVAILABLE
-                                || section.status() == ContextSectionStatus.STALE)
+                                || (section.status() == ContextSectionStatus.STALE
+                                && evidencePolicy != EvidenceAcquisitionPolicy.STRICT_OBSERVED))
                         .isPresent());
     }
 

@@ -106,6 +106,28 @@ class IntelligenceOrchestratorTest {
     }
 
     @Test
+    void strictObservedOrchestrationSkipsStaleTradeabilitySnapshot() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-10-29T03:49:15Z");
+        TradeabilityAnalysisCapability tradeability = new TradeabilityAnalysisCapability();
+        IntelligenceOrchestrator orchestrator = orchestrator(
+                strategy(AnalysisExecutionMode.ACTIVE, List.of(tradeability.id()),
+                        List.of(ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT)),
+                        Duration.ofMillis(200)),
+                List.of(tradeability),
+                List.of(staleSnapshotContributor(marketId, cutoff)));
+
+        ConsolidatedIntelligence result = orchestrator.analyze(new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE, "context",
+                null, null, null, cutoff, EvidenceAcquisitionPolicy.STRICT_OBSERVED));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.executionMetadata().capabilityExecutions())
+                .anyMatch(execution -> execution.capabilityId().equals(tradeability.id())
+                        && execution.status() == CapabilityExecutionStatus.SKIPPED);
+    }
+
+    @Test
     void oneCapabilityFailureDoesNotDiscardSuccessfulFindings() {
         SpreadAnalysisCapability spread = new SpreadAnalysisCapability();
         AnalysisCapability failing = capability(
@@ -363,6 +385,28 @@ class IntelligenceOrchestratorTest {
                 ),
                 new AtomicInteger()
         );
+    }
+
+    private ContextContributor staleSnapshotContributor(UUID marketId, Instant cutoff) {
+        return new ContextContributor() {
+            @Override
+            public ContextSectionType sectionType() {
+                return ContextSectionType.MARKET_SNAPSHOT;
+            }
+
+            @Override
+            public ContextSection contribute(IntelligenceAnalysisRequest request) {
+                return new ContextSection(
+                        ContextSectionType.MARKET_SNAPSHOT,
+                        ContextSectionStatus.STALE,
+                        ContextSensitivity.PUBLIC,
+                        new MarketSnapshotContext(marketId, "BTC/USD", new BigDecimal("100"),
+                                new BigDecimal("99"), new BigDecimal("101"), true, cutoff.minusSeconds(1)),
+                        new ContextProvenance("market-data", cutoff.minusSeconds(1), cutoff.minusSeconds(1),
+                                null, null, null, EvidenceAcquisitionPolicy.STRICT_OBSERVED, null, 1, cutoff),
+                        "Current market snapshot is stale");
+            }
+        };
     }
 
     private ContextContributor accountContributor(AtomicInteger calls) {

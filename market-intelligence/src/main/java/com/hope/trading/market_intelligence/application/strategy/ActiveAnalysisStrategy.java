@@ -39,10 +39,11 @@ public class ActiveAnalysisStrategy implements AnalysisExecutionStrategy {
                              TradeabilityAnalysisCapability.CAPABILITY_ID
                     ),
                     List.of(
-                             ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
-                             ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
-                              ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT)
-                      ),
+                            ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
+                            ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT),
+                            ContextRequirement.requiredPublic(ContextSectionType.HISTORICAL_OHLC),
+                            ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT)
+                    ),
                       4,
                     timeout
             );

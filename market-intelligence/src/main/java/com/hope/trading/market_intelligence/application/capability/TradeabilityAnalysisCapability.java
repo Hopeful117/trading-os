@@ -16,6 +16,8 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -42,7 +44,7 @@ public final class TradeabilityAnalysisCapability
                 CapabilityCategory.DETERMINISTIC, ExecutionPolicy.ON_DEMAND,
                 RetryPolicy.disabled(), List.of(
                         optional(ProductionArtifactTypes.MARKET_IDENTITY),
-                        optional(ProductionArtifactTypes.MARKET_SNAPSHOT),
+                        required(ProductionArtifactTypes.MARKET_SNAPSHOT),
                         optional(ProductionArtifactTypes.ORDER_BOOK_REPLAY),
                         optional(ProductionArtifactTypes.OHLC_HISTORY),
                         optional(ProductionArtifactTypes.NEWS_CONTEXT)),
@@ -56,6 +58,11 @@ public final class TradeabilityAnalysisCapability
     private com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement optional(ArtifactType type) {
         return new com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement(type, ProductionArtifactTypes.V1,
                 VersionCompatibilityMode.EXACT, false, ArtifactCardinality.ONE, false);
+    }
+
+    private com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement required(ArtifactType type) {
+        return new com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement(type, ProductionArtifactTypes.V1,
+                VersionCompatibilityMode.EXACT, true, ArtifactCardinality.ONE, false);
     }
 
     @Override
@@ -72,10 +79,48 @@ public final class TradeabilityAnalysisCapability
             throw new IllegalStateException(
                     "Tradeability requires approved non-live evidence provenance at the execution cutoff");
         }
-        UUID marketId = artifacts.stream().map(StoredArtifact::key)
-                .map(ArtifactCacheKey::scope).map(ArtifactScope::marketId)
-                .filter(java.util.Objects::nonNull).findFirst().orElse(UUID.nameUUIDFromBytes(
-                        "tradeability-unknown-market".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        StoredArtifact snapshotArtifact = artifacts.stream()
+                .filter(value -> value.key().identity().artifactType()
+                        .equals(ProductionArtifactTypes.MARKET_SNAPSHOT.value()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Tradeability requires an approved market snapshot"));
+        if (!(snapshotArtifact.content() instanceof MarketSnapshotContext snapshot)) {
+            throw new IllegalStateException("Tradeability requires a cutoff-compatible market snapshot");
+        }
+        UUID snapshotMarketId = snapshot.marketId();
+        if (snapshotMarketId == null
+                || artifacts.stream().anyMatch(artifact -> artifact.key().scope().marketId() != null
+                        && !snapshotMarketId.equals(artifact.key().scope().marketId()))
+                || artifacts.stream().map(StoredArtifact::content)
+                .filter(MarketIdentityContext.class::isInstance)
+                .map(MarketIdentityContext.class::cast)
+                .anyMatch(identity -> !snapshotMarketId.equals(identity.marketId()))
+                || artifacts.stream().map(StoredArtifact::content)
+                .filter(MarketSnapshotContext.class::isInstance)
+                .map(MarketSnapshotContext.class::cast)
+                .anyMatch(value -> !snapshotMarketId.equals(value.marketId()))
+                || artifacts.stream().map(StoredArtifact::content)
+                .map(this::marketIdOf)
+                .flatMap(Optional::stream)
+                .anyMatch(value -> !snapshotMarketId.equals(value))) {
+            throw new IllegalStateException("Tradeability requires market-consistent artifacts");
+        }
+        if (snapshot.occurredAt() == null
+                || snapshot.occurredAt().isAfter(cutoff)
+                || snapshot.bid() == null
+                || snapshot.ask() == null
+                || snapshot.bid().signum() <= 0
+                || snapshot.ask().compareTo(snapshot.bid()) < 0
+                || snapshotArtifact.provenance().producedAt().isAfter(cutoff)
+                || snapshotArtifact.freshness().producedAt().isAfter(cutoff)
+                || snapshotArtifact.freshness().validUntil().isBefore(cutoff)
+                || snapshotArtifact.freshness().invalidationTime()
+                .map(value -> !value.isAfter(cutoff)).orElse(false)) {
+            throw new IllegalStateException(
+                    "Tradeability requires a cutoff-compatible market snapshot");
+        }
+        UUID marketId = snapshotMarketId;
         String instrument = artifacts.stream().map(StoredArtifact::content)
                 .filter(MarketIdentityContext.class::isInstance).map(MarketIdentityContext.class::cast)
                 .map(MarketIdentityContext::symbol).findFirst()
@@ -110,7 +155,7 @@ public final class TradeabilityAnalysisCapability
     public List<ContextRequirement> requirements(AnalysisExecutionMode mode) {
         return List.of(
                 ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
-                ContextRequirement.optionalPublic(ContextSectionType.MARKET_SNAPSHOT),
+                ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT),
                 ContextRequirement.optionalPublic(ContextSectionType.ORDER_BOOK),
                 ContextRequirement.optionalPublic(ContextSectionType.HISTORICAL_OHLC),
                 ContextRequirement.optionalPublic(ContextSectionType.NEWS));
@@ -139,6 +184,26 @@ public final class TradeabilityAnalysisCapability
             return CapabilityAnalysisResult.empty(
                     "Tradeability requires strict observed provenance at the execution cutoff");
         }
+        ContextSection snapshotSection = context.section(ContextSectionType.MARKET_SNAPSHOT).orElse(null);
+        if (request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                && !cutoffCompatibleSnapshot(snapshotSection, cutoff, request.marketId())) {
+            return CapabilityAnalysisResult.empty(
+                    "Tradeability requires a cutoff-compatible market snapshot");
+        }
+        if (context.sections().values().stream()
+                .map(ContextSection::payload)
+                .filter(Objects::nonNull)
+                .map(this::marketIdOf)
+                .flatMap(Optional::stream)
+                .anyMatch(value -> !request.marketId().equals(value))) {
+            return CapabilityAnalysisResult.empty(
+                    "Tradeability requires market-consistent context");
+        }
+        if (snapshotSection != null && snapshotSection.payload() instanceof MarketSnapshotContext snapshot
+                && !request.marketId().equals(snapshot.marketId())) {
+            return CapabilityAnalysisResult.empty(
+                    "Tradeability requires a market snapshot for the requested market");
+        }
         String instrument = context.section(ContextSectionType.MARKET_IDENTITY)
                 .map(ContextSection::payload).filter(MarketIdentityContext.class::isInstance)
                 .map(MarketIdentityContext.class::cast).map(MarketIdentityContext::symbol)
@@ -148,7 +213,7 @@ public final class TradeabilityAnalysisCapability
                 .orElseThrow(() -> new IllegalStateException(
                         "Canonical market instrument is unavailable for tradeability analysis"));
         TradeabilityAssessment assessment = calculator.calculate(request.marketId(), instrument,
-                cutoff, context.section(ContextSectionType.MARKET_SNAPSHOT).orElse(null),
+                cutoff, snapshotSection,
                 context.section(ContextSectionType.ORDER_BOOK).orElse(null),
                 context.section(ContextSectionType.HISTORICAL_OHLC).orElse(null),
                 context.section(ContextSectionType.NEWS).orElse(null));
@@ -198,6 +263,37 @@ public final class TradeabilityAnalysisCapability
                          provenance.observationCount(),
                          provenance.evaluationCutoff() == null ? cutoff : provenance.evaluationCutoff()),
                 status == ContextSectionStatus.AVAILABLE ? null : "Artifact is not eligible for the evaluation cutoff");
+    }
+
+    private Optional<UUID> marketIdOf(ArtifactContent content) {
+        if (content instanceof MarketIdentityContext value) return Optional.ofNullable(value.marketId());
+        if (content instanceof MarketSnapshotContext value) return Optional.ofNullable(value.marketId());
+        if (content instanceof OrderBookContext value) return Optional.ofNullable(value.marketId());
+        if (content instanceof HistoricalOhlcContext value) return Optional.ofNullable(value.marketId());
+        if (content instanceof NewsContext value) return Optional.ofNullable(value.marketId());
+        return Optional.empty();
+    }
+
+    private boolean cutoffCompatibleSnapshot(
+            ContextSection section, Instant cutoff, UUID expectedMarketId) {
+        if (section == null || section.status() != ContextSectionStatus.AVAILABLE
+                || !(section.payload() instanceof MarketSnapshotContext snapshot)
+                || snapshot.marketId() == null
+                || !expectedMarketId.equals(snapshot.marketId())
+                || snapshot.occurredAt() == null
+                || snapshot.occurredAt().isAfter(cutoff)
+                || snapshot.bid() == null
+                || snapshot.ask() == null
+                || snapshot.bid().signum() <= 0
+                || snapshot.ask().compareTo(snapshot.bid()) < 0) {
+            return false;
+        }
+        ContextProvenance provenance = section.provenance();
+        return provenance != null
+                && provenance.sourceOccurredAt() != null
+                && !provenance.sourceOccurredAt().isAfter(cutoff)
+                && provenance.fetchedAt() != null
+                && !provenance.fetchedAt().isAfter(cutoff);
     }
 
     private ContextSectionType sectionType(ArtifactType type) {
