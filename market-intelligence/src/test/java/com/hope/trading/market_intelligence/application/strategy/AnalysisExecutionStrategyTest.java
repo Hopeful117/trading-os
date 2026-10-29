@@ -54,7 +54,7 @@ class AnalysisExecutionStrategyTest {
     }
 
     @Test
-    void strictObservedActivePlanDoesNotRequireCurrentSnapshot() {
+    void strictObservedActivePlanRequiresCutoffBoundSnapshotForTradeability() {
         IntelligenceAnalysisRequest request = new IntelligenceAnalysisRequest(
                 UUID.randomUUID(), UUID.randomUUID(), AnalysisExecutionMode.ACTIVE, "replay",
                 null, null, null, Instant.parse("2026-10-15T12:00:00Z"),
@@ -63,8 +63,13 @@ class AnalysisExecutionStrategyTest {
         AnalysisExecutionPlan plan = new ActiveAnalysisStrategy(Duration.ofSeconds(3)).plan(request);
 
         assertThat(plan.baselineContext()).extracting(ContextRequirement::sectionType)
-                .contains(ContextSectionType.HISTORICAL_OHLC, ContextSectionType.TREND_CONTEXT)
-                .doesNotContain(ContextSectionType.MARKET_SNAPSHOT);
+                .contains(ContextSectionType.HISTORICAL_OHLC, ContextSectionType.TREND_CONTEXT,
+                        ContextSectionType.MARKET_SNAPSHOT);
+        assertThat(plan.baselineContext())
+                .filteredOn(requirement -> requirement.sectionType() == ContextSectionType.MARKET_SNAPSHOT)
+                .singleElement()
+                .extracting(ContextRequirement::required)
+                .isEqualTo(true);
         assertThat(plan.capabilityIds()).containsExactlyInAnyOrder(
                  TrendContextAnalysisCapability.CAPABILITY_ID,
                  OhlcRangeAnalysisCapability.CAPABILITY_ID,
