@@ -30,9 +30,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CTraderExecutionCapabilityTest {
@@ -115,6 +115,36 @@ class CTraderExecutionCapabilityTest {
                 BigDecimal.ONE, BigDecimal.valueOf(.99)));
 
         assertInstanceOf(BrokerModels.Acknowledged.class, result);
+    }
+
+    @Test
+    void propagatesProtectiveTargetsForMarketExecution() {
+        BrokerConnection connection = connected(true, false);
+        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connection));
+        when(secrets.read(any(CredentialReference.class))).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
+                new CTraderReadOnlyObservation("1001", "USD", BigDecimal.valueOf(50000),
+                        BigDecimal.valueOf(50000), BigDecimal.ZERO, BigDecimal.valueOf(50000),
+                        List.of(), List.of(), List.of(), NOW, NOW, NOW, true, List.of()));
+        when(client.submitOrder(any(), any())).thenReturn(new CTraderOpenApiClient.CTraderOrderResponse("order-1"));
+
+        var result = capability().execute(new BrokerModels.ExecutionRequest(
+                UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
+                BrokerModels.Side.BUY, BrokerModels.OrderType.MARKET, BigDecimal.ONE, null,
+                BigDecimal.valueOf(.99), List.of(BigDecimal.valueOf(1.02))));
+
+        assertInstanceOf(BrokerModels.Acknowledged.class, result);
+        var request = verifyAndCaptureOrderRequest();
+        assertThat(request.orderType()).isEqualTo("MARKET");
+        assertThat(request.stopLossPrice()).isEqualByComparingTo("0.99");
+        assertThat(request.takeProfitPrices()).containsExactly(BigDecimal.valueOf(1.02));
+    }
+
+    private CTraderOpenApiClient.CTraderOrderRequest verifyAndCaptureOrderRequest() {
+        var captor = org.mockito.ArgumentCaptor.forClass(CTraderOpenApiClient.CTraderOrderRequest.class);
+        verify(client).submitOrder(any(), captor.capture());
+        return captor.getValue();
     }
 
     private BrokerConnection connected(boolean trade, boolean live) {

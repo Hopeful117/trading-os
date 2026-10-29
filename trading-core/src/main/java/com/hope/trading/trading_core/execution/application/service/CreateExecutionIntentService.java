@@ -32,6 +32,10 @@ public final class CreateExecutionIntentService {
             metrics.duplicatePrevented();
             throw exception;
         }
+        if (command.tradePlan() != null && intents.findByTradePlan(command.tradePlan()).isPresent()) {
+            metrics.duplicatePrevented();
+            throw new DuplicateExecutionException();
+        }
         ExecutionIntent intent = ExecutionIntent.create(ids.nextIntentId(),
                 command.tradePlan(), command.riskApproval(), command.idempotencyKey(),
                 command.initiatorId(), command.brokerAccountId(), command.accountId(), command.parameters(),

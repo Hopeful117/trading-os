@@ -20,7 +20,13 @@ public interface CTraderOpenApiClient {
 
     record CTraderOrderRequest(String externalAccountId, String instrument, String side,
                                String orderType, BigDecimal quantity, BigDecimal limitPrice,
-                               BigDecimal stopLossPrice, String clientOrderId) {
+                               BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices, String clientOrderId) {
+        public CTraderOrderRequest(String externalAccountId, String instrument, String side,
+                                   String orderType, BigDecimal quantity, BigDecimal limitPrice,
+                                   BigDecimal stopLossPrice, String clientOrderId) {
+            this(externalAccountId, instrument, side, orderType, quantity, limitPrice,
+                    stopLossPrice, List.of(), clientOrderId);
+        }
     }
 
     record CTraderOrderResponse(String externalOrderId) {

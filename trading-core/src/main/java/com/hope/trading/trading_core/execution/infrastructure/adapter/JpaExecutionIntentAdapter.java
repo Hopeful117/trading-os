@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.execution.infrastructure.adapter;
 
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
+import com.hope.trading.trading_core.execution.domain.model.TradePlanReference;
 import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntentRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import com.hope.trading.trading_core.execution.infrastructure.mapper.ExecutionIntentMapper;
@@ -25,6 +26,10 @@ public class JpaExecutionIntentAdapter implements ExecutionIntentRepositoryPort 
     }
     @Override @Transactional(readOnly=true) public Optional<ExecutionIntent> findByIdempotencyKey(IdempotencyKey key) {
         return repository.findByIdempotencyKey(key.value()).map(mapper::toDomain);
+    }
+    @Override @Transactional(readOnly=true) public Optional<ExecutionIntent> findByTradePlan(TradePlanReference tradePlan) {
+        return repository.findByTradePlanIdAndTradePlanVersion(tradePlan.tradePlanId(), tradePlan.version())
+                .map(mapper::toDomain);
     }
     @Override @Transactional(readOnly=true) public List<ExecutionIntent> findByStatuses(Set<ExecutionStatus> statuses) {
         return repository.findByStatusIn(statuses.stream().map(Enum::name).toList())

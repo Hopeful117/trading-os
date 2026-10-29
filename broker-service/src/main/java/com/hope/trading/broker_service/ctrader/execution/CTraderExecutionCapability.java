@@ -73,7 +73,8 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
                         new CTraderOpenApiClient.CTraderOrderRequest(
                                 connection.externalAccountId(), request.instrument(), request.side().name(),
                                 request.orderType().name(), request.quantity(), request.limitPrice(),
-                                request.stopLossPrice(), clientOrderId(request.idempotencyKey())));
+                                request.stopLossPrice(), request.takeProfitPrices(),
+                                clientOrderId(request.idempotencyKey())));
                 return new Acknowledged(response.externalOrderId(), request.executionAttemptId().toString());
             }
         } catch (CTraderAuthenticationException exception) {
