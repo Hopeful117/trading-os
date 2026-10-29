@@ -21,6 +21,10 @@ class JpaTradingOpportunityEntity {
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT") String payload;
     @Column(name = "strategy_match_id") UUID strategyMatchId;
     @Column(name = "market_id") UUID marketId;
+    @Column(name = "account_id") UUID accountId;
+    @Column(name = "source_scan_id") UUID sourceScanId;
+    @Column(name = "source_scan_market_id") UUID sourceScanMarketId;
+    @Column(name = "analysis_execution_id") UUID analysisExecutionId;
 }
 
 record JpaTradingOpportunityId(UUID opportunityId, long version) implements Serializable { }

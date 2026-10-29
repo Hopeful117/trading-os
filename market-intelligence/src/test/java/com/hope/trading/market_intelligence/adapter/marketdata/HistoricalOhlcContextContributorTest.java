@@ -97,6 +97,26 @@ class HistoricalOhlcContextContributorTest {
     }
 
     @Test
+    void usesCandleCloseTimeForFreshnessWhenSourceWasUpdatedAtAnotherTime() {
+        MarketDataClient client = mock(MarketDataClient.class);
+        when(client.findOhlc(MARKET_ID, "FIFTEEN_MINUTES", 200)).thenReturn(List.of(
+                new OhlcResponse(
+                        MARKET_ID, "KRAKEN", "BTC/EUR", "FIFTEEN_MINUTES",
+                        Instant.parse("2026-10-15T11:45:00Z"),
+                        Instant.parse("2026-10-15T12:00:00Z"),
+                        new BigDecimal("100"), new BigDecimal("105"), new BigDecimal("95"),
+                        new BigDecimal("102"), BigDecimal.TEN, new BigDecimal("101"), 2,
+                        true, Instant.parse("2026-10-15T10:00:00Z"), false, "ohlc",
+                        Instant.parse("2026-10-15T11:59:30Z"))));
+
+        ContextSection section = contributor(client).contribute(request(CUTOFF));
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.AVAILABLE);
+        assertThat(section.provenance().sourceOccurredAt())
+                .isEqualTo(Instant.parse("2026-10-15T10:00:00Z"));
+    }
+
+    @Test
     void ordersAcceptedCandlesAndRetainsSourceReferences() {
         MarketDataClient client = mock(MarketDataClient.class);
         OhlcResponse later = candle(CUTOFF.minusSeconds(60), CUTOFF.minusSeconds(30));
@@ -133,10 +153,10 @@ class HistoricalOhlcContextContributorTest {
     }
 
     private OhlcResponse candle(Instant occurredAt, Instant fetchedAt) {
-        Instant openTime = occurredAt == null ? CUTOFF : occurredAt;
+        Instant openTime = occurredAt == null ? CUTOFF : occurredAt.minusSeconds(900);
         return new OhlcResponse(
                 MARKET_ID, "KRAKEN", "BTC/EUR", "FIFTEEN_MINUTES", openTime,
-                openTime.plusSeconds(900), new BigDecimal("100"), new BigDecimal("105"),
+                occurredAt, new BigDecimal("100"), new BigDecimal("105"),
                 new BigDecimal("95"), new BigDecimal("102"), BigDecimal.TEN,
                 new BigDecimal("101"), 2, true, occurredAt, false, "ohlc", fetchedAt);
     }

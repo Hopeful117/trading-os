@@ -97,6 +97,11 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                         candle.volume()
                 ))
                 .toList();
+        Instant latestCloseTime = accepted.stream()
+                .map(OhlcResponse::closeTime)
+                .filter(java.util.Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
         Instant occurredAt = accepted.stream()
                 .map(OhlcResponse::occurredAt)
                 .filter(java.util.Objects::nonNull)
@@ -112,11 +117,10 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                 accepted.stream().map(OhlcResponse::fetchedAt)
                         .filter(java.util.Objects::nonNull)
                         .max(Comparator.naturalOrder()).orElse(null))
-                : sectionFactory.availableAt(
-                sectionType(),
-                new HistoricalOhlcContext(
-                        request.marketId(), ACTIVE_INTERVAL, candles
-                ),
+                : sectionFactory.historicalOhlcAvailableAt(
+                new HistoricalOhlcContext(request.marketId(), ACTIVE_INTERVAL, candles),
+                ACTIVE_INTERVAL,
+                latestCloseTime,
                 occurredAt,
                 accepted.stream().map(OhlcResponse::fetchedAt)
                         .filter(java.util.Objects::nonNull)

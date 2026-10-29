@@ -69,6 +69,20 @@ class MarketDataSectionFactoryTest {
     }
 
     @Test
+    void treatsTheLatestCompletedFifteenMinuteCandleAsFreshAtRehearsalTiming() {
+        MarketDataSectionFactory factory =
+                new MarketDataSectionFactory(Duration.ofSeconds(30));
+        Instant cutoff = Instant.parse("2026-10-29T18:05:48Z");
+
+        ContextSection section = factory.historicalOhlcAvailableAt(
+                null, "FIFTEEN_MINUTES", Instant.parse("2026-10-29T18:00:00Z"),
+                Instant.parse("2026-10-29T18:00:00Z"),
+                Instant.parse("2026-10-29T18:02:42Z"), cutoff);
+
+        assertThat(section.status()).isEqualTo(ContextSectionStatus.AVAILABLE);
+    }
+
+    @Test
     void excludesMarketSnapshotsNewerThanEvaluationCutoff() {
         MarketDataSectionFactory factory =
                 new MarketDataSectionFactory(Duration.ofSeconds(30));
