@@ -6,6 +6,7 @@ import com.hope.trading.market_data.ctrader.authentication.CTraderMarketDataProp
 import com.hope.trading.market_data.ctrader.authentication.CTraderTokenLifecycleService;
 import com.hope.trading.market_data.ctrader.authentication.CTraderTokenStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -43,6 +44,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final WebSocketConnector webSocketConnector;
 
+    @Autowired
     public JsonWebSocketCTraderOpenApiClient(CTraderMarketDataProperties properties,
                                              CTraderTokenLifecycleService tokenLifecycle,
                                              ObjectMapper objectMapper) {
