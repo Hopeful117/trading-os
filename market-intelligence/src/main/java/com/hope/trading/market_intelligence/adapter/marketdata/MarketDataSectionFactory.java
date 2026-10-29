@@ -13,21 +13,28 @@ import java.time.Instant;
 public class MarketDataSectionFactory {
     private static final String SOURCE = "market-data";
     private final Duration staleAfter;
+    private final HistoricalOhlcFreshnessPolicy historicalOhlcFreshness;
     private final Clock clock;
 
     public MarketDataSectionFactory(
             @Value("${intelligence.context.stale-after:30s}") Duration staleAfter
     ) {
-        this(staleAfter, Clock.systemUTC());
+        this(staleAfter, HistoricalOhlcFreshnessPolicy.DEFAULT_CAPTURE_GRACE, Clock.systemUTC());
     }
 
     @Autowired
     public MarketDataSectionFactory(
             @Value("${intelligence.context.stale-after:30s}") Duration staleAfter,
+            @Value("${intelligence.context.historical-ohlc.capture-grace:30s}") Duration historicalOhlcCaptureGrace,
             Clock clock
     ) {
         this.staleAfter = staleAfter;
+        this.historicalOhlcFreshness = new HistoricalOhlcFreshnessPolicy(historicalOhlcCaptureGrace);
         this.clock = clock;
+    }
+
+    public MarketDataSectionFactory(Duration staleAfter, Clock clock) {
+        this(staleAfter, HistoricalOhlcFreshnessPolicy.DEFAULT_CAPTURE_GRACE, clock);
     }
 
     public ContextSection available(
@@ -84,6 +91,45 @@ public class MarketDataSectionFactory {
             );
         }
         return available(type, payload, occurredAt, fetchedAt);
+    }
+
+    public ContextSection historicalOhlcAvailableAt(
+            ContextPayload payload,
+            String interval,
+            Instant latestCompletedCloseTime,
+            Instant occurredAt,
+            Instant fetchedAt,
+            Instant evaluationCutoff
+    ) {
+        if (evaluationCutoff == null) {
+            return available(ContextSectionType.HISTORICAL_OHLC, payload, occurredAt, fetchedAt);
+        }
+        if (fetchedAt == null) {
+            return new ContextSection(
+                    ContextSectionType.HISTORICAL_OHLC, ContextSectionStatus.INCOMPLETE,
+                    ContextSensitivity.PUBLIC, null,
+                    new ContextProvenance(SOURCE, occurredAt, null),
+                    "Market data capture time is missing");
+        }
+        if (isFuture(occurredAt, evaluationCutoff)
+                || isFuture(fetchedAt, evaluationCutoff)) {
+            return new ContextSection(
+                    ContextSectionType.HISTORICAL_OHLC,
+                    ContextSectionStatus.INCOMPLETE,
+                    ContextSensitivity.PUBLIC,
+                    null,
+                    new ContextProvenance(SOURCE, occurredAt, fetchedAt),
+                    "Market data is newer than the evaluation cut-off");
+        }
+        ContextSectionStatus status = historicalOhlcFreshness.status(
+                interval, latestCompletedCloseTime, evaluationCutoff);
+        return new ContextSection(
+                ContextSectionType.HISTORICAL_OHLC,
+                status,
+                ContextSensitivity.PUBLIC,
+                payload,
+                new ContextProvenance(SOURCE, occurredAt, fetchedAt),
+                status == ContextSectionStatus.STALE ? "Market data is stale" : null);
     }
 
     public ContextSection snapshot(

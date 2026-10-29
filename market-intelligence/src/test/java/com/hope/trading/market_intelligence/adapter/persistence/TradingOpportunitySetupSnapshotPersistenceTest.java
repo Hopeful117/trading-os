@@ -54,6 +54,46 @@ class TradingOpportunitySetupSnapshotPersistenceTest {
     }
 
     @Test
+    void activeScanProvenanceIsWrittenToDenormalizedColumnsAndPayload() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        UUID scanId = UUID.randomUUID();
+        UUID scanMarketId = UUID.randomUUID();
+        UUID executionId = UUID.randomUUID();
+        TradingOpportunity value = new OpportunityFactory().create(
+                new OpportunityFactory.Values(
+                        new OpportunityId(UUID.randomUUID()), new OpportunityVersion(3),
+                        OpportunityStatus.ACTIVE, "EUR/USD", OpportunityDirection.LONG,
+                        "OHLC_TREND", "m15", OpportunityType.POSITIONAL,
+                        OpportunityOrigin.USER_REQUEST, new OpportunityScore(BigDecimal.TEN),
+                        "Confirmed", Set.of(new ObservationReference(UUID.randomUUID())), Set.of(), NOW, NOW,
+                        NOW.plusSeconds(300), NOW,
+                        UUID.randomUUID(), null, UUID.randomUUID(), accountId, scanId,
+                        scanMarketId, executionId));
+
+        JpaTradingOpportunityEntity entity = invokeEntity(value);
+
+        assertThat(entity.accountId).isEqualTo(accountId);
+        assertThat(entity.sourceScanId).isEqualTo(scanId);
+        assertThat(entity.sourceScanMarketId).isEqualTo(scanMarketId);
+        assertThat(entity.analysisExecutionId).isEqualTo(executionId);
+        TradingOpportunity restored = invokeDomain(entity);
+        assertThat(restored.accountId()).contains(accountId);
+        assertThat(restored.sourceScanId()).contains(scanId);
+        assertThat(restored.sourceScanMarketId()).contains(scanMarketId);
+        assertThat(restored.analysisExecutionId()).contains(executionId);
+    }
+
+    @Test
+    void nonScanOpportunityKeepsNullableProvenance() throws Exception {
+        JpaTradingOpportunityEntity entity = invokeEntity(opportunityWithSnapshot(null));
+
+        assertThat(entity.accountId).isNull();
+        assertThat(entity.sourceScanId).isNull();
+        assertThat(entity.sourceScanMarketId).isNull();
+        assertThat(entity.analysisExecutionId).isNull();
+    }
+
+    @Test
     void legacyPayloadWithoutSnapshotDeserializesToNull() throws Exception {
         String legacyPayload = """
                 {"id":"%s","version":1,"status":"ACTIVE","instrument":"BTC/EUR",
