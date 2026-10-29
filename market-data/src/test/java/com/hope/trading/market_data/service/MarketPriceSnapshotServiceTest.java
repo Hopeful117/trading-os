@@ -8,6 +8,7 @@ import com.hope.trading.market_data.model.MarketState;
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.model.PriceObservation;
 import com.hope.trading.market_data.repository.MarketRepository;
 import com.hope.trading.market_data.repository.PriceObservationRepository;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,8 @@ class MarketPriceSnapshotServiceTest {
                     List.of(provider),
                     clock,
                     Duration.ofSeconds(30));
+
+    private final PriceObservationRepository observations = mock(PriceObservationRepository.class);
 
     @Test
     void returnsAvailableMissingAndUnknownPricesInRequestedOrder() {
@@ -236,6 +239,52 @@ class MarketPriceSnapshotServiceTest {
         assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.STALE_PROVIDER);
         assertThat(result.getFirst().capturedAt()).isEqualTo(clock.instant());
         assertThat(result.getFirst().occurredAt()).isBefore(clock.instant().minusSeconds(30));
+    }
+
+    @Test
+    void asOfSnapshotUsesOnlyObservationAtOrBeforeCutoff() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "EUR/USD", true);
+        Instant cutoff = Instant.parse("2026-08-01T12:00:00.123456789Z");
+        PriceObservation observation = new PriceObservation(
+                UUID.randomUUID(), marketId, MarketProvider.CTRADER, "EUR/USD", "EUR", "USD",
+                new BigDecimal("1.1000"), new BigDecimal("1.1002"), new BigDecimal("1.1001"),
+                Instant.parse("2026-08-01T11:59:59.999999999Z"),
+                Instant.parse("2026-08-01T12:00:00.000000001Z"));
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        when(observations
+                .findTopByMarketIdAndEffectiveAtLessThanEqualAndCapturedAtLessThanEqualOrderByEffectiveAtDescCapturedAtDescObservationIdDesc(
+                        marketId, cutoff, cutoff))
+                .thenReturn(Optional.of(observation));
+        MarketPriceSnapshotService historical = new MarketPriceSnapshotService(
+                repository, publisher, List.of(provider), clock, Duration.ofSeconds(30), observations, null);
+
+        var result = historical.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofSeconds(1), "CONFIRM_OR_ACQUIRE", cutoff));
+
+        assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.FRESH);
+        assertThat(result.getFirst().bid()).isEqualByComparingTo("1.1000");
+        assertThat(result.getFirst().capturedAt()).isEqualTo(observation.getCapturedAt());
+        assertThat(result.getFirst().sourceSnapshotId()).isEqualTo("observation:" + observation.getObservationId());
+        assertThat(provider.calls).hasValue(0);
+    }
+
+    @Test
+    void asOfSnapshotDoesNotFallBackToCurrentProviderWhenObservationIsMissing() {
+        UUID marketId = UUID.randomUUID();
+        Market market = market(marketId, "EUR/USD", true);
+        Instant cutoff = Instant.parse("2026-08-01T12:00:00Z");
+        when(repository.findAllById(List.of(marketId))).thenReturn(List.of(market));
+        provider.next = Optional.of(ticker(marketId, "EUR/USD", "1.1", "1.2", "1.15", "2026-08-01T12:00:00Z"));
+        MarketPriceSnapshotService historical = new MarketPriceSnapshotService(
+                repository, publisher, List.of(provider), clock, Duration.ofSeconds(30), observations, null);
+
+        var result = historical.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofSeconds(1), "CONFIRM_OR_ACQUIRE", cutoff));
+
+        assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.UNAVAILABLE);
+        assertThat(result.getFirst().bid()).isNull();
+        assertThat(provider.calls).hasValue(0);
     }
 
     @Test

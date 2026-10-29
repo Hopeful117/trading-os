@@ -5,10 +5,12 @@ import com.hope.trading.market_data.dto.MarketPriceSnapshotStatus;
 import com.hope.trading.market_data.brokerclient.MarketDataProvider;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.Market;
+import com.hope.trading.market_data.model.PriceObservation;
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.repository.MarketRepository;
+import com.hope.trading.market_data.repository.PriceObservationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +44,7 @@ public class MarketPriceSnapshotService {
     private final Map<MarketProvider, MarketDataProvider> providers;
     private final Clock clock;
     private final Duration staleAfter;
+    private final PriceObservationRepository priceObservationRepository;
     private final MarketSubscriptionService subscriptionService;
     private final ConcurrentMap<AcquisitionKey, CompletableFuture<Acquisition>> inFlightAcquisitions =
             new ConcurrentHashMap<>();
@@ -52,7 +55,17 @@ public class MarketPriceSnapshotService {
             List<MarketDataProvider> providers,
             Clock clock,
             @Value("${market-data.snapshot.stale-after:30s}") Duration staleAfter) {
-        this(marketRepository, tickerEventPublisher, providers, clock, staleAfter, null);
+        this(marketRepository, tickerEventPublisher, providers, clock, staleAfter, null, null);
+    }
+
+    public MarketPriceSnapshotService(
+            MarketRepository marketRepository,
+            TickerEventPublisher tickerEventPublisher,
+            List<MarketDataProvider> providers,
+            Clock clock,
+            @Value("${market-data.snapshot.stale-after:30s}") Duration staleAfter,
+            MarketSubscriptionService subscriptionService) {
+        this(marketRepository, tickerEventPublisher, providers, clock, staleAfter, null, subscriptionService);
     }
 
     @Autowired
@@ -62,6 +75,7 @@ public class MarketPriceSnapshotService {
             List<MarketDataProvider> providers,
             Clock clock,
             @Value("${market-data.snapshot.stale-after:30s}") Duration staleAfter,
+            PriceObservationRepository priceObservationRepository,
             MarketSubscriptionService subscriptionService) {
         this.marketRepository = marketRepository;
         this.tickerEventPublisher = tickerEventPublisher;
@@ -71,6 +85,7 @@ public class MarketPriceSnapshotService {
         ));
         this.clock = clock;
         this.staleAfter = staleAfter;
+        this.priceObservationRepository = priceObservationRepository;
         this.subscriptionService = subscriptionService;
     }
 
@@ -94,6 +109,12 @@ public class MarketPriceSnapshotService {
                 .stream()
                 .collect(Collectors.toMap(Market::getMarketId, Function.identity()));
 
+        if (request.asOf() != null) {
+            return requestedIds.stream()
+                    .map(marketId -> toHistoricalSnapshot(marketId, markets.get(marketId), freshness, request.asOf()))
+                    .toList();
+        }
+
         MarketStreamRequest tickerRequest = new MarketStreamRequest(MarketStreamType.TICKER, null);
         List<UUID> preSubscribedIds = requestedIds.stream()
                 .map(markets::get)
@@ -114,6 +135,46 @@ public class MarketPriceSnapshotService {
                 .map(marketId -> toSnapshot(marketId, markets.get(marketId), freshness, boundedTimeout, confirm,
                         structured, preSubscribedIds.contains(marketId)))
                 .toList();
+    }
+
+    private MarketPriceSnapshot toHistoricalSnapshot(UUID marketId, Market market, Duration freshness,
+                                                      java.time.Instant asOf) {
+        if (market == null) {
+            return new MarketPriceSnapshot(
+                    marketId, null, null, null, null, false, null,
+                    MarketPriceSnapshotStatus.UNKNOWN_MARKET, null, null, clock.instant());
+        }
+        if (priceObservationRepository == null) {
+            return unavailableHistoricalSnapshot(marketId, market);
+        }
+        PriceObservation observation = priceObservationRepository
+                .findTopByMarketIdAndEffectiveAtLessThanEqualAndCapturedAtLessThanEqualOrderByEffectiveAtDescCapturedAtDescObservationIdDesc(
+                        marketId, asOf, asOf)
+                .orElse(null);
+        if (observation == null || observation.getBid() == null || observation.getAsk() == null) {
+            return unavailableHistoricalSnapshot(marketId, market);
+        }
+        boolean fresh = !observation.getEffectiveAt().isBefore(asOf.minus(freshness));
+        long sourceVersion = observation.getObservationId().getMostSignificantBits() & Long.MAX_VALUE;
+        return new MarketPriceSnapshot(
+                marketId,
+                market.getSymbol(),
+                observation.getLast(),
+                observation.getBid(),
+                observation.getAsk(),
+                market.getMarketState() != null && market.getMarketState().isTradable(),
+                observation.getEffectiveAt(),
+                fresh ? MarketPriceSnapshotStatus.FRESH : MarketPriceSnapshotStatus.STALE,
+                "observation:" + observation.getObservationId(),
+                sourceVersion == 0 ? 1 : sourceVersion,
+                observation.getCapturedAt());
+    }
+
+    private MarketPriceSnapshot unavailableHistoricalSnapshot(UUID marketId, Market market) {
+        return new MarketPriceSnapshot(
+                marketId, market.getSymbol(), null, null, null,
+                market.getMarketState() != null && market.getMarketState().isTradable(), null,
+                MarketPriceSnapshotStatus.UNAVAILABLE, null, null, clock.instant());
     }
 
     private MarketPriceSnapshot toSnapshot(UUID marketId, Market market, Duration freshness,

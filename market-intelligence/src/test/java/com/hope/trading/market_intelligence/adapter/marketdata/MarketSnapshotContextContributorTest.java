@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentCaptor;
 
 class MarketSnapshotContextContributorTest {
     private final MarketDataClient marketDataClient = mock(MarketDataClient.class);
@@ -100,6 +101,23 @@ class MarketSnapshotContextContributorTest {
 
         assertThat(section.status()).isEqualTo(ContextSectionStatus.INCOMPLETE);
         assertThat(section.payload()).isNull();
+    }
+
+    @Test
+    void requestsMarketSnapshotAtEvaluationCutoff() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-08-01T12:00:00Z");
+        when(marketDataClient.findPriceSnapshots(any())).thenReturn(List.of(
+                snapshot(marketId, "FRESH", "2026-08-01T11:59:59Z", "2026-08-01T12:00:00Z")
+        ));
+
+        contributor.contribute(new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE, "objective",
+                null, UUID.randomUUID(), null, cutoff));
+
+        ArgumentCaptor<MarketPriceSnapshotRequest> request = ArgumentCaptor.forClass(MarketPriceSnapshotRequest.class);
+        verify(marketDataClient).findPriceSnapshots(request.capture());
+        assertThat(request.getValue().asOf()).isEqualTo(cutoff);
     }
 
     private IntelligenceAnalysisRequest request(UUID marketId) {
