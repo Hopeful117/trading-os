@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 public class HistoricalOhlcCaptureScheduler {
     private final HistoricalOhlcCaptureService captureService;
 
-    @Scheduled(fixedDelayString = "${historical-ohlc.capture.fixed-delay:PT15M}")
+    @Scheduled(
+            fixedDelayString = "${historical-ohlc.capture.fixed-delay:PT15M}",
+            initialDelayString = "${market-data.startup-grace:PT1M}")
     public void capture() {
         captureService.capture();
     }
