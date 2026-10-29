@@ -70,7 +70,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
                 {"ctidTraderAccountId":9001,"moneyDigits":2,"positionUnrealizedPnl":[{"positionId":10,"netUnrealizedPnl":1000}]}
                 """);
         JsonNode deals = mapper.readTree("""
-                {"ctidTraderAccountId":9001,"deal":[{"dealId":88,"symbolId":7,"moneyDigits":2,"executionPrice":1.2,"filledVolume":300,"tradeSide":"BUY","commission":10,"utcLastUpdateTimestamp":1792756950000,"executionTimestamp":1792756950000,"closePositionDetail":{"grossProfit":20,"swap":2}}],"hasMore":false}
+                {"ctidTraderAccountId":9001,"deal":[{"dealId":88,"positionId":10,"symbolId":7,"moneyDigits":2,"executionPrice":1.2,"filledVolume":300,"tradeSide":"BUY","commission":10,"utcLastUpdateTimestamp":1792756950000,"executionTimestamp":1792756950000,"closePositionDetail":{"grossProfit":20,"swap":2}}],"hasMore":false}
                 """);
 
         var observation = invokeMapper(trader, assets, symbols, reconcile, pnl, deals, started);
@@ -90,8 +90,10 @@ class JsonWebSocketCTraderOpenApiClientTest {
             assertThat(order.quantity()).isEqualByComparingTo("5");
             assertThat(order.filledQuantity()).isEqualByComparingTo("1");
         });
-        assertThat(observation.deals()).singleElement().satisfies(deal -> {
-            assertThat(deal.providerReference()).isEqualTo("88");
+            assertThat(observation.deals()).singleElement().satisfies(deal -> {
+                assertThat(deal.providerReference()).isEqualTo("88");
+                assertThat(deal.providerPositionReference()).isEqualTo("10");
+                assertThat(deal.closingPosition()).isTrue();
             assertThat(deal.quantity()).isEqualByComparingTo("3");
             assertThat(deal.price()).isEqualByComparingTo("1.2");
             assertThat(deal.fee()).isEqualByComparingTo("0.1");

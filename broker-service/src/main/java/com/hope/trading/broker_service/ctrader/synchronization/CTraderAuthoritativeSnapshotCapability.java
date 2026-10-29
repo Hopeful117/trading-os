@@ -101,9 +101,10 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                         orderStatus(order.status()), order.quantity(), order.filledQuantity(), List.of(), order.observedAt()))
                 .toList();
         List<ClosedTrade> deals = observation.deals().stream()
-                .map(deal -> new ClosedTrade(deal.providerReference(), deal.instrument(), observation.valuationAsset(),
-                        isSell(deal.side()) ? Side.SELL : Side.BUY, deal.quantity(), deal.price(),
-                        deal.fee(), deal.realizedPnl(), deal.executedAt(), deal.swap()))
+                .map(deal -> new ClosedTrade(deal.providerReference(), deal.providerPositionReference(),
+                        deal.instrument(), observation.valuationAsset(), isSell(deal.side()) ? Side.SELL : Side.BUY,
+                        deal.quantity(), deal.price(), deal.fee(), deal.realizedPnl(), deal.executedAt(),
+                        deal.swap(), deal.closingPosition()))
                 .toList();
         SnapshotFreshness freshness = observation.completedAt().isBefore(now.minus(MAX_OBSERVATION_AGE))
                 ? SnapshotFreshness.STALE : SnapshotFreshness.FRESH;

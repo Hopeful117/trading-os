@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepo
 import com.hope.trading.trading_core.broker.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
@@ -242,6 +243,19 @@ class BrokerSynchronizationServiceImplTest {
     }
 
     @Test
+    void v2SynchronizationRejectsPositionWithoutStableIdentity() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount,
+                        List.of(new BrokerPositionSnapshotV2Dto("XBT/USD", new BigDecimal("2"),
+                                new BigDecimal("100"), java.time.Instant.now(), null)), List.of()));
+
+        assertThatThrownBy(() -> service.synchronize(context.ownerId, context.brokerAccount.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Broker position reference is required for reconciliation");
+    }
+
+    @Test
     void v2SynchronizationRejectsExternalAccountMismatch() {
         UUID ownerId = UUID.randomUUID();
         BrokerAccount brokerAccount = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
@@ -286,6 +300,10 @@ class BrokerSynchronizationServiceImplTest {
         when(brokerAccountRepository.findByIdAndOwnerId(brokerAccount.id(), ownerId))
                 .thenReturn(Optional.of(brokerAccount));
         when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
+                v2Snapshot(brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of()));
+        service.synchronize(ownerId, brokerAccount.id());
+
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
                 new BrokerAccountSnapshotV2Dto(brokerAccount.id(), BrokerProvider.KRAKEN, "external-1",
                         Map.of(), List.of(), java.time.Instant.now(), null, List.of(), List.of(),
                         "INCOMPLETE", "STALE", java.time.Instant.now(), java.time.Instant.now(),
@@ -294,5 +312,235 @@ class BrokerSynchronizationServiceImplTest {
         assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Broker account snapshot is not complete and fresh");
+        assertThat(account.getTrades()).hasSize(1);
+        assertThat(account.getTrades().getFirst().getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(account.getTrades().getFirst().getQuantity()).isEqualByComparingTo("2");
     }
+
+    @Test
+    void v2SynchronizationUpdatesExistingPositionWithoutReplacingTradeIdentity() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of()));
+
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+        Trade original = context.account.getTrades().getFirst();
+
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")), List.of()));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        assertThat(context.account.getTrades()).hasSize(1);
+        assertThat(context.account.getTrades().getFirst().getTradeId()).isEqualTo(original.getTradeId());
+        assertThat(context.account.getTrades().getFirst().getBrokerPositionReference()).isEqualTo("position-1");
+        assertThat(context.account.getTrades().getFirst().getQuantity()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void v2SynchronizationAppliesPartialExternalCloseWithoutClosingTrade() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of()));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        BrokerDealSnapshotV2Dto deal = closeDeal("deal-1", "position-1", "1", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")), List.of(deal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(trade.getQuantity()).isEqualByComparingTo("1");
+        assertThat(trade.getRealizedPnl()).isEqualByComparingTo("5");
+        assertThat(trade.getClosedAt()).isNull();
+    }
+
+    @Test
+    void v2SynchronizationTreatsHistoricalDealsAsImportedBaseline() {
+        V2Context context = v2Context();
+        BrokerDealSnapshotV2Dto historicalDeal = closeDeal("deal-1", "position-1", "1", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")),
+                        List.of(historicalDeal)));
+
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(trade.getQuantity()).isEqualByComparingTo("1");
+        assertThat(trade.getBrokerClosedQuantity()).isNull();
+        assertThat(trade.getRealizedPnl()).isNull();
+        assertThat(trade.getBrokerCloseDealReferences()).isNull();
+        assertThat(trade.getBrokerBaselineCloseDealReferences()).isEqualTo("deal-1");
+    }
+
+    @Test
+    void v2SynchronizationUsesBaselinedDealToProveCloseAfterPositionDisappears() {
+        V2Context context = v2Context();
+        BrokerDealSnapshotV2Dto historicalDeal = closeDeal("deal-1", "position-1", "1", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")),
+                        List.of(historicalDeal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(), List.of(historicalDeal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(trade.getBrokerCloseDealReferences()).isEqualTo("deal-1");
+        assertThat(trade.getRealizedPnl()).isEqualByComparingTo("5");
+    }
+
+    @Test
+    void v2SynchronizationDoesNotClosePositionPresentDespiteCumulativeDeals() {
+        V2Context context = v2Context();
+        BrokerDealSnapshotV2Dto historicalDeal = closeDeal("deal-1", "position-1", "1", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                        v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")),
+                        List.of(historicalDeal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        BrokerDealSnapshotV2Dto contradictoryDeal = closeDeal("deal-2", "position-1", "1", "120", "7");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")),
+                        List.of(historicalDeal, contradictoryDeal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(trade.getQuantity()).isEqualByComparingTo("1");
+        assertThat(trade.getBrokerCloseDealReferences()).isNull();
+        assertThat(trade.getBrokerBaselineCloseDealReferences()).isEqualTo("deal-1");
+        assertThat(trade.getRealizedPnl()).isNull();
+    }
+
+    @Test
+    void v2SynchronizationAppliesPartialThenFinalCloseAcrossSnapshots() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of()));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        BrokerDealSnapshotV2Dto partial = closeDeal("deal-1", "position-1", "1", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")), List.of(partial)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        BrokerDealSnapshotV2Dto finalClose = closeDeal("deal-2", "position-1", "1", "120", "7");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(), List.of(partial, finalClose)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(trade.getBrokerClosedQuantity()).isEqualByComparingTo("2");
+        assertThat(trade.getRealizedPnl()).isEqualByComparingTo("12");
+        assertThat(trade.getBrokerCloseDealReferences()).contains("deal-1", "deal-2");
+    }
+
+    @Test
+    void v2SynchronizationIgnoresUncorrelatedCloseDeal() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of()));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        BrokerDealSnapshotV2Dto unrelated = closeDeal("deal-other", "position-other", "2", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(), List.of(unrelated)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(trade.getQuantity()).isEqualByComparingTo("2");
+        assertThat(trade.getBrokerClosedQuantity()).isNull();
+    }
+
+    @Test
+    void v2SynchronizationClosesTradeOnlyFromCorrelatedAuthoritativeDeal() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of()));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        BrokerDealSnapshotV2Dto deal = closeDeal("deal-1", "position-1", "2", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(), List.of(deal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(trade.getBrokerPositionReference()).isEqualTo("position-1");
+        assertThat(trade.getBrokerCloseDealReference()).isEqualTo("deal-1");
+        assertThat(trade.getExitPrice()).isEqualByComparingTo("110");
+        assertThat(trade.getPnl()).isEqualByComparingTo("5");
+        assertThat(trade.getClosedAt()).isNotNull();
+    }
+
+    @Test
+    void repeatedCloseSnapshotIsIdempotentAndDoesNotResurrectClosedTrade() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of()));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        BrokerDealSnapshotV2Dto deal = closeDeal("deal-1", "position-1", "2", "110", "5");
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(), List.of(deal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "2")), List.of(deal)));
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        Trade trade = context.account.getTrades().getFirst();
+        assertThat(context.account.getTrades()).hasSize(1);
+        assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(trade.getPnl()).isEqualByComparingTo("5");
+    }
+
+    private V2Context v2Context() {
+        UUID ownerId = UUID.randomUUID();
+        BrokerAccount brokerAccount = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
+                ExecutionMode.LIVE, "Kraken live", java.time.Instant.now());
+        User owner = new User();
+        owner.setUserId(ownerId);
+        Account account = Account.builder()
+                .brokerAccountId(brokerAccount.id())
+                .broker(BrokerProvider.KRAKEN.toString())
+                .name("Kraken live")
+                .baseCurrency("USD")
+                .user(owner)
+                .build();
+        when(accountRepository.findByBrokerAccountId(brokerAccount.id())).thenReturn(Optional.of(account));
+        when(brokerAccountRepository.findByIdAndOwnerId(brokerAccount.id(), ownerId))
+                .thenReturn(Optional.of(brokerAccount));
+        return new V2Context(ownerId, brokerAccount, account);
+    }
+
+    private BrokerAccountSnapshotV2Dto v2Snapshot(BrokerAccount brokerAccount,
+                                                   List<BrokerPositionSnapshotV2Dto> positions,
+                                                   List<BrokerDealSnapshotV2Dto> deals) {
+        return new BrokerAccountSnapshotV2Dto(brokerAccount.id(), BrokerProvider.KRAKEN,
+                "external-1", Map.of("USD", new BigDecimal("6000")), positions,
+                java.time.Instant.now(), null, List.of(), deals, "COMPLETE", "FRESH",
+                java.time.Instant.now(), java.time.Instant.now(), List.of());
+    }
+
+    private BrokerPositionSnapshotV2Dto position(String reference, String instrument, String quantity) {
+        return new BrokerPositionSnapshotV2Dto(instrument, new BigDecimal(quantity),
+                new BigDecimal("100"), java.time.Instant.now(), reference);
+    }
+
+    private BrokerDealSnapshotV2Dto closeDeal(String dealReference, String positionReference,
+                                              String quantity, String price, String pnl) {
+        return new BrokerDealSnapshotV2Dto(dealReference, positionReference, "XBT/USD", "USD", "SELL",
+                new BigDecimal(quantity), new BigDecimal(price), null, null, new BigDecimal(pnl),
+                java.time.Instant.now(), true);
+    }
+
+    private record V2Context(UUID ownerId, BrokerAccount brokerAccount, Account account) { }
 }

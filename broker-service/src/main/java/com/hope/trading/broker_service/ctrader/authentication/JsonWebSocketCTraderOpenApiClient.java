@@ -369,12 +369,17 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 reasons.add("DEAL_FACTS_UNAVAILABLE:" + deal.path("dealId").asText());
                 continue;
             }
-            dealFacts.add(new CTraderReadOnlyObservation.Deal(deal.path("dealId").asText(), instrument,
-                    rawFilledVolume.divide(BigDecimal.valueOf(100), MathContext.DECIMAL64),
+            JsonNode closeDetail = deal.path("closePositionDetail");
+            boolean closingPosition = closeDetail.isObject();
+            String positionReference = deal.has("positionId") ? deal.path("positionId").asText(null) : null;
+            if (positionReference == null || positionReference.isBlank()) {
+                reasons.add("DEAL_POSITION_REFERENCE_UNAVAILABLE:" + deal.path("dealId").asText());
+            }
+            dealFacts.add(new CTraderReadOnlyObservation.Deal(deal.path("dealId").asText(), positionReference,
+                    instrument, rawFilledVolume.divide(BigDecimal.valueOf(100), MathContext.DECIMAL64),
                     deal.path("tradeSide").asText("UNKNOWN"), executionPrice, money(deal.path("commission"), dealDigits),
-                    money(deal.path("closePositionDetail").path("swap"), dealDigits),
-                    closePnl(deal.path("closePositionDetail"), dealDigits),
-                    instant(deal.path("executionTimestamp"), started)));
+                    money(closeDetail.path("swap"), dealDigits), closePnl(closeDetail, dealDigits),
+                    instant(deal.path("executionTimestamp"), started), closingPosition));
         }
 
         BigDecimal unrealizedPnl = BigDecimal.ZERO;
