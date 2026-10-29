@@ -16,7 +16,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -64,14 +63,16 @@ public final class MarketThesisComposer {
         TradeabilityCapabilityContent tradeability = tradeabilityContent(observation);
         Instant evaluatedAt = observation.createdAt() == null
                 ? observation.validFrom() : observation.createdAt();
-        Instant sourceCutoff = (authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff)
-                .truncatedTo(ChronoUnit.MICROS);
+        Instant sourceCutoff = ThesisTimestampPrecision.normalize(
+                authoritativeCutoff == null ? evaluatedAt : authoritativeCutoff);
         boolean tradeabilityCompatible = tradeabilityCompatible(tradeability, marketId,
                 observation.instrument(), sourceCutoff);
+        boolean assessmentCutoffCompatible = assessment == null
+                || ThesisTimestampPrecision.notAfter(assessment.cutOffAt(), sourceCutoff);
+        boolean assessmentIdentityCompatible = assessment == null
+                || marketId.equals(assessment.marketId());
         boolean assessmentCompatible = assessment == null
-                || (!assessment.cutOffAt().isAfter(sourceCutoff)
-                && marketId.equals(assessment.marketId())
-                && observation.instrument().equals(assessment.symbol()));
+                || (assessmentCutoffCompatible && assessmentIdentityCompatible);
         List<MarketThesisEvidence> evidence = new ArrayList<>();
 
         observation.evidence().forEach(value -> evidence.add(observationEvidence(
@@ -80,10 +81,14 @@ public final class MarketThesisComposer {
             addMissing(evidence, "TREND_CONTEXT", "TREND_CONTEXT_UNAVAILABLE",
                     MarketThesisAvailability.UNAVAILABLE, sourceCutoff,
                     "Trend Context assessment is unavailable");
-        } else if (!assessmentCompatible) {
+        } else if (!assessmentCutoffCompatible) {
             addMissing(evidence, "TREND_CONTEXT", "TREND_CONTEXT_CUTOFF_INCOMPATIBLE",
                     MarketThesisAvailability.UNKNOWN, sourceCutoff,
                     "Trend Context assessment is newer than the requested source cutoff");
+        } else if (!assessmentIdentityCompatible) {
+            addMissing(evidence, "TREND_CONTEXT", "TREND_CONTEXT_IDENTITY_INCOMPATIBLE",
+                    MarketThesisAvailability.UNKNOWN, sourceCutoff,
+                    "Trend Context assessment belongs to a different market");
         } else {
             addTrendEvidence(evidence, assessment, sourceCutoff);
         }
@@ -146,9 +151,10 @@ public final class MarketThesisComposer {
 
     private static MarketThesisEvidence observationEvidence(
             UUID marketId, Observation observation, ObservationEvidence value, Instant cutoff) {
-        MarketThesisAvailability availability = value.observedAt().isAfter(cutoff)
+        MarketThesisAvailability availability = !ThesisTimestampPrecision.notAfter(value.observedAt(), cutoff)
                 ? MarketThesisAvailability.UNKNOWN : observation.validUntil()
-                .filter(validUntil -> validUntil.isBefore(cutoff))
+                .filter(validUntil -> ThesisTimestampPrecision.normalize(validUntil)
+                        .isBefore(ThesisTimestampPrecision.normalize(cutoff)))
                 .map(unused -> MarketThesisAvailability.STALE)
                 .orElse(MarketThesisAvailability.AVAILABLE);
         return new MarketThesisEvidence(
@@ -168,33 +174,38 @@ public final class MarketThesisComposer {
                 deterministicId("finding", assessment.fingerprint(), value.code(), value.ruleId()),
                 MarketThesisEvidenceRole.SUPPORTING, MarketThesisAvailability.AVAILABLE, null,
                 "TREND_CONTEXT", value.code(), value.role().name(), value.message(),
-                assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
+                ThesisTimestampPrecision.normalize(assessment.assessmentAt()), null,
+                assessment.provider(), assessment.symbol(),
                 assessment.fingerprint(), assessment.ruleVersion(), cutoff, false)));
         assessment.contradictions().forEach(value -> target.add(new MarketThesisEvidence(
                 deterministicId("contradiction", assessment.fingerprint(), value.code()),
                 MarketThesisEvidenceRole.CONTRADICTING, MarketThesisAvailability.AVAILABLE,
                 severity(value.code()), "TREND_CONTEXT", value.code(), null, value.message(),
-                assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
+                ThesisTimestampPrecision.normalize(assessment.assessmentAt()), null,
+                assessment.provider(), assessment.symbol(),
                 assessment.fingerprint(), assessment.ruleVersion(), cutoff, false)));
         assessment.exclusions().forEach(value -> target.add(new MarketThesisEvidence(
                 deterministicId("exclusion", assessment.fingerprint(), value.code()),
                 MarketThesisEvidenceRole.MISSING, MarketThesisAvailability.UNKNOWN, null,
                 "TREND_CONTEXT", value.code(), value.role().name(), value.detail(),
-                assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
+                ThesisTimestampPrecision.normalize(assessment.assessmentAt()), null,
+                assessment.provider(), assessment.symbol(),
                 assessment.fingerprint(), assessment.ruleVersion(), cutoff, false)));
         assessment.invalidations().stream().filter(value -> invalidationFresh(assessment, value))
                 .forEach(value -> target.add(new MarketThesisEvidence(
                 deterministicId("invalidation", assessment.fingerprint(), value.ruleId()),
                 MarketThesisEvidenceRole.CONTRADICTING, MarketThesisAvailability.AVAILABLE,
                 MarketThesisContradictionSeverity.BLOCKING, "TREND_CONTEXT", value.ruleId(),
-                null, "Structural invalidation is active", assessment.assessmentAt(), null,
+                 null, "Structural invalidation is active",
+                 ThesisTimestampPrecision.normalize(assessment.assessmentAt()), null,
                 assessment.provider(), assessment.symbol(), assessment.fingerprint(),
                  assessment.ruleVersion(), cutoff, false)));
         trendContextProfile.roles().forEach((role, definition) -> {
             var value = assessment.timeframes().get(role);
             if (value == null) {
                 addMissing(target, "TREND_CONTEXT", role.name(),
-                        MarketThesisAvailability.UNAVAILABLE, assessment.assessmentAt(), cutoff,
+                         MarketThesisAvailability.UNAVAILABLE,
+                         ThesisTimestampPrecision.normalize(assessment.assessmentAt()), cutoff,
                         "Trend timeframe evidence is unavailable", definition.required());
                 return;
             }
@@ -205,8 +216,9 @@ public final class MarketThesisComposer {
                     value.fresh() ? MarketThesisAvailability.AVAILABLE
                             : MarketThesisAvailability.STALE, null,
                     "TREND_CONTEXT", value.role().name(), value.interval(),
-                    value.fresh() ? "Trend timeframe evidence is available"
-                            : "Trend timeframe evidence is stale", assessment.assessmentAt(), null,
+                     value.fresh() ? "Trend timeframe evidence is available"
+                             : "Trend timeframe evidence is stale",
+                     ThesisTimestampPrecision.normalize(assessment.assessmentAt()), null,
                     assessment.provider(), assessment.symbol(), assessment.fingerprint(),
                     assessment.ruleVersion(), cutoff, definition.required()));
         });
@@ -217,7 +229,8 @@ public final class MarketThesisComposer {
                     MarketThesisEvidenceRole.CONTRADICTING, MarketThesisAvailability.AVAILABLE,
                     MarketThesisContradictionSeverity.WEAKENING, "TREND_CONTEXT",
                     assessment.alignment().name(), null,
-                    "Trend timeframes are not aligned", assessment.assessmentAt(), null,
+                     "Trend timeframes are not aligned",
+                     ThesisTimestampPrecision.normalize(assessment.assessmentAt()), null,
                     assessment.provider(), assessment.symbol(), assessment.fingerprint(),
                      assessment.ruleVersion(), cutoff, false));
         }
@@ -233,7 +246,7 @@ public final class MarketThesisComposer {
             return;
         }
         MomentumAssessment momentum = content.assessment();
-        if (momentum.cutoff() != null && momentum.cutoff().isAfter(cutoff)) {
+        if (momentum.cutoff() != null && !ThesisTimestampPrecision.notAfter(momentum.cutoff(), cutoff)) {
             addMissing(target, "MOMENTUM", "MOMENTUM_CUTOFF_INCOMPATIBLE",
                     MarketThesisAvailability.UNKNOWN, cutoff,
                     "Momentum assessment is newer than the requested source cutoff", true);
@@ -269,8 +282,8 @@ public final class MarketThesisComposer {
                         ? MarketThesisContradictionSeverity.WEAKENING
                         : MarketThesisContradictionSeverity.BLOCKING),
                 "MOMENTUM", momentum.direction().name(), momentum.acceleration().name(),
-                content.operationalStatus(), momentum.cutoff(), null, null,
-                assessment.symbol(), momentum.resultFingerprint(), momentum.policyVersion(), cutoff, true));
+                 content.operationalStatus(), ThesisTimestampPrecision.normalize(momentum.cutoff()), null, null,
+                 assessment.symbol(), momentum.resultFingerprint(), momentum.policyVersion(), cutoff, true));
     }
 
     private static void addTradeabilityEvidence(
@@ -289,8 +302,8 @@ public final class MarketThesisComposer {
                     "Tradeability assessment does not match the market or instrument", true);
             return;
         }
-        if (assessment.cutoff().isAfter(cutoff)
-                || assessment.observedAt().isAfter(cutoff)) {
+        if (!ThesisTimestampPrecision.notAfter(assessment.cutoff(), cutoff)
+                || !ThesisTimestampPrecision.notAfter(assessment.observedAt(), cutoff)) {
             addMissing(target, "TRADEABILITY", "TRADEABILITY_CUTOFF_INCOMPATIBLE",
                     MarketThesisAvailability.UNKNOWN, cutoff,
                     "Tradeability assessment is newer than the requested source cutoff", true);
@@ -313,7 +326,8 @@ public final class MarketThesisComposer {
             target.add(new MarketThesisEvidence(
                     deterministicId("tradeability", assessment.resultFingerprint(), value.code()), role,
                     value.availability(), value.severity(), value.source(), value.code(), value.timeframe(),
-                    value.explanation(), value.observedAt(), null, value.provider(),
+                     value.explanation(), ThesisTimestampPrecision.normalize(value.observedAt()), null,
+                     value.provider(),
                     value.instrument() == null ? assessment.instrument() : value.instrument(),
                     value.sourceFingerprint() == null ? assessment.resultFingerprint() : value.sourceFingerprint(),
                     assessment.policyVersion(), cutoff, value.required()));
@@ -326,8 +340,8 @@ public final class MarketThesisComposer {
         TradeabilityAssessment assessment = content.assessment();
         return marketId.equals(assessment.marketId())
                 && instrument.equals(assessment.instrument())
-                && !assessment.cutoff().isAfter(cutoff)
-                && !assessment.observedAt().isAfter(cutoff)
+                && ThesisTimestampPrecision.notAfter(assessment.cutoff(), cutoff)
+                && ThesisTimestampPrecision.notAfter(assessment.observedAt(), cutoff)
                 && !content.validUntil().isBefore(cutoff);
     }
 
@@ -511,9 +525,10 @@ public final class MarketThesisComposer {
         return observation.evidence().stream()
                 .filter(value -> value.measurements() != null
                         && value.measurements().containsKey("closePrice"))
-                .filter(value -> !value.observedAt().isAfter(cutoff))
+                .filter(value -> ThesisTimestampPrecision.notAfter(value.observedAt(), cutoff))
                 .filter(value -> observation.validUntil().isEmpty()
-                        || !observation.validUntil().get().isBefore(cutoff))
+                        || !ThesisTimestampPrecision.normalize(observation.validUntil().get())
+                        .isBefore(ThesisTimestampPrecision.normalize(cutoff)))
                 .max(Comparator.comparing(ObservationEvidence::observedAt)
                         .thenComparing(ObservationEvidence::evidenceId))
                 .map(value -> new ReferencePrice(

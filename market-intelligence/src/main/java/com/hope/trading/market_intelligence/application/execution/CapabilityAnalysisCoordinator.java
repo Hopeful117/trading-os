@@ -122,6 +122,7 @@ public class CapabilityAnalysisCoordinator {
                 .filter(section -> section.payload() != null)
                 .forEach(section -> {
                     ArtifactType type = switch (section.type()) {
+                        case MARKET_IDENTITY -> ProductionArtifactTypes.MARKET_IDENTITY;
                         case MARKET_SNAPSHOT -> ProductionArtifactTypes.MARKET_SNAPSHOT;
                         case ORDER_BOOK -> ProductionArtifactTypes.ORDER_BOOK_REPLAY;
                         case HISTORICAL_OHLC -> ProductionArtifactTypes.OHLC_HISTORY;

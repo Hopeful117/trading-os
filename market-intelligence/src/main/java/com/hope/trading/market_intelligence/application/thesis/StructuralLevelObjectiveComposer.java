@@ -95,9 +95,9 @@ final class StructuralLevelObjectiveComposer {
                                 level.pivotTime(), level.confirmationTime(),
                                 level.swing().pivotSourceId(), level.swing().evidence().key(),
                                 level.swing().evidence().cutOffAt())))
-                .filter(candidate -> !candidate.pivotTime().isAfter(sourceCutoff))
-                .filter(candidate -> !candidate.confirmationTime().isAfter(sourceCutoff))
-                .filter(candidate -> !candidate.sourceCutoff().isAfter(sourceCutoff))
+                .filter(candidate -> ThesisTimestampPrecision.notAfter(candidate.pivotTime(), sourceCutoff))
+                .filter(candidate -> ThesisTimestampPrecision.notAfter(candidate.confirmationTime(), sourceCutoff))
+                .filter(candidate -> ThesisTimestampPrecision.notAfter(candidate.sourceCutoff(), sourceCutoff))
                 .filter(candidate -> candidate.price().signum() >= 0)
                 .toList();
     }
@@ -125,17 +125,18 @@ final class StructuralLevelObjectiveComposer {
         assessment.invalidations().stream()
                 .filter(value -> value.level() != null)
                 .filter(value -> value.candle() == null
-                        || !value.candle().closeTime().isAfter(sourceCutoff))
+                        || ThesisTimestampPrecision.notAfter(value.candle().closeTime(), sourceCutoff))
                 .filter(value -> value.candle() != null || value.evidence() != null)
                 .filter(value -> value.evidence() == null
-                        || !value.evidence().cutOffAt().isAfter(sourceCutoff))
+                    || ThesisTimestampPrecision.notAfter(value.evidence().cutOffAt(), sourceCutoff))
                 .filter(value -> value.protectedLevel() == null
                         || compatible(value.protectedLevel().source(), sourceCutoff))
                 .filter(value -> freshInvalidation(value, assessment))
                 .map(value -> new MarketThesisLevel(
                         value.ruleId(), "INVALIDATION", "SETUP", value.level(),
                         "TREND_CONTEXT", value.evidence() == null ? value.ruleId() : value.evidence().key(),
-                        value.candle() == null ? assessment.assessmentAt() : value.candle().closeTime(),
+                         value.candle() == null ? ThesisTimestampPrecision.normalize(assessment.assessmentAt())
+                                 : value.candle().closeTime(),
                         value.protectedLevel() == null ? null : value.protectedLevel().source().confirmationTime(),
                         sourceCutoff))
                 .forEach(levels::add);
@@ -194,16 +195,17 @@ final class StructuralLevelObjectiveComposer {
                         .getBytes(StandardCharsets.UTF_8)),
                 MarketThesisEvidenceRole.MISSING, availability, null,
                 "MARKET_STRUCTURE", reference, null, explanation,
-                assessment.assessmentAt(), null, assessment.provider(), assessment.symbol(),
+                 ThesisTimestampPrecision.normalize(assessment.assessmentAt()), null,
+                 assessment.provider(), assessment.symbol(),
                 assessment.fingerprint(), assessment.ruleVersion(), sourceCutoff, false);
     }
 
     private boolean compatible(ConfirmedSwing source, Instant sourceCutoff) {
         return source != null
                 && source.evidence() != null
-                && !source.pivotTime().isAfter(sourceCutoff)
-                && !source.confirmationTime().isAfter(sourceCutoff)
-                && !source.evidence().cutOffAt().isAfter(sourceCutoff);
+                && ThesisTimestampPrecision.notAfter(source.pivotTime(), sourceCutoff)
+                && ThesisTimestampPrecision.notAfter(source.confirmationTime(), sourceCutoff)
+                && ThesisTimestampPrecision.notAfter(source.evidence().cutOffAt(), sourceCutoff);
     }
 
     private boolean compatible(

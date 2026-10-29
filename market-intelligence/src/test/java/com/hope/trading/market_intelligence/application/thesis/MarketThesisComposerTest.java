@@ -168,6 +168,86 @@ class MarketThesisComposerTest {
     }
 
     @Test
+    void assessmentAtNanosecondBoundaryIsCompatibleWithPersistedCutoff() {
+        Observation observation = missingObservation();
+        Instant cutoff = Instant.parse("2026-10-29T03:49:15.710432388Z");
+        TrendContextAssessment assessment = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        when(assessment.cutOffAt()).thenReturn(cutoff);
+        when(assessment.assessmentAt()).thenReturn(cutoff);
+        when(assessment.symbol()).thenReturn("1");
+        when(observation.instrument()).thenReturn("EUR/USD");
+        when(observation.createdAt()).thenReturn(cutoff);
+        when(observation.validFrom()).thenReturn(cutoff);
+        when(observation.validUntil()).thenReturn(Optional.of(cutoff.plusSeconds(900)));
+        TrendContextObservationPayload payload = payload(assessment);
+        when(observation.payload()).thenReturn(Optional.of(payload));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation, cutoff);
+
+        assertThat(thesis.scenario()).isPresent();
+        assertThat(thesis.evidence()).noneMatch(value ->
+                value.reference().equals("TREND_CONTEXT_CUTOFF_INCOMPATIBLE")
+                        || value.reference().equals("TREND_CONTEXT_IDENTITY_INCOMPATIBLE"));
+    }
+
+    @Test
+    void assessmentAfterSupportedPrecisionRemainsIncompatible() {
+        Observation observation = missingObservation();
+        Instant cutoff = Instant.parse("2026-10-29T03:49:15.710432388Z");
+        TrendContextAssessment assessment = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        when(assessment.cutOffAt()).thenReturn(cutoff.plusNanos(1_000));
+        when(assessment.symbol()).thenReturn("1");
+        when(observation.instrument()).thenReturn("EUR/USD");
+        TrendContextObservationPayload payload = payload(assessment);
+        when(observation.payload()).thenReturn(Optional.of(payload));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation, cutoff);
+
+        assertThat(thesis.evidence()).anyMatch(value ->
+                value.reference().equals("TREND_CONTEXT_CUTOFF_INCOMPATIBLE"));
+    }
+
+    @Test
+    void providerSymbolDoesNotOverrideCanonicalThesisIdentity() {
+        Observation observation = missingObservation();
+        TrendContextAssessment assessment = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        when(assessment.symbol()).thenReturn("1");
+        when(observation.instrument()).thenReturn("EUR/USD");
+        TrendContextObservationPayload payload = payload(assessment);
+        when(observation.payload()).thenReturn(Optional.of(payload));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
+
+        assertThat(thesis.instrument()).isEqualTo("EUR/USD");
+        assertThat(thesis.evidence()).noneMatch(value ->
+                value.reference().equals("TREND_CONTEXT_IDENTITY_INCOMPATIBLE"));
+    }
+
+    @Test
+    void trendContextFromAnotherMarketRemainsIncompatible() {
+        Observation observation = missingObservation();
+        TrendContextAssessment assessment = assessment(Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP)));
+        when(assessment.marketId()).thenReturn(UUID.randomUUID());
+        TrendContextObservationPayload payload = payload(assessment);
+        when(observation.payload()).thenReturn(Optional.of(payload));
+
+        var thesis = composer().compose(marketId, UUID.randomUUID(), observation);
+
+        assertThat(thesis.evidence()).anyMatch(value ->
+                value.reference().equals("TREND_CONTEXT_IDENTITY_INCOMPATIBLE"));
+        assertThat(thesis.evidence()).noneMatch(value ->
+                value.reference().equals("STRUCTURAL_LEVELS_UNAVAILABLE"));
+    }
+
+    @Test
     void deceleratingAlignedMomentumProducesWatchAndPendingConfirmation() {
         Observation observation = missingObservation();
         TrendContextAssessment trend = assessment(Map.of(
