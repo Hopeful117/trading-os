@@ -3,6 +3,7 @@ package com.hope.trading.market_data.ctrader;
 import com.hope.trading.market_data.ctrader.authentication.CTraderEnvironment;
 import com.hope.trading.market_data.ctrader.authentication.CTraderMarketDataProperties;
 import com.hope.trading.market_data.helper.MarketStateBuilder;
+import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.model.MarketActivityCalculationBasis;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,6 +60,55 @@ class CTraderMarketDataTest {
         var snapshot = provider.findOhlcHistorySnapshot(market, OhlcInterval.ONE_MINUTE, 1);
         assertThat(snapshot.observedEvents()).hasSize(1);
         assertThat(snapshot.normalizedEvents()).isEmpty();
+    }
+
+    @Test
+    void expandsCalendarLookbackWhenProviderReturnsFewerClosedBarsThanRequested() {
+        AtomicInteger calls = new AtomicInteger();
+        FakeClient client = new FakeClient() {
+            @Override public List<CTraderTrendbar> trendbars(
+                    long symbolId, String period, Instant from, Instant to, int count) {
+                if (calls.incrementAndGet() == 1) {
+                    return List.of(closedBar(NOW.minusSeconds(180)), closedBar(NOW.minusSeconds(60)));
+                }
+                return List.of(closedBar(NOW.minusSeconds(180)), closedBar(NOW.minusSeconds(120)),
+                        closedBar(NOW.minusSeconds(60)));
+            }
+
+            private CTraderTrendbar closedBar(Instant open) {
+                return new CTraderTrendbar(open.getEpochSecond(), 10, 30, 123450, 20, 100);
+            }
+        };
+        CTraderMarketData provider = new CTraderMarketData(client, properties(), new MarketStateBuilder(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        var market = provider.getMarkets().getFirst();
+        market.setMarketId(UUID.randomUUID());
+
+        var snapshot = provider.findOhlcHistorySnapshot(market, OhlcInterval.ONE_MINUTE, 3);
+
+        assertThat(snapshot.normalizedEvents()).hasSize(3);
+        assertThat(snapshot.normalizedEvents()).extracting(OhlcEvent::openTime)
+                .isSorted();
+        assertThat(calls).hasValue(2);
+    }
+
+    @Test
+    void remainsFailClosedWhenBoundedLookbackCannotSupplyRequiredHistory() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient() {
+            @Override public List<CTraderTrendbar> trendbars(
+                    long symbolId, String period, Instant from, Instant to, int count) {
+                return List.of(new CTraderTrendbar(NOW.minusSeconds(180).getEpochSecond(),
+                        10, 30, 123450, 20, 100),
+                        new CTraderTrendbar(NOW.minusSeconds(60).getEpochSecond(),
+                                10, 30, 123450, 20, 100));
+            }
+        }, properties(), new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+        var market = provider.getMarkets().getFirst();
+        market.setMarketId(UUID.randomUUID());
+
+        var snapshot = provider.findOhlcHistorySnapshot(market, OhlcInterval.ONE_MINUTE, 3);
+
+        assertThat(snapshot.normalizedEvents()).hasSize(2);
     }
 
     @Test
