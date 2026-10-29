@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.capability;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.MarketSnapshotContext;
+import com.hope.trading.market_intelligence.domain.MarketIdentityContext;
 import com.hope.trading.market_intelligence.domain.capability.CapabilityContext;
 import com.hope.trading.market_intelligence.domain.capability.CancellationToken;
 import com.hope.trading.market_intelligence.domain.capability.ArtifactCardinality;
@@ -72,5 +73,33 @@ class TradeabilityAnalysisCapabilityTest {
         assertThatThrownBy(() -> new TradeabilityAnalysisCapability().execute(context))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Tradeability requires approved non-live evidence provenance at the execution cutoff");
+    }
+
+    @Test
+    void snapshotAbsenceUsesCanonicalMarketIdentityInsteadOfMarketUuid() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-10-29T03:49:15.710432388Z");
+        StoredArtifact identity = new StoredArtifact(
+                new ArtifactCacheKey(
+                        new ArtifactIdentity(ProductionArtifactTypes.MARKET_IDENTITY.value(), "market-data", "v1"),
+                        ArtifactScope.publicMarket(marketId, "IDENTITY", AnalysisExecutionMode.ACTIVE),
+                        ArtifactFingerprint.empty(), ArtifactFingerprint.empty()),
+                new MarketIdentityContext(marketId, "CTRADER", "EUR/USD", "EUR", "USD", true),
+                ArtifactFreshness.validUntil(cutoff, cutoff.plusSeconds(900), "v1"),
+                new ArtifactProvenance("market-data", "v1", null, cutoff, Set.of(), Set.of(),
+                        null, null, EvidenceAcquisitionPolicy.STRICT_OBSERVED, 1, cutoff),
+                AnalysisResultQuality.COMPLETE);
+        ArtifactRequirement requirement = new ArtifactRequirement(
+                ProductionArtifactTypes.MARKET_IDENTITY, ProductionArtifactTypes.V1,
+                VersionCompatibilityMode.EXACT, false, ArtifactCardinality.ONE, false);
+        CapabilityContext context = new CapabilityContext(
+                UUID.randomUUID(), UUID.randomUUID(), Map.of(requirement, List.of(identity)), Set.of(), Map.of(),
+                List.of(identity.provenance()), (CancellationToken) () -> false, cutoff);
+
+        var result = new TradeabilityAnalysisCapability().execute(context);
+        var assessment = ((com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent)
+                result.artifacts().getFirst().artifact().content()).assessment();
+
+        assertThat(assessment.instrument()).isEqualTo("EUR/USD");
     }
 }

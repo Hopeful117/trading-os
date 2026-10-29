@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.domain.capability.ArtifactType;
 import com.hope.trading.market_intelligence.domain.capability.ArtifactVersion;
 
 public final class ProductionArtifactTypes {
+    public static final ArtifactType MARKET_IDENTITY = new ArtifactType("market-identity");
     public static final ArtifactType MARKET_SNAPSHOT = new ArtifactType("normalized-market-snapshot");
     public static final ArtifactType OHLC_HISTORY = new ArtifactType("normalized-ohlc-history");
     public static final ArtifactType SPREAD_ANALYSIS = new ArtifactType("spread-analysis-result");

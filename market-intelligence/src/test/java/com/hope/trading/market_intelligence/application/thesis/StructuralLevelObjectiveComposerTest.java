@@ -13,7 +13,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class StructuralLevelObjectiveComposerTest {
-    private static final Instant NOW = Instant.parse("2026-10-25T00:00:00Z");
+    private static final Instant NOW = Instant.parse("2026-10-25T00:00:00.000000388Z");
 
     @Test
     void selectsNearestOpposingObjectiveForLongScenario() {
@@ -73,6 +73,19 @@ class StructuralLevelObjectiveComposerTest {
         assertThat(result.missingEvidence()).extracting("reference")
                 .containsExactly("STRUCTURAL_BIAS", "OBJECTIVE");
         assertThat(result.reasons()).contains("STRUCTURAL_LEVELS_STALE_BIAS");
+    }
+
+    @Test
+    void levelsAtPersistedNanosecondBoundaryRemainEligible() {
+        TrendContextAssessment assessment = assessment(TrendDirection.UP, Map.of(
+                TrendContextRole.BIAS, timeframe(TrendContextRole.BIAS, level(SwingType.HIGH, "120")),
+                TrendContextRole.SETUP, timeframe(TrendContextRole.SETUP, level(SwingType.HIGH, "110"))));
+
+        var result = new StructuralLevelObjectiveComposer().compose(
+                assessment, new BigDecimal("100"), NOW, ThesisTimestampPrecision.normalize(NOW));
+
+        assertThat(result.levels()).anyMatch(level -> level.role().equals("OBJECTIVE"));
+        assertThat(result.reasons()).doesNotContain("STRUCTURAL_OBJECTIVE_UNAVAILABLE");
     }
 
     private TrendContextAssessment assessment(

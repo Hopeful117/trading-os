@@ -41,6 +41,7 @@ public final class TradeabilityAnalysisCapability
                 new CapabilityId(CAPABILITY_ID), new CapabilityVersion(CAPABILITY_VERSION),
                 CapabilityCategory.DETERMINISTIC, ExecutionPolicy.ON_DEMAND,
                 RetryPolicy.disabled(), List.of(
+                        optional(ProductionArtifactTypes.MARKET_IDENTITY),
                         optional(ProductionArtifactTypes.MARKET_SNAPSHOT),
                         optional(ProductionArtifactTypes.ORDER_BOOK_REPLAY),
                         optional(ProductionArtifactTypes.OHLC_HISTORY),
@@ -76,8 +77,14 @@ public final class TradeabilityAnalysisCapability
                 .filter(java.util.Objects::nonNull).findFirst().orElse(UUID.nameUUIDFromBytes(
                         "tradeability-unknown-market".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         String instrument = artifacts.stream().map(StoredArtifact::content)
-                .filter(MarketSnapshotContext.class::isInstance).map(MarketSnapshotContext.class::cast)
-                .map(MarketSnapshotContext::symbol).findFirst().orElse(marketId.toString());
+                .filter(MarketIdentityContext.class::isInstance).map(MarketIdentityContext.class::cast)
+                .map(MarketIdentityContext::symbol).findFirst()
+                .or(() -> artifacts.stream().map(StoredArtifact::content)
+                        .filter(MarketSnapshotContext.class::isInstance)
+                        .map(MarketSnapshotContext.class::cast)
+                        .map(MarketSnapshotContext::symbol).findFirst())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Canonical market instrument is unavailable for tradeability analysis"));
         TradeabilityCapabilityContent content = calculate(marketId, instrument, cutoff, artifacts);
         StoredArtifact output = output(context, content, marketId, instrument, cutoff, artifacts);
         long blocking = content.assessment().evidence().stream()
@@ -102,6 +109,7 @@ public final class TradeabilityAnalysisCapability
     @Override
     public List<ContextRequirement> requirements(AnalysisExecutionMode mode) {
         return List.of(
+                ContextRequirement.optionalPublic(ContextSectionType.MARKET_IDENTITY),
                 ContextRequirement.optionalPublic(ContextSectionType.MARKET_SNAPSHOT),
                 ContextRequirement.optionalPublic(ContextSectionType.ORDER_BOOK),
                 ContextRequirement.optionalPublic(ContextSectionType.HISTORICAL_OHLC),
@@ -131,10 +139,14 @@ public final class TradeabilityAnalysisCapability
             return CapabilityAnalysisResult.empty(
                     "Tradeability requires strict observed provenance at the execution cutoff");
         }
-        String instrument = context.section(ContextSectionType.MARKET_SNAPSHOT)
+        String instrument = context.section(ContextSectionType.MARKET_IDENTITY)
+                .map(ContextSection::payload).filter(MarketIdentityContext.class::isInstance)
+                .map(MarketIdentityContext.class::cast).map(MarketIdentityContext::symbol)
+                .or(() -> context.section(ContextSectionType.MARKET_SNAPSHOT)
                 .map(ContextSection::payload).filter(MarketSnapshotContext.class::isInstance)
-                .map(MarketSnapshotContext.class::cast).map(MarketSnapshotContext::symbol)
-                .orElse(request.marketId().toString());
+                        .map(MarketSnapshotContext.class::cast).map(MarketSnapshotContext::symbol))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Canonical market instrument is unavailable for tradeability analysis"));
         TradeabilityAssessment assessment = calculator.calculate(request.marketId(), instrument,
                 cutoff, context.section(ContextSectionType.MARKET_SNAPSHOT).orElse(null),
                 context.section(ContextSectionType.ORDER_BOOK).orElse(null),
