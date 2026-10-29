@@ -231,7 +231,7 @@ class MarketPriceSnapshotServiceTest {
         provider.next = Optional.of(ticker(marketId, "ETH/USD", "109", "111", "110", "2026-08-01T11:00:00Z"));
 
         var result = service.findSnapshots(new com.hope.trading.market_data.dto.MarketPriceSnapshotRequest(
-                List.of(marketId), Duration.ofSeconds(30), Duration.ofMillis(10), "REUSE_OR_ACQUIRE"));
+                List.of(marketId), Duration.ofSeconds(30), Duration.ofSeconds(1), "REUSE_OR_ACQUIRE"));
 
         assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.STALE_PROVIDER);
         assertThat(result.getFirst().capturedAt()).isEqualTo(clock.instant());
