@@ -144,7 +144,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         return Mono.fromRunnable(() -> markets.stream().filter(Objects::nonNull).forEach(market -> {
             ActiveSubscription removed = desired.remove(key(market, request));
             if (removed != null) forming.remove(key(market, request));
-        })).then(Mono.fromRunnable(this::rebuildAfterDemandChange));
+        })).then(Mono.fromRunnable(this::reconcileAfterDemandChange));
     }
 
     private void subscribeProvider(Market market, MarketStreamRequest request) {
@@ -224,26 +224,46 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         if (subscribedTrendbars.add(trendbarKey)) stream.subscribeLiveTrendbar(symbolId, period(request.parameters().interval()));
     }
 
-    private void unsubscribeProvider(Market market, MarketStreamRequest request) {
-        long symbolId = symbolId(market);
-        if (request.type() == MarketStreamType.TICKER && noOtherSpotDemand(symbolId)) {
-            subscribedSpots.remove(symbolId);
-            stream.unsubscribeSpots(symbolId);
-        }
-        if (request.type() == MarketStreamType.OHLC) {
-            String trendbarKey = symbolId + ":" + period(request.parameters().interval());
-            if (subscribedTrendbars.remove(trendbarKey)) stream.unsubscribeLiveTrendbar(symbolId, period(request.parameters().interval()));
-            if (noOtherSpotDemand(symbolId)) {
-                subscribedSpots.remove(symbolId);
-                stream.unsubscribeSpots(symbolId);
-            }
-        }
-    }
-
     private boolean noOtherSpotDemand(long symbolId) {
         return desired.values().stream().noneMatch(active ->
                 (active.request().type() == MarketStreamType.TICKER || active.request().type() == MarketStreamType.OHLC)
                         && symbolId(active.market()) == symbolId);
+    }
+
+    private boolean noOtherTrendbarDemand(String trendbarKey) {
+        String[] parts = trendbarKey.split(":", 2);
+        long symbolId = Long.parseLong(parts[0]);
+        String period = parts[1];
+        return desired.values().stream().noneMatch(active ->
+                active.request().type() == MarketStreamType.OHLC
+                        && symbolId(active.market()) == symbolId
+                        && period(active.request().parameters().interval()).equals(period));
+    }
+
+    private synchronized void reconcileAfterDemandChange() {
+        if (stream == null) return;
+
+        List<String> trendbarsToRemove = subscribedTrendbars.stream()
+                .filter(this::noOtherTrendbarDemand)
+                .toList();
+        List<Long> spotsToRemove = subscribedSpots.stream()
+                .filter(this::noOtherSpotDemand)
+                .toList();
+
+        try {
+            for (String trendbarKey : trendbarsToRemove) {
+                String[] parts = trendbarKey.split(":", 2);
+                stream.unsubscribeLiveTrendbar(Long.parseLong(parts[0]), parts[1]);
+            }
+            if (!spotsToRemove.isEmpty()) stream.unsubscribeSpots(spotsToRemove);
+            subscribedTrendbars.removeAll(trendbarsToRemove);
+            subscribedSpots.removeAll(spotsToRemove);
+        } catch (RuntimeException exception) {
+            log.warn("CTRADER_UNSUBSCRIBE_RECONCILIATION_ERROR errorType={} message={}",
+                    exception.getClass().getSimpleName(), exception.getMessage());
+            restartStreamAfterFailedSubscription();
+            throw exception;
+        }
     }
 
     private synchronized void handleEvent(long generation, CTraderOpenApiClient.CTraderStreamEvent event) {
@@ -378,15 +398,6 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     public boolean isFresh(Market market, MarketStreamRequest request, Duration silenceAfter) {
         Instant last = lastProviderEvents.get(key(market, request));
         return last != null && !last.isBefore(clock.instant().minus(silenceAfter));
-    }
-
-    private synchronized void rebuildAfterDemandChange() {
-        if (stream == null) return;
-        stream.close();
-        stream = null;
-        subscribedSpots.clear();
-        subscribedTrendbars.clear();
-        if (!desired.isEmpty()) connect().subscribe();
     }
 
     private Mono<Void> resubscribe() {

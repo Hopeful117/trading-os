@@ -438,6 +438,15 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     JsonNode response = objectMapper.readTree(raw);
                     if (clientMessageId.equals(response.path("clientMsgId").asText())
                             && response.path("payloadType").asInt() == responseType) {
+                        if (response.path("errorCode").isTextual()
+                                || response.path("payload").path("errorCode").isTextual()) {
+                            String errorCode = response.path("errorCode").asText(
+                                    response.path("payload").path("errorCode").asText("unknown"));
+                            String description = response.path("description").asText(
+                                    response.path("payload").path("description").asText(""));
+                            throw new IllegalStateException("cTrader provider rejected the request: "
+                                    + errorCode + (description.isBlank() ? "" : " (" + description + ")"));
+                        }
                         log.info("CTRADER_REQUEST_RESPONSE_MATCHED diagnosticId={} sessionId={} requestPayloadType={} expectedResponseType={} clientMsgId={} durationMs={}",
                                 diagnosticId, sessionId, requestType, responseType, clientMessageId, elapsedMillis(startedNanos));
                         return response.path("payload");
@@ -511,7 +520,13 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
 
         @Override public void unsubscribeSpots(long symbolId) {
-            throw new UnsupportedOperationException("cTrader unsubscribe is unavailable; close the bounded session");
+            unsubscribeSpots(List.of(symbolId));
+        }
+
+        @Override public void unsubscribeSpots(List<Long> symbolIds) {
+            if (symbolIds == null || symbolIds.isEmpty()) return;
+            session.request(UNSUBSCRIBE_SPOTS_REQUEST, UNSUBSCRIBE_SPOTS_RESPONSE,
+                    spotUnsubscriptionPayload(objectMapper, accountId, symbolIds));
         }
 
         @Override public void subscribeLiveTrendbar(long symbolId, String period) {
@@ -520,7 +535,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
 
         @Override public void unsubscribeLiveTrendbar(long symbolId, String period) {
-            throw new UnsupportedOperationException("cTrader unsubscribe is unavailable; close the bounded session");
+            session.request(UNSUBSCRIBE_LIVE_TRENDBAR_REQUEST, UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE,
+                    accountPayload().put("symbolId", symbolId).put("period", periodValue(period)));
         }
         @Override public void close() { session.close(); }
 
@@ -535,6 +551,13 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         ObjectNode payload = objectMapper.createObjectNode()
                 .put("ctidTraderAccountId", accountId)
                 .put("subscribeToSpotTimestamp", true);
+        var symbols = payload.putArray("symbolId");
+        symbolIds.forEach(symbols::add);
+        return payload;
+    }
+
+    static ObjectNode spotUnsubscriptionPayload(ObjectMapper objectMapper, long accountId, List<Long> symbolIds) {
+        ObjectNode payload = objectMapper.createObjectNode().put("ctidTraderAccountId", accountId);
         var symbols = payload.putArray("symbolId");
         symbolIds.forEach(symbols::add);
         return payload;
