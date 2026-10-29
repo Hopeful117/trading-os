@@ -56,6 +56,8 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     private final Map<String, Instant> lastProviderEvents = new ConcurrentHashMap<>();
     private volatile CTraderOpenApiClient.CTraderStream stream;
     private volatile boolean intentionallyDisconnected;
+    private boolean recoveryScheduled;
+    private boolean recoveryInProgress;
     private long connectionGeneration;
 
     @Autowired
@@ -100,21 +102,27 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
             log.info("CTRADER_OPEN_STREAM_EXIT diagnosticId={} accountId=unknown environment={} generation={} durationMs={}",
                     diagnosticId, properties.environment(), generation,
                     elapsedMillis(startedNanos));
+            return resubscribe();
         } catch (RuntimeException exception) {
+            invalidateFailedConnection(generation);
             log.warn("CTRADER_OPEN_STREAM_ERROR diagnosticId={} accountId=unknown environment={} generation={} durationMs={} errorType={} message={}",
                     diagnosticId, properties.environment(), generation,
                     elapsedMillis(startedNanos), exception.getClass().getSimpleName(), exception.getMessage());
             throw exception;
         }
-        return resubscribe();
     }
 
     @Override
     public synchronized Mono<Void> disconnect() {
         intentionallyDisconnected = true;
         connectionGeneration++;
+        recoveryScheduled = false;
+        recoveryInProgress = false;
+        reconnectAttempts.set(0);
         CTraderOpenApiClient.CTraderStream current = stream;
         stream = null;
+        subscribedSpots.clear();
+        subscribedTrendbars.clear();
         if (current != null) current.close();
         forming.clear();
         return Mono.empty();
@@ -268,14 +276,23 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
 
     private synchronized void handleEvent(long generation, CTraderOpenApiClient.CTraderStreamEvent event) {
         if (generation != connectionGeneration) return;
-        if (event instanceof CTraderOpenApiClient.CTraderSpotEvent spot) handleSpot(spot);
-        if (event instanceof CTraderOpenApiClient.CTraderLiveTrendbarEvent trendbar) handleTrendbar(trendbar);
+        boolean accepted = false;
+        if (event instanceof CTraderOpenApiClient.CTraderSpotEvent spot) accepted = handleSpot(spot);
+        if (event instanceof CTraderOpenApiClient.CTraderLiveTrendbarEvent trendbar) accepted = handleTrendbar(trendbar);
+        if (accepted) {
+            recoveryInProgress = false;
+            reconnectAttempts.set(0);
+        }
     }
 
-    private void handleSpot(CTraderOpenApiClient.CTraderSpotEvent spot) {
-        if (spot.bid() == null || spot.ask() == null) return;
-        desired.values().stream().filter(active -> active.request().type() == MarketStreamType.TICKER
-                        && symbolId(active.market()) == spot.symbolId()).forEach(active -> {
+    private boolean handleSpot(CTraderOpenApiClient.CTraderSpotEvent spot) {
+        if (spot.bid() == null || spot.ask() == null) return false;
+        List<ActiveSubscription> matching = desired.values().stream()
+                .filter(active -> (active.request().type() == MarketStreamType.TICKER
+                        || active.request().type() == MarketStreamType.OHLC)
+                        && symbolId(active.market()) == spot.symbolId())
+                .toList();
+        matching.forEach(active -> {
             Instant received = clock.instant();
             lastProviderEvents.put(key(active.market(), active.request()), received);
             active.market().setMarketState(MarketState.builder()
@@ -293,13 +310,17 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                     decode(spot.bid(), active.market()), decode(spot.ask(), active.market()),
                     active.market().getMarketState() != null && active.market().getMarketState().isTradable());
         });
+        return !matching.isEmpty();
     }
 
-    private void handleTrendbar(CTraderOpenApiClient.CTraderLiveTrendbarEvent event) {
-        desired.values().stream().filter(active -> active.request().type() == MarketStreamType.OHLC
+    private boolean handleTrendbar(CTraderOpenApiClient.CTraderLiveTrendbarEvent event) {
+        List<ActiveSubscription> matching = desired.values().stream()
+                .filter(active -> active.request().type() == MarketStreamType.OHLC
                         && symbolId(active.market()) == event.symbolId()
                         && period(active.request().parameters().interval()).equals(event.period()))
-                .forEach(active -> publishTrendbar(active, event));
+                .toList();
+        matching.forEach(active -> publishTrendbar(active, event));
+        return !matching.isEmpty();
     }
 
     private void publishTrendbar(ActiveSubscription active, CTraderOpenApiClient.CTraderLiveTrendbarEvent event) {
@@ -353,18 +374,73 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
 
     private synchronized void handleTermination(long generation) {
         if (generation != connectionGeneration) return;
+        connectionGeneration++;
         stream = null;
         subscribedSpots.clear();
         subscribedTrendbars.clear();
         markUnavailable();
         if (intentionallyDisconnected || desired.isEmpty()) return;
+        scheduleRecovery();
+    }
+
+    private synchronized void scheduleRecovery() {
+        if (recoveryScheduled || recoveryInProgress || intentionallyDisconnected || desired.isEmpty()) return;
         int attempt = reconnectAttempts.incrementAndGet();
-        if (attempt > MAX_RECONNECT_ATTEMPTS) return;
-        reactor.core.publisher.Mono.delay(reconnectDelays[attempt - 1]).subscribe(ignored -> {
-            synchronized (this) {
-                if (!intentionallyDisconnected && stream == null) connect(false).subscribe();
+        if (attempt > MAX_RECONNECT_ATTEMPTS) {
+            log.warn("CTRADER_RECOVERY_EXHAUSTED attempts={} desiredSubscriptions={}",
+                    attempt - 1, desired.size());
+            return;
+        }
+        recoveryScheduled = true;
+        Duration delay = reconnectDelays[Math.min(attempt - 1, reconnectDelays.length - 1)];
+        reactor.core.publisher.Mono.delay(delay).subscribe(ignored -> runRecoveryAttempt(), this::handleRecoveryFailure);
+    }
+
+    private void runRecoveryAttempt() {
+        synchronized (this) {
+            recoveryScheduled = false;
+            if (intentionallyDisconnected || desired.isEmpty() || stream != null) return;
+            recoveryInProgress = true;
+        }
+        try {
+            connect(false);
+            markRecoveryConnectionReady();
+        } catch (RuntimeException exception) {
+            handleRecoveryFailure(exception);
+        }
+    }
+
+    private synchronized void markRecoveryConnectionReady() {
+        recoveryInProgress = false;
+    }
+
+    private void handleRecoveryFailure(Throwable failure) {
+        synchronized (this) {
+            recoveryScheduled = false;
+            recoveryInProgress = false;
+            invalidateFailedConnection(connectionGeneration);
+            if (!intentionallyDisconnected && !desired.isEmpty()) scheduleRecovery();
+        }
+        log.warn("CTRADER_RECOVERY_FAILURE errorType={} message={}",
+                failure.getClass().getSimpleName(), failure.getMessage());
+    }
+
+    private synchronized void invalidateFailedConnection(long generation) {
+        if (generation != connectionGeneration) return;
+        connectionGeneration++;
+        CTraderOpenApiClient.CTraderStream failed = stream;
+        stream = null;
+        subscribedSpots.clear();
+        subscribedTrendbars.clear();
+        if (failed != null) {
+            try {
+                failed.close();
+            } catch (RuntimeException closeException) {
+                log.warn("CTRADER_FAILED_RECOVERY_CLOSE_ERROR errorType={} message={}",
+                        closeException.getClass().getSimpleName(), closeException.getMessage());
             }
-        });
+        }
+        markUnavailable();
     }
 
     @Scheduled(fixedDelayString = "${ctrader.market-data.freshness-check-delay:PT5S}")
