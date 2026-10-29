@@ -32,7 +32,8 @@ public class MarketSnapshotContextContributor implements ContextContributor {
                         List.of(request.marketId()),
                         Duration.ofSeconds(30),
                         Duration.ofSeconds(18),
-                        "CONFIRM_OR_ACQUIRE"
+                        "CONFIRM_OR_ACQUIRE",
+                        request.evaluationCutoff()
                 )
         ).stream().findFirst().orElse(null);
         ContextRequirement requirement =
