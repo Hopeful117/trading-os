@@ -46,6 +46,11 @@ public interface CTraderOpenApiClient {
         }
 
         void unsubscribeSpots(long symbolId);
+
+        default void unsubscribeSpots(List<Long> symbolIds) {
+            symbolIds.forEach(this::unsubscribeSpots);
+        }
+
         void subscribeLiveTrendbar(long symbolId, String period);
         void unsubscribeLiveTrendbar(long symbolId, String period);
         @Override void close();

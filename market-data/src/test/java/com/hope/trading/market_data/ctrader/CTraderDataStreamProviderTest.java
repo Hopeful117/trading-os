@@ -233,6 +233,91 @@ class CTraderDataStreamProviderTest {
     }
 
     @Test
+    void unsubscribesFinalSpotDemandWithoutClosingTheSharedStream() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        fixture.provider.subscribe(List.of(fixture.market), request).block();
+
+        fixture.provider.unsubscribe(List.of(fixture.market), request).block();
+
+        assertThat(fixture.client.streams).hasSize(1);
+        assertThat(fixture.client.current.closed).isFalse();
+        assertThat(fixture.client.current.unsubscribedSpots).containsExactly(42L);
+    }
+
+    @Test
+    void preservesRemainingSpotDemandWhenOneMarketIsReleased() {
+        Fixture fixture = new Fixture();
+        Market second = Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.CTRADER)
+                .symbol("GBP/USD").providerSymbol("43").baseAsset("GBP").quoteAsset("USD")
+                .productType(InstrumentProductType.SPOT)
+                .marketConstraints(fixture.market.getMarketConstraints())
+                .marketState(fixture.market.getMarketState()).build();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        fixture.provider.subscribe(List.of(fixture.market, second), request).block();
+
+        fixture.provider.unsubscribe(List.of(fixture.market), request).block();
+
+        assertThat(fixture.client.streams).hasSize(1);
+        assertThat(fixture.client.current.unsubscribedSpots).containsExactly(42L);
+        assertThat(fixture.client.current.spotSubscriptions).containsExactly(42L, 43L);
+    }
+
+    @Test
+    void preservesSharedSpotDemandUntilTheLastTickerOrOhlcConsumerReleases() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest ticker = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        MarketStreamRequest ohlc = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(1, null));
+        fixture.provider.subscribe(List.of(fixture.market), ticker).block();
+        fixture.provider.subscribe(List.of(fixture.market), ohlc).block();
+
+        fixture.provider.unsubscribe(List.of(fixture.market), ticker).block();
+        assertThat(fixture.client.current.unsubscribedSpots).isEmpty();
+
+        fixture.provider.unsubscribe(List.of(fixture.market), ohlc).block();
+        assertThat(fixture.client.current.unsubscribedSpots).containsExactly(42L);
+    }
+
+    @Test
+    void unsubscribesOnlyTheReleasedTrendbarInterval() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest m1 = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(1, null));
+        MarketStreamRequest m5 = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(5, null));
+        fixture.provider.subscribe(List.of(fixture.market), m1).block();
+        fixture.provider.subscribe(List.of(fixture.market), m5).block();
+
+        fixture.provider.unsubscribe(List.of(fixture.market), m1).block();
+
+        assertThat(fixture.client.current.unsubscribedTrendbars).containsExactly("42:M1");
+        assertThat(fixture.client.current.unsubscribedSpots).isEmpty();
+        assertThat(fixture.client.streams).hasSize(1);
+    }
+
+    @Test
+    void failedUnsubscribeReconcilesTheRemainingDesiredSetOnANewSession() {
+        Fixture fixture = new Fixture();
+        Market second = Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.CTRADER)
+                .symbol("GBP/USD").providerSymbol("43").baseAsset("GBP").quoteAsset("USD")
+                .productType(InstrumentProductType.SPOT)
+                .marketConstraints(fixture.market.getMarketConstraints())
+                .marketState(fixture.market.getMarketState()).build();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        fixture.provider.subscribe(List.of(fixture.market, second), request).block();
+        fixture.client.failSpotUnsubscription = true;
+
+        assertThatThrownBy(() -> fixture.provider.unsubscribe(List.of(fixture.market), request).block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("spot unsubscription failed");
+
+        assertThat(fixture.client.streams).hasSize(2);
+        assertThat(fixture.client.streams.getFirst().closed).isTrue();
+        assertThat(fixture.client.streams.get(1).spotSubscriptionBatches).containsExactly(List.of(43L));
+    }
+
+    @Test
     void stopsAutomaticReconnectAfterMaximumAttempts() throws Exception {
         Fixture fixture = new Fixture();
         MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.TICKER, null);
@@ -301,6 +386,7 @@ class CTraderDataStreamProviderTest {
         private CountDownLatch spotStarted;
         private CountDownLatch allowSpot;
         private boolean failSpotSubscription;
+        private boolean failSpotUnsubscription;
         private boolean failTrendbarSubscription;
         @Override public List<CTraderSymbol> symbols() { return List.of(); }
         @Override public CTraderSymbol symbol(long symbolId) { throw new UnsupportedOperationException(); }
@@ -320,6 +406,7 @@ class CTraderDataStreamProviderTest {
         private final List<List<Long>> spotSubscriptionBatches = new ArrayList<>();
         private final List<Long> unsubscribedSpots = new ArrayList<>();
         private final List<String> trendbarSubscriptions = new ArrayList<>();
+        private final List<String> unsubscribedTrendbars = new ArrayList<>();
         private boolean closed;
         private FakeStream(FakeClient client, Runnable termination) {
             this.client = client;
@@ -340,12 +427,17 @@ class CTraderDataStreamProviderTest {
             if (client.failSpotSubscription) throw new IllegalStateException("spot subscription failed");
             symbolIds.forEach(this::subscribeSpots);
         }
-        @Override public void unsubscribeSpots(long symbolId) { unsubscribedSpots.add(symbolId); }
+        @Override public void unsubscribeSpots(long symbolId) {
+            if (client.failSpotUnsubscription) throw new IllegalStateException("spot unsubscription failed");
+            unsubscribedSpots.add(symbolId);
+        }
         @Override public void subscribeLiveTrendbar(long symbolId, String period) {
             if (client.failTrendbarSubscription) throw new IllegalStateException("trendbar subscription failed");
             trendbarSubscriptions.add(symbolId + ":" + period);
         }
-        @Override public void unsubscribeLiveTrendbar(long symbolId, String period) { }
+        @Override public void unsubscribeLiveTrendbar(long symbolId, String period) {
+            unsubscribedTrendbars.add(symbolId + ":" + period);
+        }
         @Override public void close() { closed = true; }
     }
 }

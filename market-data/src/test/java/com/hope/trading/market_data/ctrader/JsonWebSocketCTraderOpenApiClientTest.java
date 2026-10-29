@@ -22,10 +22,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.ACCOUNT_AUTH_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.ACCOUNT_LIST_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.APPLICATION_AUTH_RESPONSE;
+import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE;
+import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_SPOTS_RESPONSE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -66,17 +69,30 @@ class JsonWebSocketCTraderOpenApiClientTest {
         when(tokenLifecycle.requireUsableToken(true)).thenReturn(token());
         AtomicReference<WebSocket.Listener> listener = new AtomicReference<>();
         WebSocket socket = mock(WebSocket.class);
+        List<Integer> requestTypes = new ArrayList<>();
+        List<tools.jackson.databind.JsonNode> requests = new ArrayList<>();
+        AtomicBoolean failUnsubscribe = new AtomicBoolean();
         when(socket.isOutputClosed()).thenReturn(false);
         when(socket.sendClose(anyInt(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(null));
         when(socket.sendText(anyString(), eq(true))).thenAnswer(invocation -> {
             var request = mapper.readTree(invocation.getArgument(0, String.class));
+            requestTypes.add(request.path("payloadType").asInt());
+            requests.add(request);
             int responseType = switch (request.path("payloadType").asInt()) {
                 case 2100 -> APPLICATION_AUTH_RESPONSE;
                 case 2149 -> ACCOUNT_LIST_RESPONSE;
                 case 2102 -> ACCOUNT_AUTH_RESPONSE;
+                case 2129 -> UNSUBSCRIBE_SPOTS_RESPONSE;
+                case 2136 -> UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE;
                 default -> throw new IllegalStateException("unexpected request");
             };
+            if (request.path("payloadType").asInt() == 2129 && failUnsubscribe.get()) {
+                listener.get().onText(socket, "{\"payloadType\":2130,\"clientMsgId\":\""
+                        + request.path("clientMsgId").asText()
+                        + "\",\"errorCode\":\"ERR_UNSUBSCRIBE\",\"description\":\"rejected\"}", true);
+                return CompletableFuture.completedFuture(null);
+            }
             String payload = responseType == ACCOUNT_LIST_RESPONSE
                     ? "{\"ctidTraderAccount\":[{\"ctidTraderAccountId\":42,\"isLive\":false}]}"
                     : "{}";
@@ -100,9 +116,22 @@ class JsonWebSocketCTraderOpenApiClientTest {
             eventReceived.countDown();
         }, () -> { });
         listener.get().onText(socket, "{\"payloadType\":2131,\"payload\":{\"symbolId\":42,\"timestamp\":1000,\"bid\":123,\"ask\":124}}", true);
+        stream.unsubscribeSpots(42);
+        stream.unsubscribeLiveTrendbar(42, "M1");
 
         assertThat(eventReceived.await(2, TimeUnit.SECONDS)).isTrue();
         assertThat(events).singleElement().isInstanceOf(CTraderOpenApiClient.CTraderSpotEvent.class);
+        assertThat(requestTypes).contains(2129, 2136);
+        assertThat(requests.stream().filter(request -> request.path("payloadType").asInt() == 2129)
+                .findFirst().orElseThrow().path("payload").path("ctidTraderAccountId").asLong()).isEqualTo(42L);
+        assertThat(requests.stream().filter(request -> request.path("payloadType").asInt() == 2129)
+                .findFirst().orElseThrow().path("payload").path("symbolId").toString()).isEqualTo("[42]");
+        assertThat(requests.stream().filter(request -> request.path("payloadType").asInt() == 2136)
+                .findFirst().orElseThrow().path("payload").path("period").asInt()).isEqualTo(1);
+        failUnsubscribe.set(true);
+        assertThatThrownBy(() -> stream.unsubscribeSpots(42))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("cTrader provider rejected the request: ERR_UNSUBSCRIBE (rejected)");
         stream.close();
         verify(socket).sendClose(anyInt(), eq("done"));
     }
