@@ -16,7 +16,9 @@ public class MarketSynchronizationScheduler {
     private final MarketSynchronization marketSynchronization;
 
 
-    @Scheduled(fixedDelayString = "PT1H")
+    @Scheduled(
+            fixedDelayString = "${market-synchronization.fixed-delay:PT1H}",
+            initialDelayString = "${market-data.startup-grace:PT1M}")
     public void synchronizeMarkets() {
 
         log.info("Starting market synchronization");
