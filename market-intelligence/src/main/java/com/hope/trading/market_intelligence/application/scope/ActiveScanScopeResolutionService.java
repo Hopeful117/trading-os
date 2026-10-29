@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.scope;
 
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
+import com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotResponse;
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketResponse;
 import com.hope.trading.market_intelligence.adapter.tradingcore.TradingCoreAccountClient;
 import com.hope.trading.market_intelligence.domain.scope.*;
@@ -17,6 +18,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class ActiveScanScopeResolutionService {
+    private static final Duration CURRENT_MARKET_EVIDENCE_MAX_AGE = Duration.ofSeconds(30);
     private final TradingCoreAccountClient accounts;
     private final MarketDataClient marketData;
     private final Clock clock;
@@ -138,9 +140,9 @@ public class ActiveScanScopeResolutionService {
                     .toList();
         }
         Map<String, TradingCoreAccountClient.MarketCapabilityResponse> capabilities = capabilityResolution.values();
-        List<MarketResponse> bootstrappedCatalog = bootstrapUnavailableCTraderMarkets(
+        BootstrapResult bootstrap = bootstrapCTraderMarketsRequiringRefresh(
                 candidateIds, catalogById, capabilities, applyBrokerCapabilities);
-        Map<UUID, MarketResponse> resolvedById = bootstrappedCatalog.stream().collect(Collectors.toMap(
+        Map<UUID, MarketResponse> resolvedById = bootstrap.catalog().stream().collect(Collectors.toMap(
                 MarketResponse::marketId,
                 Function.identity(),
                 (first, ignored) -> first,
@@ -151,7 +153,7 @@ public class ActiveScanScopeResolutionService {
                         : eligibilityPolicy.properties().maxMarketFactEvaluationsPerScan());
         List<MarketEligibilityDecision> decisions = candidateIds.stream()
                 .map(marketId -> evaluateMarket(marketId, resolvedById, budget, applyEligibilityPolicy,
-                        applyBrokerCapabilities, capabilities))
+                        applyBrokerCapabilities, capabilities, bootstrap.failedMarketIds()))
                 .toList();
         List<UUID> effectiveMarketIds = decisions.stream()
                 .filter(MarketEligibilityDecision::eligible)
@@ -288,7 +290,8 @@ public class ActiveScanScopeResolutionService {
             EvaluationBudget budget,
             boolean applyEligibilityPolicy,
             boolean applyBrokerCapabilities,
-            Map<String, TradingCoreAccountClient.MarketCapabilityResponse> capabilities
+            Map<String, TradingCoreAccountClient.MarketCapabilityResponse> capabilities,
+            Set<UUID> failedBootstrapMarketIds
     ) {
         MarketResponse market = byId.get(marketId);
         if (market == null) {
@@ -310,6 +313,16 @@ public class ActiveScanScopeResolutionService {
                     false,
                     List.of(MarketEligibilityReason.MARKET_NOT_TRADABLE),
                     MarketEligibilityStatus.EXCLUDED, null, null, null
+            );
+        }
+        if (failedBootstrapMarketIds.contains(marketId)) {
+            return new MarketEligibilityDecision(
+                    market.marketId(),
+                    market.symbol(),
+                    market.provider(),
+                    false,
+                    List.of(MarketEligibilityReason.DATA_UNAVAILABLE),
+                    MarketEligibilityStatus.NOT_EVALUABLE, null, null, null
             );
         }
         if (applyBrokerCapabilities) {
@@ -420,7 +433,7 @@ public class ActiveScanScopeResolutionService {
         return capability.reasons().stream().map(this::capabilityReason).toList();
     }
 
-    private List<MarketResponse> bootstrapUnavailableCTraderMarkets(
+    private BootstrapResult bootstrapCTraderMarketsRequiringRefresh(
             List<UUID> candidateIds,
             Map<UUID, MarketResponse> byId,
             Map<String, TradingCoreAccountClient.MarketCapabilityResponse> capabilities,
@@ -429,23 +442,59 @@ public class ActiveScanScopeResolutionService {
                 .map(byId::get)
                 .filter(Objects::nonNull)
                 .filter(market -> "CTRADER".equalsIgnoreCase(market.provider()))
-                .filter(market -> market.marketState() == null || !market.marketState().tradable())
+                .filter(this::requiresCurrentEvidenceRefresh)
                 .filter(market -> !applyBrokerCapabilities || hasMarketOrderCapability(market, capabilities))
                 .map(MarketResponse::marketId)
                 .toList();
-        if (bootstrapIds.isEmpty()) return byId.values().stream().toList();
+        if (bootstrapIds.isEmpty()) {
+            return new BootstrapResult(byId.values().stream().toList(), Set.of());
+        }
 
         try {
-            marketData.findPriceSnapshots(new com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotRequest(
-                    bootstrapIds, Duration.ofSeconds(30), Duration.ofSeconds(18), "CONFIRM_OR_ACQUIRE"));
-            return loadCatalog();
+            List<MarketPriceSnapshotResponse> snapshots = marketData.findPriceSnapshots(
+                    new com.hope.trading.market_intelligence.adapter.marketdata.MarketPriceSnapshotRequest(
+                            bootstrapIds, CURRENT_MARKET_EVIDENCE_MAX_AGE, Duration.ofSeconds(18), "CONFIRM_OR_ACQUIRE"));
+            Set<UUID> successfulIds = snapshots == null ? Set.of() : snapshots.stream()
+                    .filter(this::isFreshSnapshot)
+                    .filter(MarketPriceSnapshotResponse::tradable)
+                    .map(MarketPriceSnapshotResponse::marketId)
+                    .filter(bootstrapIds::contains)
+                    .collect(Collectors.toSet());
+            Set<UUID> failedIds = bootstrapIds.stream()
+                    .filter(id -> !successfulIds.contains(id))
+                    .collect(Collectors.toSet());
+            return new BootstrapResult(loadCatalog(), failedIds);
         } catch (RuntimeException bootstrapFailure) {
             try {
-                return loadCatalog();
+                return new BootstrapResult(loadCatalog(), Set.copyOf(bootstrapIds));
             } catch (RuntimeException reloadFailure) {
-                return byId.values().stream().toList();
+                return new BootstrapResult(byId.values().stream().toList(), Set.copyOf(bootstrapIds));
             }
         }
+    }
+
+    private boolean requiresCurrentEvidenceRefresh(MarketResponse market) {
+        if (market.marketState() == null || !market.marketState().tradable()) return true;
+        Instant lastUpdated = market.marketState().lastUpdated();
+        Instant now = clock.instant();
+        return lastUpdated == null
+                || lastUpdated.isAfter(now)
+                || lastUpdated.isBefore(now.minus(CURRENT_MARKET_EVIDENCE_MAX_AGE));
+    }
+
+    private boolean isFreshSnapshot(MarketPriceSnapshotResponse snapshot) {
+        if (snapshot == null || snapshot.marketId() == null
+                || !"FRESH".equalsIgnoreCase(snapshot.status())
+                || snapshot.bid() == null || snapshot.ask() == null
+                || snapshot.occurredAt() == null || snapshot.capturedAt() == null) {
+            return false;
+        }
+        Instant now = clock.instant();
+        Instant boundary = now.minus(CURRENT_MARKET_EVIDENCE_MAX_AGE);
+        return !snapshot.occurredAt().isAfter(now)
+                && !snapshot.occurredAt().isBefore(boundary)
+                && !snapshot.capturedAt().isAfter(now)
+                && !snapshot.capturedAt().isBefore(boundary);
     }
 
     private boolean hasMarketOrderCapability(
@@ -487,6 +536,13 @@ public class ActiveScanScopeResolutionService {
             }
             remaining--;
             return true;
+        }
+    }
+
+    private record BootstrapResult(List<MarketResponse> catalog, Set<UUID> failedMarketIds) {
+        private BootstrapResult {
+            catalog = List.copyOf(catalog);
+            failedMarketIds = Set.copyOf(failedMarketIds);
         }
     }
 
