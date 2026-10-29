@@ -128,6 +128,27 @@ class GatewayExecutionRouteTest {
     }
 
     @Test
+    void v2AccountSynchronizationRouteForwardsToTradingCore() {
+        Route route = route("accounts");
+
+        assertThat(route).isNotNull();
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://trading-core"));
+        assertThat(matches(route, HttpMethod.POST,
+                "/api/v2/accounts/4075e131-45ee-4ff5-85b7-052ac5ede330/synchronize"))
+                .as("v2 account synchronization must match the Trading Core route").isTrue();
+    }
+
+    @Test
+    void existingV1AccountRouteRemainsOwnedByTradingCore() {
+        Route route = route("accounts");
+
+        assertThat(route).isNotNull();
+        assertThat(matches(route, HttpMethod.GET,
+                "/api/v1/accounts/11111111-1111-1111-1111-111111111111"))
+                .as("v1 account lookup must remain on the Trading Core route").isTrue();
+    }
+
+    @Test
     void accountChallengeRouteWinsOverBroadAccountRoute() {
         String path = "/api/v1/accounts/11111111-1111-1111-1111-111111111111/challenge";
         MockServerHttpRequest request = MockServerHttpRequest.post(path).build();
