@@ -13,6 +13,10 @@ public class OrderBookRetentionProperties {
     private String storagePath = "/";
     private long minimumFreeBytes = 10L * 1024L * 1024L * 1024L;
     private int retirementBatchSize = 1000;
+    private int backfillSequenceBatchSize = 1;
+    private int backfillBoundaryBatchSize = 10;
+    private int backfillMaxSequenceBatchSize = 10;
+    private int backfillMaxBoundaryBatchSize = 100;
     private Duration invalidatedDiagnosticRetention = Duration.ofDays(30);
     private String artifactSigningKey = "";
 
@@ -84,6 +88,46 @@ public class OrderBookRetentionProperties {
         this.retirementBatchSize = retirementBatchSize;
     }
 
+    public int getBackfillSequenceBatchSize() {
+        return backfillSequenceBatchSize;
+    }
+
+    public void setBackfillSequenceBatchSize(int backfillSequenceBatchSize) {
+        this.backfillSequenceBatchSize = requirePositive("backfillSequenceBatchSize", backfillSequenceBatchSize);
+    }
+
+    public int getBackfillBoundaryBatchSize() {
+        return backfillBoundaryBatchSize;
+    }
+
+    public void setBackfillBoundaryBatchSize(int backfillBoundaryBatchSize) {
+        this.backfillBoundaryBatchSize = requirePositive("backfillBoundaryBatchSize", backfillBoundaryBatchSize);
+    }
+
+    public int getBackfillMaxSequenceBatchSize() {
+        return backfillMaxSequenceBatchSize;
+    }
+
+    public void setBackfillMaxSequenceBatchSize(int backfillMaxSequenceBatchSize) {
+        this.backfillMaxSequenceBatchSize = requirePositive("backfillMaxSequenceBatchSize", backfillMaxSequenceBatchSize);
+    }
+
+    public int getBackfillMaxBoundaryBatchSize() {
+        return backfillMaxBoundaryBatchSize;
+    }
+
+    public void setBackfillMaxBoundaryBatchSize(int backfillMaxBoundaryBatchSize) {
+        this.backfillMaxBoundaryBatchSize = requirePositive("backfillMaxBoundaryBatchSize", backfillMaxBoundaryBatchSize);
+    }
+
+    public int resolveBackfillSequenceBatchSize(Integer requested) {
+        return resolveBounded("sequenceBatchSize", requested, backfillSequenceBatchSize, backfillMaxSequenceBatchSize);
+    }
+
+    public int resolveBackfillBoundaryBatchSize(Integer requested) {
+        return resolveBounded("boundaryBatchSize", requested, backfillBoundaryBatchSize, backfillMaxBoundaryBatchSize);
+    }
+
     public Duration getInvalidatedDiagnosticRetention() {
         return invalidatedDiagnosticRetention;
     }
@@ -101,6 +145,21 @@ public class OrderBookRetentionProperties {
 
     public void setArtifactSigningKey(String artifactSigningKey) {
         this.artifactSigningKey = artifactSigningKey == null ? "" : artifactSigningKey;
+    }
+
+    private int requirePositive(String name, int value) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return value;
+    }
+
+    private int resolveBounded(String name, Integer requested, int defaultValue, int maximum) {
+        int value = requested == null ? defaultValue : requested;
+        if (value <= 0 || value > maximum) {
+            throw new IllegalArgumentException(name + " must be between 1 and " + maximum);
+        }
+        return value;
     }
 
     public String requireArtifactSigningKey() {
