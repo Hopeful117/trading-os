@@ -64,6 +64,7 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
     public ExecutionResult execute(ExecutionRequest request) {
         try {
             if (!enabled()) throw new CTraderSafetyException("cTrader execution is disabled by safety policy");
+            requireSupportedProtectionConfiguration(request);
             BrokerConnection connection = requireExecutionConnection(request.brokerAccountId());
             try (PlainSecret secret = secrets.read(new CredentialReference(connection.activeCredentialReference()))) {
                 CTraderToken token = CTraderTokenCodec.decode(secret.copyValue());
@@ -74,7 +75,7 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
                                 connection.externalAccountId(), request.instrument(), request.side().name(),
                                 request.orderType().name(), request.quantity(), request.limitPrice(),
                                 request.stopLossPrice(), request.takeProfitPrices(),
-                                clientOrderId(request.idempotencyKey())));
+                                request.referencePrice(), clientOrderId(request.idempotencyKey())));
                 return new Acknowledged(response.externalOrderId(), request.executionAttemptId().toString());
             }
         } catch (CTraderAuthenticationException exception) {
@@ -125,6 +126,15 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
         return connection;
     }
 
+    private void requireSupportedProtectionConfiguration(ExecutionRequest request) {
+        if (request.orderType() == OrderType.MARKET
+                && (request.stopLossPrice() != null || !request.takeProfitPrices().isEmpty())) {
+            if (request.referencePrice() == null) {
+                throw new CTraderAuthenticationException("CTRADER_MARKET_PROTECTION_REFERENCE_REQUIRED");
+            }
+        }
+    }
+
     private boolean effectiveDemoEnvironment(BrokerConnection connection) {
         if (Boolean.FALSE.equals(connection.providerAccountLive())) return true;
         return Boolean.TRUE.equals(connection.providerAccountLive())
@@ -167,7 +177,9 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
         String message = exception.getMessage() == null ? "CTRADER_AUTHENTICATION_FAILED" : exception.getMessage();
         String normalized = message.replaceAll("[^A-Za-z0-9]+", "_").toUpperCase(Locale.ROOT)
                 .replaceAll("_+$", "");
-        return "CTRADER_" + normalized.substring(0, Math.min(48, normalized.length()));
+        return normalized.startsWith("CTRADER_")
+                ? normalized.substring(0, Math.min(56, normalized.length()))
+                : "CTRADER_" + normalized.substring(0, Math.min(48, normalized.length()));
     }
 
     private boolean isProviderUncertain(CTraderAuthenticationException exception) {

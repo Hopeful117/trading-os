@@ -71,21 +71,30 @@ public final class BrokerModels {
     }
 
     public record ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
-            String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
-            OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
-            BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices) {
+             String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
+             OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
+             BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
+             BigDecimal referencePrice) {
         public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
                 String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
                 OrderType orderType, BigDecimal quantity, BigDecimal limitPrice) {
             this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
-                    instrument, side, orderType, quantity, limitPrice, null, List.of());
+                    instrument, side, orderType, quantity, limitPrice, null, List.of(), null);
         }
         public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
                 String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
                 OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
                 BigDecimal stopLossPrice) {
             this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
-                    instrument, side, orderType, quantity, limitPrice, stopLossPrice, List.of());
+                    instrument, side, orderType, quantity, limitPrice, stopLossPrice, List.of(), null);
+        }
+        public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
+                String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
+                OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
+                BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices) {
+            this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
+                    instrument, side, orderType, quantity, limitPrice, stopLossPrice,
+                    takeProfitPrices, null);
         }
         public ExecutionRequest {
             Objects.requireNonNull(executionIntentId); Objects.requireNonNull(executionAttemptId);
@@ -100,6 +109,8 @@ public final class BrokerModels {
             takeProfitPrices = List.copyOf(takeProfitPrices == null ? List.of() : takeProfitPrices);
             if (takeProfitPrices.stream().anyMatch(price -> price == null || price.signum() <= 0))
                 throw new IllegalArgumentException("takeProfitPrices must be positive");
+            if (referencePrice != null && referencePrice.signum() <= 0)
+                throw new IllegalArgumentException("referencePrice must be positive");
         }
     }
     public sealed interface ExecutionResult permits Acknowledged, Rejected, Unknown {}

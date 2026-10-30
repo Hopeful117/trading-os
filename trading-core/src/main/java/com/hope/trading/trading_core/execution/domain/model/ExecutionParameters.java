@@ -7,12 +7,20 @@ import java.util.List;
 public record ExecutionParameters(
         String instrument, Side side, OrderType orderType,
         BigDecimal quantity, BigDecimal limitPrice,
-        BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
-        BigDecimal expectedMonetaryRisk, BigDecimal riskRewardRatio
+         BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
+         BigDecimal expectedMonetaryRisk, BigDecimal riskRewardRatio,
+         BigDecimal referencePrice
 ) {
     public ExecutionParameters(String instrument, Side side, OrderType orderType,
             BigDecimal quantity, BigDecimal limitPrice) {
-        this(instrument, side, orderType, quantity, limitPrice, null, List.of(), null, null);
+        this(instrument, side, orderType, quantity, limitPrice, null, List.of(), null, null, null);
+    }
+    public ExecutionParameters(String instrument, Side side, OrderType orderType,
+            BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopLossPrice,
+            List<BigDecimal> takeProfitPrices, BigDecimal expectedMonetaryRisk,
+            BigDecimal riskRewardRatio) {
+        this(instrument, side, orderType, quantity, limitPrice, stopLossPrice,
+                takeProfitPrices, expectedMonetaryRisk, riskRewardRatio, null);
     }
 
     public ExecutionParameters {
@@ -37,6 +45,9 @@ public record ExecutionParameters(
         }
         if (riskRewardRatio != null && riskRewardRatio.signum() < 0) {
             throw new IllegalArgumentException("risk reward ratio cannot be negative");
+        }
+        if (referencePrice != null && referencePrice.signum() <= 0) {
+            throw new IllegalArgumentException("reference price must be positive");
         }
     }
     public enum Side { BUY, SELL }

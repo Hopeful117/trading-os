@@ -48,12 +48,13 @@ record ExecutionReadinessRequest(UUID evaluationId) { }
     record Execution(String instrument, String instrumentProvider, String instrumentProductType,
                      String direction, Entry entry, StopLoss stopLoss,
                      List<TakeProfit> takeProfits, PositionSizing positionSizing,
-                     BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules) {
+                     BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules,
+                     BigDecimal referencePrice) {
         public Execution(String instrument, String direction, Entry entry, StopLoss stopLoss,
                          List<TakeProfit> takeProfits, PositionSizing positionSizing,
                          BigDecimal riskRewardRatio, Object expiration, Set<String> managementRules) {
             this(instrument, null, null, direction, entry, stopLoss, takeProfits, positionSizing,
-                    riskRewardRatio, expiration, managementRules);
+                    riskRewardRatio, expiration, managementRules, null);
         }
     }
     record Entry(String type, BigDecimal price, Set<String> conditions) { }
@@ -99,7 +100,7 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
             throw failure;
         }
         try {
-            EntryIntent entryIntent = toEntryIntent(value.execution().entry());
+            EntryIntent entryIntent = toEntryIntent(value.execution().entry(), value.execution().referencePrice());
             return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.origin(), value.createdAt(),
                      value.context().id(), value.context().version(), value.context().capturedAt(),
                      value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
@@ -137,7 +138,7 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
 
     private Snapshot loadTransport(TradePlanTransport value) {
         try {
-            EntryIntent entryIntent = toEntryIntent(value.execution().entry());
+            EntryIntent entryIntent = toEntryIntent(value.execution().entry(), value.execution().referencePrice());
             return new Snapshot(value.tradePlanId(), value.tradePlanVersion(), value.status(), value.origin(), value.createdAt(),
                     value.context().id(), value.context().version(), value.context().capturedAt(),
                     value.context().ownerId(), value.context().tradingAccountId(), value.context().accountCurrency(),
@@ -155,14 +156,14 @@ public final class MarketIntelligenceRiskClient implements TradePlanRiskPort {
         }
     }
 
-    private static EntryIntent toEntryIntent(TradePlanTransport.Entry entry) {
+    private static EntryIntent toEntryIntent(TradePlanTransport.Entry entry, BigDecimal referencePrice) {
         EntryIntent.OrderType orderType = switch (entry.type()) {
             case "MARKET" -> EntryIntent.OrderType.MARKET;
             case "LIMIT" -> EntryIntent.OrderType.LIMIT;
             case "STOP" -> EntryIntent.OrderType.STOP;
             default -> throw new IllegalArgumentException("Unknown entry type: " + entry.type());
         };
-        return new EntryIntent(orderType, entry.price());
+        return new EntryIntent(orderType, entry.price(), referencePrice);
     }
 
     private static com.hope.trading.trading_core.shared.domain.model.InstrumentProductType parseProductType(String value) {

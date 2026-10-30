@@ -19,8 +19,9 @@ public record TradePlanRiskSnapshot(
     public record Execution(
             String instrument, String instrumentProvider, String instrumentProductType,
             String direction, Entry entry, StopLoss stopLoss,
-            List<TakeProfit> takeProfits, PositionSizing positionSizing,
-            BigDecimal riskRewardRatio, Expiration expiration, Set<String> managementRules
+             List<TakeProfit> takeProfits, PositionSizing positionSizing,
+             BigDecimal riskRewardRatio, Expiration expiration, Set<String> managementRules,
+             BigDecimal referencePrice
     ) { }
 
     public record Entry(String type, BigDecimal price, Set<String> conditions) { }

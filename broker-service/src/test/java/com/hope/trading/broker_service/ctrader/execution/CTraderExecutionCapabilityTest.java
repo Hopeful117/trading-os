@@ -118,7 +118,7 @@ class CTraderExecutionCapabilityTest {
     }
 
     @Test
-    void propagatesProtectiveTargetsForMarketExecution() {
+    void propagatesReferencePriceForProtectedMarketExecution() {
         BrokerConnection connection = connected(true, false);
         when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connection));
         when(secrets.read(any(CredentialReference.class))).thenReturn(new PlainSecret(
@@ -132,19 +132,25 @@ class CTraderExecutionCapabilityTest {
         var result = capability().execute(new BrokerModels.ExecutionRequest(
                 UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
                 BrokerModels.Side.BUY, BrokerModels.OrderType.MARKET, BigDecimal.ONE, null,
-                BigDecimal.valueOf(.99), List.of(BigDecimal.valueOf(1.02))));
+                BigDecimal.valueOf(.99), List.of(BigDecimal.valueOf(1.02)), BigDecimal.ONE));
 
         assertInstanceOf(BrokerModels.Acknowledged.class, result);
-        var request = verifyAndCaptureOrderRequest();
-        assertThat(request.orderType()).isEqualTo("MARKET");
-        assertThat(request.stopLossPrice()).isEqualByComparingTo("0.99");
-        assertThat(request.takeProfitPrices()).containsExactly(BigDecimal.valueOf(1.02));
-    }
-
-    private CTraderOpenApiClient.CTraderOrderRequest verifyAndCaptureOrderRequest() {
         var captor = org.mockito.ArgumentCaptor.forClass(CTraderOpenApiClient.CTraderOrderRequest.class);
         verify(client).submitOrder(any(), captor.capture());
-        return captor.getValue();
+        assertThat(captor.getValue().referencePrice()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void rejectsProtectedMarketExecutionWithoutReferencePriceBeforeProviderAccess() {
+        var result = capability().execute(new BrokerModels.ExecutionRequest(
+                UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
+                BrokerModels.Side.BUY, BrokerModels.OrderType.MARKET, BigDecimal.ONE, null,
+                BigDecimal.valueOf(.99), List.of(BigDecimal.valueOf(1.02))));
+
+        assertInstanceOf(BrokerModels.Rejected.class, result);
+        assertThat(((BrokerModels.Rejected) result).reasonCode())
+                .isEqualTo("CTRADER_MARKET_PROTECTION_REFERENCE_REQUIRED");
+        verifyNoInteractions(connections, secrets, client);
     }
 
     private BrokerConnection connected(boolean trade, boolean live) {

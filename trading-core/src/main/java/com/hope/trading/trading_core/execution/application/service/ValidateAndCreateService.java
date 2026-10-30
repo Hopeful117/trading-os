@@ -253,7 +253,7 @@ public class ValidateAndCreateService {
         // 5. Build ExecutionParameters from authoritative data only
         return new ExecutionParameters(instrument, side, orderType, quantity, entryIntent.price(),
                 plan.stopPrice(), plan.takeProfit() == null ? java.util.List.of() : java.util.List.of(plan.takeProfit()),
-                plan.expectedMonetaryRisk(), plan.riskRewardRatio());
+                plan.expectedMonetaryRisk(), plan.riskRewardRatio(), entryIntent.referencePrice());
     }
 
     private ExecutionParameters.Side deriveSide(String direction) {

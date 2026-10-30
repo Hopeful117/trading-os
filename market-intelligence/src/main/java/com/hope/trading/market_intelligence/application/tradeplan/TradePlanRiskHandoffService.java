@@ -227,10 +227,10 @@ public class TradePlanRiskHandoffService {
                                 execution.positionSizing().expectedMonetaryRisk(),
                                 execution.positionSizing().currency()),
                          execution.riskReward() == null ? null : execution.riskReward().ratio(),
-                        new TradePlanRiskSnapshot.Expiration(
-                                execution.expiration().expiresAt(),
-                                execution.expiration().policy()),
-                        execution.managementRules()),
+                         new TradePlanRiskSnapshot.Expiration(
+                                 execution.expiration().expiresAt(),
+                                 execution.expiration().policy()),
+                         execution.managementRules(), execution.referencePrice()),
                 new TradePlanRiskSnapshot.Rationale(
                         plan.rationale().opportunities().stream()
                         .map(reference -> opportunity(reference.id().value(), reference.version().value()))
