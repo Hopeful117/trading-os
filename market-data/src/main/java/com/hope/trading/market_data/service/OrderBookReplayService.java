@@ -1,6 +1,7 @@
 package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.model.OrderBookEvidence;
+import com.hope.trading.market_data.model.OrderBookEvidenceOrigin;
 import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.model.OrderBookReplayArtifact;
@@ -114,6 +115,12 @@ public class OrderBookReplayService {
         }
 
         OrderBookEvidence lastEvidence = sequence.isEmpty() ? startingPoint : sequence.getLast();
+        OrderBookEvidenceOrigin sourceOrigin = java.util.stream.Stream.concat(
+                        java.util.stream.Stream.of(startingPoint), sequence.stream())
+                .map(OrderBookEvidence::origin)
+                .distinct()
+                .reduce((left, right) -> OrderBookEvidenceOrigin.MIXED)
+                .orElse(startingPoint.origin());
         OrderBookReplayResult result = new OrderBookReplayResult(
                 OrderBookReplayResult.ReplayStatus.AVAILABLE, marketId, depth,
                 startingPoint.sequenceId(), cutoff,
@@ -124,7 +131,7 @@ public class OrderBookReplayService {
                 "TRUSTED",
                 java.util.stream.Stream.concat(java.util.stream.Stream.of(startingPoint), sequence.stream())
                         .map(OrderBookEvidence::contentFingerprint).toList(),
-                limit(bids, depth), limit(asks, depth), null);
+                limit(bids, depth), limit(asks, depth), null, sourceOrigin);
         log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
                         + "repositoryMs={} assemblyMs={} totalMs={}",
                 marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
@@ -137,7 +144,8 @@ public class OrderBookReplayService {
                 && artifact.marketId().equals(marketId)
                 && artifact.depth() == depth
                 && artifact.evaluationCutoff().equals(cutoff)
-                 && artifact.artifactSchemaVersion().equals("order-book-replay-artifact-v2")
+                 && (artifact.artifactSchemaVersion().equals("order-book-replay-artifact-v2")
+                 || artifact.artifactSchemaVersion().equals("order-book-replay-artifact-v3"))
                 && artifact.normalizationVersion().equals(OrderBookEvidenceFingerprint.NORMALIZATION_VERSION)
                 && artifact.latestOccurredAt() != null
                 && artifact.latestKnownAt() != null
@@ -156,7 +164,8 @@ public class OrderBookReplayService {
                 artifact.latestKnownAt(), artifact.sourceStartOrdinal(), artifact.sourceEndOrdinal(),
                 artifact.provider(), artifact.providerSymbol(), artifact.normalizationVersion(),
                 artifact.sourceEvidenceFingerprint(), artifact.sourceTrustStatus(),
-                artifact.sourceEvidenceFingerprints(), artifact.bids(), artifact.asks(), null);
+                artifact.sourceEvidenceFingerprints(), artifact.bids(), artifact.asks(), null,
+                artifact.sourceEvidenceOrigin());
     }
 
     private long elapsedMillis(long startedAt) {

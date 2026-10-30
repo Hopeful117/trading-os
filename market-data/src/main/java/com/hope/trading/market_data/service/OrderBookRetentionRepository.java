@@ -53,6 +53,7 @@ public class OrderBookRetentionRepository {
                 timestamp(artifact.latestKnownAt()), artifact.sourceStartOrdinal(), artifact.sourceEndOrdinal(),
                 artifact.provider(), artifact.providerSymbol(), artifact.normalizationVersion(),
                 artifact.artifactSchemaVersion(), artifact.sourceEvidenceFingerprint(), artifact.sourceTrustStatus(),
+                artifact.sourceEvidenceOrigin().name(),
                 OrderBookEvidencePayload.encodeStrings(artifact.sourceEvidenceFingerprints()),
                 OrderBookEvidencePayload.encode(artifact.bids()),
                 OrderBookEvidencePayload.encode(artifact.asks()), artifact.promotionReason(),
@@ -73,7 +74,7 @@ public class OrderBookRetentionRepository {
         List<PersistedEvidence> evidence = jdbc.query("""
                 SELECT market_id, provider, provider_symbol, depth, sequence_id, sequence_ordinal,
                        occurred_at, known_at, normalization_version, trusted, content_fingerprint,
-                       evidence_type, bids_payload, asks_payload
+                       evidence_type, origin, bids_payload, asks_payload
                  FROM historical_order_book_evidence
                  WHERE sequence_id = ?
                    AND ((sequence_ordinal = ? AND evidence_type = 'SNAPSHOT')
@@ -86,7 +87,9 @@ public class OrderBookRetentionRepository {
                         result.getLong("sequence_ordinal"), result.getTimestamp("occurred_at").toInstant(),
                         result.getTimestamp("known_at").toInstant(), result.getString("normalization_version"),
                          result.getBoolean("trusted"), result.getString("content_fingerprint"),
-                         result.getString("evidence_type"), OrderBookEvidencePayload.decode(result.getString("bids_payload")),
+                          result.getString("evidence_type"),
+                          com.hope.trading.market_data.model.OrderBookEvidenceOrigin.valueOf(result.getString("origin")),
+                          OrderBookEvidencePayload.decode(result.getString("bids_payload")),
                          OrderBookEvidencePayload.decode(result.getString("asks_payload"))), replay.sequenceId(),
                  replay.sourceStartOrdinal(), replay.sourceStartOrdinal(), replay.sourceEndOrdinal(),
                  Timestamp.from(replay.evaluationCutoff()));
@@ -97,6 +100,13 @@ public class OrderBookRetentionRepository {
                         && java.util.stream.IntStream.range(0, evidence.size())
                         .allMatch(index -> evidence.get(index).ordinal() == replay.sourceStartOrdinal() + index))
                 .orElse(false);
+        java.util.Set<com.hope.trading.market_data.model.OrderBookEvidenceOrigin> origins = evidence.stream()
+                .map(PersistedEvidence::origin)
+                .collect(java.util.stream.Collectors.toSet());
+        boolean originComposition = replay.sourceEvidenceOrigin()
+                == com.hope.trading.market_data.model.OrderBookEvidenceOrigin.MIXED
+                ? origins.size() > 1
+                : origins.size() == 1 && origins.contains(replay.sourceEvidenceOrigin());
         boolean metadata = evidence.stream().allMatch(item -> item.trusted()
                 && replay.marketId().equals(item.marketId())
                 && replay.depth() == item.depth()
@@ -112,7 +122,8 @@ public class OrderBookRetentionRepository {
         boolean payload = !verifyPayload || canonicalPayloadMatches(evidence, replay.depth(), replay.bids(), replay.asks());
         boolean fingerprintsMatch = fingerprints.equals(replay.sourceEvidenceFingerprints());
         boolean aggregateFingerprintMatch = fingerprint(fingerprints).equals(replay.sourceEvidenceFingerprint());
-        boolean valid = fingerprintsMatch && aggregateFingerprintMatch && contiguous && metadata && latest && payload;
+        boolean valid = fingerprintsMatch && aggregateFingerprintMatch && contiguous && metadata
+                && originComposition && latest && payload;
         if (!valid) {
             log.warn("Replay evidence mismatch sequence={} start={} end={} rows={} fingerprints={} aggregate={} contiguous={} metadata={} latest={} payload={}",
                     replay.sequenceId(), replay.sourceStartOrdinal(), replay.sourceEndOrdinal(), evidence.size(),
@@ -123,7 +134,8 @@ public class OrderBookRetentionRepository {
 
     @Transactional(readOnly = true)
     public boolean matchesArtifactFingerprint(OrderBookReplayArtifact artifact) {
-        return "order-book-replay-artifact-v2".equals(artifact.artifactSchemaVersion())
+        return ("order-book-replay-artifact-v2".equals(artifact.artifactSchemaVersion())
+                || "order-book-replay-artifact-v3".equals(artifact.artifactSchemaVersion()))
                 && OrderBookReplayArtifactFingerprint.matches(artifact, properties.requireArtifactSigningKey());
     }
 
@@ -144,7 +156,7 @@ public class OrderBookRetentionRepository {
                        artifact.evaluation_cutoff, artifact.latest_occurred_at, artifact.latest_known_at,
                        artifact.source_start_ordinal, artifact.source_end_ordinal, artifact.provider,
                        artifact.provider_symbol, artifact.normalization_version, artifact.artifact_schema_version,
-                       artifact.source_evidence_fingerprint, artifact.source_trust_status,
+                        artifact.source_evidence_fingerprint, artifact.source_trust_status, artifact.source_origin,
                        artifact.source_evidence_fingerprints_payload, artifact.bids_payload, artifact.asks_payload,
                        artifact.promotion_reason, artifact.created_at
                    FROM historical_order_book_replay_artifact artifact
@@ -164,12 +176,13 @@ public class OrderBookRetentionRepository {
                 result.getObject("source_start_ordinal", Long.class), result.getObject("source_end_ordinal", Long.class),
                 result.getString("provider"), result.getString("provider_symbol"),
                  result.getString("normalization_version"), result.getString("artifact_schema_version"),
-                 result.getString("source_evidence_fingerprint"), result.getString("source_trust_status"),
+                  result.getString("source_evidence_fingerprint"), result.getString("source_trust_status"),
                  sourceFingerprints(result.getString("source_evidence_fingerprints_payload"),
-                         result.getString("source_evidence_fingerprint")),
+                 result.getString("source_evidence_fingerprint")),
                  OrderBookEvidencePayload.decode(result.getString("bids_payload")),
                 OrderBookEvidencePayload.decode(result.getString("asks_payload")),
-                result.getString("promotion_reason"), result.getTimestamp("created_at").toInstant()),
+                 result.getString("promotion_reason"), result.getTimestamp("created_at").toInstant(),
+                 com.hope.trading.market_data.model.OrderBookEvidenceOrigin.valueOf(result.getString("source_origin"))),
                 semanticIdentity);
         return artifacts.stream().findFirst();
     }
@@ -499,9 +512,9 @@ public class OrderBookRetentionRepository {
     private String artifactInsertSql() {
         String columns = "(artifact_id, semantic_identity, artifact_fingerprint, market_id, depth, sequence_id, "
                 + "evaluation_cutoff, latest_occurred_at, latest_known_at, source_start_ordinal, source_end_ordinal, "
-                + "provider, provider_symbol, normalization_version, artifact_schema_version, source_evidence_fingerprint, "
-                + "source_trust_status, source_evidence_fingerprints_payload, bids_payload, asks_payload, promotion_reason, created_at)";
-        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                 + "provider, provider_symbol, normalization_version, artifact_schema_version, source_evidence_fingerprint, "
+                 + "source_trust_status, source_origin, source_evidence_fingerprints_payload, bids_payload, asks_payload, promotion_reason, created_at)";
+        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         if (isH2()) {
             return "INSERT INTO historical_order_book_replay_artifact " + columns + " " + values;
         }
@@ -637,8 +650,9 @@ public class OrderBookRetentionRepository {
     private record PersistedEvidence(UUID marketId, String provider, String providerSymbol,
                                      int depth, UUID sequenceId, long ordinal,
                                      Instant occurredAt, Instant knownAt, String normalizationVersion,
-                                     boolean trusted, String fingerprint, String evidenceType,
-                                     List<com.hope.trading.market_data.model.OrderBookLevel> bids,
+                                      boolean trusted, String fingerprint, String evidenceType,
+                                      com.hope.trading.market_data.model.OrderBookEvidenceOrigin origin,
+                                      List<com.hope.trading.market_data.model.OrderBookLevel> bids,
                                      List<com.hope.trading.market_data.model.OrderBookLevel> asks) {
     }
 }

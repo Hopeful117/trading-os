@@ -20,19 +20,24 @@ final class OrderBookReplayArtifactFingerprint {
                 String.valueOf(replay.sourceStartOrdinal()), String.valueOf(replay.sourceEndOrdinal()),
                 replay.provider(), replay.providerSymbol(), replay.normalizationVersion(),
                 replay.sourceEvidenceFingerprint(), String.join(",", replay.sourceEvidenceFingerprints()),
-                replay.sourceTrustStatus(), replay.latestOccurredAt().toString(), replay.latestKnownAt().toString(),
+                replay.sourceTrustStatus(), replay.sourceEvidenceOrigin().name(),
+                replay.latestOccurredAt().toString(), replay.latestKnownAt().toString(),
                 replay.bids().toString(), replay.asks().toString()), replay.evaluationCutoff(), signingKey);
     }
 
     static String calculate(OrderBookReplayArtifact artifact, String signingKey) {
-        return digest(String.join("|", artifact.semanticIdentity(), artifact.promotionReason(),
+        String sourceTrustMaterial = "order-book-replay-artifact-v3".equals(artifact.artifactSchemaVersion())
+                ? artifact.sourceTrustStatus() + "|" + artifact.sourceEvidenceOrigin().name()
+                : artifact.sourceTrustStatus();
+        String material = String.join("|", artifact.semanticIdentity(), artifact.promotionReason(),
                 artifact.marketId().toString(), Integer.toString(artifact.depth()), artifact.sequenceId().toString(),
                 artifact.evaluationCutoff().toString(), String.valueOf(artifact.sourceStartOrdinal()),
                 String.valueOf(artifact.sourceEndOrdinal()), artifact.provider(), artifact.providerSymbol(),
                 artifact.normalizationVersion(), artifact.sourceEvidenceFingerprint(),
-                String.join(",", artifact.sourceEvidenceFingerprints()), artifact.sourceTrustStatus(),
+                String.join(",", artifact.sourceEvidenceFingerprints()), sourceTrustMaterial,
                 artifact.latestOccurredAt().toString(), artifact.latestKnownAt().toString(),
-                artifact.bids().toString(), artifact.asks().toString()), artifact.evaluationCutoff(), signingKey);
+                artifact.bids().toString(), artifact.asks().toString());
+        return digest(material, artifact.evaluationCutoff(), signingKey);
     }
 
     static boolean matches(OrderBookReplayArtifact artifact, String signingKey) {

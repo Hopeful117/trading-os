@@ -53,6 +53,14 @@ public class OrderBookEvidenceCaptureService {
     }
 
     public boolean acceptSnapshot(OrderBookDelta delta) {
+        return acceptSnapshot(delta, OrderBookEvidenceOrigin.PROVIDER);
+    }
+
+    public boolean acceptLocalSnapshot(OrderBookDelta delta) {
+        return acceptSnapshot(delta, OrderBookEvidenceOrigin.LOCAL_OBSERVATION);
+    }
+
+    private boolean acceptSnapshot(OrderBookDelta delta, OrderBookEvidenceOrigin origin) {
         if (durabilityCompromised || pressureGuard.underPressure()
                 || delta.type() != OrderBookDeltaType.SNAPSHOT || !validChecksum(delta)) {
             return false;
@@ -66,7 +74,7 @@ public class OrderBookEvidenceCaptureService {
             try {
                 boolean persisted = repository.appendSnapshotAsNewSequence(
                         toEvidence(delta, sequence, knownAt, OrderBookEvidenceType.SNAPSHOT,
-                                OrderBookEvidenceOrigin.PROVIDER, 0), knownAt);
+                                origin, 0), knownAt);
                 if (!persisted) {
                     sequences.remove(key);
                     return false;
@@ -86,6 +94,14 @@ public class OrderBookEvidenceCaptureService {
     }
 
     public boolean acceptUpdate(OrderBookDelta delta) {
+        return acceptUpdate(delta, OrderBookEvidenceOrigin.PROVIDER);
+    }
+
+    public boolean acceptLocalUpdate(OrderBookDelta delta) {
+        return acceptUpdate(delta, OrderBookEvidenceOrigin.LOCAL_OBSERVATION);
+    }
+
+    private boolean acceptUpdate(OrderBookDelta delta, OrderBookEvidenceOrigin origin) {
         if (durabilityCompromised || pressureGuard.underPressure()
                 || delta.type() != OrderBookDeltaType.UPDATE || !validChecksum(delta)) {
             return false;
@@ -107,7 +123,7 @@ public class OrderBookEvidenceCaptureService {
                         new ActiveSequence(current.sequenceId(), current.marketId(), current.depth(), ordinal,
                                 delta.providerSequence(), current.lastCheckpoint(), current.lastCheckpointOrdinal(),
                                 delta.occurredAt(), knownAt), knownAt,
-                        OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER, ordinal);
+                        OrderBookEvidenceType.DELTA, origin, ordinal);
                 boolean persisted = repository.append(evidence);
                 if (!persisted && !repository.containsTrusted(evidence.contentFingerprint())) {
                     tryInvalidate(key, "evidence persistence was not confirmed");

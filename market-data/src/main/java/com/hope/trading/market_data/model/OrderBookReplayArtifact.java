@@ -27,8 +27,24 @@ public record OrderBookReplayArtifact(
         List<OrderBookLevel> bids,
         List<OrderBookLevel> asks,
         String promotionReason,
-        Instant createdAt
+        Instant createdAt,
+        OrderBookEvidenceOrigin sourceEvidenceOrigin
 ) {
+    public OrderBookReplayArtifact(UUID artifactId, String semanticIdentity, String artifactFingerprint,
+                                   UUID marketId, int depth, UUID sequenceId, Instant evaluationCutoff,
+                                   Instant latestOccurredAt, Instant latestKnownAt, Long sourceStartOrdinal,
+                                   Long sourceEndOrdinal, String provider, String providerSymbol,
+                                   String normalizationVersion, String artifactSchemaVersion,
+                                   String sourceEvidenceFingerprint, String sourceTrustStatus,
+                                   List<String> sourceEvidenceFingerprints, List<OrderBookLevel> bids,
+                                   List<OrderBookLevel> asks, String promotionReason, Instant createdAt) {
+        this(artifactId, semanticIdentity, artifactFingerprint, marketId, depth, sequenceId, evaluationCutoff,
+                latestOccurredAt, latestKnownAt, sourceStartOrdinal, sourceEndOrdinal, provider, providerSymbol,
+                normalizationVersion, artifactSchemaVersion, sourceEvidenceFingerprint, sourceTrustStatus,
+                sourceEvidenceFingerprints, bids, asks, promotionReason, createdAt,
+                OrderBookEvidenceOrigin.PROVIDER);
+    }
+
     public OrderBookReplayArtifact {
         Objects.requireNonNull(artifactId, "artifactId is required");
         Objects.requireNonNull(semanticIdentity, "semanticIdentity is required");
@@ -45,6 +61,7 @@ public record OrderBookReplayArtifact(
         Objects.requireNonNull(asks, "asks are required");
         Objects.requireNonNull(promotionReason, "promotionReason is required");
         Objects.requireNonNull(createdAt, "createdAt is required");
+        Objects.requireNonNull(sourceEvidenceOrigin, "source evidence origin is required");
         if (depth < 1) {
             throw new IllegalArgumentException("depth must be positive");
         }

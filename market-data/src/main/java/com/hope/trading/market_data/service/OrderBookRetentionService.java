@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @Service
 public class OrderBookRetentionService {
-    private static final String ARTIFACT_SCHEMA_VERSION = "order-book-replay-artifact-v2";
+    private static final String ARTIFACT_SCHEMA_VERSION = "order-book-replay-artifact-v3";
     private final OrderBookRetentionRepository repository;
     private final OrderBookEvidenceRepository evidenceRepository;
     private final OrderBookReplayService replayService;
@@ -87,7 +87,7 @@ public class OrderBookRetentionService {
                 replay.sourceStartOrdinal(), replay.sourceEndOrdinal(), replay.provider(), replay.providerSymbol(),
                 replay.normalizationVersion(), ARTIFACT_SCHEMA_VERSION, replay.sourceEvidenceFingerprint(),
                 replay.sourceTrustStatus(), replay.sourceEvidenceFingerprints(), replay.bids(), replay.asks(),
-                promotionReason, createdAt);
+                promotionReason, createdAt, replay.sourceEvidenceOrigin());
         OrderBookReplayArtifact promoted;
         if (repository.saveArtifact(artifact)) {
             promoted = artifact;

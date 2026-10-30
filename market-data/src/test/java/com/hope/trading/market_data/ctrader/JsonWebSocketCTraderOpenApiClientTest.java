@@ -29,6 +29,7 @@ import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.ACCO
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.APPLICATION_AUTH_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_SPOTS_RESPONSE;
+import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_DEPTH_QUOTES_RESPONSE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -63,6 +64,15 @@ class JsonWebSocketCTraderOpenApiClientTest {
     }
 
     @Test
+    void buildsDepthSubscriptionWithRepeatedSymbol() {
+        var payload = JsonWebSocketCTraderOpenApiClient.depthSubscriptionPayload(
+                new ObjectMapper(), 49289512L, List.of(42L, 43L));
+
+        assertThat(payload.path("ctidTraderAccountId").asLong()).isEqualTo(49289512L);
+        assertThat(payload.path("symbolId").toString()).isEqualTo("[42,43]");
+    }
+
+    @Test
     void authenticatesCorrelatesResponsesAndDispatchesSpotEvents() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         CTraderTokenLifecycleService tokenLifecycle = mock(CTraderTokenLifecycleService.class);
@@ -83,7 +93,8 @@ class JsonWebSocketCTraderOpenApiClientTest {
                 case 2100 -> APPLICATION_AUTH_RESPONSE;
                 case 2149 -> ACCOUNT_LIST_RESPONSE;
                 case 2102 -> ACCOUNT_AUTH_RESPONSE;
-                case 2129 -> UNSUBSCRIBE_SPOTS_RESPONSE;
+                    case 2129 -> UNSUBSCRIBE_SPOTS_RESPONSE;
+                    case 2158 -> UNSUBSCRIBE_DEPTH_QUOTES_RESPONSE;
                 case 2136 -> UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE;
                 default -> throw new IllegalStateException("unexpected request");
             };
@@ -108,7 +119,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
                     webSocketListener.onOpen(socket);
                     return CompletableFuture.completedFuture(socket);
                 });
-        CountDownLatch eventReceived = new CountDownLatch(1);
+        CountDownLatch eventReceived = new CountDownLatch(2);
         List<CTraderOpenApiClient.CTraderStreamEvent> events = new ArrayList<>();
 
         CTraderOpenApiClient.CTraderStream stream = client.openStream(event -> {
@@ -116,11 +127,15 @@ class JsonWebSocketCTraderOpenApiClientTest {
             eventReceived.countDown();
         }, () -> { });
         listener.get().onText(socket, "{\"payloadType\":2131,\"payload\":{\"symbolId\":42,\"timestamp\":1000,\"bid\":123,\"ask\":124}}", true);
+        listener.get().onText(socket, "{\"payloadType\":2155,\"payload\":{\"symbolId\":42,\"newQuotes\":[{\"id\":7,\"bid\":123450,\"size\":100}],\"deletedQuotes\":[]}}", true);
         stream.unsubscribeSpots(42);
+        stream.unsubscribeDepth(42);
         stream.unsubscribeLiveTrendbar(42, "M1");
 
         assertThat(eventReceived.await(2, TimeUnit.SECONDS)).isTrue();
-        assertThat(events).singleElement().isInstanceOf(CTraderOpenApiClient.CTraderSpotEvent.class);
+        assertThat(events).hasSize(2);
+        assertThat(events.get(0)).isInstanceOf(CTraderOpenApiClient.CTraderSpotEvent.class);
+        assertThat(events.get(1)).isInstanceOf(CTraderOpenApiClient.CTraderDepthEvent.class);
         assertThat(requestTypes).contains(2129, 2136);
         assertThat(requests.stream().filter(request -> request.path("payloadType").asInt() == 2129)
                 .findFirst().orElseThrow().path("payload").path("ctidTraderAccountId").asLong()).isEqualTo(42L);
