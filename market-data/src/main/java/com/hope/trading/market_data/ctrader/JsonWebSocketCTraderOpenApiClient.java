@@ -217,6 +217,24 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     }
                 }
             }
+            case DEPTH_EVENT -> {
+                long symbolId = payload.path("symbolId").asLong(0);
+                if (symbolId <= 0) return;
+                List<CTraderDepthQuote> quotes = new ArrayList<>();
+                for (JsonNode quote : payload.path("newQuotes")) {
+                    long id = quote.path("id").asLong(0);
+                    if (id <= 0 || !quote.has("size")) continue;
+                    quotes.add(new CTraderDepthQuote(id,
+                            quote.has("bid") ? quote.path("bid").asLong() : null,
+                            quote.has("ask") ? quote.path("ask").asLong() : null,
+                            quote.path("size").asLong()));
+                }
+                List<Long> deleted = new ArrayList<>();
+                for (JsonNode id : payload.path("deletedQuotes")) {
+                    if (id.asLong(0) > 0) deleted.add(id.asLong());
+                }
+                events.accept(new CTraderDepthEvent(symbolId, quotes, deleted));
+            }
             default -> { }
         }
     }
@@ -538,6 +556,26 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             session.request(UNSUBSCRIBE_LIVE_TRENDBAR_REQUEST, UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE,
                     accountPayload().put("symbolId", symbolId).put("period", periodValue(period)));
         }
+
+        @Override public void subscribeDepth(long symbolId) {
+            subscribeDepth(List.of(symbolId));
+        }
+
+        @Override public void subscribeDepth(List<Long> symbolIds) {
+            if (symbolIds == null || symbolIds.isEmpty()) return;
+            session.request(SUBSCRIBE_DEPTH_QUOTES_REQUEST, SUBSCRIBE_DEPTH_QUOTES_RESPONSE,
+                    depthSubscriptionPayload(objectMapper, accountId, symbolIds));
+        }
+
+        @Override public void unsubscribeDepth(long symbolId) {
+            unsubscribeDepth(List.of(symbolId));
+        }
+
+        @Override public void unsubscribeDepth(List<Long> symbolIds) {
+            if (symbolIds == null || symbolIds.isEmpty()) return;
+            session.request(UNSUBSCRIBE_DEPTH_QUOTES_REQUEST, UNSUBSCRIBE_DEPTH_QUOTES_RESPONSE,
+                    depthSubscriptionPayload(objectMapper, accountId, symbolIds));
+        }
         @Override public void close() { session.close(); }
 
         private ObjectNode accountPayload() { return objectMapper.createObjectNode().put("ctidTraderAccountId", accountId); }
@@ -557,6 +595,13 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     }
 
     static ObjectNode spotUnsubscriptionPayload(ObjectMapper objectMapper, long accountId, List<Long> symbolIds) {
+        ObjectNode payload = objectMapper.createObjectNode().put("ctidTraderAccountId", accountId);
+        var symbols = payload.putArray("symbolId");
+        symbolIds.forEach(symbols::add);
+        return payload;
+    }
+
+    static ObjectNode depthSubscriptionPayload(ObjectMapper objectMapper, long accountId, List<Long> symbolIds) {
         ObjectNode payload = objectMapper.createObjectNode().put("ctidTraderAccountId", accountId);
         var symbols = payload.putArray("symbolId");
         symbolIds.forEach(symbols::add);
@@ -602,10 +647,11 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     int payloadType = node.path("payloadType").asInt();
                     log.info("CTRADER_PAYLOAD_DECODED diagnosticId={} sessionId={} payloadType={} clientMsgId={}",
                             diagnosticId, sessionId, payloadType, node.path("clientMsgId").asText(""));
-                    if (payloadType == SPOT_EVENT) {
+                    if (payloadType == SPOT_EVENT || payloadType == DEPTH_EVENT) {
                         JsonNode payload = node.path("payload");
-                        log.info("CTRADER_SPOT_EVENT_RECEIVED diagnosticId={} sessionId={} symbolId={} timestamp={} hasBid={} hasAsk={}",
-                                diagnosticId, sessionId, payload.path("symbolId").asLong(0), payload.path("timestamp").asLong(0),
+                        log.info("CTRADER_MARKET_EVENT_RECEIVED diagnosticId={} sessionId={} payloadType={} symbolId={} timestamp={} hasBid={} hasAsk={}",
+                                diagnosticId, sessionId, payloadType, payload.path("symbolId").asLong(0),
+                                payload.path("timestamp").asLong(0),
                                 payload.has("bid"), payload.has("ask"));
                         events.accept(node);
                     } else {

@@ -303,6 +303,25 @@ class OrderBookRetentionPersistenceTest {
     }
 
     @Test
+    void promotionRejectsMixedOriginWhenCanonicalEvidenceHasOnlyOneOrigin() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        OrderBookEvidence persisted = evidence(marketId, sequenceId);
+        evidenceRepository.append(persisted);
+        OrderBookReplayResult forged = new OrderBookReplayResult(
+                OrderBookReplayResult.ReplayStatus.AVAILABLE, marketId, 25, sequenceId, KNOWN_AT,
+                KNOWN_AT.minusSeconds(1), KNOWN_AT, 0L, 0L, "KRAKEN", "PF_XBTUSD",
+                OrderBookEvidenceFingerprint.NORMALIZATION_VERSION,
+                aggregateFingerprint(persisted.contentFingerprint()), "TRUSTED",
+                List.of(persisted.contentFingerprint()), persisted.bids(), persisted.asks(), null,
+                OrderBookEvidenceOrigin.MIXED);
+
+        assertThatThrownBy(() -> retentionService.promote(forged, "research:sample:fake-mixed", "test mixed origin"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match persisted evidence");
+    }
+
+    @Test
     void replaySelectsTheCurrentActiveSequenceWithoutUsingInvalidatedHistory() {
         UUID marketId = markets.saveAndFlush(market()).getMarketId();
         UUID invalidatedSequenceId = UUID.randomUUID();

@@ -27,6 +27,14 @@ public interface CTraderOpenApiClient {
 
     record CTraderSpotEvent(long symbolId, Long bid, Long ask, Instant occurredAt)
             implements CTraderStreamEvent { }
+    record CTraderDepthQuote(long id, Long bid, Long ask, long size) { }
+    record CTraderDepthEvent(long symbolId, List<CTraderDepthQuote> newQuotes,
+                             List<Long> deletedQuoteIds) implements CTraderStreamEvent {
+        public CTraderDepthEvent {
+            newQuotes = List.copyOf(newQuotes == null ? List.of() : newQuotes);
+            deletedQuoteIds = List.copyOf(deletedQuoteIds == null ? List.of() : deletedQuoteIds);
+        }
+    }
     record CTraderLiveTrendbarEvent(long symbolId, String period, CTraderTrendbar trendbar,
                                     Instant occurredAt, Long spotBid, boolean closeAvailable)
             implements CTraderStreamEvent {
@@ -36,7 +44,7 @@ public interface CTraderOpenApiClient {
         }
     }
 
-    sealed interface CTraderStreamEvent permits CTraderSpotEvent, CTraderLiveTrendbarEvent { }
+    sealed interface CTraderStreamEvent permits CTraderSpotEvent, CTraderDepthEvent, CTraderLiveTrendbarEvent { }
 
     interface CTraderStream extends AutoCloseable {
         void subscribeSpots(long symbolId);
@@ -49,6 +57,22 @@ public interface CTraderOpenApiClient {
 
         default void unsubscribeSpots(List<Long> symbolIds) {
             symbolIds.forEach(this::unsubscribeSpots);
+        }
+
+        default void subscribeDepth(long symbolId) {
+            throw new UnsupportedOperationException("cTrader depth subscriptions are unavailable");
+        }
+
+        default void subscribeDepth(List<Long> symbolIds) {
+            symbolIds.forEach(this::subscribeDepth);
+        }
+
+        default void unsubscribeDepth(long symbolId) {
+            throw new UnsupportedOperationException("cTrader depth subscriptions are unavailable");
+        }
+
+        default void unsubscribeDepth(List<Long> symbolIds) {
+            symbolIds.forEach(this::unsubscribeDepth);
         }
 
         void subscribeLiveTrendbar(long symbolId, String period);

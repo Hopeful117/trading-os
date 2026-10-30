@@ -10,8 +10,15 @@ import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.model.MarketState;
+import com.hope.trading.market_data.model.OrderBookDelta;
+import com.hope.trading.market_data.model.OrderBookDeltaType;
+import com.hope.trading.market_data.model.OrderBookKey;
+import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.service.OhlcEventPublisher;
+import com.hope.trading.market_data.service.OrderBookEventPublisher;
+import com.hope.trading.market_data.service.OrderBookEvidenceCaptureService;
+import com.hope.trading.market_data.service.OrderBookStateService;
 import com.hope.trading.market_data.service.TickerEventPublisher;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +38,8 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Set;
+import java.util.HashMap;
+import java.util.Comparator;
 
 @Component
 @ConditionalOnProperty(name = "ctrader.market-data.enabled", havingValue = "true")
@@ -52,24 +61,52 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     private final Map<String, OhlcEvent> forming = new ConcurrentHashMap<>();
     private final Set<Long> subscribedSpots = ConcurrentHashMap.newKeySet();
     private final Set<String> subscribedTrendbars = ConcurrentHashMap.newKeySet();
+    private final Set<Long> subscribedDepths = ConcurrentHashMap.newKeySet();
+    private final Map<Long, DepthBook> depthBooks = new ConcurrentHashMap<>();
+    private final Map<OrderBookKey, Object> orderBookLifecycleLocks = new ConcurrentHashMap<>();
     private final AtomicInteger reconnectAttempts = new AtomicInteger();
     private final Map<String, Instant> lastProviderEvents = new ConcurrentHashMap<>();
+    private final OrderBookStateService orderBookStateService;
+    private final OrderBookEventPublisher orderBookEventPublisher;
+    private final OrderBookEvidenceCaptureService orderBookEvidenceCaptureService;
     private volatile CTraderOpenApiClient.CTraderStream stream;
     private volatile boolean intentionallyDisconnected;
     private boolean recoveryScheduled;
     private boolean recoveryInProgress;
     private long connectionGeneration;
 
-    @Autowired
     public CTraderDataStreamProvider(CTraderOpenApiClient client, TickerEventPublisher tickerPublisher,
                                      OhlcEventPublisher ohlcPublisher, Clock clock,
                                      CTraderMarketDataProperties properties, MarketStateBuilder marketStateBuilder) {
-        this(client, tickerPublisher, ohlcPublisher, clock, properties, marketStateBuilder, RECONNECT_DELAYS);
+        this(client, tickerPublisher, ohlcPublisher, clock, properties, marketStateBuilder,
+                null, null, null, RECONNECT_DELAYS);
+    }
+
+    @Autowired
+    public CTraderDataStreamProvider(CTraderOpenApiClient client, TickerEventPublisher tickerPublisher,
+                                     OhlcEventPublisher ohlcPublisher, Clock clock,
+                                     CTraderMarketDataProperties properties, MarketStateBuilder marketStateBuilder,
+                                     OrderBookStateService orderBookStateService,
+                                     OrderBookEventPublisher orderBookEventPublisher,
+                                     OrderBookEvidenceCaptureService orderBookEvidenceCaptureService) {
+        this(client, tickerPublisher, ohlcPublisher, clock, properties, marketStateBuilder,
+                orderBookStateService, orderBookEventPublisher, orderBookEvidenceCaptureService, RECONNECT_DELAYS);
     }
 
     CTraderDataStreamProvider(CTraderOpenApiClient client, TickerEventPublisher tickerPublisher,
                               OhlcEventPublisher ohlcPublisher, Clock clock,
                               CTraderMarketDataProperties properties, MarketStateBuilder marketStateBuilder,
+                              Duration[] reconnectDelays) {
+        this(client, tickerPublisher, ohlcPublisher, clock, properties, marketStateBuilder,
+                null, null, null, reconnectDelays);
+    }
+
+    CTraderDataStreamProvider(CTraderOpenApiClient client, TickerEventPublisher tickerPublisher,
+                              OhlcEventPublisher ohlcPublisher, Clock clock,
+                              CTraderMarketDataProperties properties, MarketStateBuilder marketStateBuilder,
+                              OrderBookStateService orderBookStateService,
+                              OrderBookEventPublisher orderBookEventPublisher,
+                              OrderBookEvidenceCaptureService orderBookEvidenceCaptureService,
                               Duration[] reconnectDelays) {
         this.client = client;
         this.tickerPublisher = tickerPublisher;
@@ -77,6 +114,9 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         this.clock = clock;
         this.properties = properties;
         this.marketStateBuilder = marketStateBuilder;
+        this.orderBookStateService = orderBookStateService;
+        this.orderBookEventPublisher = orderBookEventPublisher;
+        this.orderBookEvidenceCaptureService = orderBookEvidenceCaptureService;
         this.reconnectDelays = reconnectDelays.clone();
     }
 
@@ -123,8 +163,10 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         stream = null;
         subscribedSpots.clear();
         subscribedTrendbars.clear();
+        subscribedDepths.clear();
         if (current != null) current.close();
         forming.clear();
+        invalidateDepthBooks();
         return Mono.empty();
     }
 
@@ -136,9 +178,13 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                     .filter(market -> desired.putIfAbsent(key(market, request), new ActiveSubscription(market, request)) == null)
                     .toList();
             try {
-                subscribeSpots(added, request);
-                added.stream().filter(market -> request.type() == MarketStreamType.OHLC)
-                        .forEach(market -> subscribeTrendbar(market, request));
+                if (request.type() == MarketStreamType.ORDER_BOOK) {
+                    subscribeDepth(added);
+                } else {
+                    subscribeSpots(added, request);
+                    added.stream().filter(market -> request.type() == MarketStreamType.OHLC)
+                            .forEach(market -> subscribeTrendbar(market, request));
+                }
             } catch (RuntimeException exception) {
                 rollbackSubscriptions(added, request);
                 throw exception;
@@ -152,12 +198,20 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         return Mono.fromRunnable(() -> markets.stream().filter(Objects::nonNull).forEach(market -> {
             ActiveSubscription removed = desired.remove(key(market, request));
             if (removed != null) forming.remove(key(market, request));
+            if (removed != null && request.type() == MarketStreamType.ORDER_BOOK
+                    && noOtherDepthDemand(symbolId(market))) {
+                clearOrderBook(market, request.parameters().depth());
+            }
         })).then(Mono.fromRunnable(this::reconcileAfterDemandChange));
     }
 
     private void subscribeProvider(Market market, MarketStreamRequest request) {
-        subscribeSpots(List.of(market), request);
-        if (request.type() == MarketStreamType.OHLC) subscribeTrendbar(market, request);
+        if (request.type() == MarketStreamType.ORDER_BOOK) {
+            subscribeDepth(List.of(market));
+        } else {
+            subscribeSpots(List.of(market), request);
+            if (request.type() == MarketStreamType.OHLC) subscribeTrendbar(market, request);
+        }
     }
 
     private void subscribeSpots(long symbolId) {
@@ -184,7 +238,8 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         boolean restartRequired = false;
         for (Market market : markets) {
             desired.remove(key(market, request));
-            if ((request.type() == MarketStreamType.TICKER || request.type() == MarketStreamType.OHLC)
+            if ((request.type() == MarketStreamType.TICKER || request.type() == MarketStreamType.OHLC
+                    || request.type() == MarketStreamType.ORDER_BOOK)
                     && noOtherSpotDemand(symbolId(market))) {
                 long symbolId = symbolId(market);
                 if (subscribedSpots.remove(symbolId)) {
@@ -193,6 +248,11 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
             }
             if (request.type() == MarketStreamType.OHLC) {
                 subscribedTrendbars.remove(symbolId(market) + ":" + period(request.parameters().interval()));
+            }
+            if (request.type() == MarketStreamType.ORDER_BOOK && noOtherDepthDemand(symbolId(market))) {
+                subscribedDepths.remove(symbolId(market));
+                clearOrderBook(market, request.parameters().depth());
+                restartRequired = true;
             }
         }
         if (restartRequired) restartStreamAfterFailedSubscription();
@@ -207,6 +267,8 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         stream = null;
         subscribedSpots.clear();
         subscribedTrendbars.clear();
+        subscribedDepths.clear();
+        invalidateDepthBooks();
         try {
             current.close();
         } catch (RuntimeException exception) {
@@ -232,9 +294,23 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         if (subscribedTrendbars.add(trendbarKey)) stream.subscribeLiveTrendbar(symbolId, period(request.parameters().interval()));
     }
 
+    private synchronized void subscribeDepth(List<Market> markets) {
+        List<Long> newSymbolIds = markets.stream().map(this::symbolId).distinct()
+                .filter(subscribedDepths::add).toList();
+        if (newSymbolIds.isEmpty()) return;
+        try {
+            subscribeSpots(newSymbolIds);
+            stream.subscribeDepth(newSymbolIds);
+        } catch (RuntimeException exception) {
+            subscribedDepths.removeAll(newSymbolIds);
+            throw exception;
+        }
+    }
+
     private boolean noOtherSpotDemand(long symbolId) {
         return desired.values().stream().noneMatch(active ->
-                (active.request().type() == MarketStreamType.TICKER || active.request().type() == MarketStreamType.OHLC)
+                (active.request().type() == MarketStreamType.TICKER || active.request().type() == MarketStreamType.OHLC
+                        || active.request().type() == MarketStreamType.ORDER_BOOK)
                         && symbolId(active.market()) == symbolId);
     }
 
@@ -248,6 +324,12 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                         && period(active.request().parameters().interval()).equals(period));
     }
 
+    private boolean noOtherDepthDemand(long symbolId) {
+        return desired.values().stream().noneMatch(active ->
+                active.request().type() == MarketStreamType.ORDER_BOOK
+                        && symbolId(active.market()) == symbolId);
+    }
+
     private synchronized void reconcileAfterDemandChange() {
         if (stream == null) return;
 
@@ -257,6 +339,9 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         List<Long> spotsToRemove = subscribedSpots.stream()
                 .filter(this::noOtherSpotDemand)
                 .toList();
+        List<Long> depthsToRemove = subscribedDepths.stream()
+                .filter(this::noOtherDepthDemand)
+                .toList();
 
         try {
             for (String trendbarKey : trendbarsToRemove) {
@@ -264,8 +349,11 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                 stream.unsubscribeLiveTrendbar(Long.parseLong(parts[0]), parts[1]);
             }
             if (!spotsToRemove.isEmpty()) stream.unsubscribeSpots(spotsToRemove);
+            if (!depthsToRemove.isEmpty()) stream.unsubscribeDepth(depthsToRemove);
             subscribedTrendbars.removeAll(trendbarsToRemove);
             subscribedSpots.removeAll(spotsToRemove);
+            subscribedDepths.removeAll(depthsToRemove);
+            depthsToRemove.forEach(symbolId -> depthBooks.remove(symbolId));
         } catch (RuntimeException exception) {
             log.warn("CTRADER_UNSUBSCRIBE_RECONCILIATION_ERROR errorType={} message={}",
                     exception.getClass().getSimpleName(), exception.getMessage());
@@ -278,6 +366,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         if (generation != connectionGeneration) return;
         boolean accepted = false;
         if (event instanceof CTraderOpenApiClient.CTraderSpotEvent spot) accepted = handleSpot(spot);
+        if (event instanceof CTraderOpenApiClient.CTraderDepthEvent depth) accepted = handleDepth(depth);
         if (event instanceof CTraderOpenApiClient.CTraderLiveTrendbarEvent trendbar) accepted = handleTrendbar(trendbar);
         if (accepted) {
             recoveryInProgress = false;
@@ -311,6 +400,52 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                     active.market().getMarketState() != null && active.market().getMarketState().isTradable());
         });
         return !matching.isEmpty();
+    }
+
+    private boolean handleDepth(CTraderOpenApiClient.CTraderDepthEvent event) {
+        if (orderBookStateService == null || orderBookEvidenceCaptureService == null
+                || orderBookEventPublisher == null) {
+            throw new IllegalStateException("cTrader order-book capture is not configured");
+        }
+        List<ActiveSubscription> matching = desired.values().stream()
+                .filter(active -> active.request().type() == MarketStreamType.ORDER_BOOK
+                        && symbolId(active.market()) == event.symbolId())
+                .toList();
+        if (matching.isEmpty()) return false;
+        Market market = matching.getFirst().market();
+        DepthBook book = depthBooks.computeIfAbsent(event.symbolId(), ignored -> new DepthBook());
+        DepthBook.Change change = book.apply(event, market);
+        if (!change.changed()) return true;
+        Instant observedAt = clock.instant();
+        for (ActiveSubscription active : matching) {
+            int depth = active.request().parameters().depth();
+            OrderBookKey key = new OrderBookKey(active.market().getMarketId(), depth);
+            synchronized (orderBookLifecycleLocks.computeIfAbsent(key, ignored -> new Object())) {
+                if (!book.ready(depth)) {
+                    if (!book.initialObservation()) continue;
+                    OrderBookDelta snapshot = new OrderBookDelta(active.market().getMarketId(), MarketProvider.CTRADER,
+                            active.market().getSymbol(), active.market().getProviderSymbol(), depth,
+                            OrderBookDeltaType.SNAPSHOT, book.levels(true, depth), book.levels(false, depth),
+                            observedAt, null, null);
+                    if (!orderBookEvidenceCaptureService.acceptLocalSnapshot(snapshot)) continue;
+                    book.markReady(depth);
+                    orderBookEventPublisher.publish(orderBookStateService.initialize(snapshot));
+                    continue;
+                }
+                OrderBookDelta delta = new OrderBookDelta(active.market().getMarketId(), MarketProvider.CTRADER,
+                        active.market().getSymbol(), active.market().getProviderSymbol(), depth,
+                        OrderBookDeltaType.UPDATE, change.bids(), change.asks(), observedAt, null, null);
+                if (!orderBookEvidenceCaptureService.acceptLocalUpdate(delta)) {
+                    clearOrderBook(active.market(), depth);
+                    continue;
+                }
+                orderBookStateService.update(delta).ifPresent(snapshot -> {
+                    orderBookEvidenceCaptureService.checkpoint(delta, snapshot);
+                    orderBookEventPublisher.publish(snapshot);
+                });
+            }
+        }
+        return true;
     }
 
     private boolean handleTrendbar(CTraderOpenApiClient.CTraderLiveTrendbarEvent event) {
@@ -378,6 +513,8 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         stream = null;
         subscribedSpots.clear();
         subscribedTrendbars.clear();
+        subscribedDepths.clear();
+        invalidateDepthBooks();
         markUnavailable();
         if (intentionallyDisconnected || desired.isEmpty()) return;
         scheduleRecovery();
@@ -432,6 +569,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         stream = null;
         subscribedSpots.clear();
         subscribedTrendbars.clear();
+        subscribedDepths.clear();
         if (failed != null) {
             try {
                 failed.close();
@@ -440,6 +578,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                         closeException.getClass().getSimpleName(), closeException.getMessage());
             }
         }
+        invalidateDepthBooks();
         markUnavailable();
     }
 
@@ -481,7 +620,8 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
                 .collect(java.util.stream.Collectors.groupingBy(ActiveSubscription::request))
                 .forEach((request, subscriptions) -> {
                     List<Market> markets = subscriptions.stream().map(ActiveSubscription::market).toList();
-                    subscribeSpots(markets, request);
+                    if (request.type() == MarketStreamType.ORDER_BOOK) subscribeDepth(markets);
+                    else subscribeSpots(markets, request);
                     if (request.type() == MarketStreamType.OHLC) {
                         markets.forEach(market -> subscribeTrendbar(market, request));
                     }
@@ -536,14 +676,96 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
 
     private void validate(List<Market> markets, MarketStreamRequest request) {
         if (markets == null || request == null || request.type() == null) throw new IllegalArgumentException("cTrader stream request is required");
-        if (request.type() != MarketStreamType.TICKER && request.type() != MarketStreamType.OHLC) {
-            throw new UnsupportedOperationException("cTrader supports only ticker and OHLC streams");
+        if (request.type() != MarketStreamType.TICKER && request.type() != MarketStreamType.OHLC
+                && request.type() != MarketStreamType.ORDER_BOOK) {
+            throw new UnsupportedOperationException("cTrader supports only ticker, OHLC, and capture-only order-book streams");
         }
         if (request.type() == MarketStreamType.OHLC && (request.parameters() == null || request.parameters().interval() == null)) {
             throw new IllegalArgumentException("cTrader OHLC stream requires an interval");
         }
+        if (request.type() == MarketStreamType.ORDER_BOOK && (request.parameters() == null
+                || request.parameters().depth() == null || request.parameters().depth() < 1)) {
+            throw new IllegalArgumentException("cTrader order-book stream requires a positive depth");
+        }
         markets.stream().filter(Objects::nonNull).forEach(this::symbolId);
     }
 
+    private void clearOrderBook(Market market, int depth) {
+        OrderBookKey key = new OrderBookKey(market.getMarketId(), depth);
+        if (orderBookStateService != null) orderBookStateService.clear(key);
+        if (orderBookEventPublisher != null) orderBookEventPublisher.clear(key);
+        if (orderBookEvidenceCaptureService != null) orderBookEvidenceCaptureService.invalidate(key);
+    }
+
+    private void invalidateDepthBooks() {
+        desired.values().stream().filter(active -> active.request().type() == MarketStreamType.ORDER_BOOK)
+                .forEach(active -> clearOrderBook(active.market(), active.request().parameters().depth()));
+        depthBooks.clear();
+    }
+
     private record ActiveSubscription(Market market, MarketStreamRequest request) { }
+
+    private static final class DepthBook {
+        private final Map<Long, Quote> quotes = new HashMap<>();
+        private final Set<Integer> readyDepths = new java.util.HashSet<>();
+        private boolean initialObservation;
+        private Map<BigDecimal, BigDecimal> previousBids = Map.of();
+        private Map<BigDecimal, BigDecimal> previousAsks = Map.of();
+
+        private Change apply(CTraderOpenApiClient.CTraderDepthEvent event, Market market) {
+            previousBids = aggregate(true);
+            previousAsks = aggregate(false);
+            event.deletedQuoteIds().forEach(quotes::remove);
+            event.newQuotes().forEach(quote -> {
+                quotes.remove(quote.id());
+                if (quote.size() > 0) {
+                    if (quote.bid() != null) quotes.put(quote.id(), new Quote(true, decode(quote.bid(), market), quantity(quote.size())));
+                    else if (quote.ask() != null) quotes.put(quote.id(), new Quote(false, decode(quote.ask(), market), quantity(quote.size())));
+                }
+            });
+            boolean hasBid = event.newQuotes().stream().anyMatch(quote -> quote.bid() != null);
+            boolean hasAsk = event.newQuotes().stream().anyMatch(quote -> quote.ask() != null);
+            initialObservation = initialObservation || hasBid && hasAsk;
+            return new Change(changed(previousBids, aggregate(true)), changed(previousAsks, aggregate(false)));
+        }
+
+        private boolean ready(int depth) { return readyDepths.contains(depth); }
+        private void markReady(int depth) { readyDepths.add(depth); }
+        // cTrader exposes no completeness marker; a same-event two-sided observation is the
+        // explicit local capture boundary, never a claim of provider-complete depth.
+        private boolean initialObservation() { return initialObservation && !aggregate(true).isEmpty()
+                && !aggregate(false).isEmpty(); }
+
+        private List<OrderBookLevel> levels(boolean bids, int depth) {
+            Comparator<BigDecimal> comparator = bids ? Comparator.reverseOrder() : Comparator.naturalOrder();
+            return aggregate(bids).entrySet().stream().sorted(Map.Entry.comparingByKey(comparator))
+                    .limit(depth).map(entry -> new OrderBookLevel(entry.getKey(), entry.getValue())).toList();
+        }
+
+        private Map<BigDecimal, BigDecimal> aggregate(boolean bids) {
+            Map<BigDecimal, BigDecimal> result = new HashMap<>();
+            quotes.values().stream().filter(quote -> quote.bid == bids)
+                    .forEach(quote -> result.merge(quote.price, quote.quantity, BigDecimal::add));
+            return result;
+        }
+
+        private List<OrderBookLevel> changed(Map<BigDecimal, BigDecimal> before, Map<BigDecimal, BigDecimal> after) {
+            return java.util.stream.Stream.concat(before.keySet().stream(), after.keySet().stream()).distinct()
+                    .filter(price -> !java.util.Objects.equals(before.getOrDefault(price, BigDecimal.ZERO),
+                            after.getOrDefault(price, BigDecimal.ZERO)))
+                    .map(price -> new OrderBookLevel(price, after.getOrDefault(price, BigDecimal.ZERO))).toList();
+        }
+
+        private BigDecimal decode(long value, Market market) {
+            int precision = market.getMarketConstraints() == null || market.getMarketConstraints().pricePrecision() == null
+                    ? 5 : market.getMarketConstraints().pricePrecision();
+            return com.hope.trading.ctrader.openapi.codec.CTraderPriceDecoder.decode(value, precision);
+        }
+
+        private BigDecimal quantity(long value) { return BigDecimal.valueOf(value, 2); }
+        private record Quote(boolean bid, BigDecimal price, BigDecimal quantity) { }
+        private record Change(List<OrderBookLevel> bids, List<OrderBookLevel> asks) {
+            private boolean changed() { return !bids.isEmpty() || !asks.isEmpty(); }
+        }
+    }
 }

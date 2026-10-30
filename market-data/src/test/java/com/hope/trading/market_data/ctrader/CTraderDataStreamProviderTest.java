@@ -8,9 +8,13 @@ import com.hope.trading.market_data.model.MarketConstraints;
 import com.hope.trading.market_data.model.MarketStreamParameters;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
+import com.hope.trading.market_data.model.OrderBookKey;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.service.OhlcEventPublisher;
+import com.hope.trading.market_data.service.OrderBookEventPublisher;
+import com.hope.trading.market_data.service.OrderBookEvidenceCaptureService;
+import com.hope.trading.market_data.service.OrderBookStateService;
 import com.hope.trading.market_data.service.TickerEventPublisher;
 import com.hope.trading.market_data.ctrader.authentication.CTraderEnvironment;
 import com.hope.trading.market_data.ctrader.authentication.CTraderMarketDataProperties;
@@ -34,6 +38,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class CTraderDataStreamProviderTest {
     private static final Instant RECEIVED = Instant.parse("2026-10-25T12:00:00Z");
@@ -481,6 +488,66 @@ class CTraderDataStreamProviderTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void cTraderDepthDoesNotTreatTheFirstEventAsACompleteBook() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.ORDER_BOOK,
+                new MarketStreamParameters(null, 2));
+        fixture.provider.subscribe(List.of(fixture.market), request).block();
+
+        fixture.emit(new CTraderOpenApiClient.CTraderDepthEvent(42,
+                List.of(new CTraderOpenApiClient.CTraderDepthQuote(1, 123450L, null, 100)), List.of()));
+
+        verify(fixture.evidenceCapture, never()).acceptLocalSnapshot(any());
+        assertThat(fixture.client.current.depthSubscriptions).containsExactly(42L);
+        assertThat(fixture.client.current.spotSubscriptions).containsExactly(42L);
+
+        fixture.emit(new CTraderOpenApiClient.CTraderDepthEvent(42,
+                List.of(new CTraderOpenApiClient.CTraderDepthQuote(2, null, 123550L, 200)), List.of()));
+
+         verify(fixture.evidenceCapture, never()).acceptLocalSnapshot(any());
+
+         fixture.emit(new CTraderOpenApiClient.CTraderDepthEvent(42,
+                 List.of(new CTraderOpenApiClient.CTraderDepthQuote(3, 123450L, null, 100),
+                         new CTraderOpenApiClient.CTraderDepthQuote(4, null, 123550L, 200)), List.of()));
+
+         verify(fixture.evidenceCapture).acceptLocalSnapshot(any());
+     }
+
+    @Test
+    void clearsPublishedBookAndInvalidatesEvidenceWhenFinalDepthDemandIsReleased() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.ORDER_BOOK,
+                new MarketStreamParameters(null, 2));
+        fixture.provider.subscribe(List.of(fixture.market), request).block();
+        fixture.emit(new CTraderOpenApiClient.CTraderDepthEvent(42,
+                List.of(new CTraderOpenApiClient.CTraderDepthQuote(1, 123450L, null, 100),
+                        new CTraderOpenApiClient.CTraderDepthQuote(2, null, 123550L, 200)), List.of()));
+
+        fixture.provider.unsubscribe(List.of(fixture.market), request).block();
+
+        verify(fixture.evidenceCapture).invalidate(new OrderBookKey(fixture.market.getMarketId(), 2));
+        assertThat(fixture.orderBookEventPublisher.streamByMarketAndDepth(fixture.market.getMarketId(), 2)
+                .hasElements().timeout(java.time.Duration.ofMillis(100)).onErrorReturn(false).block()).isFalse();
+        assertThat(fixture.client.current.unsubscribedDepths).containsExactly(42L);
+    }
+
+    @Test
+    void invalidatesDepthEvidenceWhenTheTransportIsDisconnected() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest request = new MarketStreamRequest(MarketStreamType.ORDER_BOOK,
+                new MarketStreamParameters(null, 2));
+        fixture.provider.subscribe(List.of(fixture.market), request).block();
+        fixture.emit(new CTraderOpenApiClient.CTraderDepthEvent(42,
+                List.of(new CTraderOpenApiClient.CTraderDepthQuote(1, 123450L, null, 100),
+                        new CTraderOpenApiClient.CTraderDepthQuote(2, null, 123550L, 200)), List.of()));
+
+        fixture.provider.disconnect().block();
+
+        verify(fixture.evidenceCapture).invalidate(new OrderBookKey(fixture.market.getMarketId(), 2));
+        assertThat(fixture.client.current.closed).isTrue();
+    }
+
     private CTraderOpenApiClient.CTraderLiveTrendbarEvent bar(long timestamp, long low, Instant occurredAt) {
         return new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1",
                 new CTraderOpenApiClient.CTraderTrendbar(timestamp, 1, 3, low, 2, 100), occurredAt);
@@ -498,6 +565,9 @@ class CTraderDataStreamProviderTest {
         private final FakeClient client = new FakeClient();
         private final TickerEventPublisher tickerPublisher = mock(TickerEventPublisher.class);
         private final OhlcEventPublisher ohlcPublisher = mock(OhlcEventPublisher.class);
+        private final OrderBookStateService orderBookStateService = new OrderBookStateService();
+        private final OrderBookEventPublisher orderBookEventPublisher = new OrderBookEventPublisher();
+        private final OrderBookEvidenceCaptureService evidenceCapture = mock(OrderBookEvidenceCaptureService.class);
         private final CTraderDataStreamProvider provider;
 
         private Fixture() {
@@ -505,10 +575,13 @@ class CTraderDataStreamProviderTest {
         }
 
         private Fixture(java.time.Duration[] reconnectDelays) {
+            when(evidenceCapture.acceptLocalSnapshot(any())).thenReturn(true);
+            when(evidenceCapture.acceptLocalUpdate(any())).thenReturn(true);
             provider = new CTraderDataStreamProvider(client, tickerPublisher, ohlcPublisher,
-                    Clock.fixed(RECEIVED, ZoneOffset.UTC),
-                    new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "client", "secret", "wss://fixture",
-                            java.time.Duration.ofSeconds(1), Map.of()), new MarketStateBuilder(), reconnectDelays);
+                     Clock.fixed(RECEIVED, ZoneOffset.UTC),
+                     new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "client", "secret", "wss://fixture",
+                             java.time.Duration.ofSeconds(1), Map.of()), new MarketStateBuilder(),
+                     orderBookStateService, orderBookEventPublisher, evidenceCapture, reconnectDelays);
             doAnswer(invocation -> { tickers.add(invocation.getArgument(0)); return null; })
                     .when(tickerPublisher).publish(any(TickerEvent.class));
             doAnswer(invocation -> { ohlc.add(invocation.getArgument(0)); return null; })
@@ -573,6 +646,8 @@ class CTraderDataStreamProviderTest {
         private final List<Long> unsubscribedSpots = new ArrayList<>();
         private final List<String> trendbarSubscriptions = new ArrayList<>();
         private final List<String> unsubscribedTrendbars = new ArrayList<>();
+        private final List<Long> depthSubscriptions = new ArrayList<>();
+        private final List<Long> unsubscribedDepths = new ArrayList<>();
         private boolean closed;
         private FakeStream(FakeClient client, Consumer<CTraderOpenApiClient.CTraderStreamEvent> events,
                            Runnable termination) {
@@ -603,6 +678,8 @@ class CTraderDataStreamProviderTest {
             if (client.failSpotUnsubscription) throw new IllegalStateException("spot unsubscription failed");
             unsubscribedSpots.add(symbolId);
         }
+        @Override public void subscribeDepth(long symbolId) { depthSubscriptions.add(symbolId); }
+        @Override public void unsubscribeDepth(long symbolId) { unsubscribedDepths.add(symbolId); }
         @Override public void subscribeLiveTrendbar(long symbolId, String period) {
             if (client.failTrendbarSubscription) throw new IllegalStateException("trendbar subscription failed");
             trendbarSubscriptions.add(symbolId + ":" + period);

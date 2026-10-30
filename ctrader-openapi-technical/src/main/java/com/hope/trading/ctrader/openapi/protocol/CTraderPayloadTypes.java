@@ -34,6 +34,11 @@ public final class CTraderPayloadTypes {
     public static final int GET_TRENDBARS_RESPONSE = 2138;
     public static final int SUBSCRIBE_LIVE_TRENDBAR_RESPONSE = 2165;
     public static final int UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE = 2166;
+    public static final int DEPTH_EVENT = 2155;
+    public static final int SUBSCRIBE_DEPTH_QUOTES_REQUEST = 2156;
+    public static final int SUBSCRIBE_DEPTH_QUOTES_RESPONSE = 2157;
+    public static final int UNSUBSCRIBE_DEPTH_QUOTES_REQUEST = 2158;
+    public static final int UNSUBSCRIBE_DEPTH_QUOTES_RESPONSE = 2159;
 
     private CTraderPayloadTypes() { }
 }

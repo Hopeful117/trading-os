@@ -22,8 +22,21 @@ public record OrderBookReplayResult(
         List<String> sourceEvidenceFingerprints,
         List<OrderBookLevel> bids,
         List<OrderBookLevel> asks,
-        String reason
+        String reason,
+        OrderBookEvidenceOrigin sourceEvidenceOrigin
 ) {
+    public OrderBookReplayResult(ReplayStatus status, UUID marketId, int depth, UUID sequenceId,
+                                 Instant evaluationCutoff, Instant latestOccurredAt, Instant latestKnownAt,
+                                 Long sourceStartOrdinal, Long sourceEndOrdinal, String provider,
+                                 String providerSymbol, String normalizationVersion,
+                                 String sourceEvidenceFingerprint, String sourceTrustStatus,
+                                 List<String> sourceEvidenceFingerprints, List<OrderBookLevel> bids,
+                                 List<OrderBookLevel> asks, String reason) {
+        this(status, marketId, depth, sequenceId, evaluationCutoff, latestOccurredAt, latestKnownAt,
+                sourceStartOrdinal, sourceEndOrdinal, provider, providerSymbol, normalizationVersion,
+                sourceEvidenceFingerprint, sourceTrustStatus, sourceEvidenceFingerprints, bids, asks, reason,
+                OrderBookEvidenceOrigin.PROVIDER);
+    }
     public enum ReplayStatus {
         AVAILABLE,
         INVALID,
