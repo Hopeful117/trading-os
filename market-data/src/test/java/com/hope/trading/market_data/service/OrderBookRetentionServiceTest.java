@@ -124,6 +124,23 @@ class OrderBookRetentionServiceTest {
     }
 
     @Test
+    void rejectsDependencyConflictWithDifferentSegmentTarget() {
+        OrderBookRetentionRepository repository = mock(OrderBookRetentionRepository.class);
+        UUID artifactId = UUID.randomUUID();
+        UUID segmentId = UUID.randomUUID();
+        when(repository.saveDependency(any())).thenReturn(false);
+        when(repository.findDependency("dependency")).thenReturn(java.util.Optional.of(
+                new OrderBookEvidenceDependency(UUID.randomUUID(), "dependency", "RESEARCH", "one", artifactId,
+                        null, segmentId, OrderBookDependencyState.PROTECTED, "reason", NOW, null)));
+        OrderBookRetentionService service = service(repository, mock(OrderBookEvidenceRepository.class));
+
+        assertThatThrownBy(() -> service.protectDependency("dependency", "RESEARCH", "one", artifactId,
+                null, UUID.randomUUID(), "reason"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("target");
+    }
+
+    @Test
     void rejectsHoldConflictWithDifferentReason() {
         OrderBookRetentionRepository repository = mock(OrderBookRetentionRepository.class);
         UUID artifactId = UUID.randomUUID();

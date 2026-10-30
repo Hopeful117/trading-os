@@ -5,6 +5,8 @@ import com.hope.trading.market_intelligence.application.feature.FeatureSnapshotP
 import com.hope.trading.market_intelligence.application.outcome.MarketOutcomeEvaluationService;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 import com.hope.trading.market_intelligence.application.port.FeatureSnapshotRepository;
+import com.hope.trading.market_intelligence.application.port.ObservedMarketOutcomeRepository;
+import com.hope.trading.market_intelligence.adapter.marketdata.OrderBookRetentionClient;
 import com.hope.trading.market_intelligence.config.ResearchLifecycleProperties;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
@@ -14,6 +16,9 @@ import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionSt
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionProvenance;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
+import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
+import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
+import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -256,6 +261,51 @@ class ResearchLifecycleServiceTest {
         service.runOnce();
 
         verify(projections).project(execution.executionId());
+    }
+
+    @Test
+    void releasesReplayDependencyAfterAllConfiguredOutcomesAreTerminal() {
+        ResearchLifecycleProperties properties = validProperties();
+        properties.setArtifactPopulationEnabled(true);
+        properties.setArtifactPopulationDepth(25);
+        properties.setArtifactPopulationMaxPerRun(10);
+        properties.setArtifactPopulationPromotionReason("test");
+        AnalysisExecutionRepository executionRepository = mock(AnalysisExecutionRepository.class);
+        when(executionRepository.findByIdempotencyKey(any())).thenReturn(Optional.of(mock(AnalysisExecution.class)));
+        when(executionRepository.findByResearchScope(any(), any(), any(), any())).thenReturn(List.of());
+        FeatureSnapshot snapshot = mock(FeatureSnapshot.class);
+        Instant cutoff = Instant.parse("2026-10-16T08:00:00Z");
+        when(snapshot.marketId()).thenReturn(MARKET_ID);
+        when(snapshot.evaluationCutoff()).thenReturn(cutoff);
+        when(snapshot.analysisExecutionId()).thenReturn(UUID.randomUUID());
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(snapshots.findByPopulation(any(), any(), any(), any(), any())).thenReturn(List.of(snapshot));
+        ObservedMarketOutcomeRepository outcomes = mock(ObservedMarketOutcomeRepository.class);
+        List<Duration> horizons = properties.getOutcomeHorizons();
+        List<ObservedMarketOutcome> terminalOutcomes = horizons.stream()
+                .map(duration -> terminalOutcome(cutoff, duration)).toList();
+        when(outcomes.findByMarkets(any())).thenReturn(terminalOutcomes);
+        OrderBookRetentionClient retention = mock(OrderBookRetentionClient.class);
+
+        ResearchLifecycleService service = new ResearchLifecycleService(
+                properties, mock(AnalysisExecutionService.class), executionRepository,
+                mock(FeatureSnapshotProjectionService.class), snapshots,
+                mock(MarketOutcomeEvaluationService.class), mock(ResearchArtifactPopulationService.class),
+                retention, outcomes, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.runOnce();
+
+        verify(retention).release("order-book-replay:v1:market=11111111-1111-1111-1111-111111111111:depth=25:cutoff=2026-10-16T08:00:00Z",
+                new OrderBookRetentionClient.ReleaseRequest("research-lifecycle:durable-snapshot-and-terminal-outcomes"));
+    }
+
+    private ObservedMarketOutcome terminalOutcome(Instant cutoff, Duration duration) {
+        ObservedMarketOutcome outcome = mock(ObservedMarketOutcome.class);
+        when(outcome.marketId()).thenReturn(MARKET_ID);
+        when(outcome.evaluationCutoff()).thenReturn(cutoff);
+        when(outcome.horizon()).thenReturn(new OutcomeHorizon(duration));
+        when(outcome.status()).thenReturn(ObservedMarketOutcomeStatus.AVAILABLE);
+        return outcome;
     }
 
     private ResearchLifecycleProperties validProperties() {

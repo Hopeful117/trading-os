@@ -2,11 +2,13 @@ package com.hope.trading.market_data.scheduler;
 
 import com.hope.trading.market_data.config.OrderBookRetentionProperties;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
-import com.hope.trading.market_data.model.OrderBookRetirementCandidate;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegment;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentAssessment;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,7 +40,7 @@ class OrderBookRetentionSchedulerTest {
 
         verify(retentionService).previewRetirement();
         verify(retentionService, never()).retire(org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(OrderBookEvidenceSegmentAssessment.class));
     }
 
     @Test
@@ -47,14 +49,14 @@ class OrderBookRetentionSchedulerTest {
         OrderBookRetentionProperties properties = new OrderBookRetentionProperties();
         properties.setSchedulerEnabled(true);
         properties.setDestructiveRetirementEnabled(true);
-        OrderBookRetirementCandidate candidate = mock(OrderBookRetirementCandidate.class);
+        OrderBookEvidenceSegmentAssessment segment = eligibleSegment();
         when(retentionService.previewRetirement()).thenReturn(
-                new OrderBookRetentionService.RetirementPreview("dry-run", Instant.now(), List.of(candidate)));
+                new OrderBookRetentionService.RetirementPreview("dry-run", Instant.now(), List.of(), List.of(segment), Map.of()));
         OrderBookRetentionScheduler scheduler = new OrderBookRetentionScheduler(retentionService, properties);
 
         scheduler.run();
 
-        verify(retentionService).retire("dry-run", candidate);
+        verify(retentionService).retire("dry-run", segment);
     }
 
     @Test
@@ -63,20 +65,20 @@ class OrderBookRetentionSchedulerTest {
         OrderBookRetentionProperties properties = new OrderBookRetentionProperties();
         properties.setSchedulerEnabled(true);
         properties.setDestructiveRetirementEnabled(true);
-        OrderBookRetirementCandidate failedCandidate = mock(OrderBookRetirementCandidate.class);
-        OrderBookRetirementCandidate successfulCandidate = mock(OrderBookRetirementCandidate.class);
+        OrderBookEvidenceSegmentAssessment failedSegment = eligibleSegment();
+        OrderBookEvidenceSegmentAssessment successfulSegment = eligibleSegment();
         when(retentionService.previewRetirement()).thenReturn(
                 new OrderBookRetentionService.RetirementPreview(
-                        "dry-run", Instant.now(), List.of(failedCandidate, successfulCandidate)));
-        when(retentionService.retire("dry-run", failedCandidate))
+                        "dry-run", Instant.now(), List.of(), List.of(failedSegment, successfulSegment), Map.of()));
+        when(retentionService.retire("dry-run", failedSegment))
                 .thenThrow(new IllegalStateException("candidate failure"));
-        when(retentionService.retire("dry-run", successfulCandidate)).thenReturn(3);
+        when(retentionService.retire("dry-run", successfulSegment)).thenReturn(3);
         OrderBookRetentionScheduler scheduler = new OrderBookRetentionScheduler(retentionService, properties);
 
         scheduler.run();
 
-        verify(retentionService).retire("dry-run", failedCandidate);
-        verify(retentionService).retire("dry-run", successfulCandidate);
+        verify(retentionService).retire("dry-run", failedSegment);
+        verify(retentionService).retire("dry-run", successfulSegment);
     }
 
     @Test
@@ -93,5 +95,11 @@ class OrderBookRetentionSchedulerTest {
         scheduler.run();
 
         verify(retentionService, org.mockito.Mockito.times(2)).previewRetirement();
+    }
+
+    private OrderBookEvidenceSegmentAssessment eligibleSegment() {
+        OrderBookEvidenceSegment segment = mock(OrderBookEvidenceSegment.class);
+        when(segment.segmentId()).thenReturn(java.util.UUID.randomUUID());
+        return new OrderBookEvidenceSegmentAssessment(segment, true, 1, List.of());
     }
 }

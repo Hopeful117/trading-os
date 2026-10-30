@@ -3,6 +3,9 @@ package com.hope.trading.market_data.service;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.OrderBookEvidence;
 import com.hope.trading.market_data.model.OrderBookEvidenceOrigin;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegment;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentClassification;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentStatus;
 import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -10,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.Timestamp;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +49,7 @@ public class OrderBookEvidenceRepository {
         }
         sealOtherActiveSequences(evidence.marketId(), evidence.depth(), evidence.sequenceId(),
                 "superseded by fresh provider snapshot", supersededAt);
+        openSegment(evidence, supersededAt);
         return true;
     }
 
@@ -61,6 +66,9 @@ public class OrderBookEvidenceRepository {
                 Timestamp.from(evidence.knownAt()), OrderBookEvidencePayload.encode(evidence.bids()),
                 OrderBookEvidencePayload.encode(evidence.asks()), evidence.checksum(),
                 evidence.normalizationVersion(), evidence.contentFingerprint(), true);
+        if (rows == 1 && evidence.evidenceType() == OrderBookEvidenceType.SNAPSHOT) {
+            rotateSegment(evidence, evidence.knownAt());
+        }
         return rows == 1;
     }
 
@@ -144,6 +152,7 @@ public class OrderBookEvidenceRepository {
                         WHERE target.sequence_id = ? AND target.status = 'ACTIVE'
                         """,
                 Timestamp.from(invalidatedAt), reason, sequenceId);
+        closeSegmentsForSequence(sequenceId, invalidatedAt);
     }
 
     @Transactional
@@ -154,6 +163,7 @@ public class OrderBookEvidenceRepository {
                         WHERE market_id = ? AND depth = ? AND status = 'ACTIVE'
                         """,
                 Timestamp.from(invalidatedAt), reason, marketId, depth);
+        closeSegmentsForSequences(marketId, depth, invalidatedAt);
     }
 
     @Transactional
@@ -164,6 +174,7 @@ public class OrderBookEvidenceRepository {
                         WHERE market_id = ? AND depth = ? AND status = 'ACTIVE'
                         """,
                 Timestamp.from(sealedAt), marketId, depth);
+        closeSegmentsForSequences(marketId, depth, sealedAt);
     }
 
     private void sealOtherActiveSequences(UUID marketId, int depth, UUID sequenceId,
@@ -173,7 +184,13 @@ public class OrderBookEvidenceRepository {
                         SET status = 'SEALED', sealed_at = ?, invalidated_at = NULL, invalidation_reason = NULL
                         WHERE market_id = ? AND depth = ? AND status = 'ACTIVE' AND sequence_id <> ?
                         """,
-                Timestamp.from(sealedAt), marketId, depth, sequenceId);
+                        Timestamp.from(sealedAt), marketId, depth, sequenceId);
+        jdbc.queryForList("""
+                        SELECT sequence_id
+                          FROM historical_order_book_sequence
+                         WHERE market_id = ? AND depth = ? AND status = 'SEALED' AND sequence_id <> ?
+                        """, UUID.class, marketId, depth, sequenceId)
+                .forEach(id -> closeSegmentsForSequence(id, sealedAt));
     }
 
     @Transactional(readOnly = true)
@@ -274,6 +291,108 @@ public class OrderBookEvidenceRepository {
         } catch (java.sql.SQLException exception) {
             throw new IllegalStateException("Unable to determine database product", exception);
         }
+    }
+
+    public void openSegment(OrderBookEvidence evidence, Instant createdAt) {
+        UUID segmentId = UUID.nameUUIDFromBytes(("order-book-segment-v1:" + evidence.sequenceId() + ":"
+                        + evidence.sequenceOrdinal()).getBytes(StandardCharsets.UTF_8));
+        String columns = "(segment_id, market_id, provider, provider_symbol, depth, sequence_id, "
+                + "start_ordinal, start_known_at, status, classification, created_at)";
+        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', 'CURRENT', ?)";
+        String sql = isH2()
+                ? "MERGE INTO historical_order_book_evidence_segment " + columns + " KEY(sequence_id, start_ordinal) " + values
+                : "INSERT INTO historical_order_book_evidence_segment " + columns + " " + values
+                + " ON CONFLICT (sequence_id, start_ordinal) DO NOTHING";
+        jdbc.update(sql,
+                segmentId, evidence.marketId(), evidence.provider().name(), evidence.providerSymbol(),
+                evidence.depth(), evidence.sequenceId(), evidence.sequenceOrdinal(),
+                Timestamp.from(evidence.knownAt()), Timestamp.from(createdAt));
+    }
+
+    private void rotateSegment(OrderBookEvidence checkpoint, Instant closedAt) {
+        if (checkpoint.sequenceOrdinal() == 0) {
+            openSegment(checkpoint, closedAt);
+            return;
+        }
+        jdbc.update("""
+                UPDATE historical_order_book_evidence_segment
+                   SET end_ordinal = ?, end_known_at = ?, successor_evidence_id = ?,
+                       successor_origin = ?, status = 'CLOSED', closed_at = ?
+                 WHERE sequence_id = ? AND status = 'OPEN' AND start_ordinal < ?
+                """, checkpoint.sequenceOrdinal() - 1, Timestamp.from(checkpoint.knownAt()),
+                checkpoint.evidenceId(), checkpoint.origin().name(), Timestamp.from(closedAt),
+                checkpoint.sequenceId(), checkpoint.sequenceOrdinal());
+        openSegment(checkpoint, closedAt);
+    }
+
+    private void closeSegmentsForSequences(UUID marketId, int depth, Instant closedAt) {
+        jdbc.update("""
+                UPDATE historical_order_book_evidence_segment segment
+                   SET end_ordinal = latest.last_ordinal,
+                       end_known_at = latest.last_known_at,
+                       status = 'CLOSED', closed_at = ?
+                  FROM (
+                      SELECT sequence_id, MAX(sequence_ordinal) AS last_ordinal,
+                             MAX(known_at) AS last_known_at
+                        FROM historical_order_book_evidence
+                       WHERE market_id = ? AND depth = ?
+                       GROUP BY sequence_id
+                  ) latest
+                 WHERE segment.sequence_id = latest.sequence_id
+                   AND segment.status = 'OPEN'
+                """, Timestamp.from(closedAt), marketId, depth);
+    }
+
+    private void closeSegmentsForSequence(UUID sequenceId, Instant closedAt) {
+        jdbc.update("""
+                UPDATE historical_order_book_evidence_segment segment
+                   SET end_ordinal = latest.last_ordinal,
+                       end_known_at = latest.last_known_at,
+                       status = 'CLOSED', closed_at = ?
+                  FROM (
+                      SELECT MAX(sequence_ordinal) AS last_ordinal,
+                             MAX(known_at) AS last_known_at
+                        FROM historical_order_book_evidence
+                       WHERE sequence_id = ?
+                  ) latest
+                 WHERE segment.sequence_id = ?
+                   AND segment.status = 'OPEN'
+                   AND latest.last_ordinal IS NOT NULL
+                """, Timestamp.from(closedAt), sequenceId, sequenceId);
+    }
+
+    public List<OrderBookEvidenceSegment> findSegments(int limit) {
+        return jdbc.query("""
+                SELECT segment_id, market_id, provider, provider_symbol, depth, sequence_id,
+                       start_ordinal, end_ordinal, start_known_at, end_known_at,
+                       successor_evidence_id, successor_origin, status, classification,
+                       created_at, closed_at
+                  FROM historical_order_book_evidence_segment
+                 ORDER BY sequence_id, start_ordinal
+                 LIMIT ?
+                """, (result, row) -> new OrderBookEvidenceSegment(
+                result.getObject("segment_id", UUID.class), result.getObject("market_id", UUID.class),
+                result.getString("provider"), result.getString("provider_symbol"), result.getInt("depth"),
+                result.getObject("sequence_id", UUID.class), result.getLong("start_ordinal"),
+                result.getObject("end_ordinal", Long.class), result.getTimestamp("start_known_at").toInstant(),
+                toInstant(result.getTimestamp("end_known_at")), result.getObject("successor_evidence_id", UUID.class),
+                result.getString("successor_origin") == null ? null
+                        : OrderBookEvidenceOrigin.valueOf(result.getString("successor_origin")),
+                OrderBookEvidenceSegmentStatus.valueOf(result.getString("status")),
+                OrderBookEvidenceSegmentClassification.valueOf(result.getString("classification")),
+                result.getTimestamp("created_at").toInstant(), toInstant(result.getTimestamp("closed_at"))), limit);
+    }
+
+    public void markLegacyUnknown(UUID segmentId) {
+        jdbc.update("""
+                UPDATE historical_order_book_evidence_segment
+                   SET classification = 'LEGACY_UNKNOWN'
+                 WHERE segment_id = ?
+                """, segmentId);
+    }
+
+    private Instant toInstant(Timestamp value) {
+        return value == null ? null : value.toInstant();
     }
 
     private Optional<OrderBookEvidence> findLatestTrustedSnapshot(

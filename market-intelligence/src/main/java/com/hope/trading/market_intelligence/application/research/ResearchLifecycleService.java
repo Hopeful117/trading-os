@@ -4,8 +4,11 @@ import com.hope.trading.market_intelligence.application.execution.AnalysisExecut
 import com.hope.trading.market_intelligence.application.feature.FeatureSnapshotProjectionService;
 import com.hope.trading.market_intelligence.application.outcome.MarketOutcomeEvaluationRequest;
 import com.hope.trading.market_intelligence.application.outcome.MarketOutcomeEvaluationService;
+import com.hope.trading.market_intelligence.adapter.marketdata.OrderBookReplayIdentity;
+import com.hope.trading.market_intelligence.adapter.marketdata.OrderBookRetentionClient;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 import com.hope.trading.market_intelligence.application.port.FeatureSnapshotRepository;
+import com.hope.trading.market_intelligence.application.port.ObservedMarketOutcomeRepository;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
@@ -38,6 +41,8 @@ public class ResearchLifecycleService {
     private final FeatureSnapshotRepository snapshots;
     private final MarketOutcomeEvaluationService outcomes;
     private final ResearchArtifactPopulationService artifactPopulation;
+    private final OrderBookRetentionClient retention;
+    private final ObservedMarketOutcomeRepository outcomeRepository;
     private final Clock clock;
 
     public ResearchLifecycleService(
@@ -50,6 +55,23 @@ public class ResearchLifecycleService {
             ResearchArtifactPopulationService artifactPopulation,
             Clock clock
     ) {
+        this(properties, executions, executionRepository, projections, snapshots, outcomes,
+                artifactPopulation, null, null, clock);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ResearchLifecycleService(
+            ResearchLifecycleProperties properties,
+            AnalysisExecutionService executions,
+            AnalysisExecutionRepository executionRepository,
+            FeatureSnapshotProjectionService projections,
+            FeatureSnapshotRepository snapshots,
+            MarketOutcomeEvaluationService outcomes,
+            ResearchArtifactPopulationService artifactPopulation,
+            OrderBookRetentionClient retention,
+            ObservedMarketOutcomeRepository outcomeRepository,
+            Clock clock
+    ) {
         this.properties = properties;
         this.executions = executions;
         this.executionRepository = executionRepository;
@@ -57,6 +79,8 @@ public class ResearchLifecycleService {
         this.snapshots = snapshots;
         this.outcomes = outcomes;
         this.artifactPopulation = artifactPopulation;
+        this.retention = retention;
+        this.outcomeRepository = outcomeRepository;
         this.clock = clock;
     }
 
@@ -75,6 +99,7 @@ public class ResearchLifecycleService {
         submitLatestObservation(now);
         projectCompletedExecutions(now);
         evaluateMaturedOutcomes(now);
+        releaseCompletedReplayDependencies(now);
     }
 
     static Instant alignedCutoff(Instant now, Duration cadence) {
@@ -145,6 +170,36 @@ public class ResearchLifecycleService {
                             snapshot.marketId(), snapshot.evaluationCutoff(), duration,
                             exception.getClass().getSimpleName());
                 }
+            }
+        }
+    }
+
+    private void releaseCompletedReplayDependencies(Instant now) {
+        if (retention == null || outcomeRepository == null || !properties.isArtifactPopulationEnabled()) {
+            return;
+        }
+        List<FeatureSnapshot> snapshots = this.snapshots.findByPopulation(
+                properties.getMarketIds(), Instant.EPOCH, now.plusSeconds(1),
+                PROJECTION_VERSION, EvidenceAcquisitionPolicy.STRICT_OBSERVED.name());
+        List<com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome> outcomes =
+                outcomeRepository.findByMarkets(properties.getMarketIds());
+        for (FeatureSnapshot snapshot : snapshots) {
+            boolean terminal = properties.getOutcomeHorizons().stream().allMatch(horizon -> outcomes.stream()
+                    .anyMatch(outcome -> outcome.marketId().equals(snapshot.marketId())
+                            && outcome.evaluationCutoff().equals(snapshot.evaluationCutoff())
+                            && outcome.horizon().value().equals(horizon)
+                            && outcome.status() != com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus.PENDING));
+            if (!terminal) {
+                continue;
+            }
+            String identity = OrderBookReplayIdentity.forRequest(
+                    snapshot.marketId(), properties.getArtifactPopulationDepth(), snapshot.evaluationCutoff());
+            try {
+                retention.release(identity, new OrderBookRetentionClient.ReleaseRequest(
+                        "research-lifecycle:durable-snapshot-and-terminal-outcomes"));
+            } catch (RuntimeException exception) {
+                log.warn("Research replay dependency release failed market={} cutoff={} errorType={}",
+                        snapshot.marketId(), snapshot.evaluationCutoff(), exception.getClass().getSimpleName());
             }
         }
     }
