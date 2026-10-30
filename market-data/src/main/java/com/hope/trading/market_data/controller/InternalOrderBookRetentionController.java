@@ -63,7 +63,7 @@ public class InternalOrderBookRetentionController {
     public ResponseEntity<OrderBookEvidenceDependency> protectDependency(
             @RequestBody DependencyRequest request) {
         return ResponseEntity.ok(retentionService.protectDependency(request.dependencyKey(), request.consumerType(),
-                request.consumerIdentity(), request.artifactId(), request.sequenceId(), request.reason()));
+                request.consumerIdentity(), request.artifactId(), request.sequenceId(), request.segmentId(), request.reason()));
     }
 
     @DeleteMapping("/dependencies/{dependencyKey}")
@@ -76,7 +76,7 @@ public class InternalOrderBookRetentionController {
     @PostMapping("/holds")
     public ResponseEntity<OrderBookRetentionHold> addHold(@RequestBody HoldRequest request) {
         return ResponseEntity.ok(retentionService.addHold(request.holdKey(), request.artifactId(),
-                request.sequenceId(), request.reason()));
+                request.sequenceId(), request.segmentId(), request.reason()));
     }
 
     @DeleteMapping("/holds/{holdKey}")
@@ -86,13 +86,20 @@ public class InternalOrderBookRetentionController {
     }
 
     public record DependencyRequest(String dependencyKey, String consumerType, String consumerIdentity,
-                                    UUID artifactId, UUID sequenceId, String reason) {
+                                    UUID artifactId, UUID sequenceId, UUID segmentId, String reason) {
+        public DependencyRequest(String dependencyKey, String consumerType, String consumerIdentity,
+                                 UUID artifactId, UUID sequenceId, String reason) {
+            this(dependencyKey, consumerType, consumerIdentity, artifactId, sequenceId, null, reason);
+        }
     }
 
     public record ReleaseRequest(String reason) {
     }
 
-    public record HoldRequest(String holdKey, UUID artifactId, UUID sequenceId, String reason) {
+    public record HoldRequest(String holdKey, UUID artifactId, UUID sequenceId, UUID segmentId, String reason) {
+        public HoldRequest(String holdKey, UUID artifactId, UUID sequenceId, String reason) {
+            this(holdKey, artifactId, sequenceId, null, reason);
+        }
     }
 
     public record RetirementRequest(String dryRunFingerprint, OrderBookRetirementCandidate candidate) {

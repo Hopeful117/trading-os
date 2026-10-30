@@ -9,9 +9,12 @@ import com.hope.trading.market_data.model.MarketState;
 import com.hope.trading.market_data.model.OrderBookEvidence;
 import com.hope.trading.market_data.model.OrderBookEvidenceOrigin;
 import com.hope.trading.market_data.model.OrderBookEvidenceType;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentStatus;
 import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.service.OrderBookEvidenceFingerprint;
 import com.hope.trading.market_data.service.OrderBookEvidenceRepository;
+import com.hope.trading.market_data.service.OrderBookEvidenceSegmentBackfillService;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +40,10 @@ class OrderBookEvidencePersistenceTest {
     private MarketRepository markets;
     @Autowired
     private OrderBookEvidenceRepository evidenceRepository;
+    @Autowired
+    private OrderBookEvidenceSegmentBackfillService segmentBackfillService;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Test
     void invalidatedSequenceIsExcludedAfterRestartEquivalentRepositoryRead() {
@@ -189,6 +196,70 @@ class OrderBookEvidencePersistenceTest {
         evidenceRepository.invalidateActiveSequences(marketId, 25, "stream terminated", KNOWN_AT.plusSeconds(1));
 
         assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT.plusSeconds(2))).isEmpty();
+    }
+
+    @Test
+    void snapshotsCreateDeterministicClosedAndOpenSegments() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+
+        assertThat(evidenceRepository.append(evidence(marketId, sequenceId, 0))).isTrue();
+        assertThat(evidenceRepository.append(evidence(marketId, sequenceId, 1,
+                KNOWN_AT.plusSeconds(1), OrderBookEvidenceType.DELTA, OrderBookEvidenceOrigin.PROVIDER,
+                level("100", "2")))).isTrue();
+        OrderBookEvidence checkpoint = evidence(marketId, sequenceId, 2,
+                KNOWN_AT.plusSeconds(2), OrderBookEvidenceType.SNAPSHOT, OrderBookEvidenceOrigin.CHECKPOINT,
+                level("100", "3"));
+        assertThat(evidenceRepository.append(checkpoint)).isTrue();
+
+        var segments = evidenceRepository.findSegments(10);
+        assertThat(segments).hasSize(2);
+        assertThat(segments.get(0).status()).isEqualTo(OrderBookEvidenceSegmentStatus.CLOSED);
+        assertThat(segments.get(0).startOrdinal()).isZero();
+        assertThat(segments.get(0).endOrdinal()).isEqualTo(1L);
+        assertThat(segments.get(0).successorEvidenceId()).isEqualTo(checkpoint.evidenceId());
+        assertThat(segments.get(1).status()).isEqualTo(OrderBookEvidenceSegmentStatus.OPEN);
+        assertThat(segments.get(1).startOrdinal()).isEqualTo(2L);
+        assertThat(segments.get(1).segmentId()).isEqualTo(UUID.nameUUIDFromBytes(
+                ("order-book-segment-v1:" + sequenceId + ":2").getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void legacyBackfillIsIdempotentAndDoesNotRewriteEvidence() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        assertThat(evidenceRepository.append(evidence(marketId, sequenceId, 0))).isTrue();
+        assertThat(evidenceRepository.append(evidence(marketId, sequenceId, 2,
+                KNOWN_AT.plusSeconds(2), OrderBookEvidenceType.SNAPSHOT, OrderBookEvidenceOrigin.CHECKPOINT,
+                level("100", "3")))).isTrue();
+
+        int evidenceBefore = jdbc.queryForObject("SELECT COUNT(*) FROM historical_order_book_evidence WHERE sequence_id = ?",
+                Integer.class, sequenceId);
+        jdbc.update("DELETE FROM historical_order_book_evidence_segment WHERE sequence_id = ?", sequenceId);
+
+        segmentBackfillService.backfillSequence(sequenceId, 1);
+        segmentBackfillService.backfillSequence(sequenceId, 1);
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM historical_order_book_evidence WHERE sequence_id = ?",
+                Integer.class, sequenceId)).isEqualTo(evidenceBefore);
+        assertThat(evidenceRepository.findSegments(10)).hasSize(2)
+                .allMatch(segment -> segment.classification().name().equals("LEGACY_UNKNOWN"));
+    }
+
+    @Test
+    void individualSequenceInvalidationClosesItsOpenSegment() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        assertThat(evidenceRepository.append(evidence(marketId, sequenceId, 0))).isTrue();
+
+        evidenceRepository.invalidateSequence(sequenceId, "test invalidation", KNOWN_AT.plusSeconds(5));
+
+        assertThat(evidenceRepository.findSegments(10))
+                .singleElement()
+                .satisfies(segment -> {
+                    assertThat(segment.status()).isEqualTo(OrderBookEvidenceSegmentStatus.CLOSED);
+                    assertThat(segment.endOrdinal()).isEqualTo(0L);
+                });
     }
 
     private OrderBookEvidence evidence(UUID marketId, UUID sequenceId, long ordinal) {

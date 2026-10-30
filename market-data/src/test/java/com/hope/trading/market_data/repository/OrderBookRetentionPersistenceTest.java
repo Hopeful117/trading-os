@@ -10,6 +10,7 @@ import com.hope.trading.market_data.model.OrderBookEvidence;
 import com.hope.trading.market_data.model.OrderBookEvidenceDependency;
 import com.hope.trading.market_data.model.OrderBookDependencyState;
 import com.hope.trading.market_data.model.OrderBookEvidenceOrigin;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentStatus;
 import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
@@ -94,6 +95,40 @@ class OrderBookRetentionPersistenceTest {
         evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
 
         assertThat(retentionService.previewRetirement().candidates()).isEmpty();
+    }
+
+    @Test
+    void eligibleSegmentRetirementDeletesOnlyTheSegmentRange() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        evidenceRepository.append(delta(marketId, sequenceId, 1));
+        evidenceRepository.append(snapshot(marketId, sequenceId, 2, OrderBookEvidenceOrigin.CHECKPOINT));
+        var segment = evidenceRepository.findSegments(10).getFirst();
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(10));
+
+        retentionService.protectDependency("segment-release", "TEST", "segment", null, sequenceId,
+                segment.segmentId(), "test segment protection");
+        retentionService.releaseDependency("segment-release", "test release");
+
+        var assessment = retentionRepository.assessSegments(10).stream()
+                .filter(value -> value.segment().segmentId().equals(segment.segmentId()))
+                .findFirst().orElseThrow();
+        assertThat(assessment.eligible()).isTrue();
+
+        assertThat(retentionRepository.retireEvidenceSegment(assessment.segment(), 100,
+                KNOWN_AT.plusSeconds(20))).isEqualTo(2);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM historical_order_book_evidence
+                 WHERE sequence_id = ? AND sequence_ordinal BETWEEN 0 AND 1
+                """, Long.class, sequenceId)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM historical_order_book_evidence
+                 WHERE sequence_id = ? AND sequence_ordinal = 2
+                """, Long.class, sequenceId)).isEqualTo(1);
+        assertThat(evidenceRepository.findSegments(10).stream()
+                .filter(value -> value.segmentId().equals(segment.segmentId()))
+                .findFirst().orElseThrow().status()).isEqualTo(OrderBookEvidenceSegmentStatus.RETIRED);
     }
 
     @Test
@@ -608,6 +643,22 @@ class OrderBookRetentionPersistenceTest {
                 UUID.randomUUID(), marketId, MarketProvider.KRAKEN, "BTC/USD", "PF_XBTUSD", 25,
                 OrderBookEvidenceType.SNAPSHOT, OrderBookEvidenceOrigin.PROVIDER, null, null,
                 sequenceId, 0, 100L, KNOWN_AT.minusSeconds(1), KNOWN_AT,
+                List.of(level("100", "1")), List.of(level("101", "1")), null,
+                OrderBookEvidenceFingerprint.NORMALIZATION_VERSION, "pending");
+        return new OrderBookEvidence(pending.evidenceId(), pending.marketId(), pending.provider(), pending.symbol(),
+                pending.providerSymbol(), pending.depth(), pending.evidenceType(), pending.origin(),
+                pending.sourceStartOrdinal(), pending.sourceEndOrdinal(), pending.sequenceId(),
+                pending.sequenceOrdinal(), pending.providerSequence(), pending.occurredAt(), pending.knownAt(),
+                pending.bids(), pending.asks(), pending.checksum(), pending.normalizationVersion(),
+                OrderBookEvidenceFingerprint.fingerprint(pending));
+    }
+
+    private OrderBookEvidence snapshot(UUID marketId, UUID sequenceId, long ordinal,
+                                       OrderBookEvidenceOrigin origin) {
+        OrderBookEvidence pending = new OrderBookEvidence(
+                UUID.randomUUID(), marketId, MarketProvider.KRAKEN, "BTC/USD", "PF_XBTUSD", 25,
+                OrderBookEvidenceType.SNAPSHOT, origin, null, null,
+                sequenceId, ordinal, 100L + ordinal, KNOWN_AT.plusSeconds(ordinal), KNOWN_AT.plusSeconds(ordinal),
                 List.of(level("100", "1")), List.of(level("101", "1")), null,
                 OrderBookEvidenceFingerprint.NORMALIZATION_VERSION, "pending");
         return new OrderBookEvidence(pending.evidenceId(), pending.marketId(), pending.provider(), pending.symbol(),

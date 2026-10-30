@@ -5,6 +5,8 @@ import com.hope.trading.market_data.model.OrderBookDependencyState;
 import com.hope.trading.market_data.model.OrderBookEvidenceDependency;
 import com.hope.trading.market_data.model.OrderBookReplayArtifact;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentAssessment;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegment;
 import com.hope.trading.market_data.model.OrderBookRetentionHold;
 import com.hope.trading.market_data.model.OrderBookRetirementCandidate;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 @Service
 public class OrderBookRetentionService {
@@ -120,11 +124,17 @@ public class OrderBookRetentionService {
 
     @Transactional
     public OrderBookEvidenceDependency protectDependency(String dependencyKey, String consumerType,
-                                                         String consumerIdentity, UUID artifactId,
-                                                         UUID sequenceId, String reason) {
+                                                          String consumerIdentity, UUID artifactId,
+                                                          UUID sequenceId, String reason) {
+        return protectDependency(dependencyKey, consumerType, consumerIdentity, artifactId, sequenceId, null, reason);
+    }
+
+    public OrderBookEvidenceDependency protectDependency(String dependencyKey, String consumerType,
+                                                          String consumerIdentity, UUID artifactId,
+                                                          UUID sequenceId, UUID segmentId, String reason) {
         OrderBookEvidenceDependency dependency = new OrderBookEvidenceDependency(
                 UUID.randomUUID(), dependencyKey, consumerType, consumerIdentity, artifactId, sequenceId,
-                OrderBookDependencyState.PROTECTED, reason, clock.instant(), null);
+                segmentId, OrderBookDependencyState.PROTECTED, reason, clock.instant(), null);
         if (repository.saveDependency(dependency)) {
             return dependency;
         }
@@ -156,8 +166,13 @@ public class OrderBookRetentionService {
 
     @Transactional
     public OrderBookRetentionHold addHold(String holdKey, UUID artifactId, UUID sequenceId, String reason) {
+        return addHold(holdKey, artifactId, sequenceId, null, reason);
+    }
+
+    public OrderBookRetentionHold addHold(String holdKey, UUID artifactId, UUID sequenceId,
+                                          UUID segmentId, String reason) {
         OrderBookRetentionHold hold = new OrderBookRetentionHold(
-                UUID.randomUUID(), holdKey, artifactId, sequenceId, reason, clock.instant(), null);
+                UUID.randomUUID(), holdKey, artifactId, sequenceId, segmentId, reason, clock.instant(), null);
         if (repository.saveHold(hold)) {
             return hold;
         }
@@ -187,12 +202,23 @@ public class OrderBookRetentionService {
         Instant selectedAt = clock.instant();
         List<OrderBookRetirementCandidate> candidates = repository.findRetirementCandidates(
                 selectedAt.minus(properties.getInvalidatedDiagnosticRetention()));
-        String details = candidates.stream().map(repository::retirementDetails)
+        List<OrderBookEvidenceSegmentAssessment> segments = repository.assessSegments(1000);
+        boolean segmentsTruncated = repository.countRetainableSegments() > segments.size();
+        Map<String, Long> blockers = new LinkedHashMap<>();
+        segments.stream().flatMap(value -> value.blockers().stream())
+                .map(Enum::name)
+                .forEach(blocker -> blockers.merge(blocker, 1L, Long::sum));
+        String segmentDetails = segments.stream()
+                .map(this::segmentDetails)
                 .reduce((left, right) -> left + "," + right)
                 .orElse("none");
+        String details = candidates.stream().map(repository::retirementDetails)
+                .reduce((left, right) -> left + "," + right)
+                .orElse("none") + ";segments=" + segmentDetails
+                + ";segmentsTruncated=" + segmentsTruncated;
         String operationFingerprint = fingerprint(details);
         repository.recordDryRun(operationFingerprint, details, selectedAt, UUID.randomUUID());
-        return new RetirementPreview(operationFingerprint, selectedAt, candidates);
+        return new RetirementPreview(operationFingerprint, selectedAt, candidates, segments, blockers, segmentsTruncated);
     }
 
     @Transactional
@@ -222,14 +248,48 @@ public class OrderBookRetentionService {
         return retired;
     }
 
+    @Transactional
+    public int retire(String dryRunFingerprint, OrderBookEvidenceSegmentAssessment assessment) {
+        if (!properties.isDestructiveRetirementEnabled()) {
+            throw new IllegalStateException("destructive Order Book retirement is disabled");
+        }
+        if (dryRunFingerprint == null || dryRunFingerprint.isBlank()) {
+            throw new IllegalArgumentException("dry-run fingerprint is required");
+        }
+        if (assessment == null || !assessment.eligible()) {
+            throw new IllegalArgumentException("an eligible segment assessment is required");
+        }
+        String details = segmentDetails(assessment);
+        if (!repository.matchesDryRun(dryRunFingerprint, details)) {
+            throw new IllegalStateException("retirement segment is not confirmed by a recorded dry-run");
+        }
+        String operationFingerprint = fingerprint(dryRunFingerprint + "|" + details);
+        repository.recordMutation(operationFingerprint, details, clock.instant(), UUID.randomUUID());
+        int retired = repository.retireEvidenceSegment(assessment.segment(), properties.getRetirementBatchSize(),
+                clock.instant().minus(properties.getInvalidatedDiagnosticRetention()));
+        if (retired < properties.getRetirementBatchSize()) {
+            repository.completeOperation(operationFingerprint, clock.instant(), retired);
+        } else {
+            repository.recordPartialOperation(operationFingerprint, retired);
+        }
+        return retired;
+    }
+
+    private String segmentDetails(OrderBookEvidenceSegmentAssessment assessment) {
+        return assessment.segment().segmentId() + ":eligible=" + assessment.eligible()
+                + ":blockers=" + assessment.blockers();
+    }
+
     private boolean sameTarget(OrderBookEvidenceDependency left, OrderBookEvidenceDependency right) {
         return java.util.Objects.equals(left.artifactId(), right.artifactId())
-                && java.util.Objects.equals(left.sequenceId(), right.sequenceId());
+                && java.util.Objects.equals(left.sequenceId(), right.sequenceId())
+                && java.util.Objects.equals(left.segmentId(), right.segmentId());
     }
 
     private boolean sameTarget(OrderBookRetentionHold left, OrderBookRetentionHold right) {
         return java.util.Objects.equals(left.artifactId(), right.artifactId())
-                && java.util.Objects.equals(left.sequenceId(), right.sequenceId());
+                && java.util.Objects.equals(left.sequenceId(), right.sequenceId())
+                && java.util.Objects.equals(left.segmentId(), right.segmentId());
     }
 
     private String fingerprint(String material, Instant timestamp) {
@@ -251,9 +311,26 @@ public class OrderBookRetentionService {
     }
 
     public record RetirementPreview(String operationFingerprint, Instant selectedAt,
-                                    List<OrderBookRetirementCandidate> candidates) {
+                                    List<OrderBookRetirementCandidate> candidates,
+                                    List<OrderBookEvidenceSegmentAssessment> segments,
+                                    Map<String, Long> blockers,
+                                    boolean segmentsTruncated) {
+        public RetirementPreview(String operationFingerprint, Instant selectedAt,
+                                 List<OrderBookRetirementCandidate> candidates) {
+            this(operationFingerprint, selectedAt, candidates, List.of(), Map.of(), false);
+        }
+
+        public RetirementPreview(String operationFingerprint, Instant selectedAt,
+                                 List<OrderBookRetirementCandidate> candidates,
+                                 List<OrderBookEvidenceSegmentAssessment> segments,
+                                 Map<String, Long> blockers) {
+            this(operationFingerprint, selectedAt, candidates, segments, blockers, false);
+        }
+
         public RetirementPreview {
             candidates = List.copyOf(candidates);
+            segments = List.copyOf(segments);
+            blockers = Map.copyOf(blockers);
         }
     }
 }

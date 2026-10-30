@@ -9,6 +9,7 @@ public record OrderBookRetentionHold(
         String holdKey,
         UUID artifactId,
         UUID sequenceId,
+        UUID segmentId,
         String reason,
         Instant createdAt,
         Instant releasedAt
@@ -18,12 +19,21 @@ public record OrderBookRetentionHold(
         Objects.requireNonNull(holdKey, "holdKey is required");
         Objects.requireNonNull(reason, "reason is required");
         Objects.requireNonNull(createdAt, "createdAt is required");
-        if (artifactId == null && sequenceId == null) {
-            throw new IllegalArgumentException("an artifact or sequence target is required");
+        if (artifactId == null && sequenceId == null && segmentId == null) {
+            throw new IllegalArgumentException("an artifact, sequence or segment target is required");
         }
+    }
+
+    public OrderBookRetentionHold(UUID holdId, String holdKey, UUID artifactId, UUID sequenceId,
+                                  String reason, Instant createdAt, Instant releasedAt) {
+        this(holdId, holdKey, artifactId, sequenceId, null, reason, createdAt, releasedAt);
     }
 
     public boolean active() {
         return releasedAt == null;
+    }
+
+    public boolean targetsSegment() {
+        return segmentId != null;
     }
 }

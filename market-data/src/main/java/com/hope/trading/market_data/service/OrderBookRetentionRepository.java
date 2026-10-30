@@ -2,11 +2,16 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.model.OrderBookDependencyState;
 import com.hope.trading.market_data.model.OrderBookEvidenceDependency;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegment;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentAssessment;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentClassification;
+import com.hope.trading.market_data.model.OrderBookEvidenceSegmentStatus;
 import com.hope.trading.market_data.model.OrderBookReplayArtifact;
 import com.hope.trading.market_data.model.OrderBookRetentionHold;
 import com.hope.trading.market_data.model.OrderBookRetirementCandidate;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.model.OrderBookSequenceStatus;
+import com.hope.trading.market_data.model.OrderBookSegmentBlocker;
 import com.hope.trading.market_data.config.OrderBookRetentionProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.slf4j.Logger;
@@ -26,6 +31,7 @@ import java.util.Optional;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.ArrayList;
 
 @Repository
 public class OrderBookRetentionRepository {
@@ -198,13 +204,13 @@ public class OrderBookRetentionRepository {
 
     @Transactional
     public boolean saveDependency(OrderBookEvidenceDependency dependency) {
-        lockProtectionTarget(dependency.artifactId(), dependency.sequenceId());
+        lockProtectionTarget(dependency.artifactId(), dependency.sequenceId(), dependency.segmentId());
         if (isH2() && existsDependency(dependency.dependencyKey())) {
             return false;
         }
         return jdbc.update(dependencyInsertSql(),
                 dependency.dependencyId(), dependency.dependencyKey(), dependency.consumerType(),
-                dependency.consumerIdentity(), dependency.artifactId(), dependency.sequenceId(),
+                dependency.consumerIdentity(), dependency.artifactId(), dependency.sequenceId(), dependency.segmentId(),
                 dependency.state().name(), dependency.reason(), Timestamp.from(dependency.createdAt()),
                 timestamp(dependency.releasedAt())) == 1;
     }
@@ -213,13 +219,14 @@ public class OrderBookRetentionRepository {
     public Optional<OrderBookEvidenceDependency> findDependency(String dependencyKey) {
         return jdbc.query("""
                 SELECT dependency_id, dependency_key, consumer_type, consumer_identity, artifact_id, sequence_id,
-                       state, reason, created_at, released_at
+                       segment_id, state, reason, created_at, released_at
                   FROM historical_order_book_evidence_dependency
                  WHERE dependency_key = ?
                 """, (result, row) -> new OrderBookEvidenceDependency(
                 result.getObject("dependency_id", UUID.class), result.getString("dependency_key"),
                 result.getString("consumer_type"), result.getString("consumer_identity"),
                 result.getObject("artifact_id", UUID.class), result.getObject("sequence_id", UUID.class),
+                result.getObject("segment_id", UUID.class),
                 OrderBookDependencyState.valueOf(result.getString("state")), result.getString("reason"),
                 result.getTimestamp("created_at").toInstant(), instant(result.getTimestamp("released_at"))),
                 dependencyKey).stream().findFirst();
@@ -237,23 +244,25 @@ public class OrderBookRetentionRepository {
 
     @Transactional
     public boolean saveHold(OrderBookRetentionHold hold) {
-        lockProtectionTarget(hold.artifactId(), hold.sequenceId());
+        lockProtectionTarget(hold.artifactId(), hold.sequenceId(), hold.segmentId());
         if (isH2() && existsHold(hold.holdKey())) {
             return false;
         }
         return jdbc.update(holdInsertSql(), hold.holdId(), hold.holdKey(), hold.artifactId(), hold.sequenceId(),
+                hold.segmentId(),
                 hold.reason(), Timestamp.from(hold.createdAt()), timestamp(hold.releasedAt())) == 1;
     }
 
     @Transactional(readOnly = true)
     public Optional<OrderBookRetentionHold> findHold(String holdKey) {
         return jdbc.query("""
-                SELECT hold_id, hold_key, artifact_id, sequence_id, reason, created_at, released_at
+                SELECT hold_id, hold_key, artifact_id, sequence_id, segment_id, reason, created_at, released_at
                   FROM historical_order_book_retention_hold
                  WHERE hold_key = ?
                 """, (result, row) -> new OrderBookRetentionHold(
                 result.getObject("hold_id", UUID.class), result.getString("hold_key"),
                 result.getObject("artifact_id", UUID.class), result.getObject("sequence_id", UUID.class),
+                result.getObject("segment_id", UUID.class),
                 result.getString("reason"), result.getTimestamp("created_at").toInstant(),
                 instant(result.getTimestamp("released_at"))), holdKey).stream().findFirst();
     }
@@ -330,7 +339,142 @@ public class OrderBookRetentionRepository {
                 result.getLong("evidence_count"), result.getLong("first_ordinal"),
                  result.getLong("last_ordinal"), result.getTimestamp("first_known_at").toInstant(),
                   result.getTimestamp("last_known_at").toInstant(), instant(result.getTimestamp("invalidated_at"))),
-                  Timestamp.from(invalidatedBefore));
+                   Timestamp.from(invalidatedBefore));
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderBookEvidenceSegmentAssessment> assessSegments(int limit) {
+        List<OrderBookEvidenceSegment> segments = jdbc.query("""
+                SELECT segment_id, market_id, provider, provider_symbol, depth, sequence_id,
+                       start_ordinal, end_ordinal, start_known_at, end_known_at,
+                       successor_evidence_id, successor_origin, status, classification,
+                       created_at, closed_at
+                  FROM historical_order_book_evidence_segment
+                 WHERE status <> 'RETIRED'
+                 ORDER BY sequence_id, start_ordinal
+                 LIMIT ?
+                """, (result, row) -> new OrderBookEvidenceSegment(
+                result.getObject("segment_id", UUID.class), result.getObject("market_id", UUID.class),
+                result.getString("provider"), result.getString("provider_symbol"), result.getInt("depth"),
+                result.getObject("sequence_id", UUID.class), result.getLong("start_ordinal"),
+                result.getObject("end_ordinal", Long.class), result.getTimestamp("start_known_at").toInstant(),
+                instant(result.getTimestamp("end_known_at")), result.getObject("successor_evidence_id", UUID.class),
+                result.getString("successor_origin") == null ? null
+                        : com.hope.trading.market_data.model.OrderBookEvidenceOrigin.valueOf(
+                                result.getString("successor_origin")),
+                OrderBookEvidenceSegmentStatus.valueOf(result.getString("status")),
+                OrderBookEvidenceSegmentClassification.valueOf(result.getString("classification")),
+                result.getTimestamp("created_at").toInstant(), instant(result.getTimestamp("closed_at"))), limit);
+        return segments.stream().map(this::assessSegment).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long countRetainableSegments() {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*)
+                  FROM historical_order_book_evidence_segment
+                 WHERE status <> 'RETIRED'
+                """, Long.class);
+    }
+
+    private OrderBookEvidenceSegmentAssessment assessSegment(OrderBookEvidenceSegment segment) {
+        List<OrderBookSegmentBlocker> blockers = new ArrayList<>();
+        if (segment.status() == OrderBookEvidenceSegmentStatus.OPEN) {
+            blockers.add(OrderBookSegmentBlocker.OPEN_SEGMENT);
+        }
+        if (segment.classification() == OrderBookEvidenceSegmentClassification.LEGACY_UNKNOWN) {
+            blockers.add(OrderBookSegmentBlocker.UNKNOWN_LEGACY);
+        }
+        if (!segment.hasTrustedSuccessorBoundary()) {
+            blockers.add(OrderBookSegmentBlocker.NO_TRUSTED_SUCCESSOR_BOUNDARY);
+        } else if (!exists("""
+                SELECT 1
+                  FROM historical_order_book_evidence evidence
+                 WHERE evidence.evidence_id = ?
+                   AND evidence.sequence_id = ?
+                   AND evidence.market_id = ?
+                   AND evidence.depth = ?
+                   AND evidence.provider = ?
+                   AND evidence.provider_symbol = ?
+                   AND evidence.sequence_ordinal = ?
+                   AND evidence.evidence_type = 'SNAPSHOT'
+                   AND evidence.origin = ?
+                   AND evidence.trusted = true
+                """, segment.successorEvidenceId(), segment.sequenceId(), segment.marketId(), segment.depth(),
+                segment.provider(), segment.providerSymbol(), segment.endOrdinal() + 1,
+                segment.successorOrigin().name())) {
+            blockers.add(OrderBookSegmentBlocker.CONTINUITY_UNPROVEN);
+        }
+        if (exists("""
+                SELECT 1
+                  FROM historical_order_book_evidence_dependency dependency
+                  LEFT JOIN historical_order_book_replay_artifact artifact
+                    ON artifact.artifact_id = dependency.artifact_id
+                 WHERE dependency.state <> 'RELEASED'
+                   AND (dependency.segment_id = ? OR dependency.sequence_id = ?
+                        OR (artifact.sequence_id = ?
+                            AND COALESCE(artifact.source_start_ordinal, 0) <= ?
+                            AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= ?))
+                 LIMIT 1
+                """, segment.segmentId(), segment.sequenceId(), segment.sequenceId(),
+                segment.endOrdinal(), segment.startOrdinal())) {
+            blockers.add(OrderBookSegmentBlocker.PROTECTED_DEPENDENCY);
+        }
+        if (exists("""
+                SELECT 1
+                  FROM historical_order_book_retention_hold hold
+                  LEFT JOIN historical_order_book_replay_artifact artifact
+                    ON artifact.artifact_id = hold.artifact_id
+                 WHERE hold.released_at IS NULL
+                   AND (hold.segment_id = ? OR hold.sequence_id = ?
+                        OR (artifact.sequence_id = ?
+                            AND COALESCE(artifact.source_start_ordinal, 0) <= ?
+                            AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= ?))
+                 LIMIT 1
+                """, segment.segmentId(), segment.sequenceId(), segment.sequenceId(),
+                segment.endOrdinal(), segment.startOrdinal())) {
+            blockers.add(OrderBookSegmentBlocker.ACTIVE_HOLD);
+        }
+        if (exists("""
+                SELECT 1
+                  FROM historical_order_book_replay_artifact artifact
+                 WHERE artifact.sequence_id = ?
+                   AND artifact.source_trust_status <> 'TRUSTED'
+                   AND COALESCE(artifact.source_start_ordinal, 0) <= ?
+                   AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= ?
+                 LIMIT 1
+                """, segment.sequenceId(), segment.endOrdinal(), segment.startOrdinal())) {
+            blockers.add(OrderBookSegmentBlocker.UNTRUSTED_ARTIFACT);
+        }
+        if (!exists("""
+                SELECT 1
+                  FROM historical_order_book_evidence_dependency dependency
+                  LEFT JOIN historical_order_book_replay_artifact artifact
+                    ON artifact.artifact_id = dependency.artifact_id
+                 WHERE dependency.state = 'RELEASED'
+                   AND (dependency.segment_id = ? OR dependency.sequence_id = ?
+                        OR (artifact.sequence_id = ?
+                            AND COALESCE(artifact.source_start_ordinal, 0) <= ?
+                            AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= ?))
+                 LIMIT 1
+                """, segment.segmentId(), segment.sequenceId(), segment.sequenceId(),
+                segment.endOrdinal(), segment.startOrdinal())) {
+            blockers.add(OrderBookSegmentBlocker.NO_RELEASED_DEPENDENCY);
+        }
+        Long evidenceCount = segment.endOrdinal() == null ? 0L : jdbc.queryForObject("""
+                SELECT COUNT(*)
+                  FROM historical_order_book_evidence
+                 WHERE sequence_id = ? AND sequence_ordinal BETWEEN ? AND ?
+                """, Long.class, segment.sequenceId(), segment.startOrdinal(), segment.endOrdinal());
+        if (segment.status() == OrderBookEvidenceSegmentStatus.CLOSED && segment.endOrdinal() != null
+                && evidenceCount != segment.endOrdinal() - segment.startOrdinal() + 1) {
+            blockers.add(OrderBookSegmentBlocker.CONTINUITY_UNPROVEN);
+        }
+        return new OrderBookEvidenceSegmentAssessment(segment, blockers.isEmpty(), evidenceCount, blockers);
+    }
+
+    private boolean exists(String sql, Object... args) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (" + sql + ")", Boolean.class, args));
     }
 
     @Transactional(readOnly = true)
@@ -469,11 +613,103 @@ public class OrderBookRetentionRepository {
                       LIMIT ?
                  )
                  """, candidate.sequenceId(), candidate.firstOrdinal(), candidate.lastOrdinal(), Timestamp.from(invalidatedBefore),
-                batchSize);
+                 batchSize);
     }
 
-    private void lockProtectionTarget(UUID artifactId, UUID sequenceId) {
-        UUID targetSequenceId = resolveTargetSequence(artifactId, sequenceId);
+    @Transactional
+    public int retireEvidenceSegment(OrderBookEvidenceSegment segment, int batchSize, Instant invalidatedBefore) {
+        lockRetirementTarget(segment.sequenceId());
+        int retired = jdbc.update("""
+                DELETE FROM historical_order_book_evidence
+                 WHERE evidence_id IN (
+                     SELECT evidence.evidence_id
+                       FROM historical_order_book_evidence evidence
+                      WHERE evidence.sequence_id = ?
+                        AND evidence.sequence_ordinal BETWEEN ? AND ?
+                        AND EXISTS (
+                         SELECT 1
+                           FROM historical_order_book_evidence_segment candidate
+                          WHERE candidate.segment_id = ?
+                            AND candidate.status IN ('CLOSED', 'RETIRING')
+                            AND candidate.start_ordinal = ?
+                            AND candidate.end_ordinal = ?)
+                        AND EXISTS (
+                         SELECT 1
+                           FROM historical_order_book_sequence sequence
+                          WHERE sequence.sequence_id = evidence.sequence_id
+                            AND (sequence.status = 'SEALED' OR
+                                 (sequence.status = 'INVALIDATED' AND sequence.invalidated_at IS NOT NULL
+                                  AND sequence.invalidated_at <= ?)))
+                        AND NOT EXISTS (
+                         SELECT 1
+                           FROM historical_order_book_evidence_dependency dependency
+                          WHERE dependency.state <> 'RELEASED'
+                            AND (dependency.segment_id = ? OR dependency.sequence_id = evidence.sequence_id
+                                 OR EXISTS (
+                                     SELECT 1
+                                       FROM historical_order_book_replay_artifact artifact
+                                      WHERE artifact.artifact_id = dependency.artifact_id
+                                        AND artifact.sequence_id = evidence.sequence_id
+                                        AND COALESCE(artifact.source_start_ordinal, 0) <= evidence.sequence_ordinal
+                                        AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= evidence.sequence_ordinal)))
+                        AND NOT EXISTS (
+                         SELECT 1
+                           FROM historical_order_book_retention_hold hold
+                          WHERE hold.released_at IS NULL
+                            AND (hold.segment_id = ? OR hold.sequence_id = evidence.sequence_id
+                                 OR EXISTS (
+                                     SELECT 1
+                                       FROM historical_order_book_replay_artifact artifact
+                                      WHERE artifact.artifact_id = hold.artifact_id
+                                        AND artifact.sequence_id = evidence.sequence_id
+                                        AND COALESCE(artifact.source_start_ordinal, 0) <= evidence.sequence_ordinal
+                                        AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= evidence.sequence_ordinal)))
+                        AND EXISTS (
+                         SELECT 1
+                           FROM historical_order_book_evidence_dependency released_dependency
+                          WHERE released_dependency.state = 'RELEASED'
+                            AND (released_dependency.segment_id = ? OR released_dependency.sequence_id = evidence.sequence_id
+                                 OR EXISTS (
+                                     SELECT 1
+                                       FROM historical_order_book_replay_artifact artifact
+                                      WHERE artifact.artifact_id = released_dependency.artifact_id
+                                        AND artifact.sequence_id = evidence.sequence_id
+                                        AND COALESCE(artifact.source_start_ordinal, 0) <= evidence.sequence_ordinal
+                                        AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= evidence.sequence_ordinal)))
+                        AND NOT EXISTS (
+                         SELECT 1
+                           FROM historical_order_book_replay_artifact artifact
+                          WHERE artifact.sequence_id = evidence.sequence_id
+                            AND artifact.source_trust_status <> 'TRUSTED'
+                            AND COALESCE(artifact.source_start_ordinal, 0) <= evidence.sequence_ordinal
+                            AND COALESCE(artifact.source_end_ordinal, 9223372036854775807) >= evidence.sequence_ordinal)
+                       ORDER BY evidence.sequence_ordinal
+                       LIMIT ?
+                 )
+                """, segment.sequenceId(), segment.startOrdinal(), segment.endOrdinal(), segment.segmentId(),
+                segment.startOrdinal(), segment.endOrdinal(), Timestamp.from(invalidatedBefore), segment.segmentId(),
+                segment.segmentId(), segment.segmentId(), batchSize);
+        if (jdbc.queryForObject("""
+                SELECT COUNT(*) FROM historical_order_book_evidence
+                 WHERE sequence_id = ? AND sequence_ordinal BETWEEN ? AND ?
+                """, Long.class, segment.sequenceId(), segment.startOrdinal(), segment.endOrdinal()) == 0) {
+            jdbc.update("""
+                    UPDATE historical_order_book_evidence_segment
+                       SET status = 'RETIRED'
+                     WHERE segment_id = ? AND status IN ('CLOSED', 'RETIRING')
+                    """, segment.segmentId());
+        } else {
+            jdbc.update("""
+                    UPDATE historical_order_book_evidence_segment
+                       SET status = 'RETIRING'
+                     WHERE segment_id = ? AND status = 'CLOSED'
+                    """, segment.segmentId());
+        }
+        return retired;
+    }
+
+    private void lockProtectionTarget(UUID artifactId, UUID sequenceId, UUID segmentId) {
+        UUID targetSequenceId = resolveTargetSequence(artifactId, sequenceId, segmentId);
         lockRetirementTarget(targetSequenceId);
         if (jdbc.queryForObject("""
                 SELECT COUNT(*)
@@ -484,7 +720,7 @@ public class OrderBookRetentionRepository {
         }
     }
 
-    private UUID resolveTargetSequence(UUID artifactId, UUID sequenceId) {
+    private UUID resolveTargetSequence(UUID artifactId, UUID sequenceId, UUID segmentId) {
         UUID artifactSequence = artifactId == null ? null : jdbc.queryForObject("""
                 SELECT sequence_id
                   FROM historical_order_book_replay_artifact
@@ -493,7 +729,21 @@ public class OrderBookRetentionRepository {
         if (sequenceId != null && artifactSequence != null && !sequenceId.equals(artifactSequence)) {
             throw new IllegalArgumentException("dependency target sequence does not match artifact sequence");
         }
-        UUID target = sequenceId == null ? artifactSequence : sequenceId;
+        UUID segmentSequence = segmentId == null ? null : jdbc.queryForObject("""
+                SELECT sequence_id
+                  FROM historical_order_book_evidence_segment
+                 WHERE segment_id = ?
+                """, UUID.class, segmentId);
+        if (segmentId != null && segmentSequence == null) {
+            throw new IllegalArgumentException("dependency target segment does not exist");
+        }
+        if (sequenceId != null && segmentSequence != null && !sequenceId.equals(segmentSequence)) {
+            throw new IllegalArgumentException("dependency target segment does not match sequence");
+        }
+        if (artifactSequence != null && segmentSequence != null && !artifactSequence.equals(segmentSequence)) {
+            throw new IllegalArgumentException("dependency target segment does not match artifact");
+        }
+        UUID target = sequenceId == null ? (artifactSequence == null ? segmentSequence : artifactSequence) : sequenceId;
         if (target == null) {
             throw new IllegalArgumentException("a dependency or hold target is required");
         }
@@ -524,8 +774,8 @@ public class OrderBookRetentionRepository {
 
     private String dependencyInsertSql() {
         String columns = "(dependency_id, dependency_key, consumer_type, consumer_identity, artifact_id, sequence_id, "
-                + "state, reason, created_at, released_at)";
-        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "segment_id, state, reason, created_at, released_at)";
+        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         if (isH2()) {
             return "INSERT INTO historical_order_book_evidence_dependency " + columns + " " + values;
         }
@@ -534,8 +784,8 @@ public class OrderBookRetentionRepository {
     }
 
     private String holdInsertSql() {
-        String columns = "(hold_id, hold_key, artifact_id, sequence_id, reason, created_at, released_at)";
-        String values = "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String columns = "(hold_id, hold_key, artifact_id, sequence_id, segment_id, reason, created_at, released_at)";
+        String values = "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         if (isH2()) {
             return "INSERT INTO historical_order_book_retention_hold " + columns + " " + values;
         }

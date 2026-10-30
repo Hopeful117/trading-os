@@ -32,14 +32,17 @@ public class OrderBookRetentionScheduler {
         int failures = 0;
         try {
             OrderBookRetentionService.RetirementPreview preview = retentionService.previewRetirement();
-            candidateCount = preview.candidates().size();
+            candidateCount = preview.segments().size();
             if (properties.isDestructiveRetirementEnabled()) {
-                for (var candidate : preview.candidates()) {
+                for (var segment : preview.segments()) {
+                    if (!segment.eligible()) {
+                        continue;
+                    }
                     try {
-                        retired += retentionService.retire(preview.operationFingerprint(), candidate);
+                        retired += retentionService.retire(preview.operationFingerprint(), segment);
                     } catch (RuntimeException exception) {
                         failures++;
-                        log.error("Order-book retention candidate failed candidateCount={} retired={} failures={}",
+                        log.error("Order-book retention segment failed candidateCount={} retired={} failures={}",
                                 candidateCount, retired, failures, exception);
                     }
                 }

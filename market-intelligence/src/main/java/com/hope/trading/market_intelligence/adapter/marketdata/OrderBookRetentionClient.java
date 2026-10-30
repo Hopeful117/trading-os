@@ -28,7 +28,11 @@ public interface OrderBookRetentionClient {
     void promoteCanonical(@RequestBody CanonicalPromotionRequest request);
 
     record DependencyRequest(String dependencyKey, String consumerType, String consumerIdentity,
-                             UUID artifactId, UUID sequenceId, String reason) {
+                             UUID artifactId, UUID sequenceId, UUID segmentId, String reason) {
+        public DependencyRequest(String dependencyKey, String consumerType, String consumerIdentity,
+                                 UUID artifactId, UUID sequenceId, String reason) {
+            this(dependencyKey, consumerType, consumerIdentity, artifactId, sequenceId, null, reason);
+        }
     }
 
     record ReleaseRequest(String reason) {
