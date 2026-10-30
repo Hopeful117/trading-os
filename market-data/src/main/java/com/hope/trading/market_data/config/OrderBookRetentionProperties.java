@@ -7,6 +7,9 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "order-book.retention")
 public class OrderBookRetentionProperties {
     private boolean destructiveRetirementEnabled;
+    private boolean schedulerEnabled;
+    private Duration schedulerFixedDelay = Duration.ofHours(1);
+    private Duration schedulerInitialDelay = Duration.ofMinutes(1);
     private String storagePath = "/";
     private long minimumFreeBytes = 10L * 1024L * 1024L * 1024L;
     private int retirementBatchSize = 1000;
@@ -19,6 +22,36 @@ public class OrderBookRetentionProperties {
 
     public void setDestructiveRetirementEnabled(boolean destructiveRetirementEnabled) {
         this.destructiveRetirementEnabled = destructiveRetirementEnabled;
+    }
+
+    public boolean isSchedulerEnabled() {
+        return schedulerEnabled;
+    }
+
+    public void setSchedulerEnabled(boolean schedulerEnabled) {
+        this.schedulerEnabled = schedulerEnabled;
+    }
+
+    public Duration getSchedulerFixedDelay() {
+        return schedulerFixedDelay;
+    }
+
+    public void setSchedulerFixedDelay(Duration schedulerFixedDelay) {
+        if (schedulerFixedDelay == null || schedulerFixedDelay.isZero() || schedulerFixedDelay.isNegative()) {
+            throw new IllegalArgumentException("schedulerFixedDelay must be positive");
+        }
+        this.schedulerFixedDelay = schedulerFixedDelay;
+    }
+
+    public Duration getSchedulerInitialDelay() {
+        return schedulerInitialDelay;
+    }
+
+    public void setSchedulerInitialDelay(Duration schedulerInitialDelay) {
+        if (schedulerInitialDelay == null || schedulerInitialDelay.isNegative()) {
+            throw new IllegalArgumentException("schedulerInitialDelay cannot be negative or null");
+        }
+        this.schedulerInitialDelay = schedulerInitialDelay;
     }
 
     public String getStoragePath() {

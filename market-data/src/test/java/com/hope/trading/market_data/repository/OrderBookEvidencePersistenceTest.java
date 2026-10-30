@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -165,6 +166,14 @@ class OrderBookEvidencePersistenceTest {
         assertThat(evidenceRepository.findTrusted(marketId, 25, KNOWN_AT.plusSeconds(301)))
                 .extracting(OrderBookEvidence::sequenceOrdinal)
                 .containsExactly(2L, 3L);
+
+        List<Long> streamedOrdinals = new ArrayList<>();
+        int streamed = evidenceRepository.streamTrustedEvidenceAfter(marketId, 25, sequenceId, 2L,
+                KNOWN_AT.plusSeconds(302), 1,
+                evidence -> streamedOrdinals.add(evidence.sequenceOrdinal()));
+
+        assertThat(streamed).isEqualTo(2);
+        assertThat(streamedOrdinals).containsExactly(3L, 4L);
     }
 
     @Test

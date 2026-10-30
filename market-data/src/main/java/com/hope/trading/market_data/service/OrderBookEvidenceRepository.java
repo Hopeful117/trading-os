@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 @Repository
 public class OrderBookEvidenceRepository {
@@ -186,18 +187,48 @@ public class OrderBookEvidenceRepository {
 
     @Transactional(readOnly = true)
     public List<OrderBookEvidence> findTrusted(UUID marketId, int depth, Instant cutoff) {
-        Optional<UUID> sequenceId = findUniqueEligibleSequence(marketId, depth, cutoff);
-        if (sequenceId.isEmpty()) return List.of();
-
-        Optional<OrderBookEvidence> anchor = findLatestTrustedSnapshot(
-                marketId, depth, sequenceId.get(), cutoff);
+        Optional<OrderBookEvidence> anchor = findTrustedReplayBase(marketId, depth, cutoff);
         if (anchor.isEmpty()) return List.of();
 
         List<OrderBookEvidence> result = new java.util.ArrayList<>();
         result.add(anchor.get());
-        result.addAll(findTrustedEvidenceAfter(
-                marketId, depth, sequenceId.get(), anchor.get().sequenceOrdinal(), cutoff));
+        streamTrustedEvidenceAfter(marketId, depth, anchor.get().sequenceId(), anchor.get().sequenceOrdinal(), cutoff,
+                Integer.MAX_VALUE, result::add);
         return result;
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<OrderBookEvidence> findTrustedReplayBase(UUID marketId, int depth, Instant cutoff) {
+        return findUniqueEligibleSequence(marketId, depth, cutoff)
+                .flatMap(sequenceId -> findLatestTrustedSnapshot(marketId, depth, sequenceId, cutoff));
+    }
+
+    @Transactional(readOnly = true)
+    public int streamTrustedEvidenceAfter(UUID marketId, int depth, UUID sequenceId, long anchorOrdinal,
+                                          Instant cutoff, int batchSize, Consumer<OrderBookEvidence> consumer) {
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("batchSize must be positive");
+        }
+        if (consumer == null) {
+            throw new IllegalArgumentException("consumer is required");
+        }
+        int streamed = 0;
+        long lastOrdinal = anchorOrdinal;
+        while (true) {
+            List<OrderBookEvidence> batch = findTrustedEvidenceAfter(
+                    marketId, depth, sequenceId, lastOrdinal, cutoff, batchSize);
+            if (batch.isEmpty()) {
+                return streamed;
+            }
+            for (OrderBookEvidence evidence : batch) {
+                consumer.accept(evidence);
+                streamed++;
+                lastOrdinal = evidence.sequenceOrdinal();
+            }
+            if (batch.size() < batchSize) {
+                return streamed;
+            }
+        }
     }
 
     @Transactional(readOnly = true)
@@ -262,7 +293,7 @@ public class OrderBookEvidenceRepository {
     }
 
     private List<OrderBookEvidence> findTrustedEvidenceAfter(
-            UUID marketId, int depth, UUID sequenceId, long anchorOrdinal, Instant cutoff) {
+            UUID marketId, int depth, UUID sequenceId, long anchorOrdinal, Instant cutoff, int batchSize) {
         return jdbc.query("""
                         SELECT evidence_id, market_id, provider, symbol, provider_symbol, depth,
                                evidence_type, origin, source_start_ordinal, source_end_ordinal,
@@ -272,7 +303,8 @@ public class OrderBookEvidenceRepository {
                         WHERE market_id = ? AND depth = ? AND sequence_id = ?
                           AND trusted = true AND sequence_ordinal > ? AND known_at <= ?
                         ORDER BY sequence_ordinal
-                        """, this::map, marketId, depth, sequenceId, anchorOrdinal, Timestamp.from(cutoff));
+                        LIMIT ?
+                        """, this::map, marketId, depth, sequenceId, anchorOrdinal, Timestamp.from(cutoff), batchSize);
     }
 
     private OrderBookEvidence map(java.sql.ResultSet result, int row) throws java.sql.SQLException {
