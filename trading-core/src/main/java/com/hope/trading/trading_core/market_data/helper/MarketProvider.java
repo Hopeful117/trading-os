@@ -5,5 +5,6 @@ public enum MarketProvider {
     FTMO,
     BINANCE,
     COINBASE,
-    BYBIT
+    BYBIT,
+    CTRADER
 }

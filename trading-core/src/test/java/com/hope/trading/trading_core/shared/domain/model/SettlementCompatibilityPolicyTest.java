@@ -18,10 +18,16 @@ class SettlementCompatibilityPolicyTest {
     void rejectsUnsupportedAndUnknownCombinations() {
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.INVENTORY,
                 InstrumentProductType.LINEAR_PERPETUAL)).isFalse();
+        assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.INVENTORY,
+                InstrumentProductType.CFD)).isFalse();
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.CASH,
                 InstrumentProductType.SPOT)).isFalse();
+        assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.CASH,
+                InstrumentProductType.CFD)).isFalse();
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.UNKNOWN,
                 InstrumentProductType.SPOT)).isFalse();
+        assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.UNKNOWN,
+                InstrumentProductType.CFD)).isFalse();
         assertThatThrownBy(() -> SettlementCompatibilityPolicy.requireCompatible(
                 SettlementModel.UNKNOWN, InstrumentProductType.LINEAR_PERPETUAL))
                 .isInstanceOf(IllegalArgumentException.class);

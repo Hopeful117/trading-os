@@ -6,9 +6,14 @@ public final class SettlementCompatibilityPolicy {
 
     public static boolean isCompatible(SettlementModel settlementModel,
                                        InstrumentProductType productType) {
-        return settlementModel == SettlementModel.INVENTORY && productType == InstrumentProductType.SPOT
-                || settlementModel == SettlementModel.CASH
-                && productType == InstrumentProductType.LINEAR_PERPETUAL;
+        if (settlementModel == null || productType == null) {
+            return false;
+        }
+        return switch (settlementModel) {
+            case INVENTORY -> productType == InstrumentProductType.SPOT;
+            case CASH -> productType == InstrumentProductType.LINEAR_PERPETUAL;
+            case UNKNOWN -> false;
+        };
     }
 
     public static void requireCompatible(SettlementModel settlementModel,
