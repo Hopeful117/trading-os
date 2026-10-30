@@ -4,6 +4,9 @@ import com.hope.trading.trading_core.positionclose.application.port.BrokerPositi
 import com.hope.trading.trading_core.positionclose.domain.model.PositionCloseCommand;
 import com.hope.trading.trading_core.positionclose.domain.model.PositionCloseStatus;
 import com.hope.trading.trading_core.positionclose.domain.repository.PositionCloseCommandRepositoryPort;
+import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.model.Account;
+import com.hope.trading.trading_core.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +29,8 @@ class PositionCloseServiceTest {
     private PositionCloseCommandRepositoryPort repository;
     @Mock
     private BrokerPositionClosePort brokerPort;
+    @Mock
+    private AccountRepository accounts;
 
     private PositionCloseService service;
 
@@ -35,7 +40,7 @@ class PositionCloseServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PositionCloseService(repository, brokerPort);
+        service = new PositionCloseService(repository, brokerPort, accounts);
     }
 
     @Test
@@ -59,7 +64,7 @@ class PositionCloseServiceTest {
         when(repository.findActiveByBrokerAccountAndScope(BROKER_ACCOUNT_ID, "scope-1"))
                 .thenReturn(List.of());
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(brokerPort.executeClose("scope-1", "key-1"))
+        when(brokerPort.executeClose(BROKER_ACCOUNT_ID, "scope-1", null, "key-1"))
                 .thenReturn(new BrokerPositionClosePort.BrokerCloseResponse("ACKNOWLEDGED", "ext-123", "corr-1", "ACKNOWLEDGED", null));
 
         PositionCloseCommand result = service.close(USER_ID, ACCOUNT_ID, "ref", "key-1");
@@ -76,7 +81,7 @@ class PositionCloseServiceTest {
         when(repository.findActiveByBrokerAccountAndScope(BROKER_ACCOUNT_ID, "scope-1"))
                 .thenReturn(List.of());
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(brokerPort.executeClose("scope-1", "key-1"))
+        when(brokerPort.executeClose(BROKER_ACCOUNT_ID, "scope-1", null, "key-1"))
                 .thenThrow(new RuntimeException("Connection refused"));
 
         PositionCloseCommand result = service.close(USER_ID, ACCOUNT_ID, "ref", "key-1");
@@ -108,7 +113,7 @@ class PositionCloseServiceTest {
         when(repository.findActiveByBrokerAccountAndScope(BROKER_ACCOUNT_ID, "scope-1"))
                 .thenReturn(List.of());
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(brokerPort.executeClose("scope-1", "key-1"))
+        when(brokerPort.executeClose(BROKER_ACCOUNT_ID, "scope-1", null, "key-1"))
                 .thenReturn(new BrokerPositionClosePort.BrokerCloseResponse("REJECTED", null, null, "REJECTED", "INSUFFICIENT_FUNDS"));
 
         PositionCloseCommand result = service.close(USER_ID, ACCOUNT_ID, "ref", "key-1");
@@ -119,12 +124,17 @@ class PositionCloseServiceTest {
     @Test
     void reconcileSuccessfulExposureAbsent() {
         PositionCloseCommand cmd = new PositionCloseCommand(
-                UUID.randomUUID(), USER_ID, BROKER_ACCOUNT_ID, "ref", "scope-1", "key-1",
-                PositionCloseStatus.ACKNOWLEDGED, null, "ext-1", null,
+                UUID.randomUUID(), ACCOUNT_ID, BROKER_ACCOUNT_ID, "ref", "scope-1",
+                null, null, "key-1", PositionCloseStatus.ACKNOWLEDGED, null, "ext-1", null,
                 Instant.now(), Instant.now(), 0);
         when(repository.findById(cmd.id)).thenReturn(Optional.of(cmd));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(brokerPort.reconcileClose("scope-1", "key-1"))
+        Account account = mock(Account.class);
+        User owner = mock(User.class);
+        when(owner.getUserId()).thenReturn(USER_ID);
+        when(account.getUser()).thenReturn(owner);
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(brokerPort.reconcileClose(BROKER_ACCOUNT_ID, "scope-1", "key-1"))
                 .thenReturn(new BrokerPositionClosePort.BrokerReconcileResponse("EXPOSURE_CONFIRMED_ABSENT", "EXPOSURE_CONFIRMED_ABSENT"));
 
         PositionCloseCommand result = service.reconcile(USER_ID, cmd.id);
@@ -134,8 +144,8 @@ class PositionCloseServiceTest {
     @Test
     void reconcileRejectsUnauthorizedUser() {
         PositionCloseCommand cmd = new PositionCloseCommand(
-                UUID.randomUUID(), UUID.randomUUID(), BROKER_ACCOUNT_ID, "ref", "scope-1", "key-1",
-                PositionCloseStatus.ACKNOWLEDGED, null, "ext-1", null,
+                UUID.randomUUID(), ACCOUNT_ID, BROKER_ACCOUNT_ID, "ref", "scope-1",
+                null, null, "key-1", PositionCloseStatus.ACKNOWLEDGED, null, "ext-1", null,
                 Instant.now(), Instant.now(), 0);
         when(repository.findById(cmd.id)).thenReturn(Optional.of(cmd));
 
@@ -146,10 +156,15 @@ class PositionCloseServiceTest {
     @Test
     void reconcileRejectsNonReconcilableCommand() {
         PositionCloseCommand cmd = new PositionCloseCommand(
-                UUID.randomUUID(), USER_ID, BROKER_ACCOUNT_ID, "ref", "scope-1", "key-1",
-                PositionCloseStatus.SUBMITTED, null, null, null,
+                UUID.randomUUID(), ACCOUNT_ID, BROKER_ACCOUNT_ID, "ref", "scope-1",
+                null, null, "key-1", PositionCloseStatus.SUBMITTED, null, null, null,
                 Instant.now(), Instant.now(), 0);
         when(repository.findById(cmd.id)).thenReturn(Optional.of(cmd));
+        Account account = mock(Account.class);
+        User owner = mock(User.class);
+        when(owner.getUserId()).thenReturn(USER_ID);
+        when(account.getUser()).thenReturn(owner);
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
 
         assertThrows(PositionCloseConflictException.class, () ->
                 service.reconcile(USER_ID, cmd.id));

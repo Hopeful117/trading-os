@@ -213,10 +213,17 @@ public final class BrokerModels {
             resolvedMutationScope = required(resolvedMutationScope, "resolvedMutationScope");
         }
     }
-    public record ExecuteCloseRequest(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {
+    public record ExecuteCloseRequest(UUID brokerAccountId, String resolvedMutationScope,
+                                      BigDecimal closeQuantity, String idempotencyKey) {
+        public ExecuteCloseRequest(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {
+            this(brokerAccountId, resolvedMutationScope, null, idempotencyKey);
+        }
         public ExecuteCloseRequest {
             Objects.requireNonNull(brokerAccountId);
             resolvedMutationScope = required(resolvedMutationScope, "resolvedMutationScope");
+            if (closeQuantity != null && closeQuantity.signum() <= 0) {
+                throw new IllegalArgumentException("closeQuantity must be positive");
+            }
             idempotencyKey = required(idempotencyKey, "idempotencyKey");
         }
     }
@@ -225,7 +232,7 @@ public final class BrokerModels {
         public CloseAcknowledged { externalOrderId = required(externalOrderId, "externalOrderId"); correlationId = required(correlationId, "correlationId"); }
     }
     public record CloseRejected(String externalOrderId, String reasonCode) implements CloseResult {
-        public CloseRejected { externalOrderId = required(externalOrderId, "externalOrderId"); reasonCode = required(reasonCode, "reasonCode"); }
+        public CloseRejected { reasonCode = required(reasonCode, "reasonCode"); }
     }
     public record CloseUnknown(String reasonCode) implements CloseResult {
         public CloseUnknown { reasonCode = required(reasonCode, "reasonCode"); }
@@ -237,8 +244,16 @@ public final class BrokerModels {
             idempotencyKey = required(idempotencyKey, "idempotencyKey");
         }
     }
-    public sealed interface ReconciliationCloseResult permits ExposureConfirmedAbsent, CommandConfirmedNotExecuted, Inconclusive {}
+    public sealed interface ReconciliationCloseResult permits ExposureConfirmedAbsent,
+            ExposureConfirmedPartial, CommandConfirmedNotExecuted, Inconclusive {}
     public record ExposureConfirmedAbsent() implements ReconciliationCloseResult {}
+    public record ExposureConfirmedPartial(BigDecimal remainingQuantity) implements ReconciliationCloseResult {
+        public ExposureConfirmedPartial {
+            if (remainingQuantity == null || remainingQuantity.signum() <= 0) {
+                throw new IllegalArgumentException("remainingQuantity must be positive");
+            }
+        }
+    }
     public record CommandConfirmedNotExecuted() implements ReconciliationCloseResult {}
     public record Inconclusive(String reasonCode) implements ReconciliationCloseResult { public Inconclusive { reasonCode = required(reasonCode, "reasonCode"); } }
 

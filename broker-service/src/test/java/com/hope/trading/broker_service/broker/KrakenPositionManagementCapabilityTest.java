@@ -106,8 +106,9 @@ class KrakenPositionManagementCapabilityTest {
         };
         var cap = capability(client);
         String scope = ACCOUNT + ":BTC/USD:BUY";
-        assertThatThrownBy(() -> cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1")))
-                .isInstanceOf(NullPointerException.class);
+        CloseResult result = cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1"));
+        assertThat(result).isInstanceOf(CloseRejected.class);
+        assertThat(((CloseRejected) result).reasonCode()).isEqualTo("BROKERAUTHORIZATION");
     }
 
     @Test
@@ -120,8 +121,9 @@ class KrakenPositionManagementCapabilityTest {
         };
         var cap = capability(client);
         String scope = ACCOUNT + ":BTC/USD:BUY";
-        assertThatThrownBy(() -> cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1")))
-                .isInstanceOf(NullPointerException.class);
+        CloseResult result = cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1"));
+        assertThat(result).isInstanceOf(CloseRejected.class);
+        assertThat(((CloseRejected) result).reasonCode()).isEqualTo("BROKER_AUTHENTICATION_FAILED");
     }
 
     @Test
@@ -134,8 +136,9 @@ class KrakenPositionManagementCapabilityTest {
         };
         var cap = capability(client);
         String scope = ACCOUNT + ":BTC/USD:BUY";
-        assertThatThrownBy(() -> cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1")))
-                .isInstanceOf(NullPointerException.class);
+        CloseResult result = cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1"));
+        assertThat(result).isInstanceOf(CloseRejected.class);
+        assertThat(((CloseRejected) result).reasonCode()).isEqualTo("INVALIDORDER");
     }
 
     @Test
@@ -148,8 +151,9 @@ class KrakenPositionManagementCapabilityTest {
         };
         var cap = capability(client);
         String scope = ACCOUNT + ":BTC/USD:BUY";
-        assertThatThrownBy(() -> cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1")))
-                .isInstanceOf(NullPointerException.class);
+        CloseResult result = cap.executeClose(new ExecuteCloseRequest(ACCOUNT, scope, "idem-1"));
+        assertThat(result).isInstanceOf(CloseRejected.class);
+        assertThat(((CloseRejected) result).reasonCode()).isEqualTo("INSUFFICIENTFUNDS");
     }
 
     @Test

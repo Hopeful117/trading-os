@@ -6,6 +6,7 @@ import com.hope.trading.trading_core.positionclose.domain.model.ReconciliationCl
 import com.hope.trading.trading_core.positionclose.domain.model.PositionCloseCommand;
 import com.hope.trading.trading_core.positionclose.domain.repository.PositionCloseCommandRepositoryPort;
 import com.hope.trading.trading_core.positionclose.domain.service.PositionCloseLifecycleService;
+import com.hope.trading.trading_core.repository.AccountRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,13 +19,23 @@ import java.util.UUID;
 public class PositionCloseService {
     private final PositionCloseCommandRepositoryPort repository;
     private final BrokerPositionClosePort brokerPort;
+    private final AccountRepository accounts;
 
-    public PositionCloseService(PositionCloseCommandRepositoryPort repository, BrokerPositionClosePort brokerPort) {
-        this.repository = repository; this.brokerPort = brokerPort;
+    public PositionCloseService(PositionCloseCommandRepositoryPort repository, BrokerPositionClosePort brokerPort,
+                                AccountRepository accounts) {
+        this.repository = repository;
+        this.brokerPort = brokerPort;
+        this.accounts = accounts;
     }
 
     @Transactional
     public PositionCloseCommand close(UUID userId, UUID accountId, String brokerPositionReference, String idempotencyKey) {
+        return close(userId, accountId, brokerPositionReference, null, idempotencyKey);
+    }
+
+    @Transactional
+    public PositionCloseCommand close(UUID userId, UUID accountId, String brokerPositionReference,
+                                      java.math.BigDecimal closeQuantity, String idempotencyKey) {
         Optional<PositionCloseCommand> existing = repository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             return existing.get();
@@ -34,7 +45,7 @@ public class PositionCloseService {
         String resolvedMutationScope = resolveResponse.resolvedMutationScope();
 
         PositionCloseCommand command = PositionCloseLifecycleService.create(UUID.randomUUID(), accountId, resolveResponse.brokerAccountId(),
-                brokerPositionReference, resolvedMutationScope, idempotencyKey, Instant.now());
+                brokerPositionReference, resolvedMutationScope, closeQuantity, idempotencyKey, Instant.now());
 
         List<PositionCloseCommand> activeCommands = repository.findActiveByBrokerAccountAndScope(
                 command.brokerAccountId, command.resolvedMutationScope);
@@ -48,7 +59,8 @@ public class PositionCloseService {
             command = PositionCloseLifecycleService.transitionToSubmitted(command, Instant.now());
             command = repository.save(command);
 
-            var executeResponse = brokerPort.executeClose(resolvedMutationScope, idempotencyKey);
+            var executeResponse = brokerPort.executeClose(command.brokerAccountId, resolvedMutationScope,
+                    closeQuantity, idempotencyKey);
             command = mapBrokerResult(command, executeResponse, Instant.now());
             command = repository.save(command);
             return command;
@@ -63,7 +75,10 @@ public class PositionCloseService {
         PositionCloseCommand command = repository.findById(commandId)
                 .orElseThrow(() -> new PositionCloseCommandNotFoundException("Command not found: " + commandId));
 
-        if (!command.accountId.equals(userId)) {
+        if (accounts.findById(command.accountId)
+                .filter(account -> account.getUser() != null
+                        && userId.equals(account.getUser().getUserId()))
+                .isEmpty()) {
             throw new PositionCloseAuthorizationException("Command does not belong to user");
         }
 
@@ -71,9 +86,10 @@ public class PositionCloseService {
             throw new PositionCloseConflictException("Command is not in a reconcilable state: " + command.status);
         }
 
-        var reconcileResponse = brokerPort.reconcileClose(command.resolvedMutationScope, command.idempotencyKey);
+        var reconcileResponse = brokerPort.reconcileClose(command.brokerAccountId, command.resolvedMutationScope,
+                command.idempotencyKey);
         ReconciliationCloseResult result = mapReconciliationResult(reconcileResponse);
-        command = PositionCloseLifecycleService.reconcile(command, result, Instant.now());
+        command = PositionCloseLifecycleService.reconcile(command, result, reconcileResponse.remainingQuantity(), Instant.now());
         return repository.save(command);
     }
 
@@ -89,6 +105,7 @@ public class PositionCloseService {
     private ReconciliationCloseResult mapReconciliationResult(BrokerPositionClosePort.BrokerReconcileResponse response) {
         return switch (response.reconciliationResult()) {
             case "EXPOSURE_CONFIRMED_ABSENT" -> ReconciliationCloseResult.EXPOSURE_CONFIRMED_ABSENT;
+            case "EXPOSURE_CONFIRMED_PARTIAL" -> ReconciliationCloseResult.EXPOSURE_CONFIRMED_PARTIAL;
             case "COMMAND_CONFIRMED_NOT_EXECUTED" -> ReconciliationCloseResult.COMMAND_CONFIRMED_NOT_EXECUTED;
             default -> ReconciliationCloseResult.RECONCILIATION_INCONCLUSIVE;
         };

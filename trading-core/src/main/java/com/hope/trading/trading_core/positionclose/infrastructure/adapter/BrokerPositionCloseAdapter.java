@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.positionclose.application.port.BrokerPositi
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Component
 public class BrokerPositionCloseAdapter implements BrokerPositionClosePort {
@@ -21,20 +22,24 @@ public class BrokerPositionCloseAdapter implements BrokerPositionClosePort {
     }
 
     @Override
-    public BrokerCloseResponse executeClose(String resolvedMutationScope, String idempotencyKey) {
-        String[] parts = resolvedMutationScope.split(":");
-        UUID brokerAccountId = UUID.fromString(parts[0]);
-        var request = new BrokerPositionCloseClient.ExecuteCloseRequest(brokerAccountId, resolvedMutationScope, idempotencyKey);
+    public BrokerCloseResponse executeClose(UUID brokerAccountId, String resolvedMutationScope,
+                                            BigDecimal closeQuantity, String idempotencyKey) {
+        var request = new BrokerPositionCloseClient.ExecuteCloseRequest(brokerAccountId, resolvedMutationScope,
+                closeQuantity, idempotencyKey);
         var response = client.executeClose(request);
         return new BrokerCloseResponse(response.outcome(), response.externalOrderId(), response.correlationId(), response.status(), response.reasonCode());
     }
 
     @Override
     public BrokerReconcileResponse reconcileClose(String resolvedMutationScope, String idempotencyKey) {
-        String[] parts = resolvedMutationScope.split(":");
-        UUID brokerAccountId = UUID.fromString(parts[0]);
+        String[] parts = resolvedMutationScope.split(":", 2);
+        return reconcileClose(UUID.fromString(parts[0]), resolvedMutationScope, idempotencyKey);
+    }
+
+    @Override
+    public BrokerReconcileResponse reconcileClose(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {
         var request = new BrokerPositionCloseClient.ReconcileCloseRequest(brokerAccountId, resolvedMutationScope, idempotencyKey);
         var response = client.reconcileClose(request);
-        return new BrokerReconcileResponse(response.outcome(), response.reconciliationResult());
+        return new BrokerReconcileResponse(response.outcome(), response.reconciliationResult(), response.remainingQuantity());
     }
 }

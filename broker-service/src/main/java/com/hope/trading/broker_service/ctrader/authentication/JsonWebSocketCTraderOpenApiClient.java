@@ -191,6 +191,45 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
     }
 
+    @Override
+    public CTraderClosePositionResponse closePosition(CTraderToken token, CTraderClosePositionRequest request) {
+        safety.requireExecutionEnabled();
+        try (Session session = new Session(request.externalAccountId())) {
+            validateEnvironment();
+            authenticateApplication(session);
+            long accountId = Long.parseLong(request.externalAccountId());
+            requireAccountResponse(session.request(ACCOUNT_AUTH_REQUEST, ACCOUNT_AUTH_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)
+                            .put("accessToken", token.accessToken())), accountId);
+            CTraderExecutionInstrumentContract symbol = resolveSymbol(session, accountId, request.instrument());
+            final long providerVolume;
+            try {
+                providerVolume = symbol.providerVolume(request.quantity());
+            } catch (IllegalArgumentException exception) {
+                throw new CTraderAuthenticationException(exception.getMessage(), exception);
+            }
+            ObjectNode payload = objectMapper.createObjectNode()
+                    .put("ctidTraderAccountId", accountId)
+                    .put("positionId", request.positionId())
+                    .put("volume", providerVolume);
+            JsonNode response = requireAccountResponse(session.request(CLOSE_POSITION_REQUEST,
+                    EXECUTION_EVENT, payload), accountId);
+            String externalOrderId = response.path("order").path("orderId").asText("");
+            String dealId = response.path("deal").path("dealId").asText("");
+            String correlationId = !dealId.isBlank() ? dealId : response.path("position").path("positionId").asText("");
+            if (externalOrderId.isBlank() && correlationId.isBlank()) {
+                throw new CTraderAuthenticationException("cTrader close response did not contain execution identity");
+            }
+            return new CTraderClosePositionResponse(
+                    externalOrderId.isBlank() ? correlationId : externalOrderId,
+                    request.clientRequestId());
+        } catch (CTraderAuthenticationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new CTraderAuthenticationException("cTrader position close submission failed", exception);
+        }
+    }
+
     private CTraderExecutionInstrumentContract resolveSymbol(Session session, long accountId, String instrument) {
         JsonNode response = requireAccountResponse(session.request(SYMBOL_LIST_REQUEST, SYMBOL_LIST_RESPONSE,
                 objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
