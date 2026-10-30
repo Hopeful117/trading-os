@@ -15,6 +15,7 @@ import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
 import com.hope.trading.market_data.model.TickerEvent;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -27,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Component
+@Slf4j
 @ConditionalOnProperty(name = "ctrader.market-data.enabled", havingValue = "true")
 public class CTraderMarketData implements MarketDataProvider {
     // Calendar lookback must account for provider-closed periods while the row count remains bounded.
@@ -110,9 +112,10 @@ public class CTraderMarketData implements MarketDataProvider {
         if (canonical == null || canonical.isBlank()) return Optional.empty();
         String[] assets = canonical.split("/", 2);
         if (assets.length != 2 || assets[0].isBlank() || assets[1].isBlank()) return Optional.empty();
-        return Optional.of(Market.builder().provider(MarketProvider.CTRADER).symbol(canonical)
+        return productType(symbol.name()).map(type -> Market.builder()
+                .provider(MarketProvider.CTRADER).symbol(canonical)
                 .providerSymbol(Long.toString(symbol.id())).baseAsset(assets[0]).quoteAsset(assets[1])
-                .productType(productType(symbol.name()))
+                .productType(type)
                 // Symbol metadata alone is not proof that an order is executable now.
                 .marketState(marketStateBuilder.buildInitialState(MarketAvailability.UNAVAILABLE))
                 .marketConstraints(MarketConstraints.builder()
@@ -121,14 +124,27 @@ public class CTraderMarketData implements MarketDataProvider {
                         .maximumOrderSize(BigDecimal.valueOf(symbol.maxVolume()).movePointLeft(2))
                         .orderStepSize(BigDecimal.valueOf(symbol.stepVolume()).movePointLeft(2))
                         .tickSize(BigDecimal.ONE.movePointLeft(symbol.digits()))
-                .pricePrecision(symbol.digits()).build()).build());
+                        .pricePrecision(symbol.digits()).build()).build());
     }
 
-    private InstrumentProductType productType(String providerSymbol) {
+    private Optional<InstrumentProductType> productType(String providerSymbol) {
         String configured = properties.symbolProductTypes().get(providerSymbol);
-        return configured == null || configured.isBlank()
-                ? InstrumentProductType.SPOT
-                : InstrumentProductType.valueOf(configured.trim().toUpperCase());
+        if (configured == null) {
+            log.warn("CTRADER_MARKET_REJECTED_UNCLASSIFIED providerSymbol={} reason=missing_product_type_mapping",
+                    providerSymbol);
+            return Optional.empty();
+        }
+        if (configured.isBlank()) {
+            log.warn("CTRADER_MARKET_REJECTED_UNCLASSIFIED providerSymbol={} reason=blank_product_type_mapping",
+                    providerSymbol);
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(InstrumentProductType.valueOf(configured.trim().toUpperCase()));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Invalid cTrader product type for provider symbol "
+                    + providerSymbol, exception);
+        }
     }
 
     private OhlcEvent toEvent(Market market, OhlcInterval interval, CTraderOpenApiClient.CTraderSymbol symbol,

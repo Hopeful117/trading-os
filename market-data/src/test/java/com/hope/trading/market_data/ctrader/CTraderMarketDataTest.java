@@ -33,6 +33,8 @@ class CTraderMarketDataTest {
         var events = provider.findOhlcHistory(market, OhlcInterval.ONE_MINUTE, 1);
 
         assertThat(market.getSymbol()).isEqualTo("EUR/USD");
+        assertThat(market.getProductType())
+                .isEqualTo(com.hope.trading.market_data.helper.InstrumentProductType.SPOT);
         assertThat(market.getMarketState().isTradable()).isFalse();
         assertThat(market.getMarketState().getTradingStatus()).isEqualTo(
                 com.hope.trading.market_data.helper.TradingStatus.CLOSED);
@@ -134,6 +136,70 @@ class CTraderMarketDataTest {
     }
 
     @Test
+    void rejectsSymbolsWithoutExplicitProductTypeInsteadOfDefaultingToSpot() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient(),
+                propertiesWithCanonicalMappingWithoutProductType(), new MarketStateBuilder(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(provider.getMarkets()).isEmpty();
+    }
+
+    @Test
+    void rejectsSymbolsWithBlankProductTypeInsteadOfDefaultingToSpot() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient(),
+                propertiesWithProductType(" "), new MarketStateBuilder(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(provider.getMarkets()).isEmpty();
+    }
+
+    @Test
+    void mapsExplicitCfdProductType() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient(),
+                propertiesWithProductType("CFD"), new MarketStateBuilder(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(provider.getMarkets()).singleElement()
+                .extracting(com.hope.trading.market_data.model.Market::getProductType)
+                .isEqualTo(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
+    }
+
+    @Test
+    void mapsEachConfiguredFallbackSymbolOnlyFromItsExplicitProductType() {
+        CTraderOpenApiClient client = new FakeClient() {
+            @Override public List<CTraderSymbol> symbols() {
+                return List.of(new CTraderSymbol(42, "EURUSD", 4, 100, 1_000_000, 100),
+                        new CTraderSymbol(43, "GBPUSD", 4, 100, 1_000_000, 100),
+                        new CTraderSymbol(44, "XAUUSD", 2, 100, 1_000_000, 100),
+                        new CTraderSymbol(45, "US30.cash", 1, 100, 1_000_000, 100));
+            }
+        };
+        CTraderMarketData provider = new CTraderMarketData(client,
+                new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "id", "secret", null, null, null,
+                        "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
+                        Map.of("EURUSD", "EUR/USD", "GBPUSD", "GBP/USD", "XAUUSD", "XAU/USD",
+                                "US30.cash", "US30/USD"),
+                        Map.of("EURUSD", "CFD", "GBPUSD", "CFD", "XAUUSD", "CFD", "US30.cash", "CFD"),
+                        8, 720),
+                new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(provider.getMarkets()).hasSize(4)
+                .extracting(com.hope.trading.market_data.model.Market::getProductType)
+                .containsOnly(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
+    }
+
+    @Test
+    void rejectsInvalidProductTypeWithProviderSymbol() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient(),
+                propertiesWithProductType("UNKNOWN"), new MarketStateBuilder(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThatThrownBy(provider::getMarkets)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("EURUSD");
+    }
+
+    @Test
     void rejectsAmbiguousCanonicalMappings() {
         CTraderOpenApiClient client = new FakeClient() {
             @Override public List<CTraderSymbol> symbols() {
@@ -142,8 +208,10 @@ class CTraderMarketDataTest {
             }
         };
         CTraderMarketData provider = new CTraderMarketData(client,
-                new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "id", "secret", "wss://fixture",
-                        java.time.Duration.ofSeconds(1), Map.of("EURUSD", "EUR/USD", "EURUSD.pro", "EUR/USD")),
+                new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "id", "secret", null, null, null,
+                        "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
+                        Map.of("EURUSD", "EUR/USD", "EURUSD.pro", "EUR/USD"),
+                        Map.of("EURUSD", "SPOT", "EURUSD.pro", "SPOT"), 8, 720),
                 new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertThatThrownBy(provider::getMarkets)
@@ -152,8 +220,19 @@ class CTraderMarketDataTest {
     }
 
     private CTraderMarketDataProperties properties() {
-        return new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "id", "secret", "wss://fixture",
-                java.time.Duration.ofSeconds(1), Map.of("EURUSD", "EUR/USD"));
+        return propertiesWithProductType("SPOT");
+    }
+
+    private CTraderMarketDataProperties propertiesWithProductType(String productType) {
+        return new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "id", "secret", null, null, null,
+                "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
+                Map.of("EURUSD", "EUR/USD"), Map.of("EURUSD", productType), 8, 720);
+    }
+
+    private CTraderMarketDataProperties propertiesWithCanonicalMappingWithoutProductType() {
+        return new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "id", "secret", null, null, null,
+                "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
+                Map.of("EURUSD", "EUR/USD"), Map.of(), 8, 720);
     }
 
     private CTraderMarketDataProperties propertiesWithNoMappings() {
