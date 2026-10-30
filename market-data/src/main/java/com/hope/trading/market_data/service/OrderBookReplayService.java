@@ -6,7 +6,9 @@ import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.model.OrderBookReplayArtifact;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
+import com.hope.trading.market_data.config.OrderBookReplayProperties;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,9 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -29,11 +29,20 @@ import java.util.UUID;
 public class OrderBookReplayService {
     private final OrderBookEvidenceRepository repository;
     private final OrderBookRetentionRepository retentionRepository;
+    private final OrderBookReplayProperties properties;
 
     public OrderBookReplayService(OrderBookEvidenceRepository repository,
                                   OrderBookRetentionRepository retentionRepository) {
+        this(repository, retentionRepository, new OrderBookReplayProperties());
+    }
+
+    @Autowired
+    public OrderBookReplayService(OrderBookEvidenceRepository repository,
+                                  OrderBookRetentionRepository retentionRepository,
+                                  OrderBookReplayProperties properties) {
         this.repository = repository;
         this.retentionRepository = retentionRepository;
+        this.properties = properties;
     }
 
     // Artifact eligibility uses FOR SHARE so invalidation cannot commit mid-replay.
@@ -58,83 +67,46 @@ public class OrderBookReplayService {
         }
         long startedAt = System.nanoTime();
         long repositoryStartedAt = System.nanoTime();
-        List<OrderBookEvidence> evidence = repository.findTrusted(marketId, depth, cutoff);
+        OrderBookEvidence startingPoint = repository.findTrustedReplayBase(marketId, depth, cutoff).orElse(null);
         long repositoryDurationMs = elapsedMillis(repositoryStartedAt);
-        Map<UUID, List<OrderBookEvidence>> bySequence = new HashMap<>();
-        evidence.forEach(item -> bySequence.computeIfAbsent(item.sequenceId(), ignored -> new ArrayList<>()).add(item));
-
-        OrderBookEvidence startingPoint = bySequence.values().stream()
-                .flatMap(List::stream)
-                .filter(item -> item.evidenceType() == OrderBookEvidenceType.SNAPSHOT)
-                .max(Comparator.comparing(OrderBookEvidence::knownAt)
-                        .thenComparingLong(OrderBookEvidence::sequenceOrdinal))
-                .orElse(null);
         if (startingPoint == null) {
             OrderBookReplayResult result = OrderBookReplayResult.unavailable(marketId, depth, cutoff,
                     "No trusted snapshot is known at the cutoff");
             log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
                             + "repositoryMs={} assemblyMs={} totalMs={}",
-                    marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
+                    marketId, depth, result.status(), 0, repositoryDurationMs,
                     elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
             return result;
         }
 
-        NavigableMap<BigDecimal, BigDecimal> bids = new TreeMap<>(Comparator.reverseOrder());
-        NavigableMap<BigDecimal, BigDecimal> asks = new TreeMap<>();
-        apply(bids, startingPoint.bids());
-        apply(asks, startingPoint.asks());
-        long expectedOrdinal = startingPoint.sequenceOrdinal();
-        List<OrderBookEvidence> sequence = bySequence.get(startingPoint.sequenceId()).stream()
-                .filter(item -> item.sequenceOrdinal() > startingPoint.sequenceOrdinal())
-                .sorted(Comparator.comparingLong(OrderBookEvidence::sequenceOrdinal))
-                .toList();
-        for (OrderBookEvidence item : sequence) {
-            if (item.evidenceType() != OrderBookEvidenceType.DELTA) {
-                OrderBookReplayResult result = OrderBookReplayResult.invalid(marketId, depth, cutoff,
-                        startingPoint.sequenceId(),
-                        "Unexpected non-delta evidence after replay snapshot");
-                log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
-                                + "repositoryMs={} assemblyMs={} totalMs={}",
-                        marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
-                        elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
-                return result;
-            }
-            if (item.sequenceOrdinal() != expectedOrdinal + 1) {
-                OrderBookReplayResult result = OrderBookReplayResult.invalid(marketId, depth, cutoff,
-                        startingPoint.sequenceId(),
-                        "Sequence is not contiguous at replay cutoff");
-                log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
-                                + "repositoryMs={} assemblyMs={} totalMs={}",
-                        marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
-                        elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
-                return result;
-            }
-            apply(bids, item.bids());
-            apply(asks, item.asks());
-            expectedOrdinal = item.sequenceOrdinal();
+        ReplayAccumulator accumulator = new ReplayAccumulator(startingPoint, properties.getMaximumEvidenceCount());
+        try {
+            repository.streamTrustedEvidenceAfter(marketId, depth, startingPoint.sequenceId(),
+                    startingPoint.sequenceOrdinal(), cutoff, properties.getBatchSize(), accumulator::accept);
+        } catch (ReplayValidationException exception) {
+            OrderBookReplayResult result = OrderBookReplayResult.invalid(marketId, depth,
+                    cutoff, startingPoint.sequenceId(), exception.getMessage());
+            log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
+                            + "repositoryMs={} assemblyMs={} totalMs={}",
+                    marketId, depth, result.status(), accumulator.evidenceCount, repositoryDurationMs,
+                    elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
+            return result;
         }
 
-        OrderBookEvidence lastEvidence = sequence.isEmpty() ? startingPoint : sequence.getLast();
-        OrderBookEvidenceOrigin sourceOrigin = java.util.stream.Stream.concat(
-                        java.util.stream.Stream.of(startingPoint), sequence.stream())
-                .map(OrderBookEvidence::origin)
-                .distinct()
-                .reduce((left, right) -> OrderBookEvidenceOrigin.MIXED)
-                .orElse(startingPoint.origin());
+        OrderBookEvidence lastEvidence = accumulator.lastEvidence;
         OrderBookReplayResult result = new OrderBookReplayResult(
                 OrderBookReplayResult.ReplayStatus.AVAILABLE, marketId, depth,
                 startingPoint.sequenceId(), cutoff,
                 lastEvidence.occurredAt(), lastEvidence.knownAt(),
                 startingPoint.sequenceOrdinal(), lastEvidence.sequenceOrdinal(),
                 startingPoint.provider().name(), startingPoint.providerSymbol(),
-                startingPoint.normalizationVersion(), fingerprint(startingPoint, sequence),
+                startingPoint.normalizationVersion(), accumulator.fingerprint(),
                 "TRUSTED",
-                java.util.stream.Stream.concat(java.util.stream.Stream.of(startingPoint), sequence.stream())
-                        .map(OrderBookEvidence::contentFingerprint).toList(),
-                limit(bids, depth), limit(asks, depth), null, sourceOrigin);
+                accumulator.fingerprints, limit(accumulator.bids, depth), limit(accumulator.asks, depth), null,
+                accumulator.sourceOrigin);
         log.debug("Order-book replay completed marketId={} depth={} status={} evidenceCount={} "
                         + "repositoryMs={} assemblyMs={} totalMs={}",
-                marketId, depth, result.status(), evidence.size(), repositoryDurationMs,
+                marketId, depth, result.status(), accumulator.evidenceCount, repositoryDurationMs,
                 elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
         return result;
     }
@@ -172,21 +144,78 @@ public class OrderBookReplayService {
         return java.time.Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
-    private String fingerprint(OrderBookEvidence startingPoint, List<OrderBookEvidence> sequence) {
-        String material = java.util.stream.Stream.concat(java.util.stream.Stream.of(startingPoint), sequence.stream())
-                .map(OrderBookEvidence::contentFingerprint)
-                .reduce((left, right) -> left + "|" + right)
-                .orElse("");
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(material.getBytes(StandardCharsets.UTF_8));
+    private final class ReplayAccumulator {
+        private final NavigableMap<BigDecimal, BigDecimal> bids = new TreeMap<>(Comparator.reverseOrder());
+        private final NavigableMap<BigDecimal, BigDecimal> asks = new TreeMap<>();
+        private final List<String> fingerprints = new ArrayList<>();
+        private final MessageDigest digest = sha256();
+        private final int maximumEvidenceCount;
+        private OrderBookEvidence lastEvidence;
+        private OrderBookEvidenceOrigin sourceOrigin;
+        private long expectedOrdinal;
+        private int evidenceCount;
+
+        private ReplayAccumulator(OrderBookEvidence startingPoint, int maximumEvidenceCount) {
+            this.maximumEvidenceCount = maximumEvidenceCount;
+            if (maximumEvidenceCount < 1) {
+                throw new IllegalArgumentException("maximumEvidenceCount must be positive");
+            }
+            apply(bids, startingPoint.bids());
+            apply(asks, startingPoint.asks());
+            addFingerprint(startingPoint.contentFingerprint());
+            lastEvidence = startingPoint;
+            expectedOrdinal = startingPoint.sequenceOrdinal();
+            sourceOrigin = startingPoint.origin();
+            evidenceCount = 1;
+        }
+
+        private void accept(OrderBookEvidence evidence) {
+            if (evidence.evidenceType() != OrderBookEvidenceType.DELTA) {
+                throw new ReplayValidationException("Unexpected non-delta evidence after replay snapshot");
+            }
+            if (evidence.sequenceOrdinal() != expectedOrdinal + 1) {
+                throw new ReplayValidationException("Sequence is not contiguous at replay cutoff");
+            }
+            if (evidenceCount >= maximumEvidenceCount) {
+                throw new ReplayValidationException("Replay evidence limit exceeded");
+            }
+            apply(bids, evidence.bids());
+            apply(asks, evidence.asks());
+            addFingerprint(evidence.contentFingerprint());
+            sourceOrigin = sourceOrigin == evidence.origin() ? sourceOrigin : OrderBookEvidenceOrigin.MIXED;
+            expectedOrdinal = evidence.sequenceOrdinal();
+            lastEvidence = evidence;
+            evidenceCount++;
+        }
+
+        private void addFingerprint(String fingerprint) {
+            if (!fingerprints.isEmpty()) {
+                digest.update((byte) '|');
+            }
+            digest.update(fingerprint.getBytes(StandardCharsets.UTF_8));
+            fingerprints.add(fingerprint);
+        }
+
+        private String fingerprint() {
             StringBuilder result = new StringBuilder(64);
-            for (byte item : digest) {
+            for (byte item : digest.digest()) {
                 result.append(String.format("%02x", item));
             }
             return result.toString();
+        }
+    }
+
+    private MessageDigest sha256() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is required", exception);
+        }
+    }
+
+    private static final class ReplayValidationException extends RuntimeException {
+        private ReplayValidationException(String message) {
+            super(message);
         }
     }
 

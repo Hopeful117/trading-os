@@ -1,5 +1,6 @@
 package com.hope.trading.market_data.service;
 
+import com.hope.trading.market_data.config.OrderBookReplayProperties;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.OrderBookEvidence;
 import com.hope.trading.market_data.model.OrderBookEvidenceOrigin;
@@ -14,9 +15,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.time.Clock;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -28,12 +34,11 @@ class OrderBookReplayServiceTest {
     @Test
     void replaysOnlyEvidenceKnownAtTheCutoff() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
-        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of(
+        stubReplay(repository, List.of(
                 evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(10),
                         List.of(level("100", "1")), List.of(level("101", "1"))),
                 evidence(OrderBookEvidenceType.DELTA, 1, CUTOFF.minusSeconds(1),
-                        List.of(level("100", "2")), List.of())
-        ));
+                        List.of(level("100", "2")), List.of())));
 
         OrderBookReplayResult result = service(repository).replay(MARKET_ID, 25, CUTOFF);
 
@@ -49,7 +54,7 @@ class OrderBookReplayServiceTest {
     @Test
     void refusesReplayWithoutATrustedSnapshot() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
-        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of());
+        stubReplay(repository, List.of());
 
         OrderBookReplayResult result = service(repository).replay(MARKET_ID, 25, CUTOFF);
 
@@ -68,12 +73,11 @@ class OrderBookReplayServiceTest {
     @Test
     void marksNonContiguousReplayAsInvalid() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
-        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of(
+        stubReplay(repository, List.of(
                 evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(10),
                         List.of(level("100", "1")), List.of(level("101", "1"))),
                 evidence(OrderBookEvidenceType.DELTA, 2, CUTOFF.minusSeconds(1),
-                        List.of(level("100", "2")), List.of())
-        ));
+                        List.of(level("100", "2")), List.of())));
 
         OrderBookReplayResult result = service(repository).replay(MARKET_ID, 25, CUTOFF);
 
@@ -84,17 +88,41 @@ class OrderBookReplayServiceTest {
     @Test
     void rejectsUnexpectedSnapshotAfterReplayStart() {
         OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
-        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of(
+        stubReplay(repository, List.of(
                 evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(1),
                         List.of(level("100", "1")), List.of(level("101", "1"))),
                 evidence(OrderBookEvidenceType.SNAPSHOT, 1, CUTOFF.minusSeconds(10),
-                        List.of(level("100", "2")), List.of(level("101", "1")))
-        ));
+                        List.of(level("100", "2")), List.of(level("101", "1")))));
 
         OrderBookReplayResult result = service(repository).replay(MARKET_ID, 25, CUTOFF);
 
         assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.INVALID);
         assertThat(result.reason()).contains("Unexpected non-delta");
+    }
+
+    @Test
+    void failsClosedWhenReplayEvidenceLimitIsExceeded() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        OrderBookReplayProperties properties = new OrderBookReplayProperties();
+        properties.setMaximumEvidenceCount(1);
+        OrderBookEvidence snapshot = evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(1),
+                List.of(level("100", "1")), List.of(level("101", "1")));
+        OrderBookEvidence delta = evidence(OrderBookEvidenceType.DELTA, 1, CUTOFF,
+                List.of(level("100", "2")), List.of());
+        when(repository.findTrustedReplayBase(MARKET_ID, 25, CUTOFF)).thenReturn(Optional.of(snapshot));
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<OrderBookEvidence> consumer = invocation.getArgument(6);
+            consumer.accept(delta);
+            return 1;
+        }).when(repository).streamTrustedEvidenceAfter(any(), anyInt(), any(), anyLong(), any(), anyInt(), any());
+
+        OrderBookReplayResult result = new OrderBookReplayService(
+                repository, mock(OrderBookRetentionRepository.class), properties)
+                .replay(MARKET_ID, 25, CUTOFF);
+
+        assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.INVALID);
+        assertThat(result.reason()).contains("limit exceeded");
     }
 
     @Test
@@ -114,7 +142,7 @@ class OrderBookReplayServiceTest {
         assertThat(result.sourceEndOrdinal()).isEqualTo(1L);
         org.mockito.Mockito.verify(repository).isCurrentEligibleSequence(SEQUENCE_ID, MARKET_ID, 25, CUTOFF);
         org.mockito.Mockito.verify(repository, org.mockito.Mockito.never())
-                .findTrusted(MARKET_ID, 25, CUTOFF);
+                .findTrustedReplayBase(MARKET_ID, 25, CUTOFF);
     }
 
     @Test
@@ -123,7 +151,7 @@ class OrderBookReplayServiceTest {
         OrderBookRetentionRepository retention = mock(OrderBookRetentionRepository.class);
         when(retention.findArtifact("research:sample:1")).thenReturn(java.util.Optional.of(
                 artifact(CUTOFF.minusSeconds(1), "TRUSTED")));
-        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of(
+        stubReplay(repository, List.of(
                 evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(10),
                         List.of(level("100", "1")), List.of(level("101", "1")))));
 
@@ -131,7 +159,7 @@ class OrderBookReplayServiceTest {
                 .replay(MARKET_ID, 25, CUTOFF, "research:sample:1");
 
         assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.AVAILABLE);
-        org.mockito.Mockito.verify(repository).findTrusted(MARKET_ID, 25, CUTOFF);
+        org.mockito.Mockito.verify(repository).findTrustedReplayBase(MARKET_ID, 25, CUTOFF);
     }
 
     @Test
@@ -140,7 +168,7 @@ class OrderBookReplayServiceTest {
         OrderBookRetentionRepository retention = mock(OrderBookRetentionRepository.class);
         when(retention.findArtifact("research:sample:1")).thenReturn(java.util.Optional.of(
                 artifactWithLatestOccurredAt(null, "UNVERIFIED")));
-        when(repository.findTrusted(MARKET_ID, 25, CUTOFF)).thenReturn(List.of(
+        stubReplay(repository, List.of(
                 evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(10),
                         List.of(level("100", "1")), List.of(level("101", "1")))));
 
@@ -148,11 +176,26 @@ class OrderBookReplayServiceTest {
                 .replay(MARKET_ID, 25, CUTOFF, "research:sample:1");
 
         assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.AVAILABLE);
-        org.mockito.Mockito.verify(repository).findTrusted(MARKET_ID, 25, CUTOFF);
+        org.mockito.Mockito.verify(repository).findTrustedReplayBase(MARKET_ID, 25, CUTOFF);
     }
 
     private OrderBookReplayService service(OrderBookEvidenceRepository repository) {
         return new OrderBookReplayService(repository, mock(OrderBookRetentionRepository.class));
+    }
+
+    private void stubReplay(OrderBookEvidenceRepository repository, List<OrderBookEvidence> evidence) {
+        if (evidence.isEmpty()) {
+            when(repository.findTrustedReplayBase(MARKET_ID, 25, CUTOFF)).thenReturn(Optional.empty());
+            return;
+        }
+        when(repository.findTrustedReplayBase(MARKET_ID, 25, CUTOFF))
+                .thenReturn(Optional.of(evidence.getFirst()));
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<OrderBookEvidence> consumer = invocation.getArgument(6);
+            evidence.stream().skip(1).forEach(consumer);
+            return evidence.size() - 1;
+        }).when(repository).streamTrustedEvidenceAfter(any(), anyInt(), any(), anyLong(), any(), anyInt(), any());
     }
 
     private OrderBookReplayArtifact artifact(String trustStatus) {
