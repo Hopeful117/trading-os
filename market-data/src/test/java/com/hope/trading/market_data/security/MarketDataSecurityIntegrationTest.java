@@ -5,6 +5,7 @@ import com.hope.trading.market_data.service.MarketFactsService;
 import com.hope.trading.market_data.service.MarketSynchronization;
 import com.hope.trading.market_data.service.OrderBookReplayService;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
+import com.hope.trading.market_data.service.OrderBookEvidenceSegmentBackfillService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,9 @@ class MarketDataSecurityIntegrationTest {
 
     @MockitoBean
     private OrderBookRetentionService orderBookRetentionService;
+
+    @MockitoBean
+    private OrderBookEvidenceSegmentBackfillService backfillService;
 
     @Test
     void internalSnapshotRequiresServiceCredential() throws Exception {
@@ -206,6 +210,28 @@ class MarketDataSecurityIntegrationTest {
     void unauthorizedServiceCannotPreviewRetention() throws Exception {
         mockMvc.perform(get("/internal/v1/order-book/retention/preview")
                         .header("X-Service-Authorization", "Bearer " + serviceToken("other-service")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void authorizedServiceCanRunOneBoundedBackfillBatch() throws Exception {
+        org.mockito.Mockito.when(backfillService.backfill(1, 10)).thenReturn(
+                new OrderBookEvidenceSegmentBackfillService.BackfillResult(
+                        1, 1, 25, 1, 1, 0, 1, true, java.time.Duration.ofMillis(12)));
+
+        mockMvc.perform(post("/internal/v1/order-book/retention/backfill")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void unauthorizedServiceCannotRunBackfill() throws Exception {
+        mockMvc.perform(post("/internal/v1/order-book/retention/backfill")
+                        .header("X-Service-Authorization", "Bearer " + serviceToken("other-service"))
+                        .contentType("application/json")
+                        .content("{}"))
                 .andExpect(status().isUnauthorized());
     }
 

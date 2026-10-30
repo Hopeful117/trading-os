@@ -16,6 +16,7 @@ import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.service.OrderBookEvidenceFingerprint;
 import com.hope.trading.market_data.service.OrderBookEvidenceRepository;
+import com.hope.trading.market_data.service.OrderBookEvidenceSegmentBackfillService;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
 import com.hope.trading.market_data.service.OrderBookRetentionRepository;
 import com.hope.trading.market_data.service.OrderBookReplayService;
@@ -24,6 +25,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -34,6 +37,8 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -41,21 +46,29 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.Base64;
+import java.util.Date;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
 @Testcontainers
+@AutoConfigureMockMvc
 class OrderBookRetentionPersistenceTest {
     private static final Logger LOG = LoggerFactory.getLogger(OrderBookRetentionPersistenceTest.class);
     private static final Instant KNOWN_AT = Instant.parse("2026-10-20T12:00:00Z");
+    private static final String SERVICE_SECRET =
+            "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16")
@@ -77,6 +90,8 @@ class OrderBookRetentionPersistenceTest {
     @Autowired
     private OrderBookEvidenceRepository evidenceRepository;
     @Autowired
+    private OrderBookEvidenceSegmentBackfillService segmentBackfillService;
+    @Autowired
     private OrderBookRetentionService retentionService;
     @Autowired
     private OrderBookRetentionRepository retentionRepository;
@@ -86,6 +101,8 @@ class OrderBookRetentionPersistenceTest {
     private OrderBookRetentionProperties retentionProperties;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private MockMvc mockMvc;
 
     @Test
     void unknownSequenceIsNotRetirementCandidate() {
@@ -498,6 +515,195 @@ class OrderBookRetentionPersistenceTest {
     }
 
     @Test
+    void backfillProcessesMultipleSequencesAndReportsAffectedRows() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID firstSequenceId = UUID.randomUUID();
+        UUID secondSequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, firstSequenceId));
+        evidenceRepository.append(evidence(marketId, secondSequenceId));
+        jdbc.update("DELETE FROM historical_order_book_evidence_segment WHERE sequence_id IN (?, ?)",
+                firstSequenceId, secondSequenceId);
+
+        OrderBookEvidenceSegmentBackfillService.BackfillResult result = segmentBackfillService.backfill(2, 1);
+
+        assertThat(result.sequencesExamined()).isEqualTo(2);
+        assertThat(result.sequencesCompleted()).isEqualTo(2);
+        assertThat(result.segmentsCreated()).isEqualTo(2);
+        assertThat(result.evidenceRowsExamined()).isEqualTo(2);
+        assertThat(result.hasMoreWork()).isFalse();
+    }
+
+    @Test
+    void emptySequenceIsMarkedCompleteAndDoesNotRemainPending() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO historical_order_book_sequence (sequence_id, market_id, depth, status)
+                VALUES (?, ?, 25, 'ACTIVE')
+                """, sequenceId, marketId);
+
+        segmentBackfillService.backfillSequence(sequenceId, 1);
+
+        assertThat(jdbc.queryForObject("""
+                SELECT backfill_completed_at IS NOT NULL
+                  FROM historical_order_book_sequence
+                 WHERE sequence_id = ?
+                """, Boolean.class, sequenceId)).isTrue();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM historical_order_book_sequence
+                 WHERE sequence_id = ? AND backfill_completed_at IS NULL
+                """, Integer.class, sequenceId)).isZero();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void backfillWaitsForPostgresSequenceWriterLock() throws Exception {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        jdbc.update("DELETE FROM historical_order_book_evidence_segment WHERE sequence_id = ?", sequenceId);
+
+        var executor = Executors.newSingleThreadExecutor();
+        Future<Boolean> backfill = null;
+        var connection = jdbc.getDataSource().getConnection();
+        var statement = connection.prepareStatement("""
+                SELECT sequence_id
+                  FROM historical_order_book_sequence
+                 WHERE sequence_id = ?
+                 FOR UPDATE
+                """);
+        try {
+            connection.setAutoCommit(false);
+            statement.setObject(1, sequenceId);
+            statement.executeQuery().close();
+
+            backfill = executor.submit(() -> {
+                segmentBackfillService.backfillSequence(sequenceId, 1);
+                return true;
+            });
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            boolean waitingForLock = false;
+            while (System.nanoTime() < deadline) {
+                waitingForLock = jdbc.queryForObject("""
+                        SELECT EXISTS (
+                            SELECT 1
+                              FROM pg_stat_activity
+                             WHERE wait_event_type = 'Lock'
+                               AND state = 'active'
+                               AND query LIKE '%FROM historical_order_book_sequence%FOR UPDATE%'
+                        )
+                        """, Boolean.class);
+                if (waitingForLock) {
+                    break;
+                }
+                Thread.sleep(25);
+            }
+            assertThat(waitingForLock).isTrue();
+            assertThat(backfill).isNotDone();
+            connection.commit();
+            assertThat(backfill.get(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM historical_order_book_evidence_segment
+                     WHERE sequence_id = ? AND classification = 'LEGACY_UNKNOWN'
+                    """, Integer.class, sequenceId)).isEqualTo(1);
+        } finally {
+            try {
+                connection.rollback();
+            } finally {
+                statement.close();
+                connection.close();
+            }
+            if (backfill != null) {
+                try {
+                    backfill.get(5, TimeUnit.SECONDS);
+                } catch (Exception ignored) {
+                    // Preserve the original assertion failure while allowing cleanup to continue.
+                }
+            }
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            jdbc.update("DELETE FROM historical_order_book_evidence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM historical_order_book_sequence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM markets WHERE market_id = ?", marketId);
+        }
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void backfillEndpointPersistsSegmentsAgainstPostgres() throws Exception {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        jdbc.update("DELETE FROM historical_order_book_evidence_segment WHERE sequence_id = ?", sequenceId);
+
+        try {
+            mockMvc.perform(post("/internal/v1/order-book/retention/backfill")
+                            .header("X-Service-Authorization", "Bearer " + serviceToken("market-intelligence"))
+                            .contentType("application/json")
+                            .content("{}"))
+                    .andExpect(status().isOk());
+
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM historical_order_book_evidence_segment
+                     WHERE sequence_id = ? AND classification = 'LEGACY_UNKNOWN'
+                    """, Integer.class, sequenceId)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("""
+                    SELECT backfill_completed_at IS NOT NULL
+                      FROM historical_order_book_sequence
+                     WHERE sequence_id = ?
+                    """, Boolean.class, sequenceId)).isTrue();
+        } finally {
+            jdbc.update("DELETE FROM historical_order_book_evidence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM historical_order_book_sequence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM markets WHERE market_id = ?", marketId);
+        }
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void backfillRollsBackSegmentsWhenCompletionFails() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        jdbc.update("DELETE FROM historical_order_book_evidence_segment WHERE sequence_id = ?", sequenceId);
+        jdbc.execute("""
+                CREATE OR REPLACE FUNCTION test_fail_backfill_completion() RETURNS trigger
+                LANGUAGE plpgsql AS $$
+                BEGIN
+                    RAISE EXCEPTION 'forced backfill completion failure';
+                END;
+                $$
+                """);
+        jdbc.execute("""
+                CREATE TRIGGER test_fail_backfill_completion_trigger
+                BEFORE UPDATE OF backfill_completed_at ON historical_order_book_sequence
+                FOR EACH ROW EXECUTE FUNCTION test_fail_backfill_completion()
+                """);
+
+        try {
+            assertThatThrownBy(() -> segmentBackfillService.backfillSequence(sequenceId, 1))
+                    .hasMessageContaining("forced backfill completion failure");
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM historical_order_book_evidence_segment
+                     WHERE sequence_id = ?
+                    """, Integer.class, sequenceId)).isZero();
+            assertThat(jdbc.queryForObject("""
+                    SELECT backfill_completed_at IS NULL
+                      FROM historical_order_book_sequence
+                     WHERE sequence_id = ?
+                    """, Boolean.class, sequenceId)).isTrue();
+        } finally {
+            jdbc.execute("DROP TRIGGER IF EXISTS test_fail_backfill_completion_trigger "
+                    + "ON historical_order_book_sequence");
+            jdbc.execute("DROP FUNCTION IF EXISTS test_fail_backfill_completion()");
+            jdbc.update("DELETE FROM historical_order_book_evidence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM historical_order_book_sequence WHERE sequence_id = ?", sequenceId);
+            jdbc.update("DELETE FROM markets WHERE market_id = ?", marketId);
+        }
+    }
+
+    @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void artifactReplayAndInvalidationAreConsistentWhenRunConcurrently() throws Exception {
         UUID marketId = markets.saveAndFlush(market()).getMarketId();
@@ -711,6 +917,21 @@ class OrderBookRetentionPersistenceTest {
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }
+    }
+
+    private String serviceToken(String issuer) {
+        Instant now = Instant.now();
+        var key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(SERVICE_SECRET));
+        return Jwts.builder()
+                .issuer(issuer)
+                .subject(issuer)
+                .audience().add("market-data").and()
+                .claim("type", "service")
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(60)))
+                .id(UUID.randomUUID().toString())
+                .signWith(key)
+                .compact();
     }
 
     private Market market() {

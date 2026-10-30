@@ -34,6 +34,7 @@ public class OrderBookEvidenceRepository {
     public boolean append(OrderBookEvidence evidence) {
         requireTrustedEvidence(evidence);
         ensureSequence(evidence);
+        lockSequence(evidence.sequenceId());
         return insertEvidence(evidence);
     }
 
@@ -44,6 +45,7 @@ public class OrderBookEvidenceRepository {
             return false;
         }
         ensureSequence(evidence);
+        lockSequence(evidence.sequenceId());
         if (!insertEvidence(evidence)) {
             throw new IllegalStateException("Unable to persist new order-book snapshot sequence");
         }
@@ -95,6 +97,15 @@ public class OrderBookEvidenceRepository {
         return !jdbc.queryForList(
                 "SELECT sequence_id FROM historical_order_book_sequence WHERE sequence_id = ?",
                 UUID.class, sequenceId).isEmpty();
+    }
+
+    private void lockSequence(UUID sequenceId) {
+        jdbc.queryForObject("""
+                SELECT sequence_id
+                  FROM historical_order_book_sequence
+                 WHERE sequence_id = ?
+                 FOR UPDATE
+                """, UUID.class, sequenceId);
     }
 
     private boolean exists(String fingerprint) {

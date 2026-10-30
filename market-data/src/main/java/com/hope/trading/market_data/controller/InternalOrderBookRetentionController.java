@@ -7,6 +7,8 @@ import com.hope.trading.market_data.model.OrderBookReplayArtifact;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
 import com.hope.trading.market_data.service.OrderBookStorageHealthService;
+import com.hope.trading.market_data.service.OrderBookEvidenceSegmentBackfillService;
+import com.hope.trading.market_data.config.OrderBookRetentionProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,10 +28,28 @@ import java.time.Instant;
 public class InternalOrderBookRetentionController {
     private final OrderBookRetentionService retentionService;
     private final OrderBookStorageHealthService storageHealthService;
+    private final OrderBookEvidenceSegmentBackfillService backfillService;
+    private final OrderBookRetentionProperties retentionProperties;
 
     @GetMapping("/health")
     public ResponseEntity<OrderBookStorageHealthService.StorageHealth> health() {
         return ResponseEntity.ok(storageHealthService.health());
+    }
+
+    @PostMapping("/backfill")
+    public ResponseEntity<?> backfill(@RequestBody(required = false) BackfillRequest request) {
+        BackfillRequest effectiveRequest = request == null ? new BackfillRequest(null, null) : request;
+        try {
+            int sequenceBatchSize = retentionProperties.resolveBackfillSequenceBatchSize(
+                    effectiveRequest.sequenceBatchSize());
+            int boundaryBatchSize = retentionProperties.resolveBackfillBoundaryBatchSize(
+                    effectiveRequest.boundaryBatchSize());
+            return ResponseEntity.ok(backfillService.backfill(sequenceBatchSize, boundaryBatchSize));
+        } catch (OrderBookEvidenceSegmentBackfillService.BackfillInProgressException exception) {
+            return ResponseEntity.status(409).body(new BackfillConflictResponse(exception.getMessage()));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(new BackfillRejectedResponse(exception.getMessage()));
+        }
     }
 
     @GetMapping("/preview")
@@ -103,6 +123,15 @@ public class InternalOrderBookRetentionController {
     }
 
     public record RetirementRequest(String dryRunFingerprint, OrderBookRetirementCandidate candidate) {
+    }
+
+    public record BackfillRequest(Integer sequenceBatchSize, Integer boundaryBatchSize) {
+    }
+
+    public record BackfillConflictResponse(String message) {
+    }
+
+    public record BackfillRejectedResponse(String message) {
     }
 
     public record PromotionRequest(OrderBookReplayResult replay, String semanticIdentity,
