@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @FeignClient(name = "broker-service", contextId = "position-close-client", url = "${broker-service.base-url:}",
         configuration = BrokerServiceFeignConfiguration.class)
@@ -21,8 +22,18 @@ public interface BrokerPositionCloseClient {
 
     record ResolveTargetRequest(UUID brokerAccountId, String brokerPositionReference) {}
     record ResolvedTargetResponse(UUID brokerAccountId, String resolvedMutationScope) {}
-    record ExecuteCloseRequest(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {}
+    record ExecuteCloseRequest(UUID brokerAccountId, String resolvedMutationScope,
+                               BigDecimal closeQuantity, String idempotencyKey) {
+        public ExecuteCloseRequest(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {
+            this(brokerAccountId, resolvedMutationScope, null, idempotencyKey);
+        }
+    }
     record BrokerCloseResponse(String outcome, String externalOrderId, String correlationId, String status, String reasonCode) {}
     record ReconcileCloseRequest(UUID brokerAccountId, String resolvedMutationScope, String idempotencyKey) {}
-    record BrokerReconcileResponse(String outcome, String reconciliationResult) {}
+    record BrokerReconcileResponse(String outcome, String reconciliationResult,
+                                   BigDecimal remainingQuantity) {
+        public BrokerReconcileResponse(String outcome, String reconciliationResult) {
+            this(outcome, reconciliationResult, null);
+        }
+    }
 }

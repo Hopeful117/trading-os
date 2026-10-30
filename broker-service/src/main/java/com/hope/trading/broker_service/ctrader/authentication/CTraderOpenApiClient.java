@@ -18,6 +18,10 @@ public interface CTraderOpenApiClient {
         throw new CTraderAuthenticationException("cTrader order execution is unavailable");
     }
 
+    default CTraderClosePositionResponse closePosition(CTraderToken token, CTraderClosePositionRequest request) {
+        throw new CTraderAuthenticationException("cTrader position management is unavailable");
+    }
+
     record CTraderOrderRequest(String externalAccountId, String instrument, String side,
                                 String orderType, BigDecimal quantity, BigDecimal limitPrice,
                                 BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
@@ -39,6 +43,13 @@ public interface CTraderOpenApiClient {
     }
 
     record CTraderOrderResponse(String externalOrderId) {
+    }
+
+    record CTraderClosePositionRequest(String externalAccountId, long positionId, String instrument,
+                                       BigDecimal quantity, String clientRequestId) {
+    }
+
+    record CTraderClosePositionResponse(String externalOrderId, String correlationId) {
     }
 
     default CTraderReadOnlyObservation readOnlyObservation(CTraderToken token,

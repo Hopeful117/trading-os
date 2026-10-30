@@ -15,6 +15,8 @@ public final class PositionCloseCommandMapper {
                 entity.brokerAccountId,
                 entity.brokerPositionReference,
                 entity.resolvedMutationScope,
+                entity.closeQuantity,
+                entity.remainingQuantity,
                 entity.idempotencyKey,
                 entity.status,
                 entity.reconciliationResult,
@@ -34,6 +36,8 @@ public final class PositionCloseCommandMapper {
         entity.brokerAccountId = domain.brokerAccountId;
         entity.brokerPositionReference = domain.brokerPositionReference;
         entity.resolvedMutationScope = domain.resolvedMutationScope;
+        entity.closeQuantity = domain.closeQuantity;
+        entity.remainingQuantity = domain.remainingQuantity;
         entity.idempotencyKey = domain.idempotencyKey;
         entity.status = domain.status;
         entity.reconciliationResult = domain.reconciliationResult;

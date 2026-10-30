@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.positionclose.domain.model.PositionCloseSta
 import com.hope.trading.trading_core.positionclose.domain.model.ReconciliationCloseResult;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -25,6 +26,12 @@ public class PositionCloseCommandEntity {
 
     @Column(name = "resolved_mutation_scope", nullable = false, length = 255)
     public String resolvedMutationScope;
+
+    @Column(name = "close_quantity", precision = 30, scale = 12)
+    public BigDecimal closeQuantity;
+
+    @Column(name = "remaining_quantity", precision = 30, scale = 12)
+    public BigDecimal remainingQuantity;
 
     @Column(name = "idempotency_key", nullable = false, length = 160)
     public String idempotencyKey;

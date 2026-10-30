@@ -7,5 +7,6 @@ public enum PositionCloseStatus {
     REJECTED,
     UNKNOWN,
     CLOSED,
+    PARTIALLY_CLOSED,
     NOT_SUBMITTED
 }

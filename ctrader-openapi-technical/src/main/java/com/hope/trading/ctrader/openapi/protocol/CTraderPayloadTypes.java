@@ -20,6 +20,7 @@ public final class CTraderPayloadTypes {
     public static final int POSITION_PNL_REQUEST = 2187;
     public static final int POSITION_PNL_RESPONSE = 2188;
     public static final int NEW_ORDER_REQUEST = 2106;
+    public static final int CLOSE_POSITION_REQUEST = 2110;
     public static final int EXECUTION_EVENT = 2126;
     public static final int SYMBOL_BY_ID_REQUEST = 2116;
     public static final int SYMBOL_BY_ID_RESPONSE = 2117;

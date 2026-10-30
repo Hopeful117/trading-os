@@ -368,9 +368,10 @@ class BrokerPositionCloseServicesTest {
         }
 
         @Test
-        void closeRejectedRejectsNullExternalOrderId() {
-            assertThatThrownBy(() -> new CloseRejected(null, "CODE"))
-                    .isInstanceOf(NullPointerException.class);
+        void closeRejectedAllowsNullExternalOrderId() {
+            CloseRejected rejection = new CloseRejected(null, "CODE");
+            assertThat(rejection.externalOrderId()).isNull();
+            assertThat(rejection.reasonCode()).isEqualTo("CODE");
         }
 
         @Test

@@ -46,7 +46,8 @@ public class PositionCloseController {
             return ResponseEntity.ok(toResponse(
                     paperExitService.close(userId, accountId, request.tradeId(), idempotencyKey)));
         }
-        var command = service.close(userId, accountId, request.brokerPositionReference(), idempotencyKey);
+        var command = service.close(userId, accountId, request.brokerPositionReference(),
+                request.closeQuantity(), idempotencyKey);
         return ResponseEntity.accepted().body(toResponse(command));
     }
 
@@ -68,6 +69,7 @@ public class PositionCloseController {
             var failureReason = command.getClass().getField("failureReason").get(command);
             var resolvedMutationScope = command.getClass().getField("resolvedMutationScope").get(command);
             var reconciliationResult = command.getClass().getField("reconciliationResult").get(command);
+            var remainingQuantity = command.getClass().getField("remainingQuantity").get(command);
             
             return new PositionCloseResponse(
                     id.toString(),
@@ -75,7 +77,8 @@ public class PositionCloseController {
                     externalOrderId != null ? externalOrderId.toString() : null,
                     failureReason != null ? failureReason.toString() : null,
                     resolvedMutationScope != null ? resolvedMutationScope.toString() : null,
-                    reconciliationResult != null ? reconciliationResult.toString() : null
+                    reconciliationResult != null ? reconciliationResult.toString() : null,
+                    (java.math.BigDecimal) remainingQuantity
             );
         } catch (Exception e) {
             throw new IllegalStateException("Failed to extract command response", e);

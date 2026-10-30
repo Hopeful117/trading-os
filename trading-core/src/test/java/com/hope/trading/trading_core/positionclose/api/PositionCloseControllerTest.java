@@ -14,6 +14,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +38,7 @@ class PositionCloseControllerTest {
                 "BTC-POS-1", "scope-1", "idemp-1", PositionCloseStatus.SUBMITTED,
                 null, null, null, NOW, NOW, 0);
 
-        when(service.close(USER_ID, ACCOUNT_ID, "BTC-POS-1", "idemp-1")).thenReturn(command);
+        when(service.close(USER_ID, ACCOUNT_ID, "BTC-POS-1", null, "idemp-1")).thenReturn(command);
 
         ResponseEntity<PositionCloseResponse> response = controller.close(
                 ACCOUNT_ID, "idemp-1", new PositionCloseRequest("BTC-POS-1"), authentication());
@@ -51,7 +52,23 @@ class PositionCloseControllerTest {
         assertThat(response.getBody().resolvedMutationScope()).isEqualTo("scope-1");
         assertThat(response.getBody().reconciliationResult()).isNull();
 
-        verify(service).close(USER_ID, ACCOUNT_ID, "BTC-POS-1", "idemp-1");
+        verify(service).close(USER_ID, ACCOUNT_ID, "BTC-POS-1", null, "idemp-1");
+    }
+
+    @Test
+    void close_propagatesPartialQuantityToService() {
+        PositionCloseCommand command = new PositionCloseCommand(
+                COMMAND_ID, ACCOUNT_ID, UUID.randomUUID(),
+                "BTC-POS-1", "scope-1", "idemp-1", PositionCloseStatus.SUBMITTED,
+                null, null, null, NOW, NOW, 0);
+        BigDecimal closeQuantity = new BigDecimal("0.25");
+        when(service.close(USER_ID, ACCOUNT_ID, "BTC-POS-1", closeQuantity, "idemp-1")).thenReturn(command);
+
+        ResponseEntity<PositionCloseResponse> response = controller.close(
+                ACCOUNT_ID, "idemp-1", new PositionCloseRequest("BTC-POS-1", null, closeQuantity), authentication());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        verify(service).close(USER_ID, ACCOUNT_ID, "BTC-POS-1", closeQuantity, "idemp-1");
     }
 
     @Test
