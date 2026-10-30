@@ -12,13 +12,20 @@ import java.util.Objects;
  *
  * @see ADR-032 — Represent Trade Plan Entry Intent Explicitly
  */
-public record EntryIntent(OrderType orderType, BigDecimal price) {
+public record EntryIntent(OrderType orderType, BigDecimal price, BigDecimal referencePrice) {
+    public EntryIntent(OrderType orderType, BigDecimal price) {
+        this(orderType, price, null);
+    }
+
     public EntryIntent {
         Objects.requireNonNull(orderType, "orderType");
         if (orderType == OrderType.LIMIT) {
             if (price == null || price.signum() <= 0) {
                 throw new IllegalArgumentException("LIMIT entry intent requires a positive price");
             }
+        }
+        if (referencePrice != null && referencePrice.signum() <= 0) {
+            throw new IllegalArgumentException("reference price must be positive");
         }
     }
 

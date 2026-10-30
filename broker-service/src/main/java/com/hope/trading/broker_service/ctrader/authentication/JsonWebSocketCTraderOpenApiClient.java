@@ -26,6 +26,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
+import com.hope.trading.broker_service.ctrader.execution.CTraderExecutionInstrumentContract;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.*;
 
 @Component
@@ -131,22 +132,54 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             requireAccountResponse(session.request(ACCOUNT_AUTH_REQUEST, ACCOUNT_AUTH_RESPONSE,
                     objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)
                             .put("accessToken", token.accessToken())), accountId);
-            SymbolFacts symbol = resolveSymbol(session, accountId, request.instrument());
+            CTraderExecutionInstrumentContract symbol = resolveSymbol(session, accountId, request.instrument());
+            final long providerVolume;
+            final long relativeStopLoss;
+            final Long relativeTakeProfit;
+            try {
+                providerVolume = symbol.providerVolume(request.quantity());
+                if ("MARKET".equalsIgnoreCase(request.orderType())) {
+                    relativeStopLoss = symbol.relativeStopLoss(request.referencePrice(), request.stopLossPrice(), request.side());
+                    relativeTakeProfit = request.takeProfitPrices() != null && !request.takeProfitPrices().isEmpty()
+                            ? symbol.relativeTakeProfit(request.referencePrice(), request.takeProfitPrices().getFirst(), request.side())
+                            : null;
+                } else {
+                    relativeStopLoss = 0;
+                    relativeTakeProfit = null;
+                }
+            } catch (IllegalArgumentException exception) {
+                throw new CTraderAuthenticationException(exception.getMessage(), exception);
+            }
             ObjectNode payload = objectMapper.createObjectNode()
                     .put("ctidTraderAccountId", accountId)
-                    .put("symbolId", symbol.id())
+                    .put("symbolId", symbol.symbolId())
                     .put("orderType", orderType(request.orderType()))
                     .put("tradeSide", tradeSide(request.side()))
-                    .put("volume", volume(request.quantity(), symbol))
-                    .put("clientOrderId", request.clientOrderId())
-                    .put("stopLoss", request.stopLossPrice().doubleValue());
+                    .put("volume", providerVolume)
+                    .put("clientOrderId", request.clientOrderId());
+            if ("MARKET".equalsIgnoreCase(request.orderType())) {
+                payload.put("relativeStopLoss", relativeStopLoss);
+                if (relativeTakeProfit != null) payload.put("relativeTakeProfit", relativeTakeProfit);
+            }
             if (request.takeProfitPrices() != null && request.takeProfitPrices().size() > 1) {
-                throw new CTraderAuthenticationException("cTrader supports one take-profit price per order");
+                throw new CTraderAuthenticationException("CTRADER_UNSUPPORTED_TAKE_PROFIT_CONFIGURATION");
             }
             if (request.takeProfitPrices() != null && !request.takeProfitPrices().isEmpty()) {
-                payload.put("takeProfit", request.takeProfitPrices().getFirst().doubleValue());
+                if (!"MARKET".equalsIgnoreCase(request.orderType())) {
+                    try {
+                        payload.put("takeProfit", symbol.price(request.takeProfitPrices().getFirst(), "TAKE_PROFIT").doubleValue());
+                    } catch (IllegalArgumentException exception) {
+                        throw new CTraderAuthenticationException(exception.getMessage(), exception);
+                    }
+                }
             }
-            if (request.limitPrice() != null) payload.put("limitPrice", request.limitPrice().doubleValue());
+            if (request.limitPrice() != null) {
+                try {
+                    payload.put("limitPrice", symbol.price(request.limitPrice(), "LIMIT_PRICE").doubleValue());
+                } catch (IllegalArgumentException exception) {
+                    throw new CTraderAuthenticationException(exception.getMessage(), exception);
+                }
+            }
             JsonNode response = requireAccountResponse(session.request(NEW_ORDER_REQUEST, EXECUTION_EVENT, payload), accountId);
             String orderId = response.path("orderId").asText("");
             if (orderId.isBlank()) throw new CTraderAuthenticationException("cTrader order response did not contain an order id");
@@ -158,39 +191,61 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
     }
 
-    private SymbolFacts resolveSymbol(Session session, long accountId, String instrument) {
+    private CTraderExecutionInstrumentContract resolveSymbol(Session session, long accountId, String instrument) {
         JsonNode response = requireAccountResponse(session.request(SYMBOL_LIST_REQUEST, SYMBOL_LIST_RESPONSE,
                 objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
+        List<JsonNode> matches = new ArrayList<>();
         for (JsonNode symbol : response.path("symbol")) {
             if (instrument.equalsIgnoreCase(symbol.path("symbolName").asText())) {
-                long symbolId = symbol.path("symbolId").asLong(0);
-                if (symbolId > 0) {
-                    ObjectNode symbolRequest = objectMapper.createObjectNode()
-                            .put("ctidTraderAccountId", accountId);
-                    symbolRequest.putArray("symbolId").add(symbolId);
-                    JsonNode detailsResponse = requireAccountResponse(session.request(SYMBOL_BY_ID_REQUEST,
-                            SYMBOL_BY_ID_RESPONSE, symbolRequest), accountId);
-                    JsonNode details = detailsResponse.path("symbol").isArray()
-                            ? detailsResponse.path("symbol").path(0)
-                            : detailsResponse.path("symbol");
-                    long minVolume = details.path("minVolume").asLong(0);
-                    long maxVolume = details.path("maxVolume").asLong(0);
-                    long stepVolume = details.path("stepVolume").asLong(0);
-                    if (minVolume <= 0 || maxVolume < minVolume || stepVolume <= 0) {
-                        throw new CTraderAuthenticationException("cTrader symbol volume constraints are unavailable");
-                    }
-                    return new SymbolFacts(symbolId, minVolume, maxVolume, stepVolume);
-                }
+                matches.add(symbol);
             }
         }
-        throw new CTraderAuthenticationException("cTrader symbol is unavailable");
+        if (matches.isEmpty()) throw new CTraderAuthenticationException("CTRADER_UNKNOWN_INSTRUMENT");
+        if (matches.size() > 1) throw new CTraderAuthenticationException("CTRADER_AMBIGUOUS_INSTRUMENT");
+        JsonNode listed = matches.getFirst();
+        long symbolId = listed.path("symbolId").asLong(0);
+        if (symbolId <= 0) throw new CTraderAuthenticationException("CTRADER_UNKNOWN_INSTRUMENT");
+        ObjectNode symbolRequest = objectMapper.createObjectNode()
+                .put("ctidTraderAccountId", accountId);
+        symbolRequest.putArray("symbolId").add(symbolId);
+        JsonNode detailsResponse = requireAccountResponse(session.request(SYMBOL_BY_ID_REQUEST,
+                SYMBOL_BY_ID_RESPONSE, symbolRequest), accountId);
+        JsonNode details = detailsResponse.path("symbol").isArray()
+                ? detailsResponse.path("symbol").path(0)
+                : detailsResponse.path("symbol");
+        try {
+            return new CTraderExecutionInstrumentContract(
+                    symbolId,
+                    listed.path("symbolName").asText(),
+                    details.path("digits").asInt(listed.path("digits").asInt(0)),
+                    details.path("pipPosition").asInt(listed.path("pipPosition").asInt(0)),
+                    details.path("minVolume").asLong(0),
+                    details.path("maxVolume").asLong(0),
+                    details.path("stepVolume").asLong(0),
+                    optionalPositiveLong(details, "lotSize"),
+                    optionalNonNegativeLong(details, "slDistance"),
+                    optionalNonNegativeLong(details, "tpDistance"),
+                    details.path("distanceSetIn").isTextual() ? details.path("distanceSetIn").asText() : null);
+        } catch (IllegalArgumentException exception) {
+            throw new CTraderAuthenticationException(exception.getMessage(), exception);
+        }
+    }
+
+    private static Long optionalPositiveLong(JsonNode node, String field) {
+        long value = node.path(field).asLong(0);
+        return value > 0 ? value : null;
+    }
+
+    private static Long optionalNonNegativeLong(JsonNode node, String field) {
+        if (!node.has(field) || !node.path(field).canConvertToLong()) return null;
+        long value = node.path(field).asLong();
+        return value >= 0 ? value : null;
     }
 
     private int orderType(String value) {
         return switch (value.toUpperCase(java.util.Locale.ROOT)) {
             case "MARKET" -> 1;
-            case "LIMIT" -> 2;
-            default -> throw new CTraderAuthenticationException("cTrader order type is unsupported");
+            default -> throw new CTraderAuthenticationException("CTRADER_UNSUPPORTED_ORDER_TYPE");
         };
     }
 
@@ -199,23 +254,6 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if ("SELL".equalsIgnoreCase(value)) return 2;
         throw new CTraderAuthenticationException("cTrader trade side is unsupported");
     }
-
-    private long volume(BigDecimal quantity, SymbolFacts symbol) {
-        try {
-            // cTrader represents order volume in cents: 100 means 1.00 units.
-            BigDecimal providerVolume = quantity.movePointRight(2);
-            long value = providerVolume.longValueExact();
-            if (value < symbol.minVolume() || value > symbol.maxVolume()
-                    || (value - symbol.minVolume()) % symbol.stepVolume() != 0) {
-                throw new CTraderAuthenticationException("cTrader quantity violates symbol volume constraints");
-            }
-            return value;
-        } catch (ArithmeticException exception) {
-            throw new CTraderAuthenticationException("cTrader volume precision is invalid", exception);
-        }
-    }
-
-    private record SymbolFacts(long id, long minVolume, long maxVolume, long stepVolume) {}
 
     @Override
     public CTraderReadOnlyObservation readOnlyObservation(CTraderToken token, String externalAccountId,

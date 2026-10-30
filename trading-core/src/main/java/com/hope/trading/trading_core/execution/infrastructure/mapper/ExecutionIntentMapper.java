@@ -54,9 +54,9 @@ public final class ExecutionIntentMapper {
                 ExecutionParameters.Side.valueOf(value.side),
                 ExecutionParameters.OrderType.valueOf(value.orderType), value.quantity,value.limitPrice,
                 value.stopLossPrice,
-                value.takeProfitPrices == null || value.takeProfitPrices.isBlank() ? List.of() :
-                        Arrays.stream(value.takeProfitPrices.split(",")).map(java.math.BigDecimal::new).toList(),
-                value.expectedMonetaryRisk, value.riskRewardRatio);
+                 value.takeProfitPrices == null || value.takeProfitPrices.isBlank() ? List.of() :
+                         Arrays.stream(value.takeProfitPrices.split(",")).map(java.math.BigDecimal::new).toList(),
+                 value.expectedMonetaryRisk, value.riskRewardRatio, value.referencePrice);
         if (ExecutionPurpose.valueOf(value.purpose == null ? "ENTRY" : value.purpose) == ExecutionPurpose.EXIT) {
             return ExecutionIntent.rehydrateExit(new ExecutionIntentId(value.id), value.targetTradeId,
                     new IdempotencyKey(value.idempotencyKey), value.initiatorId, value.brokerAccountId, value.accountId,

@@ -35,6 +35,7 @@ public class ExecutionIntentEntity {
     @Column(name="take_profit_prices", columnDefinition="TEXT") public String takeProfitPrices;
     @Column(name="expected_monetary_risk", precision=30, scale=12) public BigDecimal expectedMonetaryRisk;
     @Column(name="risk_reward_ratio", precision=30, scale=12) public BigDecimal riskRewardRatio;
+    @Column(name="reference_price", precision=30, scale=12) public BigDecimal referencePrice;
     @Column(nullable=false) public String status;
     @Column(name="active_attempt_id", unique=true) public UUID activeAttemptId;
     @Column(name="created_at", nullable=false, updatable=false) public Instant createdAt;

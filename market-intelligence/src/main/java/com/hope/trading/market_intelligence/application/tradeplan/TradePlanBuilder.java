@@ -40,8 +40,9 @@ final class TradePlanBuilder {
         BigDecimal reward = targets.getFirst().price().subtract(entryPrice).abs();
         ExecutionParameters execution = new ExecutionParameters(
                 input.instrument(), input.direction(), entry, stop, targets, sizing,
-                new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
-                expiration, management, input.instrumentProvider(), input.instrumentProductType());
+                 new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
+                 expiration, management, input.instrumentProvider(), input.instrumentProductType(),
+                 entryPrice);
         if (input.instrumentProvider() == null || input.instrumentProvider().isBlank()
                 || input.instrumentProductType() == null || input.instrumentProductType().isBlank()) {
             throw new IllegalArgumentException("Canonical instrument product identity is required");
@@ -78,10 +79,11 @@ final class TradePlanBuilder {
         ExecutionParameters execution = new ExecutionParameters(
                 request.instrument(), request.direction(), request.entry(), request.stopLoss(),
                 request.takeProfits(), request.positionSizing(),
-                risk == null || reward == null ? null
-                        : new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
-                new PlanExpiration(request.expiresAt(), request.expirationPolicy()),
-                request.managementRules(), request.instrumentProvider(), request.instrumentProductType());
+                 risk == null || reward == null ? null
+                         : new RiskReward(reward.divide(risk, 4, RoundingMode.HALF_UP)),
+                 new PlanExpiration(request.expiresAt(), request.expirationPolicy()),
+                 request.managementRules(), request.instrumentProvider(), request.instrumentProductType(),
+                 request.referencePrice());
         if (request.instrumentProvider() == null || request.instrumentProvider().isBlank()
                 || request.instrumentProductType() == null || request.instrumentProductType().isBlank()) {
             throw new IllegalArgumentException("Canonical instrument product identity is required");

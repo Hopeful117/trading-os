@@ -9,7 +9,7 @@ public final class ExecutionRequestMapper {
         return new BrokerRequest(value.intentId().value(),value.attemptId().value(),
                 value.idempotencyKey().value(),value.brokerAccountId(),p.instrument(),
                 p.side().name(),p.orderType().name(),p.quantity(),p.limitPrice(),p.stopLossPrice(),
-                p.takeProfitPrices());
+                p.takeProfitPrices(), p.referencePrice());
     }
     public ReconcileRequest map(BrokerExecutionPort.ReconciliationRequest value){
         return new ReconcileRequest(value.intentId().value(),value.attemptId().value(),
