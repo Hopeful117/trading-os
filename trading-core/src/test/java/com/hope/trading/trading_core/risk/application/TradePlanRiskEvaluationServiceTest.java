@@ -26,6 +26,7 @@ import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import java.math.BigDecimal;
@@ -264,6 +265,19 @@ class TradePlanRiskEvaluationServiceTest {
         assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
         assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
                 .containsExactly("AUTOMATED_PROTECTION_REQUIRED");
+    }
+
+    @Test
+    void cfdManualPlanWithoutProtectionFailsClosedBeforeRiskEvaluation() {
+        availableContext(List.of());
+        when(plans.load(planId, 3)).thenReturn(cfdPlan(null));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("CFD_STOP_UNAVAILABLE");
+        verify(broker, never()).load(any(), any(), any());
     }
 
     @Test
@@ -587,7 +601,16 @@ class TradePlanRiskEvaluationServiceTest {
                 UUID.randomUUID(), 8, now, actorId, accountId, accountCurrency,
                 UUID.randomUUID(), 2, UUID.randomUUID(), 4,
                  "ETHUSD", "LONG", entryIntent, stopPrice, new BigDecimal("120"), BigDecimal.ONE,
-                 new BigDecimal("1000"), new BigDecimal("100"), null, sizingCurrency, "{\"accepted\":true}", List.of());
+                  new BigDecimal("1000"), new BigDecimal("100"), null, sizingCurrency, "{\"accepted\":true}", List.of());
+    }
+
+    private TradePlanRiskPort.Snapshot cfdPlan(BigDecimal stopPrice) {
+        return new TradePlanRiskPort.Snapshot(planId, 3, "ACCEPTED", "MANUAL", now,
+                UUID.randomUUID(), 8, now, actorId, accountId, "USD", UUID.randomUUID(), 2,
+                UUID.randomUUID(), 4, "EUR/USD", "MARKET_DATA", InstrumentProductType.CFD,
+                "LONG", new EntryIntent(EntryIntent.OrderType.MARKET, null), stopPrice,
+                new BigDecimal("1.20"), new BigDecimal("1000"), new BigDecimal("10000"),
+                new BigDecimal("100"), new BigDecimal("1.5"), "USD", "{\"accepted\":true}", List.of());
     }
 
     private RiskPersistence.Profile profile() {

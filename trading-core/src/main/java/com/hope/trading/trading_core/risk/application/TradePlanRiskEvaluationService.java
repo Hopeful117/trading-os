@@ -20,6 +20,8 @@ import com.hope.trading.risk.snapshot.PositionSnapshot;
 import com.hope.trading.risk.snapshot.RuleSetSnapshot;
 import com.hope.trading.risk.snapshot.TradingContext;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.market_data.service.InstrumentFinancialContractResolver;
+import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Command;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Reason;
@@ -31,6 +33,8 @@ import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentFinancialContract;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -69,6 +73,8 @@ public class TradePlanRiskEvaluationService {
     private final RiskAcknowledgmentDeliveryService acknowledgmentDelivery;
     private final RiskProfileValidator riskProfileValidator;
     private final TransactionTemplate transactions;
+    private final InstrumentFinancialContractResolver financialContracts;
+    private final CfdRiskProjectionService cfdRisk;
 
     @Autowired
     public TradePlanRiskEvaluationService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
@@ -77,6 +83,8 @@ public class TradePlanRiskEvaluationService {
                                            RiskPersistence persistence, Clock clock,
                                            RiskAcknowledgmentDeliveryService acknowledgmentDelivery,
                                            RiskProfileValidator riskProfileValidator,
+                                           InstrumentFinancialContractResolver financialContracts,
+                                           CfdRiskProjectionService cfdRisk,
                                            PlatformTransactionManager transactionManager) {
         this.accounts = accounts;
         this.brokerAccounts = brokerAccounts;
@@ -88,8 +96,22 @@ public class TradePlanRiskEvaluationService {
         this.clock = clock;
         this.acknowledgmentDelivery = acknowledgmentDelivery;
         this.riskProfileValidator = riskProfileValidator;
+        this.financialContracts = financialContracts;
+        this.cfdRisk = cfdRisk;
         this.transactions = new TransactionTemplate(transactionManager);
         this.engine = RiskEngines.standard(ENGINE_VERSION, clock);
+    }
+
+    public TradePlanRiskEvaluationService(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
+                                           TradePlanRiskPort tradePlans, RiskFactsProvider facts,
+                                           MarketValuationPort market, RequiredMarginPort requiredMargins,
+                                           RiskPersistence persistence, Clock clock,
+                                           RiskAcknowledgmentDeliveryService acknowledgmentDelivery,
+                                           RiskProfileValidator riskProfileValidator,
+                                           PlatformTransactionManager transactionManager) {
+        this(accounts, brokerAccounts, tradePlans, facts, market, requiredMargins, persistence, clock,
+                acknowledgmentDelivery, riskProfileValidator, null, new CfdRiskProjectionService(),
+                transactionManager);
     }
 
     /** Compatibility constructor for focused unit tests that provide only LIVE facts. */
@@ -246,10 +268,25 @@ public class TradePlanRiskEvaluationService {
         BigDecimal dailyClosedPnl = dailyClosed.amount();
 
         List<PositionSnapshot> positions = positions(brokerSnapshot.positions(), current, currency, accountRate,
-                "MANUAL".equalsIgnoreCase(plan.origin()));
+                 "MANUAL".equalsIgnoreCase(plan.origin()), account);
         BigDecimal sizingRate = assetRate(current, plan.sizingCurrency());
-        BigDecimal notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
-        BigDecimal expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
+        BigDecimal notional;
+        BigDecimal expectedLoss;
+        if (plan.instrumentProductType() == InstrumentProductType.CFD) {
+            if (financialContracts == null) throw unavailable("CFD_CONTRACT_UNAVAILABLE");
+            InstrumentFinancialContract contract = financialContracts.resolve(plan.instrument())
+                    .requireProductType(InstrumentProductType.CFD);
+            BigDecimal signedQuantity = "LONG".equalsIgnoreCase(plan.direction())
+                    ? plan.quantity() : plan.quantity().negate();
+            CfdRiskProjectionService.Proposed projection = cfdRisk.projectProposed(contract, signedQuantity,
+                    plan.entryIntent() == null ? null : plan.entryIntent().price(), plan.stopPrice(),
+                    plan.expectedMonetaryRisk(), fact(current, "proposed"), current.sourceVersion(), currency);
+            notional = projection.notional().amount();
+            expectedLoss = projection.stopRisk().amount();
+        } else {
+            notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
+            expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
+        }
         BigDecimal marginPrice = plan.entryIntent().price() != null
                 ? plan.entryIntent().price()
                 : current.facts().stream()
@@ -411,6 +448,9 @@ public class TradePlanRiskEvaluationService {
         if (plan.sourcePayload() == null || plan.contextId() == null || plan.contextVersion() < 1)
             throw unavailable("TRADE_PLAN_PROVENANCE_INCOMPLETE");
         if (blank(plan.origin())) throw unavailable("TRADE_PLAN_ORIGIN_MISSING");
+        if (plan.instrumentProductType() == InstrumentProductType.CFD && plan.stopPrice() == null) {
+            throw unavailable("CFD_STOP_UNAVAILABLE");
+        }
         if (!"MANUAL".equalsIgnoreCase(plan.origin()) && plan.stopPrice() == null) {
             throw unavailable("AUTOMATED_PROTECTION_REQUIRED");
         }
@@ -499,8 +539,9 @@ public class TradePlanRiskEvaluationService {
     }
 
     private List<PositionSnapshot> positions(List<RiskFactsProvider.Position> brokerPositions,
-                                              MarketValuationPort.Snapshot valuation, String currency,
-                                              BigDecimal marginConversionRate, boolean allowUnprotected) {
+                                               MarketValuationPort.Snapshot valuation, String currency,
+                                               BigDecimal marginConversionRate, boolean allowUnprotected,
+                                               com.hope.trading.trading_core.model.Account account) {
         List<PositionSnapshot> result = new ArrayList<>();
         for (var position : brokerPositions) {
             if (position.positionId() == null || position.signedQuantity() == null
@@ -528,6 +569,17 @@ public class TradePlanRiskEvaluationService {
                     || blank(price.sourceProvenance())
                     || price.sourcePrice().multiply(price.quoteToReportingRate()).compareTo(price.value()) != 0)
                 throw unavailable("POSITION_PRICE_PROVENANCE_INCOMPLETE");
+            InstrumentFinancialContract contract = positionContract(position, account);
+            if (contract != null && contract.productType() == InstrumentProductType.CFD) {
+                CfdRiskProjectionService.Position projection = cfdRisk.projectPosition(contract,
+                        position.signedQuantity(), position.entryPrice(), position.protectiveStops(), price,
+                        valuation.sourceVersion(), currency);
+                result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
+                        projection.marketValue(), projection.lossAtStop(),
+                        new Money(position.margin().multiply(marginConversionRate), currency),
+                        position.protectionStatus()));
+                continue;
+            }
             BigDecimal conversion = price.quoteToReportingRate();
             BigDecimal loss = BigDecimal.ZERO;
             for (var stop : position.protectiveStops() == null ? List.<RiskFactsProvider.Stop>of() : position.protectiveStops()) {
@@ -545,6 +597,21 @@ public class TradePlanRiskEvaluationService {
                     position.protectionStatus()));
         }
         return List.copyOf(result);
+    }
+
+    private InstrumentFinancialContract positionContract(RiskFactsProvider.Position position,
+                                                         com.hope.trading.trading_core.model.Account account) {
+        if (account != null && account.getTrades() != null) {
+            Trade trade = account.getTrades().stream().filter(candidate -> candidate != null
+                    && (position.positionId().equals(candidate.getTradeId())
+                    || (candidate.getBrokerPositionReference() != null
+                    && candidate.getBrokerPositionReference().equals(position.sourcePositionReference()))))
+                    .findFirst().orElse(null);
+            if (trade != null && trade.getProductType() == InstrumentProductType.CFD) {
+                return cfdRisk.fromTrade(trade);
+            }
+        }
+        return financialContracts == null ? null : financialContracts.resolveIfCfd(position.instrument());
     }
 
     private static BigDecimal valueAssets(Map<String, BigDecimal> balances, MarketValuationPort.Snapshot valuation) {
