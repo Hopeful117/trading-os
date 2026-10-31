@@ -181,6 +181,25 @@ class CTraderMarketDataTest {
     }
 
     @Test
+    void mapsCompleteConfiguredCfdFinancialContractMetadata() {
+        CTraderMarketDataProperties properties = new CTraderMarketDataProperties(
+                CTraderEnvironment.DEMO, "id", "secret", null, null, null,
+                "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
+                Map.of("EURUSD", "EUR/USD"), Map.of("EURUSD", "CFD"),
+                Map.of("EURUSD", "1"), Map.of("EURUSD", "3"), 8, 720);
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient(), properties,
+                new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+
+        var market = provider.getMarkets().getFirst();
+
+        assertThat(market.getQuantityUnit()).isEqualTo("UNDERLYING_UNITS");
+        assertThat(market.getContractMultiplier()).isEqualByComparingTo("1");
+        assertThat(market.getContractSourceId()).isEqualTo("market-data-contract:EUR/USD");
+        assertThat(market.getContractSourceVersion()).isEqualTo(3L);
+        assertThat(market.getContractObservedAt()).isEqualTo(NOW);
+    }
+
+    @Test
     void mapsEachConfiguredFallbackSymbolOnlyFromItsExplicitProductType() {
         CTraderOpenApiClient client = new FakeClient() {
             @Override public List<CTraderSymbol> symbols() {

@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.UUID;
+import java.math.BigDecimal;
+import java.time.Instant;
 
 @Getter
 @Builder
@@ -25,6 +27,16 @@ public class MarketResponse {
     private String quoteAsset;
 
     private InstrumentProductType productType;
+
+    private String quantityUnit;
+
+    private BigDecimal contractMultiplier;
+
+    private String contractSourceId;
+
+    private Long contractSourceVersion;
+
+    private Instant contractObservedAt;
 
     private MarketState marketState;
 

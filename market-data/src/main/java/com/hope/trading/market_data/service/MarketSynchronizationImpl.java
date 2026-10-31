@@ -69,6 +69,11 @@ public class MarketSynchronizationImpl implements MarketSynchronization {
         existing.setBaseAsset(incoming.getBaseAsset());
         existing.setQuoteAsset(incoming.getQuoteAsset());
         existing.setProviderSymbol(incoming.getProviderSymbol());
+        existing.setQuantityUnit(incoming.getQuantityUnit());
+        existing.setContractMultiplier(incoming.getContractMultiplier());
+        existing.setContractSourceId(incoming.getContractSourceId());
+        existing.setContractSourceVersion(incoming.getContractSourceVersion());
+        existing.setContractObservedAt(incoming.getContractObservedAt());
 
         existing.setMarketConstraints(
                 incoming.getMarketConstraints()

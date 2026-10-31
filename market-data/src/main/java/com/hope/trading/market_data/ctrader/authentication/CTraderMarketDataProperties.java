@@ -20,20 +20,32 @@ public record CTraderMarketDataProperties(
         Duration authorizationStateTtl,
         Map<String, String> symbolMappings,
         Map<String, String> symbolProductTypes,
+        Map<String, String> symbolContractMultipliers,
+        Map<String, String> symbolContractSourceVersions,
         int maxTrendbarPages,
         int maxTrendbarRows) {
     public CTraderMarketDataProperties(CTraderEnvironment environment, String clientId, String clientSecret,
                                        String websocketEndpoint, Duration requestTimeout,
                                        Map<String, String> symbolMappings) {
         this(environment, clientId, clientSecret, null, null, null, websocketEndpoint, requestTimeout,
-                Duration.ofMinutes(10), symbolMappings, Map.of(), 8, 720);
+                Duration.ofMinutes(10), symbolMappings, Map.of(), Map.of(), Map.of(), 8, 720);
     }
 
     public CTraderMarketDataProperties(CTraderEnvironment environment, String clientId, String clientSecret,
                                        String tokenEndpoint, String websocketEndpoint, Duration requestTimeout,
                                        Map<String, String> symbolMappings, int maxTrendbarPages, int maxTrendbarRows) {
         this(environment, clientId, clientSecret, null, null, tokenEndpoint, websocketEndpoint, requestTimeout,
-                Duration.ofMinutes(10), symbolMappings, Map.of(), maxTrendbarPages, maxTrendbarRows);
+                Duration.ofMinutes(10), symbolMappings, Map.of(), Map.of(), Map.of(), maxTrendbarPages, maxTrendbarRows);
+    }
+
+    public CTraderMarketDataProperties(CTraderEnvironment environment, String clientId, String clientSecret,
+                                       String authorizationEndpoint, String redirectUri, String tokenEndpoint,
+                                       String websocketEndpoint, Duration requestTimeout, Duration authorizationStateTtl,
+                                       Map<String, String> symbolMappings, Map<String, String> symbolProductTypes,
+                                       int maxTrendbarPages, int maxTrendbarRows) {
+        this(environment, clientId, clientSecret, authorizationEndpoint, redirectUri, tokenEndpoint,
+                websocketEndpoint, requestTimeout, authorizationStateTtl, symbolMappings, symbolProductTypes,
+                Map.of(), Map.of(), maxTrendbarPages, maxTrendbarRows);
     }
 
     @ConstructorBinding
@@ -46,6 +58,8 @@ public record CTraderMarketDataProperties(
         }
         symbolMappings = symbolMappings == null ? Map.of() : Map.copyOf(symbolMappings);
         symbolProductTypes = symbolProductTypes == null ? Map.of() : Map.copyOf(symbolProductTypes);
+        symbolContractMultipliers = symbolContractMultipliers == null ? Map.of() : Map.copyOf(symbolContractMultipliers);
+        symbolContractSourceVersions = symbolContractSourceVersions == null ? Map.of() : Map.copyOf(symbolContractSourceVersions);
         if (maxTrendbarPages < 1 || maxTrendbarRows < 1) {
             throw new IllegalArgumentException("cTrader trendbar bounds must be positive");
         }

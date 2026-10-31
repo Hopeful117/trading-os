@@ -14,6 +14,11 @@ public class MarketMapper {
                 .baseAsset(market.getBaseAsset())
                 .quoteAsset(market.getQuoteAsset())
                 .productType(market.getProductType())
+                .quantityUnit(market.getQuantityUnit())
+                .contractMultiplier(market.getContractMultiplier())
+                .contractSourceId(market.getContractSourceId())
+                .contractSourceVersion(market.getContractSourceVersion())
+                .contractObservedAt(market.getContractObservedAt())
                 .marketState(market.getMarketState())
                 .marketConstraints(market.getMarketConstraints())
                 .build();

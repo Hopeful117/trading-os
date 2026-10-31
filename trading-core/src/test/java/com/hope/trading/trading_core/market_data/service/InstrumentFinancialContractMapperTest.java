@@ -54,10 +54,11 @@ class InstrumentFinancialContractMapperTest {
     void rejectsLegacyConstraintsWithoutQuantityIncrement() {
         MarketResponse market = MarketResponse.builder()
                 .symbol("EUR/USD")
-                .baseAsset("EUR")
-                .quoteAsset("USD")
-                .productType(InstrumentProductType.CFD)
-                .marketConstraints(new MarketConstraints(new BigDecimal("1000"), null,
+                 .baseAsset("EUR")
+                 .quoteAsset("USD")
+                 .productType(InstrumentProductType.CFD)
+                 .quantityUnit(QuantityUnit.UNDERLYING_UNITS.name())
+                 .marketConstraints(new MarketConstraints(new BigDecimal("1000"), null,
                         new BigDecimal("0.00001"), 0, 5))
                 .build();
 
@@ -70,11 +71,12 @@ class InstrumentFinancialContractMapperTest {
     private MarketResponse market(InstrumentProductType productType) {
         return MarketResponse.builder()
                 .symbol("EUR/USD")
-                .baseAsset("EUR")
-                .quoteAsset("USD")
-                .productType(productType)
-                .marketConstraints(new MarketConstraints(new BigDecimal("1000"), new BigDecimal("1000"),
-                        null, new BigDecimal("0.00001"), 0, 5))
+                 .baseAsset("EUR")
+                 .quoteAsset("USD")
+                 .productType(productType)
+                 .quantityUnit(QuantityUnit.UNDERLYING_UNITS.name())
+                 .marketConstraints(new MarketConstraints(new BigDecimal("1000"), new BigDecimal("1000"),
+                         null, new BigDecimal("0.00001"), 0, 5))
                 .build();
     }
 }

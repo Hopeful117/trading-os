@@ -18,6 +18,8 @@ import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.market_data.service.InstrumentFinancialContractResolver;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.TradeRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
@@ -56,6 +58,7 @@ class BrokerSynchronizationServiceImplTest {
     private final BrokerApiClient brokerApiClient = mock(BrokerApiClient.class);
     private final BrokerAccountSnapshotV2Client brokerAccountSnapshotV2Client = mock(BrokerAccountSnapshotV2Client.class);
     private final AccountMapper accountMapper = new AccountMapper();
+    private final InstrumentFinancialContractResolver financialContracts = mock(InstrumentFinancialContractResolver.class);
 
     private BrokerSynchronizationServiceImpl service;
 
@@ -68,7 +71,7 @@ class BrokerSynchronizationServiceImplTest {
         service = new BrokerSynchronizationServiceImpl(
                 userRepository, accountRepository, tradeRepository,
                 new TradingCalculatorServiceImpl(), brokerApiClient, brokerAccountSnapshotV2Client,
-                accountMapper, brokerAccountRepository);
+                accountMapper, brokerAccountRepository, financialContracts);
 
         user = new User();
         user.setUserId(userId);
@@ -334,6 +337,29 @@ class BrokerSynchronizationServiceImplTest {
         assertThat(context.account.getTrades().getFirst().getTradeId()).isEqualTo(original.getTradeId());
         assertThat(context.account.getTrades().getFirst().getBrokerPositionReference()).isEqualTo("position-1");
         assertThat(context.account.getTrades().getFirst().getQuantity()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void v2SynchronizationDoesNotResolveMarketDataForKnownNonCfdTrade() {
+        V2Context context = v2Context();
+        Trade existing = Trade.builder()
+                .symbol("XBT/USD")
+                .type(TradeType.BUY)
+                .quantity(new BigDecimal("2"))
+                .entryPrice(new BigDecimal("100"))
+                .tradeStatus(TradeStatus.OPEN)
+                .brokerPositionReference("position-1")
+                .productType(InstrumentProductType.LINEAR_PERPETUAL)
+                .build();
+        context.account.addTrade(existing);
+        when(financialContracts.resolveIfCfd("XBT/USD"))
+                .thenThrow(new AssertionError("known non-CFD trade must not resolve Market Data"));
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(position("position-1", "XBT/USD", "1")), List.of()));
+
+        service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        assertThat(existing.getQuantity()).isEqualByComparingTo("1");
     }
 
     @Test

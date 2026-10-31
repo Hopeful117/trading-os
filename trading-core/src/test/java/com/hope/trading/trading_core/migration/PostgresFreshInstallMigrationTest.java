@@ -51,13 +51,14 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(46);
+        assertMigrationHistory(47);
+        assertCfdProjectionSchema();
         assertDailyDrawdownBoundarySchema();
         assertTradeExecutionProvenanceConstraints();
         assertBrokerPositionReconciliationSchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("46");
+                 String.class)).isEqualTo("47");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -79,9 +80,9 @@ class PostgresFreshInstallMigrationTest {
                 Integer.class, UUID.fromString("3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012"))).isEqualTo(1);
         assertThat(tableExists("challenge_reevaluation_outbox")).isTrue();
         assertThat(jdbc.queryForObject(
-                "select count(*) from pg_indexes where schemaname = current_schema() "
-                        + "and indexname in ('idx_risk_evaluation_t1_intent', 'idx_risk_evaluation_t1_account')",
-                Integer.class)).isEqualTo(2);
+                 "select count(*) from pg_indexes where schemaname = current_schema() "
+                         + "and indexname in ('idx_risk_evaluation_t1_intent', 'idx_risk_evaluation_t1_account')",
+                 Integer.class)).isEqualTo(2);
         assertThat(jdbc.queryForObject(
                 "select count(*) from challenge_definition where id = ? and definition_version = '1.0.0'",
                 Integer.class, BENCHMARK_DEFINITION_ID)).isEqualTo(1);
@@ -107,10 +108,23 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(46);
+                 Integer.class)).isEqualTo(47);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
+    }
+
+    @Test
+    void rejectsPartialCfdProjectionFacts() {
+        Flyway flyway = flyway(jdbcUrlSchema());
+        flyway.migrate();
+
+        UUID tradeId = UUID.randomUUID();
+        assertThatThrownBy(() -> jdbc.update(
+                "insert into trades(trade_id, symbol, type, entry_price, quantity, trade_status, "
+                        + "product_type, quote_currency) values (?, 'EURUSD', 'BUY', 1.1, 1, 'OPEN', 'CFD', 'USD')",
+                tradeId))
+                .hasMessageContaining("trades_financial_contract_complete");
     }
 
     @Test
@@ -143,7 +157,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(46);
+        assertMigrationHistory(47);
         assertDailyDrawdownBoundarySchema();
         assertBrokerPositionReconciliationSchema();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
@@ -199,6 +213,19 @@ class PostgresFreshInstallMigrationTest {
         assertThat(jdbc.queryForObject(
                 "select to_regclass(current_schema() || '.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
+    }
+
+    private void assertCfdProjectionSchema() {
+        assertThat(jdbc.queryForObject("select count(*) from information_schema.columns "
+                        + "where table_schema = current_schema() and table_name = 'trades' "
+                        + "and column_name in ('product_type', 'base_currency', 'quote_currency', 'quantity_unit', "
+                        + "'contract_multiplier', 'price_precision', 'quantity_precision', 'minimum_quantity', "
+                        + "'quantity_increment', 'contract_source_id', 'contract_source_version', 'contract_observed_at')",
+                Integer.class)).isEqualTo(12);
+        assertThat(jdbc.queryForObject("select count(*) from pg_constraint "
+                        + "where connamespace = current_schema()::regnamespace and conname in "
+                + "('trades_financial_contract_complete')",
+                Integer.class)).isEqualTo(1);
     }
 
     private void assertDailyDrawdownBoundarySchema() {

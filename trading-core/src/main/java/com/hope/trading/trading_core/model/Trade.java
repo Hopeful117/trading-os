@@ -2,6 +2,9 @@ package com.hope.trading.trading_core.model;
 
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentFinancialContract;
+import com.hope.trading.trading_core.shared.domain.model.QuantityUnit;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -27,6 +30,44 @@ public class Trade {
 
     @Column(nullable = false)
     private String symbol;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type", length = 32)
+    private InstrumentProductType productType;
+
+    @Column(name = "quote_currency", length = 16)
+    private String quoteCurrency;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "quantity_unit", length = 32)
+    private QuantityUnit quantityUnit;
+
+    @Column(name = "contract_multiplier", precision = 38, scale = 12)
+    private BigDecimal contractMultiplier;
+
+    @Column(name = "base_currency", length = 16)
+    private String baseCurrency;
+
+    @Column(name = "price_precision")
+    private Integer pricePrecision;
+
+    @Column(name = "quantity_precision")
+    private Integer quantityPrecision;
+
+    @Column(name = "minimum_quantity", precision = 38, scale = 12)
+    private BigDecimal minimumQuantity;
+
+    @Column(name = "quantity_increment", precision = 38, scale = 12)
+    private BigDecimal quantityIncrement;
+
+    @Column(name = "contract_source_id", length = 255)
+    private String contractSourceId;
+
+    @Column(name = "contract_source_version")
+    private Long contractSourceVersion;
+
+    @Column(name = "contract_observed_at")
+    private Instant contractObservedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -93,5 +134,21 @@ public class Trade {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TradeStatus tradeStatus;
+
+    /** Copies a validated provider-neutral contract snapshot onto the persisted position. */
+    public void applyFinancialContract(InstrumentFinancialContract contract) {
+        this.productType = contract.productType();
+        this.baseCurrency = contract.baseCurrency().value();
+        this.quoteCurrency = contract.quoteCurrency().value();
+        this.quantityUnit = contract.quantityUnit();
+        this.contractMultiplier = contract.contractMultiplier();
+        this.pricePrecision = contract.pricePrecision();
+        this.quantityPrecision = contract.quantityPrecision();
+        this.minimumQuantity = contract.minimumQuantity();
+        this.quantityIncrement = contract.quantityIncrement();
+        this.contractSourceId = contract.provenance().sourceId();
+        this.contractSourceVersion = contract.provenance().sourceVersion();
+        this.contractObservedAt = contract.provenance().observedAt();
+    }
 
 }

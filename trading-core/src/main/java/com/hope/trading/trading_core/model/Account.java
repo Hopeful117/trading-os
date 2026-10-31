@@ -109,5 +109,4 @@ public class Account {
         trade.setAccount(this);
     }
 
-
 }
