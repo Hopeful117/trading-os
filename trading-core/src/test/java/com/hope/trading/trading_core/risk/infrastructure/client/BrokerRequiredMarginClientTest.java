@@ -102,7 +102,7 @@ class BrokerRequiredMarginClientTest {
     }
 
     @Test
-    void resolvesPaperMarginThroughTheAuthoritativeBrokerPreview() {
+    void resolvesPaperMarginThroughTheAvailableButNonAuthoritativeBrokerPreview() {
         UUID owner = UUID.randomUUID();
         BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER, "paper", NOW);
         BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
