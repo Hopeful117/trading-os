@@ -35,6 +35,9 @@ class CTraderMarketDataTest {
         assertThat(market.getSymbol()).isEqualTo("EUR/USD");
         assertThat(market.getProductType())
                 .isEqualTo(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
+        assertThat(market.getMarketConstraints().minimumOrderSize()).isEqualByComparingTo("1000");
+        assertThat(market.getMarketConstraints().orderStepSize()).isEqualByComparingTo("1000");
+        assertThat(market.getMarketConstraints().quantityPrecision()).isZero();
         assertThat(market.getMarketState().isTradable()).isFalse();
         assertThat(market.getMarketState().getTradingStatus()).isEqualTo(
                 com.hope.trading.market_data.helper.TradingStatus.CLOSED);
@@ -46,6 +49,19 @@ class CTraderMarketDataTest {
             assertThat(event.closed()).isTrue();
             assertThat(event.providerSymbol()).isEqualTo("42");
         });
+    }
+
+    @Test
+    void derivesQuantityPrecisionFromAllCanonicalQuantityConstraints() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient() {
+            @Override public List<CTraderSymbol> symbols() {
+                return List.of(new CTraderSymbol(42, "EURUSD", 5, 100_001, 10_000_000_000L, 100_000));
+            }
+        }, properties(), new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(provider.getMarkets()).singleElement()
+                .extracting(market -> market.getMarketConstraints().quantityPrecision())
+                .isEqualTo(2);
     }
 
     @Test
@@ -241,7 +257,7 @@ class CTraderMarketDataTest {
     }
 
     private static class FakeClient implements CTraderOpenApiClient {
-        private final CTraderSymbol symbol = new CTraderSymbol(42, "EURUSD", 4, 100, 1_000_000, 100);
+        private final CTraderSymbol symbol = new CTraderSymbol(42, "EURUSD", 5, 100_000, 10_000_000_000L, 100_000);
         @Override public List<CTraderSymbol> symbols() { return List.of(symbol); }
         @Override public CTraderSymbol symbol(long symbolId) { return symbol; }
         @Override public List<CTraderTrendbar> trendbars(long symbolId, String period, Instant from, Instant to, int count) {
