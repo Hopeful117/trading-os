@@ -69,10 +69,11 @@ public class ExecutionConfiguration {
             ExecutionAttemptRepositoryPort attempts, BrokerOrderRepositoryPort orders,
              ExecutionLifecycleService lifecycle, ExecutionMetrics metrics,
              PaperSettlementService paperSettlementService,
+             PaperCfdSettlementService paperCfdSettlementService,
              BrokerAccountRepository brokerAccountRepository,
              TradeOutcomeService tradeOutcomeService){
-        return new ExecutionFinalizationStep(intents, attempts, orders, lifecycle, metrics,
-                paperSettlementService, brokerAccountRepository, tradeOutcomeService);
+         return new ExecutionFinalizationStep(intents, attempts, orders, lifecycle, metrics,
+                 paperSettlementService, paperCfdSettlementService, brokerAccountRepository, tradeOutcomeService);
     }
     @Bean TradeOutcomeService tradeOutcomeService(TradeOutcomeRepositoryPort outcomes,
                                                    AccountRepository accounts) {
