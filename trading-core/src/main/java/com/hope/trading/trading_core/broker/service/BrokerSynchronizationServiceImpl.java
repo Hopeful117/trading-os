@@ -46,6 +46,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
     private final AccountMapper accountMapper;
     private final BrokerAccountRepository brokerAccountRepository;
     private final InstrumentFinancialContractResolver financialContracts;
+    private final LiveCfdReconciliationService liveCfdReconciliation;
 
     @Override
     @Transactional
@@ -83,11 +84,15 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
         var brokerAccount = brokerAccountRepository.findByIdAndOwnerId(brokerAccountId, ownerId)
                 .orElseThrow(() -> new EntityNotFoundException("Broker account mapping not found"));
-         BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
-         validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
-         if (!"COMPLETE".equals(snapshot.completeness()) || !"FRESH".equals(snapshot.freshness())) {
-             throw new IllegalStateException("Broker account snapshot is not complete and fresh");
-         }
+        if (brokerAccount.executionMode() != com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.LIVE) {
+            throw new IllegalStateException("Broker synchronization requires a LIVE account");
+        }
+        BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
+        validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
+        if (!"COMPLETE".equals(snapshot.completeness()) || !"FRESH".equals(snapshot.freshness())) {
+            throw new IllegalStateException("Broker account snapshot is not complete and fresh");
+        }
+        validateAccountFacts(snapshot);
         if (account.getBroker() != null
                 && !brokerAccount.providerRegistrationReference().toString().equals(account.getBroker())) {
             throw new IllegalStateException("Account provider metadata mismatch");
@@ -97,17 +102,40 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
             throw new IllegalStateException("External broker account identity mismatch");
         }
 
+        validateUniqueProviderPositionReferences(snapshot.positions());
         replaceBalances(account, snapshot.balances());
         replaceOpenPositions(account, snapshot.positions(), snapshot.deals());
         account.setMarketDataTimestamp(snapshot.observedAt());
-        recalculateAccount(account);
         if (snapshot.account() != null && snapshot.account().equity() != null) {
+            // LIVE equity is provider-authoritative. Do not rebuild it from the
+            // locally synchronized balances and trade state.
             account.setEquity(snapshot.account().equity());
             if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
                 account.setPeakEquity(account.getEquity());
             }
         }
         accountRepository.save(account);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public LiveCfdReconciliationService.Result reconcileLiveCfd(UUID ownerId, UUID brokerAccountId) {
+        if (ownerId == null || brokerAccountId == null) {
+            throw new IllegalArgumentException("ownerId and brokerAccountId are required");
+        }
+        Account account = accountRepository.findByBrokerAccountId(brokerAccountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account mapping not found"));
+        if (account.getUser() == null || !ownerId.equals(account.getUser().getUserId())) {
+            throw new EntityNotFoundException("Account mapping not found");
+        }
+        var brokerAccount = brokerAccountRepository.findByIdAndOwnerId(brokerAccountId, ownerId)
+                .orElseThrow(() -> new EntityNotFoundException("Broker account mapping not found"));
+        if (brokerAccount.executionMode() != com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.LIVE) {
+            return liveCfdReconciliation.unavailable("LIVE_CFD_RECONCILIATION_REQUIRES_LIVE_ACCOUNT");
+        }
+        BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
+        validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
+        return liveCfdReconciliation.reconcile(snapshot, account.getTrades());
     }
 
     private void validateSnapshot(UUID expectedProviderRegistrationReference, UUID brokerAccountId,
@@ -117,6 +145,19 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         }
         if (!expectedProviderRegistrationReference.equals(snapshot.providerRegistrationReference())) {
             throw new IllegalStateException("Broker account snapshot provider mismatch");
+        }
+        if (snapshot.balances() == null || snapshot.positions() == null
+                || snapshot.orders() == null || snapshot.deals() == null) {
+            throw new IllegalStateException("Broker account snapshot collections are incomplete");
+        }
+    }
+
+    private void validateAccountFacts(BrokerAccountSnapshotV2Dto snapshot) {
+        var account = snapshot.account();
+        if (account == null || account.valuationAsset() == null || account.valuationAsset().isBlank()
+                || account.balance() == null || account.equity() == null
+                || account.usedMargin() == null || account.freeMargin() == null) {
+            throw new IllegalStateException("Broker account snapshot account facts are incomplete");
         }
     }
 
@@ -258,6 +299,16 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
             throw new IllegalStateException("Broker position reference is required for reconciliation");
         }
         return position.brokerPositionReference();
+    }
+
+    private void validateUniqueProviderPositionReferences(List<BrokerPositionSnapshotV2Dto> positions) {
+        Set<String> references = new HashSet<>();
+        for (BrokerPositionSnapshotV2Dto position : positions) {
+            String reference = requiredPositionReference(position);
+            if (!references.add(reference)) {
+                throw new IllegalStateException("Duplicate broker position reference: " + reference);
+            }
+        }
     }
 
     private void updateOpenPosition(Trade trade, BrokerPositionSnapshotV2Dto position) {

@@ -543,7 +543,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         requireObject(trader, "trader", reasons);
         requireArray(assets, "asset", reasons);
         requireArray(symbols, "symbol", reasons);
-        allowOmittedArray(reconcile, "position", reasons);
+        requireArray(reconcile, "position", reasons);
         allowOmittedArray(reconcile, "order", reasons);
         allowOmittedArray(pnl, "positionUnrealizedPnl", reasons);
         allowOmittedArray(deals, "deal", reasons);
@@ -566,7 +566,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if (valuationAsset == null || valuationAsset.isBlank()) reasons.add("VALUATION_ASSET_UNAVAILABLE");
 
         List<CTraderReadOnlyObservation.Position> positions = new java.util.ArrayList<>();
-        BigDecimal usedMargin = BigDecimal.ZERO;
+        BigDecimal usedMargin = money(traderNode.path("usedMargin"), moneyDigits);
+        BigDecimal freeMargin = money(traderNode.path("freeMargin"), moneyDigits);
         for (JsonNode position : reconcile.path("position")) {
             JsonNode tradeData = position.path("tradeData");
             String symbolId = tradeData.path("symbolId").asText();
@@ -591,8 +592,6 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             BigDecimal positionMargin = money(position.path("usedMargin"), position.path("moneyDigits").asInt(moneyDigits));
             if (positionMargin == null) {
                 reasons.add("POSITION_MARGIN_UNAVAILABLE:" + position.path("positionId").asText());
-            } else {
-                usedMargin = usedMargin.add(positionMargin);
             }
             BigDecimal stopLoss = position.has("stopLoss") && position.path("stopLoss").isNumber()
                     ? position.path("stopLoss").decimalValue() : null;
@@ -655,25 +654,27 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     instant(deal.path("executionTimestamp"), started), closingPosition));
         }
 
-        BigDecimal unrealizedPnl = BigDecimal.ZERO;
         boolean pnlComplete = true;
         for (JsonNode item : pnl.path("positionUnrealizedPnl")) {
             BigDecimal positionPnl = money(item.path("netUnrealizedPnl"), pnl.path("moneyDigits").asInt(moneyDigits));
             if (positionPnl == null) {
                 pnlComplete = false;
-            } else {
-                unrealizedPnl = unrealizedPnl.add(positionPnl);
             }
         }
-        BigDecimal equity = pnlComplete ? balance.add(unrealizedPnl) : null;
+        // Equity is an account-authoritative provider fact. Never reconstruct it
+        // from local balance plus an unrealized-PnL observation.
+        BigDecimal equity = money(traderNode.path("equity"), moneyDigits);
         if (!pnlComplete) reasons.add("UNREALIZED_PNL_UNAVAILABLE");
+        if (equity == null) reasons.add("EQUITY_UNAVAILABLE");
+        if (usedMargin == null) reasons.add("USED_MARGIN_UNAVAILABLE");
+        if (freeMargin == null) reasons.add("FREE_MARGIN_UNAVAILABLE");
         Instant providerObservedAt = latestProviderTimestamp(trader, reconcile, deals, started, reasons);
-        boolean complete = reasons.isEmpty() && equity != null && !deals.path("hasMore").asBoolean(false)
+        boolean complete = reasons.isEmpty() && !deals.path("hasMore").asBoolean(false)
                 && valuationAsset != null && !valuationAsset.isBlank();
         if (deals.path("hasMore").asBoolean(false)) reasons.add("DEAL_HISTORY_TRUNCATED");
         Instant completed = Instant.now();
         return new CTraderReadOnlyObservation(externalAccountId, valuationAsset == null ? "UNKNOWN" : valuationAsset,
-                balance, equity, usedMargin, null, positions, orders, dealFacts,
+                balance, equity, usedMargin, freeMargin, positions, orders, dealFacts,
                 started, providerObservedAt, completed, complete, List.copyOf(new LinkedHashSet<>(reasons)));
     }
 

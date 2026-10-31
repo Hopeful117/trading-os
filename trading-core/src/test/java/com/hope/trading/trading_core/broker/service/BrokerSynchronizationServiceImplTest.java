@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Cli
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.broker.dto.AccountBalanceDto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
@@ -59,6 +60,7 @@ class BrokerSynchronizationServiceImplTest {
     private final BrokerAccountSnapshotV2Client brokerAccountSnapshotV2Client = mock(BrokerAccountSnapshotV2Client.class);
     private final AccountMapper accountMapper = new AccountMapper();
     private final InstrumentFinancialContractResolver financialContracts = mock(InstrumentFinancialContractResolver.class);
+    private final LiveCfdReconciliationService liveCfdReconciliation = mock(LiveCfdReconciliationService.class);
 
     private BrokerSynchronizationServiceImpl service;
 
@@ -71,7 +73,7 @@ class BrokerSynchronizationServiceImplTest {
         service = new BrokerSynchronizationServiceImpl(
                 userRepository, accountRepository, tradeRepository,
                 new TradingCalculatorServiceImpl(), brokerApiClient, brokerAccountSnapshotV2Client,
-                accountMapper, brokerAccountRepository, financialContracts);
+                accountMapper, brokerAccountRepository, financialContracts, liveCfdReconciliation);
 
         user = new User();
         user.setUserId(userId);
@@ -180,13 +182,10 @@ class BrokerSynchronizationServiceImplTest {
         when(brokerAccountRepository.findByIdAndOwnerId(brokerAccount.id(), ownerId))
                 .thenReturn(Optional.of(brokerAccount));
         when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
-                new BrokerAccountSnapshotV2Dto(
-                        brokerAccount.id(), BrokerProvider.KRAKEN, "external-1",
-                        Map.of("USD", new BigDecimal("6000")),
+                v2Snapshot(brokerAccount,
                         List.of(new BrokerPositionSnapshotV2Dto(
                                 "XBT/USD", new BigDecimal("2"), new BigDecimal("100"),
-                                java.time.Instant.now(), "position-1")),
-                        java.time.Instant.now()));
+                                java.time.Instant.now(), "position-1")), List.of()));
 
         service.synchronize(ownerId, brokerAccount.id());
 
@@ -219,6 +218,43 @@ class BrokerSynchronizationServiceImplTest {
     }
 
     @Test
+    void v2SynchronizationDoesNotCallBrokerForPaperAccountOrMutateLocalState() {
+        UUID ownerId = UUID.randomUUID();
+        BrokerAccount brokerAccount = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
+                ExecutionMode.PAPER, "Kraken paper", java.time.Instant.now());
+        User owner = new User();
+        owner.setUserId(ownerId);
+        Account account = Account.builder()
+                .brokerAccountId(brokerAccount.id())
+                .broker(BrokerProvider.KRAKEN.toString())
+                .name("Kraken paper")
+                .baseCurrency("USD")
+                .equity(new BigDecimal("1234"))
+                .user(owner)
+                .build();
+        Trade existing = Trade.builder()
+                .symbol("EUR/USD")
+                .type(TradeType.BUY)
+                .quantity(new BigDecimal("2"))
+                .entryPrice(new BigDecimal("1.1"))
+                .tradeStatus(TradeStatus.OPEN)
+                .build();
+        account.addTrade(existing);
+        when(accountRepository.findByBrokerAccountId(brokerAccount.id())).thenReturn(Optional.of(account));
+        when(brokerAccountRepository.findByIdAndOwnerId(brokerAccount.id(), ownerId))
+                .thenReturn(Optional.of(brokerAccount));
+
+        assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Broker synchronization requires a LIVE account");
+
+        verify(brokerAccountSnapshotV2Client, never()).getAccountSnapshot(brokerAccount.id());
+        verify(accountRepository, never()).save(any(Account.class));
+        assertThat(account.getEquity()).isEqualByComparingTo("1234");
+        assertThat(account.getTrades()).containsExactly(existing);
+    }
+
+    @Test
     void v2SynchronizationRejectsProviderMismatch() {
         UUID ownerId = UUID.randomUUID();
         BrokerAccount brokerAccount = BrokerAccount.create(ownerId, BrokerProvider.KRAKEN,
@@ -237,8 +273,9 @@ class BrokerSynchronizationServiceImplTest {
                 .thenReturn(Optional.of(brokerAccount));
         when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
                 new BrokerAccountSnapshotV2Dto(
-                        brokerAccount.id(), UUID.randomUUID(), "external-1", Map.of(), List.of(),
-                        java.time.Instant.now()));
+                        brokerAccount.id(), UUID.randomUUID(), "external-1", null, null,
+                        java.time.Instant.now(), null, null, null, "COMPLETE", "FRESH",
+                        java.time.Instant.now(), java.time.Instant.now(), List.of()));
 
         assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))
                 .isInstanceOf(IllegalStateException.class)
@@ -256,6 +293,35 @@ class BrokerSynchronizationServiceImplTest {
         assertThatThrownBy(() -> service.synchronize(context.ownerId, context.brokerAccount.id()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Broker position reference is required for reconciliation");
+    }
+
+    @Test
+    void v2SynchronizationRejectsDuplicateProviderPositionReferencesBeforeMutation() {
+        V2Context context = v2Context();
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(
+                v2Snapshot(context.brokerAccount, List.of(
+                        position("position-1", "XBT/USD", "2"),
+                        position("position-1", "XBT/USD", "1")), List.of()));
+
+        assertThatThrownBy(() -> service.synchronize(context.ownerId, context.brokerAccount.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Duplicate broker position reference: position-1");
+        assertThat(context.account.getTrades()).isEmpty();
+    }
+
+    @Test
+    void liveCfdReconciliationIsExposedThroughTheSynchronizationBoundary() {
+        V2Context context = v2Context();
+        BrokerAccountSnapshotV2Dto snapshot = v2Snapshot(context.brokerAccount, List.of(), List.of());
+        LiveCfdReconciliationService.Result expected = new LiveCfdReconciliationService.Result(
+                LiveCfdReconciliationService.Status.UNAVAILABLE, List.of(), List.of("test"));
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id())).thenReturn(snapshot);
+        when(liveCfdReconciliation.reconcile(snapshot, context.account.getTrades())).thenReturn(expected);
+
+        var result = service.reconcileLiveCfd(context.ownerId, context.brokerAccount.id());
+
+        assertThat(result).isSameAs(expected);
+        verify(liveCfdReconciliation).reconcile(snapshot, context.account.getTrades());
     }
 
     @Test
@@ -282,7 +348,9 @@ class BrokerSynchronizationServiceImplTest {
         when(brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccount.id())).thenReturn(
                 new BrokerAccountSnapshotV2Dto(
                         brokerAccount.id(), BrokerProvider.KRAKEN, "external-2", Map.of(), List.of(),
-                        java.time.Instant.now()));
+                        java.time.Instant.now(), new BrokerAccountFactsV2Dto("USD", BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO), List.of(), List.of(),
+                        "COMPLETE", "FRESH", java.time.Instant.now(), java.time.Instant.now(), List.of()));
 
         assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))
                 .isInstanceOf(IllegalStateException.class)
@@ -318,6 +386,42 @@ class BrokerSynchronizationServiceImplTest {
         assertThat(account.getTrades()).hasSize(1);
         assertThat(account.getTrades().getFirst().getTradeStatus()).isEqualTo(TradeStatus.OPEN);
         assertThat(account.getTrades().getFirst().getQuantity()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void v2SynchronizationRejectsNullSnapshotCollectionsBeforeMutation() {
+        V2Context context = v2Context();
+        java.time.Instant now = java.time.Instant.now();
+        BrokerAccountSnapshotV2Dto malformed = new BrokerAccountSnapshotV2Dto(
+                context.brokerAccount.id(), BrokerProvider.KRAKEN, "external-1", null, null,
+                now, null, List.of(), null, "COMPLETE", "FRESH", now, now, List.of());
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id()))
+                .thenReturn(malformed);
+
+        assertThatThrownBy(() -> service.synchronize(context.ownerId, context.brokerAccount.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Broker account snapshot collections are incomplete");
+
+        verify(accountRepository, never()).save(any(Account.class));
+        assertThat(context.account.getTrades()).isEmpty();
+    }
+
+    @Test
+    void v2SynchronizationRejectsMissingAccountFactsBeforeMutation() {
+        V2Context context = v2Context();
+        java.time.Instant now = java.time.Instant.now();
+        BrokerAccountSnapshotV2Dto malformed = new BrokerAccountSnapshotV2Dto(
+                context.brokerAccount.id(), BrokerProvider.KRAKEN, "external-1", Map.of(), List.of(),
+                now, null, List.of(), List.of(), "COMPLETE", "FRESH", now, now, List.of());
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id()))
+                .thenReturn(malformed);
+
+        assertThatThrownBy(() -> service.synchronize(context.ownerId, context.brokerAccount.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Broker account snapshot account facts are incomplete");
+
+        verify(accountRepository, never()).save(any(Account.class));
+        assertThat(context.account.getTrades()).isEmpty();
     }
 
     @Test
@@ -552,7 +656,9 @@ class BrokerSynchronizationServiceImplTest {
                                                    List<BrokerDealSnapshotV2Dto> deals) {
         return new BrokerAccountSnapshotV2Dto(brokerAccount.id(), BrokerProvider.KRAKEN,
                 "external-1", Map.of("USD", new BigDecimal("6000")), positions,
-                java.time.Instant.now(), null, List.of(), deals, "COMPLETE", "FRESH",
+                java.time.Instant.now(), new BrokerAccountFactsV2Dto("USD", new BigDecimal("6000"),
+                        new BigDecimal("6000"), new BigDecimal("100"), new BigDecimal("5900")),
+                List.of(), deals, "COMPLETE", "FRESH",
                 java.time.Instant.now(), java.time.Instant.now(), List.of());
     }
 

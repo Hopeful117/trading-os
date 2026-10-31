@@ -83,7 +83,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
     void mapsPrecisionAndVolumeWithoutInferringMissingFacts() throws Exception {
         Instant started = Instant.parse("2026-10-23T12:00:00Z");
         JsonNode trader = mapper.readTree("""
-                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"depositAssetId":1,"moneyDigits":2}}
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"equity":101000,"usedMargin":10000,"freeMargin":90000,"depositAssetId":1,"moneyDigits":2}}
                 """);
         JsonNode assets = mapper.readTree("""
                 {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
@@ -106,6 +106,8 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThat(observation.complete()).isTrue();
         assertThat(observation.balance()).isEqualByComparingTo("1000");
         assertThat(observation.equity()).isEqualByComparingTo("1010");
+        assertThat(observation.usedMargin()).isEqualByComparingTo("100");
+        assertThat(observation.freeMargin()).isEqualByComparingTo("900");
         assertThat(observation.positions()).singleElement().satisfies(position -> {
             assertThat(position.instrument()).isEqualTo("EUR/USD");
             assertThat(position.signedQuantity()).isEqualByComparingTo("2");
@@ -135,7 +137,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
     void treatsZeroStopLossAsExplicitlyUnprotected() throws Exception {
         Instant started = Instant.parse("2026-10-23T12:00:00Z");
         JsonNode trader = mapper.readTree("""
-                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"depositAssetId":1,"moneyDigits":2}}
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"equity":101000,"usedMargin":10000,"freeMargin":90000,"depositAssetId":1,"moneyDigits":2}}
                 """);
         JsonNode assets = mapper.readTree("""
                 {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
@@ -165,13 +167,13 @@ class JsonWebSocketCTraderOpenApiClientTest {
     void treatsOmittedEmptyCollectionsAsEmptyAccountState() throws Exception {
         Instant started = Instant.parse("2026-10-23T12:00:00Z");
         JsonNode trader = mapper.readTree("""
-                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"depositAssetId":1,"moneyDigits":2}}
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"equity":101000,"usedMargin":10000,"freeMargin":90000,"depositAssetId":1,"moneyDigits":2}}
                 """);
         JsonNode assets = mapper.readTree("""
                 {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
                 """);
         JsonNode symbols = mapper.readTree("{\"ctidTraderAccountId\":9001,\"symbol\":[]}");
-        JsonNode reconcile = mapper.readTree("{\"ctidTraderAccountId\":9001}");
+        JsonNode reconcile = mapper.readTree("{\"ctidTraderAccountId\":9001,\"position\":[],\"order\":[]}");
         JsonNode pnl = mapper.readTree("{\"ctidTraderAccountId\":9001,\"moneyDigits\":2}");
         JsonNode deals = mapper.readTree("{\"ctidTraderAccountId\":9001,\"hasMore\":false}");
 
@@ -182,6 +184,34 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThat(observation.orders()).isEmpty();
         assertThat(observation.deals()).isEmpty();
         assertThat(observation.providerObservedAt()).isEqualTo(started);
+    }
+
+    @Test
+    void treatsMissingPositionCollectionAsIncomplete() throws Exception {
+        Instant started = Instant.parse("2026-10-23T12:00:00Z");
+        JsonNode trader = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"equity":101000,"usedMargin":10000,"freeMargin":90000,"depositAssetId":1,"moneyDigits":2}}
+                """);
+        JsonNode assets = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
+                """);
+        JsonNode symbols = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"symbol":[]}
+                """);
+        JsonNode reconcile = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"order":[]}
+                """);
+        JsonNode pnl = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"moneyDigits":2,"positionUnrealizedPnl":[]}
+                """);
+        JsonNode deals = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"deal":[],"hasMore":false}
+                """);
+
+        var observation = invokeMapper(trader, assets, symbols, reconcile, pnl, deals, started);
+
+        assertThat(observation.complete()).isFalse();
+        assertThat(observation.reasons()).contains("RESPONSE_FIELD_UNAVAILABLE:position");
     }
 
     @Test
