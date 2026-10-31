@@ -109,7 +109,8 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
 
         var account = snapshot.account();
         if (account.valuationAsset() == null || account.balance() == null
-                || account.equity() == null || account.usedMargin() == null) {
+                || account.equity() == null || account.usedMargin() == null
+                || account.freeMargin() == null) {
             complete = false;
             reasons.add("ACCOUNT_RISK_FACTS_INCOMPLETE");
         }

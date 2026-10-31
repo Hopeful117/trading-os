@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.broker.service;
 
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
@@ -201,7 +202,9 @@ class BrokerSynchronizationPersistenceIntegrationTest {
         BrokerAccount account = brokerAccounts.findById(brokerAccountId).orElseThrow();
         return new BrokerAccountSnapshotV2Dto(brokerAccountId, account.providerRegistrationReference(),
                 null, Map.of("USD", new BigDecimal("10000")), positions, OBSERVED_AT,
-                null, List.of(), deals, "COMPLETE", "FRESH", OBSERVED_AT, OBSERVED_AT, List.of());
+                new BrokerAccountFactsV2Dto("USD", new BigDecimal("10000"), new BigDecimal("10000"),
+                        new BigDecimal("100"), new BigDecimal("9900")),
+                List.of(), deals, "COMPLETE", "FRESH", OBSERVED_AT, OBSERVED_AT, List.of());
     }
 
     private BrokerPositionSnapshotV2Dto position(String reference, String quantity) {

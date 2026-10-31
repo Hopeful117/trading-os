@@ -106,12 +106,26 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                         deal.quantity(), deal.price(), deal.fee(), deal.realizedPnl(), deal.executedAt(),
                         deal.swap(), deal.closingPosition()))
                 .toList();
-        SnapshotFreshness freshness = observation.completedAt().isBefore(now.minus(MAX_OBSERVATION_AGE))
+        SnapshotFreshness freshness = observation.providerObservedAt().isBefore(now.minus(MAX_OBSERVATION_AGE))
                 ? SnapshotFreshness.STALE : SnapshotFreshness.FRESH;
-        SnapshotCompleteness completeness = observation.complete() && freshness == SnapshotFreshness.FRESH
+        boolean accountFactsComplete = observation.valuationAsset() != null
+                && !observation.valuationAsset().isBlank()
+                && observation.balance() != null
+                && observation.equity() != null
+                && observation.usedMargin() != null
+                && observation.freeMargin() != null;
+        SnapshotCompleteness completeness = observation.complete() && accountFactsComplete
+                && freshness == SnapshotFreshness.FRESH
                 ? SnapshotCompleteness.COMPLETE : SnapshotCompleteness.INCOMPLETE;
         List<String> reasons = completeness == SnapshotCompleteness.COMPLETE
                 ? observation.reasons() : appendReasons(observation, freshness);
+        if (!accountFactsComplete) {
+            java.util.ArrayList<String> incompleteReasons = new java.util.ArrayList<>(reasons);
+            if (observation.equity() == null) incompleteReasons.add("EQUITY_UNAVAILABLE");
+            if (observation.usedMargin() == null) incompleteReasons.add("USED_MARGIN_UNAVAILABLE");
+            if (observation.freeMargin() == null) incompleteReasons.add("FREE_MARGIN_UNAVAILABLE");
+            reasons = List.copyOf(new java.util.LinkedHashSet<>(incompleteReasons));
+        }
         return new BrokerAccountSnapshotV2(brokerAccountId, providers.referenceFor(BrokerProviderId.CTRADER),
                 observation.externalAccountId(),
                 java.util.Map.of(observation.valuationAsset(), observation.balance()), positions,

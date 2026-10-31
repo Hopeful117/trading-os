@@ -59,7 +59,7 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
                 CTraderTokenCodec.encode(new CTraderToken("access", "refresh", now.plusSeconds(3600)))));
         when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
                 new CTraderReadOnlyObservation("9001", "USD", new BigDecimal("1000"),
-                        new BigDecimal("1010"), new BigDecimal("100"), null,
+                        new BigDecimal("1010"), new BigDecimal("100"), new BigDecimal("900"),
                          List.of(new CTraderReadOnlyObservation.Position("EUR/USD", new BigDecimal("2"),
                                  new BigDecimal("1.1"), now, "position-1", new BigDecimal("5"),
                                  new BigDecimal("1.05"))),
@@ -95,5 +95,28 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
 
         assertThatThrownBy(() -> capability.snapshot(accountId))
                 .hasMessage("cTrader external account identity mismatch");
+    }
+
+    @Test
+    void providerTimestampControlsFreshness() {
+        UUID accountId = UUID.randomUUID();
+        UUID credential = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, UUID.randomUUID(),
+                BrokerProviderId.CTRADER, now);
+        connection.authenticate(credential, now);
+        connection.bindExternalAccount("9001", "demo", now);
+        when(connections.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+        when(secrets.read(new CredentialReference(credential))).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", now.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
+                new CTraderReadOnlyObservation("9001", "USD", new BigDecimal("1000"),
+                        new BigDecimal("1010"), new BigDecimal("100"), new BigDecimal("900"),
+                        List.of(), List.of(), List.of(), now.minusSeconds(31), now.minusSeconds(31),
+                        now, true, List.of()));
+
+        var snapshot = capability.snapshot(accountId);
+
+        assertThat(snapshot.freshness()).isEqualTo(SnapshotFreshness.STALE);
+        assertThat(snapshot.completeness()).isEqualTo(SnapshotCompleteness.INCOMPLETE);
     }
 }

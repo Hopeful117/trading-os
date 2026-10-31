@@ -5,4 +5,5 @@ import java.util.UUID;
 public interface BrokerSynchronizationService {
     void synchronize(String username);
     void synchronize(UUID ownerId, UUID brokerAccountId);
+    LiveCfdReconciliationService.Result reconcileLiveCfd(UUID ownerId, UUID brokerAccountId);
 }
