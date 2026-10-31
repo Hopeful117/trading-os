@@ -52,6 +52,29 @@ public interface MarketValuationPort {
     }
     record AcquisitionOutcome(UUID marketId, String status) { }
     record Fact(String type, String id, UUID marketId, String asset, PriceUse priceUse,
-                BigDecimal value, BigDecimal sourcePrice, BigDecimal quoteToReportingRate,
-                String status, String sourceProvenance) { }
+                 BigDecimal value, BigDecimal sourcePrice, BigDecimal quoteToReportingRate,
+                 String status, String sourceProvenance, Instant sourceEffectiveAt,
+                 Instant sourceCapturedAt, Instant conversionEffectiveAt,
+                 Instant conversionCapturedAt, List<ConversionLeg> conversionLegs) {
+        public Fact(String type, String id, UUID marketId, String asset, PriceUse priceUse,
+                    BigDecimal value, BigDecimal sourcePrice, BigDecimal quoteToReportingRate,
+                    String status, String sourceProvenance, Instant sourceEffectiveAt,
+                    Instant sourceCapturedAt, Instant conversionEffectiveAt,
+                    Instant conversionCapturedAt) {
+            this(type, id, marketId, asset, priceUse, value, sourcePrice, quoteToReportingRate,
+                    status, sourceProvenance, sourceEffectiveAt, sourceCapturedAt,
+                    conversionEffectiveAt, conversionCapturedAt, List.of());
+        }
+
+        public Fact(String type, String id, UUID marketId, String asset, PriceUse priceUse,
+                    BigDecimal value, BigDecimal sourcePrice, BigDecimal quoteToReportingRate,
+                    String status, String sourceProvenance) {
+            this(type, id, marketId, asset, priceUse, value, sourcePrice, quoteToReportingRate,
+                    status, sourceProvenance, null, null, null, null, List.of());
+        }
+    }
+
+    record ConversionLeg(String fromCurrency, String toCurrency, BigDecimal rate,
+                         String priceType, String provenance, Instant effectiveAt,
+                         Instant capturedAt) { }
 }

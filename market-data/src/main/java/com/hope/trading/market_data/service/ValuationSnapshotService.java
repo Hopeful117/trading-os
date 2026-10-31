@@ -60,6 +60,30 @@ public class ValuationSnapshotService {
 
     @Transactional
     public ValuationSnapshotBatchResponse create(ValuationSnapshotBatchRequest request) {
+        Evaluation evaluation = evaluateInternal(request);
+        ValuationSnapshot snapshot = new ValuationSnapshot(
+                UUID.randomUUID(), evaluation.reportingCurrency(), evaluation.valuationTimestamp(), Instant.now(clock),
+                POLICY_VERSION, evaluation.maxObservationAge().toString(), evaluation.status());
+        evaluation.facts().forEach(snapshot::addFact);
+        snapshot = snapshotRepository.saveAndFlush(snapshot);
+        return response(snapshot, request.acquisitionOutcomes());
+    }
+
+    /** Evaluates current facts without creating a persisted valuation snapshot. */
+    @Transactional(readOnly = true)
+    public ValuationSnapshotBatchResponse evaluate(ValuationSnapshotBatchRequest request) {
+        Evaluation evaluation = evaluateInternal(request);
+        return new ValuationSnapshotBatchResponse(
+                UUID.randomUUID(), 1, evaluation.reportingCurrency(), evaluation.valuationTimestamp(),
+                Instant.now(clock), POLICY_VERSION, evaluation.maxObservationAge().toString(),
+                evaluation.status(), evaluation.facts().stream().map(this::responseFact).toList(),
+                request.acquisitionOutcomes().stream()
+                        .map(outcome -> new ValuationSnapshotBatchResponse.AcquisitionOutcome(
+                                outcome.marketId(), outcome.status()))
+                        .toList());
+    }
+
+    private Evaluation evaluateInternal(ValuationSnapshotBatchRequest request) {
         String reportingCurrency = normalize(request.reportingCurrency());
         Duration requestedMaxAge = request.maxObservationAge() == null
                 ? maxObservationAge : request.maxObservationAge();
@@ -74,12 +98,7 @@ public class ValuationSnapshotService {
 
         SnapshotStatus status = facts.stream().allMatch(fact -> fact.getStatus() == FactStatus.AVAILABLE)
                 ? SnapshotStatus.COMPLETE : SnapshotStatus.INCOMPLETE;
-        ValuationSnapshot snapshot = new ValuationSnapshot(
-                UUID.randomUUID(), reportingCurrency, request.valuationTimestamp(), Instant.now(clock),
-                POLICY_VERSION, requestedMaxAge.toString(), status);
-        facts.forEach(snapshot::addFact);
-        snapshot = snapshotRepository.saveAndFlush(snapshot);
-        return response(snapshot, request.acquisitionOutcomes());
+        return new Evaluation(reportingCurrency, request.valuationTimestamp(), requestedMaxAge, status, facts);
     }
 
     private ValuationFact instrumentFact(ValuationSnapshotBatchRequest.Instrument request,
@@ -282,5 +301,10 @@ public class ValuationSnapshotService {
         private boolean hasProvenance() {
             return !legs.isEmpty();
         }
+    }
+
+    private record Evaluation(String reportingCurrency, Instant valuationTimestamp,
+                              Duration maxObservationAge, SnapshotStatus status,
+                              List<ValuationFact> facts) {
     }
 }

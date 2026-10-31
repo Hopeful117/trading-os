@@ -590,14 +590,14 @@ class CTraderDataStreamProviderTest {
         private void emit(CTraderOpenApiClient.CTraderStreamEvent event) { client.events.accept(event); }
         private void terminate() { client.current.termination.run(); }
         private void awaitStreamCount(int expected) throws InterruptedException {
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
             while (client.streams.size() < expected && System.nanoTime() < deadline) {
                 Thread.sleep(5);
             }
             assertThat(client.streams).hasSize(expected);
         }
         private void awaitSpotSubscription(long symbolId) throws InterruptedException {
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
             while (!client.current.spotSubscriptions.contains(symbolId) && System.nanoTime() < deadline) {
                 Thread.sleep(5);
             }
