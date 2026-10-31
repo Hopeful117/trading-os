@@ -116,6 +116,11 @@ public class CTraderMarketData implements MarketDataProvider {
                 .provider(MarketProvider.CTRADER).symbol(canonical)
                 .providerSymbol(Long.toString(symbol.id())).baseAsset(assets[0]).quoteAsset(assets[1])
                 .productType(type)
+                .quantityUnit(hasCompleteContract(symbol.name(), type) ? "UNDERLYING_UNITS" : null)
+                .contractMultiplier(persistedContractMultiplier(symbol.name(), type))
+                .contractSourceId(contractSourceId(canonical, symbol.name(), type))
+                .contractSourceVersion(contractSourceVersion(symbol.name(), type))
+                .contractObservedAt(contractObservedAt(symbol.name(), type))
                 // Symbol metadata alone is not proof that an order is executable now.
                 .marketState(marketStateBuilder.buildInitialState(MarketAvailability.UNAVAILABLE))
                 .marketConstraints(MarketConstraints.builder()
@@ -128,7 +133,47 @@ public class CTraderMarketData implements MarketDataProvider {
                                 canonicalQuantity(symbol.maxVolume()),
                                 canonicalQuantity(symbol.stepVolume())))
                         .tickSize(BigDecimal.ONE.movePointLeft(symbol.digits()))
-                        .pricePrecision(symbol.digits()).build()).build());
+                .pricePrecision(symbol.digits()).build()).build());
+    }
+
+    private BigDecimal contractMultiplier(String providerSymbol, InstrumentProductType productType) {
+        if (productType != InstrumentProductType.CFD) return null;
+        String configured = properties.symbolContractMultipliers().get(providerSymbol);
+        if (configured == null || configured.isBlank()) return null;
+        BigDecimal multiplier = new BigDecimal(configured.trim());
+        if (multiplier.signum() <= 0) throw new IllegalStateException("Invalid CFD contract multiplier for " + providerSymbol);
+        return multiplier;
+    }
+
+    private boolean hasCompleteContract(String providerSymbol, InstrumentProductType productType) {
+        if (productType != InstrumentProductType.CFD) return false;
+        return contractMultiplier(providerSymbol, productType) != null
+                && properties.symbolContractSourceVersions().get(providerSymbol) != null
+                && !properties.symbolContractSourceVersions().get(providerSymbol).isBlank();
+    }
+
+    private BigDecimal persistedContractMultiplier(String providerSymbol, InstrumentProductType productType) {
+        return hasCompleteContract(providerSymbol, productType)
+                ? contractMultiplier(providerSymbol, productType) : null;
+    }
+
+    private String contractSourceId(String canonicalSymbol, String providerSymbol,
+                                    InstrumentProductType productType) {
+        return hasCompleteContract(providerSymbol, productType)
+                ? "market-data-contract:" + canonicalSymbol : null;
+    }
+
+    private Long contractSourceVersion(String providerSymbol, InstrumentProductType productType) {
+        if (!hasCompleteContract(providerSymbol, productType)) return null;
+        String configured = properties.symbolContractSourceVersions().get(providerSymbol);
+        if (configured == null || configured.isBlank()) return null;
+        long version = Long.parseLong(configured.trim());
+        if (version < 1) throw new IllegalStateException("Invalid CFD contract source version for " + providerSymbol);
+        return version;
+    }
+
+    private Instant contractObservedAt(String providerSymbol, InstrumentProductType productType) {
+        return hasCompleteContract(providerSymbol, productType) ? clock.instant() : null;
     }
 
     private BigDecimal canonicalQuantity(long providerVolume) {

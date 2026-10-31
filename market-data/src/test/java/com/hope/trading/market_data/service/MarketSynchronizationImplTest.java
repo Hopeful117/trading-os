@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -76,6 +78,30 @@ class MarketSynchronizationImplTest {
         assertThat(existing.getBaseAsset()).isEqualTo("XBT");
         assertThat(existing.getQuoteAsset()).isEqualTo("EUR");
         assertThat(existing.getProviderSymbol()).isEqualTo("NEW_SYMBOL");
+    }
+
+    @Test
+    void existingCfdMarketKeepsItsCompleteFinancialContractMetadata() {
+        Market existing = market("EUR/USD", "OLD", "OLD");
+        existing.setProductType(InstrumentProductType.CFD);
+        Market incoming = market("EUR/USD", "EUR", "USD");
+        incoming.setProductType(InstrumentProductType.CFD);
+        incoming.setQuantityUnit("UNDERLYING_UNITS");
+        incoming.setContractMultiplier(new BigDecimal("100000"));
+        incoming.setContractSourceId("market-data-contract:EUR/USD");
+        incoming.setContractSourceVersion(3L);
+        incoming.setContractObservedAt(Instant.parse("2026-10-31T12:00:00Z"));
+        when(marketDataProvider.getMarkets()).thenReturn(List.of(incoming));
+        when(marketRepository.findByProviderAndSymbolAndProductType(
+                MarketProvider.KRAKEN, "EUR/USD", InstrumentProductType.CFD)).thenReturn(Optional.of(existing));
+
+        service.synchronizeMarkets();
+
+        assertThat(existing.getQuantityUnit()).isEqualTo("UNDERLYING_UNITS");
+        assertThat(existing.getContractMultiplier()).isEqualByComparingTo("100000");
+        assertThat(existing.getContractSourceId()).isEqualTo("market-data-contract:EUR/USD");
+        assertThat(existing.getContractSourceVersion()).isEqualTo(3L);
+        assertThat(existing.getContractObservedAt()).isEqualTo(Instant.parse("2026-10-31T12:00:00Z"));
     }
 
     @Test

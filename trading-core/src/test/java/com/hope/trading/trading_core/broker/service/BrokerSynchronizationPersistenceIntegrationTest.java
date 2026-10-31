@@ -14,6 +14,12 @@ import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.market_data.service.InstrumentFinancialContractResolver;
+import com.hope.trading.trading_core.shared.domain.model.CurrencyCode;
+import com.hope.trading.trading_core.shared.domain.model.FinancialContractProvenance;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentFinancialContract;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
+import com.hope.trading.trading_core.shared.domain.model.QuantityUnit;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.TradeRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
@@ -49,6 +55,7 @@ class BrokerSynchronizationPersistenceIntegrationTest {
     @Autowired private EntityManager entityManager;
 
     @MockitoBean private BrokerAccountSnapshotV2Client snapshotClient;
+    @MockitoBean private InstrumentFinancialContractResolver financialContracts;
 
     private UUID ownerId;
     private UUID brokerAccountId;
@@ -160,6 +167,33 @@ class BrokerSynchronizationPersistenceIntegrationTest {
         Trade afterRepeatedClose = trades.findById(reloadedImportedTrade.getTradeId()).orElseThrow();
         assertThat(afterRepeatedClose.getBrokerClosedQuantity()).isEqualByComparingTo("1");
         assertThat(afterRepeatedClose.getRealizedPnl()).isEqualByComparingTo("5");
+    }
+
+    @Test
+    void persistsAndReloadsTheCompleteCfdContractSnapshot() {
+        Trade trade = trades.findById(tradeId).orElseThrow();
+        Instant observedAt = Instant.parse("2026-10-31T12:00:00Z");
+        trade.applyFinancialContract(new InstrumentFinancialContract(
+                "EUR/USD", InstrumentProductType.CFD, new CurrencyCode("EUR"), new CurrencyCode("USD"),
+                QuantityUnit.UNDERLYING_UNITS, new BigDecimal("100000"), 5, 2,
+                new BigDecimal("0.01"), new BigDecimal("0.01"),
+                new FinancialContractProvenance("market-data-contract:EUR/USD", 3, observedAt)));
+        trades.saveAndFlush(trade);
+        entityManager.clear();
+
+        Trade reloaded = trades.findById(tradeId).orElseThrow();
+        assertThat(reloaded.getProductType()).isEqualTo(InstrumentProductType.CFD);
+        assertThat(reloaded.getBaseCurrency()).isEqualTo("EUR");
+        assertThat(reloaded.getQuoteCurrency()).isEqualTo("USD");
+        assertThat(reloaded.getQuantityUnit()).isEqualTo(QuantityUnit.UNDERLYING_UNITS);
+        assertThat(reloaded.getContractMultiplier()).isEqualByComparingTo("100000");
+        assertThat(reloaded.getPricePrecision()).isEqualTo(5);
+        assertThat(reloaded.getQuantityPrecision()).isEqualTo(2);
+        assertThat(reloaded.getMinimumQuantity()).isEqualByComparingTo("0.01");
+        assertThat(reloaded.getQuantityIncrement()).isEqualByComparingTo("0.01");
+        assertThat(reloaded.getContractSourceId()).isEqualTo("market-data-contract:EUR/USD");
+        assertThat(reloaded.getContractSourceVersion()).isEqualTo(3L);
+        assertThat(reloaded.getContractObservedAt()).isEqualTo(observedAt);
     }
 
     private BrokerAccountSnapshotV2Dto snapshot(List<BrokerPositionSnapshotV2Dto> positions,

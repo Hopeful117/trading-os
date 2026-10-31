@@ -13,12 +13,28 @@ import java.math.BigDecimal;
 
     @Component
 public class InstrumentFinancialContractMapper {
+    public InstrumentFinancialContract fromMarket(MarketResponse market) {
+        if (market == null) throw new IllegalArgumentException("market is required");
+        if (market.getContractMultiplier() == null
+                || market.getContractSourceId() == null
+                || market.getContractSourceVersion() == null
+                || market.getContractObservedAt() == null) {
+            throw new IllegalStateException("complete financial contract metadata is unavailable");
+        }
+        return fromCfdMarket(market, market.getContractMultiplier(),
+                new FinancialContractProvenance(market.getContractSourceId(),
+                        market.getContractSourceVersion(), market.getContractObservedAt()));
+    }
+
     public InstrumentFinancialContract fromCfdMarket(MarketResponse market,
                                                      BigDecimal contractMultiplier,
                                                      FinancialContractProvenance provenance) {
         if (market == null) throw new IllegalArgumentException("market is required");
         if (market.getProductType() != InstrumentProductType.CFD) {
             throw new IllegalArgumentException("instrument product type is not compatible with the requested calculation");
+        }
+        if (!QuantityUnit.UNDERLYING_UNITS.name().equals(market.getQuantityUnit())) {
+            throw new IllegalArgumentException("unsupported or missing quantity unit");
         }
         MarketConstraints constraints = market.getMarketConstraints();
         if (constraints == null) throw new IllegalArgumentException("market constraints are required");

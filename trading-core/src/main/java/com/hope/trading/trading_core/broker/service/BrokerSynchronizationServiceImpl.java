@@ -15,9 +15,11 @@ import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.model.User;
+import com.hope.trading.trading_core.market_data.service.InstrumentFinancialContractResolver;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.TradeRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -43,6 +45,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
     private final BrokerAccountSnapshotV2Client brokerAccountSnapshotV2Client;
     private final AccountMapper accountMapper;
     private final BrokerAccountRepository brokerAccountRepository;
+    private final InstrumentFinancialContractResolver financialContracts;
 
     @Override
     @Transactional
@@ -179,6 +182,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                             .build();
 
                     account.addTrade(trade);
+                    applyFinancialContractIfRequired(trade, trade.getSymbol());
                 });
 
 
@@ -221,6 +225,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
             } else {
                 updateOpenPosition(trade, position);
             }
+            applyFinancialContractIfRequired(trade, position.instrument());
             List<BrokerDealSnapshotV2Dto> positionDeals = dealsForPosition(deals, reference);
             if (imported) {
                 // The provider deal window may start after the position was opened.
@@ -236,6 +241,16 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                 .filter(trade -> !observedReferences.contains(trade.getBrokerPositionReference()))
                 .forEach(trade -> applyClosingDeals(trade,
                         dealsForPosition(deals, trade.getBrokerPositionReference()), false));
+    }
+
+    private void applyFinancialContractIfRequired(Trade trade, String instrument) {
+        if (trade.getProductType() != null && trade.getProductType() != InstrumentProductType.CFD) {
+            return;
+        }
+        var contract = financialContracts.resolveIfCfd(instrument);
+        if (contract != null) {
+            trade.applyFinancialContract(contract);
+        }
     }
 
     private String requiredPositionReference(BrokerPositionSnapshotV2Dto position) {
