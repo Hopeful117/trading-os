@@ -103,6 +103,70 @@ public class CfdValuationService {
         }
     }
 
+    /**
+     * Values a persisted CFD at an explicit local exit price. The price is the
+     * execution fill, so only the read-only currency fact is acquired here.
+     */
+    public CfdRealizationResult realize(Trade trade, ExecutionMode executionMode,
+                                        String reportingCurrency, BigDecimal exitPrice) {
+        if (executionMode != ExecutionMode.PAPER) {
+            return CfdRealizationResult.unavailable("LIVE CFD provider-authoritative exposure is unavailable");
+        }
+        try {
+            if (trade == null || trade.getAccount() == null || reportingCurrency == null
+                    || !reportingCurrency.equalsIgnoreCase(trade.getAccount().getBaseCurrency())) {
+                return CfdRealizationResult.unavailable("CFD reporting currency does not match the account");
+            }
+            InstrumentFinancialContract contract = contract(trade);
+            if (exitPrice == null || exitPrice.signum() <= 0) {
+                return CfdRealizationResult.unavailable("CFD exit price is unavailable");
+            }
+            Money quotePnl = calculator.calculateGrossPnlQuote(contract, trade.getQuantity(),
+                    trade.getEntryPrice(), exitPrice);
+            Money reportingPnl = quotePnl;
+            Instant conversionEffectiveAt = null;
+            Instant conversionCapturedAt = null;
+            List<MarketValuationPort.ConversionLeg> conversionLegs = List.of();
+            CurrencyCode target = new CurrencyCode(reportingCurrency);
+            if (!contract.quoteCurrency().equals(target)) {
+                MarketValuationPort.Snapshot snapshot = marketValuation.valueReadOnly(
+                        reportingCurrency, clock.instant(), List.of(),
+                        List.of(new MarketValuationPort.Asset(trade.getTradeId().toString(),
+                                contract.quoteCurrency().value())), MarketValuationPort.FreshnessRequirement.t1());
+                if (!snapshot.complete()) {
+                    return CfdRealizationResult.unavailable("CFD currency conversion fact is unavailable");
+                }
+                MarketValuationPort.Fact fact = snapshot.facts().stream()
+                        .filter(candidate -> candidate.id().equals(trade.getTradeId().toString()))
+                        .findFirst().orElseThrow(() -> new IllegalStateException(
+                                "CFD currency conversion fact is unavailable"));
+                if (!reportingCurrency.equalsIgnoreCase(snapshot.reportingCurrency())
+                        || !"AVAILABLE".equals(fact.status())) {
+                    return CfdRealizationResult.unavailable("CFD currency conversion fact is unavailable");
+                }
+                conversionLegs = validateConversion(contract.quoteCurrency().value(), target.value(), fact);
+                BigDecimal rate = conversionLegs.stream().map(MarketValuationPort.ConversionLeg::rate)
+                        .reduce(BigDecimal.ONE, BigDecimal::multiply);
+                if (fact.quoteToReportingRate() == null
+                        || rate.compareTo(fact.quoteToReportingRate()) != 0) {
+                    return CfdRealizationResult.unavailable("CFD currency conversion fact is unavailable");
+                }
+                conversionEffectiveAt = conversionLegs.stream().map(MarketValuationPort.ConversionLeg::effectiveAt)
+                        .max(Instant::compareTo).orElseThrow();
+                conversionCapturedAt = conversionLegs.stream().map(MarketValuationPort.ConversionLeg::capturedAt)
+                        .max(Instant::compareTo).orElseThrow();
+                reportingPnl = calculator.convert(quotePnl, target,
+                        new CurrencyConversionFact(contract.quoteCurrency(), target, rate,
+                                provenance(snapshot, conversionEffectiveAt)));
+            }
+            return CfdRealizationResult.available(quotePnl, reportingPnl, conversionEffectiveAt,
+                    conversionCapturedAt, conversionLegs);
+        } catch (RuntimeException failure) {
+            return CfdRealizationResult.unavailable(failure.getMessage() == null
+                    ? "CFD realization facts are unavailable" : failure.getMessage());
+        }
+    }
+
     private InstrumentFinancialContract contract(Trade trade) {
         if (trade == null || trade.getProductType() != InstrumentProductType.CFD
                 || trade.getBaseCurrency() == null || trade.getQuoteCurrency() == null
@@ -194,5 +258,27 @@ public class CfdValuationService {
         }
 
         public enum Status { AVAILABLE, UNAVAILABLE }
+    }
+
+    public record CfdRealizationResult(CfdValuationResult.Status status, String reason, Money grossPnlQuote,
+                                       Money grossPnlReporting, Instant conversionEffectiveAt,
+                                       Instant conversionCapturedAt,
+                                       List<MarketValuationPort.ConversionLeg> conversionLegs) {
+        public static CfdRealizationResult available(Money grossPnlQuote, Money grossPnlReporting,
+                                                     Instant conversionEffectiveAt,
+                                                     Instant conversionCapturedAt,
+                                                     List<MarketValuationPort.ConversionLeg> conversionLegs) {
+            return new CfdRealizationResult(CfdValuationResult.Status.AVAILABLE, null, grossPnlQuote, grossPnlReporting,
+                    conversionEffectiveAt, conversionCapturedAt, List.copyOf(conversionLegs));
+        }
+
+        public static CfdRealizationResult unavailable(String reason) {
+            return new CfdRealizationResult(CfdValuationResult.Status.UNAVAILABLE, reason, null, null,
+                    null, null, List.of());
+        }
+
+        public boolean available() {
+            return status == CfdValuationResult.Status.AVAILABLE;
+        }
     }
 }

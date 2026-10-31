@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.execution.application.pipeline;
 
 import com.hope.trading.trading_core.execution.application.port.*;
 import com.hope.trading.trading_core.execution.application.service.PaperSettlementService;
+import com.hope.trading.trading_core.execution.application.service.PaperCfdSettlementService;
 import com.hope.trading.trading_core.execution.application.service.TradeOutcomeService;
 import com.hope.trading.trading_core.execution.domain.repository.*;
 import com.hope.trading.trading_core.execution.domain.service.ExecutionLifecycleService;
@@ -15,6 +16,7 @@ public final class ExecutionFinalizationStep {
     private final ExecutionLifecycleService lifecycle;
     private final ExecutionMetrics metrics;
     private final PaperSettlementService paperSettlementService;
+    private final PaperCfdSettlementService paperCfdSettlementService;
     private final BrokerAccountRepository brokerAccountRepository;
     private final TradeOutcomeService tradeOutcomeService;
 
@@ -24,12 +26,24 @@ public final class ExecutionFinalizationStep {
             PaperSettlementService paperSettlementService,
             BrokerAccountRepository brokerAccountRepository,
             TradeOutcomeService tradeOutcomeService) {
+        this(intents, attempts, orders, lifecycle, metrics, paperSettlementService,
+                null, brokerAccountRepository, tradeOutcomeService);
+    }
+
+    public ExecutionFinalizationStep(ExecutionIntentRepositoryPort intents,
+            ExecutionAttemptRepositoryPort attempts, BrokerOrderRepositoryPort orders,
+            ExecutionLifecycleService lifecycle, ExecutionMetrics metrics,
+            PaperSettlementService paperSettlementService,
+            PaperCfdSettlementService paperCfdSettlementService,
+            BrokerAccountRepository brokerAccountRepository,
+            TradeOutcomeService tradeOutcomeService) {
         this.intents = Objects.requireNonNull(intents);
         this.attempts = Objects.requireNonNull(attempts);
         this.orders = Objects.requireNonNull(orders);
         this.lifecycle = Objects.requireNonNull(lifecycle);
         this.metrics = Objects.requireNonNull(metrics);
         this.paperSettlementService = Objects.requireNonNull(paperSettlementService);
+        this.paperCfdSettlementService = paperCfdSettlementService;
         this.brokerAccountRepository = Objects.requireNonNull(brokerAccountRepository);
         this.tradeOutcomeService = tradeOutcomeService;
     }
@@ -40,7 +54,7 @@ public final class ExecutionFinalizationStep {
             PaperSettlementService paperSettlementService,
             BrokerAccountRepository brokerAccountRepository) {
         this(intents, attempts, orders, lifecycle, metrics, paperSettlementService,
-                brokerAccountRepository, null);
+                null, brokerAccountRepository, null);
     }
 
     public ExecutionFinalizationStep(ExecutionIntentRepositoryPort intents,
@@ -52,6 +66,7 @@ public final class ExecutionFinalizationStep {
         this.lifecycle = Objects.requireNonNull(lifecycle);
         this.metrics = Objects.requireNonNull(metrics);
         this.paperSettlementService = null;
+        this.paperCfdSettlementService = null;
         this.brokerAccountRepository = null;
         this.tradeOutcomeService = null;
     }
@@ -66,8 +81,7 @@ public final class ExecutionFinalizationStep {
                     orders.save(context.brokerOrder());
                 }
                 if (isPaperAccount(context.intent().brokerAccountId())) {
-                    settledTradeId = paperSettlementService.settle(
-                            context.intent(), context.attempt(), context.brokerOrder());
+                    settledTradeId = settlePaper(context);
                 }
                 lifecycle.acknowledged(context.intent(), context.attempt(),
                         context.brokerOrder(), acknowledged.correlationId(), context.now());
@@ -104,5 +118,15 @@ public final class ExecutionFinalizationStep {
                 .map(account -> account.executionMode()
                         == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER)
                 .orElse(false);
+    }
+
+    private java.util.UUID settlePaper(ExecutionPipelineContext context) {
+        if (paperCfdSettlementService != null
+                && paperCfdSettlementService.supports(context.intent())) {
+            return paperCfdSettlementService.settle(
+                    context.intent(), context.attempt(), context.brokerOrder());
+        }
+        return paperSettlementService.settle(
+                context.intent(), context.attempt(), context.brokerOrder());
     }
 }
