@@ -11,6 +11,7 @@ import com.hope.trading.market_data.model.PriceObservation;
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.repository.MarketRepository;
 import com.hope.trading.market_data.repository.PriceObservationRepository;
+import com.hope.trading.market_data.repository.ValuationSnapshotRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -43,6 +44,8 @@ class ValuationSnapshotServiceTest {
     private MarketRepository marketRepository;
     @Autowired
     private PriceObservationRepository observationRepository;
+    @Autowired
+    private ValuationSnapshotRepository snapshotRepository;
     @Autowired
     private TickerEventPublisher tickerEventPublisher;
 
@@ -198,6 +201,22 @@ class ValuationSnapshotServiceTest {
         assertThat(first.capturedAt()).isEqualTo(VALUATION_TIME);
         assertThat(first.maxObservationAge()).isEqualTo("PT5M");
         assertThat(first.policyVersion()).isEqualTo("CONSERVATIVE_MULTI_HOP_FX_NO_LOOKAHEAD_V3");
+    }
+
+    @Test
+    void evaluatesFactsWithoutPersistingAValuationSnapshot() {
+        Market market = market("EUR/USD", "EUR", "USD");
+        observe(market, "1.10", "1.11", VALUATION_TIME.minusSeconds(10));
+        long before = snapshotRepository.count();
+
+        var response = service.evaluate(new ValuationSnapshotBatchRequest(
+                "USD", VALUATION_TIME,
+                List.of(new ValuationSnapshotBatchRequest.Instrument(
+                        "position", market.getMarketId(), PriceUse.CONSERVATIVE_SELL)), List.of()));
+
+        assertThat(response.status()).isEqualTo(ValuationSnapshotBatchResponse.SnapshotStatus.COMPLETE);
+        assertThat(response.facts().getFirst().value()).isEqualByComparingTo("1.10");
+        assertThat(snapshotRepository.count()).isEqualTo(before);
     }
 
     private Market market(String symbol, String base, String quote) {

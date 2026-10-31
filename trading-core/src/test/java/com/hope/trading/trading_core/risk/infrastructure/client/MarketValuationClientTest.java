@@ -115,4 +115,69 @@ class MarketValuationClientTest {
         verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(marketId),
                 Duration.ofSeconds(30), Duration.ofSeconds(18), "CONFIRM_OR_ACQUIRE"));
     }
+
+    @Test
+    void readOnlyValuationDoesNotRefreshOrPersistMarketFacts() {
+        MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
+        UUID marketId = UUID.randomUUID();
+        Instant valuationAt = Instant.parse("2026-08-01T12:00:00Z");
+        var source = new ValuationTransport.Source(UUID.randomUUID(), marketId, "KRAKEN", "EURUSD",
+                "BID", new BigDecimal("1.10"), valuationAt.minusSeconds(5), valuationAt.minusSeconds(4), "PT5S");
+        var fact = new ValuationTransport.Fact("INSTRUMENT", "position", marketId, null,
+                "CONSERVATIVE_SELL", new BigDecimal("1.10"), "AVAILABLE", source, List.of());
+        when(feign.markets()).thenReturn(List.of(
+                new CatalogueMarket(marketId, "KRAKEN", "EURUSD", "EUR", "USD")));
+        when(feign.facts(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(
+                UUID.randomUUID(), 1, "USD", valuationAt, valuationAt,
+                "conservative-v3", "PT5M", "COMPLETE", List.of(fact)));
+        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules(),
+                Clock.fixed(valuationAt, ZoneOffset.UTC));
+
+        MarketValuationPort.Snapshot result = client.valueReadOnly("USD", valuationAt,
+                List.of(new MarketValuationPort.Instrument("position", "EURUSD",
+                        MarketValuationPort.PriceUse.CONSERVATIVE_SELL)), List.of(),
+                MarketValuationPort.FreshnessRequirement.t0());
+
+        assertThat(result.complete()).isTrue();
+        assertThat(result.facts().getFirst().sourceEffectiveAt()).isEqualTo(valuationAt.minusSeconds(5));
+        verify(feign).facts(org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.verify(feign, org.mockito.Mockito.never())
+                .refresh(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void preservesEveryReadOnlyMultiHopConversionLegAndLatestTimestamps() {
+        MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
+        UUID marketId = UUID.randomUUID();
+        Instant valuationAt = Instant.parse("2026-08-01T12:00:00Z");
+        var firstSource = new ValuationTransport.Source(UUID.randomUUID(), UUID.randomUUID(), "KRAKEN",
+                "USDCHF", "BID", new BigDecimal("0.90"), valuationAt.minusSeconds(20),
+                valuationAt.minusSeconds(19), "PT20S");
+        var secondSource = new ValuationTransport.Source(UUID.randomUUID(), UUID.randomUUID(), "KRAKEN",
+                "CHFEUR", "BID", new BigDecimal("0.80"), valuationAt.minusSeconds(10),
+                valuationAt.minusSeconds(9), "PT10S");
+        var fact = new ValuationTransport.Fact("INSTRUMENT", "position", marketId, null,
+                "CONSERVATIVE_SELL", new BigDecimal("0.72"), "AVAILABLE",
+                new ValuationTransport.Source(UUID.randomUUID(), marketId, "KRAKEN", "EURUSD", "BID",
+                        new BigDecimal("1.10"), valuationAt.minusSeconds(5), valuationAt.minusSeconds(4), "PT5S"),
+                List.of(new ValuationTransport.ConversionLeg("USD", "CHF", new BigDecimal("0.90"), firstSource),
+                        new ValuationTransport.ConversionLeg("CHF", "EUR", new BigDecimal("0.80"), secondSource)));
+        when(feign.markets()).thenReturn(List.of(
+                new CatalogueMarket(marketId, "KRAKEN", "EURUSD", "EUR", "USD")));
+        when(feign.facts(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(
+                UUID.randomUUID(), 1, "EUR", valuationAt, valuationAt,
+                "conservative-v3", "PT5M", "COMPLETE", List.of(fact)));
+        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules(),
+                Clock.fixed(valuationAt, ZoneOffset.UTC));
+
+        MarketValuationPort.Snapshot result = client.valueReadOnly("EUR", valuationAt,
+                List.of(new MarketValuationPort.Instrument("position", "EURUSD",
+                        MarketValuationPort.PriceUse.CONSERVATIVE_SELL)), List.of(),
+                MarketValuationPort.FreshnessRequirement.t0());
+
+        assertThat(result.facts().getFirst().conversionLegs()).hasSize(2);
+        assertThat(result.facts().getFirst().conversionEffectiveAt()).isEqualTo(valuationAt.minusSeconds(10));
+        assertThat(result.facts().getFirst().conversionCapturedAt()).isEqualTo(valuationAt.minusSeconds(9));
+        assertThat(result.facts().getFirst().quoteToReportingRate()).isEqualByComparingTo("0.72");
+    }
 }

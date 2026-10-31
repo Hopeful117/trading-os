@@ -3,6 +3,7 @@ package com.hope.trading.trading_core.risk.infrastructure.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.market_data.dto.MarketPriceSnapshotRequest;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
+import com.hope.trading.trading_core.market_data.valuation.ReadOnlyMarketValuationPort;
 import com.hope.trading.trading_core.config.MarketDataFeignConfiguration;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -26,6 +27,8 @@ interface MarketValuationFeignClient {
     List<CatalogueMarket> markets();
     @PostMapping("/internal/v1/valuation-snapshots/batch")
     ValuationTransport value(@RequestBody ValuationRequest request);
+    @PostMapping("/internal/v1/valuation-facts/batch")
+    ValuationTransport facts(@RequestBody ValuationRequest request);
     @PostMapping("/internal/markets/prices/snapshot")
     List<PriceSnapshotTransport> refresh(@RequestBody MarketPriceSnapshotRequest request);
 }
@@ -59,7 +62,7 @@ record ValuationTransport(UUID snapshotId, long version, String reportingCurrenc
 }
 
 @Component
-public final class MarketValuationClient implements MarketValuationPort {
+public final class MarketValuationClient implements MarketValuationPort, ReadOnlyMarketValuationPort {
     private final MarketValuationFeignClient client;
     private final ObjectMapper mapper;
     private final Clock clock;
@@ -80,6 +83,19 @@ public final class MarketValuationClient implements MarketValuationPort {
     public Snapshot value(String reportingCurrency, Instant at,
                           List<Instrument> instruments, List<Asset> assets,
                           FreshnessRequirement requirement) {
+        return valueInternal(reportingCurrency, at, instruments, assets, requirement, false);
+    }
+
+    @Override
+    public Snapshot valueReadOnly(String reportingCurrency, Instant at,
+                                  List<Instrument> instruments, List<Asset> assets,
+                                  FreshnessRequirement requirement) {
+        return valueInternal(reportingCurrency, at, instruments, assets, requirement, true);
+    }
+
+    private Snapshot valueInternal(String reportingCurrency, Instant at,
+                                   List<Instrument> instruments, List<Asset> assets,
+                                   FreshnessRequirement requirement, boolean readOnly) {
         List<CatalogueMarket> catalogue = client.markets();
         List<InstrumentRequest> instrumentRequests = instruments.stream().map(item -> {
             List<CatalogueMarket> matches = catalogue.stream()
@@ -94,7 +110,7 @@ public final class MarketValuationClient implements MarketValuationPort {
         Instant valuationAt = at;
         List<UUID> refreshMarketIds = refreshMarketIds(catalogue, instrumentRequests, assets, reportingCurrency);
         List<AcquisitionOutcomeRequest> acquisitionOutcomes = List.of();
-        if (!refreshMarketIds.isEmpty()) {
+        if (!readOnly && !refreshMarketIds.isEmpty()) {
             acquisitionOutcomes = client.refresh(new MarketPriceSnapshotRequest(refreshMarketIds,
                     requirement.maxObservationAge(), requirement.acquisitionDeadline(),
                     requirement.acquisitionMode().name())).stream()
@@ -102,15 +118,23 @@ public final class MarketValuationClient implements MarketValuationPort {
                     .toList();
             valuationAt = clock.instant();
         }
-        ValuationTransport value = client.value(new ValuationRequest(reportingCurrency, valuationAt,
+        ValuationTransport value = (readOnly ? client.facts(new ValuationRequest(reportingCurrency, valuationAt,
                 instrumentRequests, assets.stream().map(a -> new AssetRequest(a.id(), a.currency())).toList(),
                 requirement.boundary().name(), requirement.acquisitionMode().name(),
-                requirement.maxObservationAge(), requirement.acquisitionDeadline(), acquisitionOutcomes));
+                requirement.maxObservationAge(), requirement.acquisitionDeadline(), acquisitionOutcomes))
+                : client.value(new ValuationRequest(reportingCurrency, valuationAt,
+                instrumentRequests, assets.stream().map(a -> new AssetRequest(a.id(), a.currency())).toList(),
+                requirement.boundary().name(), requirement.acquisitionMode().name(),
+                requirement.maxObservationAge(), requirement.acquisitionDeadline(), acquisitionOutcomes)));
         try {
             List<Fact> facts = value.facts().stream().map(f -> new Fact(f.type(), f.id(), f.marketId(),
                     f.asset(), f.priceUse() == null ? null : PriceUse.valueOf(f.priceUse()), f.value(),
                     f.source() == null ? null : f.source().price(), conversionRate(f.conversionLegs()), f.status(),
-                    preserve(f.source(), f.conversionLegs()))).toList();
+                    preserve(f.source(), f.conversionLegs()),
+                    f.source() == null ? null : f.source().effectiveAt(),
+                    f.source() == null ? null : f.source().capturedAt(),
+                    conversionEffectiveAt(f.conversionLegs()), conversionCapturedAt(f.conversionLegs()),
+                    conversionLegs(f.conversionLegs()))).toList();
             boolean complete = "COMPLETE".equals(value.status()) && value.acquisitionOutcomes().stream()
                     .allMatch(outcome -> "FRESH".equalsIgnoreCase(outcome.status()));
             return new Snapshot(value.snapshotId(), value.version(), value.reportingCurrency(),
@@ -203,5 +227,36 @@ public final class MarketValuationClient implements MarketValuationPort {
         if (legs == null || legs.isEmpty() || legs.stream().anyMatch(leg -> leg.rate() == null)) return null;
         return legs.stream().map(ValuationTransport.ConversionLeg::rate)
                 .reduce(BigDecimal.ONE, BigDecimal::multiply);
+    }
+
+    private Instant conversionEffectiveAt(List<ValuationTransport.ConversionLeg> legs) {
+        return legs == null ? null : legs.stream()
+                .map(ValuationTransport.ConversionLeg::source)
+                .filter(java.util.Objects::nonNull)
+                .map(ValuationTransport.Source::effectiveAt)
+                .filter(java.util.Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(null);
+    }
+
+    private Instant conversionCapturedAt(List<ValuationTransport.ConversionLeg> legs) {
+        return legs == null ? null : legs.stream()
+                .map(ValuationTransport.ConversionLeg::source)
+                .filter(java.util.Objects::nonNull)
+                .map(ValuationTransport.Source::capturedAt)
+                .filter(java.util.Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(null);
+    }
+
+    private List<MarketValuationPort.ConversionLeg> conversionLegs(
+            List<ValuationTransport.ConversionLeg> legs) {
+        if (legs == null) return List.of();
+        return legs.stream().map(leg -> new MarketValuationPort.ConversionLeg(
+                leg.fromCurrency(), leg.toCurrency(), leg.rate(),
+                leg.source() == null ? null : leg.source().priceType(),
+                preserve(leg.source(), List.of()),
+                leg.source() == null ? null : leg.source().effectiveAt(),
+                leg.source() == null ? null : leg.source().capturedAt())).toList();
     }
 }
