@@ -13,6 +13,8 @@ import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
+import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
+import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
@@ -341,6 +343,29 @@ class ExecutionTimeRiskRevalidationServiceTest {
     }
 
     @Test
+    void cfdManualPlanWithoutProtectionFailsClosedBeforeRiskEvaluation() {
+        when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(cfdReadyPlan(null));
+        Account account = Account.builder().accountId(accountId).brokerAccountId(intent.brokerAccountId())
+                .user(com.hope.trading.trading_core.model.User.builder().userId(intent.initiatorId()).build())
+                .name("main").baseCurrency("USD").build();
+        BrokerAccount linkedBroker = mock(BrokerAccount.class);
+        when(accounts.findById(accountId)).thenReturn(Optional.of(account));
+        when(brokerAccounts.findByIdAndOwnerId(intent.brokerAccountId(), intent.initiatorId()))
+                .thenReturn(Optional.of(linkedBroker));
+        when(linkedBroker.id()).thenReturn(intent.brokerAccountId());
+        when(linkedBroker.providerRegistrationReference()).thenReturn(UUID.randomUUID());
+        when(persistence.configuration(accountId)).thenReturn(Optional.of(
+                new RiskPersistence.AccountConfiguration(accountId, intent.brokerAccountId(), "UTC", "USD", UUID.randomUUID())));
+        when(persistence.assignedProfile(accountId)).thenReturn(Optional.of(validProfile()));
+
+        ExecutionTimeRiskRevalidationService.T1Outcome outcome = service.evaluateAndPersist(intent, now);
+
+        assertThat(outcome.approved()).isFalse();
+        assertThat(outcome.reasonCode()).isEqualTo("CFD_STOP_UNAVAILABLE");
+        verify(broker, never()).load(any(), any(), any());
+    }
+
+    @Test
     void validatesRiskRevalidationHelpers() throws Exception {
         assertThat(invoke("direction", new Class<?>[]{String.class}, "LONG"))
                 .isEqualTo(com.hope.trading.risk.domain.RiskTypes.TradeDirection.LONG);
@@ -451,5 +476,14 @@ class ExecutionTimeRiskRevalidationServiceTest {
                 com.hope.trading.trading_core.shared.domain.model.EntryIntent.OrderType.MARKET, null),
                 BigDecimal.ONE, new BigDecimal("50000"), new BigDecimal("0.1"), BigDecimal.ONE,
                 new BigDecimal("0.00001"), "USD", "plan");
+    }
+
+    private TradePlanRiskPort.Snapshot cfdReadyPlan(BigDecimal stopPrice) {
+        return new TradePlanRiskPort.Snapshot(tradePlanId, 1, "READY_TO_EXECUTE", "MANUAL", now,
+                UUID.randomUUID(), 1, now, intent.initiatorId(), accountId, "USD", UUID.randomUUID(), 1,
+                UUID.randomUUID(), 1, "EUR/USD", "MARKET_DATA", InstrumentProductType.CFD, "LONG",
+                new EntryIntent(EntryIntent.OrderType.MARKET, null), stopPrice, new BigDecimal("1.20"),
+                new BigDecimal("1000"), new BigDecimal("10000"), new BigDecimal("100"), new BigDecimal("1.5"),
+                "USD", "plan", List.of());
     }
 }
