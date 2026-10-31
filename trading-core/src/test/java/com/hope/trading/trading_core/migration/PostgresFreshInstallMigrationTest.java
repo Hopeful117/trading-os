@@ -51,14 +51,14 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(47);
+        assertMigrationHistory(48);
         assertCfdProjectionSchema();
         assertDailyDrawdownBoundarySchema();
         assertTradeExecutionProvenanceConstraints();
         assertBrokerPositionReconciliationSchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("47");
+                 String.class)).isEqualTo("48");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -108,7 +108,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(47);
+                 Integer.class)).isEqualTo(48);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -157,7 +157,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(47);
+        assertMigrationHistory(48);
         assertDailyDrawdownBoundarySchema();
         assertBrokerPositionReconciliationSchema();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
@@ -226,6 +226,13 @@ class PostgresFreshInstallMigrationTest {
                         + "where connamespace = current_schema()::regnamespace and conname in "
                 + "('trades_financial_contract_complete')",
                 Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select pg_get_constraintdef(oid) from pg_constraint "
+                        + "where connamespace = current_schema()::regnamespace "
+                        + "and conname = 'trades_open_quantity_valid'", String.class))
+                .contains("product_type", "CFD", "quantity <>", "quantity >");
+        assertThat(jdbc.queryForObject("select count(*) from pg_constraint "
+                        + "where connamespace = current_schema()::regnamespace "
+                        + "and conname = 'trades_open_quantity_positive'", Integer.class)).isZero();
     }
 
     private void assertDailyDrawdownBoundarySchema() {
