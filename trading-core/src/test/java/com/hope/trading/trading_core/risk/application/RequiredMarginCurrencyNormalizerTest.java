@@ -21,6 +21,13 @@ class RequiredMarginCurrencyNormalizerTest {
     }
 
     @Test
+    void preservesValidZeroMarginForReductions() {
+        assertThat(RequiredMarginCurrencyNormalizer.normalize(
+                margin("USD", BigDecimal.ZERO), "USD", valuation("USD", "1"), NOW))
+                .contains(BigDecimal.ZERO);
+    }
+
+    @Test
     void convertsMarginUsingCurrentAssetRate() {
         assertThat(RequiredMarginCurrencyNormalizer.normalize(
                 margin("EUR", new BigDecimal("100")), "USD", valuation("EUR", "1.2"), NOW))

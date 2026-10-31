@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.hope.trading.trading_core.risk.margin.PaperRequiredMarginClient;
+import com.hope.trading.trading_core.risk.margin.MarginResolutionContext;
 
 @FeignClient(name = "broker-service", contextId = "brokerRequiredMarginClient",
         configuration = BrokerServiceFeignConfiguration.class)
@@ -44,14 +46,25 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
     private final AccountRepository accounts;
     private final Clock clock;
     private final Duration maxAge;
+    private final PaperRequiredMarginClient paperMargin;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BrokerRequiredMarginClient(BrokerMarginFeignClient client,
+                                      BrokerTechnicalCapabilitiesFeignClient capabilities,
+                                      BrokerAccountRepository brokerAccounts, AccountRepository accounts,
+                                      Clock clock, @Value("${trading-core.risk.broker-facts-max-age:PT5M}") Duration maxAge,
+                                      PaperRequiredMarginClient paperMargin) {
+        this.client = client; this.capabilities = capabilities;
+        this.brokerAccounts = brokerAccounts; this.accounts = accounts;
+        this.clock = clock; this.maxAge = maxAge;
+        this.paperMargin = paperMargin;
+    }
 
     public BrokerRequiredMarginClient(BrokerMarginFeignClient client,
                                       BrokerTechnicalCapabilitiesFeignClient capabilities,
                                       BrokerAccountRepository brokerAccounts, AccountRepository accounts,
-                                      Clock clock, @Value("${trading-core.risk.broker-facts-max-age:PT5M}") Duration maxAge) {
-        this.client = client; this.capabilities = capabilities;
-        this.brokerAccounts = brokerAccounts; this.accounts = accounts;
-        this.clock = clock; this.maxAge = maxAge;
+                                      Clock clock, Duration maxAge) {
+        this(client, capabilities, brokerAccounts, accounts, clock, maxAge, null);
     }
 
     @Override
@@ -64,10 +77,8 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
             var brokerAccount = brokerAccounts.findById(request.brokerAccountId()).orElse(null);
             if (brokerAccount == null) return Optional.empty();
             boolean paper = brokerAccount.executionMode() == ExecutionMode.PAPER;
-            String provider = brokerAccount.providerRegistrationReference().toString();
-            BrokerTechnicalCapabilities technical = paper
-                    ? capabilities.getByProvider(provider, request.brokerAccountId(), request.instrument())
-                    : capabilities.get(request.brokerAccountId(), request.instrument());
+            if (paper) return paperMargin == null ? Optional.empty() : paperMargin.resolve(request);
+            BrokerTechnicalCapabilities technical = capabilities.get(request.brokerAccountId(), request.instrument());
             if (technical == null || !request.brokerAccountId().equals(technical.brokerAccountId())
                     || blank(technical.provider()) || technical.sourceVersion() < 1 || technical.observedAt() == null
                     || !request.instrument().equalsIgnoreCase(technical.instrument())
@@ -78,9 +89,7 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
             BrokerMarginPreviewRequest previewRequest = new BrokerMarginPreviewRequest(request.brokerAccountId(),
                     request.instrument(), "LONG".equalsIgnoreCase(request.direction()) ? "BUY" : "SELL",
                     request.quantity(), request.price(), null);
-            BrokerMarginPreview preview = paper
-                    ? client.previewByProvider(provider, previewRequest)
-                    : client.preview(request.brokerAccountId(), previewRequest);
+             BrokerMarginPreview preview = client.preview(request.brokerAccountId(), previewRequest);
             if (preview == null || !request.brokerAccountId().equals(preview.brokerAccountId())
                     || !request.instrument().equalsIgnoreCase(preview.instrument())
                     || preview.amount() == null || preview.amount().signum() <= 0
@@ -95,6 +104,24 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
                     unavailable.getClass().getSimpleName());
             return Optional.empty();
         }
+    }
+
+    @Override
+    public Resolution resolveDetailed(Request request) {
+        if (request != null && request.brokerAccountId() != null && paperMargin != null) {
+            var broker = brokerAccounts.findById(request.brokerAccountId()).orElse(null);
+            if (broker != null && broker.executionMode() == ExecutionMode.PAPER) return paperMargin.resolveDetailed(request);
+        }
+        return RequiredMarginPort.super.resolveDetailed(request);
+    }
+
+    @Override
+    public Optional<MarginResolutionContext> resolveContext(Request request) {
+        if (request != null && request.brokerAccountId() != null && paperMargin != null) {
+            var broker = brokerAccounts.findById(request.brokerAccountId()).orElse(null);
+            if (broker != null && broker.executionMode() == ExecutionMode.PAPER) return paperMargin.resolveContext(request);
+        }
+        return RequiredMarginPort.super.resolveContext(request);
     }
 
     private boolean stale(Instant observedAt) {

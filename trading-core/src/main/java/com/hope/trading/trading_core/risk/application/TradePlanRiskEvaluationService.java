@@ -296,10 +296,28 @@ public class TradePlanRiskEvaluationService {
                 .findFirst()
                 .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
         Instant marginObservedAt = clock.instant();
-         RequiredMarginPort.Fact marginFact = requiredMargins.resolve(new RequiredMarginPort.Request(
-                         brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                         marginPrice, marginObservedAt))
-                  .orElseThrow(() -> unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
+          RequiredMarginPort.Request marginRequest = new RequiredMarginPort.Request(
+                          brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
+                          marginPrice, marginObservedAt, account.getAccountId(), currency, null, null, null);
+          if ("PAPER".equals(brokerAccount.executionMode().name())) {
+              RequiredMarginPort.Resolution contextResolution = requiredMargins.resolveDetailed(marginRequest);
+              if (contextResolution == null) {
+                  contextResolution = requiredMargins.resolve(marginRequest)
+                          .map(RequiredMarginPort.Resolution::available)
+                          .orElseGet(() -> RequiredMarginPort.Resolution.unavailable("MARGIN_CONTEXT_UNAVAILABLE"));
+              }
+              if (contextResolution.fact() == null || contextResolution.fact().context() == null)
+                  throw unavailable(contextResolution.reason());
+              marginRequest = marginRequest.withContext(contextResolution.fact().context());
+          }
+          RequiredMarginPort.Resolution marginResolution = requiredMargins.resolveDetailed(marginRequest);
+          if (marginResolution == null) {
+              marginResolution = requiredMargins.resolve(marginRequest)
+                      .map(RequiredMarginPort.Resolution::available)
+                      .orElseGet(() -> RequiredMarginPort.Resolution.unavailable("REQUIRED_MARGIN_UNAVAILABLE"));
+          }
+          RequiredMarginPort.Fact marginFact = marginResolution.fact();
+          if (marginFact == null) throw unavailable(marginResolution.reason());
          if (marginFact.currency() == null || marginFact.currency().isBlank()) {
              throw unavailable("REQUIRED_MARGIN_INVALID");
          }
@@ -323,7 +341,9 @@ public class TradePlanRiskEvaluationService {
         provenance.put("riskDayBaselinePayload", baseline.payload());
         provenance.put("candidateStartMarket", startValuation.sourcePayload()); provenance.put("currentMarket", current.sourcePayload());
         provenance.put("closedTradeMarkets", dailyClosed.marketPayloads());
-        provenance.put("requiredMargin", marginFact);
+         provenance.put("requiredMargin", marginFact);
+         provenance.put("marginContext", marginFact.context());
+         provenance.put("marginEvidence", marginFact.evidence());
         provenance.put("profile", profile);
 
         Map<String, Object> accountPayload = new LinkedHashMap<>();

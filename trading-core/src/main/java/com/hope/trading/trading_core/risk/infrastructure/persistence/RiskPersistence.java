@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Response;
 import com.hope.trading.risk.projection.RiskHeadroomProjection;
 import com.hope.trading.trading_core.model.Account;
+import com.hope.trading.trading_core.risk.margin.MarginResolutionContext;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
@@ -171,6 +172,22 @@ public class RiskPersistence {
         entity.payloadSchemaVersion = 1; entity.payload = payload;
         entityManager.persist(entity); entityManager.flush();
         return entity.version;
+    }
+
+    /** Reads the structured PAPER margin context captured in the T0 evidence snapshot. */
+    public Optional<MarginResolutionContext> marginContext(UUID evaluationId) {
+        RiskContextSnapshotEntity entity = entityManager.createQuery(
+                        "select e from RiskContextSnapshotEntity e where e.evaluationId=:evaluation",
+                        RiskContextSnapshotEntity.class).setParameter("evaluation", evaluationId)
+                .getResultStream().findFirst().orElse(null);
+        if (entity == null || entity.payload == null) return Optional.empty();
+        try {
+            var root = mapper.readTree(entity.payload);
+            var value = root.path("provenance").path("marginContext");
+            return value.isMissingNode() ? Optional.empty() : Optional.of(mapper.treeToValue(value, MarginResolutionContext.class));
+        } catch (Exception unreadable) {
+            return Optional.empty();
+        }
     }
 
     @Transactional
