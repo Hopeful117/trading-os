@@ -1,0 +1,4 @@
+{
+  "url": "http://localhost:17085/decision-workspace?accountId=d8d094c2-ec43-4d05-9e2b-a4130b352bfa&marketId=ba1576b7-7bd6-4260-a309-7e5a156cbce8&opportunityId=6e02404e-2105-3ff6-a183-1bbfc8580681",
+  "main": "Live market quote\nEUR/USD\nCTRADER · SPOT\nOPEN\nSTALE\nLAST PRICE\nUNKNOWN\n3:26:31 AM\nBID\n1.11561\nASK\n1.11562\nSPREAD\n0.00001\nANALYTICAL EVIDENCE ONLY\nTrend Context\nNOT RISK APPROVAL / NOT EXECUTION AUTHORIZATION\nStatus: DEGRADED\nValidity: VALID\nAssessed Oct 29, 2026, 3:46:18 AM\nObservation v11\nDirection\nDOWN\nRegime\nTRANSITIONING\nPhase\nTRANSITION\nAttention outcome\nCONTEXTUALLY_DANGEROUS\nDetailed deterministic evidence\nRoles, provenance, diagnostics\n+\nEVIDENCE-LED DECISION\nOpportunity review\nVALID\nMARKET THESIS\nNO_TRA"
+}

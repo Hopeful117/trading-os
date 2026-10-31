@@ -4,6 +4,8 @@ import java.util.List;
 import java.time.Instant;
 import java.math.BigDecimal;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
+import com.hope.trading.broker_service.ctrader.execution.CTraderExecutionInstrumentContract;
+import com.hope.trading.broker_service.ctrader.metadata.CTraderInstrumentMetadata;
 
 public interface CTraderOpenApiClient {
     List<String> discoverAuthorizedAccountIds(CTraderToken token);
@@ -57,5 +59,31 @@ public interface CTraderOpenApiClient {
                                                             Instant from,
                                                             Instant to) {
         throw new CTraderAuthenticationException("cTrader read-only synchronization is unavailable");
+    }
+
+    default CTraderExecutionInstrumentContract readExecutionInstrumentContract(CTraderToken token,
+                                                                                 String externalAccountId,
+                                                                                 String instrument) {
+        throw new CTraderAuthenticationException("cTrader instrument metadata is unavailable");
+    }
+
+    default CTraderInstrumentMetadata readInstrumentMetadata(CTraderToken token,
+                                                              String externalAccountId,
+                                                              String instrument) {
+        throw new CTraderAuthenticationException("cTrader economic metadata is unavailable");
+    }
+
+    default CTraderQuote readCurrentQuote(CTraderToken token, String externalAccountId, String instrument) {
+        throw new CTraderAuthenticationException("cTrader quote is unavailable");
+    }
+
+    record CTraderQuote(String instrument, BigDecimal bid, BigDecimal ask, Instant observedAt) {
+        public CTraderQuote {
+            if (instrument == null || instrument.isBlank()) throw new IllegalArgumentException("quote instrument is required");
+            if (bid == null || bid.signum() <= 0) throw new IllegalArgumentException("quote bid must be positive");
+            if (ask == null || ask.signum() <= 0) throw new IllegalArgumentException("quote ask must be positive");
+            if (ask.compareTo(bid) < 0) throw new IllegalArgumentException("quote ask must not be below bid");
+            if (observedAt == null) throw new IllegalArgumentException("quote timestamp is required");
+        }
     }
 }

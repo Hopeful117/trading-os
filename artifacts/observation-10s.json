@@ -1,0 +1,4 @@
+{
+  "main": "Live market quote\nEUR/USD\nCTRADER · SPOT\nOPEN\nSTALE\nLAST PRICE\nUNKNOWN\n3:26:31 AM\nBID\n1.11561\nASK\n1.11562\nSPREAD\n0.00001\nANALYTICAL EVIDENCE ONLY\nTrend Context\nNOT RISK APPROVAL / NOT EXECUTION AUTHORIZATION\nStatus: DEGRADED\nValidity: VALID\nAssessed Oct 29, 2026, 3:46:18 AM\nObservation v11\nDirection\nDOWN\nRegime\nTRANSITIONING\nPhase\nTRANSITION\nAttention outcome\nCONTEXTUALLY_DANGEROUS\nDetailed deterministic evidence\n",
+  "body": true
+}

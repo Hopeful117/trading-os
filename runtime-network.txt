@@ -1,0 +1,12 @@
+4. [GET] http://localhost:17085/api/v1/opportunities/63fcf745-fa1a-330a-a8e0-44205d5c15cb => [200] OK
+5. [GET] http://localhost:17085/api/v1/accounts => [200] OK
+6. [GET] http://localhost:17085/api/v1/intelligence/decision-context/d8d094c2-ec43-4d05-9e2b-a4130b352bfa => [200] OK
+7. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/dashboard => [409] Conflict
+8. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+9. [GET] http://localhost:17085/api/v1/markets => [200] OK
+10. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+11. [GET] http://localhost:17085/api/v1/intelligence/trend-context/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+12. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+13. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/ohlc?interval=FIVE_MINUTES&limit=200 => [200] OK
+
+Note: 3 static requests not shown, run with "static" option to see them.

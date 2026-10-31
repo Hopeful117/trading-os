@@ -1,0 +1,12 @@
+5. [GET] http://localhost:17085/api/v1/challenges => [200] OK
+6. [GET] http://localhost:17085/api/v1/accounts/2d30cf90-a9c7-47aa-bb30-d26ef1178b8b/challenge => [404] Not Found
+7. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+8. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+9. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+10. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+11. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+12. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+13. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+14. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/challenge => [200] OK
+
+Note: 3 static requests not shown, run with "static" option to see them.
