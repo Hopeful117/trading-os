@@ -5,7 +5,11 @@ import lombok.Builder;
 import java.math.BigDecimal;
 
 @Builder
-public record MarketConstraints(BigDecimal minimumOrderSize, BigDecimal minimumCost, BigDecimal tickSize,
+public record MarketConstraints(BigDecimal minimumOrderSize, BigDecimal orderStepSize,
+                                BigDecimal minimumCost, BigDecimal tickSize,
                                 Integer quantityPrecision, Integer pricePrecision) {
+    public MarketConstraints(BigDecimal minimumOrderSize, BigDecimal minimumCost, BigDecimal tickSize,
+                             Integer quantityPrecision, Integer pricePrecision) {
+        this(minimumOrderSize, null, minimumCost, tickSize, quantityPrecision, pricePrecision);
+    }
 }
-

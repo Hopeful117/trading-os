@@ -120,11 +120,28 @@ public class CTraderMarketData implements MarketDataProvider {
                 .marketState(marketStateBuilder.buildInitialState(MarketAvailability.UNAVAILABLE))
                 .marketConstraints(MarketConstraints.builder()
                         // cTrader volumes are expressed in centi-units.
-                        .minimumOrderSize(BigDecimal.valueOf(symbol.minVolume()).movePointLeft(2))
-                        .maximumOrderSize(BigDecimal.valueOf(symbol.maxVolume()).movePointLeft(2))
-                        .orderStepSize(BigDecimal.valueOf(symbol.stepVolume()).movePointLeft(2))
+                        .minimumOrderSize(canonicalQuantity(symbol.minVolume()))
+                        .maximumOrderSize(canonicalQuantity(symbol.maxVolume()))
+                        .orderStepSize(canonicalQuantity(symbol.stepVolume()))
+                        .quantityPrecision(quantityPrecision(
+                                canonicalQuantity(symbol.minVolume()),
+                                canonicalQuantity(symbol.maxVolume()),
+                                canonicalQuantity(symbol.stepVolume())))
                         .tickSize(BigDecimal.ONE.movePointLeft(symbol.digits()))
                         .pricePrecision(symbol.digits()).build()).build());
+    }
+
+    private BigDecimal canonicalQuantity(long providerVolume) {
+        if (providerVolume <= 0) throw new IllegalStateException("Invalid cTrader volume constraint");
+        return BigDecimal.valueOf(providerVolume).movePointLeft(2);
+    }
+
+    private int quantityPrecision(BigDecimal... canonicalQuantities) {
+        int precision = 0;
+        for (BigDecimal quantity : canonicalQuantities) {
+            precision = Math.max(precision, quantity.stripTrailingZeros().scale());
+        }
+        return precision;
     }
 
     private Optional<InstrumentProductType> productType(String providerSymbol) {
