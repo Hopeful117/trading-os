@@ -18,7 +18,7 @@ public final class RequiredMarginCurrencyNormalizer {
                                                  String reportingCurrency,
                                                  MarketValuationPort.Snapshot valuation,
                                                  Instant asOf) {
-        if (fact == null || fact.amount() == null || fact.amount().signum() <= 0
+        if (fact == null || fact.amount() == null || fact.amount().signum() < 0
                 || blank(fact.currency()) || blank(reportingCurrency)
                 || blank(fact.sourceId()) || fact.sourceVersion() < 1 || fact.observedAt() == null
                 || asOf == null || fact.observedAt().isAfter(asOf)
@@ -30,6 +30,9 @@ public final class RequiredMarginCurrencyNormalizer {
                 || stale(valuation, asOf) || staleRelativeToMargin(fact, valuation)
                 || valuation.facts() == null) {
             return Optional.empty();
+        }
+        if (fact.amount().signum() == 0) {
+            return Optional.of(BigDecimal.ZERO);
         }
         if (normalized(fact.currency()).equals(normalized(reportingCurrency))) {
             return Optional.of(fact.amount());

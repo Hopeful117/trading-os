@@ -17,6 +17,7 @@ import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.risk.application.RiskProfileValidator;
+import com.hope.trading.trading_core.risk.margin.MarginResolutionContext;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.repository.AccountRepository;
@@ -259,8 +260,12 @@ class ExecutionTimeRiskRevalidationServiceTest {
          doAnswer(invocation -> market.value(invocation.getArgument(0), invocation.getArgument(1),
                  invocation.getArgument(2), invocation.getArgument(3)))
                  .when(market).value(any(), any(), any(), any(), any());
-        when(requiredMargins.resolve(any())).thenReturn(Optional.of(
-                new RequiredMarginPort.Fact(BigDecimal.ONE, "EUR", "paper-margin", 1, now)));
+         when(requiredMargins.resolve(any())).thenReturn(Optional.of(
+                 new RequiredMarginPort.Fact(BigDecimal.ONE, "EUR", "paper-margin", 1, now)));
+         when(persistence.marginContext(evaluationId)).thenReturn(Optional.of(new MarginResolutionContext(
+                 accountId, intent.brokerAccountId(), UUID.randomUUID(), "v1", UUID.randomUUID(),
+                 "contract", 1L, UUID.randomUUID(), 1L, "EUR", "USD", new BigDecimal("1.2"),
+                 java.time.Duration.ofSeconds(30), 2, now)));
         when(persistence.baseline(any(), any(), any(), any(), any(), any(), any())).thenReturn(
                 new RiskPersistence.Baseline(1, new BigDecimal("10000"), "USD",
                         Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), 1, "baseline"));
@@ -394,7 +399,7 @@ class ExecutionTimeRiskRevalidationServiceTest {
                 margin, "USD", marginValuation, now)).contains(BigDecimal.TEN);
         assertThat(com.hope.trading.trading_core.risk.application.RequiredMarginCurrencyNormalizer.normalize(
                 new RequiredMarginPort.Fact(BigDecimal.ZERO, "USD", "broker-margin", 1, observedAt),
-                "USD", marginValuation, now)).isEmpty();
+                 "USD", marginValuation, now)).contains(BigDecimal.ZERO);
 
         MarketValuationPort.Fact asset = new MarketValuationPort.Fact(
                 "ASSET", "usd", null, "USD", null, BigDecimal.ONE, null, null, "AVAILABLE", "source");
