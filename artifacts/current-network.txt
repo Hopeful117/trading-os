@@ -1,0 +1,42 @@
+4. [GET] http://localhost:17085/api/v1/accounts => [200] OK
+5. [GET] http://localhost:17085/api/v1/intelligence/decision-context/d8d094c2-ec43-4d05-9e2b-a4130b352bfa => [200] OK
+6. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/dashboard => [200] OK
+7. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+8. [GET] http://localhost:17085/api/v1/markets => [200] OK
+9. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+10. [GET] http://localhost:17085/api/v1/intelligence/trend-context/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+11. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+12. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/ohlc?interval=FIVE_MINUTES&limit=200 => [200] OK
+13. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/dashboard => [409] Conflict
+14. [GET] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/dashboard => [409] Conflict
+15. [DELETE] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+16. [DELETE] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+17. [GET] http://localhost:17085/api/v1/intelligence/decision-context/d8d094c2-ec43-4d05-9e2b-a4130b352bfa => [200] OK
+18. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+19. [GET] http://localhost:17085/api/v1/markets => [200] OK
+20. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+21. [GET] http://localhost:17085/api/v1/intelligence/trend-context/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+22. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+23. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/ohlc?interval=FIVE_MINUTES&limit=200 => [200] OK
+24. [DELETE] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+25. [DELETE] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+26. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+27. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+28. [GET] http://localhost:17085/api/v1/intelligence/trend-context/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+29. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+30. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/ohlc?interval=FIVE_MINUTES&limit=200 => [200] OK
+31. [POST] http://localhost:17085/api/v1/intelligence/scans/scope => [200] OK
+32. [POST] http://localhost:17085/api/v1/intelligence/scans => [202] Accepted
+33. [GET] http://localhost:17085/api/v1/intelligence/scans/18134c4d-efe1-4dde-bf29-a2c110f3ec78 => [200] OK
+34. [DELETE] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+35. [DELETE] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+36. [GET] http://localhost:17085/api/v1/opportunities/6e02404e-2105-3ff6-a183-1bbfc8580681 => [200] OK
+37. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+38. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+39. [GET] http://localhost:17085/api/v1/intelligence/trend-context/ba1576b7-7bd6-4260-a309-7e5a156cbce8 => [200] OK
+40. [POST] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/subscriptions => [204] No Content
+41. [GET] http://localhost:17085/api/v1/markets/ba1576b7-7bd6-4260-a309-7e5a156cbce8/ohlc?interval=FIVE_MINUTES&limit=200 => [200] OK
+42. [POST] http://localhost:17085/api/v1/accounts/d8d094c2-ec43-4d05-9e2b-a4130b352bfa/opportunity-decisions => [200] OK
+43. [GET] http://localhost:17085/api/v1/intelligence/scans/18134c4d-efe1-4dde-bf29-a2c110f3ec78
+
+Note: 3 static requests not shown, run with "static" option to see them.

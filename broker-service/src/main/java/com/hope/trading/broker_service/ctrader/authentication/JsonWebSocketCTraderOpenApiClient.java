@@ -27,6 +27,8 @@ import java.math.MathContext;
 import java.time.Instant;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
 import com.hope.trading.broker_service.ctrader.execution.CTraderExecutionInstrumentContract;
+import com.hope.trading.broker_service.ctrader.metadata.CTraderInstrumentMetadata;
+import com.hope.trading.ctrader.openapi.codec.CTraderPriceDecoder;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.*;
 
 @Component
@@ -231,30 +233,12 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     }
 
     private CTraderExecutionInstrumentContract resolveSymbol(Session session, long accountId, String instrument) {
-        JsonNode response = requireAccountResponse(session.request(SYMBOL_LIST_REQUEST, SYMBOL_LIST_RESPONSE,
-                objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
-        List<JsonNode> matches = new ArrayList<>();
-        for (JsonNode symbol : response.path("symbol")) {
-            if (instrument.equalsIgnoreCase(symbol.path("symbolName").asText())) {
-                matches.add(symbol);
-            }
-        }
-        if (matches.isEmpty()) throw new CTraderAuthenticationException("CTRADER_UNKNOWN_INSTRUMENT");
-        if (matches.size() > 1) throw new CTraderAuthenticationException("CTRADER_AMBIGUOUS_INSTRUMENT");
-        JsonNode listed = matches.getFirst();
-        long symbolId = listed.path("symbolId").asLong(0);
-        if (symbolId <= 0) throw new CTraderAuthenticationException("CTRADER_UNKNOWN_INSTRUMENT");
-        ObjectNode symbolRequest = objectMapper.createObjectNode()
-                .put("ctidTraderAccountId", accountId);
-        symbolRequest.putArray("symbolId").add(symbolId);
-        JsonNode detailsResponse = requireAccountResponse(session.request(SYMBOL_BY_ID_REQUEST,
-                SYMBOL_BY_ID_RESPONSE, symbolRequest), accountId);
-        JsonNode details = detailsResponse.path("symbol").isArray()
-                ? detailsResponse.path("symbol").path(0)
-                : detailsResponse.path("symbol");
+        ResolvedSymbol resolved = resolveSymbolNodes(session, accountId, instrument);
+        JsonNode listed = resolved.listed();
+        JsonNode details = resolved.details();
         try {
             return new CTraderExecutionInstrumentContract(
-                    symbolId,
+                    resolved.symbolId(),
                     listed.path("symbolName").asText(),
                     details.path("digits").asInt(listed.path("digits").asInt(0)),
                     details.path("pipPosition").asInt(listed.path("pipPosition").asInt(0)),
@@ -268,6 +252,91 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         } catch (IllegalArgumentException exception) {
             throw new CTraderAuthenticationException(exception.getMessage(), exception);
         }
+    }
+
+    private ResolvedSymbol resolveSymbolNodes(Session session, long accountId, String instrument) {
+        JsonNode response = requireAccountResponse(session.request(SYMBOL_LIST_REQUEST, SYMBOL_LIST_RESPONSE,
+                objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
+        JsonNode listed = selectListedSymbol(response, instrument);
+        long symbolId = listed.path("symbolId").asLong(0);
+        if (symbolId <= 0) throw new CTraderAuthenticationException("CTRADER_UNKNOWN_INSTRUMENT");
+        ObjectNode symbolRequest = objectMapper.createObjectNode()
+                .put("ctidTraderAccountId", accountId);
+        symbolRequest.putArray("symbolId").add(symbolId);
+        JsonNode detailsResponse = requireAccountResponse(session.request(SYMBOL_BY_ID_REQUEST,
+                SYMBOL_BY_ID_RESPONSE, symbolRequest), accountId);
+        JsonNode details = detailsResponse.path("symbol").isArray()
+                ? detailsResponse.path("symbol").path(0)
+                : detailsResponse.path("symbol");
+        if (!details.isObject()) throw new CTraderAuthenticationException("CTRADER_METADATA_UNAVAILABLE");
+        return new ResolvedSymbol(symbolId, listed, details);
+    }
+
+    JsonNode selectListedSymbol(JsonNode response, String instrument) {
+        List<JsonNode> matches = new ArrayList<>();
+        for (JsonNode symbol : response.path("symbol")) {
+            if (instrument.equalsIgnoreCase(symbol.path("symbolName").asText())) {
+                matches.add(symbol);
+            }
+        }
+        if (matches.isEmpty()) throw new CTraderAuthenticationException("CTRADER_UNKNOWN_INSTRUMENT");
+        if (matches.size() > 1) throw new CTraderAuthenticationException("CTRADER_AMBIGUOUS_INSTRUMENT");
+        return matches.getFirst();
+    }
+
+    private JsonNode findAuthorizedAccount(JsonNode response, String externalAccountId) {
+        for (JsonNode account : response.path("ctidTraderAccount")) {
+            if (externalAccountId.equals(account.path("ctidTraderAccountId").asText())) return account;
+        }
+        throw new CTraderAuthenticationException("cTrader account is not authorized");
+    }
+
+    private String assetName(JsonNode assets, String assetId) {
+        if (assetId == null) return null;
+        for (JsonNode asset : assets.path("asset")) {
+            if (assetId.equals(asset.path("assetId").asText())) return text(asset, "name");
+        }
+        return null;
+    }
+
+    private String firstText(JsonNode primary, JsonNode fallback, String field) {
+        String value = text(primary, field);
+        return value != null ? value : text(fallback, field);
+    }
+
+    private Long firstLong(JsonNode primary, JsonNode fallback, String field) {
+        Long value = longValue(primary, field);
+        return value != null ? value : longValue(fallback, field);
+    }
+
+    private Integer integerValue(JsonNode primary, String field, JsonNode fallback) {
+        Integer value = integerValue(primary, field);
+        return value != null ? value : integerValue(fallback, field);
+    }
+
+    private String text(JsonNode node, String field) {
+        return node != null && node.hasNonNull(field) && node.path(field).isValueNode()
+                ? node.path(field).asText() : null;
+    }
+
+    private Boolean booleanValue(JsonNode node, String field) {
+        return node != null && node.has(field) && node.path(field).isBoolean() ? node.path(field).asBoolean() : null;
+    }
+
+    private Long longValue(JsonNode node, String field) {
+        return node != null && node.has(field) && node.path(field).canConvertToLong() ? node.path(field).asLong() : null;
+    }
+
+    private Integer integerValue(JsonNode node, String field) {
+        return node != null && node.has(field) && node.path(field).canConvertToInt() ? node.path(field).asInt() : null;
+    }
+
+    private BigDecimal money(JsonNode node, String field, Integer digits) {
+        return node != null && digits != null && node.has(field) && node.path(field).isNumber()
+                ? node.path(field).decimalValue().movePointLeft(Math.max(0, digits)) : null;
+    }
+
+    record ResolvedSymbol(long symbolId, JsonNode listed, JsonNode details) {
     }
 
     private static Long optionalPositiveLong(JsonNode node, String field) {
@@ -328,6 +397,133 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             throw exception;
         } catch (Exception exception) {
             throw new CTraderAuthenticationException("cTrader read-only synchronization failed", exception);
+        }
+    }
+
+    @Override
+    public CTraderExecutionInstrumentContract readExecutionInstrumentContract(CTraderToken token,
+                                                                                String externalAccountId,
+                                                                                String instrument) {
+        try (Session session = new Session(externalAccountId)) {
+            validateEnvironment();
+            authenticateApplication(session);
+            long accountId = Long.parseLong(externalAccountId);
+            requireAccountResponse(session.request(ACCOUNT_AUTH_REQUEST, ACCOUNT_AUTH_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)
+                            .put("accessToken", token.accessToken())), accountId);
+            return resolveSymbol(session, accountId, instrument);
+        } catch (CTraderAuthenticationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new CTraderAuthenticationException("cTrader instrument metadata read failed", exception);
+        }
+    }
+
+    @Override
+    public CTraderInstrumentMetadata readInstrumentMetadata(CTraderToken token,
+                                                             String externalAccountId,
+                                                             String instrument) {
+        try (Session session = new Session(externalAccountId)) {
+            validateEnvironment();
+            authenticateApplication(session);
+            long accountId = Long.parseLong(externalAccountId);
+            requireAccountResponse(session.request(ACCOUNT_AUTH_REQUEST, ACCOUNT_AUTH_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)
+                            .put("accessToken", token.accessToken())), accountId);
+
+            JsonNode account = findAuthorizedAccount(session.request(ACCOUNT_LIST_REQUEST, ACCOUNT_LIST_RESPONSE,
+                    objectMapper.createObjectNode().put("accessToken", token.accessToken())), externalAccountId);
+            JsonNode traderResponse = requireAccountResponse(session.request(TRADER_REQUEST, TRADER_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
+            JsonNode assets = requireAccountResponse(session.request(ASSET_LIST_REQUEST, ASSET_LIST_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
+            ResolvedSymbol resolved = resolveSymbolNodes(session, accountId, instrument);
+            return mapInstrumentMetadata(externalAccountId, account, traderResponse, assets, resolved);
+        } catch (CTraderAuthenticationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new CTraderAuthenticationException("cTrader economic metadata read failed", exception);
+        }
+    }
+
+    CTraderInstrumentMetadata mapInstrumentMetadata(String externalAccountId, JsonNode account,
+                                                    JsonNode traderResponse, JsonNode assets,
+                                                    ResolvedSymbol resolved) {
+        JsonNode trader = traderResponse.path("trader");
+        Integer moneyDigits = integerValue(trader, "moneyDigits");
+        return new CTraderInstrumentMetadata(
+                    new CTraderInstrumentMetadata.CTraderAccountFacts(
+                            externalAccountId,
+                            booleanValue(account, "isLive"),
+                            text(trader, "accountType"),
+                            assetName(assets, text(trader, "depositAssetId")),
+                            money(trader, "balance", moneyDigits),
+                            money(trader, "equity", moneyDigits),
+                            money(trader, "usedMargin", moneyDigits),
+                            money(trader, "freeMargin", moneyDigits),
+                            longValue(trader, "leverageInCents"),
+                            longValue(trader, "maxLeverageInCents"),
+                            integerValue(trader, "moneyDigits"),
+                            text(trader, "marginCalculationType")),
+                    new CTraderInstrumentMetadata.CTraderSymbolFacts(
+                            resolved.symbolId(),
+                            text(resolved.listed(), "symbolName"),
+                            firstText(resolved.details(), resolved.listed(), "description"),
+                            firstLong(resolved.details(), resolved.listed(), "symbolCategoryId"),
+                            assetName(assets, firstText(resolved.details(), resolved.listed(), "baseAssetId")),
+                            assetName(assets, firstText(resolved.details(), resolved.listed(), "quoteAssetId")),
+                            integerValue(resolved.details(), "digits", resolved.listed()),
+                            integerValue(resolved.details(), "pipPosition", resolved.listed()),
+                            longValue(resolved.details(), "lotSize"),
+                            longValue(resolved.details(), "minVolume"),
+                            longValue(resolved.details(), "maxVolume"),
+                            longValue(resolved.details(), "stepVolume"),
+                            longValue(resolved.details(), "commission"),
+                            text(resolved.details(), "commissionType"),
+                            longValue(resolved.details(), "minCommission"),
+                            text(resolved.details(), "minCommissionType"),
+                            longValue(resolved.details(), "swapLong"),
+                            longValue(resolved.details(), "swapShort"),
+                            text(resolved.details(), "swapCalculationType"),
+                            integerValue(resolved.details(), "tripleSwapDay"),
+                            text(resolved.details(), "tradingMode"),
+                            text(resolved.details(), "measurementUnits"),
+                            longValue(resolved.details(), "slDistance"),
+                            longValue(resolved.details(), "tpDistance"),
+                            text(resolved.details(), "distanceSetIn")));
+    }
+
+    @Override
+    public CTraderQuote readCurrentQuote(CTraderToken token, String externalAccountId, String instrument) {
+        try (Session session = new Session(externalAccountId)) {
+            validateEnvironment();
+            authenticateApplication(session);
+            long accountId = Long.parseLong(externalAccountId);
+            requireAccountResponse(session.request(ACCOUNT_AUTH_REQUEST, ACCOUNT_AUTH_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)
+                            .put("accessToken", token.accessToken())), accountId);
+            CTraderExecutionInstrumentContract symbol = resolveSymbol(session, accountId, instrument);
+            ObjectNode subscribe = objectMapper.createObjectNode()
+                    .put("ctidTraderAccountId", accountId)
+                    .put("subscribeToSpotTimestamp", true);
+            subscribe.putArray("symbolId").add(symbol.symbolId());
+            requireAccountResponse(session.request(SUBSCRIBE_SPOTS_REQUEST, SUBSCRIBE_SPOTS_RESPONSE, subscribe), accountId);
+            try {
+                JsonNode spot = session.awaitSpot(accountId, symbol.symbolId());
+                BigDecimal bid = CTraderPriceDecoder.decode(spot.path("bid").longValue(), symbol.digits());
+                BigDecimal ask = CTraderPriceDecoder.decode(spot.path("ask").longValue(), symbol.digits());
+                Instant observedAt = Instant.ofEpochMilli(spot.path("timestamp").longValue());
+                return new CTraderQuote(symbol.symbolName(), bid, ask, observedAt);
+            } finally {
+                ObjectNode unsubscribe = objectMapper.createObjectNode()
+                        .put("ctidTraderAccountId", accountId);
+                unsubscribe.putArray("symbolId").add(symbol.symbolId());
+                session.request(UNSUBSCRIBE_SPOTS_REQUEST, UNSUBSCRIBE_SPOTS_RESPONSE, unsubscribe);
+            }
+        } catch (CTraderAuthenticationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new CTraderAuthenticationException("cTrader quote read failed", exception);
         }
     }
 
@@ -628,6 +824,38 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 throw exception;
             } catch (Exception exception) {
                 throw new CTraderAuthenticationException("cTrader Open API response is invalid", exception);
+            }
+        }
+
+        private JsonNode awaitSpot(long accountId, long symbolId) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+            try {
+                while (System.nanoTime() < deadline) {
+                    String raw = messages.poll(1, TimeUnit.SECONDS);
+                    if (raw == null) continue;
+                    JsonNode response = objectMapper.readTree(raw);
+                    JsonNode payload = response.path("payload");
+                    if (response.path("payloadType").asInt() == SPOT_EVENT
+                            && payload.path("ctidTraderAccountId").asLong() == accountId
+                            && payload.path("symbolId").asLong() == symbolId) {
+                        if (payload.has("bid") && payload.has("ask") && payload.has("timestamp")) {
+                            return payload;
+                        }
+                        continue;
+                    }
+                    if (response.path("errorCode").isTextual()
+                            || payload.path("errorCode").isTextual()) {
+                        throw new CTraderAuthenticationException("cTrader Open API rejected the request");
+                    }
+                }
+                throw new CTraderAuthenticationException("cTrader quote facts are incomplete");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new CTraderAuthenticationException("cTrader quote request interrupted", exception);
+            } catch (CTraderAuthenticationException exception) {
+                throw exception;
+            } catch (Exception exception) {
+                throw new CTraderAuthenticationException("cTrader quote response is invalid", exception);
             }
         }
 

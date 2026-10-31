@@ -34,7 +34,7 @@ class CTraderMarketDataTest {
 
         assertThat(market.getSymbol()).isEqualTo("EUR/USD");
         assertThat(market.getProductType())
-                .isEqualTo(com.hope.trading.market_data.helper.InstrumentProductType.SPOT);
+                .isEqualTo(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
         assertThat(market.getMarketState().isTradable()).isFalse();
         assertThat(market.getMarketState().getTradingStatus()).isEqualTo(
                 com.hope.trading.market_data.helper.TradingStatus.CLOSED);
@@ -220,7 +220,7 @@ class CTraderMarketDataTest {
     }
 
     private CTraderMarketDataProperties properties() {
-        return propertiesWithProductType("SPOT");
+        return propertiesWithProductType("CFD");
     }
 
     private CTraderMarketDataProperties propertiesWithProductType(String productType) {

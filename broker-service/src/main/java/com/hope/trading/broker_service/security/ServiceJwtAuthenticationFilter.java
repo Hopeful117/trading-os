@@ -23,7 +23,7 @@ public class ServiceJwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        if (!request.getRequestURI().startsWith("/internal/")) {
+        if (!request.getRequestURI().startsWith("/internal/") || isUserReadOnlyValidationRequest(request)) {
             chain.doFilter(request, response);
             return;
         }
@@ -47,5 +47,10 @@ public class ServiceJwtAuthenticationFilter extends OncePerRequestFilter {
         } catch (RuntimeException failure) {
             response.sendError(401, "Invalid service credential");
         }
+    }
+
+    private boolean isUserReadOnlyValidationRequest(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.matches("/internal/v1/broker-accounts/[0-9a-fA-F-]+/ctrader/(instrument|quote|instrument/metadata)");
     }
 }

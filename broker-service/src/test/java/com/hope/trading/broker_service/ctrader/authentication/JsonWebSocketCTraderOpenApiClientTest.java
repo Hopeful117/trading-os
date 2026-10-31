@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
 import com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties;
+import com.hope.trading.broker_service.ctrader.metadata.CTraderInstrumentMetadata;
 import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -38,6 +39,33 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThatThrownBy(() -> client.submitOrder(null, request))
                 .isInstanceOf(CTraderSafetyException.class)
                 .hasMessage("cTrader execution is disabled by safety policy");
+    }
+
+    @Test
+    void validatesReadOnlyQuoteFactsWithExactDecimalPrices() {
+        var quote = new CTraderOpenApiClient.CTraderQuote(
+                "EUR/USD", new BigDecimal("1.12345"), new BigDecimal("1.12346"),
+                Instant.parse("2026-10-30T12:00:00Z"));
+
+        assertThat(quote.bid()).isEqualByComparingTo("1.12345");
+        assertThat(quote.ask()).isEqualByComparingTo("1.12346");
+        assertThat(quote.observedAt()).isEqualTo(Instant.parse("2026-10-30T12:00:00Z"));
+    }
+
+    @Test
+    void rejectsInvalidReadOnlyQuoteFacts() {
+        assertThatThrownBy(() -> new CTraderOpenApiClient.CTraderQuote(
+                "EUR/USD", BigDecimal.ZERO, BigDecimal.ONE, Instant.now()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("quote bid must be positive");
+        assertThatThrownBy(() -> new CTraderOpenApiClient.CTraderQuote(
+                "EUR/USD", BigDecimal.ONE, new BigDecimal("0.99"), Instant.now()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("quote ask must not be below bid");
+        assertThatThrownBy(() -> new CTraderOpenApiClient.CTraderQuote(
+                "EUR/USD", BigDecimal.ONE, BigDecimal.ONE, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("quote timestamp is required");
     }
 
     @Test
@@ -202,6 +230,56 @@ class JsonWebSocketCTraderOpenApiClientTest {
                 List.of(), List.of(), List.of(), null, now, now, false, List.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("observation timestamps are required");
+    }
+
+    @Test
+    void mapsProviderEconomicFactsAndLeavesMissingFactsNull() throws Exception {
+        JsonNode account = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"isLive":false}
+                """);
+        JsonNode trader = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"trader":{"accountType":"HEDGED","depositAssetId":1,
+                "balance":5000000,"moneyDigits":2,"leverageInCents":10000}}
+                """);
+        JsonNode assets = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"},
+                {"assetId":2,"name":"EUR"}]}
+        """);
+        var resolved = new JsonWebSocketCTraderOpenApiClient.ResolvedSymbol(1,
+                mapper.readTree("{\"symbolName\":\"EURUSD\"}"),
+                mapper.readTree("""
+                {"description":"Euro vs US Dollar","symbolCategoryId":7,"baseAssetId":2,
+                "quoteAssetId":1,"digits":5,"pipPosition":4,"lotSize":10000000,
+                "minVolume":100000,"maxVolume":10000000000,"stepVolume":100000,
+                "swapLong":-3,"swapShort":-1,"tripleSwapDay":5,"slDistance":0,
+                "tpDistance":0,"distanceSetIn":"POINTS"}
+                """));
+
+        CTraderInstrumentMetadata metadata = client.mapInstrumentMetadata("9001", account, trader, assets, resolved);
+
+        assertThat(metadata.account().providerLive()).isFalse();
+        assertThat(metadata.account().accountCurrency()).isEqualTo("USD");
+        assertThat(metadata.account().balance()).isEqualByComparingTo("50000");
+        assertThat(metadata.symbol().baseAsset()).isEqualTo("EUR");
+        assertThat(metadata.symbol().quoteAsset()).isEqualTo("USD");
+        assertThat(metadata.symbol().swapLong()).isEqualTo(-3L);
+        assertThat(metadata.symbol().commission()).isNull();
+        assertThat(metadata.symbol().distanceSetIn()).isEqualTo("POINTS");
+    }
+
+    @Test
+    void resolvesOnlyOneExactProviderSymbol() throws Exception {
+        assertThat(client.selectListedSymbol(mapper.readTree(
+                "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"}]}"), "eurusd")
+                .path("symbolId").asLong()).isEqualTo(1);
+        assertThatThrownBy(() -> client.selectListedSymbol(mapper.readTree(
+                "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"}]}"), "EUR/USD"))
+                .isInstanceOf(CTraderAuthenticationException.class)
+                .hasMessage("CTRADER_UNKNOWN_INSTRUMENT");
+        assertThatThrownBy(() -> client.selectListedSymbol(mapper.readTree(
+                "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"},{\"symbolId\":2,\"symbolName\":\"EURUSD\"}]}"), "EURUSD"))
+                .isInstanceOf(CTraderAuthenticationException.class)
+                .hasMessage("CTRADER_AMBIGUOUS_INSTRUMENT");
     }
 
     private CTraderReadOnlyObservation invokeMapper(JsonNode trader, JsonNode assets, JsonNode symbols,

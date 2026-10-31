@@ -49,10 +49,15 @@ class BrokerApiSecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
     @Test void ctraderOAuthCallbackIsReachableWithoutUserJwt() throws Exception {
-        mvc.perform(get("/api/v1/broker-accounts/ctrader/authorization/callback")
-                .queryParam("state", "invalid"))
-                .andExpect(status().isSeeOther())
-                .andExpect(header().string("Location", "/accounts?ctrader=failed"));
+         mvc.perform(get("/api/v1/broker-accounts/ctrader/authorization/callback")
+                 .queryParam("state", "invalid"))
+                 .andExpect(status().isSeeOther())
+                 .andExpect(header().string("Location", "/accounts?ctrader=failed"));
+    }
+    @Test void ctraderInstrumentMetadataRequiresUserJwt() throws Exception {
+        mvc.perform(get("/internal/v1/broker-accounts/{id}/ctrader/instrument/metadata", UUID.randomUUID())
+                .queryParam("instrument", "EURUSD"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test void historicalFeesAllowsAuthorizedServiceOnly() throws Exception {
