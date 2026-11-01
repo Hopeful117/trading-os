@@ -51,14 +51,15 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-        assertMigrationHistory(49);
+        assertMigrationHistory(50);
         assertCfdProjectionSchema();
         assertDailyDrawdownBoundarySchema();
         assertTradeExecutionProvenanceConstraints();
         assertBrokerPositionReconciliationSchema();
+        assertMarginPolicySchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("49");
+                 String.class)).isEqualTo("50");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -108,7 +109,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(49);
+                 Integer.class)).isEqualTo(50);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -157,9 +158,10 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-        assertMigrationHistory(49);
+        assertMigrationHistory(50);
         assertDailyDrawdownBoundarySchema();
         assertBrokerPositionReconciliationSchema();
+        assertMarginPolicySchema();
         assertThat(triggerExists("immutable_risk_evaluation_t1")).isTrue();
         assertThat(jdbc.queryForObject(
                 "select count(*) from challenge_definition where id = ? and definition_version = '1.0.0'",
@@ -257,7 +259,30 @@ class PostgresFreshInstallMigrationTest {
                 Integer.class, "fk_trade_execution_provenance_fill")).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from pg_constraint "
                         + "where connamespace = current_schema()::regnamespace and conname = ?",
-                Integer.class, "uk_trade_execution_provenance_fill")).isEqualTo(1);
+                 Integer.class, "uk_trade_execution_provenance_fill")).isEqualTo(1);
+    }
+
+    private void assertMarginPolicySchema() {
+        assertThat(tableExists("margin_policy")).isTrue();
+        assertThat(tableExists("margin_policy_assignment")).isTrue();
+        assertThat(jdbc.queryForObject(
+                "select data_type from information_schema.columns "
+                        + "where table_schema = current_schema() and table_name = 'margin_policy' "
+                        + "and column_name = 'margin_rate'", String.class)).isEqualTo("numeric");
+        assertThat(jdbc.queryForObject(
+                "select count(*) from pg_constraint "
+                        + "where connamespace = current_schema()::regnamespace "
+                        + "and conname in ('margin_policy_rate_positive', 'margin_policy_scale_valid', "
+                        + "'margin_policy_rate_scale_valid', 'margin_policy_fields_non_blank', "
+                        + "'margin_policy_effective_order')", Integer.class)).isEqualTo(5);
+        assertThat(jdbc.queryForObject(
+                "select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid "
+                        + "where c.relnamespace = current_schema()::regnamespace "
+                        + "and t.tgname = 'immutable_margin_policy'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "select count(*) from pg_constraint "
+                        + "where connamespace = current_schema()::regnamespace "
+                        + "and conname = 'margin_policy_assignment_fk'", Integer.class)).isEqualTo(1);
     }
 
     private void assertBrokerPositionReconciliationSchema() {
