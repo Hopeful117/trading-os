@@ -1,34 +1,16 @@
-import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { HttpErrorResponse } from '@angular/common/http';
-import { catchError, combineLatest, map, of, shareReplay, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, map, of, shareReplay, startWith, switchMap, tap } from 'rxjs';
 
 import { OpportunityResponse } from '../../../core/models/opportunity.model';
 import { OpportunityService } from '../../../core/services/opportunity.service';
-import { TradePlanService } from '../../../core/services/trade-plan.service';
-import { MarketService } from '../../../core/services/market.service';
-import { MarketResponse, marketProductTypeLabel } from '../../../core/models/market-response';
-import {
-  tradeFlowErrorMessage,
-  tradePreparationFailure,
-  TradePreparationFailure,
-} from '../../../core/utils/trade-flow-error';
 
-export type OpportunityDetailView =
-  | { status: 'loading' }
-  | { status: 'error' }
-  | { status: 'notFound' }
-  | {
-      status: 'loaded';
-      opportunity: OpportunityResponse;
-      accountId: string | null;
-      market: MarketResponse | null;
-    };
+export type OpportunityDetailView = { status: 'loading' } | { status: 'error' };
 
 @Component({
   selector: 'app-opportunity-details',
-  imports: [AsyncPipe, DatePipe, DecimalPipe, RouterLink],
+  imports: [AsyncPipe, RouterLink],
   templateUrl: './opportunity-details.html',
   styleUrl: './opportunity-details.scss',
 })
@@ -36,15 +18,6 @@ export class OpportunityDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly opportunityService = inject(OpportunityService);
-  private readonly tradePlanService = inject(TradePlanService);
-  private readonly marketService = inject(MarketService);
-
-  readonly productTypeLabel = marketProductTypeLabel;
-
-  preparing = false;
-  preparationError = false;
-  preparationErrorMessage = '';
-  preparationFailure: TradePreparationFailure | null = null;
 
   readonly view$ = combineLatest([this.route.paramMap, this.route.queryParamMap]).pipe(
     map(([params, queryParams]) => ({
@@ -53,117 +26,29 @@ export class OpportunityDetail {
     })),
     switchMap(({ opportunityId, accountId }) => {
       if (opportunityId === null) {
-        return of<OpportunityDetailView>({ status: 'notFound' });
+        return of<OpportunityDetailView>({ status: 'error' });
       }
 
       return this.opportunityService.findById(opportunityId).pipe(
-        switchMap((opportunity) =>
-          opportunity.marketId
-            ? this.marketService.findById(opportunity.marketId).pipe(
-                map((market) => ({
-                  status: 'loaded' as const,
-                  opportunity,
-                  accountId: opportunity.accountId ?? accountId,
-                  market,
-                })),
-              )
-            : of({
-                status: 'loaded' as const,
-                opportunity,
-                accountId: opportunity.accountId ?? accountId,
-                market: null,
-              }),
-        ),
-        catchError((error: unknown) =>
-          of<OpportunityDetailView>(
-            error instanceof HttpErrorResponse && error.status === 404
-              ? { status: 'notFound' }
-              : { status: 'error' },
-          ),
-        ),
+        tap((opportunity) => this.openCockpit(opportunity, accountId)),
+        map((): OpportunityDetailView => ({ status: 'loading' })),
+        catchError(() => of<OpportunityDetailView>({ status: 'error' })),
         startWith<OpportunityDetailView>({ status: 'loading' }),
       );
     }),
-    shareReplay({
-      bufferSize: 1,
-      refCount: true,
-    }),
+    shareReplay({ bufferSize: 1, refCount: true }),
   );
 
-  prepareTradePlan(
-    opportunityId: string,
-    opportunityVersion: number,
-    accountId: string,
-    marketId: string | null = null,
-  ): void {
-    if (this.preparing || !accountId) {
-      return;
-    }
-
-    this.preparing = true;
-    this.preparationError = false;
-    this.preparationFailure = null;
-    this.preparationErrorMessage = '';
-    this.tradePlanService
-      .createFromOpportunity(
-        opportunityId,
-        opportunityVersion,
-        accountId,
-        `${opportunityId}:${accountId}`,
-      )
-      .subscribe({
-        next: (created) => {
-          this.preparing = false;
-          const commands = [
-            '/trade-planning',
-            'plans',
-            created.tradePlanId,
-            'versions',
-            created.tradePlanVersion,
-          ];
-          const navigation = marketId ? { queryParams: { marketId } } : undefined;
-          void (navigation
-            ? this.router.navigate(commands, navigation)
-            : this.router.navigate(commands));
-        },
-        error: (error: unknown) => {
-          this.preparing = false;
-          this.preparationError = true;
-          this.preparationFailure = tradePreparationFailure(error);
-          this.preparationErrorMessage = tradeFlowErrorMessage(
-            error,
-            'The Trade Plan could not be created. Try again later.',
-          );
-        },
-      });
-  }
-
-  metricEntries(failure: TradePreparationFailure): [string, number][] {
-    return Object.entries(failure.metrics) as [string, number][];
-  }
-
-  safeList<T>(value: T[] | undefined): T[] {
-    return value ?? [];
-  }
-
-  hasValidThesis(thesis: OpportunityResponse['thesis']): boolean {
-    return (
-      thesis !== null &&
-      thesis !== undefined &&
-      typeof thesis.id === 'string' &&
-      thesis.id.length > 0 &&
-      thesis.version >= 1 &&
-      (thesis.state === 'NO_TRADE' || thesis.state === 'WATCH' || thesis.state === 'CANDIDATE')
-    );
-  }
-
-  canPrepare(opportunity: OpportunityResponse): boolean {
-    return (
-      opportunity.status === 'ACTIVE' &&
-      opportunity.thesis?.state === 'CANDIDATE' &&
-      this.hasValidThesis(opportunity.thesis) &&
-      opportunity.marketThesis !== null &&
-      opportunity.marketThesis !== undefined
-    );
+  private openCockpit(opportunity: OpportunityResponse, accountId: string | null): void {
+    void this.router.navigate(['/decision-workspace'], {
+      queryParams: {
+        opportunityId: opportunity.id,
+        opportunityVersion: opportunity.version,
+        marketId: opportunity.marketId,
+        ...(accountId || opportunity.accountId
+          ? { accountId: accountId || opportunity.accountId }
+          : {}),
+      },
+    });
   }
 }

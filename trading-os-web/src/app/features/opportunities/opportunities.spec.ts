@@ -208,10 +208,16 @@ describe('Opportunities', () => {
   });
 
   describe('navigation', () => {
-    it('opens the opportunity detail when no account is selected', () => {
+    it('opens the Decision Cockpit when no account is selected', () => {
       component.openOpportunity(mockOpportunities[0]);
 
-      expect(routerMock.navigate).toHaveBeenCalledWith(['/opportunities', 'o1']);
+      expect(routerMock.navigate).toHaveBeenCalledWith(['/decision-workspace'], {
+        queryParams: {
+          opportunityId: 'o1',
+          opportunityVersion: 2,
+          marketId: 'market-1',
+        },
+      });
     });
 
     it('opens the gated Decision Workspace when an account is selected', () => {

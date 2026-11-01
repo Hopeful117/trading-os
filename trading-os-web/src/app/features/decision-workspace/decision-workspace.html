@@ -37,7 +37,7 @@
       }
       @case ('ready') {
         <section
-          class="context-card"
+          class="context-card cockpit-context"
           data-testid="cockpit-context"
           aria-labelledby="cockpit-context-title"
         >
@@ -197,7 +197,7 @@
     }
   }
 
-  <section class="account-card" aria-labelledby="account-context-title">
+  <section class="account-card account-toolbar" aria-labelledby="account-context-title">
     <div class="section-heading">
       <div>
         <span class="eyebrow">Step 1</span>
@@ -312,89 +312,6 @@
           </section>
         }
         <div class="workstation-layout">
-          <aside class="selector-rail" aria-label="Account and market selection">
-            <section class="context-grid">
-              <article class="context-card account-summary">
-                <div class="section-heading">
-                  <div>
-                    <span class="eyebrow">Account context</span>
-                    <h2>{{ view.context.account.name }}</h2>
-                  </div>
-                  <span class="count-badge">{{ view.context.account.baseCurrency }}</span>
-                </div>
-                <dl>
-                  <div>
-                    <dt>Risk profile</dt>
-                    <dd>{{ view.context.account.riskProfileSemanticVersion ?? 'Unavailable' }}</dd>
-                  </div>
-                  <div>
-                    <dt>Planning profile</dt>
-                    <dd>{{ view.context.account.tradePlanningProfileVersion ?? 'Unavailable' }}</dd>
-                  </div>
-                </dl>
-              </article>
-
-              <article class="context-card markets-summary">
-                <div class="section-heading">
-                  <div>
-                    <span class="eyebrow">Market selection</span>
-                    <h2>Choose a market</h2>
-                  </div>
-                  <span class="count-badge"
-                    >{{ view.context.eligibleMarketIds.length }} eligible</span
-                  >
-                </div>
-
-                @if (view.context.eligibleMarketIds.length === 0) {
-                  <p class="state-message" data-testid="no-eligible-markets">
-                    No market is currently eligible for this account.
-                  </p>
-                } @else {
-                  <label class="market-search">
-                    <input
-                      type="search"
-                      data-testid="market-search"
-                      aria-label="Search available markets"
-                      placeholder="Search symbol, e.g. BNT/USD"
-                      [value]="marketSearch"
-                      (input)="setMarketSearch($any($event.target).value)"
-                    />
-                    <small
-                      >Filter the available markets
-                      {{ view.context.eligibleMarketIds.length }} markets.</small
-                    >
-                  </label>
-
-                  @if (eligibleMarkets(view.context).length === 0) {
-                    <p class="state-message" data-testid="market-search-empty">
-                      No eligible market matches “{{ marketSearch }}”.
-                    </p>
-                  } @else {
-                    <div class="market-list" data-testid="eligible-markets">
-                      @for (market of eligibleMarkets(view.context); track market.marketId) {
-                        <button
-                          type="button"
-                          class="market-option"
-                          [class.selected]="selectedMarketId === market.marketId"
-                          [attr.aria-pressed]="selectedMarketId === market.marketId"
-                          (click)="selectMarket(market.marketId, view.context)"
-                        >
-                          <strong>{{ market.symbol ?? market.marketId }}</strong>
-                          <span>{{ market.provider ?? 'Unknown provider' }}</span>
-                        </button>
-                      }
-                    </div>
-                    @if (eligibleMarkets(view.context).length === 40) {
-                      <small class="market-list-note"
-                        >Showing the first 40 matches. Refine your search.</small
-                      >
-                    }
-                  }
-                }
-              </article>
-            </section>
-          </aside>
-
           <section class="active-workspace" aria-label="Active market investigation">
             <app-scan-panel
               data-testid="market-navigator"
@@ -410,7 +327,7 @@
               <section class="workspace-empty-state" data-testid="workspace-select-market-state">
                 <span class="eyebrow">Investigation surface</span>
                 <h2>Select an eligible market</h2>
-                <p>Use the selector rail to load quote, chart, Trend Context, and Order Flow.</p>
+                <p>Use the Market Navigator to load quote, chart, Trend Context, and Order Flow.</p>
               </section>
             } @else if (selectedMarketId; as marketId) {
               @if (marketView$ | async; as marketView) {
@@ -951,131 +868,200 @@
 
                             @if (activeOpportunity.thesis; as thesis) {
                               <section
-                                class="market-section thesis-gate"
+                                class="market-section thesis-gate thesis-terminal"
                                 data-testid="market-thesis"
                               >
-                                <div class="section-heading">
+                                <div class="thesis-terminal-header">
                                   <div>
-                                    <span class="eyebrow">Market Thesis</span>
-                                    <h3>{{ thesis.state }}</h3>
+                                    <span class="eyebrow">Market Thesis · deterministic view</span>
+                                    <div class="thesis-title-line">
+                                      <h3>{{ thesis.instrument }}</h3>
+                                      <span class="thesis-state" [attr.data-state]="thesis.state">
+                                        {{ thesis.state }}
+                                      </span>
+                                      <span class="thesis-version">v{{ thesis.version }}</span>
+                                    </div>
                                   </div>
-                                  <span class="stream-badge">v{{ thesis.version }}</span>
+                                  <span class="thesis-authority">No execution authorization</span>
                                 </div>
+                                <div class="thesis-signal-grid">
+                                  <article class="thesis-signal thesis-signal--direction">
+                                    <span>Bias</span>
+                                    <strong>{{ thesis.scenario?.direction ?? 'NONE' }}</strong>
+                                  </article>
+                                  <article class="thesis-signal">
+                                    <span>Thesis state</span>
+                                    <strong>{{ thesis.state }}</strong>
+                                  </article>
+                                  <article class="thesis-signal">
+                                    <span>Valid until</span>
+                                    <strong>{{
+                                      thesis.validUntil
+                                        ? (thesis.validUntil | date: 'short')
+                                        : 'No expiry'
+                                    }}</strong>
+                                  </article>
+                                  <article class="thesis-signal">
+                                    <span>Evidence ledger</span>
+                                    <strong
+                                      >{{ thesis.supportingEvidence?.length ?? 0 }} support ·
+                                      {{ thesis.contradictingEvidence?.length ?? 0 }} conflict ·
+                                      {{ thesis.missingEvidence?.length ?? 0 }} missing</strong
+                                    >
+                                  </article>
+                                </div>
+
                                 @if (thesis.scenario; as scenario) {
-                                  <p>
-                                    <strong>{{ scenario.direction }}</strong> ·
-                                    {{ scenario.statement }}
+                                  <p class="thesis-statement">{{ scenario.statement }}</p>
+
+                                  <div class="thesis-gates">
+                                    <article class="thesis-gate-card thesis-gate-card--confirm">
+                                      <div class="thesis-card-heading">
+                                        <span class="eyebrow">Confirmation</span>
+                                        <span
+                                          >{{ scenario.confirmationConditions.length }} rules</span
+                                        >
+                                      </div>
+                                      @if (scenario.confirmationConditions.length > 0) {
+                                        <div class="thesis-condition-list">
+                                          @for (
+                                            condition of scenario.confirmationConditions;
+                                            track condition.code
+                                          ) {
+                                            <div class="thesis-condition">
+                                              <span class="thesis-condition-status">{{
+                                                condition.status
+                                              }}</span>
+                                              <div>
+                                                <strong>{{ condition.code }}</strong>
+                                                <small>{{ condition.explanation }}</small>
+                                              </div>
+                                            </div>
+                                          }
+                                        </div>
+                                      } @else {
+                                        <span class="thesis-empty"
+                                          >No confirmation rule available.</span
+                                        >
+                                      }
+                                    </article>
+
+                                    <article class="thesis-gate-card thesis-gate-card--invalidate">
+                                      <div class="thesis-card-heading">
+                                        <span class="eyebrow">Invalidation</span>
+                                        <span
+                                          >{{ scenario.invalidationConditions.length }} rules</span
+                                        >
+                                      </div>
+                                      @if (scenario.invalidationConditions.length > 0) {
+                                        <div class="thesis-condition-list">
+                                          @for (
+                                            condition of scenario.invalidationConditions;
+                                            track condition.code
+                                          ) {
+                                            <div class="thesis-condition">
+                                              <span class="thesis-condition-status">Watch</span>
+                                              <div>
+                                                <strong>{{ condition.code }}</strong>
+                                                <small>{{ condition.explanation }}</small>
+                                              </div>
+                                            </div>
+                                          }
+                                        </div>
+                                      } @else {
+                                        <span class="thesis-empty"
+                                          >No invalidation rule available.</span
+                                        >
+                                      }
+                                    </article>
+                                  </div>
+
+                                  @if (scenario.relevantLevels.length > 0) {
+                                    <div class="thesis-levels">
+                                      <div class="thesis-card-heading">
+                                        <span class="eyebrow">Key levels</span>
+                                        <span>Market map</span>
+                                      </div>
+                                      <div class="thesis-level-list">
+                                        @for (
+                                          level of scenario.relevantLevels;
+                                          track level.reference + level.role
+                                        ) {
+                                          <span class="thesis-level">
+                                            <strong>{{ level.role }}</strong>
+                                            {{ level.reference }} · {{ level.value }} ·
+                                            {{ level.timeframe }}
+                                          </span>
+                                        }
+                                      </div>
+                                    </div>
+                                  }
+                                } @else {
+                                  <p class="thesis-empty thesis-empty--prominent">
+                                    No actionable scenario is available for this thesis.
                                   </p>
                                 }
-                                <div class="detail-grid thesis-gate-grid">
-                                  <article class="detail-card">
-                                    <span class="eyebrow">Confirmation</span>
-                                    @if (thesis.scenario?.confirmationConditions?.length) {
-                                      <ul>
-                                        @for (
-                                          condition of thesis.scenario?.confirmationConditions;
-                                          track condition.code
-                                        ) {
-                                          <li>
-                                            <strong>{{ condition.code }}</strong> ·
-                                            {{ condition.status }} · {{ condition.explanation }}
-                                          </li>
-                                        }
-                                      </ul>
-                                    } @else {
-                                      <span>Unavailable</span>
-                                    }
-                                  </article>
-                                  <article class="detail-card">
-                                    <span class="eyebrow">Invalidation</span>
-                                    @if (thesis.scenario?.invalidationConditions?.length) {
-                                      <ul>
-                                        @for (
-                                          condition of thesis.scenario?.invalidationConditions;
-                                          track condition.code
-                                        ) {
-                                          <li>
-                                            <strong>{{ condition.code }}</strong> ·
-                                            {{ condition.explanation }}
-                                          </li>
-                                        }
-                                      </ul>
-                                    } @else {
-                                      <span>Unavailable</span>
-                                    }
-                                  </article>
-                                  <article class="detail-card">
-                                    <span class="eyebrow">Objective / obstacles</span>
-                                    @for (
-                                      level of thesis.scenario?.relevantLevels ?? [];
-                                      track level.reference + level.role
-                                    ) {
-                                      <span
-                                        ><strong>{{ level.role }}</strong> · {{ level.reference }} ·
-                                        {{ level.value }} · {{ level.timeframe }}</span
-                                      >
-                                    } @empty {
-                                      <span>Unavailable</span>
-                                    }
-                                  </article>
-                                </div>
-                                <div class="thesis-evidence-grid">
-                                  <article class="detail-card">
-                                    <span class="eyebrow">Supporting evidence</span>
-                                    @for (
-                                      evidence of thesis.supportingEvidence;
-                                      track evidence.evidenceId
-                                    ) {
-                                      <span
-                                        ><strong>{{ evidence.source }}</strong> ·
-                                        {{ evidence.reference }} · {{ evidence.explanation }}</span
-                                      >
-                                    } @empty {
-                                      <span>None available</span>
-                                    }
-                                  </article>
-                                  <article class="detail-card thesis-contradictions">
-                                    <span class="eyebrow">Contradictions</span>
-                                    @for (
-                                      evidence of thesis.contradictingEvidence;
-                                      track evidence.evidenceId
-                                    ) {
-                                      <span
-                                        ><strong>{{ evidence.severity ?? 'UNKNOWN' }}</strong> ·
-                                        {{ evidence.source }} · {{ evidence.explanation }}</span
-                                      >
-                                    } @empty {
-                                      <span>None recorded</span>
-                                    }
-                                  </article>
-                                  <article class="detail-card thesis-missing">
-                                    <span class="eyebrow">Missing evidence</span>
-                                    @for (
-                                      evidence of thesis.missingEvidence;
-                                      track evidence.evidenceId
-                                    ) {
-                                      <span
-                                        ><strong>{{ evidence.availability }}</strong> ·
-                                        {{ evidence.source }} · {{ evidence.explanation }}</span
-                                      >
-                                    } @empty {
-                                      <span>None recorded</span>
-                                    }
-                                  </article>
-                                </div>
-                                <div class="trend-context-meta">
-                                  <span>Evaluated {{ thesis.evaluatedAt | date: 'medium' }}</span>
-                                  <span>Cut-off {{ thesis.sourceCutoff | date: 'medium' }}</span>
-                                  <span
-                                    >Valid until
-                                    {{
-                                      thesis.validUntil
-                                        ? (thesis.validUntil | date: 'medium')
-                                        : 'Unavailable'
-                                    }}</span
-                                  >
-                                  <span>Fingerprint {{ thesis.inputFingerprint }}</span>
-                                </div>
+
+                                <details class="thesis-evidence-ledger">
+                                  <summary>
+                                    Evidence ledger
+                                    <span
+                                      >{{ thesis.supportingEvidence?.length ?? 0 }} supporting ·
+                                      {{ thesis.contradictingEvidence?.length ?? 0 }} contradictory
+                                      · {{ thesis.missingEvidence?.length ?? 0 }} missing</span
+                                    >
+                                  </summary>
+                                  <div class="thesis-evidence-grid">
+                                    <article class="thesis-evidence-card">
+                                      <span class="eyebrow">Supporting</span>
+                                      @for (
+                                        evidence of thesis.supportingEvidence ?? [];
+                                        track evidence.evidenceId
+                                      ) {
+                                        <span
+                                          ><strong>{{ evidence.source }}</strong> ·
+                                          {{ evidence.reference }} ·
+                                          {{ evidence.explanation }}</span
+                                        >
+                                      } @empty {
+                                        <span>None available</span>
+                                      }
+                                    </article>
+                                    <article class="thesis-evidence-card thesis-contradictions">
+                                      <span class="eyebrow">Contradictory</span>
+                                      @for (
+                                        evidence of thesis.contradictingEvidence ?? [];
+                                        track evidence.evidenceId
+                                      ) {
+                                        <span
+                                          ><strong>{{ evidence.severity ?? 'UNKNOWN' }}</strong> ·
+                                          {{ evidence.source }} · {{ evidence.explanation }}</span
+                                        >
+                                      } @empty {
+                                        <span>None recorded</span>
+                                      }
+                                    </article>
+                                    <article class="thesis-evidence-card thesis-missing">
+                                      <span class="eyebrow">Missing</span>
+                                      @for (
+                                        evidence of thesis.missingEvidence ?? [];
+                                        track evidence.evidenceId
+                                      ) {
+                                        <span
+                                          ><strong>{{ evidence.availability }}</strong> ·
+                                          {{ evidence.source }} · {{ evidence.explanation }}</span
+                                        >
+                                      } @empty {
+                                        <span>None recorded</span>
+                                      }
+                                    </article>
+                                  </div>
+                                  <div class="thesis-provenance">
+                                    <span>Evaluated {{ thesis.evaluatedAt | date: 'medium' }}</span>
+                                    <span>Cut-off {{ thesis.sourceCutoff | date: 'medium' }}</span>
+                                    <span>Fingerprint {{ thesis.inputFingerprint }}</span>
+                                  </div>
+                                </details>
                               </section>
                             } @else {
                               <p

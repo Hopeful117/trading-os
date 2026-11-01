@@ -130,6 +130,14 @@
   }
 }
 
+.market-search {
+  margin-top: 0.75rem;
+}
+
+.market-search input {
+  min-width: 0;
+}
+
 .retry-button,
 .run-button {
   border-radius: 9px;
