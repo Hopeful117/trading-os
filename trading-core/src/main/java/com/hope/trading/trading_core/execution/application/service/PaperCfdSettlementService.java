@@ -22,6 +22,7 @@ import com.hope.trading.trading_core.shared.domain.model.InstrumentFinancialCont
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.shared.domain.model.QuantityUnit;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
+import com.hope.trading.trading_core.shared.domain.model.SettlementCompatibilityPolicy;
 import com.hope.trading.trading_core.valuation.application.CfdValuationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,12 +31,19 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 
 /** Dedicated local accounting boundary for PAPER CFD exposure lifecycle. */
 @Service
 public class PaperCfdSettlementService {
+    public enum ProductIdentity {
+        CFD,
+        NON_CFD,
+        UNAVAILABLE
+    }
+
     private final BrokerAccountRepository brokerAccounts;
     private final AccountRepository accounts;
     private final MarketDataClient marketData;
@@ -59,15 +67,32 @@ public class PaperCfdSettlementService {
     }
 
     public boolean supports(ExecutionIntent intent) {
-        if (intent == null || intent.parameters() == null || marketData == null) return false;
-        return Optional.ofNullable(marketData.findAll()).orElse(List.of()).stream()
-                .anyMatch(market -> market != null
-                        && intent.parameters().instrument().equalsIgnoreCase(market.getSymbol())
-                        && market.getProductType() == InstrumentProductType.CFD);
+        if (resolveProductIdentity(intent) != ProductIdentity.CFD) return false;
+        boolean compatibleSettlement = accounts.findByBrokerAccountId(intent.brokerAccountId())
+                .map(account -> SettlementCompatibilityPolicy.isCompatible(
+                        account.getSettlementModel(), InstrumentProductType.CFD))
+                .orElse(false);
+        return compatibleSettlement;
+    }
+
+    public ProductIdentity resolveProductIdentity(ExecutionIntent intent) {
+        if (intent == null || intent.parameters() == null || marketData == null) {
+            return ProductIdentity.UNAVAILABLE;
+        }
+        List<MarketResponse> matches = Optional.ofNullable(marketData.findAll()).orElse(List.of()).stream()
+                .filter(market -> market != null
+                        && intent.parameters().instrument().equalsIgnoreCase(market.getSymbol()))
+                .toList();
+        if (matches.size() != 1 || matches.getFirst().getProductType() == null) {
+            return ProductIdentity.UNAVAILABLE;
+        }
+        return matches.getFirst().getProductType() == InstrumentProductType.CFD
+                ? ProductIdentity.CFD : ProductIdentity.NON_CFD;
     }
 
     @Transactional
     public Account refreshEquity(Account account) {
+        requireCompatible(account);
         requirePaperCashAccount(account);
         ensureCashBaseline(account);
         Projection projection = project(account, null);
@@ -91,6 +116,7 @@ public class PaperCfdSettlementService {
         }
         Account account = accounts.findByBrokerAccountId(brokerAccount.id())
                 .orElseThrow(() -> new IllegalStateException("PAPER account is unavailable"));
+        requireCompatible(account);
         requirePaperCashAccount(account);
         if (account.getUser() == null || !brokerAccount.ownerId().equals(account.getUser().getUserId())) {
             throw new IllegalStateException("PAPER account identity is inconsistent");
@@ -102,9 +128,23 @@ public class PaperCfdSettlementService {
                 provenance.findByBrokerOrderIdAndFillId(order.id().value(), fill.fillId());
         if (replay.isPresent()) return replay.get().tradeId();
 
+        boolean provenanceClaimed = false;
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT) {
+            UUID targetTradeId = intent.targetTradeId()
+                    .orElseThrow(() -> new IllegalStateException("CFD EXIT target is required"));
+            provenanceClaimed = provenance.saveIfAbsent(new TradeExecutionProvenanceStore.Provenance(
+                    UUID.randomUUID(), targetTradeId, attempt.id().value(), order.id().value(),
+                    fill.fillId(), fill.executedAt(), ExecutionMode.PAPER.name(), intent.purpose().name()));
+            if (!provenanceClaimed) {
+                return provenance.findByBrokerOrderIdAndFillId(order.id().value(), fill.fillId())
+                        .orElseThrow(() -> new IllegalStateException("PAPER CFD replay provenance is unavailable"))
+                        .tradeId();
+            }
+        }
+
         return intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY
                 ? entry(account, intent, attempt, order, fill)
-                : exit(account, intent, attempt, order, fill);
+                : exit(account, intent, attempt, order, fill, provenanceClaimed);
     }
 
     private UUID entry(Account account, ExecutionIntent intent, ExecutionAttempt attempt,
@@ -112,9 +152,12 @@ public class PaperCfdSettlementService {
         InstrumentFinancialContract contract = resolveContract(intent.parameters().instrument());
         BigDecimal signedQuantity = signed(intent.parameters().side(), fill.quantity());
         calculator.calculateGrossPnlQuote(contract, signedQuantity, fill.price(), fill.price());
+        Set<UUID> existingTradeIds = account.getTrades().stream()
+                .map(Trade::getTradeId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
 
         Trade trade = Trade.builder()
-                .tradeId(UUID.randomUUID())
                 .symbol(intent.parameters().instrument())
                 .type(intent.parameters().side() == ExecutionParameters.Side.BUY ? TradeType.BUY : TradeType.SELL)
                 .entryPrice(fill.price())
@@ -130,14 +173,23 @@ public class PaperCfdSettlementService {
         account.setEquity(account.getRealizedBalance());
         account.setValuationStatus(AccountValuationStatus.UNAVAILABLE);
         account.setValuedAt(fill.executedAt());
-        accounts.save(account);
+        Account persisted = accounts.save(account);
         accounts.flush();
-        record(trade.getTradeId(), intent, attempt, order, fill);
-        return trade.getTradeId();
+        Trade persistedTrade = persisted.getTrades().stream()
+                .filter(candidate -> candidate.getTradeId() != null
+                        && !existingTradeIds.contains(candidate.getTradeId()))
+                .findFirst()
+                .orElse(trade);
+        if (persistedTrade.getTradeId() == null) {
+            // Focused unit-test repositories may not emulate generated UUIDs.
+            persistedTrade.setTradeId(UUID.randomUUID());
+        }
+        record(persistedTrade.getTradeId(), intent, attempt, order, fill);
+        return persistedTrade.getTradeId();
     }
 
     private UUID exit(Account account, ExecutionIntent intent, ExecutionAttempt attempt,
-                      BrokerOrder order, BrokerOrder.Fill fill) {
+                       BrokerOrder order, BrokerOrder.Fill fill, boolean provenanceClaimed) {
         UUID targetId = intent.targetTradeId()
                 .orElseThrow(() -> new IllegalStateException("CFD EXIT target is required"));
         Trade trade = account.getTrades().stream()
@@ -180,7 +232,7 @@ public class PaperCfdSettlementService {
         account.setMarketDataTimestamp(remaining.marketDataTimestamp());
         accounts.save(account);
         accounts.flush();
-        record(trade.getTradeId(), intent, attempt, order, fill);
+        if (!provenanceClaimed) record(trade.getTradeId(), intent, attempt, order, fill);
         return trade.getTradeId();
     }
 
@@ -245,6 +297,16 @@ public class PaperCfdSettlementService {
     private void requirePaperCashAccount(Account account) {
         if (account == null || account.getSettlementModel() != SettlementModel.CASH) {
             throw new IllegalStateException("PAPER CFD accounting requires a CASH account");
+        }
+    }
+
+    private void requireCompatible(Account account) {
+        try {
+            SettlementCompatibilityPolicy.requireCompatible(account == null ? null : account.getSettlementModel(),
+                    InstrumentProductType.CFD);
+        } catch (IllegalArgumentException incompatible) {
+            throw new IllegalStateException("PAPER settlement model is incompatible with instrument product type",
+                    incompatible);
         }
     }
 

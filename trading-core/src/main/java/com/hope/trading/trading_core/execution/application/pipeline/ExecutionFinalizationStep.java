@@ -121,10 +121,18 @@ public final class ExecutionFinalizationStep {
     }
 
     private java.util.UUID settlePaper(ExecutionPipelineContext context) {
-        if (paperCfdSettlementService != null
-                && paperCfdSettlementService.supports(context.intent())) {
-            return paperCfdSettlementService.settle(
-                    context.intent(), context.attempt(), context.brokerOrder());
+        if (paperCfdSettlementService != null) {
+            var productIdentity = paperCfdSettlementService.resolveProductIdentity(context.intent());
+            if (productIdentity == PaperCfdSettlementService.ProductIdentity.UNAVAILABLE) {
+                throw new IllegalStateException("PAPER instrument product identity is unavailable or ambiguous");
+            }
+            if (productIdentity == PaperCfdSettlementService.ProductIdentity.CFD) {
+                if (!paperCfdSettlementService.supports(context.intent())) {
+                    throw new IllegalStateException("PAPER CFD settlement is unavailable or incompatible");
+                }
+                return paperCfdSettlementService.settle(
+                        context.intent(), context.attempt(), context.brokerOrder());
+            }
         }
         return paperSettlementService.settle(
                 context.intent(), context.attempt(), context.brokerOrder());

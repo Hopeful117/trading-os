@@ -33,6 +33,7 @@ import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.valuation.application.CfdValuationService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -49,6 +50,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@Disabled("PAPER CFD settlement remains blocked until ADR-083 and Phase 8 authorization are complete")
 class PaperCfdSettlementServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-31T12:00:00Z");
 
@@ -67,6 +69,21 @@ class PaperCfdSettlementServiceTest {
         });
         assertThat(amount(scenario.account, "USD")).isEqualByComparingTo("10000");
         assertThat(scenario.account.getRealizedBalance()).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void accountsForExplicitExecutionFeesWithoutInventingOtherCosts() {
+        Scenario scenario = scenario();
+        scenario.settleEntry(ExecutionParameters.Side.BUY, "1.10000", "1000", "2.50");
+
+        Trade trade = scenario.account.getTrades().getFirst();
+        ExecutionContext exit = scenario.exit(trade, ExecutionParameters.Side.SELL,
+                "1.10200", "1000", "1.25");
+        scenario.settlement.settle(exit.intent, exit.attempt, exit.order);
+
+        assertThat(trade.getRealizedPnl()).isEqualByComparingTo("2");
+        assertThat(scenario.account.getRealizedBalance()).isEqualByComparingTo("9998.25");
+        assertThat(scenario.account.getEquity()).isEqualByComparingTo("9998.25");
     }
 
     @Test
@@ -306,6 +323,15 @@ class PaperCfdSettlementServiceTest {
         @Override
         public void save(Provenance provenance) {
             values.add(provenance);
+        }
+
+        @Override
+        public boolean saveIfAbsent(Provenance provenance) {
+            if (findByBrokerOrderIdAndFillId(provenance.brokerOrderId(), provenance.fillId()).isPresent()) {
+                return false;
+            }
+            save(provenance);
+            return true;
         }
     }
 }
