@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import com.hope.trading.trading_core.risk.margin.MarginResolutionContext;
+import com.hope.trading.trading_core.market_data.valuation.MarketValuationPort;
 
 /** Read boundary for an authoritative broker/account proposed-order margin fact. */
 public interface RequiredMarginPort {
@@ -13,24 +14,58 @@ public interface RequiredMarginPort {
     record Request(UUID brokerAccountId, String instrument, String direction,
                    BigDecimal quantity, BigDecimal price, Instant requestedAt,
                    UUID financialAccountId, String reportingCurrency, String policyId,
-                   String policyVersion, String exposureSnapshotId, MarginResolutionContext context) {
+                   String policyVersion, String exposureSnapshotId, MarginResolutionContext context,
+                   MarketValuationPort.Snapshot valuation,
+                   MarketValuationPort.FreshnessRequirement freshnessRequirement) {
         public Request(UUID brokerAccountId, String instrument, String direction,
                        BigDecimal quantity, BigDecimal price, Instant requestedAt) {
             this(brokerAccountId, instrument, direction, quantity, price, requestedAt,
-                    null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null);
         }
         public Request(UUID brokerAccountId, String instrument, String direction,
                        BigDecimal quantity, BigDecimal price, Instant requestedAt,
                        UUID financialAccountId, String reportingCurrency, String policyId,
                        String policyVersion, String exposureSnapshotId) {
             this(brokerAccountId, instrument, direction, quantity, price, requestedAt,
-                    financialAccountId, reportingCurrency, policyId, policyVersion, exposureSnapshotId, null);
+                    financialAccountId, reportingCurrency, policyId, policyVersion, exposureSnapshotId,
+                    null, null, null);
+        }
+
+        public Request(UUID brokerAccountId, String instrument, String direction,
+                       BigDecimal quantity, BigDecimal price, Instant requestedAt,
+                       UUID financialAccountId, String reportingCurrency, String policyId,
+                       String policyVersion, String exposureSnapshotId, MarginResolutionContext context) {
+            this(brokerAccountId, instrument, direction, quantity, price, requestedAt,
+                    financialAccountId, reportingCurrency, policyId, policyVersion, exposureSnapshotId,
+                    context, null, null);
+        }
+
+        public Request(UUID brokerAccountId, String instrument, String direction,
+                       BigDecimal quantity, BigDecimal price, Instant requestedAt,
+                       UUID financialAccountId, String reportingCurrency, String policyId,
+                       String policyVersion, String exposureSnapshotId,
+                       MarginResolutionContext context, MarketValuationPort.Snapshot valuation,
+                       MarketValuationPort.FreshnessRequirement freshnessRequirement) {
+            this.brokerAccountId = brokerAccountId;
+            this.instrument = instrument;
+            this.direction = direction;
+            this.quantity = quantity;
+            this.price = price;
+            this.requestedAt = requestedAt;
+            this.financialAccountId = financialAccountId;
+            this.reportingCurrency = reportingCurrency;
+            this.policyId = policyId;
+            this.policyVersion = policyVersion;
+            this.exposureSnapshotId = exposureSnapshotId;
+            this.context = context;
+            this.valuation = valuation;
+            this.freshnessRequirement = freshnessRequirement;
         }
 
         public Request withContext(MarginResolutionContext value) {
             return new Request(brokerAccountId, instrument, direction, quantity, price, requestedAt,
                     financialAccountId, reportingCurrency, value.policyId().toString(), value.policyVersion(),
-                    value.exposureSnapshotId().toString(), value);
+                    value.exposureSnapshotId().toString(), value, valuation, freshnessRequirement);
         }
     }
     record Fact(BigDecimal amount, String currency, String sourceId,

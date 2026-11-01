@@ -278,24 +278,33 @@ public class ExecutionTimeRiskRevalidationService {
             notional = positive(plan.notional(), "PLAN_NOTIONAL_INVALID").multiply(sizingRate);
             expectedLoss = positive(plan.expectedMonetaryRisk(), "PLAN_EXPECTED_LOSS_INVALID").multiply(sizingRate);
         }
-        BigDecimal marginPrice = plan.entryIntent().price() != null
-                ? plan.entryIntent().price()
-                : current.facts().stream()
-                .filter(fact -> "INSTRUMENT".equals(fact.type()) && "proposed".equals(fact.id()))
-                .map(MarketValuationPort.Fact::sourcePrice)
-                .filter(java.util.Objects::nonNull)
-                .findFirst()
-                .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
+        boolean paper = "PAPER".equals(brokerAccount.executionMode().name());
+        BigDecimal marginPrice = paper
+                ? current.facts().stream()
+                    .filter(fact -> "INSTRUMENT".equals(fact.type()) && "proposed".equals(fact.id()))
+                    .map(MarketValuationPort.Fact::sourcePrice)
+                    .filter(java.util.Objects::nonNull)
+                    .findFirst()
+                    .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"))
+                : plan.entryIntent().price() != null
+                    ? plan.entryIntent().price()
+                    : current.facts().stream()
+                        .filter(fact -> "INSTRUMENT".equals(fact.type()) && "proposed".equals(fact.id()))
+                        .map(MarketValuationPort.Fact::sourcePrice)
+                        .filter(java.util.Objects::nonNull)
+                        .findFirst()
+                        .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
         Instant marginObservedAt = clock.instant();
-         RequiredMarginPort.Request marginRequest = new RequiredMarginPort.Request(
-                         brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                         marginPrice, marginObservedAt, account.getAccountId(), currency, null, null, null);
-         if ("PAPER".equals(brokerAccount.executionMode().name())) {
-             if (intent.riskApproval() == null || intent.riskApproval().evaluationId() == null)
-                 throw unavailable("T0_MARGIN_CONTEXT_MISSING");
-             marginRequest = marginRequest.withContext(persistence.marginContext(intent.riskApproval().evaluationId())
-                     .orElseThrow(() -> unavailable("T0_MARGIN_CONTEXT_MISSING")));
-         }
+        RequiredMarginPort.Request marginRequest = new RequiredMarginPort.Request(
+                brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
+                marginPrice, marginObservedAt, account.getAccountId(), currency, null, null, null,
+                null, current, MarketValuationPort.FreshnessRequirement.t1());
+        if (paper) {
+            if (intent.riskApproval() == null || intent.riskApproval().evaluationId() == null)
+                throw unavailable("T0_MARGIN_CONTEXT_MISSING");
+            marginRequest = marginRequest.withContext(persistence.marginContext(intent.riskApproval().evaluationId())
+                    .orElseThrow(() -> unavailable("T0_MARGIN_CONTEXT_MISSING")));
+        }
          RequiredMarginPort.Resolution marginResolution = requiredMargins.resolveDetailed(marginRequest);
          if (marginResolution == null) {
              marginResolution = requiredMargins.resolve(marginRequest)
