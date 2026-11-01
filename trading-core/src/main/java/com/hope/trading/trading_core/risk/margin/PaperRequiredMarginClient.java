@@ -4,12 +4,10 @@ import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepo
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.market_data.service.InstrumentFinancialContractResolver;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
-import com.hope.trading.trading_core.market_data.valuation.MarketValuationPort;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.repository.TradeRepository;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.math.BigDecimal;
@@ -23,17 +21,15 @@ public final class PaperRequiredMarginClient {
     private final TradeRepository trades;
     private final MarginPolicyPersistence policies;
     private final InstrumentFinancialContractResolver contracts;
-    private final MarketValuationPort market;
     private final Clock clock;
     private final PaperMarginExposureSnapshot exposures = new PaperMarginExposureSnapshot();
     private final PaperMarginCalculator calculator = new PaperMarginCalculator();
 
     public PaperRequiredMarginClient(AccountRepository accounts, BrokerAccountRepository brokerAccounts,
                                      TradeRepository trades, MarginPolicyPersistence policies,
-                                     InstrumentFinancialContractResolver contracts, MarketValuationPort market,
-                                     Clock clock) {
+                                     InstrumentFinancialContractResolver contracts, Clock clock) {
         this.accounts = accounts; this.brokerAccounts = brokerAccounts; this.trades = trades;
-        this.policies = policies; this.contracts = contracts; this.market = market; this.clock = clock;
+        this.policies = policies; this.contracts = contracts; this.clock = clock;
     }
 
     public Optional<RequiredMarginPort.Fact> resolve(RequiredMarginPort.Request request) {
@@ -76,16 +72,18 @@ public final class PaperRequiredMarginClient {
                     && !request.exposureSnapshotId().equals(exposure.snapshotId().toString())) return unavailable("EXPOSURE_SNAPSHOT_MISMATCH");
             if (exposure.contractId() != null && (!exposure.contractId().equals(contract.provenance().sourceId())
                     || !exposure.contractVersion().equals(contract.provenance().sourceVersion()))) return unavailable("CONTRACT_MISMATCH");
-            var valuation = market.value(account.getBaseCurrency(), request.requestedAt(),
-                    List.of(new MarketValuationPort.Instrument("proposed", request.instrument(),
-                            MarketValuationPort.PriceUse.LAST)), List.of(),
-                    MarketValuationPort.FreshnessRequirement.t0());
+            if (request.valuation() == null || request.freshnessRequirement() == null)
+                return unavailable("MARGIN_VALUATION_CONTEXT_MISSING");
+            var valuation = request.valuation();
             var matches = valuation.facts().stream().filter(f -> "INSTRUMENT".equals(f.type())
                     && "proposed".equals(f.id()) && "AVAILABLE".equals(f.status())).toList();
             if (matches.size() != 1) return unavailable("VALUATION_FACT_AMBIGUOUS");
             var fact = matches.getFirst();
             if (fact.sourcePrice() == null || fact.sourcePrice().signum() <= 0) return unavailable("MISSING_MARK");
-            Duration maxAge = Duration.parse(valuation.maxObservationAge());
+            Duration maxAge = request.freshnessRequirement().maxObservationAge();
+            if (valuation.maxObservationAge() == null
+                    || !Duration.parse(valuation.maxObservationAge()).equals(maxAge))
+                return unavailable("MARGIN_FRESHNESS_MISMATCH");
             if (!valuation.complete() || valuation.sourceVersion() < 1
                     || !account.getBaseCurrency().equalsIgnoreCase(valuation.reportingCurrency())
                     || fact.sourceEffectiveAt() == null || fact.sourceCapturedAt() == null
@@ -105,7 +103,7 @@ public final class PaperRequiredMarginClient {
                     maxAge, policy.reportingCurrencyScale(), request.requestedAt());
             if (!context.financialAccountId().equals(account.getAccountId()) || !context.brokerAccountId().equals(broker.id())) return unavailable("CONTEXT_IDENTITY_MISMATCH");
             var result = calculator.calculate(policy, new PaperMarginCalculator.Request(request.instrument(),
-                    exposure.signedQuantity(), signed(request), request.price(), contract.contractMultiplier(),
+                    exposure.signedQuantity(), signed(request), fact.sourcePrice(), contract.contractMultiplier(),
                     contract.quoteCurrency().value(), account.getBaseCurrency(), fact.conversionLegs(), request.requestedAt(),
                     maxAge, context.quoteToReportingRate()));
             if (!result.available()) return unavailable(result.reason());

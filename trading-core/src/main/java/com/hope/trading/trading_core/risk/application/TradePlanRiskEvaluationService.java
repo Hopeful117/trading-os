@@ -296,9 +296,10 @@ public class TradePlanRiskEvaluationService {
                 .findFirst()
                 .orElseThrow(() -> unavailable("CURRENT_MARKET_VALUATION_UNAVAILABLE"));
         Instant marginObservedAt = clock.instant();
-          RequiredMarginPort.Request marginRequest = new RequiredMarginPort.Request(
-                          brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
-                          marginPrice, marginObservedAt, account.getAccountId(), currency, null, null, null);
+        RequiredMarginPort.Request marginRequest = new RequiredMarginPort.Request(
+                brokerAccount.id(), plan.instrument(), plan.direction(), plan.quantity(),
+                marginPrice, marginObservedAt, account.getAccountId(), currency, null, null, null,
+                null, current, MarketValuationPort.FreshnessRequirement.t0());
           if ("PAPER".equals(brokerAccount.executionMode().name())) {
               RequiredMarginPort.Resolution contextResolution = requiredMargins.resolveDetailed(marginRequest);
               if (contextResolution == null) {

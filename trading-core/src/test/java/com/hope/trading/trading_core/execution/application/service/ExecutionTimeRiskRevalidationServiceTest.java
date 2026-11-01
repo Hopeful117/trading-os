@@ -280,6 +280,14 @@ class ExecutionTimeRiskRevalidationServiceTest {
 
         assertThat(outcome.approved()).as("decision=%s reason=%s", outcome.decision(), outcome.reasonCode()).isTrue();
         assertThat(outcome.decision()).isEqualTo(com.hope.trading.risk.domain.RiskTypes.RiskDecision.APPROVED);
+        ArgumentCaptor<RequiredMarginPort.Request> marginRequests = ArgumentCaptor.forClass(RequiredMarginPort.Request.class);
+        verify(requiredMargins, atLeastOnce()).resolveDetailed(marginRequests.capture());
+        RequiredMarginPort.Request t1MarginRequest = marginRequests.getValue();
+        assertThat(t1MarginRequest.price()).isEqualByComparingTo("50000");
+        assertThat(t1MarginRequest.valuation()).isNotNull();
+        assertThat(t1MarginRequest.valuation().facts()).anyMatch(fact -> "proposed".equals(fact.id())
+                && fact.sourcePrice().compareTo(new BigDecimal("50000")) == 0);
+        assertThat(t1MarginRequest.freshnessRequirement()).isEqualTo(MarketValuationPort.FreshnessRequirement.t1());
         ArgumentCaptor<List> valuationAssets = ArgumentCaptor.forClass(List.class);
         verify(market, atLeastOnce()).value(any(), any(), any(), valuationAssets.capture());
         assertThat(valuationAssets.getAllValues()).anyMatch(assets -> assets.stream()
