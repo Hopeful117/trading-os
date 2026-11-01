@@ -13,6 +13,9 @@ public interface TradeExecutionProvenanceStore {
 
     void save(Provenance provenance);
 
+    /** Atomically claims a broker-order/fill identity, returning whether this caller won. */
+    boolean saveIfAbsent(Provenance provenance);
+
     record Provenance(UUID id, UUID tradeId, UUID executionAttemptId, UUID brokerOrderId,
                       String fillId, Instant executedAt, String executionMode,
                       String executionPurpose) {
@@ -35,6 +38,11 @@ public interface TradeExecutionProvenanceStore {
             @Override
             public void save(Provenance provenance) {
                 // Compatibility constructors are used only by lightweight unit tests.
+            }
+
+            @Override
+            public boolean saveIfAbsent(Provenance provenance) {
+                throw new UnsupportedOperationException("Atomic provenance claim is unavailable");
             }
         };
     }

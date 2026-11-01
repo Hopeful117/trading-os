@@ -41,6 +41,13 @@ public class JpaTradeExecutionProvenanceStore implements TradeExecutionProvenanc
         repository.saveAndFlush(entity);
     }
 
+    @Override
+    public boolean saveIfAbsent(Provenance provenance) {
+        return repository.insertIfAbsent(provenance.id(), provenance.tradeId(), provenance.executionAttemptId(),
+                provenance.brokerOrderId(), provenance.fillId(), provenance.executedAt(),
+                provenance.executionMode(), provenance.executionPurpose()) == 1;
+    }
+
     private Provenance toDomain(TradeExecutionProvenanceEntity entity) {
         return new Provenance(entity.id, entity.tradeId, entity.executionAttemptId,
                 entity.brokerOrderId, entity.fillId, entity.executedAt,
