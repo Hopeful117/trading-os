@@ -19,8 +19,7 @@
 
 .page-header h1,
 .section-heading h2,
-.state-card h2,
-.account-summary h2 {
+.state-card h2 {
   margin: 0;
 }
 
@@ -45,6 +44,28 @@
   border-radius: 0.8rem;
   background: #111d2b;
   padding: 1.25rem;
+}
+
+.account-toolbar {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem 1rem;
+}
+
+.account-toolbar .section-heading {
+  margin: 0;
+}
+
+.account-toolbar .field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 34rem);
+  align-items: center;
+  max-width: none;
+  margin-top: 0;
+}
+
+.account-toolbar .field span {
+  color: #91a4ba;
 }
 
 .field {
@@ -310,6 +331,20 @@ select {
   margin-top: 1rem;
 }
 
+.cockpit-context {
+  padding: 1rem;
+}
+
+.cockpit-context .cockpit-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.cockpit-context .cockpit-metric {
+  padding: 0.7rem;
+}
+
 .market-notice {
   margin-top: 1rem;
   border-left: 3px solid #d49a43;
@@ -350,29 +385,6 @@ dd {
   padding: 0.25rem 0.65rem;
 }
 
-.market-search {
-  display: grid;
-  gap: 0.45rem;
-  margin-top: 1rem;
-}
-
-.market-search input {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #38506b;
-  border-radius: 0.45rem;
-  background: #0d1723;
-  color: #e6eef8;
-  padding: 0.75rem 0.85rem;
-  font: inherit;
-}
-
-.market-search small,
-.market-list-note {
-  color: #91a4ba;
-  font-size: 0.78rem;
-}
-
 .market-picker-empty {
   display: grid;
   gap: 0.35rem;
@@ -381,40 +393,6 @@ dd {
   border-radius: 0.55rem;
   padding: 1rem;
   color: #b7c9dc;
-}
-
-.market-list-note {
-  display: block;
-  margin-top: 0.75rem;
-}
-
-.market-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.market-option {
-  display: grid;
-  gap: 0.35rem;
-  border: 1px solid #2e4763;
-  border-radius: 0.55rem;
-  background: #162638;
-  color: #e6eef8;
-  padding: 0.85rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.market-option span {
-  color: #91a4ba;
-  font-size: 0.85rem;
-}
-
-.market-option.selected {
-  border-color: #65a9e8;
-  box-shadow: 0 0 0 1px #65a9e8;
 }
 
 .state-card {
@@ -460,6 +438,244 @@ dd {
 .opportunity-decision {
   display: grid;
   gap: 1rem;
+}
+
+.thesis-terminal,
+.thesis-gate-card,
+.thesis-levels,
+.thesis-evidence-card {
+  min-width: 0;
+  border: 1px solid #294662;
+  border-radius: 0.5rem;
+  background: #122235;
+}
+
+.thesis-terminal {
+  display: grid;
+  gap: 0.75rem;
+  overflow: hidden;
+  border-color: #315a7d;
+  background: #0f1b29;
+}
+
+.thesis-terminal-header,
+.thesis-card-heading,
+.thesis-provenance,
+.thesis-evidence-ledger summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.thesis-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.thesis-title-line h3,
+.thesis-statement {
+  margin: 0;
+}
+
+.thesis-state,
+.thesis-version,
+.thesis-authority {
+  border: 1px solid #416987;
+  border-radius: 999px;
+  padding: 0.2rem 0.45rem;
+  color: #a9d7f5;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.thesis-state[data-state='CANDIDATE'] {
+  border-color: #6b8d68;
+  color: #b7e2af;
+}
+.thesis-state[data-state='NO_TRADE'] {
+  border-color: #8d5555;
+  color: #ffaaa6;
+}
+.thesis-version {
+  border: 0;
+  padding: 0;
+  color: #91a4ba;
+}
+.thesis-authority {
+  border: 0;
+  color: #91a4ba;
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.thesis-signal-grid,
+.thesis-gates,
+.thesis-evidence-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.thesis-signal-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.thesis-gates {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.thesis-evidence-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.6rem;
+}
+
+.thesis-signal,
+.thesis-evidence-card {
+  display: grid;
+  align-content: start;
+  gap: 0.3rem;
+  padding: 0.65rem 0.75rem;
+  background: #142438;
+}
+
+.thesis-signal span,
+.thesis-card-heading > span:last-child {
+  color: #91a4ba;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.thesis-signal strong {
+  overflow: hidden;
+  color: #e6eef8;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thesis-signal--direction strong {
+  color: #8fc8f5;
+  font-size: 1.05rem;
+}
+.thesis-statement {
+  border-left: 3px solid #65a9e8;
+  background: #162b41;
+  color: #e6eef8;
+  font-size: 0.98rem;
+  line-height: 1.4;
+  padding: 0.75rem 1rem;
+}
+.thesis-gate-card,
+.thesis-levels {
+  padding: 0.75rem;
+}
+.thesis-gate-card--confirm {
+  border-top: 2px solid #6b8d68;
+}
+.thesis-gate-card--invalidate {
+  border-top: 2px solid #a8753e;
+}
+.thesis-condition-list,
+.thesis-level-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+}
+.thesis-condition {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.5rem;
+}
+.thesis-condition > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.thesis-condition strong,
+.thesis-condition small,
+.thesis-evidence-card > span:not(.eyebrow) {
+  overflow-wrap: anywhere;
+}
+.thesis-condition strong {
+  color: #e6eef8;
+  font-size: 0.78rem;
+}
+.thesis-condition small,
+.thesis-empty {
+  color: #91a4ba;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+.thesis-condition-status {
+  border-radius: 0.25rem;
+  background: #1b4b76;
+  color: #c8e8ff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.2rem 0.3rem;
+  text-transform: uppercase;
+}
+.thesis-levels {
+  background: #101f30;
+}
+.thesis-level-list {
+  display: flex;
+  flex-wrap: wrap;
+}
+.thesis-level {
+  border: 1px solid #38506b;
+  border-radius: 0.3rem;
+  color: #b7c9dc;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+}
+.thesis-level strong,
+.thesis-evidence-card strong {
+  color: #e6eef8;
+}
+.thesis-empty {
+  display: block;
+  margin-top: 0.6rem;
+}
+.thesis-empty--prominent {
+  margin: 0;
+  border: 1px dashed #38506b;
+  padding: 0.75rem;
+}
+.thesis-evidence-ledger {
+  border-top: 1px solid #294662;
+  padding-top: 0.7rem;
+}
+.thesis-evidence-ledger summary {
+  color: #c8d9ea;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.thesis-evidence-ledger summary span {
+  color: #91a4ba;
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+.thesis-evidence-card {
+  color: #91a4ba;
+  font-size: 0.73rem;
+  line-height: 1.35;
+}
+.thesis-contradictions {
+  border-color: #8d5555;
+}
+.thesis-missing {
+  border-color: #a8753e;
+}
+.thesis-provenance {
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+  color: #71869c;
+  font-size: 0.68rem;
 }
 
 .opportunity-validity--warning {
@@ -532,20 +748,7 @@ dd {
 }
 
 .workstation-layout {
-  display: grid;
-  grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
-  gap: 0.75rem;
-}
-.selector-rail {
-  display: grid;
-  gap: 0.75rem;
-}
-.selector-rail > * {
-  width: 100%;
-  min-width: 0;
-}
-.selector-rail .context-grid {
-  grid-template-columns: 1fr;
+  display: block;
 }
 .active-workspace {
   min-width: 0;
@@ -586,9 +789,6 @@ dd {
 }
 
 @media (max-width: 1024px) {
-  .workstation-layout {
-    grid-template-columns: 15rem minmax(0, 1fr);
-  }
   .market-context {
     grid-template-columns: 1fr;
     grid-template-areas: 'quote' 'chart' 'action' 'trend' 'order' 'constraints';
@@ -599,8 +799,25 @@ dd {
   .decision-workspace {
     padding: 0.75rem;
   }
-  .workstation-layout {
+  .account-toolbar .field {
     grid-template-columns: 1fr;
+  }
+  .account-toolbar .field select {
+    width: 100%;
+  }
+  .cockpit-context .cockpit-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .thesis-signal-grid,
+  .thesis-gates,
+  .thesis-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+  .thesis-terminal-header,
+  .thesis-card-heading,
+  .thesis-evidence-ledger summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .trend-context-summary,
   .opportunity-stages,

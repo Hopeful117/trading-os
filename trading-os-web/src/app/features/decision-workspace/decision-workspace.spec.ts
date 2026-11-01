@@ -296,8 +296,9 @@ describe('DecisionWorkspace', () => {
     await fixture.whenStable();
 
     expect(contextServiceMock.resolve).toHaveBeenCalledWith(account.accountId);
-    expect(fixture.nativeElement.querySelector('[data-testid="eligible-markets"]')).toBeTruthy();
-    expect(fixture.nativeElement.textContent).toContain('BTC/USD');
+    expect(fixture.nativeElement.querySelector('[data-testid="market-navigator"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="eligible-markets"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Market navigator');
     expect(fixture.nativeElement.querySelector('[data-testid="excluded-markets"]')).toBeNull();
   });
 
@@ -475,20 +476,16 @@ describe('DecisionWorkspace', () => {
     expect(text).not.toContain('No account selected');
   });
 
-  it('shows the available market catalogue and filters it by search', async () => {
+  it('uses the Market Navigator as the only visible market selection surface', async () => {
     component.selectAccount(account.accountId);
     fixture.detectChanges();
     await fixture.whenStable();
 
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('[data-testid="eligible-markets"]')).toBeTruthy();
-    expect(element.textContent).toContain('BTC/USD');
-    expect(element.textContent).toContain('ETH/USD');
-
-    component.setMarketSearch('btc');
-    fixture.detectChanges();
-    expect(element.textContent).toContain('BTC/USD');
-    expect(element.textContent).not.toContain('ETH/USD');
+    expect(element.querySelector('[data-testid="market-navigator"]')).toBeTruthy();
+    expect(element.querySelector('[data-testid="eligible-markets"]')).toBeNull();
+    expect(element.querySelector('[data-testid="market-search"]')).toBeNull();
+    expect(element.textContent).toContain('Scan the eligible universe');
   });
 
   it('clears the selected market when the account changes', () => {

@@ -428,6 +428,51 @@ describe('ScanPanel', () => {
       expect(options[0].textContent).toContain('ETH/EUR');
     });
 
+    it('filters the specific-market catalogue by symbol, asset, provider, or market id', async () => {
+      await createComponent();
+      fixture.nativeElement.querySelector('[data-testid="specific-scope"]').click();
+      await fixture.whenStable();
+
+      const search = fixture.nativeElement.querySelector(
+        '[data-testid="specific-market-search"]',
+      ) as HTMLInputElement;
+      expect(search).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelectorAll('[data-testid="market-select"] option').length,
+      ).toBe(2);
+
+      search.value = 'eth';
+      search.dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+
+      const options = fixture.nativeElement.querySelectorAll(
+        '[data-testid="market-select"] option',
+      );
+      expect(options.length).toBe(1);
+      expect(options[0].textContent).toContain('ETH/EUR');
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="specific-market-search-empty"]'),
+      ).toBeNull();
+    });
+
+    it('shows a clear empty state when the specific-market search has no match', async () => {
+      await createComponent();
+      fixture.nativeElement.querySelector('[data-testid="specific-scope"]').click();
+      await fixture.whenStable();
+
+      const search = fixture.nativeElement.querySelector(
+        '[data-testid="specific-market-search"]',
+      ) as HTMLInputElement;
+      search.value = 'missing';
+      search.dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+
+      expect(fixture.nativeElement.querySelector('[data-testid="market-select"]')).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="specific-market-search-empty"]'),
+      ).not.toBeNull();
+    });
+
     it('sorts the specific-market catalogue without changing selected scan ids', async () => {
       marketServiceMock.findAll.mockReturnValue(of([markets[1], markets[0], markets[2]]));
       activeScanServiceMock.resolveScope.mockReturnValue(

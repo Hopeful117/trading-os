@@ -37,6 +37,7 @@ import { AccountService } from '../../../core/services/account.service';
 import { ActiveScanService } from '../../../core/services/active-scan.service';
 import { MarketService } from '../../../core/services/market.service';
 import { MarketDiscoveryService } from '../../../core/services/market-discovery.service';
+import { v4 as uuidv4 } from 'uuid';
 import { SCAN_POLL_INTERVAL_MS } from './scan-poll-interval';
 
 export type ScanSessionError = 'CONFLICT' | 'UNAUTHORIZED' | 'UNAVAILABLE' | 'INELIGIBLE';
@@ -89,6 +90,7 @@ export class ScanPanel {
 
   accountId = '';
   objective = '';
+  marketSearch = '';
   scopeMode: ScanScopeMode | '' = '';
   selectedMarketIds: string[] = [];
   resultFilter: ScanResultFilter = 'ALL';
@@ -279,6 +281,20 @@ export class ScanPanel {
     );
   }
 
+  filteredSelectableMarkets(markets: MarketResponse[]): MarketResponse[] {
+    const query = this.marketSearch.trim().toLowerCase();
+    return this.selectableMarkets(markets).filter(
+      (market) =>
+        !query ||
+        market.marketId.toLowerCase().includes(query) ||
+        this.marketDiscovery.matchesSearch(market, query),
+    );
+  }
+
+  setMarketSearch(value: string): void {
+    this.marketSearch = value;
+  }
+
   readable(value: string): string {
     return value.replaceAll('_', ' ').toLowerCase();
   }
@@ -306,6 +322,7 @@ export class ScanPanel {
 
   private resetForAccount(): void {
     this.objective = '';
+    this.marketSearch = '';
     this.scopeMode = '';
     this.selectedMarketIds = [];
     this.resultFilter = 'ALL';
@@ -317,12 +334,16 @@ export class ScanPanel {
     return market.marketState.tradable || market.provider.toUpperCase() === 'CTRADER';
   }
 
+  private idempotencyKey(): string {
+    return globalThis.crypto?.randomUUID?.() ?? uuidv4();
+  }
+
   private runSession(
     command: CreateActiveScanRequest,
     pollIntervalMs: number,
   ): Observable<ScanPanelView> {
     return this.preflight(command).pipe(
-      switchMap(() => this.activeScanService.createScan(command, crypto.randomUUID())),
+      switchMap(() => this.activeScanService.createScan(command, this.idempotencyKey())),
       switchMap((created) => {
         const scans$ = isActiveScanTerminal(created.status)
           ? of(created)

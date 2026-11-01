@@ -85,16 +85,12 @@ export class Opportunities {
 
   openOpportunity(opportunity: OpportunityResponse): void {
     const accountId = this.selectedAccountId || opportunity.accountId || '';
-    if (!accountId) {
-      void this.router.navigate(['/opportunities', opportunity.id]);
-      return;
-    }
     void this.router.navigate(['/decision-workspace'], {
       queryParams: {
         opportunityId: opportunity.id,
         opportunityVersion: opportunity.version,
         marketId: opportunity.marketId,
-        accountId,
+        ...(accountId ? { accountId } : {}),
       },
     });
   }

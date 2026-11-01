@@ -105,25 +105,45 @@
         <button type="button" class="retry-button" (click)="reloadMarkets()">Retry</button>
       </div>
     } @else if (scopeMode === 'SPECIFIC') {
-      <label class="field market-picker">
-        <span>Markets</span>
-        <select
-          multiple
-          name="scanMarketIds"
-          [(ngModel)]="selectedMarketIds"
-          data-testid="market-select"
-        >
-          @for (market of selectableMarkets(catalogue.markets); track market.marketId) {
-            <option [value]="market.marketId">
-              {{ market.symbol }} · {{ marketProductType(market.marketId) }} · {{ market.provider }}
-            </option>
-          }
-        </select>
-        <small
-          >{{ selectedMarketIds.length }} selected. Closed or non-tradable markets are not
-          selectable; data freshness is checked by the backend when the scan starts.</small
-        >
+      <label class="field market-search">
+        <span>Find specific markets</span>
+        <input
+          type="search"
+          name="scanMarketSearch"
+          [value]="marketSearch"
+          (input)="setMarketSearch($any($event.target).value)"
+          placeholder="Search symbol, asset or provider"
+          data-testid="specific-market-search"
+          autocomplete="off"
+        />
+        <small>Search the eligible catalogue, then select one or more markets.</small>
       </label>
+      @if (filteredSelectableMarkets(catalogue.markets).length > 0) {
+        <label class="field market-picker">
+          <span>Markets · {{ filteredSelectableMarkets(catalogue.markets).length }} found</span>
+          <select
+            multiple
+            name="scanMarketIds"
+            [(ngModel)]="selectedMarketIds"
+            data-testid="market-select"
+          >
+            @for (market of filteredSelectableMarkets(catalogue.markets); track market.marketId) {
+              <option [value]="market.marketId">
+                {{ market.symbol }} · {{ marketProductType(market.marketId) }} ·
+                {{ market.provider }}
+              </option>
+            }
+          </select>
+          <small
+            >{{ selectedMarketIds.length }} selected. Closed or non-tradable markets are not
+            selectable; data freshness is checked by the backend when the scan starts.</small
+          >
+        </label>
+      } @else {
+        <p class="catalogue-note" data-testid="specific-market-search-empty">
+          No eligible market matches “{{ marketSearch }}”.
+        </p>
+      }
     }
   }
 

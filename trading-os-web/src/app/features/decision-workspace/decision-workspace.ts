@@ -44,7 +44,6 @@ import { AccountService } from '../../core/services/account.service';
 import { DashboardPollEvent, DashboardService } from '../../core/services/dashboard.service';
 import { DecisionContextService } from '../../core/services/decision-context.service';
 import { MarketDataStreamService } from '../../core/services/market-data-stream.service';
-import { MarketDiscoveryService } from '../../core/services/market-discovery.service';
 import { MarketService } from '../../core/services/market.service';
 import { OpportunityService } from '../../core/services/opportunity.service';
 import { TradePlanService } from '../../core/services/trade-plan.service';
@@ -131,7 +130,6 @@ export class DecisionWorkspace {
   private readonly trendContextService = inject(TrendContextService);
   private readonly marketService = inject(MarketService);
   private readonly marketDataStreamService = inject(MarketDataStreamService);
-  private readonly marketDiscovery = inject(MarketDiscoveryService);
   private readonly opportunityService = inject(OpportunityService);
   private readonly tradePlanService = inject(TradePlanService);
   private readonly route = inject(ActivatedRoute);
@@ -163,7 +161,6 @@ export class DecisionWorkspace {
   selectedAccountId: string | null = null;
   selectedMarketId: string | null = null;
   manualTradeOpen = false;
-  marketSearch = '';
   showTrendContextDetails = false;
   opportunity: OpportunityResponse | null = null;
   opportunityDecision: OpportunityDecision = null;
@@ -560,7 +557,6 @@ export class DecisionWorkspace {
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
     this.opportunityDecision = null;
-    this.marketSearch = '';
     this.showTrendContextDetails = false;
     this.dashboardAccountSubject.next(accountId || null);
     this.clearActiveSubscriptions().subscribe(() => {
@@ -587,7 +583,6 @@ export class DecisionWorkspace {
     this.selectedMarketId = null;
     this.manualTradeOpen = false;
     this.opportunityDecision = null;
-    this.marketSearch = '';
     this.showTrendContextDetails = false;
     this.opportunityRequestKey = null;
     this.dashboardAccountSubject.next(null);
@@ -641,27 +636,6 @@ export class DecisionWorkspace {
     this.opportunityDecision = null;
     this.showTrendContextDetails = false;
     this.clearActiveSubscriptions().subscribe(() => this.selectedMarketSubject.next(marketId));
-  }
-
-  setMarketSearch(value: string): void {
-    this.marketSearch = value.trim().toUpperCase();
-  }
-
-  eligibleMarkets(context: DecisionContextResponse): DecisionContextResponse['markets'] {
-    const query = this.marketSearch;
-    return context.markets
-      .filter((market) => market.eligible)
-      .filter((market) => {
-        if (query.length === 0) {
-          return true;
-        }
-
-        return (
-          this.marketDiscovery.matchesSearch(market, query) ||
-          market.marketId.toUpperCase().includes(query)
-        );
-      })
-      .slice(0, 40);
   }
 
   openManualTrade(): void {
