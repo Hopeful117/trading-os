@@ -23,7 +23,7 @@ public class MarginPolicyPersistence {
                         + "and p.instrument=:instrument and a.effectiveAt<=:at order by a.effectiveAt desc, a.id desc",
                 MarginPolicyEntity.class);
         return query.setParameter("account", accountId).setParameter("instrument", instrument)
-                .setParameter("at", at).setMaxResults(1).getResultStream().findFirst().map(this::model);
+                .setParameter("at", at).setMaxResults(1).getResultList().stream().findFirst().map(this::model);
     }
 
     public Optional<MarginPolicy> version(UUID policyId, String version) {
@@ -59,7 +59,7 @@ public class MarginPolicyPersistence {
             throw new IllegalArgumentException("invalid margin policy assignment");
         var current = entityManager.createQuery("select a from MarginPolicyAssignmentEntity a where a.accountId=:account order by a.effectiveAt desc, a.id desc",
                         MarginPolicyAssignmentEntity.class).setParameter("account", accountId).setMaxResults(1)
-                .setLockMode(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE).getResultStream().findFirst();
+                .setLockMode(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE).getResultList().stream().findFirst();
         if (expectedAssignmentVersion >= 0 && (current.isEmpty() || current.get().version != expectedAssignmentVersion))
             throw new IllegalStateException("margin policy assignment version conflict");
         MarginPolicyAssignmentEntity assignment = new MarginPolicyAssignmentEntity();
@@ -88,7 +88,7 @@ class MarginPolicyEntity {
     @jakarta.persistence.Id UUID id;
     @jakarta.persistence.Id @jakarta.persistence.Column(length = 64) String version;
     @jakarta.persistence.Column(nullable = false, length = 160) String instrument;
-    @jakarta.persistence.Column(name = "margin_rate", nullable = false, precision = 38, scale = 18) BigDecimal marginRate;
+    @jakarta.persistence.Column(name = "margin_rate", nullable = false, columnDefinition = "NUMERIC") BigDecimal marginRate;
     @jakarta.persistence.Column(name = "source_category", nullable = false, length = 32) String sourceCategory;
     @jakarta.persistence.Column(name = "source_reference", nullable = false, length = 255) String sourceReference;
     @jakarta.persistence.Column(name = "effective_at", nullable = false) Instant effectiveAt;
