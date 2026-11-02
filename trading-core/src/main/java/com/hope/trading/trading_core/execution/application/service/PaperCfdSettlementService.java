@@ -24,6 +24,8 @@ import com.hope.trading.trading_core.shared.domain.model.QuantityUnit;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.shared.domain.model.SettlementCompatibilityPolicy;
 import com.hope.trading.trading_core.valuation.application.CfdValuationService;
+import jakarta.persistence.EntityManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +33,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -50,20 +51,24 @@ public class PaperCfdSettlementService {
     private final TradeExecutionProvenanceStore provenance;
     private final CfdValuationService valuation;
     private final Clock clock;
+    private final EntityManager entityManager;
     private final CfdFinancialCalculator calculator = new CfdFinancialCalculator();
 
+    @Autowired
     public PaperCfdSettlementService(BrokerAccountRepository brokerAccounts,
                                      AccountRepository accounts,
                                      MarketDataClient marketData,
                                      TradeExecutionProvenanceStore provenance,
                                      CfdValuationService valuation,
-                                     Clock clock) {
+                                     Clock clock,
+                                     EntityManager entityManager) {
         this.brokerAccounts = brokerAccounts;
         this.accounts = accounts;
         this.marketData = marketData;
         this.provenance = provenance;
         this.valuation = valuation;
         this.clock = clock;
+        this.entityManager = entityManager;
     }
 
     public boolean supports(ExecutionIntent intent) {
@@ -126,9 +131,22 @@ public class PaperCfdSettlementService {
         validateFill(intent, fill);
         Optional<TradeExecutionProvenanceStore.Provenance> replay =
                 provenance.findByBrokerOrderIdAndFillId(order.id().value(), fill.fillId());
-        if (replay.isPresent()) return replay.get().tradeId();
+        if (replay.isPresent()) {
+            return Optional.ofNullable(replay.get().tradeId())
+                    .orElseThrow(() -> new IllegalStateException("PAPER CFD replay provenance is incomplete"));
+        }
 
         boolean provenanceClaimed = false;
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
+            provenanceClaimed = provenance.claimEntryIfAbsent(new TradeExecutionProvenanceStore.Provenance(
+                    UUID.randomUUID(), null, attempt.id().value(), order.id().value(),
+                    fill.fillId(), fill.executedAt(), ExecutionMode.PAPER.name(), intent.purpose().name()));
+            if (!provenanceClaimed) {
+                return provenance.findByBrokerOrderIdAndFillId(order.id().value(), fill.fillId())
+                        .map(TradeExecutionProvenanceStore.Provenance::tradeId)
+                        .orElseThrow(() -> new IllegalStateException("PAPER CFD entry replay provenance is unavailable"));
+            }
+        }
         if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.EXIT) {
             UUID targetTradeId = intent.targetTradeId()
                     .orElseThrow(() -> new IllegalStateException("CFD EXIT target is required"));
@@ -142,9 +160,13 @@ public class PaperCfdSettlementService {
             }
         }
 
-        return intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY
+        UUID tradeId = intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY
                 ? entry(account, intent, attempt, order, fill)
                 : exit(account, intent, attempt, order, fill, provenanceClaimed);
+        if (intent.purpose() == com.hope.trading.trading_core.execution.domain.model.ExecutionPurpose.ENTRY) {
+            provenance.completeEntryClaim(order.id().value(), fill.fillId(), tradeId);
+        }
+        return tradeId;
     }
 
     private UUID entry(Account account, ExecutionIntent intent, ExecutionAttempt attempt,
@@ -152,11 +174,6 @@ public class PaperCfdSettlementService {
         InstrumentFinancialContract contract = resolveContract(intent.parameters().instrument());
         BigDecimal signedQuantity = signed(intent.parameters().side(), fill.quantity());
         calculator.calculateGrossPnlQuote(contract, signedQuantity, fill.price(), fill.price());
-        Set<UUID> existingTradeIds = account.getTrades().stream()
-                .map(Trade::getTradeId)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-
         Trade trade = Trade.builder()
                 .symbol(intent.parameters().instrument())
                 .type(intent.parameters().side() == ExecutionParameters.Side.BUY ? TradeType.BUY : TradeType.SELL)
@@ -168,24 +185,18 @@ public class PaperCfdSettlementService {
                 .build();
         trade.applyFinancialContract(contract);
         account.addTrade(trade);
+        entityManager.persist(trade);
         ensureCashBaseline(account);
         account.setRealizedBalance(account.getRealizedBalance().subtract(fill.fee()));
         account.setEquity(account.getRealizedBalance());
         account.setValuationStatus(AccountValuationStatus.UNAVAILABLE);
         account.setValuedAt(fill.executedAt());
-        Account persisted = accounts.save(account);
         accounts.flush();
-        Trade persistedTrade = persisted.getTrades().stream()
-                .filter(candidate -> candidate.getTradeId() != null
-                        && !existingTradeIds.contains(candidate.getTradeId()))
-                .findFirst()
-                .orElse(trade);
-        if (persistedTrade.getTradeId() == null) {
+        if (trade.getTradeId() == null) {
             // Focused unit-test repositories may not emulate generated UUIDs.
-            persistedTrade.setTradeId(UUID.randomUUID());
+            trade.setTradeId(UUID.randomUUID());
         }
-        record(persistedTrade.getTradeId(), intent, attempt, order, fill);
-        return persistedTrade.getTradeId();
+        return trade.getTradeId();
     }
 
     private UUID exit(Account account, ExecutionIntent intent, ExecutionAttempt attempt,

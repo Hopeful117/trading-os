@@ -48,6 +48,20 @@ public class JpaTradeExecutionProvenanceStore implements TradeExecutionProvenanc
                 provenance.executionMode(), provenance.executionPurpose()) == 1;
     }
 
+    @Override
+    public boolean claimEntryIfAbsent(Provenance provenance) {
+        return repository.claimEntryIfAbsent(provenance.id(), provenance.executionAttemptId(),
+                provenance.brokerOrderId(), provenance.fillId(), provenance.executedAt(),
+                provenance.executionMode(), provenance.executionPurpose()) == 1;
+    }
+
+    @Override
+    public void completeEntryClaim(UUID brokerOrderId, String fillId, UUID tradeId) {
+        if (repository.completeEntryClaim(brokerOrderId, fillId, tradeId) != 1) {
+            throw new IllegalStateException("PAPER CFD entry provenance claim could not be completed");
+        }
+    }
+
     private Provenance toDomain(TradeExecutionProvenanceEntity entity) {
         return new Provenance(entity.id, entity.tradeId, entity.executionAttemptId,
                 entity.brokerOrderId, entity.fillId, entity.executedAt,

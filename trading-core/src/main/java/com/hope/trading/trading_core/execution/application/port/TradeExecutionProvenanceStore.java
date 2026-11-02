@@ -16,6 +16,16 @@ public interface TradeExecutionProvenanceStore {
     /** Atomically claims a broker-order/fill identity, returning whether this caller won. */
     boolean saveIfAbsent(Provenance provenance);
 
+    /** Atomically claims an entry fill before its generated trade identity exists. */
+    default boolean claimEntryIfAbsent(Provenance provenance) {
+        return saveIfAbsent(provenance);
+    }
+
+    /** Completes an entry claim with the trade identity created in the same transaction. */
+    default void completeEntryClaim(UUID brokerOrderId, String fillId, UUID tradeId) {
+        throw new UnsupportedOperationException("Entry provenance completion is unavailable");
+    }
+
     record Provenance(UUID id, UUID tradeId, UUID executionAttemptId, UUID brokerOrderId,
                       String fillId, Instant executedAt, String executionMode,
                       String executionPurpose) {
