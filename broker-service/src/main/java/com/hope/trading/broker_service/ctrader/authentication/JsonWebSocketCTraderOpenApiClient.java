@@ -808,13 +808,20 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     String raw = messages.poll(1, TimeUnit.SECONDS);
                     if (raw == null) continue;
                     JsonNode response = objectMapper.readTree(raw);
-                    if (response.path("clientMsgId").asText().equals(clientMsgId)
-                            && response.path("payloadType").asInt() == responseType) {
+                    boolean correlated = response.path("clientMsgId").asText().equals(clientMsgId);
+                    int actualPayloadType = response.path("payloadType").asInt();
+                    if (correlated && actualPayloadType == responseType) {
                         return response.path("payload");
                     }
-                    if (response.path("errorCode").isTextual()
-                            || response.path("payload").path("errorCode").isTextual()) {
-                        throw new CTraderAuthenticationException("cTrader Open API rejected the request");
+                    if (actualPayloadType == ACCOUNT_DISCONNECT_EVENT
+                            && (correlated || JsonWebSocketCTraderOpenApiClient.this
+                            .accountDisconnectMatchesSession(externalAccountId, response))) {
+                        throw JsonWebSocketCTraderOpenApiClient.this.providerFailure(
+                                requestType, response, correlated ? clientMsgId : null);
+                    }
+                    if (correlated && (response.path("errorCode").isTextual()
+                            || response.path("payload").path("errorCode").isTextual())) {
+                        throw JsonWebSocketCTraderOpenApiClient.this.providerFailure(requestType, response, clientMsgId);
                     }
                 }
                 throw new CTraderAuthenticationException("cTrader Open API response timed out");
@@ -864,6 +871,75 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         public void close() {
             socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
         }
+    }
+
+    CTraderAuthenticationException providerFailure(int requestType, JsonNode response,
+                                                   String clientMsgId) {
+        JsonNode payload = response.path("payload");
+        int responseType = response.path("payloadType").asInt();
+        String errorCode = safeDiagnosticText(firstDiagnosticText(response, payload, "errorCode"));
+        String reason = safeDiagnosticText(firstDiagnosticText(payload, response, "reason"));
+        String description = safeDiagnosticText(firstDiagnosticText(response, payload, "description"));
+        String message = responseType == ACCOUNT_DISCONNECT_EVENT
+                ? "cTrader account disconnected during " + requestMessage(requestType)
+                : "cTrader Open API rejected " + requestMessage(requestType);
+        return new CTraderAuthenticationException(message,
+                new CTraderAuthenticationException.ProviderDiagnostic(
+                        requestStage(requestType), requestType, requestMessage(requestType),
+                        responseType, responseMessage(responseType), blankToNull(errorCode),
+                        blankToNull(reason), blankToNull(description), blankToNull(clientMsgId)));
+    }
+
+    private String firstDiagnosticText(JsonNode first, JsonNode second, String field) {
+        String value = first.path(field).asText("");
+        return value.isBlank() ? second.path(field).asText("") : value;
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    boolean accountDisconnectMatchesSession(String externalAccountId, JsonNode response) {
+        if (externalAccountId == null || externalAccountId.isBlank()) return false;
+        return externalAccountId.equals(response.path("payload").path("ctidTraderAccountId").asText());
+    }
+
+    private String safeDiagnosticText(String value) {
+        if (value == null || value.isBlank()) return null;
+        String redacted = value.replaceAll(
+                "(?i)(access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|authorization)"
+                        + "\\s*[:=]\\s*(?:Bearer\\s+)?[^\\s,;]+", "$1=[REDACTED]");
+        redacted = redacted.replaceAll("[\\p{Cntrl}]", " ")
+                .replaceAll("\\s+", " ").trim();
+        return redacted.length() <= 256 ? redacted : redacted.substring(0, 256);
+    }
+
+    private String requestStage(int payloadType) {
+        return switch (payloadType) {
+            case APPLICATION_AUTH_REQUEST -> "APP_AUTH";
+            case ACCOUNT_LIST_REQUEST -> "ACCOUNT_LIST";
+            case ACCOUNT_AUTH_REQUEST -> "ACCOUNT_AUTH";
+            default -> "CTRADER_REQUEST";
+        };
+    }
+
+    private String requestMessage(int payloadType) {
+        return switch (payloadType) {
+            case APPLICATION_AUTH_REQUEST -> "ProtoOAApplicationAuthReq";
+            case ACCOUNT_LIST_REQUEST -> "ProtoOAGetAccountListByAccessTokenReq";
+            case ACCOUNT_AUTH_REQUEST -> "ProtoOAAccountAuthReq";
+            default -> "payload type " + payloadType;
+        };
+    }
+
+    private String responseMessage(int payloadType) {
+        return switch (payloadType) {
+            case APPLICATION_AUTH_RESPONSE -> "ProtoOAApplicationAuthRes";
+            case ACCOUNT_LIST_RESPONSE -> "ProtoOAGetAccountListByAccessTokenRes";
+            case ACCOUNT_AUTH_RESPONSE -> "ProtoOAAccountAuthRes";
+            case ACCOUNT_DISCONNECT_EVENT -> "ProtoOAAccountDisconnectEvent";
+            default -> "payload type " + payloadType;
+        };
     }
 
     private static final class Listener implements WebSocket.Listener {

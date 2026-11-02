@@ -80,6 +80,63 @@ class JsonWebSocketCTraderOpenApiClientTest {
     }
 
     @Test
+    void preservesAccountDisconnectDetailsWithoutSecrets() throws Exception {
+        Method method = JsonWebSocketCTraderOpenApiClient.class
+                .getDeclaredMethod("providerFailure", int.class, JsonNode.class, String.class);
+        method.setAccessible(true);
+
+        CTraderAuthenticationException exception = (CTraderAuthenticationException) invoke(method, client,
+                2102, mapper.readTree("""
+                        {"clientMsgId":"corr-1","payloadType":2142,
+                         "payload":{"ctidTraderAccountId":49289512,
+                         "reason":"Access Token is expired"}}
+                        """), "corr-1");
+
+        assertThat(exception.getMessage()).contains("ProtoOAAccountAuthReq");
+        assertThat(exception.getMessage()).doesNotContain("access-token-secret");
+        assertThat(exception.diagnostic()).satisfies(diagnostic -> {
+            assertThat(diagnostic.stage()).isEqualTo("ACCOUNT_AUTH");
+            assertThat(diagnostic.requestPayloadType()).isEqualTo(2102);
+            assertThat(diagnostic.requestMessage()).isEqualTo("ProtoOAAccountAuthReq");
+            assertThat(diagnostic.responsePayloadType()).isEqualTo(2142);
+            assertThat(diagnostic.responseMessage()).isEqualTo("ProtoOAAccountDisconnectEvent");
+            assertThat(diagnostic.providerReason()).isEqualTo("Access Token is expired");
+            assertThat(diagnostic.correlationId()).isEqualTo("corr-1");
+        });
+    }
+
+    @Test
+    void recognizesUncorrelatedAccountDisconnectForTheBoundSession() throws Exception {
+        JsonNode response = mapper.readTree("""
+                {"payloadType":2142,"payload":{"ctidTraderAccountId":49289512,
+                 "reason":"account disabled"}}
+                """);
+
+        assertThat(client.accountDisconnectMatchesSession("49289512", response)).isTrue();
+        assertThat(client.accountDisconnectMatchesSession("9001", response)).isFalse();
+    }
+
+    @Test
+    void preservesGenericProviderErrorDetailsWithoutPayloadSecrets() throws Exception {
+        Method method = JsonWebSocketCTraderOpenApiClient.class
+                .getDeclaredMethod("providerFailure", int.class, JsonNode.class, String.class);
+        method.setAccessible(true);
+
+        CTraderAuthenticationException exception = (CTraderAuthenticationException) invoke(method, client,
+                2102, mapper.readTree("""
+                        {"clientMsgId":"corr-2","payloadType":2103,
+                         "payload":{"errorCode":"CH_ACCESS_TOKEN_INVALID",
+                         "description":"accessToken=secret refresh_token=other\\n token rejected"}}
+                        """), "corr-2");
+
+        assertThat(exception.diagnostic().providerErrorCode()).isEqualTo("CH_ACCESS_TOKEN_INVALID");
+        assertThat(exception.diagnostic().providerDescription())
+                .isEqualTo("accessToken=[REDACTED] refresh_token=[REDACTED] token rejected");
+        assertThat(exception.diagnostic().providerDescription()).doesNotContain("secret", "other");
+        assertThat(exception.getMessage()).doesNotContain("token rejected");
+    }
+
+    @Test
     void mapsPrecisionAndVolumeWithoutInferringMissingFacts() throws Exception {
         Instant started = Instant.parse("2026-10-23T12:00:00Z");
         JsonNode trader = mapper.readTree("""

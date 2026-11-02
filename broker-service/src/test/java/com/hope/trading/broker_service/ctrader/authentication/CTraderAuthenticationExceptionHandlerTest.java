@@ -34,4 +34,24 @@ class CTraderAuthenticationExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody()).doesNotContainKey("code");
     }
+
+    @Test
+    void exposesSafeStructuredProviderDiagnostic() {
+        var response = handler.handle(new CTraderAuthenticationException("account disconnected",
+                new CTraderAuthenticationException.ProviderDiagnostic(
+                        "ACCOUNT_AUTH", 2102, "ProtoOAAccountAuthReq", 2142,
+                        "ProtoOAAccountDisconnectEvent", null, "Access Token is expired",
+                        "accessToken=secret\nAuthorization: Bearer token", "corr-1")));
+
+        assertThat(response.getBody())
+                .containsEntry("stage", "ACCOUNT_AUTH")
+                .containsEntry("requestPayloadType", "2102")
+                .containsEntry("responsePayloadType", "2142")
+                .containsEntry("providerReason", "Access Token is expired")
+                .containsEntry("providerDescription",
+                        "accessToken=[REDACTED] Authorization=[REDACTED]")
+                .doesNotContainKey("accessToken")
+                .doesNotContainKey("refreshToken")
+                .doesNotContainKey("clientSecret");
+    }
 }
