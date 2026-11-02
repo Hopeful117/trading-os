@@ -5,6 +5,7 @@ public final class CTraderPayloadTypes {
     public static final int APPLICATION_AUTH_RESPONSE = 2101;
     public static final int ACCOUNT_AUTH_REQUEST = 2102;
     public static final int ACCOUNT_AUTH_RESPONSE = 2103;
+    public static final int ACCOUNT_DISCONNECT_EVENT = 2142;
     public static final int ACCOUNT_LIST_REQUEST = 2149;
     public static final int ACCOUNT_LIST_RESPONSE = 2150;
     public static final int TRADER_REQUEST = 2121;
