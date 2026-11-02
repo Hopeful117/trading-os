@@ -32,8 +32,8 @@ import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.valuation.application.CfdValuationService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Disabled;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -50,7 +50,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-@Disabled("PAPER CFD settlement remains blocked until ADR-083 and Phase 8 authorization are complete")
 class PaperCfdSettlementServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-31T12:00:00Z");
 
@@ -63,11 +62,13 @@ class PaperCfdSettlementServiceTest {
         assertThat(tradeId).isNotNull();
         assertThat(scenario.account.getTrades()).singleElement().satisfies(trade -> {
             assertThat(trade.getQuantity()).isEqualByComparingTo("1000");
+            assertThat(trade.getEntryPrice()).isEqualByComparingTo("1.10000");
             assertThat(trade.getProductType()).isEqualTo(InstrumentProductType.CFD);
             assertThat(trade.getContractMultiplier()).isEqualByComparingTo("1");
             assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
         });
         assertThat(amount(scenario.account, "USD")).isEqualByComparingTo("10000");
+        assertThat(amount(scenario.account, "EUR")).isEqualByComparingTo("0");
         assertThat(scenario.account.getRealizedBalance()).isEqualByComparingTo("10000");
     }
 
@@ -107,8 +108,16 @@ class PaperCfdSettlementServiceTest {
         Trade trade = scenario.account.getTrades().getFirst();
         scenario.marketValuationReturnsMark(trade, "1.10100");
 
+        BigDecimal realizedBeforeMtm = scenario.account.getRealizedBalance();
+        BigDecimal entryPriceBeforeMtm = trade.getEntryPrice();
+        BigDecimal quantityBeforeMtm = trade.getQuantity();
+        BigDecimal baseInventoryBeforeMtm = amount(scenario.account, "EUR");
         scenario.settlement.refreshEquity(scenario.account);
         assertThat(scenario.account.getEquity()).isEqualByComparingTo("10001");
+        assertThat(scenario.account.getRealizedBalance()).isEqualByComparingTo(realizedBeforeMtm);
+        assertThat(trade.getEntryPrice()).isEqualByComparingTo(entryPriceBeforeMtm);
+        assertThat(trade.getQuantity()).isEqualByComparingTo(quantityBeforeMtm);
+        assertThat(amount(scenario.account, "EUR")).isEqualByComparingTo(baseInventoryBeforeMtm);
 
         ExecutionContext exit = scenario.exit(trade, ExecutionParameters.Side.SELL,
                 "1.10200", "1000", "0");
@@ -153,7 +162,7 @@ class PaperCfdSettlementServiceTest {
         assertThat(scenario.account.getRealizedBalance()).isEqualByComparingTo("10000");
         assertThatThrownBy(() -> new PaperCfdSettlementService(scenario.brokers, scenario.accounts,
                 scenario.marketData, scenario.provenance, scenario.valuation,
-                Clock.fixed(NOW, ZoneOffset.UTC)).settle(
+                Clock.fixed(NOW, ZoneOffset.UTC), mock(EntityManager.class)).settle(
                 scenario.liveEntry().intent, scenario.liveEntry().attempt, scenario.liveEntry().order))
                 .isInstanceOf(IllegalStateException.class)
                  .hasMessage("PAPER CFD settlement rejects LIVE context");
@@ -185,6 +194,38 @@ class PaperCfdSettlementServiceTest {
         assertThat(scenario.account.getTrades()).isEmpty();
     }
 
+    @Test
+    void rejectsUnavailableExecutionFeeAtTheFillBoundary() {
+        assertThatThrownBy(() -> new BrokerOrder.Fill("missing-fee", new BigDecimal("1000"),
+                new BigDecimal("1.10000"), null, NOW))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void linksEntryProvenanceToTheCreatedTradeWithOtherAccountTradesPresent() {
+        Scenario scenario = scenario();
+        Trade existing = Trade.builder().symbol("EUR/USD").type(TradeType.BUY)
+                .entryPrice(new BigDecimal("1.09000")).currentPrice(new BigDecimal("1.09000"))
+                .quantity(new BigDecimal("1000")).openedAt(NOW.minusSeconds(60))
+                .tradeStatus(TradeStatus.OPEN).build();
+        existing.setTradeId(UUID.randomUUID());
+        existing.setProductType(InstrumentProductType.CFD);
+        scenario.account.addTrade(existing);
+
+        ExecutionContext entry = scenario.entry(ExecutionParameters.Side.BUY, "1.10000", "1000", "0");
+        UUID createdTradeId = scenario.settlement.settle(entry.intent, entry.attempt, entry.order);
+
+        List<Trade> createdTrades = scenario.account.getTrades().stream()
+                .filter(trade -> !trade.getTradeId().equals(existing.getTradeId()))
+                .toList();
+        assertThat(createdTrades).hasSize(1);
+        Trade created = createdTrades.getFirst();
+        assertThat(created.getTradeId()).isEqualTo(createdTradeId);
+        assertThat(scenario.provenance.findByBrokerOrderIdAndFillId(
+                entry.order.id().value(), entry.order.fills().getFirst().fillId())
+                .orElseThrow().tradeId()).isEqualTo(createdTradeId);
+    }
+
     private Scenario scenario() {
         UUID owner = UUID.randomUUID();
         BrokerAccount broker = BrokerAccount.create(owner, BrokerProvider.KRAKEN, ExecutionMode.PAPER,
@@ -207,7 +248,7 @@ class PaperCfdSettlementServiceTest {
         CfdValuationService valuation = new CfdValuationService(marketValuation,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         PaperCfdSettlementService settlement = new PaperCfdSettlementService(brokers, accounts,
-                marketData, provenance, valuation, Clock.fixed(NOW, ZoneOffset.UTC));
+                marketData, provenance, valuation, Clock.fixed(NOW, ZoneOffset.UTC), mock(EntityManager.class));
         return new Scenario(settlement, account, broker, owner, brokers, accounts, marketData,
                 provenance, marketValuation, valuation);
     }
@@ -332,6 +373,20 @@ class PaperCfdSettlementServiceTest {
             }
             save(provenance);
             return true;
+        }
+
+        @Override
+        public void completeEntryClaim(UUID brokerOrderId, String fillId, UUID tradeId) {
+            for (int i = 0; i < values.size(); i++) {
+                Provenance value = values.get(i);
+                if (value.brokerOrderId().equals(brokerOrderId) && value.fillId().equals(fillId)) {
+                    values.set(i, new Provenance(value.id(), tradeId, value.executionAttemptId(),
+                            value.brokerOrderId(), value.fillId(), value.executedAt(),
+                            value.executionMode(), value.executionPurpose()));
+                    return;
+                }
+            }
+            throw new IllegalStateException("entry provenance claim not found");
         }
     }
 }

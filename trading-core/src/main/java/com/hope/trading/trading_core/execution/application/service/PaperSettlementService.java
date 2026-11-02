@@ -219,6 +219,9 @@ public class PaperSettlementService {
             throw new IllegalStateException("PAPER settlement model is incompatible with instrument product type",
                     incompatible);
         }
+        if (productType == InstrumentProductType.CFD) {
+            throw new IllegalStateException("PAPER CFD settlement requires dedicated CFD settlement service");
+        }
         return productType;
     }
 

@@ -11,7 +11,8 @@ public final class SettlementCompatibilityPolicy {
         }
         return switch (settlementModel) {
             case INVENTORY -> productType == InstrumentProductType.SPOT;
-            case CASH -> productType == InstrumentProductType.LINEAR_PERPETUAL;
+            case CASH -> productType == InstrumentProductType.LINEAR_PERPETUAL
+                    || productType == InstrumentProductType.CFD;
             case UNKNOWN -> false;
         };
     }

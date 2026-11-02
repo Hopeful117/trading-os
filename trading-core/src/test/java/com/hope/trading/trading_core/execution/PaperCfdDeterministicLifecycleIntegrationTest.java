@@ -38,6 +38,7 @@ import com.hope.trading.trading_core.market_data.valuation.MarketValuationPort;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.User;
 import com.hope.trading.trading_core.repository.AccountRepository;
+import com.hope.trading.trading_core.repository.TradeRepository;
 import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationModels;
 import com.hope.trading.trading_core.risk.application.RiskAcknowledgmentDeliveryService;
@@ -59,7 +60,6 @@ import com.hope.trading.trading_core.shared.domain.model.SettlementCompatibility
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.execution.infrastructure.adapter.BrokerExecutionClient;
 import jakarta.persistence.EntityManager;
-import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -96,7 +96,6 @@ import static org.mockito.Mockito.when;
 @SpringBootTest
 @ActiveProfiles("test")
 @Testcontainers
-@Transactional
 class PaperCfdDeterministicLifecycleIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-11-01T12:00:00Z");
     private static final UUID MARKET_ID = UUID.fromString("10000000-0000-0000-0000-000000000019");
@@ -120,6 +119,7 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
 
     @Autowired private UserRepository users;
     @Autowired private AccountRepository accounts;
+    @Autowired private TradeRepository trades;
     @Autowired private BrokerAccountRepository brokerAccounts;
     @Autowired private ValidateAndCreateService validation;
     @Autowired private TradePlanRiskEvaluationService t0Risk;
@@ -151,12 +151,15 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
     private UUID planId;
     private UUID evaluationId;
     private UUID tradeId;
+    private UUID currentIntentId;
     private AtomicReference<BigDecimal> riskPrice;
+    private AtomicReference<MarketValuationPort.Snapshot> t1ValuationOverride;
 
     @BeforeEach
     void setUp() {
         when(clock.instant()).thenReturn(NOW);
         when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        t1ValuationOverride = new AtomicReference<>();
 
         User owner = users.save(User.builder()
                 .username("paper-cfd-e2e-" + UUID.randomUUID())
@@ -185,30 +188,30 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
     }
 
     @Test
-    void provesT0AndT1WhileKeepingCfdSettlementBlocked() {
+    void provesT0AndT1RiskEvidenceBeforeSettlementQualification() {
         ExecutionIntent entry = authorizeEntry();
         assertThat(entry.riskApproval().evaluationId()).isEqualTo(evaluationId);
         Map<String, Object> t0 = jdbc.queryForMap(
                 "select status,decision from risk_evaluation where id=?", evaluationId);
         assertThat(t0).containsEntry("status", "COMPLETED").containsEntry("decision", "APPROVED");
+        String t0Context = jdbc.queryForObject("select payload from risk_context_snapshot where evaluation_id=?",
+                String.class, evaluationId);
+        assertThat(t0Context).contains("1.10000", "11.00");
         int provenanceBefore = jdbc.queryForObject("select count(*) from trade_execution_provenance", Integer.class);
 
         riskPrice.set(decimal("1.10200"));
         ExecutionTimeRiskRevalidationService.T1Outcome t1 = t1Risk.evaluateAndPersist(entry, NOW);
         assertThat(t1.approved()).isTrue();
-        ExecutionAttempt entryAttempt = attempt(entry);
-        BrokerOrder entryOrder = order(entry, entryAttempt, "entry-fill", "1.10100", "2.50");
-        assertThatThrownBy(() -> settlement.settle(entry, entryAttempt, entryOrder))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("PAPER settlement model is incompatible with instrument product type");
-
         assertThat(t1Evaluations()).singleElement().satisfies(row -> {
             assertThat(row.get("status")).isEqualTo("COMPLETED");
             assertThat(row.get("decision")).isEqualTo("APPROVED");
             assertThat(row.get("execution_intent_id")).isEqualTo(entry.id().value());
             assertThat(row.get("t0_evaluation_id")).isEqualTo(evaluationId);
         });
-        assertThat(reloadAccount().getTrades()).isEmpty();
+        String t1Context = jdbc.queryForObject("select payload from risk_context_snapshot where evaluation_id=?",
+                String.class, t1.t1EvaluationId());
+        assertThat(t1Context).contains("1.10200", "11.02");
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
         assertThat(jdbc.queryForObject("select count(*) from trade_execution_provenance", Integer.class))
                 .isEqualTo(provenanceBefore);
     }
@@ -232,11 +235,13 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
         assertThat(jdbc.queryForObject("select count(*) from trade_execution_provenance", Integer.class))
                 .isEqualTo(provenanceBefore);
         Account after = reloadAccount();
-        assertThat(after.getTrades()).isEmpty();
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
         assertThat(after.getRealizedBalance()).isEqualByComparingTo(beforeBalance);
         assertThat(after.getEquity()).isEqualByComparingTo(beforeEquity);
-        assertThat(jdbc.queryForObject("select count(*) from execution_attempt", Integer.class)).isZero();
-        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
         assertThat(t1Evaluations()).singleElement().satisfies(row -> {
             assertThat(row.get("status")).isEqualTo("COMPLETED");
             assertThat(row.get("decision")).isEqualTo("REJECTED");
@@ -245,25 +250,180 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
     }
 
     @Test
-    void keepsCashCfdCompatibilityRejectedOnTheStandardApplicationPath() {
+    void t1RejectsAStaleAuthoritativeValuationFact() {
+        ExecutionIntent entry = authorizeEntry();
+        t1ValuationOverride.set(riskValuation(MarketValuationPort.FreshnessRequirement.t1(),
+                NOW.minusSeconds(31), NOW.minusSeconds(31), "PT30S"));
+
+        ExecutionTimeRiskRevalidationService.T1Outcome t1 = t1Risk.evaluateAndPersist(entry, NOW);
+
+        assertThat(t1.approved()).isFalse();
+        assertThat(t1.reasonCode()).isEqualTo("STALE_FACT");
+        assertThat(entry.status()).isEqualTo(ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE);
+        verify(liveBroker, never()).submit(any());
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
+    }
+
+    @Test
+    void t1RejectsARecentFactWithAConflictingFreshnessContract() {
+        ExecutionIntent entry = authorizeEntry();
+        t1ValuationOverride.set(riskValuation(MarketValuationPort.FreshnessRequirement.t1(),
+                NOW.minusSeconds(1), NOW.minusSeconds(1), "PT5M"));
+
+        ExecutionTimeRiskRevalidationService.T1Outcome t1 = t1Risk.evaluateAndPersist(entry, NOW);
+
+        assertThat(t1.approved()).isFalse();
+        assertThat(t1.reasonCode()).isEqualTo("MARGIN_FRESHNESS_MISMATCH");
+        assertThat(entry.status()).isEqualTo(ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE);
+        verify(liveBroker, never()).submit(any());
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
+    }
+
+    @Test
+    void keepsGenericPaperSettlementSeparatedFromDedicatedCfdSettlement() {
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.CASH,
-                InstrumentProductType.CFD)).isFalse();
-        assertThatThrownBy(() -> SettlementCompatibilityPolicy.requireCompatible(SettlementModel.CASH,
-                InstrumentProductType.CFD)).isInstanceOf(IllegalArgumentException.class);
+                InstrumentProductType.CFD)).isTrue();
 
         ExecutionIntent entry = authorizeEntry();
         assertThatThrownBy(() -> standardPaperSettlement.settle(entry, null, null))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("PAPER settlement model is incompatible with instrument product type");
-        assertThatThrownBy(() -> execution.execute(entry.id()))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("PAPER CFD settlement is unavailable or incompatible");
+                .hasMessage("PAPER CFD settlement requires dedicated CFD settlement service");
+    }
+
+    @Test
+    void executesCfdThroughTheRealApplicationPathAndPersistsAuthoritativeFill() {
+        ExecutionIntent entry = authorizeEntry();
+        riskPrice.set(decimal("1.10200"));
+
+        ExecutionIntent result = execution.execute(entry.id());
+
+        assertThat(result.status()).isEqualTo(ExecutionStatus.COMPLETED);
+        verify(liveBroker, never()).submit(any());
+        assertThat(t1Evaluations()).singleElement().satisfies(row -> {
+            assertThat(row.get("status")).isEqualTo("COMPLETED");
+            assertThat(row.get("decision")).isEqualTo("APPROVED");
+        });
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt where intent_id=?",
+                Integer.class, entry.id().value())).isEqualTo(1);
+
+        BrokerOrder persistedOrder = orders.findByIntentId(entry.id()).orElseThrow();
+        assertThat(persistedOrder.externalOrderId()).startsWith("SIM-");
+        assertThat(persistedOrder.fills()).singleElement().satisfies(fill -> {
+            assertThat(fill.fillId()).startsWith("fill-");
+            assertThat(fill.price()).isEqualByComparingTo("1.10100");
+            assertThat(fill.quantity()).isEqualByComparingTo("1000");
+            assertThat(fill.fee()).isZero();
+        });
+        BrokerOrder.Fill authoritativeFill = persistedOrder.fills().getFirst();
+
+        entityManager.clear();
+        Account persisted = accounts.findById(accountId).orElseThrow();
+        assertThat(persisted.getSettlementModel()).isEqualTo(SettlementModel.CASH);
+        assertThat(trades.findAllByAccount_AccountId(accountId)).singleElement().satisfies(trade -> {
+            tradeId = trade.getTradeId();
+            assertThat(trade.getProductType()).isEqualTo(InstrumentProductType.CFD);
+            assertThat(trade.getQuantity()).isEqualByComparingTo("1000");
+            assertThat(trade.getEntryPrice()).isEqualByComparingTo(authoritativeFill.price());
+            assertThat(trade.getTradeStatus()).isEqualTo(TradeStatus.OPEN);
+        });
+        assertThat(persisted.getRealizedBalance()).isEqualByComparingTo("100000");
+        assertThat(jdbc.queryForObject("select coalesce(sum(amount), 0) from \"account-balance\" "
+                        + "where account_id=? and asset='EUR'", BigDecimal.class, accountId))
+                .isZero();
+        assertThat(jdbc.queryForObject("select count(*) from trade_execution_provenance "
+                        + "where broker_order_id=? and fill_id=?", Integer.class,
+                persistedOrder.id().value(), authoritativeFill.fillId())).isEqualTo(1);
+
+        entityManager.clear();
+        Account reconstructed = accounts.findById(accountId).orElseThrow();
+        assertThat(trades.findAllByAccount_AccountId(accountId)).singleElement()
+                .satisfies(trade -> assertThat(trade.getTradeId()).isEqualTo(tradeId));
+    }
+
+    @Test
+    void rejectsApplicationExecutionWithoutHumanAuthorizedTradePlan() {
+        when(tradePlans.load(planId, 1)).thenReturn(readyPlan());
+        int attemptsBefore = jdbc.queryForObject("select count(*) from execution_attempt", Integer.class);
+        int ordersBefore = jdbc.queryForObject("select count(*) from execution_broker_order", Integer.class);
+
+        assertThatThrownBy(() -> validation.validateAndCreate(new ValidateAndCreateCommand(ownerId, planId, 1,
+                evaluationId, brokerAccountId, new IdempotencyKey("unauthorized-cfd-" + UUID.randomUUID()),
+                NOW.plusSeconds(600))))
+                .isInstanceOf(com.hope.trading.trading_core.execution.domain.exception.ExecutionValidationException.class)
+                .hasMessageContaining("Trade Plan is not in accepted state");
+
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt", Integer.class))
+                .isEqualTo(attemptsBefore);
+        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order", Integer.class))
+                .isEqualTo(ordersBefore);
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
+    }
+
+    @Test
+    void rejectsWrongOwnerBeforeCreatingAnExecutionIntent() {
+        int attemptsBefore = jdbc.queryForObject("select count(*) from execution_attempt", Integer.class);
+        int ordersBefore = jdbc.queryForObject("select count(*) from execution_broker_order", Integer.class);
+
+        assertThatThrownBy(() -> validation.validateAndCreate(new ValidateAndCreateCommand(UUID.randomUUID(), planId, 1,
+                evaluationId, brokerAccountId, new IdempotencyKey("wrong-owner-cfd-" + UUID.randomUUID()),
+                NOW.plusSeconds(600))))
+                .isInstanceOf(com.hope.trading.trading_core.execution.domain.exception.ExecutionValidationException.class)
+                .hasMessageContaining("Trade Plan does not belong to the authenticated user");
+
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt", Integer.class))
+                .isEqualTo(attemptsBefore);
+        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order", Integer.class))
+                .isEqualTo(ordersBefore);
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
+    }
+
+    @Test
+    void rejectsApplicationExecutionWhenT1RejectsBeforeBrokerSubmission() {
+        ExecutionIntent entry = authorizeEntry();
+        riskPrice.set(decimal("100.00000"));
+
+        ExecutionIntent result = execution.execute(entry.id());
+
+        assertThat(result.status()).isEqualTo(ExecutionStatus.RISK_REVALIDATION_REJECTED);
+        verify(liveBroker, never()).submit(any());
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
+    }
+
+    @Test
+    void rejectsApplicationExecutionWhenT1FactIsStale() {
+        ExecutionIntent entry = authorizeEntry();
+        t1ValuationOverride.set(riskValuation(MarketValuationPort.FreshnessRequirement.t1(),
+                NOW.minusSeconds(31), NOW.minusSeconds(31), "PT30S"));
+
+        ExecutionIntent result = execution.execute(entry.id());
+
+        assertThat(result.status()).isEqualTo(ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE);
+        verify(liveBroker, never()).submit(any());
+        assertThat(jdbc.queryForObject("select count(*) from execution_attempt where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from execution_broker_order where intent_id=?",
+                Integer.class, entry.id().value())).isZero();
+        assertThat(trades.findAllByAccount_AccountId(accountId)).isEmpty();
     }
 
     private ExecutionIntent authorizeEntry() {
-        return validation.validateAndCreate(new ValidateAndCreateCommand(ownerId, planId, 1, evaluationId,
+        ExecutionIntent intent = validation.validateAndCreate(new ValidateAndCreateCommand(ownerId, planId, 1, evaluationId,
                 brokerAccountId, new IdempotencyKey("paper-cfd-entry-" + UUID.randomUUID()),
                 NOW.plusSeconds(600)));
+        currentIntentId = intent.id().value();
+        return intent;
     }
 
     private void configureRiskReferences() {
@@ -295,7 +455,8 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
         when(marketValuation.value(any(), any(), any(), any())).thenAnswer(invocation ->
                 riskValuation(MarketValuationPort.FreshnessRequirement.t0()));
         when(marketValuation.value(any(), any(), any(), any(), any())).thenAnswer(invocation ->
-                riskValuation(invocation.getArgument(4)));
+                Optional.ofNullable(t1ValuationOverride.get())
+                        .orElseGet(() -> riskValuation(invocation.getArgument(4))));
 
         RiskEvaluationModels.Response t0 = t0Risk.evaluate(new RiskEvaluationModels.Command(
                 ownerId, planId, 1, accountId, "story-0192-t0-" + UUID.randomUUID(), NOW));
@@ -304,15 +465,22 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
     }
 
     private MarketValuationPort.Snapshot riskValuation(MarketValuationPort.FreshnessRequirement requirement) {
+        return riskValuation(requirement, NOW, NOW, requirement.maxObservationAge().toString());
+    }
+
+    private MarketValuationPort.Snapshot riskValuation(MarketValuationPort.FreshnessRequirement requirement,
+                                                        Instant sourceEffectiveAt,
+                                                        Instant sourceCapturedAt,
+                                                        String maxObservationAge) {
         BigDecimal price = riskPrice.get();
         List<MarketValuationPort.Fact> facts = List.of(
                 new MarketValuationPort.Fact("ASSET", "USD", null, "USD", null, BigDecimal.ONE,
                         BigDecimal.ONE, null, "AVAILABLE", "story-0192"),
                 new MarketValuationPort.Fact("INSTRUMENT", "proposed", MARKET_ID, null,
                         MarketValuationPort.PriceUse.CONSERVATIVE_BUY, price, price, null,
-                        "AVAILABLE", "story-0192", NOW, NOW, null, null, List.of()));
+                        "AVAILABLE", "story-0192", sourceEffectiveAt, sourceCapturedAt, null, null, List.of()));
         return new MarketValuationPort.Snapshot(UUID.randomUUID(), 1, "USD", NOW, NOW,
-                "story-0192", requirement.maxObservationAge().toString(), true, facts,
+                "story-0192", maxObservationAge, true, facts,
                 "story-0192-risk-market", List.of());
     }
 
@@ -362,7 +530,6 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
     }
 
     private Account reloadAccount() {
-        entityManager.flush();
         entityManager.clear();
         return accounts.findById(accountId).orElseThrow();
     }
@@ -372,7 +539,8 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
     }
 
     private List<Map<String, Object>> t1Evaluations() {
-        return jdbc.queryForList("select status,decision,unavailable_reason_code,response_payload,execution_intent_id,t0_evaluation_id from risk_evaluation_t1");
+        return jdbc.queryForList("select status,decision,unavailable_reason_code,response_payload,execution_intent_id,t0_evaluation_id "
+                + "from risk_evaluation_t1 where execution_intent_id=?", currentIntentId);
     }
 
     private ExecutionAttempt attempt(ExecutionIntent intent) {

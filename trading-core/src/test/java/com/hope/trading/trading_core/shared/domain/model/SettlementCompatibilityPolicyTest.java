@@ -12,6 +12,8 @@ class SettlementCompatibilityPolicyTest {
                 InstrumentProductType.SPOT)).isTrue();
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.CASH,
                 InstrumentProductType.LINEAR_PERPETUAL)).isTrue();
+        assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.CASH,
+                InstrumentProductType.CFD)).isTrue();
     }
 
     @Test
@@ -22,8 +24,6 @@ class SettlementCompatibilityPolicyTest {
                 InstrumentProductType.CFD)).isFalse();
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.CASH,
                 InstrumentProductType.SPOT)).isFalse();
-        assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.CASH,
-                InstrumentProductType.CFD)).isFalse();
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.UNKNOWN,
                 InstrumentProductType.SPOT)).isFalse();
         assertThat(SettlementCompatibilityPolicy.isCompatible(SettlementModel.UNKNOWN,

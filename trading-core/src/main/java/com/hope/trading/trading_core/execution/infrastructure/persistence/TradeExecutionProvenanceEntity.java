@@ -17,7 +17,7 @@ public class TradeExecutionProvenanceEntity {
     @Id
     public UUID id;
 
-    @Column(name = "trade_id", nullable = false, updatable = false)
+    @Column(name = "trade_id", updatable = false)
     public UUID tradeId;
 
     @Column(name = "execution_attempt_id", nullable = false, updatable = false)

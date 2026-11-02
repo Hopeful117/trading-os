@@ -30,4 +30,25 @@ public interface JpaTradeExecutionProvenanceRepository
                        @Param("executedAt") Instant executedAt,
                        @Param("executionMode") String executionMode,
                        @Param("executionPurpose") String executionPurpose);
+
+    @Modifying
+    @Query(value = "insert into trade_execution_provenance "
+            + "(id,trade_id,execution_attempt_id,broker_order_id,fill_id,executed_at,execution_mode,execution_purpose) "
+            + "values (:id,null,:attemptId,:brokerOrderId,:fillId,:executedAt,:executionMode,:executionPurpose) "
+            + "on conflict (broker_order_id,fill_id) do nothing", nativeQuery = true)
+    int claimEntryIfAbsent(@Param("id") UUID id,
+                           @Param("attemptId") UUID attemptId,
+                           @Param("brokerOrderId") UUID brokerOrderId,
+                           @Param("fillId") String fillId,
+                           @Param("executedAt") Instant executedAt,
+                           @Param("executionMode") String executionMode,
+                           @Param("executionPurpose") String executionPurpose);
+
+    @Modifying
+    @Query(value = "update trade_execution_provenance set trade_id = :tradeId "
+            + "where broker_order_id = :brokerOrderId and fill_id = :fillId and trade_id is null",
+            nativeQuery = true)
+    int completeEntryClaim(@Param("brokerOrderId") UUID brokerOrderId,
+                           @Param("fillId") String fillId,
+                           @Param("tradeId") UUID tradeId);
 }
