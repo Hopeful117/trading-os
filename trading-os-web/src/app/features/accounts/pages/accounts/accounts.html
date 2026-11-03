@@ -274,7 +274,11 @@
             </button>
             @if (readOnlyStatusAccountId() === brokerAccount.id) {
               @if (readOnlyStatusError()) {
-                <p class="connection-message error" data-testid="read-only-status-error" role="alert">
+                <p
+                  class="connection-message error"
+                  data-testid="read-only-status-error"
+                  role="alert"
+                >
                   Le statut lecture seule n’a pas pu être récupéré.
                 </p>
               } @else if (readOnlyStatus(); as readOnly) {

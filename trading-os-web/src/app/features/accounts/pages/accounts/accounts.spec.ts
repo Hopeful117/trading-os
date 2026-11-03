@@ -180,8 +180,9 @@ describe('Accounts', () => {
     pending.error(new Error('failed'));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="read-only-status-error"]'))
-      .not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="read-only-status-error"]'),
+    ).not.toBeNull();
     expect(button.disabled).toBe(false);
   });
 
