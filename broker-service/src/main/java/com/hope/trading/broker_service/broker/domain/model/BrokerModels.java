@@ -145,10 +145,11 @@ public final class BrokerModels {
                                            java.util.List<OrderSnapshot> orders,
                                            java.util.List<ClosedTrade> deals,
                                            java.util.List<PositionPnlSnapshot> positionPnls,
-                                           SnapshotCollectionAvailability positionAvailability,
-                                           SnapshotCollectionAvailability orderAvailability,
-                                           SnapshotCollectionAvailability pnlAvailability,
-                                           boolean pnlComplete,
+                                            SnapshotCollectionAvailability positionAvailability,
+                                            SnapshotCollectionAvailability orderAvailability,
+                                            SnapshotCollectionAvailability pnlAvailability,
+                                           SnapshotCollectionAvailability dealAvailability,
+                                            boolean pnlComplete,
                                            SnapshotCompleteness completeness,
                                            SnapshotFreshness freshness,
                                            Instant observationStartedAt,
@@ -166,9 +167,11 @@ public final class BrokerModels {
             Objects.requireNonNull(positionAvailability);
             Objects.requireNonNull(orderAvailability);
             Objects.requireNonNull(pnlAvailability);
+            Objects.requireNonNull(dealAvailability);
             validateCollection(positionAvailability, positions, "positions");
             validateCollection(orderAvailability, orders, "orders");
             validateCollection(pnlAvailability, positionPnls, "positionPnls");
+            validateCollection(dealAvailability, deals, "deals");
             if (pnlComplete && pnlAvailability == SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT) {
                 throw new IllegalArgumentException("complete PnL cannot be unavailable");
             }
@@ -187,6 +190,7 @@ public final class BrokerModels {
             this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions,
                     observedAt, null, List.of(), List.of(), List.of(),
                     collectionAvailability(positions), SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                    SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
                     SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT, false,
                     SnapshotCompleteness.COMPLETE,
                     SnapshotFreshness.FRESH, observedAt, observedAt, List.of());
@@ -207,8 +211,25 @@ public final class BrokerModels {
                                        java.util.List<String> unavailabilityReasons) {
             this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions, observedAt,
                     account, orders, deals, List.of(), collectionAvailability(positions),
-                    collectionAvailability(orders), SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT, false,
+                    collectionAvailability(orders), collectionAvailability(deals), false,
                     completeness, freshness, observationStartedAt, completedAt, unavailabilityReasons);
+        }
+
+        public BrokerAccountSnapshotV2(UUID brokerAccountId, UUID providerRegistrationReference,
+                                       String externalAccountId, java.util.Map<String,BigDecimal> balances,
+                                       java.util.List<PositionSnapshot> positions, Instant observedAt,
+                                       AccountFacts account, java.util.List<OrderSnapshot> orders,
+                                       java.util.List<ClosedTrade> deals, java.util.List<PositionPnlSnapshot> positionPnls,
+                                       SnapshotCollectionAvailability positionAvailability,
+                                       SnapshotCollectionAvailability orderAvailability,
+                                       SnapshotCollectionAvailability pnlAvailability, boolean pnlComplete,
+                                       SnapshotCompleteness completeness, SnapshotFreshness freshness,
+                                       Instant observationStartedAt, Instant completedAt,
+                                       java.util.List<String> unavailabilityReasons) {
+            this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions, observedAt,
+                    account, orders, deals, positionPnls, positionAvailability, orderAvailability, pnlAvailability,
+                    collectionAvailability(deals), pnlComplete, completeness, freshness, observationStartedAt,
+                    completedAt, unavailabilityReasons);
         }
 
         public BrokerAccountSnapshotV2(UUID brokerAccountId, BrokerProviderId provider,
@@ -249,7 +270,7 @@ public final class BrokerModels {
     }
     public enum AccountPositionModel { HEDGED, NETTED, SPREAD_BETTING, UNKNOWN }
     public enum MarginCalculationModel { MAX, SUM, NET, UNKNOWN }
-    public enum SnapshotCollectionAvailability { UNAVAILABLE_OR_ABSENT, AVAILABLE_EMPTY, AVAILABLE_NON_EMPTY }
+    public enum SnapshotCollectionAvailability { UNAVAILABLE_OR_ABSENT, AVAILABLE_EMPTY, AVAILABLE_NON_EMPTY, TRUNCATED }
     public record PositionPnlSnapshot(String brokerPositionReference, BigDecimal grossUnrealizedPnl,
                                       BigDecimal netUnrealizedPnl, Integer monetaryScale) {
         public PositionPnlSnapshot {

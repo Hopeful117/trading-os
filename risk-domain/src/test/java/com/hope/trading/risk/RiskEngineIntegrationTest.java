@@ -44,7 +44,7 @@ class RiskEngineIntegrationTest {
     @Test void staticTotalDrawdownUsesStartingBalanceAndBreachIsInclusive() {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500"),
                 usd("0"), java.util.Optional.of(usd("50000")),
-                new DailyRiskBaseline(usd("50000"), NOW, "TEST", java.util.Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("50000"), NOW, "TEST", java.util.Map.of()), java.util.Optional.of(usd("0")));
         var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
                 RuleSeverity.BLOCKING, "0.03")), account, null);
 
@@ -81,13 +81,13 @@ class RiskEngineIntegrationTest {
     private AccountSnapshot accountAtEquity(String equity) {
         return new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd(equity),
                 usd("0"), java.util.Optional.of(usd("50000")),
-                new DailyRiskBaseline(usd("50000"), NOW, "TEST", java.util.Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("50000"), NOW, "TEST", java.util.Map.of()), java.util.Optional.of(usd("0")));
     }
 
     @Test void staticTotalDrawdownDoesNotMoveAfterProfit() {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("55000"), usd("52000"),
                 usd("0"), java.util.Optional.of(usd("50000")),
-                new DailyRiskBaseline(usd("55000"), NOW, "TEST", java.util.Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("55000"), NOW, "TEST", java.util.Map.of()), java.util.Optional.of(usd("0")));
         var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
                 RuleSeverity.BLOCKING, "0.06")), account, null);
 
@@ -104,7 +104,7 @@ class RiskEngineIntegrationTest {
                 rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03")),
                 new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"), usd("9700"), usd("0"),
                         java.util.Optional.of(usd("10000")),
-                        new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("0")), null);
+                         new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0"))), null);
 
         var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
 
@@ -146,11 +146,11 @@ class RiskEngineIntegrationTest {
         var exact = new DeterministicRiskEngine("28.1", registry, clock).evaluate(
                 context(rules(strictDailyRule("0.03")), new AccountSnapshot(ACCOUNT_ID, 3, NOW,
                         usd("48500"), usd("48500"), usd("0"), java.util.Optional.of(usd("50000")),
-                        new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0")), null));
+                         new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0"))), null));
         var above = new DeterministicRiskEngine("28.1", registry, clock).evaluate(
                 context(rules(strictDailyRule("0.03")), new AccountSnapshot(ACCOUNT_ID, 3, NOW,
                         usd("48499.99"), usd("48499.99"), usd("0"), java.util.Optional.of(usd("50000")),
-                        new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0")), null));
+                         new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0"))), null));
 
         assertEquals(RiskDecision.APPROVED, exact.decision().orElseThrow());
         assertEquals(RuleStatus.PASS, exact.ruleResults().getFirst().status());
@@ -161,7 +161,7 @@ class RiskEngineIntegrationTest {
     @Test void totalDrawdownRetainsItsInclusiveBreachBoundary() {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500.01"),
                 usd("0"), java.util.Optional.of(usd("50000")),
-                new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0")));
         var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
                 RuleSeverity.BLOCKING, "0.03")), account, null);
 
@@ -175,7 +175,7 @@ class RiskEngineIntegrationTest {
         for (String equity : List.of("48500.00", "48499.99")) {
             var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd(equity),
                     usd("0"), java.util.Optional.of(usd("50000")),
-                    new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0")));
             var context = context(rules(rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT,
                     RuleSeverity.BLOCKING, "0.03")), account, null);
 
@@ -189,7 +189,7 @@ class RiskEngineIntegrationTest {
     @Test void krakenPropAdvanced50kUsesInclusiveDailyAndStaticTotalBoundaries() {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500"),
                 usd("0"), java.util.Optional.of(usd("50000")),
-                new DailyRiskBaseline(usd("50000"), NOW, "UTC/00:30", Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("50000"), NOW, "UTC/00:30", Map.of()), java.util.Optional.of(usd("0")));
         var context = context(rules(
                 rule(DailyDrawdownRule.ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03"),
                 rule(MaximumTotalDrawdownRule.RULE_ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.03")),
@@ -275,7 +275,7 @@ class RiskEngineIntegrationTest {
     private RiskValidationResult evaluateDailyDrawdown(String equity) {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd(equity),
                 usd("0"), java.util.Optional.of(usd("50000")),
-                new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("50000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0")));
         var context = context(rules(rule(DailyDrawdownRule.ID, RuleCategory.ACCOUNT,
                 RuleSeverity.BLOCKING, "0.03")), account, null);
         return new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);

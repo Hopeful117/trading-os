@@ -42,6 +42,24 @@ class JsonWebSocketCTraderOpenApiClientTest {
     }
 
     @Test
+    void expectedMarginUsesDocumentedPayloadTypesAndMatchesResponseVolume() throws Exception {
+        Method requestMessage = JsonWebSocketCTraderOpenApiClient.class
+                .getDeclaredMethod("requestMessage", int.class);
+        Method responseMessage = JsonWebSocketCTraderOpenApiClient.class
+                .getDeclaredMethod("responseMessage", int.class);
+        requestMessage.setAccessible(true);
+        responseMessage.setAccessible(true);
+
+        assertThat(invoke(requestMessage, client, 2139)).isEqualTo("ProtoOAExpectedMarginReq");
+        assertThat(invoke(responseMessage, client, 2140)).isEqualTo("ProtoOAExpectedMarginRes");
+        assertThatThrownBy(() -> client.validateExpectedMarginResponse(
+                mapper.readTree("{\"margin\":[{\"volume\":200,\"buyMargin\":100}] }"), 100L))
+                .hasMessage("CTRADER_EXPECTED_MARGIN_UNSUPPORTED_RESPONSE");
+        client.validateExpectedMarginResponse(
+                mapper.readTree("{\"margin\":[{\"volume\":100,\"buyMargin\":100}] }"), 100L);
+    }
+
+    @Test
     void validatesReadOnlyQuoteFactsWithExactDecimalPrices() {
         var quote = new CTraderOpenApiClient.CTraderQuote(
                 "EUR/USD", new BigDecimal("1.12345"), new BigDecimal("1.12346"),
@@ -248,7 +266,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
 
         var observation = invokeMapper(trader, assets, symbols, reconcile, pnl, deals, started);
 
-        assertThat(observation.complete()).isTrue();
+        assertThat(observation.complete()).isFalse();
         assertThat(observation.positions()).isEmpty();
         assertThat(observation.orders()).isEmpty();
         assertThat(observation.deals()).isEmpty();
@@ -260,6 +278,8 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThat(observation.pnlSet().availability())
                 .isEqualTo(CTraderReadOnlyObservation.CollectionAvailability.AVAILABLE_EMPTY);
         assertThat(observation.pnlComplete()).isTrue();
+        assertThat(observation.dealSet().availability())
+                .isEqualTo(CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT);
     }
 
     @Test
@@ -315,7 +335,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThat(observation.pnlSet().availability())
                 .isEqualTo(CTraderReadOnlyObservation.CollectionAvailability.AVAILABLE_EMPTY);
         assertThat(observation.pnlComplete()).isTrue();
-        assertThat(observation.complete()).isFalse();
+        assertThat(observation.complete()).isTrue();
     }
 
     @Test

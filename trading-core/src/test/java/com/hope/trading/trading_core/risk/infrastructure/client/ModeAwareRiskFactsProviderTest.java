@@ -262,6 +262,29 @@ class ModeAwareRiskFactsProviderTest {
     }
 
     @Test
+    void missingFreeMarginDoesNotMakeEveryLiveRiskFactUnavailable() {
+        UUID brokerId = UUID.randomUUID();
+        UUID providerReference = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
+                from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.ZERO, null), List.of(), List.of(),
+                "COMPLETE", "FRESH", from, from.plusSeconds(1), List.of()));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.account().equity()).isEqualByComparingTo("1");
+        assertThat(snapshot.account().margin()).isZero();
+    }
+
+    @Test
     void paperUsesLocalBalancesAndOpenTradesWithoutCallingBrokerFacts() {
         UUID brokerId = UUID.randomUUID();
         UUID tradeId = UUID.randomUUID();

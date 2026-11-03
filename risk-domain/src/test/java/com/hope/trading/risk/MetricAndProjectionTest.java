@@ -15,14 +15,35 @@ class MetricAndProjectionTest {
     private final AccountSnapshot account = new AccountSnapshot(
         ACCOUNT_ID, 1, NOW, usd("10000"), usd("9800"), usd("500"),
             java.util.Optional.of(usd("10000")),
-            new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("-100"));
+             new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), Optional.of(usd("-100")));
     private final ProjectionEngine engine = new ProjectionEngine();
 
     @Test void computesEveryObservedMetric() {
         var metrics = new ObservedMetricsCalculator().calculate(account);
         assertEquals(new BigDecimal("-200"), metrics.floatingPnl().amount());
-        assertEquals(new BigDecimal("-100"), metrics.closedPnl().amount());
+        assertEquals(new BigDecimal("-100"), metrics.closedPnl().orElseThrow().amount());
         assertEquals(new BigDecimal("9300"), metrics.freeMargin().amount());
+    }
+
+    @Test void preservesUnavailableDailyClosedPnlWithoutTurningItIntoZero() {
+        AccountSnapshot unavailable = new AccountSnapshot(
+                ACCOUNT_ID, 1, NOW, usd("10000"), usd("9800"), usd("500"),
+                Optional.of(usd("10000")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), Optional.empty());
+
+        var metrics = new ObservedMetricsCalculator().calculate(unavailable);
+
+        assertTrue(metrics.closedPnl().isEmpty());
+    }
+
+    @Test void preservesAuthoritativeZeroDailyClosedPnlAsAvailable() {
+        AccountSnapshot zero = new AccountSnapshot(
+                ACCOUNT_ID, 1, NOW, usd("10000"), usd("9800"), usd("500"),
+                Optional.of(usd("10000")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()),
+                Optional.of(usd("0")));
+
+        assertEquals(0, zero.dailyClosedPnl().orElseThrow().amount().signum());
     }
 
     @Test void opensAndIncreasesLongPosition() {
@@ -89,7 +110,7 @@ class MetricAndProjectionTest {
         AccountSnapshot profitable = new AccountSnapshot(
                 ACCOUNT_ID, 1, NOW, usd("10000"), usd("10010"), usd("500"),
                 Optional.of(usd("10000")),
-                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("0"));
+                 new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), Optional.of(usd("0")));
 
         ProjectedMetrics projected = engine.project(profitable, emptyPortfolio(),
                 trade(TradeDirection.LONG, "1", "100", "15", "1"));

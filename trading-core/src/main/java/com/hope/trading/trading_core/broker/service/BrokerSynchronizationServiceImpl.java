@@ -155,8 +155,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
     private void validateAccountFacts(BrokerAccountSnapshotV2Dto snapshot) {
         var account = snapshot.account();
         if (account == null || account.valuationAsset() == null || account.valuationAsset().isBlank()
-                || account.balance() == null || account.equity() == null
-                || account.usedMargin() == null || account.freeMargin() == null) {
+                || account.balance() == null) {
             throw new IllegalStateException("Broker account snapshot account facts are incomplete");
         }
     }

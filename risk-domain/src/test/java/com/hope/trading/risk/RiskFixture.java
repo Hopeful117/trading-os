@@ -37,7 +37,7 @@ final class RiskFixture {
     static RiskEvaluationContext context(EffectiveRiskRuleSet rules) {
         return context(rules, new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"),
                 usd("9800"), usd("500"), java.util.Optional.of(usd("10000")),
-                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), usd("-100")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), Optional.of(usd("-100"))),
                 new ProposedTrade(
                         UUID.fromString("00000000-0000-0000-0000-000000000012"), 1,
                         "EURUSD", TradeDirection.LONG, new BigDecimal("1000"),
