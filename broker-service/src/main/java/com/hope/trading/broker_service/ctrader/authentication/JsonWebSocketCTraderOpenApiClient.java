@@ -539,11 +539,28 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                                                        JsonNode pnl, JsonNode deals, Instant started) {
         log.info("ctrader_observation_response_fields accountId={} trader={} assets={} symbols={} reconcile={} pnl={} deals={}",
                 externalAccountId, fields(trader), fields(assets), fields(symbols), fields(reconcile), fields(pnl), fields(deals));
+        log.info("ctrader_observation_response_shape accountId={} trader={} assets={} symbols={} reconcile={} pnl={} deals={}",
+                externalAccountId,
+                responseShape(trader, "trader"),
+                responseShape(assets, "asset"),
+                responseShape(symbols, "symbol"),
+                responseShape(reconcile, "position", "order"),
+                responseShape(pnl, "positionUnrealizedPnl"),
+                responseShape(deals, "deal", "hasMore"));
+        log.info("ctrader_observation_response_nested_shape accountId={} trader={} position={} order={} pnl={} deal={}",
+                externalAccountId,
+                responseShape(trader.path("trader"), "balance", "equity", "usedMargin", "freeMargin",
+                        "depositAssetId", "moneyDigits", "accountType", "totalMarginCalculationType",
+                        "leverageInCents", "managerBonus", "ibBonus", "nonWithdrawableBonus"),
+                firstItemFields(reconcile, "position"),
+                firstItemFields(reconcile, "order"),
+                firstItemFields(pnl, "positionUnrealizedPnl"),
+                firstItemFields(deals, "deal"));
         List<String> reasons = new java.util.ArrayList<>();
         requireObject(trader, "trader", reasons);
         requireArray(assets, "asset", reasons);
         requireArray(symbols, "symbol", reasons);
-        requireArray(reconcile, "position", reasons);
+        allowOmittedArray(reconcile, "position", reasons);
         allowOmittedArray(reconcile, "order", reasons);
         allowOmittedArray(pnl, "positionUnrealizedPnl", reasons);
         allowOmittedArray(deals, "deal", reasons);
@@ -566,6 +583,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if (valuationAsset == null || valuationAsset.isBlank()) reasons.add("VALUATION_ASSET_UNAVAILABLE");
 
         List<CTraderReadOnlyObservation.Position> positions = new java.util.ArrayList<>();
+        CTraderReadOnlyObservation.CollectionState<JsonNode> rawPositions = collectionState(reconcile, "position");
+        CTraderReadOnlyObservation.CollectionState<JsonNode> rawOrders = collectionState(reconcile, "order");
         BigDecimal usedMargin = money(traderNode.path("usedMargin"), moneyDigits);
         BigDecimal freeMargin = money(traderNode.path("freeMargin"), moneyDigits);
         for (JsonNode position : reconcile.path("position")) {
@@ -601,8 +620,14 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 }
                 stopLoss = null;
             }
+            int positionMoneyDigits = position.path("moneyDigits").asInt(moneyDigits);
             positions.add(new CTraderReadOnlyObservation.Position(instrument, quantity,
-                    entryPrice, observedAt, position.path("positionId").asText(), positionMargin, stopLoss));
+                    entryPrice, observedAt, position.path("positionId").asText(), positionMargin, stopLoss,
+                    providerText(tradeData, "symbolId"), providerText(tradeData, "tradeSide"), rawVolume,
+                    providerField(position, "moneyDigits", JsonNode::asInt),
+                    providerMoneyField(position, "swap", positionMoneyDigits),
+                    providerMoneyField(position, "commission", positionMoneyDigits),
+                    providerMoneyField(position, "mirroringCommission", positionMoneyDigits)));
         }
 
         List<CTraderReadOnlyObservation.Order> orders = new java.util.ArrayList<>();
@@ -654,13 +679,29 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     instant(deal.path("executionTimestamp"), started), closingPosition));
         }
 
-        boolean pnlComplete = true;
-        for (JsonNode item : pnl.path("positionUnrealizedPnl")) {
-            BigDecimal positionPnl = money(item.path("netUnrealizedPnl"), pnl.path("moneyDigits").asInt(moneyDigits));
-            if (positionPnl == null) {
-                pnlComplete = false;
-            }
+        CTraderReadOnlyObservation.CollectionState<JsonNode> rawPnl = collectionState(pnl, "positionUnrealizedPnl");
+        List<CTraderReadOnlyObservation.PositionPnl> pnlFacts = new java.util.ArrayList<>();
+        boolean pnlComplete = rawPnl.availability() != CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT;
+        if (rawPositions.availability() == CTraderReadOnlyObservation.CollectionAvailability.AVAILABLE_NON_EMPTY
+                && positions.size() != rawPositions.values().size()) {
+            pnlComplete = false;
         }
+        java.util.Set<String> positionReferences = new java.util.HashSet<>();
+        for (CTraderReadOnlyObservation.Position position : positions) {
+            positionReferences.add(position.providerReference());
+        }
+        java.util.Set<String> pnlReferences = new java.util.HashSet<>();
+        for (JsonNode item : pnl.path("positionUnrealizedPnl")) {
+            String positionReference = providerText(item, "positionId");
+            if (positionReference == null || !pnlReferences.add(positionReference)) pnlComplete = false;
+            int pnlMoneyDigits = pnl.path("moneyDigits").asInt(moneyDigits);
+            var gross = providerMoneyField(item, "grossUnrealizedPnl", pnlMoneyDigits);
+            var net = providerMoneyField(item, "netUnrealizedPnl", pnlMoneyDigits);
+            if (positionReference == null || !net.present()) pnlComplete = false;
+            pnlFacts.add(new CTraderReadOnlyObservation.PositionPnl(positionReference == null ? "UNKNOWN" : positionReference,
+                    gross, net, providerField(pnl, "moneyDigits", JsonNode::asInt)));
+        }
+        if (!positionReferences.equals(pnlReferences)) pnlComplete = false;
         // Equity is an account-authoritative provider fact. Never reconstruct it
         // from local balance plus an unrealized-PnL observation.
         BigDecimal equity = money(traderNode.path("equity"), moneyDigits);
@@ -669,13 +710,102 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if (usedMargin == null) reasons.add("USED_MARGIN_UNAVAILABLE");
         if (freeMargin == null) reasons.add("FREE_MARGIN_UNAVAILABLE");
         Instant providerObservedAt = latestProviderTimestamp(trader, reconcile, deals, started, reasons);
-        boolean complete = reasons.isEmpty() && !deals.path("hasMore").asBoolean(false)
+        if (rawPositions.availability() == CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT) {
+            reasons.add("RESPONSE_FIELD_UNAVAILABLE:position");
+        }
+        if (rawOrders.availability() == CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT) {
+            reasons.add("RESPONSE_FIELD_UNAVAILABLE:order");
+        }
+        if (rawPnl.availability() == CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT) {
+            reasons.add("RESPONSE_FIELD_UNAVAILABLE:positionUnrealizedPnl");
+        }
+        boolean complete = reasons.isEmpty() && pnlComplete && !deals.path("hasMore").asBoolean(false)
                 && valuationAsset != null && !valuationAsset.isBlank();
         if (deals.path("hasMore").asBoolean(false)) reasons.add("DEAL_HISTORY_TRUNCATED");
         Instant completed = Instant.now();
+        var accountFacts = new CTraderReadOnlyObservation.AccountFacts(
+                providerEnumField(traderNode, "accountType", this::accountType),
+                providerEnumField(traderNode, "totalMarginCalculationType", this::marginCalculationType),
+                providerField(traderNode, "depositAssetId", JsonNode::asText),
+                providerField(traderNode, "moneyDigits", JsonNode::asInt),
+                providerField(traderNode, "leverageInCents", JsonNode::asLong),
+                providerMoneyField(traderNode, "managerBonus", moneyDigits),
+                providerMoneyField(traderNode, "ibBonus", moneyDigits),
+                providerMoneyField(traderNode, "nonWithdrawableBonus", moneyDigits));
+        var positionSet = mapCollection(rawPositions, positions);
+        var orderSet = mapCollection(rawOrders, orders);
+        var pnlSet = mapCollection(rawPnl, pnlFacts);
         return new CTraderReadOnlyObservation(externalAccountId, valuationAsset == null ? "UNKNOWN" : valuationAsset,
                 balance, equity, usedMargin, freeMargin, positions, orders, dealFacts,
-                started, providerObservedAt, completed, complete, List.copyOf(new LinkedHashSet<>(reasons)));
+                started, providerObservedAt, completed, complete, List.copyOf(new LinkedHashSet<>(reasons)),
+                accountFacts, positionSet, orderSet, pnlSet, pnlComplete);
+    }
+
+    private <T> CTraderReadOnlyObservation.CollectionState<T> mapCollection(
+            CTraderReadOnlyObservation.CollectionState<JsonNode> raw, List<T> values) {
+        return new CTraderReadOnlyObservation.CollectionState<>(raw.availability(), values);
+    }
+
+    private CTraderReadOnlyObservation.CollectionState<JsonNode> collectionState(JsonNode response, String field) {
+        // cTrader's official JSON representation may omit zero-entry repeated
+        // fields. The caller reaches this mapper only after a correlated,
+        // account-validated successful response has been decoded.
+        if (!response.has(field)) {
+            return CTraderReadOnlyObservation.CollectionState.available(List.of());
+        }
+        if (!response.path(field).isArray()) {
+            return CTraderReadOnlyObservation.CollectionState.unavailable();
+        }
+        List<JsonNode> values = new ArrayList<>();
+        response.path(field).forEach(values::add);
+        return CTraderReadOnlyObservation.CollectionState.available(values);
+    }
+
+    private String providerText(JsonNode node, String field) {
+        return node.hasNonNull(field) ? node.path(field).asText() : null;
+    }
+
+    private <T> CTraderReadOnlyObservation.ProviderField<T> providerField(
+            JsonNode node, String field, java.util.function.Function<JsonNode, T> decoder) {
+        return node.hasNonNull(field)
+                ? CTraderReadOnlyObservation.ProviderField.present(decoder.apply(node.path(field)))
+                : CTraderReadOnlyObservation.ProviderField.absent();
+    }
+
+    private CTraderReadOnlyObservation.ProviderField<String> providerEnumField(
+            JsonNode node, String field, java.util.function.Function<JsonNode, String> decoder) {
+        return providerField(node, field, decoder);
+    }
+
+    private String accountType(JsonNode value) {
+        if (value.isIntegralNumber()) {
+            return switch (value.intValue()) {
+                case 0 -> "HEDGED";
+                case 1 -> "NETTED";
+                case 2 -> "SPREAD_BETTING";
+                default -> "UNKNOWN(" + value.intValue() + ")";
+            };
+        }
+        return value.asText();
+    }
+
+    private String marginCalculationType(JsonNode value) {
+        if (value.isIntegralNumber()) {
+            return switch (value.intValue()) {
+                case 0 -> "MAX";
+                case 1 -> "SUM";
+                case 2 -> "NET";
+                default -> "UNKNOWN(" + value.intValue() + ")";
+            };
+        }
+        return value.asText();
+    }
+
+    private CTraderReadOnlyObservation.ProviderField<BigDecimal> providerMoneyField(
+            JsonNode node, String field, int moneyDigits) {
+        return node.hasNonNull(field)
+                ? CTraderReadOnlyObservation.ProviderField.present(money(node.path(field), moneyDigits))
+                : CTraderReadOnlyObservation.ProviderField.absent();
     }
 
     private BigDecimal closePnl(JsonNode detail, int moneyDigits) {
@@ -730,6 +860,36 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         List<String> fields = new ArrayList<>();
         response.fieldNames().forEachRemaining(fields::add);
         return fields;
+    }
+
+    /** Logs presence and cardinality only; provider values and payload contents remain redacted. */
+    private String responseShape(JsonNode response, String... targetFields) {
+        List<String> shape = new ArrayList<>();
+        for (String field : targetFields) {
+            if (!response.has(field)) {
+                shape.add(field + "=ABSENT");
+                continue;
+            }
+            JsonNode value = response.path(field);
+            if (value.isNull()) {
+                shape.add(field + "=NULL");
+            } else if (value.isArray()) {
+                shape.add(field + "=" + (value.isEmpty() ? "EMPTY" : "NON_EMPTY")
+                        + ":count=" + value.size());
+            } else {
+                shape.add(field + "=PRESENT:type=" + value.getNodeType());
+            }
+        }
+        return String.join(",", shape);
+    }
+
+    private String firstItemFields(JsonNode response, String field) {
+        if (!response.has(field)) return field + "=ABSENT";
+        JsonNode values = response.path(field);
+        if (!values.isArray()) return field + "=NOT_ARRAY";
+        if (values.isEmpty()) return field + "=EMPTY";
+        JsonNode first = values.get(0);
+        return field + "=" + (first.isObject() ? fields(first) : first.getNodeType());
     }
 
     private Instant latestProviderTimestamp(JsonNode trader, JsonNode reconcile, JsonNode deals,

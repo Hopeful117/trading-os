@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.brokeraccount.api;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountService;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerConnectionCommandClient;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountReadOnlyStatusService;
 import com.hope.trading.trading_core.dto.UserDto;
 import feign.FeignException;
 import jakarta.validation.Valid;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class BrokerAccountController {
     private final BrokerAccountService service;
     private final BrokerConnectionCommandClient brokerConnection;
+    private final BrokerAccountReadOnlyStatusService readOnlyStatusService;
 
     @PostMapping
     public ResponseEntity<BrokerAccountResponse> create(@Valid @RequestBody CreateBrokerAccountRequest request,
@@ -47,6 +49,12 @@ public class BrokerAccountController {
     @GetMapping("/{accountId}/status")
     public ResponseEntity<BrokerAccountResponse> status(@PathVariable UUID accountId, Authentication authentication) {
         return get(accountId, authentication);
+    }
+
+    @GetMapping("/{accountId}/read-only-status")
+    public ResponseEntity<BrokerAccountReadOnlyStatusResponse> readOnlyStatus(
+            @PathVariable UUID accountId, Authentication authentication) {
+        return ResponseEntity.ok(readOnlyStatusService.status(principal(authentication).getUserId(), accountId));
     }
 
     @PostMapping("/{accountId}/disconnect")

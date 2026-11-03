@@ -9,6 +9,7 @@ import {
   CTraderAuthorization,
   CTraderMarketDataAuthorizationState,
   CTraderMarketDataAuthorization,
+  BrokerAccountReadOnlyStatus,
   CTRADER_PROVIDER_REGISTRATION_REFERENCE,
   KRAKEN_PROVIDER_REGISTRATION_REFERENCE,
 } from '../models/broker-account.model';
@@ -22,6 +23,12 @@ export class BrokerAccountService {
 
   list(): Observable<BrokerAccount[]> {
     return this.http.get<BrokerAccount[]>(this.baseUrl);
+  }
+
+  getReadOnlyStatus(brokerAccountId: string): Observable<BrokerAccountReadOnlyStatus> {
+    return this.http.get<BrokerAccountReadOnlyStatus>(
+      `${this.baseUrl}/${brokerAccountId}/read-only-status`,
+    );
   }
 
   provisionTradingAccount(accountId: string): Observable<unknown> {

@@ -20,6 +20,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 import {
   BrokerAccount,
+  BrokerAccountReadOnlyStatus,
   BrokerProvider,
   CTraderAuthorization,
   CTraderMarketDataAuthorizationState,
@@ -59,6 +60,10 @@ export class Accounts {
   readonly provisioningFeedback = signal<ConnectionFeedback>(null);
   readonly syncing = signal(false);
   readonly syncFeedback = signal<ConnectionFeedback>(null);
+  readonly readOnlyStatusAccountId = signal<string | null>(null);
+  readonly readOnlyStatus = signal<BrokerAccountReadOnlyStatus | null>(null);
+  readonly readOnlyStatusLoading = signal(false);
+  readonly readOnlyStatusError = signal(false);
   readonly cTraderAuthorization = signal<CTraderAuthorization | null>(null);
   readonly cTraderFlowAccountId = signal<string | null>(null);
   readonly cTraderMarketDataUrl = signal<string | null>(null);
@@ -157,6 +162,7 @@ export class Accounts {
     const accountId = this.cTraderFlowAccountId();
     if (this.lifecycleBusy() || !authorization || !accountId || !externalAccountId) return;
 
+    this.connectionFeedback.set(null);
     this.provisioningAccountId.set(accountId);
     this.provisioningFeedback.set(null);
     this.brokerAccountService
@@ -360,12 +366,39 @@ export class Accounts {
     return account.provider === CTRADER_PROVIDER_REGISTRATION_REFERENCE;
   }
 
+  refreshReadOnlyStatus(account: BrokerAccount): void {
+    if (
+      this.readOnlyStatusLoading() ||
+      account.connectionStatus !== 'CONNECTED' ||
+      !this.isCTraderAccount(account)
+    ) {
+      return;
+    }
+
+    this.readOnlyStatusAccountId.set(account.id);
+    this.readOnlyStatus.set(null);
+    this.readOnlyStatusError.set(false);
+    this.readOnlyStatusLoading.set(true);
+    this.brokerAccountService.getReadOnlyStatus(account.id).subscribe({
+      next: (status) => {
+        this.readOnlyStatus.set(status);
+        this.readOnlyStatusLoading.set(false);
+      },
+      error: () => {
+        this.readOnlyStatus.set(null);
+        this.readOnlyStatusError.set(true);
+        this.readOnlyStatusLoading.set(false);
+      },
+    });
+  }
+
   lifecycleBusy(): boolean {
     return (
       this.connecting() ||
       this.revokingAccountId() !== null ||
       this.disconnectingAccountId() !== null ||
-      this.provisioningAccountId() !== null
+      this.provisioningAccountId() !== null ||
+      this.readOnlyStatusLoading()
     );
   }
 

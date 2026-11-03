@@ -3,6 +3,7 @@ package com.hope.trading.broker_service.ctrader.synchronization;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 /** Provider-owned facts kept inside the cTrader adapter boundary. */
 public record CTraderReadOnlyObservation(
@@ -19,7 +20,23 @@ public record CTraderReadOnlyObservation(
         Instant providerObservedAt,
         Instant completedAt,
         boolean complete,
-        List<String> reasons) {
+        List<String> reasons,
+        AccountFacts accountFacts,
+        CollectionState<Position> positionSet,
+        CollectionState<Order> orderSet,
+        CollectionState<PositionPnl> pnlSet,
+        boolean pnlComplete) {
+
+    public CTraderReadOnlyObservation(String externalAccountId, String valuationAsset,
+                                      BigDecimal balance, BigDecimal equity, BigDecimal usedMargin,
+                                      BigDecimal freeMargin, List<Position> positions, List<Order> orders,
+                                      List<Deal> deals, Instant startedAt, Instant providerObservedAt,
+                                      Instant completedAt, boolean complete, List<String> reasons) {
+        this(externalAccountId, valuationAsset, balance, equity, usedMargin, freeMargin, positions, orders,
+                deals, startedAt, providerObservedAt, completedAt, complete, reasons, AccountFacts.empty(),
+                CollectionState.available(positions), CollectionState.available(orders),
+                CollectionState.available(List.of()), true);
+    }
 
     public CTraderReadOnlyObservation {
         if (externalAccountId == null || externalAccountId.isBlank()) {
@@ -36,14 +53,101 @@ public record CTraderReadOnlyObservation(
             throw new IllegalArgumentException("observation timestamps are required");
         }
         reasons = List.copyOf(reasons);
+        accountFacts = Objects.requireNonNull(accountFacts, "accountFacts is required");
+        positionSet = Objects.requireNonNull(positionSet, "positionSet is required");
+        orderSet = Objects.requireNonNull(orderSet, "orderSet is required");
+        pnlSet = Objects.requireNonNull(pnlSet, "pnlSet is required");
+    }
+
+    public record ProviderField<T>(boolean present, T value) {
+        public ProviderField {
+            if (!present && value != null) throw new IllegalArgumentException("absent provider field cannot have a value");
+            if (present && value == null) throw new IllegalArgumentException("present provider field requires a value");
+        }
+
+        public static <T> ProviderField<T> absent() {
+            return new ProviderField<>(false, null);
+        }
+
+        public static <T> ProviderField<T> present(T value) {
+            return new ProviderField<>(true, Objects.requireNonNull(value, "provider value is required"));
+        }
+    }
+
+    public enum CollectionAvailability {
+        UNAVAILABLE_OR_ABSENT,
+        AVAILABLE_EMPTY,
+        AVAILABLE_NON_EMPTY
+    }
+
+    public record CollectionState<T>(CollectionAvailability availability, List<T> values) {
+        public CollectionState {
+            availability = Objects.requireNonNull(availability, "collection availability is required");
+            values = List.copyOf(values);
+            if (availability == CollectionAvailability.UNAVAILABLE_OR_ABSENT && !values.isEmpty()) {
+                throw new IllegalArgumentException("unavailable collection cannot have values");
+            }
+            if (availability == CollectionAvailability.AVAILABLE_EMPTY && !values.isEmpty()) {
+                throw new IllegalArgumentException("empty collection cannot have values");
+            }
+        }
+
+        public static <T> CollectionState<T> unavailable() {
+            return new CollectionState<>(CollectionAvailability.UNAVAILABLE_OR_ABSENT, List.of());
+        }
+
+        public static <T> CollectionState<T> available(List<T> values) {
+            return new CollectionState<>(values.isEmpty()
+                    ? CollectionAvailability.AVAILABLE_EMPTY : CollectionAvailability.AVAILABLE_NON_EMPTY, values);
+        }
+    }
+
+    public record AccountFacts(
+            ProviderField<String> accountType,
+            ProviderField<String> totalMarginCalculationType,
+            ProviderField<String> depositAssetId,
+            ProviderField<Integer> moneyDigits,
+            ProviderField<Long> leverageInCents,
+            ProviderField<BigDecimal> managerBonus,
+            ProviderField<BigDecimal> ibBonus,
+            ProviderField<BigDecimal> nonWithdrawableBonus) {
+        public AccountFacts {
+            accountType = Objects.requireNonNull(accountType, "accountType is required");
+            totalMarginCalculationType = Objects.requireNonNull(totalMarginCalculationType, "margin type is required");
+            depositAssetId = Objects.requireNonNull(depositAssetId, "depositAssetId is required");
+            moneyDigits = Objects.requireNonNull(moneyDigits, "moneyDigits is required");
+            leverageInCents = Objects.requireNonNull(leverageInCents, "leverageInCents is required");
+            managerBonus = Objects.requireNonNull(managerBonus, "managerBonus is required");
+            ibBonus = Objects.requireNonNull(ibBonus, "ibBonus is required");
+            nonWithdrawableBonus = Objects.requireNonNull(nonWithdrawableBonus, "nonWithdrawableBonus is required");
+        }
+
+        public static AccountFacts empty() {
+            return new AccountFacts(ProviderField.absent(), ProviderField.absent(), ProviderField.absent(),
+                    ProviderField.absent(), ProviderField.absent(), ProviderField.absent(),
+                    ProviderField.absent(), ProviderField.absent());
+        }
     }
 
     public record Position(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
                            Instant observedAt, String providerReference, BigDecimal margin,
-                           BigDecimal stopLoss) {
+                           BigDecimal stopLoss, String providerSymbolId, String providerTradeSide,
+                           BigDecimal providerVolume, ProviderField<Integer> moneyDigits,
+                           ProviderField<BigDecimal> swap, ProviderField<BigDecimal> commission,
+                           ProviderField<BigDecimal> mirroringCommission) {
         public Position(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
                         Instant observedAt, String providerReference) {
-            this(instrument, signedQuantity, entryPrice, observedAt, providerReference, null, null);
+            this(instrument, signedQuantity, entryPrice, observedAt, providerReference, null, null,
+                    null, null, null, ProviderField.absent(), ProviderField.absent(),
+                    ProviderField.absent(), ProviderField.absent());
+        }
+
+        public Position(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
+                        Instant observedAt, String providerReference, BigDecimal margin,
+                        BigDecimal stopLoss) {
+            this(instrument, signedQuantity, entryPrice, observedAt, providerReference, margin, stopLoss,
+                    null, null, null, ProviderField.absent(), ProviderField.absent(),
+                    ProviderField.absent(), ProviderField.absent());
         }
 
         public Position {
@@ -53,6 +157,24 @@ public record CTraderReadOnlyObservation(
             if (observedAt == null || providerReference == null || providerReference.isBlank()) throw new IllegalArgumentException("position identity is required");
             if (margin != null && margin.signum() < 0) throw new IllegalArgumentException("margin cannot be negative");
             if (stopLoss != null && stopLoss.signum() <= 0) throw new IllegalArgumentException("stopLoss must be positive");
+            moneyDigits = Objects.requireNonNull(moneyDigits, "moneyDigits is required");
+            swap = Objects.requireNonNull(swap, "swap is required");
+            commission = Objects.requireNonNull(commission, "commission is required");
+            mirroringCommission = Objects.requireNonNull(mirroringCommission, "mirroringCommission is required");
+        }
+    }
+
+    public record PositionPnl(String providerPositionReference,
+                              ProviderField<BigDecimal> grossUnrealizedPnl,
+                              ProviderField<BigDecimal> netUnrealizedPnl,
+                              ProviderField<Integer> moneyDigits) {
+        public PositionPnl {
+            if (providerPositionReference == null || providerPositionReference.isBlank()) {
+                throw new IllegalArgumentException("position PnL identity is required");
+            }
+            grossUnrealizedPnl = Objects.requireNonNull(grossUnrealizedPnl, "gross PnL is required");
+            netUnrealizedPnl = Objects.requireNonNull(netUnrealizedPnl, "net PnL is required");
+            moneyDigits = Objects.requireNonNull(moneyDigits, "moneyDigits is required");
         }
     }
 

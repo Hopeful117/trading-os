@@ -7,7 +7,6 @@ import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
 import com.hope.trading.broker_service.connection.integration.TradingCoreBrokerAccountClient;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
-import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
 import com.hope.trading.broker_service.secret.application.SecretReader;
 import com.hope.trading.broker_service.secret.application.SecretRotator;
 import com.hope.trading.broker_service.secret.application.SecretWriter;
@@ -21,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -153,10 +151,6 @@ class CTraderAuthenticationServiceTest {
          when(connections.findByBrokerAccountIdAndOwnerIdForUpdate(brokerAccountId, owner)).thenReturn(Optional.of(connection));
         when(secretReader.read(new CredentialReference(tokenReference)))
                 .thenReturn(new PlainSecret(CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
-        when(openApi.readOnlyObservation(any(), eq("1001"), any(), any()))
-                .thenReturn(new CTraderReadOnlyObservation("1001", "USD", BigDecimal.valueOf(50000),
-                        BigDecimal.valueOf(50000), BigDecimal.ZERO, BigDecimal.valueOf(50000),
-                        List.of(), List.of(), List.of(), NOW, NOW, NOW, true, List.of()));
         when(openApi.isDemoAccount(any(), eq("1001"))).thenReturn(true);
 
         CTraderAuthorizationResponse response = service().bind(owner, brokerAccountId, attempt.id(), "1001", AUTHORIZATION);
@@ -167,6 +161,7 @@ class CTraderAuthenticationServiceTest {
         org.junit.jupiter.api.Assertions.assertTrue(connection.detectedPermissions().contains(
                 com.hope.trading.broker_service.connection.domain.BrokerPermission.TRADE));
         verify(openApi).authorizeAccount(any(), eq("1001"));
+        verify(openApi, never()).readOnlyObservation(any(), any(), any(), any());
         verify(tradingCore).updateStatusWithServiceAuthorization(eq(brokerAccountId), any(), any());
     }
 
