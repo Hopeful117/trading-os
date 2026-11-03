@@ -27,6 +27,72 @@ export interface BrokerAccount {
   updatedAt: string;
 }
 
+export interface BrokerAccountReadOnlyStatus {
+  status: string;
+  executionAllowed: boolean;
+  riskEvaluationAllowed: boolean;
+  snapshot: BrokerAccountSnapshot | null;
+}
+
+export interface BrokerAccountSnapshot {
+  brokerAccountId: string;
+  providerRegistrationReference: string;
+  externalAccountId: string | null;
+  balances: Record<string, number>;
+  positions: BrokerPositionSnapshot[];
+  observedAt: string;
+  account: BrokerAccountFacts | null;
+  orders: BrokerOrderSnapshot[];
+  deals: BrokerDealSnapshot[];
+  completeness: string;
+  freshness: string;
+  observationStartedAt: string;
+  completedAt: string;
+  unavailabilityReasons: string[];
+}
+
+export interface BrokerAccountFacts {
+  valuationAsset: string | null;
+  balance: number | null;
+  equity: number | null;
+  usedMargin: number | null;
+  freeMargin: number | null;
+}
+
+export interface BrokerPositionSnapshot {
+  instrument: string;
+  signedQuantity: number;
+  entryPrice: number;
+  observedAt: string;
+  brokerPositionReference: string;
+  margin: number | null;
+  stopLoss: number | null;
+}
+
+export interface BrokerOrderSnapshot {
+  externalOrderId: string;
+  clientOrderId: string | null;
+  status: string;
+  quantity: number;
+  filledQuantity: number;
+  observedAt: string;
+}
+
+export interface BrokerDealSnapshot {
+  providerTradeReference: string;
+  providerPositionReference: string | null;
+  instrument: string;
+  settlementAsset: string;
+  side: string;
+  quantity: number;
+  price: number;
+  fee: number | null;
+  swap: number | null;
+  realizedPnl: number | null;
+  closedAt: string;
+  closingPosition: boolean;
+}
+
 export interface CredentialValidation {
   outcome: string;
   connectionStatus: BrokerConnectionStatus;

@@ -258,6 +258,38 @@
           </button>
         }
         @if (brokerAccount.connectionStatus === 'CONNECTED') {
+          @if (isCTraderAccount(brokerAccount)) {
+            <button
+              type="button"
+              class="secondary-button"
+              data-testid="read-only-status-button"
+              [disabled]="readOnlyStatusLoading()"
+              (click)="refreshReadOnlyStatus(brokerAccount)"
+            >
+              {{
+                readOnlyStatusLoading() && readOnlyStatusAccountId() === brokerAccount.id
+                  ? 'Lecture…'
+                  : 'Actualiser le statut lecture seule'
+              }}
+            </button>
+            @if (readOnlyStatusAccountId() === brokerAccount.id) {
+              @if (readOnlyStatusError()) {
+                <p
+                  class="connection-message error"
+                  data-testid="read-only-status-error"
+                  role="alert"
+                >
+                  Le statut lecture seule n’a pas pu être récupéré.
+                </p>
+              } @else if (readOnlyStatus(); as readOnly) {
+                <p class="connection-message" data-testid="read-only-status-result" role="status">
+                  Statut: {{ readOnly.status }} · Complétude:
+                  {{ readOnly.snapshot?.completeness || 'UNKNOWN' }} · Fraîcheur:
+                  {{ readOnly.snapshot?.freshness || 'UNKNOWN' }}
+                </p>
+              }
+            }
+          }
           @if (!hasTradingAccount(brokerAccount, state.accounts)) {
             <button
               type="button"

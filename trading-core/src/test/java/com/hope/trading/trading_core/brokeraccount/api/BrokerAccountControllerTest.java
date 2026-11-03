@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.brokeraccount.api;
 
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountService;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerConnectionCommandClient;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountReadOnlyStatusService;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerConnectionStatus;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
@@ -34,8 +35,9 @@ class BrokerAccountControllerTest {
 
     private final BrokerAccountService service = mock(BrokerAccountService.class);
     private final BrokerConnectionCommandClient brokerConnection = mock(BrokerConnectionCommandClient.class);
+    private final BrokerAccountReadOnlyStatusService readOnlyStatusService = mock(BrokerAccountReadOnlyStatusService.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
-            new BrokerAccountController(service, brokerConnection)).build();
+            new BrokerAccountController(service, brokerConnection, readOnlyStatusService)).build();
 
     private UsernamePasswordAuthenticationToken auth(UUID userId) {
         UserDto principal = UserDto.builder().userId(userId).build();
@@ -102,6 +104,25 @@ class BrokerAccountControllerTest {
                 .andExpect(status().isOk());
 
         verify(service).get(userId, accountId);
+    }
+
+    @Test
+    void readOnlyStatusPassesAuthenticatedOwnerAndSerializesObservationStatus() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        var readOnlyStatus = new BrokerAccountReadOnlyStatusResponse(
+                "CONNECTED_BUT_FACTS_INCOMPLETE", false, false, null);
+        when(readOnlyStatusService.status(userId, accountId)).thenReturn(readOnlyStatus);
+
+        mvc.perform(get("/api/v1/broker-accounts/{accountId}/read-only-status", accountId)
+                        .principal(auth(userId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONNECTED_BUT_FACTS_INCOMPLETE"))
+                .andExpect(jsonPath("$.executionAllowed").value(false))
+                .andExpect(jsonPath("$.riskEvaluationAllowed").value(false))
+                .andExpect(jsonPath("$.snapshot").doesNotExist());
+
+        verify(readOnlyStatusService).status(userId, accountId);
     }
 
     @Test

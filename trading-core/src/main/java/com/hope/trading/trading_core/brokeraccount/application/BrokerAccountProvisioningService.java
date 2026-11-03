@@ -102,7 +102,8 @@ public class BrokerAccountProvisioningService {
             throw new IllegalStateException("Broker account snapshot identity mismatch");
         }
         if (!"COMPLETE".equals(snapshot.completeness()) || !"FRESH".equals(snapshot.freshness())) {
-            throw new IllegalStateException("Broker account snapshot is not complete and fresh");
+            throw new BrokerAccountSnapshotIncompleteException(snapshot.completeness(), snapshot.freshness(),
+                    snapshot.unavailabilityReasons());
         }
         if (snapshot.account() == null || snapshot.account().valuationAsset() == null
                 || snapshot.account().valuationAsset().isBlank()) {

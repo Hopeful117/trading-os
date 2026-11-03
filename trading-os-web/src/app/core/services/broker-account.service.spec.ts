@@ -29,6 +29,22 @@ describe('BrokerAccountService', () => {
     req.flush([]);
   });
 
+  it('retrieves read-only broker status without a request body', () => {
+    service.getReadOnlyStatus('account-1').subscribe();
+
+    const req = http.expectOne({
+      method: 'GET',
+      url: '/api/v1/broker-accounts/account-1/read-only-status',
+    });
+    expect(req.request.body).toBeNull();
+    req.flush({
+      status: 'CONNECTED_BUT_FACTS_INCOMPLETE',
+      executionAllowed: false,
+      riskEvaluationAllowed: false,
+      snapshot: null,
+    });
+  });
+
   it('retrieves the authenticated eligible risk profile catalog', () => {
     service.eligibleRiskProfiles().subscribe();
 

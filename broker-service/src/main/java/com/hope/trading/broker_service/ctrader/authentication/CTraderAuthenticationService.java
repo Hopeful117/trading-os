@@ -8,7 +8,6 @@ import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
 import com.hope.trading.broker_service.connection.integration.TradingCoreBrokerAccountClient;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
-import com.hope.trading.broker_service.ctrader.synchronization.CTraderReadOnlyObservation;
 import com.hope.trading.broker_service.secret.application.SecretReader;
 import com.hope.trading.broker_service.secret.application.SecretRotator;
 import com.hope.trading.broker_service.secret.application.SecretWriter;
@@ -18,8 +17,6 @@ import com.hope.trading.broker_service.secret.domain.PlainSecret;
 import com.hope.trading.broker_service.secret.domain.SecretMetadata;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -33,7 +30,6 @@ import java.util.UUID;
 
 @Service
 public class CTraderAuthenticationService {
-    private static final Logger log = LoggerFactory.getLogger(CTraderAuthenticationService.class);
     private static final String SCOPE = "trading";
     private static final Set<BrokerPermission> READ_PERMISSIONS = Set.of(
             BrokerPermission.READ_ACCOUNT,
@@ -187,16 +183,6 @@ public class CTraderAuthenticationService {
                 throw new CTraderAuthenticationException("Selected cTrader account is not a provider-confirmed demo account");
             }
             Instant validatedAt = clock.instant();
-            CTraderReadOnlyObservation observation = openApi.readOnlyObservation(
-                    token, externalAccountId, validatedAt.minusSeconds(7 * 24 * 60 * 60), validatedAt);
-            if (!externalAccountId.equals(observation.externalAccountId())) {
-                throw new CTraderAuthenticationException("cTrader external account identity mismatch");
-            }
-            if (!observation.complete()) {
-                log.warn("ctrader_account_observation_incomplete accountId={} reasons={}",
-                        externalAccountId, observation.reasons());
-                throw new CTraderAuthenticationException("cTrader account observation is incomplete");
-            }
             BrokerConnection connection = connections.findByBrokerAccountIdAndOwnerIdForUpdate(
                             attempt.brokerAccountId(), ownerId)
                     .orElseThrow(() -> new CTraderAuthenticationException("Broker connection is not accessible"));
@@ -219,7 +205,7 @@ public class CTraderAuthenticationService {
                             externalAccountId,
                             validatedAt),
                     null);
-            return response(attempt, null, "cTrader account bound and read-only connection validated");
+            return response(attempt, null, "cTrader account bound and account authorization validated");
         }
     }
 

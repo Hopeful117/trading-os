@@ -157,7 +157,22 @@ provider-specific symbol IDs and separate demo/live endpoints. It does not prove
 that the target FTMO account exposes every requested fact with one atomic
 timestamp; controlled real-account READ-ONLY validation remains required.
 
-## 8. Rejected Alternatives
+## 8. Partial Read-Only Capability
+
+The provider-neutral snapshot may be exposed through an authenticated read-only
+status boundary when cTrader supplies usable account identity, balance,
+positions, orders, quotes or instrument metadata but omits required account
+financial facts. Such a response SHALL explicitly report
+`CONNECTED_BUT_FACTS_INCOMPLETE` and preserve the missing-fact reasons.
+
+This partial capability is observational only. It SHALL set execution and risk
+evaluation availability to false, SHALL NOT create or synchronize a Trading Core
+financial account, and SHALL NOT make incomplete facts authoritative. The
+existing `COMPLETE` and `FRESH` requirements remain mandatory for provisioning,
+LIVE synchronization, reconciliation authority, risk evaluation and execution
+admission.
+
+## 9. Rejected Alternatives
 
 ### Expose cTrader DTOs to Trading Core
 

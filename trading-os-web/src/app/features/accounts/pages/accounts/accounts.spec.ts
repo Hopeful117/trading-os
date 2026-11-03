@@ -15,6 +15,7 @@ describe('Accounts', () => {
   };
   let brokerAccountService: {
     list: ReturnType<typeof vi.fn>;
+    getReadOnlyStatus: ReturnType<typeof vi.fn>;
     eligibleRiskProfiles: ReturnType<typeof vi.fn>;
     createPaper: ReturnType<typeof vi.fn>;
     createAndConnect: ReturnType<typeof vi.fn>;
@@ -30,15 +31,18 @@ describe('Accounts', () => {
     revoke: ReturnType<typeof vi.fn>;
   };
   let accounts: BehaviorSubject<Account[]>;
+  let brokerAccounts: BehaviorSubject<BrokerAccount[]>;
 
   beforeEach(async () => {
     accounts = new BehaviorSubject<Account[]>([]);
+    brokerAccounts = new BehaviorSubject<BrokerAccount[]>([]);
     accountService = {
       getAccounts: vi.fn(() => accounts),
       synchronize: vi.fn(() => of('Accounts synchronized successfully')),
     };
     brokerAccountService = {
-      list: vi.fn(() => of([])),
+      list: vi.fn(() => brokerAccounts),
+      getReadOnlyStatus: vi.fn(),
       eligibleRiskProfiles: vi.fn(() => of([])),
       createPaper: vi.fn(() => of({ executionMode: 'PAPER' })),
       createAndConnect: vi.fn(() => of({ outcome: 'VALID', safeMessage: 'Connexion réussie.' })),
@@ -104,6 +108,93 @@ describe('Accounts', () => {
 
   it('should load broker accounts on init', () => {
     expect(brokerAccountService.list).toHaveBeenCalled();
+  });
+
+  it('does not request read-only status before the user action and prevents duplicates while pending', () => {
+    const account = brokerAccount('ctrader-account-1', 'CONNECTED');
+    account.provider = '3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012';
+    const pending = new Subject<unknown>();
+    brokerAccountService.getReadOnlyStatus.mockReturnValue(pending);
+
+    expect(brokerAccountService.getReadOnlyStatus).not.toHaveBeenCalled();
+    component.refreshReadOnlyStatus(account);
+    component.refreshReadOnlyStatus(account);
+
+    expect(brokerAccountService.getReadOnlyStatus).toHaveBeenCalledTimes(1);
+    expect(component.readOnlyStatusLoading()).toBe(true);
+    expect(component.lifecycleBusy()).toBe(true);
+    pending.next({ status: 'CONNECTED_BUT_FACTS_INCOMPLETE' });
+    pending.complete();
+    expect(component.readOnlyStatusLoading()).toBe(false);
+    expect(component.lifecycleBusy()).toBe(false);
+  });
+
+  it('renders the cTrader refresh action and its incomplete result after a user click', async () => {
+    const account = brokerAccount('ctrader-account-1', 'CONNECTED');
+    account.provider = '3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012';
+    const pending = new Subject<unknown>();
+    brokerAccountService.getReadOnlyStatus.mockReturnValue(pending);
+    brokerAccounts.next([account]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(
+      '[data-testid="read-only-status-button"]',
+    ) as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    expect(brokerAccountService.getReadOnlyStatus).not.toHaveBeenCalled();
+
+    button.click();
+    expect(brokerAccountService.getReadOnlyStatus).toHaveBeenCalledTimes(1);
+    fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+
+    pending.next({
+      status: 'CONNECTED_BUT_FACTS_INCOMPLETE',
+      executionAllowed: false,
+      riskEvaluationAllowed: false,
+      snapshot: { completeness: 'INCOMPLETE', freshness: 'FRESH' },
+    });
+    pending.complete();
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="read-only-status-result"]')?.textContent,
+    ).toContain('CONNECTED_BUT_FACTS_INCOMPLETE');
+    expect(button.disabled).toBe(false);
+  });
+
+  it('renders a fail-closed error after the rendered refresh action fails', async () => {
+    const account = brokerAccount('ctrader-account-1', 'CONNECTED');
+    account.provider = '3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012';
+    const pending = new Subject<unknown>();
+    brokerAccountService.getReadOnlyStatus.mockReturnValue(pending);
+    brokerAccounts.next([account]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(
+      '[data-testid="read-only-status-button"]',
+    ) as HTMLButtonElement;
+    button.click();
+    pending.error(new Error('failed'));
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="read-only-status-error"]'),
+    ).not.toBeNull();
+    expect(button.disabled).toBe(false);
+  });
+
+  it('releases read-only loading state and shows fail-closed error feedback', () => {
+    const account = brokerAccount('ctrader-account-1', 'CONNECTED');
+    account.provider = '3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012';
+    brokerAccountService.getReadOnlyStatus.mockReturnValue(throwError(() => new Error('failed')));
+    component.refreshReadOnlyStatus(account);
+
+    expect(component.readOnlyStatus()).toBeNull();
+    expect(component.readOnlyStatusLoading()).toBe(false);
+    expect(component.readOnlyStatusError()).toBe(true);
   });
 
   it('loads eligible risk profiles on init', () => {
@@ -208,6 +299,26 @@ describe('Accounts', () => {
     expect(
       fixture.nativeElement.querySelector('[data-testid="ctrader-account-option"]'),
     ).not.toBeNull();
+  });
+
+  it('clears stale authorization feedback when binding a cTrader account succeeds', async () => {
+    component.cTraderFlowAccountId.set('ctrader-account-1');
+    component.cTraderAuthorization.set({
+      attemptId: 'attempt-1',
+      authorizationUrl: null,
+      status: 'ACCOUNT_SELECTION_REQUIRED',
+      discoveredAccountIds: ['new-account'],
+      selectedExternalAccountId: null,
+      expiresAt: '2026-10-27T10:00:00Z',
+      safeMessage: 'Select an account',
+    });
+    component.connectionFeedback.set({ kind: 'error', message: 'Ancien échec OAuth' });
+
+    component.bindCTraderAccount('new-account');
+    await fixture.whenStable();
+
+    expect(component.connectionFeedback()).toBeNull();
+    expect(component.provisioningFeedback()?.kind).toBe('success');
   });
 
   it('shows visible error feedback and clears sensitive fields when connection fails', async () => {
