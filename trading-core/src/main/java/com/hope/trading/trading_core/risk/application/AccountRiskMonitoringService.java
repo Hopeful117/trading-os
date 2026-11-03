@@ -31,6 +31,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Builds observed account context and delegates all risk calculations to Risk Domain. */
@@ -128,10 +129,13 @@ public class AccountRiskMonitoringService {
         long ruleVersion = persistence.component(evaluationId, "RULE_SET",
                 profile.id() + ":" + profile.semanticVersion(), requestedAt, persistence.write(profile));
 
-        BigDecimal dailyClosedPnl = snapshot.closedTrades().stream()
-                .map(RiskFactsProvider.ClosedTrade::realizedPnl)
-                .filter(value -> value != null)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        Optional<BigDecimal> dailyClosedPnl = snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.UNAVAILABLE_OR_ABSENT
+                || snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.TRUNCATED
+                ? Optional.empty()
+                : Optional.of(snapshot.closedTrades().stream()
+                        .map(RiskFactsProvider.ClosedTrade::realizedPnl)
+                        .filter(value -> value != null)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add));
         var request = new RiskEvaluationRequest(evaluationId, UUID.randomUUID(),
                 ValidationMode.ACCOUNT_MONITORING, null, requestedAt);
         var trading = new TradingContext(account.getUser().getUserId(), account.getAccountId(), requestedAt,
@@ -144,7 +148,7 @@ public class AccountRiskMonitoringService {
                 new DailyRiskBaseline(new Money(baseline.amount(), currency), baseline.startsAt(),
                         "RISK_DAY_BASELINE", Map.of("baselineVersion", Long.toString(baseline.version()),
                         "riskDay", day.date().toString())),
-                new Money(dailyClosedPnl, currency));
+                dailyClosedPnl.map(value -> new Money(value, currency)));
         var portfolioSnapshot = new PortfolioSnapshot(configuration.portfolioId(), Math.max(1, portfolioVersion),
                 capturedAt, positions);
         var marketSnapshot = new MarketSnapshot(Math.max(1, marketVersion), capturedAt, Map.of());

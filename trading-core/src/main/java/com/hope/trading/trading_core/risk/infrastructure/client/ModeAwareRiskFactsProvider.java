@@ -109,8 +109,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
 
         var account = snapshot.account();
         if (account.valuationAsset() == null || account.balance() == null
-                || account.equity() == null || account.usedMargin() == null
-                || account.freeMargin() == null) {
+                || account.equity() == null || account.usedMargin() == null) {
             complete = false;
             reasons.add("ACCOUNT_RISK_FACTS_INCOMPLETE");
         }
@@ -145,7 +144,24 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
         return new RiskFactsProvider.Snapshot(snapshot.brokerAccountId(), sourceVersion, snapshot.observedAt(),
                 complete, List.copyOf(new java.util.LinkedHashSet<>(reasons)), snapshot.balances(),
                 new RiskFactsProvider.Account(account.valuationAsset(), account.balance(), account.equity(),
-                        account.usedMargin(), null), positions, closedTrades, List.of(), writePayload(snapshot));
+                        account.usedMargin(), null), positions, closedTrades, List.of(), writePayload(snapshot),
+                dealAvailability(snapshot.dealAvailability(), snapshot.deals()));
+    }
+
+    private RiskFactsProvider.DealAvailability dealAvailability(
+            com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability availability,
+            List<?> deals) {
+        if (availability == null) {
+            return deals == null || deals.isEmpty()
+                    ? RiskFactsProvider.DealAvailability.AVAILABLE_EMPTY
+                    : RiskFactsProvider.DealAvailability.AVAILABLE_NON_EMPTY;
+        }
+        return switch (availability) {
+            case AVAILABLE_EMPTY -> RiskFactsProvider.DealAvailability.AVAILABLE_EMPTY;
+            case AVAILABLE_NON_EMPTY -> RiskFactsProvider.DealAvailability.AVAILABLE_NON_EMPTY;
+            case TRUNCATED -> RiskFactsProvider.DealAvailability.TRUNCATED;
+            case UNAVAILABLE_OR_ABSENT -> RiskFactsProvider.DealAvailability.UNAVAILABLE_OR_ABSENT;
+        };
     }
 
     private String sourceId(BrokerAccountSnapshotV2Dto snapshot) {

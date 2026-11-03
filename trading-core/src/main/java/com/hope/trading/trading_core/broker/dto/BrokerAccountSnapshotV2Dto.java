@@ -20,6 +20,7 @@ public record BrokerAccountSnapshotV2Dto(
         SnapshotCollectionAvailability positionAvailability,
         SnapshotCollectionAvailability orderAvailability,
         SnapshotCollectionAvailability pnlAvailability,
+        SnapshotCollectionAvailability dealAvailability,
         boolean pnlComplete,
         String completeness,
         String freshness,
@@ -35,9 +36,12 @@ public record BrokerAccountSnapshotV2Dto(
                 ? collectionAvailability(orders) : orderAvailability;
         pnlAvailability = pnlAvailability == null
                 ? SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT : pnlAvailability;
+        dealAvailability = dealAvailability == null
+                ? collectionAvailability(deals) : dealAvailability;
         validateCollection(positionAvailability, positions, "positions");
         validateCollection(orderAvailability, orders, "orders");
         validateCollection(pnlAvailability, positionPnls, "positionPnls");
+        validateCollection(dealAvailability, deals, "deals");
         if (pnlComplete && pnlAvailability == SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT) {
             throw new IllegalArgumentException("complete PnL cannot be unavailable");
         }
@@ -52,6 +56,7 @@ public record BrokerAccountSnapshotV2Dto(
         this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions, observedAt,
                 null, List.of(), List.of(), List.of(), SnapshotCollectionAvailability.AVAILABLE_EMPTY,
                 SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT, SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
                 false, "COMPLETE", "FRESH", observedAt, observedAt, List.of());
     }
 
@@ -71,8 +76,33 @@ public record BrokerAccountSnapshotV2Dto(
                                       List<String> unavailabilityReasons) {
         this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions, observedAt,
                 account, orders, deals, List.of(), collectionAvailability(positions), collectionAvailability(orders),
-                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT, false, completeness, freshness,
+                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT, collectionAvailability(deals), false, completeness, freshness,
                 observationStartedAt, completedAt, unavailabilityReasons);
+    }
+
+    public BrokerAccountSnapshotV2Dto(UUID brokerAccountId,
+                                      UUID providerRegistrationReference,
+                                      String externalAccountId,
+                                      Map<String, BigDecimal> balances,
+                                      List<BrokerPositionSnapshotV2Dto> positions,
+                                      Instant observedAt,
+                                      BrokerAccountFactsV2Dto account,
+                                      List<BrokerOrderSnapshotV2Dto> orders,
+                                      List<BrokerDealSnapshotV2Dto> deals,
+                                      List<BrokerPositionPnlSnapshotV2Dto> positionPnls,
+                                      SnapshotCollectionAvailability positionAvailability,
+                                      SnapshotCollectionAvailability orderAvailability,
+                                      SnapshotCollectionAvailability pnlAvailability,
+                                      boolean pnlComplete,
+                                      String completeness,
+                                      String freshness,
+                                      Instant observationStartedAt,
+                                      Instant completedAt,
+                                      List<String> unavailabilityReasons) {
+        this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions, observedAt,
+                account, orders, deals, positionPnls, positionAvailability, orderAvailability, pnlAvailability,
+                collectionAvailability(deals), pnlComplete, completeness, freshness, observationStartedAt,
+                completedAt, unavailabilityReasons);
     }
 
     private static SnapshotCollectionAvailability collectionAvailability(List<?> values) {

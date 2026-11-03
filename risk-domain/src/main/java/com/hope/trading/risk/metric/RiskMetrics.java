@@ -5,7 +5,7 @@ import com.hope.trading.risk.domain.Ratio;
 import java.util.Optional;
 
 public record RiskMetrics(
-        Money balance, Money equity, Money floatingPnl, Money closedPnl,
+        Money balance, Money equity, Money floatingPnl, Optional<Money> closedPnl,
         Money margin, Money freeMargin,
         Money projectedExposure, Money projectedDrawdown, Money projectedMargin,
         Money remainingRisk, Money portfolioHeat, Ratio riskUtilization,

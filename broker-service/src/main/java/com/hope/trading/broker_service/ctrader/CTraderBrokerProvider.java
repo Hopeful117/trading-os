@@ -17,20 +17,23 @@ public final class CTraderBrokerProvider implements BrokerProvider {
     private final CTraderExecutionCapability execution;
     private final CTraderTechnicalCapabilities technicalCapabilities;
     private final CTraderPositionManagementCapability positionManagement;
+    private final CTraderMarginCapability margin;
 
     @Autowired
     public CTraderBrokerProvider(CTraderAuthoritativeSnapshotCapability snapshots,
-                                 CTraderExecutionCapability execution,
-                                 CTraderTechnicalCapabilities technicalCapabilities,
-                                 CTraderPositionManagementCapability positionManagement) {
+                                  CTraderExecutionCapability execution,
+                                  CTraderTechnicalCapabilities technicalCapabilities,
+                                  CTraderPositionManagementCapability positionManagement,
+                                  CTraderMarginCapability margin) {
         this.snapshots = snapshots;
         this.execution = execution;
         this.technicalCapabilities = technicalCapabilities;
         this.positionManagement = positionManagement;
+        this.margin = margin;
     }
 
     public CTraderBrokerProvider(CTraderAuthoritativeSnapshotCapability snapshots) {
-        this(snapshots, null, null, null);
+        this(snapshots, null, null, null, null);
     }
 
     @Override
@@ -43,6 +46,7 @@ public final class CTraderBrokerProvider implements BrokerProvider {
         if (type.isInstance(snapshots)) return Optional.of(type.cast(snapshots));
         if (type.isInstance(technicalCapabilities)) return Optional.of(type.cast(technicalCapabilities));
         if (positionManagement != null && type.isInstance(positionManagement)) return Optional.of(type.cast(positionManagement));
+        if (margin != null && type.isInstance(margin)) return Optional.of(type.cast(margin));
         return execution != null && execution.enabled() && type.isInstance(execution)
                 ? Optional.of(type.cast(execution)) : Optional.empty();
     }

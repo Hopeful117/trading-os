@@ -22,10 +22,11 @@ public record CTraderReadOnlyObservation(
         boolean complete,
         List<String> reasons,
         AccountFacts accountFacts,
-        CollectionState<Position> positionSet,
-        CollectionState<Order> orderSet,
-        CollectionState<PositionPnl> pnlSet,
-        boolean pnlComplete) {
+         CollectionState<Position> positionSet,
+         CollectionState<Order> orderSet,
+         CollectionState<PositionPnl> pnlSet,
+         boolean pnlComplete,
+         CollectionState<Deal> dealSet) {
 
     public CTraderReadOnlyObservation(String externalAccountId, String valuationAsset,
                                       BigDecimal balance, BigDecimal equity, BigDecimal usedMargin,
@@ -35,7 +36,20 @@ public record CTraderReadOnlyObservation(
         this(externalAccountId, valuationAsset, balance, equity, usedMargin, freeMargin, positions, orders,
                 deals, startedAt, providerObservedAt, completedAt, complete, reasons, AccountFacts.empty(),
                 CollectionState.available(positions), CollectionState.available(orders),
-                CollectionState.unavailable(), false);
+                CollectionState.unavailable(), false, CollectionState.unavailable());
+    }
+
+    public CTraderReadOnlyObservation(String externalAccountId, String valuationAsset,
+                                      BigDecimal balance, BigDecimal equity, BigDecimal usedMargin,
+                                      BigDecimal freeMargin, List<Position> positions, List<Order> orders,
+                                      List<Deal> deals, Instant startedAt, Instant providerObservedAt,
+                                      Instant completedAt, boolean complete, List<String> reasons,
+                                      AccountFacts accountFacts, CollectionState<Position> positionSet,
+                                      CollectionState<Order> orderSet, CollectionState<PositionPnl> pnlSet,
+                                      boolean pnlComplete) {
+        this(externalAccountId, valuationAsset, balance, equity, usedMargin, freeMargin, positions, orders, deals,
+                startedAt, providerObservedAt, completedAt, complete, reasons, accountFacts, positionSet, orderSet,
+                pnlSet, pnlComplete, CollectionState.available(deals));
     }
 
     public CTraderReadOnlyObservation {
@@ -77,7 +91,8 @@ public record CTraderReadOnlyObservation(
     public enum CollectionAvailability {
         UNAVAILABLE_OR_ABSENT,
         AVAILABLE_EMPTY,
-        AVAILABLE_NON_EMPTY
+        AVAILABLE_NON_EMPTY,
+        TRUNCATED
     }
 
     public record CollectionState<T>(CollectionAvailability availability, List<T> values) {
@@ -99,6 +114,10 @@ public record CTraderReadOnlyObservation(
         public static <T> CollectionState<T> available(List<T> values) {
             return new CollectionState<>(values.isEmpty()
                     ? CollectionAvailability.AVAILABLE_EMPTY : CollectionAvailability.AVAILABLE_NON_EMPTY, values);
+        }
+
+        public static <T> CollectionState<T> truncated(List<T> values) {
+            return new CollectionState<>(CollectionAvailability.TRUNCATED, values);
         }
     }
 

@@ -33,6 +33,8 @@ import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.*;
 
 @Component
 public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
+    private static final int EXPECTED_MARGIN_REQUEST = 2139;
+    private static final int EXPECTED_MARGIN_RESPONSE = 2140;
     private static final Logger log = LoggerFactory.getLogger(JsonWebSocketCTraderOpenApiClient.class);
 
     private final CTraderProperties properties;
@@ -527,6 +529,66 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
     }
 
+    @Override
+    public CTraderExpectedMargin expectedMargin(CTraderToken token, String externalAccountId,
+                                                String instrument, String side, BigDecimal quantity) {
+        if (!"BUY".equalsIgnoreCase(side) && !"SELL".equalsIgnoreCase(side)) {
+            throw new CTraderAuthenticationException("CTRADER_UNSUPPORTED_MARGIN_SIDE");
+        }
+        if (quantity == null || quantity.signum() <= 0) {
+            throw new CTraderAuthenticationException("CTRADER_INVALID_MARGIN_QUANTITY");
+        }
+        Instant observedAt = Instant.now();
+        try (Session session = new Session(externalAccountId)) {
+            validateEnvironment();
+            authenticateApplication(session);
+            long accountId = Long.parseLong(externalAccountId);
+            requireAccountResponse(session.request(ACCOUNT_AUTH_REQUEST, ACCOUNT_AUTH_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)
+                            .put("accessToken", token.accessToken())), accountId);
+            JsonNode trader = requireAccountResponse(session.request(TRADER_REQUEST, TRADER_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
+            JsonNode assets = requireAccountResponse(session.request(ASSET_LIST_REQUEST, ASSET_LIST_RESPONSE,
+                    objectMapper.createObjectNode().put("ctidTraderAccountId", accountId)), accountId);
+            CTraderExecutionInstrumentContract symbol = resolveSymbol(session, accountId, instrument);
+            ObjectNode request = objectMapper.createObjectNode()
+                    .put("ctidTraderAccountId", accountId)
+                    .put("symbolId", symbol.symbolId());
+            request.putArray("volume").add(symbol.providerVolume(quantity));
+            JsonNode response = requireAccountResponse(session.request(EXPECTED_MARGIN_REQUEST,
+                    EXPECTED_MARGIN_RESPONSE, request), accountId);
+            long requestedVolume = symbol.providerVolume(quantity);
+            validateExpectedMarginResponse(response, requestedVolume);
+            JsonNode margins = response.path("margin");
+            int moneyDigits = response.path("moneyDigits").isIntegralNumber()
+                    ? response.path("moneyDigits").asInt() : -1;
+            if (moneyDigits < 0) {
+                throw new CTraderAuthenticationException("CTRADER_EXPECTED_MARGIN_PRECISION_UNAVAILABLE");
+            }
+            String field = "BUY".equalsIgnoreCase(side) ? "buyMargin" : "sellMargin";
+            BigDecimal amount = money(margins.get(0).path(field), moneyDigits);
+            String currency = assetName(assets, trader.path("trader").path("depositAssetId").asText(null));
+            if (amount == null || amount.signum() <= 0 || currency == null || currency.isBlank()) {
+                throw new CTraderAuthenticationException("CTRADER_EXPECTED_MARGIN_FACTS_UNAVAILABLE");
+            }
+            return new CTraderExpectedMargin(instrument, side.toUpperCase(java.util.Locale.ROOT), amount,
+                    currency, observedAt.toEpochMilli(), observedAt);
+        } catch (CTraderAuthenticationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new CTraderAuthenticationException("cTrader expected margin request failed", exception);
+        }
+    }
+
+    void validateExpectedMarginResponse(JsonNode response, long requestedVolume) {
+        JsonNode margins = response == null ? null : response.path("margin");
+        if (!margins.isArray() || margins.size() != 1
+                || !margins.get(0).path("volume").canConvertToLong()
+                || margins.get(0).path("volume").asLong() != requestedVolume) {
+            throw new CTraderAuthenticationException("CTRADER_EXPECTED_MARGIN_UNSUPPORTED_RESPONSE");
+        }
+    }
+
     private void authenticateApplication(Session session) {
         session.request(APPLICATION_AUTH_REQUEST, APPLICATION_AUTH_RESPONSE,
                 objectMapper.createObjectNode()
@@ -583,8 +645,9 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if (valuationAsset == null || valuationAsset.isBlank()) reasons.add("VALUATION_ASSET_UNAVAILABLE");
 
         List<CTraderReadOnlyObservation.Position> positions = new java.util.ArrayList<>();
-        CTraderReadOnlyObservation.CollectionState<JsonNode> rawPositions = collectionState(reconcile, "position");
-        CTraderReadOnlyObservation.CollectionState<JsonNode> rawOrders = collectionState(reconcile, "order");
+         CTraderReadOnlyObservation.CollectionState<JsonNode> rawPositions = collectionState(reconcile, "position");
+         CTraderReadOnlyObservation.CollectionState<JsonNode> rawOrders = collectionState(reconcile, "order");
+         CTraderReadOnlyObservation.CollectionState<JsonNode> rawDeals = dealCollectionState(deals);
         BigDecimal usedMargin = money(traderNode.path("usedMargin"), moneyDigits);
         BigDecimal freeMargin = money(traderNode.path("freeMargin"), moneyDigits);
         for (JsonNode position : reconcile.path("position")) {
@@ -706,10 +769,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         // from local balance plus an unrealized-PnL observation.
         BigDecimal equity = money(traderNode.path("equity"), moneyDigits);
         if (!pnlComplete) reasons.add("UNREALIZED_PNL_UNAVAILABLE");
-        if (equity == null) reasons.add("EQUITY_UNAVAILABLE");
-        if (usedMargin == null) reasons.add("USED_MARGIN_UNAVAILABLE");
-        if (freeMargin == null) reasons.add("FREE_MARGIN_UNAVAILABLE");
-        Instant providerObservedAt = latestProviderTimestamp(trader, reconcile, deals, started, reasons);
+         Instant providerObservedAt = latestProviderTimestamp(trader, reconcile, deals, started, reasons);
         if (rawPositions.availability() == CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT) {
             reasons.add("RESPONSE_FIELD_UNAVAILABLE:position");
         }
@@ -719,9 +779,15 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if (rawPnl.availability() == CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT) {
             reasons.add("RESPONSE_FIELD_UNAVAILABLE:positionUnrealizedPnl");
         }
-        boolean complete = reasons.isEmpty() && pnlComplete && !deals.path("hasMore").asBoolean(false)
-                && valuationAsset != null && !valuationAsset.isBlank();
-        if (deals.path("hasMore").asBoolean(false)) reasons.add("DEAL_HISTORY_TRUNCATED");
+         boolean complete = reasons.isEmpty() && pnlComplete
+                 && rawDeals.availability() != CTraderReadOnlyObservation.CollectionAvailability.TRUNCATED
+                 && rawDeals.availability() != CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT
+                 && valuationAsset != null && !valuationAsset.isBlank();
+         if (rawDeals.availability() == CTraderReadOnlyObservation.CollectionAvailability.TRUNCATED) {
+             reasons.add("DEAL_HISTORY_TRUNCATED");
+         } else if (rawDeals.availability() == CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT) {
+             reasons.add("DEAL_HISTORY_UNAVAILABLE");
+         }
         Instant completed = Instant.now();
         var accountFacts = new CTraderReadOnlyObservation.AccountFacts(
                 providerEnumField(traderNode, "accountType", this::accountType),
@@ -737,8 +803,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         var pnlSet = mapCollection(rawPnl, pnlFacts);
         return new CTraderReadOnlyObservation(externalAccountId, valuationAsset == null ? "UNKNOWN" : valuationAsset,
                 balance, equity, usedMargin, freeMargin, positions, orders, dealFacts,
-                started, providerObservedAt, completed, complete, List.copyOf(new LinkedHashSet<>(reasons)),
-                accountFacts, positionSet, orderSet, pnlSet, pnlComplete);
+                 started, providerObservedAt, completed, complete, List.copyOf(new LinkedHashSet<>(reasons)),
+                 accountFacts, positionSet, orderSet, pnlSet, pnlComplete, mapCollection(rawDeals, dealFacts));
     }
 
     private <T> CTraderReadOnlyObservation.CollectionState<T> mapCollection(
@@ -759,6 +825,17 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         List<JsonNode> values = new ArrayList<>();
         response.path(field).forEach(values::add);
         return CTraderReadOnlyObservation.CollectionState.available(values);
+    }
+
+    private CTraderReadOnlyObservation.CollectionState<JsonNode> dealCollectionState(JsonNode response) {
+        if (!response.has("deal") || !response.path("deal").isArray()) {
+            return CTraderReadOnlyObservation.CollectionState.unavailable();
+        }
+        List<JsonNode> values = new ArrayList<>();
+        response.path("deal").forEach(values::add);
+        return response.path("hasMore").asBoolean(false)
+                ? CTraderReadOnlyObservation.CollectionState.truncated(values)
+                : CTraderReadOnlyObservation.CollectionState.available(values);
     }
 
     private String providerText(JsonNode node, String field) {
@@ -1088,6 +1165,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             case APPLICATION_AUTH_REQUEST -> "ProtoOAApplicationAuthReq";
             case ACCOUNT_LIST_REQUEST -> "ProtoOAGetAccountListByAccessTokenReq";
             case ACCOUNT_AUTH_REQUEST -> "ProtoOAAccountAuthReq";
+            case EXPECTED_MARGIN_REQUEST -> "ProtoOAExpectedMarginReq";
             default -> "payload type " + payloadType;
         };
     }
@@ -1097,6 +1175,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             case APPLICATION_AUTH_RESPONSE -> "ProtoOAApplicationAuthRes";
             case ACCOUNT_LIST_RESPONSE -> "ProtoOAGetAccountListByAccessTokenRes";
             case ACCOUNT_AUTH_RESPONSE -> "ProtoOAAccountAuthRes";
+            case EXPECTED_MARGIN_RESPONSE -> "ProtoOAExpectedMarginRes";
             case ACCOUNT_DISCONNECT_EVENT -> "ProtoOAAccountDisconnectEvent";
             default -> "payload type " + payloadType;
         };

@@ -16,7 +16,19 @@ public interface RiskFactsProvider {
     record Snapshot(UUID sourceId, long sourceVersion, Instant observedAt, boolean complete,
                     List<String> unavailabilityReasons, Map<String, BigDecimal> assetBalances,
                     Account account, List<Position> positions, List<ClosedTrade> closedTrades,
-                    List<LedgerEntry> ledgerEntries, String sourcePayload) { }
+                    List<LedgerEntry> ledgerEntries, String sourcePayload,
+                    DealAvailability dealAvailability) {
+        public Snapshot(UUID sourceId, long sourceVersion, Instant observedAt, boolean complete,
+                        List<String> unavailabilityReasons, Map<String, BigDecimal> assetBalances,
+                        Account account, List<Position> positions, List<ClosedTrade> closedTrades,
+                        List<LedgerEntry> ledgerEntries, String sourcePayload) {
+            this(sourceId, sourceVersion, observedAt, complete, unavailabilityReasons, assetBalances,
+                    account, positions, closedTrades, ledgerEntries, sourcePayload,
+                    closedTrades == null || closedTrades.isEmpty()
+                            ? DealAvailability.AVAILABLE_EMPTY : DealAvailability.AVAILABLE_NON_EMPTY);
+        }
+    }
+    enum DealAvailability { AVAILABLE_EMPTY, AVAILABLE_NON_EMPTY, UNAVAILABLE_OR_ABSENT, TRUNCATED }
     record Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
                    BigDecimal margin, BigDecimal startingBalance) { }
     record Position(UUID positionId, String sourcePositionReference, String sourceReferenceProvenance,

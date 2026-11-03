@@ -97,7 +97,10 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
                     || preview.observedAt() == null || preview.sourceVersion() < 1
                     || stale(preview.observedAt())) return Optional.empty();
             return Optional.of(new Fact(preview.amount(), preview.currency(), preview.sourceId(),
-                    preview.sourceVersion(), preview.observedAt()));
+                    preview.sourceVersion(), preview.observedAt(), null,
+                    new RequiredMarginPort.MarginEvidence("BROKER_PROVIDER_MARGIN_PREVIEW",
+                            "BROKER_PROVIDER", preview.sourceId(), null, null, null, null,
+                            preview.sourceVersion(), null, maxAge.toString(), 0)));
         } catch (RuntimeException unavailable) {
             log.warn("broker_required_margin_unavailable brokerAccountId={} instrument={} direction={} reason={}",
                     request.brokerAccountId(), request.instrument(), request.direction(),

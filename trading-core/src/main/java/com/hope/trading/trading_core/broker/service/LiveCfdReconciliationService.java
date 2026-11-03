@@ -155,8 +155,7 @@ public final class LiveCfdReconciliationService {
     private boolean accountFactsAvailable(BrokerAccountSnapshotV2Dto snapshot) {
         var account = snapshot.account();
         return account != null && account.valuationAsset() != null && !account.valuationAsset().isBlank()
-                && account.balance() != null && account.equity() != null
-                && account.usedMargin() != null && account.freeMargin() != null
+                && account.balance() != null
                 && snapshot.observedAt() != null && snapshot.observationStartedAt() != null
                 && snapshot.completedAt() != null;
     }

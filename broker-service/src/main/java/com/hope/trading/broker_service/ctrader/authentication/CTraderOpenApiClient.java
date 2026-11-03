@@ -77,6 +77,22 @@ public interface CTraderOpenApiClient {
         throw new CTraderAuthenticationException("cTrader quote is unavailable");
     }
 
+    default CTraderExpectedMargin expectedMargin(CTraderToken token, String externalAccountId,
+                                                  String instrument, String side, BigDecimal quantity) {
+        throw new CTraderAuthenticationException("cTrader expected margin is unavailable");
+    }
+
+    record CTraderExpectedMargin(String instrument, String side, BigDecimal amount,
+                                 String currency, long sourceVersion, Instant observedAt) {
+        public CTraderExpectedMargin {
+            if (instrument == null || instrument.isBlank()) throw new IllegalArgumentException("margin instrument is required");
+            if (side == null || side.isBlank()) throw new IllegalArgumentException("margin side is required");
+            if (amount == null || amount.signum() <= 0) throw new IllegalArgumentException("margin amount must be positive");
+            if (currency == null || currency.isBlank()) throw new IllegalArgumentException("margin currency is required");
+            if (sourceVersion < 1 || observedAt == null) throw new IllegalArgumentException("margin provenance is required");
+        }
+    }
+
     record CTraderQuote(String instrument, BigDecimal bid, BigDecimal ask, Instant observedAt) {
         public CTraderQuote {
             if (instrument == null || instrument.isBlank()) throw new IllegalArgumentException("quote instrument is required");

@@ -120,11 +120,8 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
         SnapshotFreshness freshness = observation.providerObservedAt().isBefore(now.minus(MAX_OBSERVATION_AGE))
                 ? SnapshotFreshness.STALE : SnapshotFreshness.FRESH;
         boolean accountFactsComplete = observation.valuationAsset() != null
-                && !observation.valuationAsset().isBlank()
-                && observation.balance() != null
-                && observation.equity() != null
-                && observation.usedMargin() != null
-                && observation.freeMargin() != null;
+                 && !observation.valuationAsset().isBlank()
+                 && observation.balance() != null;
         boolean pnlFactsComplete = observation.pnlComplete()
                 && observation.pnlSet().availability() != CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT;
         SnapshotCompleteness completeness = observation.complete() && accountFactsComplete && pnlFactsComplete
@@ -132,7 +129,7 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                 ? SnapshotCompleteness.COMPLETE : SnapshotCompleteness.INCOMPLETE;
         List<String> reasons = completeness == SnapshotCompleteness.COMPLETE
                 ? observation.reasons() : appendReasons(observation, freshness);
-        if (!accountFactsComplete) {
+        if (observation.equity() == null || observation.usedMargin() == null || observation.freeMargin() == null) {
             java.util.ArrayList<String> incompleteReasons = new java.util.ArrayList<>(reasons);
             if (observation.equity() == null) incompleteReasons.add("EQUITY_UNAVAILABLE");
             if (observation.usedMargin() == null) incompleteReasons.add("USED_MARGIN_UNAVAILABLE");
@@ -148,10 +145,11 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                 observation.externalAccountId(),
                 java.util.Map.of(observation.valuationAsset(), observation.balance()), positions,
                 observation.providerObservedAt(), account, orders, deals, positionPnls,
-                collectionAvailability(observation.positionSet().availability()),
-                collectionAvailability(observation.orderSet().availability()),
-                collectionAvailability(observation.pnlSet().availability()), observation.pnlComplete(), completeness, freshness,
-                observation.startedAt(), observation.completedAt(), reasons);
+                 collectionAvailability(observation.positionSet().availability()),
+                 collectionAvailability(observation.orderSet().availability()),
+                 collectionAvailability(observation.pnlSet().availability()),
+                 collectionAvailability(observation.dealSet().availability()), observation.pnlComplete(), completeness, freshness,
+                 observation.startedAt(), observation.completedAt(), reasons);
     }
 
     private BigDecimal value(CTraderReadOnlyObservation.ProviderField<BigDecimal> field) {
@@ -185,6 +183,7 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
         return switch (availability) {
             case AVAILABLE_EMPTY -> SnapshotCollectionAvailability.AVAILABLE_EMPTY;
             case AVAILABLE_NON_EMPTY -> SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY;
+            case TRUNCATED -> SnapshotCollectionAvailability.TRUNCATED;
             case UNAVAILABLE_OR_ABSENT -> SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT;
         };
     }

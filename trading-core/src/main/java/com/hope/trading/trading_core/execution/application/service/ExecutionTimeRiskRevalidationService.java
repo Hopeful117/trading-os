@@ -256,7 +256,7 @@ public class ExecutionTimeRiskRevalidationService {
                 .map(value -> new Money(positiveOrZero(value, "BROKER_STARTING_BALANCE_INVALID")
                         .multiply(accountRate), currency));
         ClosedPnl dailyClosed = closedPnl(brokerSnapshot, currency, riskDay);
-        BigDecimal dailyClosedPnl = dailyClosed.amount();
+        Optional<BigDecimal> dailyClosedPnl = dailyClosed.amount();
 
         List<PositionSnapshot> positions = positions(brokerSnapshot.positions(), current, currency, accountRate,
                 "MANUAL".equalsIgnoreCase(plan.origin()), account);
@@ -349,7 +349,7 @@ public class ExecutionTimeRiskRevalidationService {
         accountPayload.put("margin", margin);
         accountPayload.put("accountStartingBalance", accountStartingBalance.orElse(null));
         accountPayload.put("dailyReferenceBalance", dailyStart);
-        accountPayload.put("dailyClosedPnl", dailyClosedPnl);
+        accountPayload.put("dailyClosedPnl", dailyClosedPnl.orElse(null));
         accountPayload.put("provenance", provenance);
         long accountVersion = persistence.component(t1EvaluationId, "ACCOUNT",
                 "broker:" + brokerSnapshot.sourceVersion(), brokerSnapshot.observedAt(), persistence.write(accountPayload));
@@ -375,7 +375,7 @@ public class ExecutionTimeRiskRevalidationService {
                 new DailyRiskBaseline(new Money(dailyStart, currency), baseline.startsAt(),
                         "RISK_DAY_BASELINE", Map.of("baselineVersion", Long.toString(baseline.version()),
                         "riskDay", riskDay.date().toString())),
-                new Money(dailyClosedPnl, currency));
+                dailyClosedPnl.map(value -> new Money(value, currency)));
         var portfolioSnapshot = new PortfolioSnapshot(configuration.portfolioId(), portfolioVersion,
                 brokerSnapshot.observedAt(), positions);
         Map<String, BigDecimal> prices = new HashMap<>();
@@ -530,6 +530,10 @@ public class ExecutionTimeRiskRevalidationService {
     }
 
     private ClosedPnl closedPnl(RiskFactsProvider.Snapshot snapshot, String currency, RiskDay riskDay) {
+        if (snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.UNAVAILABLE_OR_ABSENT
+                || snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.TRUNCATED) {
+            return new ClosedPnl(Optional.empty(), List.of());
+        }
         BigDecimal total = BigDecimal.ZERO;
         List<String> payloads = new ArrayList<>();
         for (var trade : snapshot.closedTrades()) {
@@ -544,7 +548,7 @@ public class ExecutionTimeRiskRevalidationService {
             total = total.add(trade.realizedPnl().multiply(fact(valuation, "pnl").value()))
                     .subtract(trade.fee().multiply(fact(valuation, "fee").value()));
         }
-        return new ClosedPnl(total, List.copyOf(payloads));
+        return new ClosedPnl(Optional.of(total), List.copyOf(payloads));
     }
 
     private List<PositionSnapshot> positions(List<RiskFactsProvider.Position> brokerPositions,
@@ -726,5 +730,5 @@ public class ExecutionTimeRiskRevalidationService {
         return new ContextUnavailable(code, message);
     }
 
-    private record ClosedPnl(BigDecimal amount, List<String> marketPayloads) { }
+    private record ClosedPnl(Optional<BigDecimal> amount, List<String> marketPayloads) { }
 }
