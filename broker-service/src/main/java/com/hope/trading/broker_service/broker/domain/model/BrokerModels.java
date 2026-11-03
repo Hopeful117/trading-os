@@ -144,6 +144,11 @@ public final class BrokerModels {
                                            AccountFacts account,
                                            java.util.List<OrderSnapshot> orders,
                                            java.util.List<ClosedTrade> deals,
+                                           java.util.List<PositionPnlSnapshot> positionPnls,
+                                           SnapshotCollectionAvailability positionAvailability,
+                                           SnapshotCollectionAvailability orderAvailability,
+                                           SnapshotCollectionAvailability pnlAvailability,
+                                           boolean pnlComplete,
                                            SnapshotCompleteness completeness,
                                            SnapshotFreshness freshness,
                                            Instant observationStartedAt,
@@ -157,6 +162,16 @@ public final class BrokerModels {
             Objects.requireNonNull(observedAt);
             orders = java.util.List.copyOf(orders);
             deals = java.util.List.copyOf(deals);
+            positionPnls = java.util.List.copyOf(positionPnls);
+            Objects.requireNonNull(positionAvailability);
+            Objects.requireNonNull(orderAvailability);
+            Objects.requireNonNull(pnlAvailability);
+            validateCollection(positionAvailability, positions, "positions");
+            validateCollection(orderAvailability, orders, "orders");
+            validateCollection(pnlAvailability, positionPnls, "positionPnls");
+            if (pnlComplete && pnlAvailability == SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT) {
+                throw new IllegalArgumentException("complete PnL cannot be unavailable");
+            }
             Objects.requireNonNull(completeness);
             Objects.requireNonNull(freshness);
             Objects.requireNonNull(observationStartedAt);
@@ -166,12 +181,34 @@ public final class BrokerModels {
 
         public BrokerAccountSnapshotV2(UUID brokerAccountId, UUID providerRegistrationReference,
                                        String externalAccountId,
+                                        java.util.Map<String,BigDecimal> balances,
+                                        java.util.List<PositionSnapshot> positions,
+                                        Instant observedAt) {
+            this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions,
+                    observedAt, null, List.of(), List.of(), List.of(),
+                    collectionAvailability(positions), SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                    SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT, false,
+                    SnapshotCompleteness.COMPLETE,
+                    SnapshotFreshness.FRESH, observedAt, observedAt, List.of());
+        }
+
+        public BrokerAccountSnapshotV2(UUID brokerAccountId, UUID providerRegistrationReference,
+                                       String externalAccountId,
                                        java.util.Map<String,BigDecimal> balances,
                                        java.util.List<PositionSnapshot> positions,
-                                       Instant observedAt) {
-            this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions,
-                    observedAt, null, List.of(), List.of(), SnapshotCompleteness.COMPLETE,
-                    SnapshotFreshness.FRESH, observedAt, observedAt, List.of());
+                                       Instant observedAt,
+                                       AccountFacts account,
+                                       java.util.List<OrderSnapshot> orders,
+                                       java.util.List<ClosedTrade> deals,
+                                       SnapshotCompleteness completeness,
+                                       SnapshotFreshness freshness,
+                                       Instant observationStartedAt,
+                                       Instant completedAt,
+                                       java.util.List<String> unavailabilityReasons) {
+            this(brokerAccountId, providerRegistrationReference, externalAccountId, balances, positions, observedAt,
+                    account, orders, deals, List.of(), collectionAvailability(positions),
+                    collectionAvailability(orders), SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT, false,
+                    completeness, freshness, observationStartedAt, completedAt, unavailabilityReasons);
         }
 
         public BrokerAccountSnapshotV2(UUID brokerAccountId, BrokerProviderId provider,
@@ -186,10 +223,40 @@ public final class BrokerModels {
         }
     }
     public record AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
-                               BigDecimal usedMargin, BigDecimal freeMargin) {
+                               BigDecimal usedMargin, BigDecimal freeMargin,
+                               AccountPositionModel positionModel,
+                               MarginCalculationModel marginCalculationModel,
+                               Integer monetaryScale,
+                               BigDecimal leverage) {
         public AccountFacts {
             valuationAsset = required(valuationAsset, "valuationAsset");
             Objects.requireNonNull(balance);
+            positionModel = Objects.requireNonNull(positionModel);
+            marginCalculationModel = Objects.requireNonNull(marginCalculationModel);
+            if (monetaryScale != null && monetaryScale < 0) {
+                throw new IllegalArgumentException("monetaryScale cannot be negative");
+            }
+            if (leverage != null && leverage.signum() <= 0) {
+                throw new IllegalArgumentException("leverage must be positive");
+            }
+        }
+
+        public AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                            BigDecimal usedMargin, BigDecimal freeMargin) {
+            this(valuationAsset, balance, equity, usedMargin, freeMargin,
+                    AccountPositionModel.UNKNOWN, MarginCalculationModel.UNKNOWN, null, null);
+        }
+    }
+    public enum AccountPositionModel { HEDGED, NETTED, SPREAD_BETTING, UNKNOWN }
+    public enum MarginCalculationModel { MAX, SUM, NET, UNKNOWN }
+    public enum SnapshotCollectionAvailability { UNAVAILABLE_OR_ABSENT, AVAILABLE_EMPTY, AVAILABLE_NON_EMPTY }
+    public record PositionPnlSnapshot(String brokerPositionReference, BigDecimal grossUnrealizedPnl,
+                                      BigDecimal netUnrealizedPnl, Integer monetaryScale) {
+        public PositionPnlSnapshot {
+            brokerPositionReference = required(brokerPositionReference, "brokerPositionReference");
+            if (monetaryScale != null && monetaryScale < 0) {
+                throw new IllegalArgumentException("monetaryScale cannot be negative");
+            }
         }
     }
     public record PositionSnapshot(String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
@@ -301,6 +368,22 @@ public final class BrokerModels {
                            Instant closedAt, BigDecimal swap) {
             this(providerTradeReference, null, instrument, settlementAsset, side, quantity, price, fee,
                     realizedPnl, closedAt, swap, realizedPnl != null || swap != null);
+        }
+    }
+    private static SnapshotCollectionAvailability collectionAvailability(List<?> values) {
+        return values.isEmpty() ? SnapshotCollectionAvailability.AVAILABLE_EMPTY
+                : SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY;
+    }
+    private static void validateCollection(SnapshotCollectionAvailability availability,
+                                           List<?> values, String name) {
+        if (availability == SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT && !values.isEmpty()) {
+            throw new IllegalArgumentException(name + " cannot contain values when unavailable");
+        }
+        if (availability == SnapshotCollectionAvailability.AVAILABLE_EMPTY && !values.isEmpty()) {
+            throw new IllegalArgumentException(name + " cannot contain values when empty");
+        }
+        if (availability == SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY && values.isEmpty()) {
+            throw new IllegalArgumentException(name + " must contain values when non-empty");
         }
     }
     public record LedgerEntry(String providerLedgerReference, String asset, String type,

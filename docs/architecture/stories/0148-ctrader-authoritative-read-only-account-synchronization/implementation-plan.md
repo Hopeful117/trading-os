@@ -372,3 +372,62 @@ Stop and request an ADR amendment or human decision if:
 Human approval of this Implementation Plan is required before implementation may
 begin. Approval authorizes the implementation stage only; it does not authorize
 real-provider credentials, live trading, mutation capabilities or execution.
+
+## 14. Additive Financial Contract Extension
+
+This bounded extension is authorized by the implementation task issued after the
+original Story 0148 implementation. It does not reopen or relabel the historical
+Story status and does not authorize provider access.
+
+### Scope
+
+Extend the existing provider-neutral v2 snapshot with already-decoded cTrader
+account-model and scaling facts, explicit position/order/PnL collection
+availability, and position-level unrealized PnL facts. Do not add financial
+derivations or execution behavior.
+
+### Neutral Schema
+
+`BrokerAccountFactsV2` adds:
+
+- `AccountPositionModel`: `HEDGED`, `NETTED`, `SPREAD_BETTING`, `UNKNOWN`;
+- `MarginCalculationModel`: `MAX`, `SUM`, `NET`, `UNKNOWN`;
+- `monetaryScale`, representing normalized decimal precision metadata;
+- `leverage`, representing normalized leverage rather than cTrader cents.
+
+`BrokerAccountSnapshotV2` adds:
+
+- position, order and PnL `SnapshotCollectionAvailability`;
+- `pnlComplete`;
+- position-level gross/net unrealized PnL with monetary scale metadata.
+
+`valuationAsset` remains the neutral deposit/valuation asset. The raw cTrader
+deposit asset ID is not exposed. Manager, IB and non-withdrawable bonuses remain
+unavailable because their inclusion in neutral account semantics is not approved.
+
+### Semantics and Mapping
+
+The cTrader adapter maps decoded provider enum values to neutral enums and maps
+unknown values to `UNKNOWN`. cTrader `leverageInCents` is divided by 100 before
+being exposed as neutral leverage. Existing monetary values remain normalized
+`BigDecimal` values and are not scaled again.
+
+Authoritative `AVAILABLE_EMPTY` collections remain `AVAILABLE_EMPTY` through the
+snapshot boundary. `UNAVAILABLE_OR_ABSENT`, malformed responses and incomplete
+observations remain fail-closed. A complete empty PnL set is preserved, but no
+account-level zero PnL derivation is added in this extension.
+
+### Compatibility and Non-Goals
+
+Existing constructors remain available and default new facts to `UNKNOWN`, null,
+or unavailable according to the existing provider contract. Providers that do
+not supply the new facts do not fabricate them. Equity, used-margin, free-margin,
+MAX/SUM/NET aggregation, pending-order margin reservation, risk admission and
+execution remain explicitly out of scope.
+
+### Tests
+
+Focused Broker Service tests cover neutral enum mapping, unknown-value handling,
+leverage and monetary precision propagation, authoritative empty collections,
+and preservation of legitimate financial incompleteness. Existing cTrader
+decoder tests continue to cover malformed and unavailable collection behavior.

@@ -35,7 +35,7 @@ public record CTraderReadOnlyObservation(
         this(externalAccountId, valuationAsset, balance, equity, usedMargin, freeMargin, positions, orders,
                 deals, startedAt, providerObservedAt, completedAt, complete, reasons, AccountFacts.empty(),
                 CollectionState.available(positions), CollectionState.available(orders),
-                CollectionState.available(List.of()), true);
+                CollectionState.unavailable(), false);
     }
 
     public CTraderReadOnlyObservation {

@@ -1,7 +1,6 @@
 package com.hope.trading.broker_service.ctrader.synchronization;
 
-import com.hope.trading.broker_service.broker.domain.model.BrokerModels.SnapshotCompleteness;
-import com.hope.trading.broker_service.broker.domain.model.BrokerModels.SnapshotFreshness;
+import com.hope.trading.broker_service.broker.domain.model.BrokerModels.*;
 import com.hope.trading.broker_service.connection.application.BrokerConnectionRepository;
 import com.hope.trading.broker_service.connection.domain.BrokerConnection;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
@@ -44,7 +43,20 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
                      new CTraderRequestSafetyGuard(mock(JdbcTemplate.class),
                              new com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties(
                                      false, 1000, 700, 800, java.time.Duration.ofMinutes(15),
-                                     java.time.Duration.ofMinutes(30)), clock));
+                              java.time.Duration.ofMinutes(30)), clock));
+
+    @Test
+    void legacyObservationConstructorDoesNotClaimPnlCompleteness() {
+        var observation = new CTraderReadOnlyObservation("9001", "USD", BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE,
+                List.of(new CTraderReadOnlyObservation.Position("EUR/USD", BigDecimal.ONE,
+                        BigDecimal.ONE, now, "position-1")), List.of(), List.of(), now, now, now,
+                true, List.of());
+
+        assertThat(observation.pnlComplete()).isFalse();
+        assertThat(observation.pnlSet().availability())
+                .isEqualTo(CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT);
+    }
 
     @Test
     void completeFreshObservationIsMappedToNeutralFacts() {
@@ -61,9 +73,28 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
                 new CTraderReadOnlyObservation("9001", "USD", new BigDecimal("1000"),
                         new BigDecimal("1010"), new BigDecimal("100"), new BigDecimal("900"),
                          List.of(new CTraderReadOnlyObservation.Position("EUR/USD", new BigDecimal("2"),
-                                 new BigDecimal("1.1"), now, "position-1", new BigDecimal("5"),
-                                 new BigDecimal("1.05"))),
-                         List.of(), List.of(), now, now, now, true, List.of()));
+                                  new BigDecimal("1.1"), now, "position-1", new BigDecimal("5"),
+                                  new BigDecimal("1.05"))),
+                         List.of(), List.of(), now, now, now, true, List.of(),
+                         new CTraderReadOnlyObservation.AccountFacts(
+                                 CTraderReadOnlyObservation.ProviderField.present("HEDGED"),
+                                 CTraderReadOnlyObservation.ProviderField.present("MAX"),
+                                 CTraderReadOnlyObservation.ProviderField.present("1"),
+                                 CTraderReadOnlyObservation.ProviderField.present(2),
+                                 CTraderReadOnlyObservation.ProviderField.present(10000L),
+                                 CTraderReadOnlyObservation.ProviderField.absent(),
+                                 CTraderReadOnlyObservation.ProviderField.absent(),
+                                 CTraderReadOnlyObservation.ProviderField.absent()),
+                         CTraderReadOnlyObservation.CollectionState.available(List.of(
+                                 new CTraderReadOnlyObservation.Position("EUR/USD", new BigDecimal("2"),
+                                         new BigDecimal("1.1"), now, "position-1", new BigDecimal("5"),
+                                         new BigDecimal("1.05")))),
+                         CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                         CTraderReadOnlyObservation.CollectionState.available(List.of(
+                                 new CTraderReadOnlyObservation.PositionPnl("position-1",
+                                         CTraderReadOnlyObservation.ProviderField.present(new BigDecimal("10")),
+                                         CTraderReadOnlyObservation.ProviderField.present(new BigDecimal("8")),
+                                         CTraderReadOnlyObservation.ProviderField.present(2)))), true));
 
         var snapshot = capability.snapshot(accountId);
 
@@ -76,6 +107,108 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
             assertThat(position.margin()).isEqualByComparingTo("5");
             assertThat(position.stopLoss()).isEqualByComparingTo("1.05");
         });
+        assertThat(snapshot.account().positionModel()).isEqualTo(AccountPositionModel.HEDGED);
+        assertThat(snapshot.account().marginCalculationModel()).isEqualTo(MarginCalculationModel.MAX);
+        assertThat(snapshot.account().monetaryScale()).isEqualTo(2);
+        assertThat(snapshot.account().leverage()).isEqualByComparingTo("100");
+        assertThat(snapshot.positionAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY);
+        assertThat(snapshot.orderAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
+        assertThat(snapshot.pnlAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY);
+        assertThat(snapshot.pnlComplete()).isTrue();
+        assertThat(snapshot.positionPnls()).singleElement().satisfies(pnl -> {
+            assertThat(pnl.brokerPositionReference()).isEqualTo("position-1");
+            assertThat(pnl.grossUnrealizedPnl()).isEqualByComparingTo("10");
+            assertThat(pnl.netUnrealizedPnl()).isEqualByComparingTo("8");
+            assertThat(pnl.monetaryScale()).isEqualTo(2);
+        });
+        assertThat(snapshot.unavailabilityReasons()).isEmpty();
+    }
+
+    @Test
+    void unknownAccountModelsMapToNeutralUnknownWithoutGuessing() {
+        UUID accountId = UUID.randomUUID();
+        UUID credential = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, UUID.randomUUID(),
+                BrokerProviderId.CTRADER, now);
+        connection.authenticate(credential, now);
+        connection.bindExternalAccount("9001", "demo", now);
+        when(connections.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+        when(secrets.read(new CredentialReference(credential))).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", now.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
+                new CTraderReadOnlyObservation("9001", "USD", BigDecimal.ONE, BigDecimal.ONE,
+                        BigDecimal.ZERO, BigDecimal.ONE, List.of(), List.of(), List.of(), now, now, now,
+                        true, List.of(), new CTraderReadOnlyObservation.AccountFacts(
+                        CTraderReadOnlyObservation.ProviderField.present("UNKNOWN(99)"),
+                        CTraderReadOnlyObservation.ProviderField.present("UNKNOWN(99)"),
+                        CTraderReadOnlyObservation.ProviderField.absent(),
+                        CTraderReadOnlyObservation.ProviderField.absent(),
+                        CTraderReadOnlyObservation.ProviderField.absent(),
+                        CTraderReadOnlyObservation.ProviderField.absent(),
+                        CTraderReadOnlyObservation.ProviderField.absent(),
+                        CTraderReadOnlyObservation.ProviderField.absent()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()), true));
+
+        var snapshot = capability.snapshot(accountId);
+
+        assertThat(snapshot.account().positionModel()).isEqualTo(AccountPositionModel.UNKNOWN);
+        assertThat(snapshot.account().marginCalculationModel()).isEqualTo(MarginCalculationModel.UNKNOWN);
+    }
+
+    @Test
+    void authoritativeEmptyCollectionsDoNotCreateUnavailableReasons() {
+        UUID accountId = UUID.randomUUID();
+        UUID credential = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, UUID.randomUUID(),
+                BrokerProviderId.CTRADER, now);
+        connection.authenticate(credential, now);
+        connection.bindExternalAccount("9001", "demo", now);
+        when(connections.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+        when(secrets.read(new CredentialReference(credential))).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", now.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
+                new CTraderReadOnlyObservation("9001", "USD", new BigDecimal("1000"),
+                        new BigDecimal("1000"), BigDecimal.ZERO, new BigDecimal("1000"),
+                        List.of(), List.of(), List.of(), now, now, now, true, List.of(),
+                        CTraderReadOnlyObservation.AccountFacts.empty(),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()), true));
+
+        var snapshot = capability.snapshot(accountId);
+
+        assertThat(snapshot.completeness()).isEqualTo(SnapshotCompleteness.COMPLETE);
+        assertThat(snapshot.unavailabilityReasons()).isEmpty();
+        assertThat(snapshot.positionAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
+        assertThat(snapshot.orderAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
+        assertThat(snapshot.pnlAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
+    }
+
+    @Test
+    void incompletePnlCannotProduceCompleteSnapshot() {
+        UUID accountId = UUID.randomUUID();
+        UUID credential = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, UUID.randomUUID(),
+                BrokerProviderId.CTRADER, now);
+        connection.authenticate(credential, now);
+        connection.bindExternalAccount("9001", "demo", now);
+        when(connections.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+        when(secrets.read(new CredentialReference(credential))).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", now.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
+                new CTraderReadOnlyObservation("9001", "USD", BigDecimal.ONE, BigDecimal.ONE,
+                        BigDecimal.ZERO, BigDecimal.ONE, List.of(), List.of(), List.of(), now, now, now,
+                        true, List.of(), CTraderReadOnlyObservation.AccountFacts.empty(),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()), false));
+
+        var snapshot = capability.snapshot(accountId);
+
+        assertThat(snapshot.completeness()).isEqualTo(SnapshotCompleteness.INCOMPLETE);
+        assertThat(snapshot.unavailabilityReasons()).contains("UNREALIZED_PNL_UNAVAILABLE");
     }
 
     @Test
