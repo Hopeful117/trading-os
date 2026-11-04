@@ -447,10 +447,13 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
                 InstrumentProductType.CFD, new CurrencyCode("EUR"), new CurrencyCode("USD"),
                 QuantityUnit.UNDERLYING_UNITS, BigDecimal.ONE, 5, 0, BigDecimal.ONE, BigDecimal.ONE,
                 new FinancialContractProvenance("story-0192", 1L, NOW.minusSeconds(30))));
-        when(riskFacts.load(any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
+        when(riskFacts.load(any(), any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
                 brokerAccountId, 1, NOW, true, List.of(), Map.of("USD", decimal("10000")),
                 new RiskFactsProvider.Account("USD", decimal("100000"), decimal("100000"), BigDecimal.ZERO,
-                        decimal("100000")), List.of(), List.of(), List.of(), "story-0192-risk-facts"));
+                        decimal("100000"), new RiskFactsProvider.EquityFact(decimal("100000"), "USD",
+                        com.hope.trading.trading_core.risk.application.port.RiskFactRequirements.EquityProvenance.BROKER_DERIVED,
+                        "AVAILABLE", NOW, NOW, true, true, true, "PAPER_ACCOUNT_STATE", "PAPER_MARK_TO_MARKET", List.of())),
+                List.of(), List.of(), List.of(), "story-0192-risk-facts"));
         riskPrice = new AtomicReference<>(decimal("1.10000"));
         when(marketValuation.value(any(), any(), any(), any())).thenAnswer(invocation ->
                 riskValuation(MarketValuationPort.FreshnessRequirement.t0()));

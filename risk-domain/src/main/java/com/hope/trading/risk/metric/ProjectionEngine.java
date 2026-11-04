@@ -35,8 +35,8 @@ public final class ProjectionEngine {
                 .reduce(Money.zero(currency), Money::add);
         Money projectedPositionMargin =
                 sum(projectedPositions, currency, ProjectedPosition::margin);
-        Money margin = account.usedMargin()
-                .subtract(currentPositionMargin).add(projectedPositionMargin);
+        Optional<Money> margin = account.usedMargin()
+                .map(value -> value.subtract(currentPositionMargin).add(projectedPositionMargin));
         return new ProjectedMetrics(exposure, projectedDrawdown, projectedTotalDrawdown, margin, heat,
                 new ProjectedPortfolioState(projectedPositions));
     }

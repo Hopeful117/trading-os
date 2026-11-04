@@ -31,6 +31,7 @@ import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
+import com.hope.trading.trading_core.risk.application.port.RiskFactRequirements;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentFinancialContract;
@@ -123,7 +124,22 @@ public class TradePlanRiskEvaluationService {
                                            RiskProfileValidator riskProfileValidator,
                                            PlatformTransactionManager transactionManager) {
         this(accounts, brokerAccounts, tradePlans,
-                (account, brokerAccount, sourceId, from, to) -> RiskFactsProvider.fromBroker(broker.load(sourceId, from, to)),
+                new RiskFactsProvider() {
+                    @Override
+                    public RiskFactsProvider.Snapshot load(com.hope.trading.trading_core.model.Account account,
+                                                           com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
+                                                           UUID sourceId, Instant from, Instant to) {
+                        return RiskFactsProvider.fromBroker(broker.load(sourceId, from, to));
+                    }
+
+                    @Override
+                    public RiskFactsProvider.Snapshot load(com.hope.trading.trading_core.model.Account account,
+                                                           com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
+                                                           UUID sourceId, Instant from, Instant to,
+                                                           RiskFactRequirements requirements) {
+                        return RiskFactsProvider.fromBroker(broker.load(sourceId, from, to), requirements);
+                    }
+                },
                 market, requiredMargins, persistence, clock, acknowledgmentDelivery,
                 riskProfileValidator, transactionManager);
     }
@@ -215,10 +231,11 @@ public class TradePlanRiskEvaluationService {
         validatePlan(command, plan, configuration.reportingCurrency(), preflight);
         RiskDay riskDay = RiskDay.containing(command.requestedAt(), configuration.riskTimeZone(),
                 LocalTime.parse(configuration.riskDayResetTime()));
+        RiskFactRequirements requirements = RiskFactRequirements.from(rules);
         RiskFactsProvider.Snapshot brokerSnapshot = facts.load(account, brokerAccount,
-                 brokerAccount.id(),
-                 riskDay.startsAt(), riskDay.endsAt());
-        requireBroker(brokerSnapshot, riskDay);
+                brokerAccount.id(), riskDay.startsAt(), riskDay.endsAt(), requirements);
+        requireBroker(brokerSnapshot, riskDay, requirements, account,
+                brokerAccount.executionMode() == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER);
 
         String currency = configuration.reportingCurrency();
         Map<String, BigDecimal> startBalances = reconstructStartBalances(brokerSnapshot, riskDay);
@@ -253,7 +270,8 @@ public class TradePlanRiskEvaluationService {
         BigDecimal balance = valueAssets(brokerSnapshot.assetBalances(), current);
         BigDecimal accountRate = assetRate(current, brokerSnapshot.account().valuationAsset());
         BigDecimal equity = positiveOrZero(brokerSnapshot.account().equity(), "BROKER_EQUITY_MISSING").multiply(accountRate);
-        BigDecimal margin = positiveOrZero(brokerSnapshot.account().margin(), "BROKER_MARGIN_MISSING").multiply(accountRate);
+        Optional<BigDecimal> margin = Optional.ofNullable(brokerSnapshot.account().margin())
+                .map(value -> positiveOrZero(value, "BROKER_MARGIN_INVALID").multiply(accountRate));
         BigDecimal startingBalance = brokerSnapshot.account().startingBalance();
         if (startingBalance == null) {
             startingBalance = account.getStartingBalance();
@@ -350,7 +368,7 @@ public class TradePlanRiskEvaluationService {
         Map<String, Object> accountPayload = new LinkedHashMap<>();
         accountPayload.put("balance", balance);
         accountPayload.put("equity", equity);
-        accountPayload.put("margin", margin);
+        accountPayload.put("margin", margin.orElse(null));
         accountPayload.put("accountStartingBalance", accountStartingBalance.orElse(null));
         accountPayload.put("dailyReferenceBalance", dailyStart);
         accountPayload.put("dailyClosedPnl", dailyClosedPnl.orElse(null));
@@ -374,7 +392,8 @@ public class TradePlanRiskEvaluationService {
                 "reportingCurrency", currency, "tradePlanContextId", plan.contextId().toString(),
                 "tradePlanContextVersion", Long.toString(plan.contextVersion())));
         var accountSnapshot = new AccountSnapshot(command.accountId(), accountVersion, brokerSnapshot.observedAt(),
-                new Money(balance, currency), new Money(equity, currency), new Money(margin, currency),
+                new Money(balance, currency), new Money(equity, currency),
+                margin.map(value -> new Money(value, currency)),
                 accountStartingBalance,
                 new DailyRiskBaseline(new Money(dailyStart, currency), baseline.startsAt(),
                         "RISK_DAY_BASELINE", Map.of("baselineVersion", Long.toString(baseline.version()),
@@ -483,7 +502,9 @@ public class TradePlanRiskEvaluationService {
             throw unavailable("TRADE_PLAN_SIZING_CURRENCY_MISMATCH");
     }
 
-    private void requireBroker(RiskFactsProvider.Snapshot snapshot, RiskDay riskDay) {
+    private void requireBroker(RiskFactsProvider.Snapshot snapshot, RiskDay riskDay,
+                               RiskFactRequirements requirements, com.hope.trading.trading_core.model.Account account,
+                               boolean paper) {
         if (!snapshot.complete() || snapshot.account() == null || snapshot.sourceVersion() < 1
                 || snapshot.observedAt() == null || !riskDay.contains(snapshot.observedAt())
                 || snapshot.assetBalances() == null || snapshot.positions() == null
@@ -498,6 +519,21 @@ public class TradePlanRiskEvaluationService {
                 || !riskDay.contains(e.occurredAt()) || e.occurredAt().isAfter(snapshot.observedAt()))) {
             throw unavailable("BROKER_RISK_INTERVAL_INVALID");
         }
+        if (requirements.balance() && snapshot.account().balance() == null)
+            throw unavailable("BROKER_BALANCE_MISSING");
+        if (requirements.equity() && snapshot.account().equity() == null)
+            throw unavailable("BROKER_EQUITY_MISSING");
+        if (!RiskFactsProvider.equityAdmissible(snapshot.account(), requirements, paper))
+            throw unavailable("BROKER_EQUITY_PROVENANCE_OR_QUALITY_INVALID");
+        if (requirements.positions() && snapshot.positions() == null)
+            throw unavailable("BROKER_POSITIONS_MISSING");
+        if (requirements.startingBalance() && snapshot.account().startingBalance() == null
+                && (account == null || account.getStartingBalance() == null))
+            throw unavailable("BROKER_STARTING_BALANCE_MISSING");
+        if (requirements.closedDeals()
+                && (snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.UNAVAILABLE_OR_ABSENT
+                || snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.TRUNCATED))
+            throw unavailable("BROKER_DEAL_HISTORY_UNAVAILABLE");
     }
 
     static Map<String, BigDecimal> reconstructStartBalances(RiskFactsProvider.Snapshot snapshot, RiskDay day) {

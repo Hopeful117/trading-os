@@ -6,8 +6,8 @@ import java.util.Optional;
 
 public record RiskMetrics(
         Money balance, Money equity, Money floatingPnl, Optional<Money> closedPnl,
-        Money margin, Money freeMargin,
-        Money projectedExposure, Money projectedDrawdown, Money projectedMargin,
+        Optional<Money> margin, Optional<Money> freeMargin,
+        Money projectedExposure, Money projectedDrawdown, Optional<Money> projectedMargin,
         Money remainingRisk, Money portfolioHeat, Ratio riskUtilization,
         Ratio positionRiskRatio, Ratio exposureRatio, Ratio dailyDrawdownRatio,
         Optional<Ratio> totalDrawdownRatio

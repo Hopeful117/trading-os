@@ -25,6 +25,7 @@ import com.hope.trading.trading_core.risk.application.RiskEvaluationModels.Respo
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
+import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
@@ -218,6 +219,37 @@ class TradePlanRiskEvaluationServiceTest {
 
         assertThat(response.status()).isEqualTo("COMPLETED");
         assertThat(response.metrics()).containsKey("totalDrawdownRatio");
+    }
+
+    @Test
+    void missingAccountUsedMarginDoesNotBlockPolicyThatDoesNotRequireIt() {
+        availableContext(List.of());
+        when(broker.load(any(), any(), any())).thenReturn(new BrokerRiskFactsPort.Snapshot(
+                brokerAccountId, 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
+                new BrokerRiskFactsPort.Account("USD", new BigDecimal("10000"),
+                        new BigDecimal("10000"), null, new BigDecimal("10000"), reportedEquity("10000")),
+                List.of(), List.of(), List.of(), "{\"version\":11}"));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.approved()).isTrue();
+    }
+
+    @Test
+    void missingEquityBlocksEquityDependentPolicy() {
+        availableContext(List.of());
+        when(broker.load(any(), any(), any())).thenReturn(new BrokerRiskFactsPort.Snapshot(
+                brokerAccountId, 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
+                new BrokerRiskFactsPort.Account("USD", new BigDecimal("10000"), null,
+                        new BigDecimal("100"), new BigDecimal("10000")),
+                List.of(), List.of(), List.of(), "{\"version\":11}"));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
+        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
+                .containsExactly("BROKER_EQUITY_MISSING");
     }
 
     @Test
@@ -514,6 +546,11 @@ class TradePlanRiskEvaluationServiceTest {
         availableContext(List.of());
         when(plans.loadPreflight(planId, 3)).thenReturn(
                 plan("USD", "USD", "PROPOSED", "AUTOMATED", new BigDecimal("90")));
+        when(broker.load(any(), any(), any())).thenReturn(new BrokerRiskFactsPort.Snapshot(
+                brokerAccountId, 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
+                new BrokerRiskFactsPort.Account("USD", new BigDecimal("10000"),
+                        new BigDecimal("10000"), null, new BigDecimal("10000"), reportedEquity("10000")),
+                List.of(), List.of(), List.of(), "{\"version\":11}"));
 
         Response response = service.preflight(command("preflight", 3));
 
@@ -559,7 +596,13 @@ class TradePlanRiskEvaluationServiceTest {
         return new BrokerRiskFactsPort.Snapshot(brokerAccountId,
                 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
                 new BrokerRiskFactsPort.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"),
-                        new BigDecimal("100"), startingBalance), positions, closedTrades, List.of(), "{\"version\":11}");
+                        new BigDecimal("100"), startingBalance, reportedEquity("10000")), positions, closedTrades, List.of(), "{\"version\":11}");
+    }
+
+    private RiskFactsProvider.EquityFact reportedEquity(String value) {
+        return new RiskFactsProvider.EquityFact(new BigDecimal(value), "USD",
+                com.hope.trading.trading_core.risk.application.port.RiskFactRequirements.EquityProvenance.BROKER_REPORTED,
+                "AVAILABLE", now, now, true, true, true, "BROKER_ACCOUNT", "ACCOUNT_EQUITY", List.of());
     }
 
     private Object valuation(org.mockito.invocation.InvocationOnMock invocation) {

@@ -12,6 +12,7 @@ import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
 import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
+import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.shared.domain.model.EntryIntent;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
@@ -231,10 +232,11 @@ class ExecutionTimeRiskRevalidationServiceTest {
                 new RiskPersistence.AccountConfiguration(accountId, intent.brokerAccountId(), "UTC", "USD", UUID.randomUUID())));
         when(persistence.assignedProfile(accountId)).thenReturn(Optional.of(validProfile()));
         when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(readyPlan());
-        when(facts.load(any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
+         when(facts.load(any(), any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
                 intent.brokerAccountId(), 1, now, true, List.of(),
                 Map.of("USD", new BigDecimal("10000"), "ETH", BigDecimal.ZERO),
-                 new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO, null),
+                 new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO, null,
+                         paperEquity()),
                 List.of(), List.of(), List.of(), "paper-facts"));
          when(market.value(any(), any(), any(), any())).thenAnswer(invocation -> {
             List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
@@ -319,10 +321,11 @@ class ExecutionTimeRiskRevalidationServiceTest {
                 new RiskPersistence.AccountConfiguration(accountId, intent.brokerAccountId(), "UTC", "USD", UUID.randomUUID())));
         when(persistence.assignedProfile(accountId)).thenReturn(Optional.of(validProfile()));
         when(tradePlans.loadReady(tradePlanId, 1)).thenReturn(readyPlan());
-        when(facts.load(any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
+         when(facts.load(any(), any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
                 intent.brokerAccountId(), 1, now, true, List.of(),
                 Map.of("USD", new BigDecimal("10000"), "ETH", BigDecimal.ZERO),
-                new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO, null),
+                 new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"), BigDecimal.ZERO, null,
+                         paperEquity()),
                 List.of(), List.of(), List.of(), "paper-facts"));
         when(market.value(any(), any(), any(), any())).thenAnswer(invocation -> {
             List<MarketValuationPort.Instrument> instruments = invocation.getArgument(2);
@@ -469,6 +472,12 @@ class ExecutionTimeRiskRevalidationServiceTest {
             }
             throw exception;
         }
+    }
+
+    private RiskFactsProvider.EquityFact paperEquity() {
+        return new RiskFactsProvider.EquityFact(new BigDecimal("10000"), "USD",
+                com.hope.trading.trading_core.risk.application.port.RiskFactRequirements.EquityProvenance.BROKER_DERIVED,
+                "AVAILABLE", now, now, true, true, true, "PAPER_ACCOUNT_STATE", "PAPER_MARK_TO_MARKET", List.of());
     }
 
     private RiskPersistence.Profile validProfile() {

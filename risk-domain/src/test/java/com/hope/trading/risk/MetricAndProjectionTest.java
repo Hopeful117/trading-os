@@ -22,7 +22,7 @@ class MetricAndProjectionTest {
         var metrics = new ObservedMetricsCalculator().calculate(account);
         assertEquals(new BigDecimal("-200"), metrics.floatingPnl().amount());
         assertEquals(new BigDecimal("-100"), metrics.closedPnl().orElseThrow().amount());
-        assertEquals(new BigDecimal("9300"), metrics.freeMargin().amount());
+        assertEquals(new BigDecimal("9300"), metrics.freeMargin().orElseThrow().amount());
     }
 
     @Test void preservesUnavailableDailyClosedPnlWithoutTurningItIntoZero() {
@@ -71,7 +71,7 @@ class MetricAndProjectionTest {
                 trade(TradeDirection.SHORT, "4", "400", "40", "80"));
         assertPosition(projected, "6", "600");
         assertMoney(projected.portfolioHeat(), "60");
-        assertMoney(projected.margin(), "420");
+        assertMoney(projected.margin().orElseThrow(), "420");
     }
 
     @Test void closesAnOppositePosition() {
@@ -80,7 +80,7 @@ class MetricAndProjectionTest {
                 trade(TradeDirection.SHORT, "10", "1000", "100", "200"));
         assertTrue(projected.portfolioState().positions().isEmpty());
         assertMoney(projected.exposure(), "0");
-        assertMoney(projected.margin(), "300");
+        assertMoney(projected.margin().orElseThrow(), "300");
     }
 
     @Test void crossesThroughZeroAndOpensOppositeRemainder() {
@@ -89,7 +89,7 @@ class MetricAndProjectionTest {
                 trade(TradeDirection.SHORT, "15", "1500", "150", "300"));
         assertPosition(projected, "-5", "500.0000000000000000000000000000000");
         assertMoney(projected.portfolioHeat(), "50.00000000000000000000000000000000");
-        assertMoney(projected.margin(), "400.0000000000000000000000000000000");
+        assertMoney(projected.margin().orElseThrow(), "400.0000000000000000000000000000000");
     }
 
     @Test void calculatesAllRatiosBeforeRulesRun() {
