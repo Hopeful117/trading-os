@@ -85,21 +85,30 @@ public class ExecutionConfiguration {
                                                          com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort tradePlans) {
          return new DecisionHistoryService(outcomes, accounts, executions, tradePlans);
      }
-    @Bean ExecuteTradeService executeTradeService(ExecutionIntentRepositoryPort intents,
+     @Bean ExecuteTradeService executeTradeService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,BrokerOrderRepositoryPort orders,
             BrokerExecutionPort broker,ExecutionIdGenerator ids,ExecutionEventPublisher events,
              ExecutionMetrics metrics,ExecutionValidationService validation,
              IdempotencyService idempotency,ExecutionLifecycleService lifecycle,Clock clock,
              ExecutionTimeRiskRevalidationService t1Revalidation,
-             ExecutionFinalizationStep executionFinalizationStep,
-             com.hope.trading.trading_core.challenge.application.ChallengeExecutionAdmissionService challengeAdmission){
+              ExecutionFinalizationStep executionFinalizationStep,
+              com.hope.trading.trading_core.challenge.application.ChallengeExecutionAdmissionService challengeAdmission,
+              T1ApprovalVerifier t1ApprovalVerifier){
         return new ExecuteTradeService(intents,new ExecutionValidationStep(validation,lifecycle),
                 new IdempotencyVerificationStep(idempotency),
                 new ExecutionAttemptCreationStep(attempts,ids),
-                new BrokerSubmissionStep(broker,intents,attempts,lifecycle),
+                 new BrokerSubmissionStep(broker,intents,attempts,lifecycle,t1ApprovalVerifier),
                 new BrokerResponseProcessingStep(ids),
                  executionFinalizationStep,events,clock, t1Revalidation, challengeAdmission);
-    }
+     }
+     @Bean T1ApprovalVerifier t1ApprovalVerifier(RiskPersistence riskPersistence) {
+         return (evaluationId, executionIntentId) -> riskPersistence.t1EvaluationById(evaluationId)
+                 .filter(evaluation -> executionIntentId.equals(evaluation.executionIntentId()))
+                 .filter(evaluation -> "COMPLETED".equals(evaluation.status()))
+                 .map(RiskPersistence.T1StoredEvaluation::decision)
+                 .filter(decision -> "APPROVED".equals(decision) || "APPROVED_WITH_WARNINGS".equals(decision))
+                 .isPresent();
+     }
     @Bean RetryExecutionService retryExecutionService(ExecutionIntentRepositoryPort intents,
             ExecutionAttemptRepositoryPort attempts,
             ExecuteTradeService execution,ExecutionEventPublisher events,ExecutionMetrics metrics,Clock clock){

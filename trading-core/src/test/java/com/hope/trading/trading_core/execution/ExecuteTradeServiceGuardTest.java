@@ -98,7 +98,7 @@ class ExecuteTradeServiceGuardTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, futureClock, mock(ExecutionTimeRiskRevalidationService.class));
@@ -308,7 +308,7 @@ private Fixture fixture() {
                 new ExecutionValidationStep(new ExecutionValidationService(), lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(attempts, ids),
-                new BrokerSubmissionStep(broker, intents, attempts, lifecycle),
+                 new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(ids),
                 new ExecutionFinalizationStep(intents, attempts, orders, lifecycle, metrics,
                         paperSettlementService, brokerAccountRepository),

@@ -3,6 +3,7 @@ package com.hope.trading.risk.context;
 import com.hope.trading.risk.domain.RiskEvaluationRequest;
 import com.hope.trading.risk.policy.EffectiveRiskRuleSet;
 import com.hope.trading.risk.snapshot.*;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -16,11 +17,13 @@ public final class RiskEvaluationContext {
     private final PortfolioSnapshot portfolio;
     private final MarketSnapshot market;
     private final RuleSetSnapshot ruleSet;
+    private final Map<String, String> invariantAdmissionReasons;
 
     RiskEvaluationContext(
             RiskEvaluationRequest request, TradingContext trading,
             AccountSnapshot account, PortfolioSnapshot portfolio,
-            MarketSnapshot market, RuleSetSnapshot ruleSet
+            MarketSnapshot market, RuleSetSnapshot ruleSet,
+            Map<String, String> invariantAdmissionReasons
     ) {
         this.request = Objects.requireNonNull(request);
         this.trading = Objects.requireNonNull(trading);
@@ -28,6 +31,8 @@ public final class RiskEvaluationContext {
         this.portfolio = Objects.requireNonNull(portfolio);
         this.market = Objects.requireNonNull(market);
         this.ruleSet = Objects.requireNonNull(ruleSet);
+        this.invariantAdmissionReasons = Map.copyOf(invariantAdmissionReasons == null
+                ? Map.of() : invariantAdmissionReasons);
     }
 
     public RiskEvaluationRequest request() { return request; }
@@ -37,4 +42,5 @@ public final class RiskEvaluationContext {
     public MarketSnapshot market() { return market; }
     public RuleSetSnapshot ruleSetSnapshot() { return ruleSet; }
     public EffectiveRiskRuleSet ruleSet() { return ruleSet.effectiveRuleSet(); }
+    public Map<String, String> invariantAdmissionReasons() { return invariantAdmissionReasons; }
 }

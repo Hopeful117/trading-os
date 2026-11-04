@@ -47,12 +47,13 @@ class BrokerSubmissionStepRegressionTest {
         ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
         ExecutionAttempt attempt = ExecutionAttempt.create(
                 new ExecutionAttemptId(uuid(100)), intent.id(), 1, NOW, UUID.randomUUID());
-        var ctx = new ExecutionPipelineContext(intent, NOW);
+        var ctx = approvedEntryContext(intent);
         ctx.attempt(attempt);
+        ctx.t1EvaluationId(attempt.t1EvaluationId());
 
         when(broker.submit(any())).thenReturn(new BrokerExecutionPort.Acknowledged("ext-1", "corr-1"));
 
-        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1);
 
         step.execute(ctx);
 
@@ -69,13 +70,14 @@ class BrokerSubmissionStepRegressionTest {
         ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
         ExecutionAttempt attempt = ExecutionAttempt.create(
                 new ExecutionAttemptId(uuid(101)), intent.id(), 1, NOW, UUID.randomUUID());
-        var ctx = new ExecutionPipelineContext(intent, NOW);
+        var ctx = approvedEntryContext(intent);
         ctx.attempt(attempt);
+        ctx.t1EvaluationId(attempt.t1EvaluationId());
 
         BrokerExecutionPort.Acknowledged ack = new BrokerExecutionPort.Acknowledged("ext-order-1", "corr-1");
         when(broker.submit(any())).thenReturn(ack);
 
-        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1);
 
         step.execute(ctx);
 
@@ -88,13 +90,14 @@ class BrokerSubmissionStepRegressionTest {
         ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
         ExecutionAttempt attempt = ExecutionAttempt.create(
                 new ExecutionAttemptId(uuid(102)), intent.id(), 1, NOW, UUID.randomUUID());
-        var ctx = new ExecutionPipelineContext(intent, NOW);
+        var ctx = approvedEntryContext(intent);
         ctx.attempt(attempt);
+        ctx.t1EvaluationId(attempt.t1EvaluationId());
 
         BrokerExecutionPort.Rejected rejected = new BrokerExecutionPort.Rejected("ext-1", "INSUFFICIENT_FUNDS");
         when(broker.submit(any())).thenReturn(rejected);
 
-        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1);
 
         step.execute(ctx);
 
@@ -107,13 +110,14 @@ class BrokerSubmissionStepRegressionTest {
         ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
         ExecutionAttempt attempt = ExecutionAttempt.create(
                 new ExecutionAttemptId(uuid(103)), intent.id(), 1, NOW, UUID.randomUUID());
-        var ctx = new ExecutionPipelineContext(intent, NOW);
+        var ctx = approvedEntryContext(intent);
         ctx.attempt(attempt);
+        ctx.t1EvaluationId(attempt.t1EvaluationId());
 
         BrokerExecutionPort.Unknown unknown = new BrokerExecutionPort.Unknown("TIMEOUT");
         when(broker.submit(any())).thenReturn(unknown);
 
-        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1);
 
         step.execute(ctx);
 
@@ -126,12 +130,13 @@ class BrokerSubmissionStepRegressionTest {
         ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
         ExecutionAttempt attempt = ExecutionAttempt.create(
                 new ExecutionAttemptId(uuid(104)), intent.id(), 1, NOW, UUID.randomUUID());
-        var ctx = new ExecutionPipelineContext(intent, NOW);
+        var ctx = approvedEntryContext(intent);
         ctx.attempt(attempt);
+        ctx.t1EvaluationId(attempt.t1EvaluationId());
 
         when(broker.submit(any())).thenReturn(new BrokerExecutionPort.Acknowledged("ext-1", "corr-1"));
 
-        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1);
 
         step.execute(ctx);
 
@@ -144,8 +149,38 @@ class BrokerSubmissionStepRegressionTest {
     }
 
     @Test
+    void executeRejectsApprovalIdentityDifferentFromAttemptIdentity() {
+        ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
+        var ctx = approvedEntryContext(intent);
+        ExecutionAttempt attempt = ExecutionAttempt.create(
+                new ExecutionAttemptId(uuid(105)), intent.id(), 1, NOW, UUID.randomUUID());
+        ctx.attempt(attempt);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1);
+
+        assertThatThrownBy(() -> step.execute(ctx))
+                .isInstanceOf(com.hope.trading.trading_core.execution.domain.exception.InvalidExecutionStateException.class)
+                .hasMessageContaining("T1 risk approval");
+        verifyNoInteractions(broker, lifecycle, intents, attempts);
+    }
+
+    @Test
+    void executeRejectsWhenPersistedT1ApprovalIsNotApproved() {
+        ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
+        var ctx = approvedEntryContext(intent);
+        ExecutionAttempt attempt = ExecutionAttempt.create(
+                new ExecutionAttemptId(uuid(106)), intent.id(), 1, NOW, ctx.t1EvaluationId());
+        ctx.attempt(attempt);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, (evaluationId, executionIntentId) -> false);
+
+        assertThatThrownBy(() -> step.execute(ctx))
+                .isInstanceOf(com.hope.trading.trading_core.execution.domain.exception.InvalidExecutionStateException.class)
+                .hasMessageContaining("T1 risk approval");
+        verifyNoInteractions(broker, lifecycle, intents, attempts);
+    }
+
+    @Test
     void executeRequiresNonNullArguments() {
-        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle);
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1);
 
         assertThatThrownBy(() -> step.execute(null))
                 .isInstanceOf(NullPointerException.class);
@@ -153,16 +188,23 @@ class BrokerSubmissionStepRegressionTest {
 
     @Test
     void constructorRequiresNonNullDependencies() {
-        assertThatThrownBy(() -> new BrokerSubmissionStep(null, intents, attempts, lifecycle))
+        assertThatThrownBy(() -> new BrokerSubmissionStep(null, intents, attempts, lifecycle, APPROVED_T1))
                 .isInstanceOf(NullPointerException.class);
 
-        assertThatThrownBy(() -> new BrokerSubmissionStep(broker, null, attempts, lifecycle))
+        assertThatThrownBy(() -> new BrokerSubmissionStep(broker, null, attempts, lifecycle, APPROVED_T1))
                 .isInstanceOf(NullPointerException.class);
 
-        assertThatThrownBy(() -> new BrokerSubmissionStep(broker, intents, null, lifecycle))
+        assertThatThrownBy(() -> new BrokerSubmissionStep(broker, intents, null, lifecycle, APPROVED_T1))
                 .isInstanceOf(NullPointerException.class);
 
-        assertThatThrownBy(() -> new BrokerSubmissionStep(broker, intents, attempts, null))
+        assertThatThrownBy(() -> new BrokerSubmissionStep(broker, intents, attempts, null, APPROVED_T1))
                 .isInstanceOf(NullPointerException.class);
+    }
+
+    private ExecutionPipelineContext approvedEntryContext(ExecutionIntent intent) {
+        var ctx = new ExecutionPipelineContext(intent, NOW);
+        ctx.t1Approved(true);
+        ctx.t1EvaluationId(UUID.randomUUID());
+        return ctx;
     }
 }

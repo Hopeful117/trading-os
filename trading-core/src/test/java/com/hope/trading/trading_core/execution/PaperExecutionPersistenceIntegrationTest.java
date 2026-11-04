@@ -7,6 +7,7 @@ import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.execution.application.service.ExecutionTimeRiskRevalidationService;
 import com.hope.trading.trading_core.execution.application.service.ExecuteTradeService;
 import com.hope.trading.trading_core.execution.application.service.PaperSettlementService;
+import com.hope.trading.trading_core.execution.application.port.T1ApprovalVerifier;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.aggregate.BrokerOrder;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionAttempt;
@@ -110,6 +111,7 @@ class PaperExecutionPersistenceIntegrationTest {
     @MockitoBean private MarketDataClient marketData;
     @MockitoBean private BrokerExecutionClient liveBroker;
     @MockitoBean private ExecutionTimeRiskRevalidationService riskRevalidation;
+    @MockitoBean private T1ApprovalVerifier t1ApprovalVerifier;
     @MockitoBean private TradePlanRiskPort tradePlans;
 
     private UUID ownerId;
@@ -123,6 +125,7 @@ class PaperExecutionPersistenceIntegrationTest {
         when(riskRevalidation.evaluateAndPersist(any(), any())).thenReturn(
                 new ExecutionTimeRiskRevalidationService.T1Outcome(
                         UUID.randomUUID(), com.hope.trading.risk.domain.RiskTypes.RiskDecision.APPROVED, null, true));
+        when(t1ApprovalVerifier.isApproved(any(), any())).thenReturn(true);
         when(tradePlans.loadReady(any(), anyLong())).thenReturn(new TradePlanRiskPort.Snapshot(
                 PLAN_ID, 1, "READY_TO_EXECUTE", NOW, UUID.randomUUID(), 1, NOW, ownerId, accountId,
                 "USD", UUID.randomUUID(), 1, UUID.randomUUID(), 1, "BTC/USD", "LONG",

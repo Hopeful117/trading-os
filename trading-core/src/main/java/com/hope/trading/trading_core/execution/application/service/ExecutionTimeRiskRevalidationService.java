@@ -36,6 +36,7 @@ import com.hope.trading.trading_core.risk.application.port.MarketValuationPort;
 import com.hope.trading.trading_core.risk.application.port.RequiredMarginPort;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.risk.application.port.RiskFactRequirements;
+import com.hope.trading.trading_core.risk.application.port.InvariantEvidenceAdmission;
 import com.hope.trading.trading_core.risk.application.port.TradePlanRiskPort;
 import com.hope.trading.trading_core.risk.infrastructure.persistence.RiskPersistence;
 import com.hope.trading.trading_core.risk.application.RiskEvaluationException;
@@ -227,7 +228,12 @@ public class ExecutionTimeRiskRevalidationService {
         RiskFactsProvider.Snapshot brokerSnapshot = facts.load(account, brokerAccount,
                 brokerAccount.id(), riskDay.startsAt(), riskDay.endsAt(), requirements);
         requireBroker(brokerSnapshot, riskDay, requirements, account,
-                brokerAccount.executionMode() == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER);
+                brokerAccount.executionMode() == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER,
+                account.getBrokerAccountId());
+        boolean paperAccount = brokerAccount.executionMode()
+                == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER;
+        Map<String, String> invariantAdmission = InvariantEvidenceAdmission.resolve(
+                brokerSnapshot, requirements, account, paperAccount);
 
         String currency = configuration.reportingCurrency();
         Map<String, BigDecimal> startBalances = reconstructStartBalances(brokerSnapshot, riskDay);
@@ -260,8 +266,6 @@ public class ExecutionTimeRiskRevalidationService {
 
         BigDecimal balance = valueAssets(brokerSnapshot.assetBalances(), current);
         BigDecimal accountRate = assetRate(current, brokerSnapshot.account().valuationAsset());
-        boolean paperAccount = brokerAccount.executionMode()
-                == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER;
         boolean equityUsable = !requirements.equity()
                 || RiskFactsProvider.equityAdmissible(brokerSnapshot.account(), requirements, paperAccount);
         BigDecimal equity = !equityUsable || brokerSnapshot.account().equity() == null ? null
@@ -393,7 +397,7 @@ public class ExecutionTimeRiskRevalidationService {
                 "reportingCurrency", currency, "tradePlanContextId", plan.contextId().toString(),
                 "tradePlanContextVersion", Long.toString(plan.contextVersion())));
         var accountSnapshot = new AccountSnapshot(accountId, accountVersion, brokerSnapshot.observedAt(),
-                new Money(balance, currency), new Money(equity, currency),
+                new Money(balance, currency), equity == null ? null : new Money(equity, currency),
                 margin.map(value -> new Money(value, currency)),
                 accountStartingBalance,
                 new DailyRiskBaseline(new Money(dailyStart, currency), baseline.startsAt(),
@@ -408,7 +412,7 @@ public class ExecutionTimeRiskRevalidationService {
         var marketSnapshot = new MarketSnapshot(marketVersion, current.capturedAt(), prices);
         var ruleSnapshot = new RuleSetSnapshot(ruleVersion, now, rules);
         var context = new RiskEvaluationContextBuilder().build(request, trading, accountSnapshot,
-                portfolioSnapshot, marketSnapshot, ruleSnapshot);
+                portfolioSnapshot, marketSnapshot, ruleSnapshot, invariantAdmission);
         long contextVersion = persistence.context(t1EvaluationId, now, persistence.write(Map.of(
                 "request", request, "trading", trading, "account", accountSnapshot, "portfolio", portfolioSnapshot,
                 "market", marketSnapshot, "rules", ruleSnapshot, "provenance", provenance)));
@@ -502,13 +506,10 @@ public class ExecutionTimeRiskRevalidationService {
 
     private void requireBroker(RiskFactsProvider.Snapshot snapshot, RiskDay riskDay,
                                RiskFactRequirements requirements, com.hope.trading.trading_core.model.Account account,
-                               boolean paper) {
-        if (!snapshot.complete() || snapshot.account() == null || snapshot.sourceVersion() < 1
-                || snapshot.observedAt() == null || !riskDay.contains(snapshot.observedAt())
-                || snapshot.assetBalances() == null || snapshot.positions() == null
-                || snapshot.closedTrades() == null || snapshot.ledgerEntries() == null) {
-            String reason = snapshot.unavailabilityReasons() == null || snapshot.unavailabilityReasons().isEmpty()
-                    ? "BROKER_RISK_FACTS_INCOMPLETE" : snapshot.unavailabilityReasons().get(0);
+                               boolean paper, UUID expectedSourceId) {
+        String structuralFailure = InvariantEvidenceAdmission.structuralFailure(snapshot, expectedSourceId);
+        if (structuralFailure != null || snapshot.observedAt() == null || !riskDay.contains(snapshot.observedAt())) {
+            String reason = structuralFailure == null ? "BROKER_RISK_INTERVAL_INVALID" : structuralFailure;
             throw unavailable(reason);
         }
         if (snapshot.closedTrades().stream().anyMatch(t -> t == null || t.closedAt() == null
@@ -519,10 +520,6 @@ public class ExecutionTimeRiskRevalidationService {
         }
         if (requirements.balance() && snapshot.account().balance() == null)
             throw unavailable("BROKER_BALANCE_MISSING");
-        if (requirements.equity() && snapshot.account().equity() == null)
-            throw unavailable("BROKER_EQUITY_MISSING");
-        if (!RiskFactsProvider.equityAdmissible(snapshot.account(), requirements, paper))
-            throw unavailable("BROKER_EQUITY_PROVENANCE_OR_QUALITY_INVALID");
         if (requirements.positions() && snapshot.positions() == null)
             throw unavailable("BROKER_POSITIONS_MISSING");
         if (requirements.startingBalance() && snapshot.account().startingBalance() == null

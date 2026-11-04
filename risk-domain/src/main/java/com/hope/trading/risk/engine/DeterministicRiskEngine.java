@@ -76,6 +76,16 @@ public final class DeterministicRiskEngine implements RiskEngine {
             }
             RiskRule rule = candidate.get();
             try {
+                String admissionReason = context.invariantAdmissionReasons().get(configuration.ruleId());
+                if (admissionReason != null) {
+                    incomplete = true;
+                    results.add(new RiskRuleResult(configuration.ruleId(),
+                            configuration.ruleVersion(), RuleStatus.INCOMPLETE,
+                            configuration.severity(),
+                            new RuleExplanation(admissionReason, Map.of()),
+                            Map.of(), evaluatedAt, Map.of("reason", admissionReason)));
+                    continue;
+                }
                 if (!rule.evidenceAvailable(ruleContext)) {
                     incomplete = true;
                     results.add(new RiskRuleResult(configuration.ruleId(),

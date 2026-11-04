@@ -84,6 +84,7 @@ public class ExecuteTradeService {
                 return intent;
             }
             context.t1EvaluationId(t1Outcome.t1EvaluationId());
+            context.t1Approved(true);
         }
 
         validation.execute(context);

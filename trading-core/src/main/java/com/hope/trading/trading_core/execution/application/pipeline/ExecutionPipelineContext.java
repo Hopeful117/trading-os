@@ -13,6 +13,7 @@ public final class ExecutionPipelineContext {
     private BrokerExecutionPort.SubmissionResult submissionResult;
     private BrokerOrder brokerOrder;
     private UUID t1EvaluationId;
+    private boolean t1Approved;
     public ExecutionPipelineContext(ExecutionIntent intent, Instant now) {
         this.intent = Objects.requireNonNull(intent); this.now = Objects.requireNonNull(now);
     }
@@ -28,4 +29,6 @@ public final class ExecutionPipelineContext {
     public void brokerOrder(BrokerOrder value) { brokerOrder = Objects.requireNonNull(value); }
     public UUID t1EvaluationId() { return t1EvaluationId; }
     public void t1EvaluationId(UUID value) { t1EvaluationId = Objects.requireNonNull(value); }
+    public boolean t1Approved() { return t1Approved; }
+    public void t1Approved(boolean value) { t1Approved = value; }
 }

@@ -14,6 +14,7 @@ final class ExecutionTestSupport {
     static final Instant NOW=Instant.parse("2026-07-31T10:00:00Z");
     static final Clock CLOCK=Clock.fixed(NOW,ZoneOffset.UTC);
     static final UUID USER=uuid(1),ACCOUNT=uuid(2),PLAN=uuid(3),RISK=uuid(4);
+    static final T1ApprovalVerifier APPROVED_T1 = (evaluationId, executionIntentId) -> true;
     static UUID uuid(long value){return new UUID(0,value);}
     static ExecutionIntent intent(ExecutionStatus status){
         ExecutionIntent value=ExecutionIntent.create(new ExecutionIntentId(uuid(10)),

@@ -359,7 +359,7 @@ class ModeAwareRiskFactsProviderTest {
                         new RiskFactRequirements(true, true, false, false, false, false, true));
 
         assertThat(snapshot.complete()).isFalse();
-        assertThat(snapshot.unavailabilityReasons()).contains("AUTHORITATIVE_FACT_REQUIREMENTS_UNAVAILABLE");
+        assertThat(snapshot.unavailabilityReasons()).contains("OBSERVATION_INCOMPLETE");
     }
 
     @Test
@@ -385,7 +385,7 @@ class ModeAwareRiskFactsProviderTest {
                         new RiskFactRequirements(true, true, false, false, false, false, false));
 
         assertThat(snapshot.complete()).isFalse();
-        assertThat(snapshot.unavailabilityReasons()).contains("AUTHORITATIVE_FACT_REQUIREMENTS_UNAVAILABLE");
+        assertThat(snapshot.unavailabilityReasons()).contains("OBSERVATION_INCOMPLETE");
     }
 
     @Test

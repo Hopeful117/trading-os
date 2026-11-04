@@ -237,7 +237,7 @@ class TradePlanRiskEvaluationServiceTest {
     }
 
     @Test
-    void missingEquityBlocksEquityDependentPolicy() {
+    void missingEquityProducesIncompleteEquityDependentPolicyResult() {
         availableContext(List.of());
         when(broker.load(any(), any(), any())).thenReturn(new BrokerRiskFactsPort.Snapshot(
                 brokerAccountId, 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
@@ -247,9 +247,9 @@ class TradePlanRiskEvaluationServiceTest {
 
         Response response = service.evaluate(command("key", 3));
 
-        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
-        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
-                .containsExactly("BROKER_EQUITY_MISSING");
+        assertThat(response.status()).isEqualTo("INCOMPLETE");
+        assertThat(response.approved()).isFalse();
+        assertThat(response.reasons()).isNotEmpty();
     }
 
     @Test

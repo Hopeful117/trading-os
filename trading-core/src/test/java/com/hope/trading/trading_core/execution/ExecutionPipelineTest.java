@@ -26,6 +26,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ExecutionPipelineTest {
+    @Test void submissionStepRejectsEntryWithoutExplicitT1Approval() {
+        var f = fixture();
+        var intent = intent(ExecutionStatus.CREATED);
+
+        assertThatThrownBy(() -> new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1)
+                .execute(new ExecutionPipelineContext(intent, CLOCK.instant())))
+                .isInstanceOf(InvalidExecutionStateException.class)
+                .hasMessageContaining("T1 risk approval");
+        assertThat(f.broker.submissions).isZero();
+    }
+
     @Test void persistsAttemptBeforeBrokerAndCompletesAcknowledgedExecution(){
         var f=fixture();var intent=intent(ExecutionStatus.CREATED);f.intents.save(intent);
         var result=f.execution.execute(intent.id());
@@ -149,7 +160,7 @@ class ExecutionPipelineTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Rejected);
@@ -183,7 +194,7 @@ class ExecutionPipelineTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Unavailable);
@@ -193,6 +204,39 @@ class ExecutionPipelineTest {
         
         var result = execution.execute(intent.id());
         
+        assertThat(result.status()).isEqualTo(ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE);
+        assertThat(f.broker.submissions).isZero();
+        assertThat(f.attempts.findByIntentId(intent.id())).isEmpty();
+    }
+
+    @Test void t1IncompleteNeverReachesBrokerSubmission() {
+        var f = fixture();
+        var t1Incomplete = mock(ExecutionTimeRiskRevalidationService.class);
+        var t1Outcome = new ExecutionTimeRiskRevalidationService.T1Outcome(
+                UUID.randomUUID(), null, "INCOMPLETE", false);
+        when(t1Incomplete.evaluateAndPersist(any(), any())).thenAnswer(inv -> {
+            ExecutionIntent intentArg = inv.getArgument(0);
+            Instant nowArg = inv.getArgument(1);
+            f.lifecycle.validate(intentArg, nowArg);
+            f.lifecycle.riskUnavailable(intentArg, t1Outcome.t1EvaluationId(),
+                    t1Outcome.reasonCode(), nowArg);
+            return t1Outcome;
+        });
+
+        var execution = new ExecuteTradeService(f.intents,
+                new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
+                new IdempotencyVerificationStep(new IdempotencyService()),
+                new ExecutionAttemptCreationStep(f.attempts, f.ids),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
+                new BrokerResponseProcessingStep(f.ids),
+                new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
+                f.events, CLOCK, t1Incomplete);
+
+        var intent = intent(ExecutionStatus.CREATED);
+        f.intents.save(intent);
+
+        var result = execution.execute(intent.id());
+
         assertThat(result.status()).isEqualTo(ExecutionStatus.RISK_REVALIDATION_UNAVAILABLE);
         assertThat(f.broker.submissions).isZero();
         assertThat(f.attempts.findByIntentId(intent.id())).isEmpty();
@@ -217,7 +261,7 @@ class ExecutionPipelineTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Unavailable);
@@ -242,7 +286,7 @@ class ExecutionPipelineTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Approved);
@@ -269,7 +313,7 @@ class ExecutionPipelineTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Approved);
@@ -298,7 +342,7 @@ class ExecutionPipelineTest {
                 new ExecutionValidationStep(new ExecutionValidationService(),lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(attempts,ids),
-                new BrokerSubmissionStep(broker,intents,attempts,lifecycle),
+                new BrokerSubmissionStep(broker,intents,attempts,lifecycle,APPROVED_T1),
                 new BrokerResponseProcessingStep(ids),
                 new ExecutionFinalizationStep(intents,attempts,orders,lifecycle,metrics,paperSettlementService,brokerAccountRepository),events,CLOCK, t1Revalidation);
         return new Fixture(intents,attempts,orders,broker,brokerAccountRepository,events,metrics,execution,lifecycle,ids);
