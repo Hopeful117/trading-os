@@ -13,12 +13,14 @@ import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.model.AccountBalance;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.helper.TradeType;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
+import com.hope.trading.trading_core.risk.application.port.RiskFactRequirements;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.model.AccountValuationStatus;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
@@ -146,7 +148,7 @@ class ModeAwareRiskFactsProviderTest {
     }
 
     @Test
-    void missingPositionMarginRemainsRiskIncomplete() {
+    void missingPositionMarginDoesNotMakeUnrelatedObservationIncomplete() {
         UUID brokerId = UUID.randomUUID();
         UUID providerReference = UUID.randomUUID();
         BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
@@ -166,8 +168,9 @@ class ModeAwareRiskFactsProviderTest {
                 new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
-        assertThat(snapshot.complete()).isFalse();
-        assertThat(snapshot.unavailabilityReasons()).contains("POSITION_MARGIN_UNAVAILABLE:position-1");
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.positions()).singleElement().extracting(RiskFactsProvider.Position::margin)
+                .isNull();
     }
 
     @Test
@@ -282,6 +285,107 @@ class ModeAwareRiskFactsProviderTest {
         assertThat(snapshot.complete()).isTrue();
         assertThat(snapshot.account().equity()).isEqualByComparingTo("1");
         assertThat(snapshot.account().margin()).isZero();
+    }
+
+    @Test
+    void missingAccountUsedMarginDoesNotMakeEveryLiveRiskFactUnavailable() {
+        UUID brokerId = UUID.randomUUID();
+        UUID providerReference = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
+                from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE,
+                BigDecimal.ONE, null, null), List.of(), List.of(),
+                "COMPLETE", "FRESH", from, from.plusSeconds(1), List.of()));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to);
+
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.account().margin()).isNull();
+    }
+
+    @Test
+    void unavailableDealsDoNotBlockWhenPolicyDoesNotRequireDeals() {
+        UUID brokerId = UUID.randomUUID();
+        UUID providerReference = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
+                from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, BigDecimal.ONE,
+                null, null), List.of(), List.of(), List.of(),
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY, SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY, SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                true, "INCOMPLETE", "FRESH", from, from.plusSeconds(2),
+                List.of("DEAL_HISTORY_UNAVAILABLE", "OBSERVATION_INCOMPLETE")));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to,
+                        new RiskFactRequirements(true, true, false, false, false, false, false));
+
+        assertThat(snapshot.complete()).isTrue();
+        assertThat(snapshot.dealAvailability()).isEqualTo(RiskFactsProvider.DealAvailability.UNAVAILABLE_OR_ABSENT);
+        assertThat(snapshot.unavailabilityReasons()).contains("DEAL_HISTORY_UNAVAILABLE");
+    }
+
+    @Test
+    void unavailableDealsBlockWhenPolicyRequiresDeals() {
+        UUID brokerId = UUID.randomUUID();
+        UUID providerReference = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
+                from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, BigDecimal.ONE,
+                null, null), List.of(), List.of(), List.of(),
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY, SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY, SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                true, "INCOMPLETE", "FRESH", from, from.plusSeconds(2),
+                List.of("DEAL_HISTORY_UNAVAILABLE", "OBSERVATION_INCOMPLETE")));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to,
+                        new RiskFactRequirements(true, true, false, false, false, false, true));
+
+        assertThat(snapshot.complete()).isFalse();
+        assertThat(snapshot.unavailabilityReasons()).contains("AUTHORITATIVE_FACT_REQUIREMENTS_UNAVAILABLE");
+    }
+
+    @Test
+    void missingRequiredEquityRemainsFailClosed() {
+        UUID brokerId = UUID.randomUUID();
+        UUID providerReference = UUID.randomUUID();
+        BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
+        when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
+        when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
+        when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
+        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+                brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
+                from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, null,
+                null, null), List.of(), List.of(), List.of(),
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY, SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY, SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                true, "INCOMPLETE", "FRESH", from, from.plusSeconds(2),
+                List.of("EQUITY_UNAVAILABLE", "OBSERVATION_INCOMPLETE")));
+
+        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to,
+                        new RiskFactRequirements(true, true, false, false, false, false, false));
+
+        assertThat(snapshot.complete()).isFalse();
+        assertThat(snapshot.unavailabilityReasons()).contains("AUTHORITATIVE_FACT_REQUIREMENTS_UNAVAILABLE");
     }
 
     @Test
