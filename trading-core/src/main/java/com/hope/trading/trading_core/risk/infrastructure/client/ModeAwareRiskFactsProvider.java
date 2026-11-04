@@ -6,9 +6,11 @@ import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
 import com.hope.trading.trading_core.helper.TradeStatus;
 import com.hope.trading.trading_core.model.Trade;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
+import com.hope.trading.trading_core.risk.application.port.RiskFactRequirements;
 import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import com.hope.trading.trading_core.shared.domain.model.SettlementModel;
 import com.hope.trading.trading_core.valuation.application.PaperDerivativeAccountValuationService;
@@ -60,7 +62,14 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     @Override
     public RiskFactsProvider.Snapshot load(com.hope.trading.trading_core.model.Account account,
                                            BrokerAccount brokerAccount, UUID sourceId,
-                                             Instant from, Instant to) {
+                                           Instant from, Instant to) {
+        return load(account, brokerAccount, sourceId, from, to, null);
+    }
+
+    @Override
+    public RiskFactsProvider.Snapshot load(com.hope.trading.trading_core.model.Account account,
+                                           BrokerAccount brokerAccount, UUID sourceId,
+                                           Instant from, Instant to, RiskFactRequirements requirements) {
         if (brokerAccount.executionMode() == ExecutionMode.LIVE) {
             if (authoritativeSnapshots != null) {
                 BrokerAccountSnapshotV2Dto authoritative = null;
@@ -77,11 +86,11 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 if (authoritative != null) {
                     validateIdentity(brokerAccount, sourceId, authoritative);
                     if (authoritative.account() != null) {
-                        return fromAuthoritative(authoritative, from, to);
+                        return fromAuthoritative(authoritative, account, from, to, requirements);
                     }
                 }
             }
-            return RiskFactsProvider.fromBroker(liveFacts.load(sourceId, from, to));
+            return RiskFactsProvider.fromBroker(liveFacts.load(sourceId, from, to), requirements);
         }
         if (brokerAccount.executionMode() == ExecutionMode.PAPER) {
             return paperSnapshot(account, brokerAccount, from, to);
@@ -100,26 +109,34 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     }
 
     private RiskFactsProvider.Snapshot fromAuthoritative(BrokerAccountSnapshotV2Dto snapshot,
-                                                          Instant from, Instant to) {
+                                                          com.hope.trading.trading_core.model.Account localAccount,
+                                                          Instant from, Instant to,
+                                                          RiskFactRequirements requirements) {
         List<String> reasons = new java.util.ArrayList<>(snapshot.unavailabilityReasons() == null
                 ? List.of() : snapshot.unavailabilityReasons());
-        boolean complete = "COMPLETE".equals(snapshot.completeness())
-                && "FRESH".equals(snapshot.freshness());
-        if (!complete) reasons.add("AUTHORITATIVE_SNAPSHOT_NOT_COMPLETE_AND_FRESH");
+        boolean complete = contextuallyComplete(snapshot, localAccount, requirements);
+        if (!complete && requirements == null) {
+            reasons.add("AUTHORITATIVE_SNAPSHOT_NOT_COMPLETE_AND_FRESH");
+        } else if (!complete && "FRESH".equals(snapshot.freshness())) {
+            reasons.add("AUTHORITATIVE_FACT_REQUIREMENTS_UNAVAILABLE");
+        }
 
         var account = snapshot.account();
-        if (account.valuationAsset() == null || account.balance() == null
-                || account.equity() == null || account.usedMargin() == null) {
+        if (account == null) {
             complete = false;
-            reasons.add("ACCOUNT_RISK_FACTS_INCOMPLETE");
+            reasons.add("ACCOUNT_FACTS_UNAVAILABLE");
+            return new RiskFactsProvider.Snapshot(snapshot.brokerAccountId(),
+                    snapshot.completedAt() == null ? 0 : snapshot.completedAt().toEpochMilli(),
+                    snapshot.observedAt(), false, List.copyOf(new java.util.LinkedHashSet<>(reasons)),
+                    snapshot.balances(), null, List.of(), List.of(), List.of(), writePayload(snapshot),
+                    dealAvailability(snapshot.dealAvailability(), snapshot.deals()));
         }
-        if (snapshot.positions() != null) {
-            for (var position : snapshot.positions()) {
-                if (position.margin() == null) {
-                    complete = false;
-                    reasons.add("POSITION_MARGIN_UNAVAILABLE:" + position.brokerPositionReference());
-                }
-            }
+
+        RiskFactsProvider.EquityFact equityFact = equityFact(account.equityFact(), snapshot);
+        if (requirements != null && requirements.equity()
+                && !equityAdmissible(equityFact, requirements, account.equity(), account.valuationAsset())) {
+            reasons.add(equityFact.reasons().isEmpty()
+                    ? "EQUITY_PROVENANCE_UNAVAILABLE" : equityFact.reasons().getFirst());
         }
 
         List<RiskFactsProvider.Position> positions = snapshot.positions() == null ? List.of()
@@ -144,8 +161,95 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
         return new RiskFactsProvider.Snapshot(snapshot.brokerAccountId(), sourceVersion, snapshot.observedAt(),
                 complete, List.copyOf(new java.util.LinkedHashSet<>(reasons)), snapshot.balances(),
                 new RiskFactsProvider.Account(account.valuationAsset(), account.balance(), account.equity(),
-                        account.usedMargin(), null), positions, closedTrades, List.of(), writePayload(snapshot),
+                        account.usedMargin(), null, equityFact), positions, closedTrades, List.of(), writePayload(snapshot),
                 dealAvailability(snapshot.dealAvailability(), snapshot.deals()));
+    }
+
+    private RiskFactsProvider.EquityFact equityFact(
+            BrokerAccountFactsV2Dto.EquityFactDto value, BrokerAccountSnapshotV2Dto snapshot) {
+        if (value == null || value.provenance() == null || value.availability() == null) {
+            return RiskFactsProvider.EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE");
+        }
+        try {
+            RiskFactRequirements.EquityProvenance provenance =
+                    RiskFactRequirements.EquityProvenance.valueOf(value.provenance());
+            return new RiskFactsProvider.EquityFact(value.value(), value.currency(), provenance,
+                    value.availability(), value.observedAt(), value.capturedAt(), value.fresh(),
+                    value.complete(), value.coherent(), value.source(), value.resolutionMethod(), value.reasons());
+        } catch (RuntimeException invalid) {
+            return RiskFactsProvider.EquityFact.unavailable("EQUITY_PROVENANCE_INVALID");
+        }
+    }
+
+    private boolean contextuallyComplete(BrokerAccountSnapshotV2Dto snapshot,
+                                         com.hope.trading.trading_core.model.Account localAccount,
+                                         RiskFactRequirements requirements) {
+        if (snapshot == null || snapshot.account() == null
+                || snapshot.observedAt() == null || snapshot.completedAt() == null
+                || snapshot.completedAt().toEpochMilli() < 1
+                || !"FRESH".equals(snapshot.freshness())
+                || snapshot.balances() == null || snapshot.positions() == null
+                || snapshot.deals() == null || snapshot.positionPnls() == null) {
+            return false;
+        }
+        if (requirements == null) return "COMPLETE".equals(snapshot.completeness());
+
+        var account = snapshot.account();
+        if (requirements.equity() && !equityAdmissible(equityFact(account.equityFact(), snapshot), requirements,
+                account.equity(), account.valuationAsset())) return false;
+        if (requirements.balance() && account.balance() == null) return false;
+        if (requirements.equity() && account.equity() == null) return false;
+        if (requirements.usedMargin() && account.usedMargin() == null) return false;
+        if (requirements.freeMargin() && account.freeMargin() == null) return false;
+        if (requirements.positions()
+                && snapshot.positionAvailability() == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT) {
+            return false;
+        }
+        if (requirements.closedDeals()
+                && (snapshot.dealAvailability() == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT
+                || snapshot.dealAvailability() == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.TRUNCATED)) {
+            return false;
+        }
+        if (requirements.startingBalance()
+                && (localAccount == null || localAccount.getStartingBalance() == null)) {
+            return false;
+        }
+        return snapshot.unavailabilityReasons() == null
+                || snapshot.unavailabilityReasons().stream().allMatch(reason -> optionalOrRequiredReason(reason, requirements));
+    }
+
+    private boolean equityAdmissible(RiskFactsProvider.EquityFact equity,
+                                     RiskFactRequirements requirements, BigDecimal numericEquity,
+                                     String valuationAsset) {
+        if (!requirements.equityContractRequired()) return numericEquity != null;
+        return equity != null
+                && "AVAILABLE".equals(equity.availability())
+                && equity.value() != null && numericEquity != null
+                && equity.value().compareTo(numericEquity) == 0
+                && equity.currency() != null && equity.currency().equalsIgnoreCase(valuationAsset)
+                && equity.observedAt() != null && equity.capturedAt() != null
+                && equity.fresh() && equity.complete() && equity.coherent()
+                && requirements.admissibleEquityProvenances().contains(equity.provenance());
+    }
+
+    private boolean optionalOrRequiredReason(String reason, RiskFactRequirements requirements) {
+        if (reason == null || reason.isBlank() || "OBSERVATION_INCOMPLETE".equals(reason)) return true;
+        if (reason.startsWith("EQUITY_PROVENANCE") || reason.startsWith("EQUITY_QUALITY")) {
+            return !requirements.equity();
+        }
+        if ("EQUITY_UNAVAILABLE".equals(reason)) return !requirements.equity();
+        if ("USED_MARGIN_UNAVAILABLE".equals(reason)) return !requirements.usedMargin();
+        if ("FREE_MARGIN_UNAVAILABLE".equals(reason)) return !requirements.freeMargin();
+        if ("DEAL_HISTORY_UNAVAILABLE".equals(reason) || "DEAL_HISTORY_TRUNCATED".equals(reason)) {
+            return !requirements.closedDeals();
+        }
+        if ("UNREALIZED_PNL_UNAVAILABLE".equals(reason)) return true;
+        if (reason.startsWith("DEAL_")) return !requirements.closedDeals();
+        if (reason.startsWith("ORDER_") || reason.equals("RESPONSE_FIELD_UNAVAILABLE:order")) return true;
+        if (reason.equals("RESPONSE_FIELD_UNAVAILABLE:position")) return !requirements.positions();
+        if (reason.startsWith("POSITION_MARGIN_UNAVAILABLE")) return !requirements.positions();
+        if (reason.startsWith("POSITION_")) return !requirements.positions();
+        return false;
     }
 
     private RiskFactsProvider.DealAvailability dealAvailability(
@@ -226,11 +330,22 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 reasons,
                 balances,
                 new RiskFactsProvider.Account(valuationAsset, balance, account == null ? null : account.getEquity(),
-                        BigDecimal.ZERO, account == null ? null : account.getStartingBalance()),
+                        BigDecimal.ZERO, account == null ? null : account.getStartingBalance(),
+                        account == null || account.getEquity() == null
+                                ? RiskFactsProvider.EquityFact.unavailable("PAPER_ACCOUNT_VALUATION_INCOMPLETE")
+                                : validPaperEquity(account.getEquity(), valuationAsset)),
                 positions,
                 closedTrades,
                 List.of(),
                 payload);
+    }
+
+    private RiskFactsProvider.EquityFact validPaperEquity(BigDecimal equity, String currency) {
+        if (currency == null || currency.isBlank()) {
+            return RiskFactsProvider.EquityFact.unavailable("PAPER_VALUATION_CURRENCY_UNAVAILABLE");
+        }
+        return RiskFactsProvider.EquityFact.available(equity, currency, clock.instant(), clock.instant(),
+                "PAPER_ACCOUNT_STATE", "PAPER_MARK_TO_MARKET");
     }
 
     private void refreshCashValuation(com.hope.trading.trading_core.model.Account account,

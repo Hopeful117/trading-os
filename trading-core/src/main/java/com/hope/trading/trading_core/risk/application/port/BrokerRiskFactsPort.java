@@ -14,7 +14,14 @@ public interface BrokerRiskFactsPort {
                     Account account, List<Position> positions, List<ClosedTrade> closedTrades,
                     List<LedgerEntry> ledgerEntries, String sourcePayload) { }
     record Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
-                   BigDecimal margin, BigDecimal startingBalance) { }
+                   BigDecimal margin, BigDecimal startingBalance,
+                   RiskFactsProvider.EquityFact equityFact) {
+        public Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                       BigDecimal margin, BigDecimal startingBalance) {
+            this(valuationAsset, balance, equity, margin, startingBalance,
+                    RiskFactsProvider.EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"));
+        }
+    }
     record Position(UUID positionId, String providerPositionReference, String providerReferenceProvenance,
                     String instrument, BigDecimal signedQuantity, BigDecimal entryPrice,
                     BigDecimal marketValue, BigDecimal margin, BigDecimal protectedQuantity,

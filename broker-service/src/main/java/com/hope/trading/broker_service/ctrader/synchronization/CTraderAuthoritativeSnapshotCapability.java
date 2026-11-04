@@ -96,7 +96,8 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                 accountPositionModel(providerFacts.accountType()),
                 marginCalculationModel(providerFacts.totalMarginCalculationType()),
                 providerFacts.moneyDigits().present() ? providerFacts.moneyDigits().value() : null,
-                leverage(providerFacts.leverageInCents()));
+                leverage(providerFacts.leverageInCents()),
+                EquityFact.unavailable("EQUITY_PROVIDER_SOURCE_UNVALIDATED"));
         List<PositionSnapshot> positions = observation.positions().stream()
                 .map(position -> new PositionSnapshot(position.instrument(), position.signedQuantity(),
                         position.entryPrice(), position.observedAt(), position.providerReference(),

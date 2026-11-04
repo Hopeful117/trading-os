@@ -19,6 +19,34 @@ public final class BrokerModels {
     public enum OrderStatus { ACKNOWLEDGED, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED, UNKNOWN }
     public enum SnapshotCompleteness { COMPLETE, INCOMPLETE }
     public enum SnapshotFreshness { FRESH, STALE, UNKNOWN }
+    public enum EquityProvenance { BROKER_REPORTED, BROKER_DERIVED, UNAVAILABLE }
+    public enum EquityAvailability { AVAILABLE, UNAVAILABLE }
+
+    public record EquityFact(BigDecimal value, String currency, EquityProvenance provenance,
+                             EquityAvailability availability, Instant observedAt, Instant capturedAt,
+                             boolean fresh, boolean complete, boolean coherent, String source,
+                             String resolutionMethod, List<String> reasons) {
+        public EquityFact {
+            provenance = Objects.requireNonNull(provenance, "equity provenance is required");
+            availability = Objects.requireNonNull(availability, "equity availability is required");
+            reasons = List.copyOf(reasons == null ? List.of() : reasons);
+            if (availability == EquityAvailability.UNAVAILABLE) {
+                if (value != null || currency != null || provenance != EquityProvenance.UNAVAILABLE) {
+                    throw new IllegalArgumentException("unavailable equity cannot contain a usable value");
+                }
+            } else if (value == null || value.signum() < 0 || currency == null || currency.isBlank()
+                    || provenance == EquityProvenance.UNAVAILABLE || observedAt == null || capturedAt == null
+                    || source == null || source.isBlank() || resolutionMethod == null || resolutionMethod.isBlank()) {
+                throw new IllegalArgumentException("available equity facts are incomplete");
+            }
+        }
+
+        public static EquityFact unavailable(String reason) {
+            return new EquityFact(null, null, EquityProvenance.UNAVAILABLE, EquityAvailability.UNAVAILABLE,
+                    null, null, false, false, false, "UNKNOWN", "UNAVAILABLE",
+                    reason == null || reason.isBlank() ? List.of("EQUITY_UNAVAILABLE") : List.of(reason));
+        }
+    }
 
     public record TechnicalCapabilities(UUID brokerAccountId, String provider, String instrument, long sourceVersion,
             Instant observedAt, List<OrderType> supportedOrderTypes,
@@ -244,11 +272,12 @@ public final class BrokerModels {
         }
     }
     public record AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
-                               BigDecimal usedMargin, BigDecimal freeMargin,
-                               AccountPositionModel positionModel,
-                               MarginCalculationModel marginCalculationModel,
-                               Integer monetaryScale,
-                               BigDecimal leverage) {
+                                BigDecimal usedMargin, BigDecimal freeMargin,
+                                AccountPositionModel positionModel,
+                                MarginCalculationModel marginCalculationModel,
+                                Integer monetaryScale,
+                                BigDecimal leverage,
+                                EquityFact equityFact) {
         public AccountFacts {
             valuationAsset = required(valuationAsset, "valuationAsset");
             Objects.requireNonNull(balance);
@@ -260,12 +289,24 @@ public final class BrokerModels {
             if (leverage != null && leverage.signum() <= 0) {
                 throw new IllegalArgumentException("leverage must be positive");
             }
+            equityFact = equityFact == null ? EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE") : equityFact;
         }
 
         public AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
                             BigDecimal usedMargin, BigDecimal freeMargin) {
             this(valuationAsset, balance, equity, usedMargin, freeMargin,
-                    AccountPositionModel.UNKNOWN, MarginCalculationModel.UNKNOWN, null, null);
+                    AccountPositionModel.UNKNOWN, MarginCalculationModel.UNKNOWN, null, null,
+                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"));
+        }
+
+        public AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                            BigDecimal usedMargin, BigDecimal freeMargin,
+                            AccountPositionModel positionModel,
+                            MarginCalculationModel marginCalculationModel,
+                            Integer monetaryScale, BigDecimal leverage) {
+            this(valuationAsset, balance, equity, usedMargin, freeMargin, positionModel,
+                    marginCalculationModel, monetaryScale, leverage,
+                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"));
         }
     }
     public enum AccountPositionModel { HEDGED, NETTED, SPREAD_BETTING, UNKNOWN }
