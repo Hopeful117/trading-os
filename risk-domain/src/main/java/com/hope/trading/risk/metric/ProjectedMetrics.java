@@ -6,9 +6,14 @@ import java.util.Optional;
 
 public record ProjectedMetrics(
         Money exposure, Money drawdown, Optional<Money> totalDrawdown,
-        Money margin, Money portfolioHeat,
+        Optional<Money> margin, Money portfolioHeat,
         ProjectedPortfolioState portfolioState
 ) {
+    public ProjectedMetrics(Money exposure, Money drawdown, Optional<Money> totalDrawdown,
+                            Money margin, Money portfolioHeat, ProjectedPortfolioState portfolioState) {
+        this(exposure, drawdown, totalDrawdown, Optional.of(margin), portfolioHeat, portfolioState);
+    }
+
     public ProjectedMetrics {
         Objects.requireNonNull(exposure); Objects.requireNonNull(drawdown);
         Objects.requireNonNull(totalDrawdown);
