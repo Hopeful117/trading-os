@@ -91,8 +91,15 @@ public final class KrakenRiskSnapshotCapability implements RiskSnapshotCapabilit
 
     private AccountRiskFacts accountFacts(CredentialMaterial credentials) {
         JsonNode result=client.privatePost("/0/private/TradeBalance",Map.of("asset","ZUSD"),credentials);
-        return new AccountRiskFacts(KrakenAssetNormalizer.asset("ZUSD"),decimal(result,"eb"),
-                decimal(result,"e"),decimal(result,"m"),null);
+        BigDecimal balance = decimal(result,"eb");
+        BigDecimal equity = decimal(result,"e");
+        Instant observedAt = clock.instant();
+        return new AccountRiskFacts(KrakenAssetNormalizer.asset("ZUSD"), balance, equity,
+                decimal(result,"m"),null,
+                new EquityFact(equity, KrakenAssetNormalizer.asset("ZUSD"),
+                        EquityProvenance.BROKER_REPORTED, EquityAvailability.AVAILABLE,
+                        observedAt, observedAt, true, true, true,
+                        "KRAKEN_TRADE_BALANCE", "TRADE_BALANCE", List.of()));
     }
 
     private PositionFacts positions(CredentialMaterial credentials) {

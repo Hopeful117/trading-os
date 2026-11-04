@@ -15,7 +15,7 @@ public record ProjectedMetrics(
     }
 
     public ProjectedMetrics {
-        Objects.requireNonNull(exposure); Objects.requireNonNull(drawdown);
+        Objects.requireNonNull(exposure);
         Objects.requireNonNull(totalDrawdown);
         Objects.requireNonNull(margin); Objects.requireNonNull(portfolioHeat);
         Objects.requireNonNull(portfolioState);

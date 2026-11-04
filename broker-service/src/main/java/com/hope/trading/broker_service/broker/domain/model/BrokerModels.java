@@ -404,7 +404,13 @@ public final class BrokerModels {
         }
     }
     public record AccountRiskFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
-            BigDecimal margin, BigDecimal startingBalance) {}
+            BigDecimal margin, BigDecimal startingBalance, EquityFact equityFact) {
+        public AccountRiskFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                                BigDecimal margin, BigDecimal startingBalance) {
+            this(valuationAsset, balance, equity, margin, startingBalance,
+                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"));
+        }
+    }
     public record RiskPosition(UUID positionId, String providerPositionReference,
             String providerReferenceProvenance, String instrument, BigDecimal signedQuantity,
             BigDecimal entryPrice, BigDecimal cost, BigDecimal marketValue,

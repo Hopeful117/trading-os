@@ -19,8 +19,9 @@ public final class DerivedMetricsCalculator {
                     .orElse(BigDecimal.ZERO);
         Ratio positionRisk = divide(
                 projectedPositionLoss, observed.balance().amount());
-        Ratio exposure = divide(projected.exposure().amount(), observed.equity().amount());
-        Ratio dailyDrawdown = divide(projected.drawdown().amount(),
+        Ratio exposure = observed.equity() == null ? null
+                : divide(projected.exposure().amount(), observed.equity().amount());
+        Ratio dailyDrawdown = projected.drawdown() == null ? null : divide(projected.drawdown().amount(),
                 account.dailyRiskBaseline().referenceBalance().amount());
         Optional<Ratio> totalDrawdown = projected.totalDrawdown()
                 .map(value -> divide(value.amount(), account.accountStartingBalance()

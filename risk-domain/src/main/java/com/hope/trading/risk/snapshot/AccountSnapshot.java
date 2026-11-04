@@ -20,12 +20,12 @@ public record AccountSnapshot(
 
     public AccountSnapshot {
         Objects.requireNonNull(accountId); Objects.requireNonNull(capturedAt);
-        Objects.requireNonNull(balance); Objects.requireNonNull(equity);
+        Objects.requireNonNull(balance);
         Objects.requireNonNull(usedMargin); Objects.requireNonNull(accountStartingBalance);
         Objects.requireNonNull(dailyRiskBaseline); Objects.requireNonNull(dailyClosedPnl);
         if (version < 1) throw new IllegalArgumentException("version starts at 1");
         String currency = balance.currency();
-        if (!currency.equals(equity.currency())
+        if (equity != null && !currency.equals(equity.currency())
                 || usedMargin.isPresent() && !currency.equals(usedMargin.get().currency())
                 || !currency.equals(dailyRiskBaseline.referenceBalance().currency())
                 || dailyClosedPnl.isPresent() && !currency.equals(dailyClosedPnl.get().currency())) {
@@ -36,7 +36,7 @@ public record AccountSnapshot(
                 throw new IllegalArgumentException("Invalid account starting balance");
             }
         });
-        if (balance.amount().signum() < 0 || equity.amount().signum() < 0
+        if (balance.amount().signum() < 0 || equity != null && equity.amount().signum() < 0
                 || usedMargin.isPresent() && usedMargin.get().amount().signum() < 0) {
             throw new IllegalArgumentException("Invalid account values");
         }

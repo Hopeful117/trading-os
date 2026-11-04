@@ -10,6 +10,10 @@ public final class MaximumTotalDrawdownRule implements RiskRule {
     public static final String RULE_ID = RiskRuleIds.MAX_TOTAL_DRAWDOWN;
 
     @Override public String id() { return RULE_ID; }
+    @Override public boolean evidenceAvailable(RiskRuleEvaluationContext context) {
+        return context.metrics().totalDrawdownRatio().isPresent();
+    }
+    @Override public String incompleteReason() { return "EQUITY_AND_STARTING_BALANCE_REQUIRED_FOR_TOTAL_DRAWDOWN"; }
 
     @Override public RiskRuleResult evaluate(RiskRuleEvaluationContext context,
                                               RuleConfiguration configuration, Instant time) {

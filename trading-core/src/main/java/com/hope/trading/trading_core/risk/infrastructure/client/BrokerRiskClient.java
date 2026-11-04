@@ -2,6 +2,8 @@ package com.hope.trading.trading_core.risk.infrastructure.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.trading_core.risk.application.port.BrokerRiskFactsPort;
+import com.hope.trading.trading_core.risk.application.port.RiskFactRequirements;
+import com.hope.trading.trading_core.risk.application.port.RiskFactsProvider;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -27,7 +29,15 @@ record BrokerRiskTransport(UUID brokerAccountId, long snapshotVersion, Instant o
                            List<Position> positions, List<ClosedTrade> closedTrades,
                            List<LedgerEntry> ledgerEntries) {
     record Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
-                   BigDecimal margin, BigDecimal startingBalance) { }
+                   BigDecimal margin, BigDecimal startingBalance, EquityFact equityFact) {
+        Account(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                BigDecimal margin, BigDecimal startingBalance) {
+            this(valuationAsset, balance, equity, margin, startingBalance, null);
+        }
+        record EquityFact(BigDecimal value, String currency, String provenance, String availability,
+                          Instant observedAt, Instant capturedAt, boolean fresh, boolean complete,
+                          boolean coherent, String source, String resolutionMethod, List<String> reasons) { }
+    }
     record Position(UUID positionId, String providerPositionReference, String providerReferenceProvenance,
                     String instrument, BigDecimal signedQuantity, BigDecimal entryPrice, BigDecimal cost,
                     BigDecimal marketValue, BigDecimal unrealizedPnl, BigDecimal margin,
@@ -55,9 +65,10 @@ public final class BrokerRiskClient implements BrokerRiskFactsPort {
     public Snapshot load(UUID brokerAccountId, Instant from, Instant to) {
         BrokerRiskTransport value = client.get(brokerAccountId, from, to);
         try {
-            var account = value.account() == null ? null : new Account(value.account().valuationAsset(),
+            BrokerRiskFactsPort.Account account = value.account() == null ? null
+                    : new BrokerRiskFactsPort.Account(value.account().valuationAsset(),
                     value.account().balance(), value.account().equity(), value.account().margin(),
-                    value.account().startingBalance());
+                    value.account().startingBalance(), toEquityFact(value.account().equityFact()));
             var positions = value.positions().stream().map(p -> new Position(p.positionId(),
                     p.providerPositionReference(), p.providerReferenceProvenance(), p.instrument(),
                     p.signedQuantity(), p.entryPrice(), p.marketValue(), p.margin(), p.protectedQuantity(),
@@ -69,9 +80,24 @@ public final class BrokerRiskClient implements BrokerRiskFactsPort {
                     e.asset(), e.type(), e.amount(), e.fee(), e.balance(), e.occurredAt())).toList();
             return new Snapshot(value.brokerAccountId(), value.snapshotVersion(), value.observedAt(),
                     "COMPLETE".equals(value.completeness()), value.unavailabilityReasons(), value.assetBalances(),
-                    account, positions, closed, ledger, mapper.writeValueAsString(value));
+                    account,
+                    positions, closed, ledger, mapper.writeValueAsString(value));
         } catch (Exception failure) {
             throw new IllegalStateException("Broker snapshot cannot be preserved", failure);
+        }
+    }
+
+    private static RiskFactsProvider.EquityFact toEquityFact(BrokerRiskTransport.Account.EquityFact value) {
+        if (value == null || value.provenance() == null || value.availability() == null) {
+            return RiskFactsProvider.EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE");
+        }
+        try {
+            return new RiskFactsProvider.EquityFact(value.value(), value.currency(),
+                    RiskFactRequirements.EquityProvenance.valueOf(value.provenance()), value.availability(),
+                    value.observedAt(), value.capturedAt(), value.fresh(), value.complete(), value.coherent(),
+                    value.source(), value.resolutionMethod(), value.reasons());
+        } catch (RuntimeException invalid) {
+            return RiskFactsProvider.EquityFact.unavailable("EQUITY_PROVENANCE_INVALID");
         }
     }
 }

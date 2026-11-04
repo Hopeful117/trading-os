@@ -10,11 +10,12 @@ public final class RiskResultAggregator {
     public Aggregation aggregate(List<RiskRuleResult> results,
                                  boolean incomplete, boolean failed) {
         List<RiskRuleResult> violations = results.stream()
-                .filter(r -> r.status() == RuleStatus.FAILURE).toList();
+                .filter(r -> r.status() == RuleStatus.FAILURE || r.status() == RuleStatus.INCOMPLETE).toList();
         List<RiskRuleResult> warnings = results.stream()
                 .filter(r -> r.status() == RuleStatus.WARNING).toList();
+        boolean incompleteRule = results.stream().anyMatch(r -> r.status() == RuleStatus.INCOMPLETE);
         EvaluationStatus status = failed ? EvaluationStatus.FAILED
-                : incomplete ? EvaluationStatus.INCOMPLETE : EvaluationStatus.COMPLETED;
+                : incomplete || incompleteRule ? EvaluationStatus.INCOMPLETE : EvaluationStatus.COMPLETED;
         boolean blockingFailure = violations.stream()
                 .anyMatch(r -> r.severity() == RuleSeverity.BLOCKING);
         Optional<RiskDecision> decision = status != EvaluationStatus.COMPLETED

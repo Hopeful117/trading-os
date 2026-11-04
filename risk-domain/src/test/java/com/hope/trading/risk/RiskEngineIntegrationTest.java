@@ -1,6 +1,7 @@
 package com.hope.trading.risk;
 
 import com.hope.trading.risk.audit.*;
+import com.hope.trading.risk.domain.ProposedTrade;
 import com.hope.trading.risk.domain.RiskValidationResult;
 import com.hope.trading.risk.engine.*;
 import com.hope.trading.risk.explain.DecisionExplainer;
@@ -12,6 +13,7 @@ import java.time.*;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.hope.trading.risk.RiskFixture.*;
 import static com.hope.trading.risk.domain.RiskTypes.*;
@@ -216,6 +218,29 @@ class RiskEngineIntegrationTest {
         var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
         assertEquals(EvaluationStatus.INCOMPLETE, result.evaluationStatus());
         assertTrue(result.decision().isEmpty());
+    }
+
+    @Test void evaluatesPositionRiskWhenEquityIsUnavailableButBlocksAggregateDecision() {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"), null,
+                usd("500"), java.util.Optional.of(usd("10000")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()),
+                java.util.Optional.of(usd("-100")));
+        var context = context(rules(
+                rule(MaximumPositionRiskRule.ID, RuleCategory.POSITION, RuleSeverity.BLOCKING, "0.02"),
+                rule(DailyDrawdownRule.ID, RuleCategory.ACCOUNT, RuleSeverity.BLOCKING, "0.05")),
+                account, new ProposedTrade(
+                        UUID.fromString("00000000-0000-0000-0000-000000000012"), 1,
+                        "EURUSD", TradeDirection.LONG, new BigDecimal("1000"),
+                        usd("2000"), usd("100"), usd("200")));
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(context);
+
+        assertEquals(EvaluationStatus.INCOMPLETE, result.evaluationStatus());
+        assertTrue(result.decision().isEmpty());
+        assertEquals(RuleStatus.PASS, result.ruleResults().get(0).status());
+        assertEquals(RuleStatus.INCOMPLETE, result.ruleResults().get(1).status());
+        assertEquals("EQUITY_REQUIRED_FOR_DAILY_DRAWDOWN",
+                result.ruleResults().get(1).explanation().code());
     }
 
     @Test void storedEvaluationReplaysIdentically() {

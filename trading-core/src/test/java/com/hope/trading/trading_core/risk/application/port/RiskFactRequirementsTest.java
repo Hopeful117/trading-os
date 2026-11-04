@@ -28,6 +28,13 @@ class RiskFactRequirementsTest {
         assertThat(requirements.usedMargin()).isFalse();
         assertThat(requirements.freeMargin()).isFalse();
         assertThat(requirements.closedDeals()).isFalse();
+        assertThat(requirements.invariants().get("MAX_POSITION_RISK").facts())
+                .containsExactlyInAnyOrder(RiskFactRequirements.Fact.BALANCE,
+                        RiskFactRequirements.Fact.POSITIONS,
+                        RiskFactRequirements.Fact.PROTECTIVE_STOPS);
+        assertThat(requirements.invariants().get("MAX_EXPOSURE").facts())
+                .containsExactlyInAnyOrder(RiskFactRequirements.Fact.EQUITY,
+                        RiskFactRequirements.Fact.POSITIONS);
     }
 
     @Test

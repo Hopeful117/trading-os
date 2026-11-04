@@ -6,10 +6,11 @@ import java.util.Optional;
 
 public final class ObservedMetricsCalculator {
     public ObservedMetrics calculate(AccountSnapshot account) {
-        Money floatingPnl = account.equity().subtract(account.balance());
+        Money equity = account.equity();
+        Money floatingPnl = equity == null ? null : equity.subtract(account.balance());
         Optional<Money> margin = account.usedMargin();
-        Optional<Money> freeMargin = margin.map(value -> account.equity().subtract(value));
-        return new ObservedMetrics(account.balance(), account.equity(), floatingPnl,
+        Optional<Money> freeMargin = equity == null ? Optional.empty() : margin.map(equity::subtract);
+        return new ObservedMetrics(account.balance(), equity, floatingPnl,
                 account.dailyClosedPnl(), margin, freeMargin);
     }
 }

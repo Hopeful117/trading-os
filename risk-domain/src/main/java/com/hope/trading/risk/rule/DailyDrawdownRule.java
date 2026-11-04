@@ -8,6 +8,10 @@ import java.time.Instant;
 public final class DailyDrawdownRule implements RiskRule {
     public static final String ID = RiskRuleIds.DAILY_DRAWDOWN;
     @Override public String id() { return ID; }
+    @Override public boolean evidenceAvailable(RiskRuleEvaluationContext context) {
+        return context.metrics().dailyDrawdownRatio() != null;
+    }
+    @Override public String incompleteReason() { return "EQUITY_REQUIRED_FOR_DAILY_DRAWDOWN"; }
     @Override public RiskRuleResult evaluate(RiskRuleEvaluationContext context,
             RuleConfiguration configuration, Instant time) {
         Object boundary = configuration.parameters().getOrDefault("breachBoundary", "INCLUSIVE");
