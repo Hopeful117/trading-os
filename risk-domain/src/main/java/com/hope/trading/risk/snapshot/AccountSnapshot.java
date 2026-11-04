@@ -8,9 +8,16 @@ import java.util.UUID;
 
 public record AccountSnapshot(
         UUID accountId, long version, Instant capturedAt, Money balance, Money equity,
-        Money usedMargin, Optional<Money> accountStartingBalance,
+        Optional<Money> usedMargin, Optional<Money> accountStartingBalance,
         DailyRiskBaseline dailyRiskBaseline, Optional<Money> dailyClosedPnl
 ) {
+    public AccountSnapshot(UUID accountId, long version, Instant capturedAt, Money balance, Money equity,
+                           Money usedMargin, Optional<Money> accountStartingBalance,
+                           DailyRiskBaseline dailyRiskBaseline, Optional<Money> dailyClosedPnl) {
+        this(accountId, version, capturedAt, balance, equity, Optional.of(usedMargin),
+                accountStartingBalance, dailyRiskBaseline, dailyClosedPnl);
+    }
+
     public AccountSnapshot {
         Objects.requireNonNull(accountId); Objects.requireNonNull(capturedAt);
         Objects.requireNonNull(balance); Objects.requireNonNull(equity);
@@ -18,7 +25,8 @@ public record AccountSnapshot(
         Objects.requireNonNull(dailyRiskBaseline); Objects.requireNonNull(dailyClosedPnl);
         if (version < 1) throw new IllegalArgumentException("version starts at 1");
         String currency = balance.currency();
-        if (!currency.equals(equity.currency()) || !currency.equals(usedMargin.currency())
+        if (!currency.equals(equity.currency())
+                || usedMargin.isPresent() && !currency.equals(usedMargin.get().currency())
                 || !currency.equals(dailyRiskBaseline.referenceBalance().currency())
                 || dailyClosedPnl.isPresent() && !currency.equals(dailyClosedPnl.get().currency())) {
             throw new IllegalArgumentException("Account monetary values must share currency");
@@ -29,7 +37,7 @@ public record AccountSnapshot(
             }
         });
         if (balance.amount().signum() < 0 || equity.amount().signum() < 0
-                || usedMargin.amount().signum() < 0) {
+                || usedMargin.isPresent() && usedMargin.get().amount().signum() < 0) {
             throw new IllegalArgumentException("Invalid account values");
         }
     }
