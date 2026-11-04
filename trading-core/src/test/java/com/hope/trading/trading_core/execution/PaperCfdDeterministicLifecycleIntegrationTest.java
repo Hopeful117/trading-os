@@ -447,7 +447,7 @@ class PaperCfdDeterministicLifecycleIntegrationTest {
                 InstrumentProductType.CFD, new CurrencyCode("EUR"), new CurrencyCode("USD"),
                 QuantityUnit.UNDERLYING_UNITS, BigDecimal.ONE, 5, 0, BigDecimal.ONE, BigDecimal.ONE,
                 new FinancialContractProvenance("story-0192", 1L, NOW.minusSeconds(30))));
-        when(riskFacts.load(any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
+        when(riskFacts.load(any(), any(), any(), any(), any(), any())).thenReturn(new RiskFactsProvider.Snapshot(
                 brokerAccountId, 1, NOW, true, List.of(), Map.of("USD", decimal("10000")),
                 new RiskFactsProvider.Account("USD", decimal("100000"), decimal("100000"), BigDecimal.ZERO,
                         decimal("100000")), List.of(), List.of(), List.of(), "story-0192-risk-facts"));
