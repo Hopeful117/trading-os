@@ -117,8 +117,8 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
         boolean complete = contextuallyComplete(snapshot, localAccount, requirements);
         if (!complete && requirements == null) {
             reasons.add("AUTHORITATIVE_SNAPSHOT_NOT_COMPLETE_AND_FRESH");
-        } else if (!complete && "FRESH".equals(snapshot.freshness())) {
-            reasons.add("AUTHORITATIVE_FACT_REQUIREMENTS_UNAVAILABLE");
+        } else if (!complete && !"FRESH".equals(snapshot.freshness())) {
+            reasons.add("AUTHORITATIVE_OBSERVATION_NOT_FRESH");
         }
 
         var account = snapshot.account();
@@ -137,6 +137,22 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 && !equityAdmissible(equityFact, requirements, account.equity(), account.valuationAsset())) {
             reasons.add(equityFact.reasons().isEmpty()
                     ? "EQUITY_PROVENANCE_UNAVAILABLE" : equityFact.reasons().getFirst());
+        }
+        if (snapshot.balances() == null) reasons.add("BALANCE_FACTS_UNAVAILABLE");
+        if (snapshot.positions() == null
+                || snapshot.positionAvailability()
+                == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT) {
+            reasons.add("POSITIONS_UNAVAILABLE");
+        }
+        if (snapshot.positionPnls() == null) reasons.add("POSITION_PNL_UNAVAILABLE");
+        if (snapshot.deals() == null
+                || snapshot.dealAvailability()
+                == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT
+                || snapshot.dealAvailability()
+                == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.TRUNCATED) {
+            reasons.add(snapshot.dealAvailability()
+                    == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.TRUNCATED
+                    ? "DEAL_HISTORY_TRUNCATED" : "DEAL_HISTORY_UNAVAILABLE");
         }
 
         List<RiskFactsProvider.Position> positions = snapshot.positions() == null ? List.of()

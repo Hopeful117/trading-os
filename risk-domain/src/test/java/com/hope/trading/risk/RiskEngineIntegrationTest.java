@@ -43,6 +43,29 @@ class RiskEngineIntegrationTest {
         assertEquals(2, new DecisionExplainer().explain(result).reasons().size());
     }
 
+    @Test void evaluatesIndependentPositionEvidenceWhenEquityIsUnavailable() {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"), null,
+                usd("500"), java.util.Optional.of(usd("10000")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0")));
+        var context = context(rules(
+                rule(MaximumPositionRiskRule.ID, RuleCategory.POSITION,
+                        RuleSeverity.BLOCKING, "0.50"),
+                rule(MaximumExposureRule.ID, RuleCategory.PORTFOLIO,
+                        RuleSeverity.BLOCKING, "0.50")), account,
+                new ProposedTrade(UUID.randomUUID(), 1, "EURUSD", TradeDirection.LONG,
+                        BigDecimal.ONE, usd("10"), usd("1"), usd("1")));
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(
+                new com.hope.trading.risk.context.RiskEvaluationContextBuilder().build(
+                        context.request(), context.trading(), context.account(), context.portfolio(),
+                        context.market(), context.ruleSetSnapshot(),
+                        Map.of(MaximumExposureRule.ID, "BROKER_EQUITY_UNAVAILABLE")));
+
+        assertEquals(RuleStatus.PASS, result.ruleResults().get(0).status());
+        assertEquals(RuleStatus.INCOMPLETE, result.ruleResults().get(1).status());
+        assertTrue(result.decision().isEmpty());
+    }
+
     @Test void staticTotalDrawdownUsesStartingBalanceAndBreachIsInclusive() {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500"),
                 usd("0"), java.util.Optional.of(usd("50000")),

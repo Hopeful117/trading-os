@@ -418,7 +418,7 @@ public class RiskPersistence {
     }
 
     public Optional<T1StoredEvaluation> t1EvaluationById(UUID evaluationId) {
-        RiskEvaluationT1Entity e = entityManager.find(RiskEvaluationT1Entity.class, evaluationId);
+        RiskEvaluationT1Entity e = entityManager.find(RiskEvaluationT1Entity.class, new T1EvaluationKey(evaluationId));
         if (e == null) return Optional.empty();
         return Optional.of(new T1StoredEvaluation(e.id, e.executionIntentId, e.t0EvaluationId, e.accountId,
                 e.status, e.decision, e.unavailableReasonCode, e.resultSchemaVersion, e.resultPayload,

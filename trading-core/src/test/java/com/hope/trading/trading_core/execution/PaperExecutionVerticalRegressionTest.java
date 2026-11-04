@@ -239,7 +239,7 @@ class PaperExecutionVerticalRegressionTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(attempts, ids),
-                new BrokerSubmissionStep(routing, intents, attempts, lifecycle),
+                new BrokerSubmissionStep(routing, intents, attempts, lifecycle, (evaluationId, executionIntentId) -> true),
                 new BrokerResponseProcessingStep(ids),
                 new ExecutionFinalizationStep(
                         intents, attempts, orders, lifecycle, metrics, settlement, brokerAccounts),

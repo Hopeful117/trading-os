@@ -2,6 +2,7 @@ package com.hope.trading.risk.context;
 
 import com.hope.trading.risk.domain.RiskEvaluationRequest;
 import com.hope.trading.risk.snapshot.*;
+import java.util.Map;
 import java.util.Objects;
 
 /** Assembles and validates one coherent immutable business snapshot only. */
@@ -9,6 +10,14 @@ public final class RiskEvaluationContextBuilder {
     public RiskEvaluationContext build(
             RiskEvaluationRequest request, TradingContext trading, AccountSnapshot account,
             PortfolioSnapshot portfolio, MarketSnapshot market, RuleSetSnapshot ruleSet
+    ) {
+        return build(request, trading, account, portfolio, market, ruleSet, Map.of());
+    }
+
+    public RiskEvaluationContext build(
+            RiskEvaluationRequest request, TradingContext trading, AccountSnapshot account,
+            PortfolioSnapshot portfolio, MarketSnapshot market, RuleSetSnapshot ruleSet,
+            Map<String, String> invariantAdmissionReasons
     ) {
         Objects.requireNonNull(request); Objects.requireNonNull(trading);
         Objects.requireNonNull(account); Objects.requireNonNull(portfolio);
@@ -31,7 +40,8 @@ public final class RiskEvaluationContextBuilder {
                 throw new IllegalArgumentException("Missing market price for proposed instrument");
             }
         }
-        return new RiskEvaluationContext(request, trading, account, portfolio, market, ruleSet);
+        return new RiskEvaluationContext(request, trading, account, portfolio, market, ruleSet,
+                invariantAdmissionReasons);
     }
 
     private boolean sameCurrency(AccountSnapshot account, PortfolioSnapshot portfolio) {

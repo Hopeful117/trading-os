@@ -56,7 +56,7 @@ class ExecutionPipelineOrderRegressionTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Mock);
@@ -91,7 +91,7 @@ class ExecutionPipelineOrderRegressionTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Mock);
@@ -129,7 +129,7 @@ class ExecutionPipelineOrderRegressionTest {
                 new ExecutionValidationStep(new ExecutionValidationService(), f.lifecycle),
                 new IdempotencyVerificationStep(new IdempotencyService()),
                 new ExecutionAttemptCreationStep(f.attempts, f.ids),
-                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle),
+                new BrokerSubmissionStep(f.broker, f.intents, f.attempts, f.lifecycle, APPROVED_T1),
                 new BrokerResponseProcessingStep(f.ids),
                 new ExecutionFinalizationStep(f.intents, f.attempts, f.orders, f.lifecycle, f.metrics),
                 f.events, CLOCK, t1Mock);
