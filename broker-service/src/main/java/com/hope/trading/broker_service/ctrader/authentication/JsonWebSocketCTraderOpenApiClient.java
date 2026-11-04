@@ -797,7 +797,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 providerField(traderNode, "leverageInCents", JsonNode::asLong),
                 providerMoneyField(traderNode, "managerBonus", moneyDigits),
                 providerMoneyField(traderNode, "ibBonus", moneyDigits),
-                providerMoneyField(traderNode, "nonWithdrawableBonus", moneyDigits));
+                providerMoneyField(traderNode, "nonWithdrawableBonus", moneyDigits),
+                providerField(traderNode, "balanceVersion", JsonNode::asLong));
         var positionSet = mapCollection(rawPositions, positions);
         var orderSet = mapCollection(rawOrders, orders);
         var pnlSet = mapCollection(rawPnl, pnlFacts);

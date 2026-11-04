@@ -158,7 +158,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
     void mapsPrecisionAndVolumeWithoutInferringMissingFacts() throws Exception {
         Instant started = Instant.parse("2026-10-23T12:00:00Z");
         JsonNode trader = mapper.readTree("""
-                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"equity":101000,"usedMargin":10000,"freeMargin":90000,"depositAssetId":1,"moneyDigits":2,"accountType":0,"totalMarginCalculationType":0,"leverageInCents":10000,"managerBonus":0,"ibBonus":125,"nonWithdrawableBonus":50}}
+                {"ctidTraderAccountId":9001,"trader":{"balance":100000,"equity":101000,"usedMargin":10000,"freeMargin":90000,"depositAssetId":1,"moneyDigits":2,"accountType":0,"totalMarginCalculationType":0,"leverageInCents":10000,"managerBonus":0,"ibBonus":125,"nonWithdrawableBonus":50,"balanceVersion":42}}
                 """);
         JsonNode assets = mapper.readTree("""
                 {"ctidTraderAccountId":9001,"asset":[{"assetId":1,"name":"USD"}]}
@@ -211,6 +211,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThat(observation.accountFacts().managerBonus().value()).isEqualByComparingTo("0");
         assertThat(observation.accountFacts().ibBonus().value()).isEqualByComparingTo("1.25");
         assertThat(observation.accountFacts().nonWithdrawableBonus().value()).isEqualByComparingTo("0.5");
+        assertThat(observation.accountFacts().balanceVersion().value()).isEqualTo(42L);
         assertThat(observation.positionSet().availability())
                 .isEqualTo(CTraderReadOnlyObservation.CollectionAvailability.AVAILABLE_NON_EMPTY);
         assertThat(observation.orderSet().availability())
