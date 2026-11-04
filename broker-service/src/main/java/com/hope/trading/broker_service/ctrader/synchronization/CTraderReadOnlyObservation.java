@@ -129,7 +129,20 @@ public record CTraderReadOnlyObservation(
             ProviderField<Long> leverageInCents,
             ProviderField<BigDecimal> managerBonus,
             ProviderField<BigDecimal> ibBonus,
-            ProviderField<BigDecimal> nonWithdrawableBonus) {
+            ProviderField<BigDecimal> nonWithdrawableBonus,
+            ProviderField<Long> balanceVersion) {
+        public AccountFacts(ProviderField<String> accountType,
+                            ProviderField<String> totalMarginCalculationType,
+                            ProviderField<String> depositAssetId,
+                            ProviderField<Integer> moneyDigits,
+                            ProviderField<Long> leverageInCents,
+                            ProviderField<BigDecimal> managerBonus,
+                            ProviderField<BigDecimal> ibBonus,
+                            ProviderField<BigDecimal> nonWithdrawableBonus) {
+            this(accountType, totalMarginCalculationType, depositAssetId, moneyDigits, leverageInCents,
+                    managerBonus, ibBonus, nonWithdrawableBonus, ProviderField.absent());
+        }
+
         public AccountFacts {
             accountType = Objects.requireNonNull(accountType, "accountType is required");
             totalMarginCalculationType = Objects.requireNonNull(totalMarginCalculationType, "margin type is required");
@@ -139,12 +152,13 @@ public record CTraderReadOnlyObservation(
             managerBonus = Objects.requireNonNull(managerBonus, "managerBonus is required");
             ibBonus = Objects.requireNonNull(ibBonus, "ibBonus is required");
             nonWithdrawableBonus = Objects.requireNonNull(nonWithdrawableBonus, "nonWithdrawableBonus is required");
+            balanceVersion = Objects.requireNonNull(balanceVersion, "balanceVersion is required");
         }
 
         public static AccountFacts empty() {
             return new AccountFacts(ProviderField.absent(), ProviderField.absent(), ProviderField.absent(),
                     ProviderField.absent(), ProviderField.absent(), ProviderField.absent(),
-                    ProviderField.absent(), ProviderField.absent());
+                    ProviderField.absent(), ProviderField.absent(), ProviderField.absent());
         }
     }
 
