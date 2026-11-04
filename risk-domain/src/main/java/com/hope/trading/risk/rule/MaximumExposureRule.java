@@ -8,6 +8,10 @@ import java.time.Instant;
 public final class MaximumExposureRule implements RiskRule {
     public static final String ID = RiskRuleIds.MAX_EXPOSURE;
     @Override public String id() { return ID; }
+    @Override public boolean evidenceAvailable(RiskRuleEvaluationContext context) {
+        return context.metrics().exposureRatio() != null;
+    }
+    @Override public String incompleteReason() { return "EQUITY_REQUIRED_FOR_EXPOSURE"; }
     @Override public RiskRuleResult evaluate(RiskRuleEvaluationContext context,
             RuleConfiguration configuration, Instant time) {
         return ThresholdRuleSupport.maximum(configuration,

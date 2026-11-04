@@ -14,8 +14,7 @@ public record ObservedMetrics(
     }
 
     public ObservedMetrics {
-        Objects.requireNonNull(balance); Objects.requireNonNull(equity);
-        Objects.requireNonNull(floatingPnl); Objects.requireNonNull(closedPnl);
+        Objects.requireNonNull(balance); Objects.requireNonNull(closedPnl);
         Objects.requireNonNull(margin); Objects.requireNonNull(freeMargin);
     }
 }

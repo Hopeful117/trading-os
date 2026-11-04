@@ -13,7 +13,7 @@ public final class RiskTypes {
         ACCOUNT_MONITORING, SIMULATION
     }
     public enum RuleSeverity { INFO, WARNING, BLOCKING }
-    public enum RuleStatus { PASS, WARNING, FAILURE, NOT_APPLICABLE }
+    public enum RuleStatus { PASS, WARNING, FAILURE, INCOMPLETE, NOT_APPLICABLE }
     public enum RuleCategory {
         POSITION, ACCOUNT, PORTFOLIO, PROP_FIRM, SESSION, MARKET, COMPLIANCE, CUSTOM
     }

@@ -269,7 +269,12 @@ public class TradePlanRiskEvaluationService {
 
         BigDecimal balance = valueAssets(brokerSnapshot.assetBalances(), current);
         BigDecimal accountRate = assetRate(current, brokerSnapshot.account().valuationAsset());
-        BigDecimal equity = positiveOrZero(brokerSnapshot.account().equity(), "BROKER_EQUITY_MISSING").multiply(accountRate);
+         boolean paperAccount = brokerAccount.executionMode()
+                 == com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.PAPER;
+         boolean equityUsable = !requirements.equity()
+                 || RiskFactsProvider.equityAdmissible(brokerSnapshot.account(), requirements, paperAccount);
+         BigDecimal equity = !equityUsable || brokerSnapshot.account().equity() == null ? null
+                 : positiveOrZero(brokerSnapshot.account().equity(), "BROKER_EQUITY_MISSING").multiply(accountRate);
         Optional<BigDecimal> margin = Optional.ofNullable(brokerSnapshot.account().margin())
                 .map(value -> positiveOrZero(value, "BROKER_MARGIN_INVALID").multiply(accountRate));
         BigDecimal startingBalance = brokerSnapshot.account().startingBalance();
@@ -722,9 +727,12 @@ public class TradePlanRiskEvaluationService {
         List<Reason> violations = result.violations().stream().map(this::reason).toList();
         List<Reason> warnings = result.warnings().stream().map(this::reason).toList();
         Map<String, BigDecimal> metrics = new LinkedHashMap<>();
-        metrics.put("positionRiskRatio", result.globalMetrics().positionRiskRatio().value());
-        metrics.put("exposureRatio", result.globalMetrics().exposureRatio().value());
-        metrics.put("dailyDrawdownRatio", result.globalMetrics().dailyDrawdownRatio().value());
+        if (result.globalMetrics().positionRiskRatio() != null)
+            metrics.put("positionRiskRatio", result.globalMetrics().positionRiskRatio().value());
+        if (result.globalMetrics().exposureRatio() != null)
+            metrics.put("exposureRatio", result.globalMetrics().exposureRatio().value());
+        if (result.globalMetrics().dailyDrawdownRatio() != null)
+            metrics.put("dailyDrawdownRatio", result.globalMetrics().dailyDrawdownRatio().value());
         result.globalMetrics().totalDrawdownRatio()
                 .ifPresent(value -> metrics.put("totalDrawdownRatio", value.value()));
         var trace = result.trace();
