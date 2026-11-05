@@ -63,7 +63,8 @@ class TradingOsClient:
         if parsed.hostname not in {"127.0.0.1", "localhost", "::1"} and parsed.scheme != "https":
             raise GatewayClientError("TRADING_OS_GATEWAY_URL must use HTTPS outside localhost")
         try:
-            response = httpx.post(
+            with httpx.stream(
+                "POST",
                 f"{self.base_url.rstrip('/')}{path}",
                 json=payload,
                 headers={
@@ -71,16 +72,26 @@ class TradingOsClient:
                     "Idempotency-Key": idempotency_key,
                 },
                 timeout=self.timeout_seconds,
-            )
-            response.raise_for_status()
-            if len(response.content) > self.max_response_bytes:
-                raise GatewayClientError("Gateway response exceeds the configured MCP response limit")
-            try:
-                text = response.content.decode(response.encoding or "utf-8")
-                json.loads(text)
-            except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                raise GatewayClientError("Gateway returned invalid JSON") from error
-            return text
+            ) as response:
+                body = bytearray()
+                for chunk in response.iter_bytes():
+                    body.extend(chunk)
+                    if len(body) > self.max_response_bytes:
+                        raise GatewayClientError(
+                            "Gateway response exceeds the configured MCP response limit"
+                        )
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as error:
+                    raise GatewayClientError(
+                        f"Gateway request failed with HTTP {response.status_code}"
+                    ) from error
+                try:
+                    text = bytes(body).decode(response.encoding or "utf-8")
+                    json.loads(text)
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    raise GatewayClientError("Gateway returned invalid JSON") from error
+                return text
         except GatewayClientError:
             raise
         except httpx.HTTPStatusError as error:

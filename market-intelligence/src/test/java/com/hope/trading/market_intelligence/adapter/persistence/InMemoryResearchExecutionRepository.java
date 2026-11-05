@@ -5,6 +5,8 @@ import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
+import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -28,5 +30,28 @@ public class InMemoryResearchExecutionRepository implements ResearchExecutionRep
                 .filter(value -> value.actorId().equals(actorId))
                 .filter(value -> value.idempotencyKey().equals(idempotencyKey))
                 .findFirst();
+    }
+
+    @Override
+    public List<ResearchExecution> findByStatus(ResearchExecutionStatus status) {
+        return values.values().stream().filter(value -> value.status() == status).toList();
+    }
+
+    @Override
+    public synchronized boolean saveIfStatus(
+            ResearchExecution execution, ResearchExecutionStatus expectedStatus) {
+        ResearchExecution current = values.get(execution.researchId());
+        if (current == null || current.status() != expectedStatus) {
+            return false;
+        }
+        values.put(execution.researchId(), execution);
+        return true;
+    }
+
+    @Override
+    public synchronized Optional<ResearchExecution> claimRequested(UUID researchId, java.time.Instant now) {
+        return findById(researchId)
+                .filter(value -> value.status() == ResearchExecutionStatus.REQUESTED)
+                .map(value -> save(value.running(now)));
     }
 }

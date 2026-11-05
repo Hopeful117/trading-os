@@ -29,6 +29,10 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.Set;
+import java.time.Duration;
 
 @Service
 public class ResearchApplicationService {
@@ -36,6 +40,9 @@ public class ResearchApplicationService {
     private static final int MAX_MARKETS = 2;
     private static final int MAX_OBJECTIVE_LENGTH = 500;
     private static final Set<String> DEPTHS = Set.of("STANDARD", "DEEP");
+    private static final Map<String, String> ADAPTIVE_ALLOWLIST = Map.of(
+            "market-structure-analysis", "1.1.0",
+            "ohlc-momentum-analysis", "1.0.0");
 
     private final ResearchExecutionRepository executions;
     private final MarketDataClient marketData;
@@ -44,6 +51,7 @@ public class ResearchApplicationService {
     private final ObjectMapper mapper;
     private final Clock clock;
     private final ObjectProvider<HttpAiAnalysisCapability> ai;
+    private final Executor researchExecutor;
 
     public ResearchApplicationService(
             ResearchExecutionRepository executions,
@@ -52,7 +60,18 @@ public class ResearchApplicationService {
             CapabilityAnalysisCoordinator analysis,
             ObjectMapper mapper,
             Clock clock) {
-        this(executions, marketData, theses, analysis, mapper, clock, null);
+        this(executions, marketData, theses, analysis, mapper, clock, null, Runnable::run);
+    }
+
+    public ResearchApplicationService(
+            ResearchExecutionRepository executions,
+            MarketDataClient marketData,
+            MarketThesisRepository theses,
+            CapabilityAnalysisCoordinator analysis,
+            ObjectMapper mapper,
+            Clock clock,
+            ObjectProvider<HttpAiAnalysisCapability> ai) {
+        this(executions, marketData, theses, analysis, mapper, clock, ai, Runnable::run);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -63,7 +82,8 @@ public class ResearchApplicationService {
             CapabilityAnalysisCoordinator analysis,
             ObjectMapper mapper,
             Clock clock,
-            ObjectProvider<HttpAiAnalysisCapability> ai) {
+            ObjectProvider<HttpAiAnalysisCapability> ai,
+            @org.springframework.beans.factory.annotation.Qualifier("researchExecutor") Executor researchExecutor) {
         this.executions = executions;
         this.marketData = marketData;
         this.theses = theses;
@@ -71,6 +91,7 @@ public class ResearchApplicationService {
         this.mapper = mapper;
         this.clock = clock;
         this.ai = ai;
+        this.researchExecutor = researchExecutor;
     }
 
     public ResearchExecution start(UUID actorId, String idempotencyKey, ResearchRequest request) {
@@ -102,20 +123,53 @@ public class ResearchApplicationService {
             return winner;
         }
 
-        execution = executions.save(execution.running(clock.instant()));
+        ResearchExecution requested = execution;
+        enqueue(requested.researchId());
+        return executions.findById(requested.researchId()).orElse(requested);
+    }
+
+    private void execute(UUID researchId) {
+        ResearchExecution execution = executions.claimRequested(researchId, clock.instant()).orElse(null);
+        if (execution == null) {
+            return;
+        }
         try {
-            ResearchReport report = buildReport(request, execution.researchId());
+            ResearchReport report = buildReport(
+                    new ResearchRequest(execution.marketIds(), execution.objective(), execution.depth()),
+                    execution.researchId());
             JsonNode reportJson = mapper.valueToTree(report);
-            return executions.save(report.markets().stream().allMatch(
+            ResearchExecution terminal = report.markets().stream().allMatch(
                     value -> "COMPLETE".equals(value.status()))
                     ? execution.complete(reportJson, clock.instant())
-                    : execution.partial(reportJson, clock.instant()));
+                    : execution.partial(reportJson, clock.instant());
+            executions.saveIfStatus(terminal,
+                    com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING);
         } catch (ResearchException exception) {
-            return executions.save(execution.fail(exception.code(), clock.instant()));
+            executions.saveIfStatus(execution.fail(exception.code(), clock.instant()),
+                    com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING);
         } catch (RuntimeException exception) {
             log.warn("Research execution failed researchId={} errorType={} message={}",
                     execution.researchId(), exception.getClass().getSimpleName(), exception.getMessage());
-            return executions.save(execution.fail("RESEARCH_EXECUTION_FAILED", clock.instant()));
+            executions.saveIfStatus(execution.fail("RESEARCH_EXECUTION_FAILED", clock.instant()),
+                    com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING);
+        }
+    }
+
+    public void dispatchPending() {
+        executions.findByStatus(com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.REQUESTED)
+                .forEach(value -> enqueue(value.researchId()));
+        Instant cutoff = clock.instant().minus(Duration.ofMinutes(5));
+        executions.findByStatus(com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING)
+                .stream().filter(value -> value.updatedAt().isBefore(cutoff))
+                .forEach(value -> executions.saveIfStatus(value.expire(clock.instant()),
+                        com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING));
+    }
+
+    private void enqueue(UUID researchId) {
+        try {
+            researchExecutor.execute(() -> execute(researchId));
+        } catch (RejectedExecutionException rejected) {
+            log.warn("Research execution queue is full researchId={}", researchId);
         }
     }
 
@@ -131,7 +185,11 @@ public class ResearchApplicationService {
 
     private ResearchReport buildReport(ResearchRequest request, UUID researchId) {
         List<ResearchReport.MarketResearchResult> results = new ArrayList<>();
+        List<ResearchReport.AdaptiveCapabilityRecord> requestedCapabilities = new ArrayList<>();
+        List<ResearchReport.AdaptiveCapabilityRecord> executedCapabilities = new ArrayList<>();
+        List<ResearchReport.AdaptiveCapabilityRecord> rejectedCapabilities = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
+        boolean followUpUsed = false;
         for (UUID marketId : request.marketIds()) {
             MarketResponse market;
             try {
@@ -186,14 +244,70 @@ public class ResearchApplicationService {
                 marketDiagnostics.add("MARKET_THESIS_MISSING");
                 aiStatus = "NOT_REQUESTED";
             } else if (ai != null && ai.getIfAvailable() != null) {
+                HttpAiAnalysisCapability aiCapability = ai.getIfAvailable();
                 try {
-                    CapabilityAnalysisResult interpreted = ai.getIfAvailable().analyze(
+                    CapabilityAnalysisResult interpreted = aiCapability.analyzeAdaptive(
                             new IntelligenceAnalysisRequest(
                                     UUID.randomUUID(), marketId, AnalysisExecutionMode.PASSIVE,
                                     request.objective(), null, researchId, null, clock.instant(),
                                     EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElseThrow()),
                             new com.hope.trading.market_intelligence.domain.IntelligenceContext(Map.of()));
-                    aiStatus = interpreted.findings().isEmpty() ? "PARTIAL" : "COMPLETED";
+                    com.hope.trading.market_intelligence.application.port.RequestedAnalysis requested =
+                            interpreted.requestedAnalysis();
+                    if (requested != null) {
+                        ResearchReport.AdaptiveCapabilityRecord requestedRecord =
+                                new ResearchReport.AdaptiveCapabilityRecord(
+                                        requested.capabilityId(), requested.capabilityVersion(),
+                                        requested.marketId(), requested.reason(), requested.expectedEvidence(),
+                                        "PROPOSED", null, null);
+                        requestedCapabilities.add(requestedRecord);
+                        String rejection = null;
+                        if (followUpUsed) {
+                            rejection = "ADAPTIVE_BUDGET_EXHAUSTED";
+                        } else if (!validAdaptiveText(requested.capabilityId(), 120)
+                                || !validAdaptiveText(requested.capabilityVersion(), 32)
+                                || requested.marketId() == null
+                                || !validAdaptiveText(requested.reason(), 2_000)
+                                || !validAdaptiveText(requested.expectedEvidence(), 2_000)) {
+                            rejection = "ADAPTIVE_REQUEST_MALFORMED";
+                        } else {
+                            String expectedVersion = ADAPTIVE_ALLOWLIST.get(requested.capabilityId());
+                            if (expectedVersion == null || !expectedVersion.equals(requested.capabilityVersion())) {
+                                rejection = "CAPABILITY_NOT_ALLOWLISTED";
+                            } else if (!marketId.equals(requested.marketId())) {
+                                rejection = "CAPABILITY_MARKET_OUT_OF_SCOPE";
+                            }
+                        }
+                        if (rejection != null) {
+                            rejectedCapabilities.add(new ResearchReport.AdaptiveCapabilityRecord(
+                                    requested.capabilityId(), requested.capabilityVersion(), requested.marketId(),
+                                    requested.reason(), requested.expectedEvidence(), "REJECTED", null,
+                                    rejection));
+                            marketDiagnostics.add(rejection);
+                        } else {
+                            followUpUsed = true;
+                            UUID followUpId = UUID.randomUUID();
+                            ConsolidatedIntelligence followUp = analysis.analyze(followUpId,
+                                    new IntelligenceAnalysisRequest(
+                                            followUpId, marketId, AnalysisExecutionMode.PASSIVE,
+                                            requested.reason(), null, researchId, null,
+                                            clock.instant(), EvidenceAcquisitionPolicy.LIVE_CURRENT,
+                                            thesis.orElseThrow()), Set.of(requested.capabilityId()));
+                            String followUpStatus = followUp.status().name();
+                            executedCapabilities.add(new ResearchReport.AdaptiveCapabilityRecord(
+                                    requested.capabilityId(), requested.capabilityVersion(), requested.marketId(),
+                                    requested.reason(), requested.expectedEvidence(), followUpStatus,
+                                    followUpId, null));
+                        }
+                    }
+                    if (interpreted.findings().isEmpty()) {
+                        aiStatus = interpreted.warnings().isEmpty() ? "PARTIAL" : "FAILED";
+                        if (!interpreted.warnings().isEmpty()) {
+                            marketDiagnostics.add("AI_INTERPRETATION_WARNING");
+                        }
+                    } else {
+                        aiStatus = interpreted.warnings().isEmpty() ? "COMPLETED" : "PARTIAL";
+                    }
                     aiInterpretation = mapper.valueToTree(interpreted);
                 } catch (RuntimeException exception) {
                     aiStatus = "FAILED";
@@ -241,6 +355,7 @@ public class ResearchApplicationService {
                 : "Research is partial; missing or failed market evidence must be reviewed.";
         return new ResearchReport("research-report-v2", request.objective(), request.depth(),
                 clock.instant(), sourceCutoff, hypotheses, results,
+                requestedCapabilities, executedCapabilities, rejectedCapabilities,
                 List.of("This report is advisory and does not authorize a trade.",
                         "No calibrated probability or profitability claim is produced."),
                 "existing-ai-engine-contract:v1", diagnostics, conclusion);
@@ -283,6 +398,10 @@ public class ResearchApplicationService {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is required", exception);
         }
+    }
+
+    private boolean validAdaptiveText(String value, int maxLength) {
+        return value != null && !value.isBlank() && value.length() <= maxLength;
     }
 
     private ResearchException notFound(UUID researchId) {

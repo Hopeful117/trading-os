@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +67,31 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
         return repository.findByActorIdAndIdempotencyKey(actorId, idempotencyKey).map(this::domain);
     }
 
+    @Override
+    public List<ResearchExecution> findByStatus(ResearchExecutionStatus status) {
+        return repository.findByStatus(status.name()).stream().map(this::domain).toList();
+    }
+
+    @Override
+    @Transactional
+    public boolean saveIfStatus(ResearchExecution value, ResearchExecutionStatus expectedStatus) {
+        JpaResearchExecutionEntity entity = repository.findForUpdate(value.researchId()).orElse(null);
+        if (entity == null || !expectedStatus.name().equals(entity.status)) {
+            return false;
+        }
+        copy(value, entity);
+        repository.saveAndFlush(entity);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public Optional<ResearchExecution> claimRequested(UUID researchId, java.time.Instant now) {
+        return repository.claimRequested(researchId, now) == 1
+                ? repository.findById(researchId).map(this::domain)
+                : Optional.empty();
+    }
+
     private ResearchExecution domain(JpaResearchExecutionEntity entity) {
         return ResearchExecution.restore(
                 entity.researchId, entity.actorId, entity.idempotencyKey, entity.requestFingerprint,
@@ -73,6 +99,22 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
                 ResearchExecutionStatus.valueOf(entity.status), entity.requestedAt, entity.updatedAt,
                 entity.completedAt, entity.failureCode,
                 entity.report == null ? null : read(entity.report, JsonNode.class));
+    }
+
+    private void copy(ResearchExecution value, JpaResearchExecutionEntity entity) {
+        entity.researchId = value.researchId();
+        entity.actorId = value.actorId();
+        entity.idempotencyKey = value.idempotencyKey();
+        entity.requestFingerprint = value.requestFingerprint();
+        entity.marketIds = write(value.marketIds());
+        entity.objective = value.objective();
+        entity.depth = value.depth();
+        entity.status = value.status().name();
+        entity.requestedAt = value.requestedAt();
+        entity.updatedAt = value.updatedAt();
+        entity.completedAt = value.completedAt();
+        entity.failureCode = value.failureCode();
+        entity.report = value.report() == null ? null : write(value.report());
     }
 
     private String write(Object value) {

@@ -13,6 +13,7 @@ public record AiAnalysisCommand(
         List<String> capabilities,
         IntelligenceContext authorizedContext,
         MarketThesis thesis,
+        boolean adaptive,
         AnalysisExecutionPolicy policy,
         ExecutionTrace trace
 ) {
@@ -23,6 +24,12 @@ public record AiAnalysisCommand(
     public AiAnalysisCommand(
             UUID executionId, List<String> capabilities, IntelligenceContext authorizedContext,
             AnalysisExecutionPolicy policy, ExecutionTrace trace) {
-        this(executionId, capabilities, authorizedContext, null, policy, trace);
+        this(executionId, capabilities, authorizedContext, null, false, policy, trace);
+    }
+
+    public AiAnalysisCommand(
+            UUID executionId, List<String> capabilities, IntelligenceContext authorizedContext,
+            MarketThesis thesis, AnalysisExecutionPolicy policy, ExecutionTrace trace) {
+        this(executionId, capabilities, authorizedContext, thesis, false, policy, trace);
     }
 }

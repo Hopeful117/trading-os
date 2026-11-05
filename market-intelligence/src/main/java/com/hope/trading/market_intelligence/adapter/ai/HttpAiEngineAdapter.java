@@ -74,8 +74,15 @@ public class HttpAiEngineAdapter implements AiEnginePort {
                 findings, response, "invalidation", "Invalidation condition", value, FindingType.WARNING));
         addFinding(findings, response, "suggested-decision", "Suggested decision",
                 response.result().suggestedDecision(), FindingType.AI_FINDING);
+        RequestedAnalysis requested = response.result().requestedAnalysis() == null ? null
+                : new RequestedAnalysis(
+                        response.result().requestedAnalysis().capabilityId(),
+                        response.result().requestedAnalysis().capabilityVersion(),
+                        response.result().requestedAnalysis().marketId(),
+                        response.result().requestedAnalysis().reason(),
+                        response.result().requestedAnalysis().expectedEvidence());
         return Optional.of(new AiStructuredResult(new AiExecutionReference(response.executionId().toString()),
-                new CapabilityAnalysisResult(List.copyOf(findings), List.of()), response.acceptedAt()));
+                new CapabilityAnalysisResult(List.copyOf(findings), List.of(), requested), response.acceptedAt()));
     }
 
     @Override

@@ -14,6 +14,7 @@ from app.domain.models import (
     MarketThesisInput,
     ThesisEvidence,
     Trace,
+    RequestedAnalysis,
 )
 
 
@@ -97,3 +98,23 @@ class InvalidReferenceProvider:
 def test_unknown_evidence_reference_is_rejected():
     with pytest.raises(InvalidInterpretation):
         InterpretationService(InvalidReferenceProvider()).interpret(request_with([evidence()]))
+
+
+def test_adaptive_request_is_strict_and_serializes_with_camel_case():
+    request = RequestedAnalysis(
+        capability_id="market-structure-analysis",
+        capability_version="1.1.0",
+        market_id=uuid4(),
+        reason="Test structure",
+        expected_evidence="Levels",
+    )
+
+    assert request.model_dump(by_alias=True)["capabilityId"] == "market-structure-analysis"
+    with pytest.raises(ValueError):
+        RequestedAnalysis(
+            capability_id="market-structure-analysis",
+            capability_version="1.1.0",
+            market_id=uuid4(),
+            reason="",
+            expected_evidence="Levels",
+        )

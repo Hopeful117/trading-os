@@ -1,23 +1,40 @@
 # Trading OS MCP Adapter
 
-Local, read-only MCP adapter for OpenCode and compatible MCP clients.
+Local MCP adapter for OpenCode and compatible MCP clients. It exposes direct
+application reads and a separately bounded Trading OS-owned research lifecycle.
 
 ## Scope
 
-The adapter runs over stdio and calls only public Trading OS Gateway GET
-contracts. It exposes exactly:
+The adapter runs over stdio and calls only public Trading OS Gateway contracts.
+It exposes two capability families.
+
+Direct application tools:
 
 - `list_markets`
 - `get_active_scan`
 - `get_market_thesis`
 - `get_opportunities`
 
+Specialized research tools:
+
+- `start_market_research`
+- `get_research_status`
+- `get_research_report`
+
 `get_active_scan` reads an already-created, Gateway-authorized active-scan
 projection. It does not start, cancel or modify a scan.
 
-It cannot create Trade Plans, evaluate Risk, modify positions, place orders,
-call cTrader, call providers directly, access internal service endpoints or
-submit analysis executions.
+`start_market_research` submits an explicit two-market research request to the
+public Gateway. The Java Market Intelligence workflow owns authorization,
+deterministic evidence assembly, lifecycle persistence and report generation.
+The client must supply a stable `idempotency_key` and reuse it for retries.
+Poll the returned research ID with `get_research_status`, then retrieve the
+persisted report with `get_research_report`.
+
+The adapter cannot create Trade Plans, evaluate Risk, modify positions, place
+orders, call cTrader, call providers directly, access internal service
+endpoints, invoke the AI Engine directly or submit technical analysis
+executions. Research output is advisory and never authorizes a trade.
 
 ## Install and Test
 
@@ -38,7 +55,8 @@ TRADING_OS_MAX_RESPONSE_BYTES=262144
 ```
 
 `TRADING_OS_JWT` is read from the process environment, sent only as a bearer
-header and never returned by a tool. Remote Gateway URLs must use HTTPS.
+header and never returned by a tool. The Gateway remains responsible for JWT
+authentication and actor ownership. Remote Gateway URLs must use HTTPS.
 
 ## Launch
 
@@ -48,7 +66,8 @@ TRADING_OS_JWT="$TRADING_OS_JWT" \
 .venv/bin/trading-os-mcp
 ```
 
-The process uses stdio and does not listen on a TCP port.
+The process uses local stdio and does not listen on a TCP port. The adapter does
+not persist JWTs, research state or reports.
 
 ## OpenCode
 
@@ -74,11 +93,10 @@ export TRADING_OS_GATEWAY_URL=http://127.0.0.1:17080
 export TRADING_OS_JWT='<short-lived user JWT>'
 ```
 
-The `opencode mcp add` command was not executed automatically because it would
-modify user configuration and require a real JWT.
+The MCP server is named `trading-os-research`. The `opencode mcp add` command
+was not executed automatically because it would modify user configuration and
+require a real JWT.
 
-Do not place a real JWT in repository configuration. Starting a market scan is
-not exposed by this adapter because it is a controlled analytical command and
-requires a separately approved authorization boundary. Remote MCP HTTP
-transport, MCP OAuth and external cTrader MCP servers are not implemented or
-authorized.
+Do not place a real JWT in repository configuration. Starting an active market
+scan is not exposed by this adapter. Remote MCP HTTP transport, MCP OAuth and
+external cTrader MCP servers are not implemented or authorized.

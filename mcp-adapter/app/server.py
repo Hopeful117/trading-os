@@ -9,7 +9,7 @@ from pydantic import Field
 from app.client import client_from_environment
 
 
-mcp = MCPServer("trading-os-read-only")
+mcp = MCPServer("trading-os-research")
 
 
 @mcp.tool()

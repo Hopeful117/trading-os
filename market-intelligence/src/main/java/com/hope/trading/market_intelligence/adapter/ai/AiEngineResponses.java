@@ -33,9 +33,33 @@ record InterpretationWire(
         List<String> confirmationConditions,
         List<String> invalidationConditions,
         List<String> uncertainty,
-        String suggestedDecision
+        String suggestedDecision,
+        RequestedAnalysisWire requestedAnalysis
 ) {
+    InterpretationWire(
+            String marketSummary,
+            String primaryScenario,
+            List<ArgumentWire> supportingArguments,
+            List<ArgumentWire> contradictions,
+            List<String> missingInformation,
+            List<String> confirmationConditions,
+            List<String> invalidationConditions,
+            List<String> uncertainty,
+            String suggestedDecision) {
+        this(marketSummary, primaryScenario, supportingArguments, contradictions,
+                missingInformation, confirmationConditions, invalidationConditions,
+                uncertainty, suggestedDecision, null);
+    }
 }
 
 record ArgumentWire(String text, List<UUID> evidenceRefs) {
+}
+
+record RequestedAnalysisWire(
+        String capabilityId,
+        String capabilityVersion,
+        UUID marketId,
+        String reason,
+        String expectedEvidence
+) {
 }

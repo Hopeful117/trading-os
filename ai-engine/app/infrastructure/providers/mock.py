@@ -50,4 +50,15 @@ class MockLLMProvider:
             ),
             uncertainty=list(request.authorized_context.diagnostics),
             suggested_decision=decision,
+            requested_analysis=(
+                {
+                    "capability_id": "market-structure-analysis",
+                    "capability_version": "1.1.0",
+                    "market_id": request.thesis.market_id,
+                    "reason": "Test whether the supplied thesis scenario is supported by current structure evidence.",
+                    "expected_evidence": "Market structure assessment for the selected market.",
+                }
+                if request.research_mode == "ADAPTIVE_RESEARCH"
+                else None
+            ),
         )

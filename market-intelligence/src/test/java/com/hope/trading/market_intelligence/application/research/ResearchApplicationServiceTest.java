@@ -6,9 +6,14 @@ import com.hope.trading.market_intelligence.adapter.marketdata.MarketDataClient;
 import com.hope.trading.market_intelligence.adapter.marketdata.MarketResponse;
 import com.hope.trading.market_intelligence.adapter.persistence.InMemoryResearchExecutionRepository;
 import com.hope.trading.market_intelligence.application.execution.CapabilityAnalysisCoordinator;
+import com.hope.trading.market_intelligence.application.capability.CapabilityAnalysisResult;
+import com.hope.trading.market_intelligence.application.capability.HttpAiAnalysisCapability;
 import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
+import com.hope.trading.market_intelligence.application.port.RequestedAnalysis;
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
+import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -78,6 +83,122 @@ class ResearchApplicationServiceTest {
                 List.of(firstMarket, secondMarket), "second", "STANDARD")))
                 .isInstanceOf(ResearchException.class)
                 .hasMessageContaining("already bound");
+    }
+
+    @Test
+    void recordsAiFailureWhenProviderReturnsWarningWithoutFindings() {
+        HttpAiAnalysisCapability aiCapability = mock(HttpAiAnalysisCapability.class);
+        ObjectProvider<HttpAiAnalysisCapability> aiProvider = mock(ObjectProvider.class);
+        when(aiProvider.getIfAvailable()).thenReturn(aiCapability);
+        when(aiCapability.analyzeAdaptive(any(), any()))
+                .thenReturn(CapabilityAnalysisResult.empty("AI Engine execution timed out"));
+        when(marketData.findMarket(firstMarket)).thenReturn(market(firstMarket, "BTC/USD"));
+        when(marketData.findMarket(secondMarket)).thenReturn(market(secondMarket, "ETH/USD"));
+        MarketThesis thesis = mock(MarketThesis.class);
+        when(thesis.id()).thenReturn(UUID.randomUUID());
+        when(thesis.version()).thenReturn(1L);
+        when(thesis.validUntil()).thenReturn(java.util.Optional.empty());
+        when(thesis.sourceCutoff()).thenReturn(Instant.parse("2026-11-05T11:00:00Z"));
+        when(thesis.supportingEvidence()).thenReturn(List.of());
+        when(thesis.contradictingEvidence()).thenReturn(List.of());
+        when(thesis.missingEvidence()).thenReturn(List.of());
+        when(thesis.scenario()).thenReturn(java.util.Optional.empty());
+        when(theses.findByMarket(any())).thenReturn(List.of(thesis));
+        when(analysis.analyze(any(), any())).thenReturn(new ConsolidatedIntelligence(
+                UUID.randomUUID(), firstMarket, AnalysisExecutionMode.PASSIVE,
+                IntelligenceExecutionStatus.COMPLETE, List.of(), List.of(), List.of(), null));
+
+        ResearchApplicationService serviceWithAi = new ResearchApplicationService(
+                new InMemoryResearchExecutionRepository(), marketData, theses, analysis,
+                new ObjectMapper().registerModule(new JavaTimeModule()), clock, aiProvider);
+
+        var execution = serviceWithAi.start(actor, "ai-timeout-key",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket, secondMarket), "Compare BTC and ETH", "STANDARD"));
+
+        assertThat(execution.status()).isEqualTo(ResearchExecutionStatus.COMPLETED);
+        assertThat(execution.report().get("markets").get(0).get("aiStatus").asText())
+                .isEqualTo("FAILED");
+        assertThat(execution.report().get("markets").get(0).get("diagnostics").toString())
+                .contains("AI_INTERPRETATION_WARNING");
+    }
+
+    @Test
+    void enforcesOneAdaptiveFollowUpAcrossTheResearchExecution() {
+        HttpAiAnalysisCapability aiCapability = mock(HttpAiAnalysisCapability.class);
+        ObjectProvider<HttpAiAnalysisCapability> aiProvider = mock(ObjectProvider.class);
+        when(aiProvider.getIfAvailable()).thenReturn(aiCapability);
+        when(aiCapability.analyzeAdaptive(any(), any())).thenReturn(
+                new CapabilityAnalysisResult(List.of(), List.of(), new RequestedAnalysis(
+                        "market-structure-analysis", "1.1.0", firstMarket,
+                        "Test market structure", "Structure levels")));
+        when(marketData.findMarket(firstMarket)).thenReturn(market(firstMarket, "BTC/USD"));
+        when(marketData.findMarket(secondMarket)).thenReturn(market(secondMarket, "ETH/USD"));
+        MarketThesis thesis = thesis();
+        when(theses.findByMarket(any())).thenReturn(List.of(thesis));
+        when(analysis.analyze(any(), any())).thenReturn(new ConsolidatedIntelligence(
+                UUID.randomUUID(), firstMarket, AnalysisExecutionMode.PASSIVE,
+                IntelligenceExecutionStatus.COMPLETE, List.of(), List.of(), List.of(), null));
+        when(analysis.analyze(any(), any(), any())).thenReturn(new ConsolidatedIntelligence(
+                UUID.randomUUID(), firstMarket, AnalysisExecutionMode.PASSIVE,
+                IntelligenceExecutionStatus.COMPLETE, List.of(), List.of(), List.of(), null));
+
+        ResearchApplicationService serviceWithAi = new ResearchApplicationService(
+            new InMemoryResearchExecutionRepository(), marketData, theses, analysis,
+                new ObjectMapper().registerModule(new JavaTimeModule()), clock, aiProvider);
+
+        var execution = serviceWithAi.start(actor, "adaptive-budget-key",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket, secondMarket), "Compare BTC and ETH", "STANDARD"));
+
+        assertThat(execution.report().get("executedCapabilities")).as("report=%s", execution.report()).hasSize(1);
+        assertThat(execution.report().get("rejectedCapabilities")).hasSize(1);
+        assertThat(execution.report().get("rejectedCapabilities").get(0).get("diagnostic").asText())
+                .isEqualTo("ADAPTIVE_BUDGET_EXHAUSTED");
+    }
+
+    @Test
+    void recordsMalformedAdaptiveRequestInsteadOfFailingTheWholeInterpretation() {
+        HttpAiAnalysisCapability aiCapability = mock(HttpAiAnalysisCapability.class);
+        ObjectProvider<HttpAiAnalysisCapability> aiProvider = mock(ObjectProvider.class);
+        when(aiProvider.getIfAvailable()).thenReturn(aiCapability);
+        when(aiCapability.analyzeAdaptive(any(), any())).thenReturn(
+                new CapabilityAnalysisResult(List.of(), List.of(),
+                        new RequestedAnalysis("", "", null, "", "")));
+        when(marketData.findMarket(firstMarket)).thenReturn(market(firstMarket, "BTC/USD"));
+        when(marketData.findMarket(secondMarket)).thenReturn(market(secondMarket, "ETH/USD"));
+        MarketThesis marketThesis = thesis();
+        when(theses.findByMarket(any())).thenReturn(List.of(marketThesis));
+        when(analysis.analyze(any(), any())).thenReturn(new ConsolidatedIntelligence(
+                UUID.randomUUID(), firstMarket, AnalysisExecutionMode.PASSIVE,
+                IntelligenceExecutionStatus.COMPLETE, List.of(), List.of(), List.of(), null));
+
+        ResearchApplicationService serviceWithAi = new ResearchApplicationService(
+                new InMemoryResearchExecutionRepository(), marketData, theses, analysis,
+                new ObjectMapper().registerModule(new JavaTimeModule()), clock, aiProvider);
+
+        var execution = serviceWithAi.start(actor, "malformed-adaptive-key",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket, secondMarket), "Compare BTC and ETH", "STANDARD"));
+
+        assertThat(execution.report().get("rejectedCapabilities")).hasSize(2);
+        assertThat(execution.report().get("rejectedCapabilities").get(0).get("diagnostic").asText())
+                .isEqualTo("ADAPTIVE_REQUEST_MALFORMED");
+        assertThat(execution.report().get("markets").get(0).get("aiStatus").asText())
+                .isEqualTo("PARTIAL");
+    }
+
+    private MarketThesis thesis() {
+        MarketThesis thesis = mock(MarketThesis.class);
+        when(thesis.id()).thenReturn(UUID.randomUUID());
+        when(thesis.version()).thenReturn(1L);
+        when(thesis.validUntil()).thenReturn(java.util.Optional.empty());
+        when(thesis.sourceCutoff()).thenReturn(Instant.parse("2026-11-05T11:00:00Z"));
+        when(thesis.supportingEvidence()).thenReturn(List.of());
+        when(thesis.contradictingEvidence()).thenReturn(List.of());
+        when(thesis.missingEvidence()).thenReturn(List.of());
+        when(thesis.scenario()).thenReturn(java.util.Optional.empty());
+        return thesis;
     }
 
     private MarketResponse market(UUID id, String symbol) {

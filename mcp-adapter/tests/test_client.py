@@ -80,6 +80,26 @@ def test_client_rejects_oversized_response(monkeypatch):
         raise AssertionError("oversized response must be rejected")
 
 
+def test_client_rejects_oversized_post_response(monkeypatch):
+    class Stream:
+        def __enter__(self):
+            return httpx.Response(
+                200,
+                content=b"{}",
+                request=httpx.Request("POST", "http://127.0.0.1"),
+            )
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: Stream())
+
+    with pytest.raises(RuntimeError, match="configured MCP response limit"):
+        TradingOsClient("http://127.0.0.1", "test-token", max_response_bytes=1).post(
+            "/api/v1/intelligence/research", {}, "research-key"
+        )
+
+
 def test_client_http_error_does_not_include_jwt(monkeypatch):
     request = httpx.Request("GET", "https://gateway.internal/api/v1/markets")
     response = httpx.Response(401, request=request, text="token must not leak")
