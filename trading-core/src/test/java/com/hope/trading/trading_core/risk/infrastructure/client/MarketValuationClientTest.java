@@ -19,6 +19,31 @@ import org.junit.jupiter.api.Test;
 
 class MarketValuationClientTest {
     @Test
+    void selectsInstrumentByProviderAndProductWhenSymbolIsAmbiguous() {
+        MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
+        UUID krakenSpot = UUID.randomUUID();
+        UUID krakenPerpetual = UUID.randomUUID();
+        UUID ctraderSpot = UUID.randomUUID();
+        Instant valuationAt = Instant.parse("2026-08-01T12:00:00Z");
+        when(feign.markets()).thenReturn(List.of(
+                new CatalogueMarket(krakenSpot, "KRAKEN", "EUR/USD", "EUR", "USD", "SPOT"),
+                new CatalogueMarket(krakenPerpetual, "KRAKEN", "EUR/USD", "EUR", "USD", "LINEAR_PERPETUAL"),
+                new CatalogueMarket(ctraderSpot, "CTRADER", "EUR/USD", "EUR", "USD", "SPOT")));
+        when(feign.value(org.mockito.ArgumentMatchers.any())).thenReturn(new ValuationTransport(
+                UUID.randomUUID(), 1, "USD", valuationAt, valuationAt,
+                "conservative-v3", "PT30S", "COMPLETE", List.of()));
+        MarketValuationClient client = new MarketValuationClient(feign, new ObjectMapper().findAndRegisterModules(),
+                Clock.fixed(valuationAt, ZoneOffset.UTC));
+
+        client.value("USD", valuationAt,
+                List.of(new MarketValuationPort.Instrument("proposed", "EUR/USD",
+                        MarketValuationPort.PriceUse.CONSERVATIVE_BUY, "CTRADER", "SPOT")), List.of());
+
+        verify(feign).refresh(new MarketPriceSnapshotRequest(List.of(ctraderSpot),
+                Duration.ofMinutes(5), Duration.ofSeconds(18), "REUSE_OR_ACQUIRE"));
+    }
+
+    @Test
     void preservesHardenedFreshnessAndConversionProvenance() {
         MarketValuationFeignClient feign = mock(MarketValuationFeignClient.class);
         UUID marketId = UUID.randomUUID();

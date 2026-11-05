@@ -3,10 +3,14 @@ package com.hope.trading.trading_core.broker.service;
 import com.hope.trading.trading_core.broker.apiClient.BrokerApiClient;
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountDto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountSynchronizationResult;
 import com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountSnapshotIncompleteException;
 import com.hope.trading.trading_core.exception.EntityNotFoundException;
 import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.helper.TradeStatus;
@@ -22,6 +26,7 @@ import com.hope.trading.trading_core.repository.UserRepository;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import com.hope.trading.trading_core.service.TradingCalculatorService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +41,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationService {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
@@ -71,7 +77,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
     @Override
     @Transactional
-    public void synchronize(UUID ownerId, UUID brokerAccountId) {
+    public BrokerAccountSynchronizationResult synchronize(UUID ownerId, UUID brokerAccountId) {
         if (ownerId == null || brokerAccountId == null) {
             throw new IllegalArgumentException("ownerId and brokerAccountId are required");
         }
@@ -87,10 +93,23 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         if (brokerAccount.executionMode() != com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.LIVE) {
             throw new IllegalStateException("Broker synchronization requires a LIVE account");
         }
-        BrokerAccountSnapshotV2Dto snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
+        long startedAt = System.nanoTime();
+        log.info("broker_account_synchronization_started brokerAccountId={}", brokerAccountId);
+        BrokerAccountSnapshotV2Dto snapshot;
+        try {
+            snapshot = brokerAccountSnapshotV2Client.getAccountSnapshot(brokerAccountId);
+        } catch (RuntimeException exception) {
+            log.warn("broker_account_synchronization_snapshot_failed brokerAccountId={} durationMs={} failureType={}",
+                    brokerAccountId, elapsedMillis(startedAt), exception.getClass().getSimpleName());
+            throw exception;
+        }
+        log.info("broker_account_synchronization_snapshot_completed brokerAccountId={} durationMs={} completeness={} freshness={}",
+                brokerAccountId, elapsedMillis(startedAt), snapshot == null ? null : snapshot.completeness(),
+                snapshot == null ? null : snapshot.freshness());
         validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
-        if (!"COMPLETE".equals(snapshot.completeness()) || !"FRESH".equals(snapshot.freshness())) {
-            throw new IllegalStateException("Broker account snapshot is not complete and fresh");
+        if (!"FRESH".equals(snapshot.freshness())) {
+            throw new BrokerAccountSnapshotIncompleteException(snapshot.completeness(), snapshot.freshness(),
+                    snapshot.unavailabilityReasons());
         }
         validateAccountFacts(snapshot);
         if (account.getBroker() != null
@@ -102,11 +121,21 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
             throw new IllegalStateException("External broker account identity mismatch");
         }
 
-        validateUniqueProviderPositionReferences(snapshot.positions());
-        replaceBalances(account, snapshot.balances());
-        replaceOpenPositions(account, snapshot.positions(), snapshot.deals());
+        if (snapshot.balances() != null && !snapshot.balances().isEmpty()) {
+            replaceBalances(account, snapshot.balances());
+        }
+        boolean positionsAvailable = isAuthoritative(snapshot.positionAvailability());
+        boolean dealsAvailable = isAuthoritative(snapshot.dealAvailability());
+        if (positionsAvailable) {
+            validateUniqueProviderPositionReferences(snapshot.positions());
+            replaceOpenPositions(account, snapshot.positions(),
+                    dealsAvailable ? snapshot.deals() : List.of(), dealsAvailable);
+        }
+        applySnapshotMetadata(account, snapshot);
+        applyDerivedEquityMetadata(account, snapshot.account() == null
+                ? null : snapshot.account().derivedEquityFact());
         account.setMarketDataTimestamp(snapshot.observedAt());
-        if (snapshot.account() != null && snapshot.account().equity() != null) {
+        if (hasAuthoritativeEquity(snapshot)) {
             // LIVE equity is provider-authoritative. Do not rebuild it from the
             // locally synchronized balances and trade state.
             account.setEquity(snapshot.account().equity());
@@ -115,6 +144,11 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
             }
         }
         accountRepository.save(account);
+        return synchronizationResult(snapshot);
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
     @Override
@@ -158,6 +192,76 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                 || account.balance() == null) {
             throw new IllegalStateException("Broker account snapshot account facts are incomplete");
         }
+    }
+
+    private boolean isAuthoritative(SnapshotCollectionAvailability availability) {
+        return availability == SnapshotCollectionAvailability.AVAILABLE_EMPTY
+                || availability == SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY;
+    }
+
+    private boolean hasAuthoritativeEquity(BrokerAccountSnapshotV2Dto snapshot) {
+        var accountFacts = snapshot.account();
+        var equityFact = accountFacts == null ? null : accountFacts.equityFact();
+        return accountFacts != null && accountFacts.equity() != null && equityFact != null
+                && "AVAILABLE".equals(equityFact.availability())
+                && equityFact.value() != null
+                && equityFact.value().compareTo(accountFacts.equity()) == 0
+                && accountFacts.valuationAsset() != null
+                && accountFacts.valuationAsset().equalsIgnoreCase(equityFact.currency())
+                && equityFact.fresh() && equityFact.complete() && equityFact.coherent();
+    }
+
+    private void applySnapshotMetadata(Account account, BrokerAccountSnapshotV2Dto snapshot) {
+        account.setBrokerSnapshotCompleteness(snapshot.completeness());
+        account.setBrokerSnapshotFreshness(snapshot.freshness());
+        account.setBrokerSnapshotPositionAvailability(snapshot.positionAvailability().name());
+        account.setBrokerSnapshotOrderAvailability(snapshot.orderAvailability().name());
+        account.setBrokerSnapshotPnlAvailability(snapshot.pnlAvailability().name());
+        account.setBrokerSnapshotDealAvailability(snapshot.dealAvailability().name());
+        account.setBrokerSnapshotObservedAt(snapshot.observedAt());
+        account.setBrokerSnapshotCompletedAt(snapshot.completedAt());
+        account.setBrokerSnapshotUnavailabilityReasons(String.join(",", snapshot.unavailabilityReasons()));
+    }
+
+    private void applyDerivedEquityMetadata(Account account, BrokerAccountFactsV2Dto.DerivedEquityFactDto derived) {
+        if (derived == null) {
+            account.setBrokerDerivedEquityCandidate(null);
+            account.setBrokerDerivedEquityCurrency(null);
+            account.setBrokerDerivedEquityProvenance(null);
+            account.setBrokerDerivedEquityCalculationVersion(null);
+            account.setBrokerDerivedEquityHypothesis(null);
+            account.setBrokerDerivedEquityConsistencyStatus(null);
+            account.setBrokerDerivedEquityValidationStatus(null);
+            account.setBrokerDerivedEquityObservedAt(null);
+            account.setBrokerDerivedEquityCapturedAt(null);
+            account.setBrokerDerivedEquityReasons(null);
+            return;
+        }
+        account.setBrokerDerivedEquityCandidate(derived.value());
+        account.setBrokerDerivedEquityCurrency(derived.currency());
+        account.setBrokerDerivedEquityProvenance(derived.provenance());
+        account.setBrokerDerivedEquityCalculationVersion(derived.calculationVersion());
+        account.setBrokerDerivedEquityHypothesis(derived.hypothesis());
+        account.setBrokerDerivedEquityConsistencyStatus(derived.consistencyStatus());
+        account.setBrokerDerivedEquityValidationStatus(derived.validationStatus());
+        account.setBrokerDerivedEquityObservedAt(derived.observedAt());
+        account.setBrokerDerivedEquityCapturedAt(derived.capturedAt());
+        account.setBrokerDerivedEquityReasons(String.join(",", derived.reasons()));
+    }
+
+    private BrokerAccountSynchronizationResult synchronizationResult(BrokerAccountSnapshotV2Dto snapshot) {
+        List<String> persisted = new java.util.ArrayList<>();
+        persisted.add("ACCOUNT_FACTS");
+        if (snapshot.balances() != null && !snapshot.balances().isEmpty()) persisted.add("BALANCES");
+        if (isAuthoritative(snapshot.positionAvailability())) persisted.add("POSITIONS");
+        if (isAuthoritative(snapshot.orderAvailability())) persisted.add("ORDER_AVAILABILITY");
+        if (isAuthoritative(snapshot.pnlAvailability())) persisted.add("POSITION_PNL_AVAILABILITY");
+        if (isAuthoritative(snapshot.dealAvailability())) persisted.add("DEAL_AVAILABILITY");
+        return new BrokerAccountSynchronizationResult(snapshot.brokerAccountId(),
+                "COMPLETE".equals(snapshot.completeness()) ? "SYNCED_COMPLETE" : "SYNCED_PARTIAL",
+                snapshot.observedAt(), snapshot.completedAt(), snapshot.completeness(), snapshot.freshness(),
+                snapshot.positionAvailability(), snapshot.orderAvailability(), snapshot.pnlAvailability(),
+                snapshot.dealAvailability(), persisted, snapshot.unavailabilityReasons(), true);
     }
 
     private Account synchronizeAccount(User user,BrokerAccountDto snapshot){
@@ -231,7 +335,8 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
 
     private void replaceOpenPositions(Account account,
                                       List<BrokerPositionSnapshotV2Dto> positions,
-                                      List<BrokerDealSnapshotV2Dto> deals) {
+                                      List<BrokerDealSnapshotV2Dto> deals,
+                                      boolean dealsAvailable) {
         Map<String, Trade> tradesByReference = new HashMap<>();
         account.getTrades().stream()
                 .filter(trade -> trade.getBrokerPositionReference() != null)
@@ -266,21 +371,25 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                 updateOpenPosition(trade, position);
             }
             applyFinancialContractIfRequired(trade, position.instrument());
-            List<BrokerDealSnapshotV2Dto> positionDeals = dealsForPosition(deals, reference);
-            if (imported) {
-                // The provider deal window may start after the position was opened.
-                // Establish the local baseline without applying historical closes.
-                rememberClosingDealReferences(trade, positionDeals);
-            } else {
-                applyClosingDeals(trade, positionDeals, true);
+            if (dealsAvailable) {
+                List<BrokerDealSnapshotV2Dto> positionDeals = dealsForPosition(deals, reference);
+                if (imported) {
+                    // The provider deal window may start after the position was opened.
+                    // Establish the local baseline without applying historical closes.
+                    rememberClosingDealReferences(trade, positionDeals);
+                } else {
+                    applyClosingDeals(trade, positionDeals, true);
+                }
             }
         });
 
+        if (dealsAvailable) {
             account.getTrades().stream()
                 .filter(trade -> !isClosed(trade) && trade.getBrokerPositionReference() != null)
                 .filter(trade -> !observedReferences.contains(trade.getBrokerPositionReference()))
                 .forEach(trade -> applyClosingDeals(trade,
                         dealsForPosition(deals, trade.getBrokerPositionReference()), false));
+        }
     }
 
     private void applyFinancialContractIfRequired(Trade trade, String instrument) {

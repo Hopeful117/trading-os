@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
@@ -195,6 +196,42 @@ class BrokerSynchronizationPersistenceIntegrationTest {
         assertThat(reloaded.getContractSourceId()).isEqualTo("market-data-contract:EUR/USD");
         assertThat(reloaded.getContractSourceVersion()).isEqualTo(3L);
         assertThat(reloaded.getContractObservedAt()).isEqualTo(observedAt);
+    }
+
+    @Test
+    void persistsPartialSnapshotCapabilityMetadataWithoutInventingFinancialFacts() {
+        BrokerAccount account = brokerAccounts.findById(brokerAccountId).orElseThrow();
+        BrokerAccountSnapshotV2Dto partial = new BrokerAccountSnapshotV2Dto(
+                brokerAccountId, account.providerRegistrationReference(), null,
+                Map.of("USD", new BigDecimal("10000")), List.of(), OBSERVED_AT,
+                new BrokerAccountFactsV2Dto("USD", new BigDecimal("10000"), null, null, null),
+                List.of(), List.of(), List.of(),
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                false, "INCOMPLETE", "FRESH", OBSERVED_AT, OBSERVED_AT,
+                List.of("EQUITY_UNAVAILABLE", "DEAL_HISTORY_UNAVAILABLE"));
+        when(snapshotClient.getAccountSnapshot(brokerAccountId)).thenReturn(partial);
+
+        service.synchronize(ownerId, brokerAccountId);
+        entityManager.flush();
+        entityManager.clear();
+
+        Account reloaded = accounts.findByBrokerAccountId(brokerAccountId).orElseThrow();
+        assertThat(reloaded.getBalances()).singleElement().satisfies(balance -> {
+            assertThat(balance.getAsset()).isEqualTo("USD");
+            assertThat(balance.getAmount()).isEqualByComparingTo("10000");
+        });
+        assertThat(reloaded.getBrokerSnapshotCompleteness()).isEqualTo("INCOMPLETE");
+        assertThat(reloaded.getBrokerSnapshotFreshness()).isEqualTo("FRESH");
+        assertThat(reloaded.getBrokerSnapshotPositionAvailability())
+                .isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY.name());
+        assertThat(reloaded.getBrokerSnapshotDealAvailability())
+                .isEqualTo(SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT.name());
+        assertThat(reloaded.getBrokerSnapshotUnavailabilityReasons())
+                .contains("EQUITY_UNAVAILABLE", "DEAL_HISTORY_UNAVAILABLE");
+        assertThat(reloaded.getEquity()).isEqualByComparingTo("10000");
     }
 
     private BrokerAccountSnapshotV2Dto snapshot(List<BrokerPositionSnapshotV2Dto> positions,

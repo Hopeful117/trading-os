@@ -142,6 +142,29 @@ class BrokerRequiredMarginClientTest {
     }
 
     @Test
+    void acceptsMarginPreviewWhenProviderDoesNotExposeLeverageLevels() {
+        BrokerAccount broker = BrokerAccount.create(UUID.randomUUID(), BrokerProvider.KRAKEN,
+                ExecutionMode.LIVE, "live", NOW);
+        BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
+        AccountRepository accounts = mock(AccountRepository.class);
+        BrokerMarginFeignClient margin = mock(BrokerMarginFeignClient.class);
+        BrokerTechnicalCapabilitiesFeignClient capabilities = mock(BrokerTechnicalCapabilitiesFeignClient.class);
+        when(brokers.findById(broker.id())).thenReturn(Optional.of(broker));
+        when(capabilities.get(broker.id(), "EUR/USD")).thenReturn(new BrokerTechnicalCapabilities(
+                broker.id(), "CTRADER", "EUR/USD", 1, NOW,
+                List.of("MARKET"), List.of(), List.of()));
+        when(margin.preview(eq(broker.id()), any())).thenReturn(new BrokerMarginPreview(
+                broker.id(), "EUR/USD", new BigDecimal("100"), "USD", "CTRADER:MARGIN_PREVIEW", 1, NOW));
+
+        BrokerRequiredMarginClient client = new BrokerRequiredMarginClient(margin, capabilities, brokers, accounts,
+                Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofMinutes(5));
+
+        assertThat(client.resolve(new RequiredMarginPort.Request(broker.id(), "EUR/USD", "LONG",
+                BigDecimal.ONE, new BigDecimal("100"), NOW))).isPresent();
+        verify(margin).preview(eq(broker.id()), any());
+    }
+
+    @Test
     void rejectsInvalidRequestBeforeCallingBroker() {
         BrokerAccountRepository brokers = mock(BrokerAccountRepository.class);
         AccountRepository accounts = mock(AccountRepository.class);

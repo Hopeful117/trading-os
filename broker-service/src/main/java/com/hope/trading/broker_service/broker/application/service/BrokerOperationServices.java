@@ -9,6 +9,8 @@ import com.hope.trading.broker_service.connection.application.BrokerConnectionRe
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderRegistrationCatalog;
 import java.util.*;
+import java.time.Clock;
+import java.time.Duration;
 import org.slf4j.Logger;import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
@@ -19,28 +21,39 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
             throw new BrokerAuthorizationException("Broker account is not accessible");
     }
      @Service public static final class GetAccountService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public GetAccountService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public AccountSnapshot get(UUID id){return metrics.record("account",()->require(providers.resolve(id),AccountCapability.class).account(id));}}
-     @Service public static class GetAccountSnapshotV2Service {
+       @Service public static class GetAccountSnapshotV2Service {
+          private static final Duration FRESH_SNAPSHOT_MAX_AGE = Duration.ofSeconds(30);
          private final BrokerProviderResolver providers;
          private final BrokerOperationsMetrics metrics;
           private final BrokerConnectionRepository connections;
           private final BrokerProviderRegistrationCatalog providerRegistrations;
-          private final com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots;
+           private final com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots;
+           private final Clock clock;
 
           public GetAccountSnapshotV2Service(BrokerProviderResolver providers, BrokerOperationsMetrics metrics,
-                                              BrokerConnectionRepository connections,
-                                              BrokerProviderRegistrationCatalog providerRegistrations,
-                                              com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots) {
+                                               BrokerConnectionRepository connections,
+                                               BrokerProviderRegistrationCatalog providerRegistrations,
+                                               com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots,
+                                               Clock clock) {
              this.providers = providers;
              this.metrics = metrics;
               this.connections = connections;
-              this.providerRegistrations = providerRegistrations;
-              this.snapshots = snapshots;
+               this.providerRegistrations = providerRegistrations;
+               this.snapshots = snapshots;
+               this.clock = clock;
          }
 
          public BrokerAccountSnapshotV2 get(UUID ownerId, UUID brokerAccountId) {
-              var connection = connections.findByBrokerAccountIdAndOwnerId(brokerAccountId, ownerId)
-                      .orElseThrow(() -> new BrokerAuthorizationException("Broker account is not accessible"));
-              var provider = providers.resolve(brokerAccountId);
+               var connection = connections.findByBrokerAccountIdAndOwnerId(brokerAccountId, ownerId)
+                       .orElseThrow(() -> new BrokerAuthorizationException("Broker account is not accessible"));
+               var now = clock.instant();
+                var reusable = snapshots.latestFresh(brokerAccountId,
+                        providerRegistrations.referenceFor(connection.provider()), connection.externalAccountId(),
+                        now, FRESH_SNAPSHOT_MAX_AGE);
+               if (reusable.isPresent()) {
+                    return reusable.get();
+               }
+               var provider = providers.resolve(brokerAccountId);
               var authoritative = provider.capability(AuthoritativeSnapshotCapability.class);
               if (authoritative.isPresent()) {
                    return metrics.record("account_snapshot_v2", () -> persist(authoritative.get().snapshot(brokerAccountId)));

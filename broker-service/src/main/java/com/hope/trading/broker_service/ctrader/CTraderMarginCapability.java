@@ -65,7 +65,7 @@ public final class CTraderMarginCapability implements MarginCapability {
             throw new CTraderAuthenticationException("cTrader connection is not usable");
         }
         Instant now = clock.instant();
-        try (CTraderRequestSafetyGuard.SnapshotLease ignored = safety.acquireSnapshot(connection.externalAccountId());
+        try (CTraderRequestSafetyGuard.SnapshotLease ignored = safety.acquireExpectedMargin(connection.externalAccountId());
              PlainSecret secret = secrets.read(new CredentialReference(connection.activeCredentialReference()))) {
             CTraderToken token = CTraderTokenCodec.decode(secret.copyValue());
             if (!token.expiresAt().isAfter(now)) {

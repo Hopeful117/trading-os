@@ -9,6 +9,18 @@
       <strong>{{ account.baseCurrency }}</strong>
     </p>
 
+    @if (account.snapshotCompleteness) {
+      <p data-testid="account-sync-state">
+        Synchronization: <strong>{{ account.synchronizationStatus }}</strong>
+        ({{ account.snapshotCompleteness }} / {{ account.snapshotFreshness }})
+      </p>
+      <p data-testid="account-risk-state">
+        {{ account.financialDataStatus || 'Financial data status unknown' }} ·
+        {{ account.riskEvidenceStatus || 'Risk evidence status unknown' }} ·
+        {{ account.tradingReadinessStatus || 'TRADING_NOT_AUTHORIZED' }}.
+      </p>
+    }
+
     <h3>Balances</h3>
 
     @for (balance of balances; track balance.asset) {
@@ -21,6 +33,24 @@
           {{ balance.amount }}
         </span>
       </div>
+    }
+
+    <h3>Financial facts</h3>
+    <p>Equity: {{ account.equity === null || account.equity === undefined ? 'Unavailable' : account.equity }}</p>
+    <p>Positions: {{ account.positionAvailability || 'Unknown' }}</p>
+    <p>Orders: {{ account.orderAvailability || 'Unknown' }}</p>
+    <p>Deals: {{ account.dealAvailability || 'Unknown' }}</p>
+    @if (account.derivedEquityCandidate !== null && account.derivedEquityCandidate !== undefined) {
+      <p data-testid="derived-equity-diagnostic">
+        Derived equity candidate: {{ account.derivedEquityCandidate }}
+        {{ account.derivedEquityCurrency }} · {{ account.derivedEquityProvenance }} ·
+        {{ account.derivedEquityValidationStatus }}
+      </p>
+    }
+    @if (account.synchronizationReasons?.length) {
+      <p data-testid="account-sync-reasons">
+        Unavailable: {{ account.synchronizationReasons?.join(', ') }}
+      </p>
     }
   </mat-card-content>
 </mat-card>

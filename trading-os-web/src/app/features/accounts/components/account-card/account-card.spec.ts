@@ -75,6 +75,31 @@ describe('AccountCard', () => {
     expect(component.balances).toEqual([]);
   });
 
+  it('renders unavailable financial facts without converting them to zero', () => {
+    const unavailableFixture = TestBed.createComponent(AccountCard);
+    unavailableFixture.componentInstance.account = {
+      ...component.account,
+      equity: null,
+      snapshotCompleteness: 'INCOMPLETE',
+      snapshotFreshness: 'FRESH',
+      synchronizationStatus: 'ACCOUNT_SYNCHRONIZED',
+      financialDataStatus: 'FINANCIAL_DATA_PARTIAL',
+      riskEvidenceStatus: 'RISK_EVIDENCE_INCOMPLETE',
+      tradingReadinessStatus: 'TRADING_NOT_AUTHORIZED',
+      positionAvailability: 'AVAILABLE_EMPTY',
+      orderAvailability: 'AVAILABLE_EMPTY',
+      dealAvailability: 'UNAVAILABLE_OR_ABSENT',
+      synchronizationReasons: ['EQUITY_UNAVAILABLE'],
+    };
+
+    unavailableFixture.detectChanges();
+
+    expect(unavailableFixture.nativeElement.textContent).toContain('Unavailable');
+    expect(unavailableFixture.nativeElement.textContent).toContain('UNAVAILABLE_OR_ABSENT');
+    expect(unavailableFixture.nativeElement.textContent).toContain('TRADING_NOT_AUTHORIZED');
+    expect(unavailableFixture.nativeElement.textContent).toContain('EQUITY_UNAVAILABLE');
+  });
+
   it('should convert string amounts to numbers', () => {
     component.account = {
       ...component.account,

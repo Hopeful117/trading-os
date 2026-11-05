@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -29,6 +30,50 @@ public class AccountDto {
     private AccountBalanceDto balances;
 
     private BigDecimal equity;
+
+    private String synchronizationStatus;
+
+    private String financialDataStatus;
+
+    private String riskEvidenceStatus;
+
+    private String tradingReadinessStatus;
+
+    private String snapshotCompleteness;
+
+    private String snapshotFreshness;
+
+    private String positionAvailability;
+
+    private String orderAvailability;
+
+    private String pnlAvailability;
+
+    private String dealAvailability;
+
+    private List<String> synchronizationReasons;
+
+    private BigDecimal derivedEquityCandidate;
+
+    private String derivedEquityCurrency;
+
+    private String derivedEquityProvenance;
+
+    private String derivedEquityCalculationVersion;
+
+    private String derivedEquityHypothesis;
+
+    private String derivedEquityConsistencyStatus;
+
+    private String derivedEquityValidationStatus;
+
+    private List<String> derivedEquityReasons;
+
+    private boolean diagnosticOnly;
+
+    private boolean riskEvidenceIncomplete;
+
+    private boolean tradingNotAuthorized;
 
     private BigDecimal peakEquity;
 

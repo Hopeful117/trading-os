@@ -79,13 +79,12 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
             boolean paper = brokerAccount.executionMode() == ExecutionMode.PAPER;
             if (paper) return paperMargin == null ? Optional.empty() : paperMargin.resolve(request);
             BrokerTechnicalCapabilities technical = capabilities.get(request.brokerAccountId(), request.instrument());
+            // Margin preview providers may not expose leverage ranges in technical capabilities.
             if (technical == null || !request.brokerAccountId().equals(technical.brokerAccountId())
                     || blank(technical.provider()) || technical.sourceVersion() < 1 || technical.observedAt() == null
                     || !request.instrument().equalsIgnoreCase(technical.instrument())
                     || technical.supportedOrderTypes() == null || technical.supportedOrderTypes().isEmpty()
-                 || invalidLeverageLevels(technical.supportedBuyLeverageLevels())
-                     || invalidLeverageLevels(technical.supportedSellLeverageLevels())
-                     || stale(technical.observedAt())) return Optional.empty();
+                    || stale(technical.observedAt())) return Optional.empty();
             BrokerMarginPreviewRequest previewRequest = new BrokerMarginPreviewRequest(request.brokerAccountId(),
                     request.instrument(), "LONG".equalsIgnoreCase(request.direction()) ? "BUY" : "SELL",
                     request.quantity(), request.price(), null);
@@ -136,8 +135,4 @@ public final class BrokerRequiredMarginClient implements RequiredMarginPort {
         return value == null || value.isBlank();
     }
 
-    private boolean invalidLeverageLevels(java.util.List<BigDecimal> levels) {
-        return levels == null || levels.isEmpty() || levels.stream()
-                .anyMatch(level -> level == null || level.signum() <= 0);
-    }
 }

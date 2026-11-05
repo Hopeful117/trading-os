@@ -9,7 +9,9 @@ import com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto;
 import com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto;
+import com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
+import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountSnapshotIncompleteException;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerProvider;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
 import com.hope.trading.trading_core.dto.Position;
@@ -381,7 +383,7 @@ class BrokerSynchronizationServiceImplTest {
                         List.of("OBSERVATION_STALE")));
 
         assertThatThrownBy(() -> service.synchronize(ownerId, brokerAccount.id()))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(BrokerAccountSnapshotIncompleteException.class)
                 .hasMessage("Broker account snapshot is not complete and fresh");
         assertThat(account.getTrades()).hasSize(1);
         assertThat(account.getTrades().getFirst().getTradeStatus()).isEqualTo(TradeStatus.OPEN);
@@ -404,6 +406,55 @@ class BrokerSynchronizationServiceImplTest {
 
         verify(accountRepository, never()).save(any(Account.class));
         assertThat(context.account.getTrades()).isEmpty();
+    }
+
+    @Test
+    void v2SynchronizationPersistsAvailableFactsWhenPositionCollectionIsUnavailable() {
+        V2Context context = v2Context();
+        java.time.Instant now = java.time.Instant.now();
+        BrokerAccountSnapshotV2Dto snapshot = new BrokerAccountSnapshotV2Dto(
+                context.brokerAccount.id(), BrokerProvider.KRAKEN, "external-1", Map.of(), List.of(), now,
+                new BrokerAccountFactsV2Dto("USD", BigDecimal.ZERO, BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO), List.of(), List.of(), List.of(),
+                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                false, "INCOMPLETE", "FRESH", now, now, List.of("EQUITY_UNAVAILABLE"));
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id()))
+                .thenReturn(snapshot);
+
+        var result = service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        assertThat(result.status()).isEqualTo("SYNCED_PARTIAL");
+        assertThat(result.positionAvailability()).isEqualTo(SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT);
+        verify(accountRepository).save(any(Account.class));
+        assertThat(context.account.getTrades()).isEmpty();
+        assertThat(context.account.getBrokerSnapshotPositionAvailability())
+                .isEqualTo(SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT.name());
+    }
+
+    @Test
+    void v2SynchronizationPersistsCurrentFactsWhenDealCollectionIsTruncated() {
+        V2Context context = v2Context();
+        java.time.Instant now = java.time.Instant.now();
+        BrokerAccountSnapshotV2Dto snapshot = new BrokerAccountSnapshotV2Dto(
+                context.brokerAccount.id(), BrokerProvider.KRAKEN, "external-1", Map.of(), List.of(), now,
+                new BrokerAccountFactsV2Dto("USD", BigDecimal.ZERO, BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO), List.of(), List.of(), List.of(),
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.AVAILABLE_EMPTY,
+                SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT,
+                SnapshotCollectionAvailability.TRUNCATED,
+                false, "INCOMPLETE", "FRESH", now, now, List.of("DEAL_HISTORY_TRUNCATED"));
+        when(brokerAccountSnapshotV2Client.getAccountSnapshot(context.brokerAccount.id()))
+                .thenReturn(snapshot);
+
+        var result = service.synchronize(context.ownerId, context.brokerAccount.id());
+
+        assertThat(result.status()).isEqualTo("SYNCED_PARTIAL");
+        assertThat(result.dealAvailability()).isEqualTo(SnapshotCollectionAvailability.TRUNCATED);
+        verify(accountRepository).save(any(Account.class));
     }
 
     @Test

@@ -1,13 +1,16 @@
 package com.hope.trading.broker_service.broker.infrastructure.persistence;
 
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.SnapshotCompleteness;
+import com.hope.trading.broker_service.broker.domain.model.BrokerModels.SnapshotFreshness;
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.BrokerAccountSnapshotV2;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Objects;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Component;
@@ -59,6 +62,17 @@ public class RiskSnapshotPersistence {
                         throw new IllegalStateException("Persisted broker account snapshot cannot be read", exception);
                     }
                 });
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<BrokerAccountSnapshotV2> latestFresh(UUID accountId, UUID providerReference,
+            String externalAccountId, Instant now, Duration maxAge) {
+        return latest(accountId).filter(snapshot -> snapshot.completeness() == SnapshotCompleteness.COMPLETE
+                && Objects.equals(snapshot.providerRegistrationReference(), providerReference)
+                && Objects.equals(snapshot.externalAccountId(), externalAccountId)
+                && snapshot.freshness() == SnapshotFreshness.FRESH
+                && !snapshot.completedAt().isBefore(now.minus(maxAge))
+                && !snapshot.completedAt().isAfter(now));
     }
 
     @Transactional
