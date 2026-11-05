@@ -264,7 +264,9 @@ public class TradePlanRiskEvaluationService {
                 ? MarketValuationPort.PriceUse.CONSERVATIVE_SELL : MarketValuationPort.PriceUse.CONSERVATIVE_BUY));
         instruments.add(new MarketValuationPort.Instrument("proposed", plan.instrument(),
                 "LONG".equals(plan.direction()) ? MarketValuationPort.PriceUse.CONSERVATIVE_BUY
-                        : MarketValuationPort.PriceUse.CONSERVATIVE_SELL));
+                        : MarketValuationPort.PriceUse.CONSERVATIVE_SELL,
+                plan.instrumentProvider(), plan.instrumentProductType() == null
+                        ? null : plan.instrumentProductType().name()));
         List<String> currentAssets = new ArrayList<>(brokerSnapshot.assetBalances().keySet());
         currentAssets.add(brokerSnapshot.account().valuationAsset());
         currentAssets.add(plan.sizingCurrency());

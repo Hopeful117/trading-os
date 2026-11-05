@@ -12,6 +12,7 @@ import com.hope.trading.broker_service.ctrader.authentication.CTraderRequestSafe
 import com.hope.trading.broker_service.ctrader.authentication.CTraderToken;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderTokenCodec;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
+import com.hope.trading.broker_service.ctrader.experimentation.CTraderDerivedEquityExperiment;
 import com.hope.trading.broker_service.secret.application.SecretReader;
 import com.hope.trading.broker_service.secret.domain.CredentialReference;
 import com.hope.trading.broker_service.secret.domain.PlainSecret;
@@ -91,13 +92,20 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
 
     private BrokerAccountSnapshotV2 map(UUID brokerAccountId, CTraderReadOnlyObservation observation, Instant now) {
         CTraderReadOnlyObservation.AccountFacts providerFacts = observation.accountFacts();
+        var derived = CTraderDerivedEquityExperiment.evaluate(observation, now,
+                MAX_OBSERVATION_AGE, Duration.ofSeconds(30));
+        DerivedEquityFact derivedEquityFact = derived.candidateEquity() == null ? null
+                : new DerivedEquityFact(derived.candidateEquity(), derived.valuationAsset(), "BROKER_DERIVED",
+                derived.calculationVersion(), derived.hypothesis().name(), derived.consistencyStatus().name(),
+                derived.validationStatus().name(), derived.providerObservedAt(), derived.completedAt(),
+                derived.diagnostics());
         AccountFacts account = new AccountFacts(observation.valuationAsset(), observation.balance(),
                 observation.equity(), observation.usedMargin(), observation.freeMargin(),
                 accountPositionModel(providerFacts.accountType()),
                 marginCalculationModel(providerFacts.totalMarginCalculationType()),
                 providerFacts.moneyDigits().present() ? providerFacts.moneyDigits().value() : null,
                 leverage(providerFacts.leverageInCents()),
-                EquityFact.unavailable("EQUITY_PROVIDER_SOURCE_UNVALIDATED"));
+                EquityFact.unavailable("EQUITY_PROVIDER_SOURCE_UNVALIDATED"), derivedEquityFact);
         List<PositionSnapshot> positions = observation.positions().stream()
                 .map(position -> new PositionSnapshot(position.instrument(), position.signedQuantity(),
                         position.entryPrice(), position.observedAt(), position.providerReference(),

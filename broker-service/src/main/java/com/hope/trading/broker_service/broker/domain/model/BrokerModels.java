@@ -277,7 +277,8 @@ public final class BrokerModels {
                                 MarginCalculationModel marginCalculationModel,
                                 Integer monetaryScale,
                                 BigDecimal leverage,
-                                EquityFact equityFact) {
+                                EquityFact equityFact,
+                                DerivedEquityFact derivedEquityFact) {
         public AccountFacts {
             valuationAsset = required(valuationAsset, "valuationAsset");
             Objects.requireNonNull(balance);
@@ -296,7 +297,7 @@ public final class BrokerModels {
                             BigDecimal usedMargin, BigDecimal freeMargin) {
             this(valuationAsset, balance, equity, usedMargin, freeMargin,
                     AccountPositionModel.UNKNOWN, MarginCalculationModel.UNKNOWN, null, null,
-                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"));
+                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null);
         }
 
         public AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
@@ -306,7 +307,24 @@ public final class BrokerModels {
                             Integer monetaryScale, BigDecimal leverage) {
             this(valuationAsset, balance, equity, usedMargin, freeMargin, positionModel,
                     marginCalculationModel, monetaryScale, leverage,
-                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"));
+                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null);
+        }
+    }
+    public record DerivedEquityFact(BigDecimal value, String currency, String provenance,
+                                    String calculationVersion, String hypothesis,
+                                    String consistencyStatus, String validationStatus,
+                                    Instant observedAt, Instant capturedAt, List<String> reasons) {
+        public DerivedEquityFact {
+            if (value == null || value.signum() < 0 || currency == null || currency.isBlank()
+                    || provenance == null || provenance.isBlank()
+                    || calculationVersion == null || calculationVersion.isBlank()
+                    || hypothesis == null || hypothesis.isBlank()
+                    || consistencyStatus == null || consistencyStatus.isBlank()
+                    || validationStatus == null || validationStatus.isBlank()
+                    || observedAt == null || capturedAt == null) {
+                throw new IllegalArgumentException("derived equity diagnostic is incomplete");
+            }
+            reasons = List.copyOf(reasons == null ? List.of() : reasons);
         }
     }
     public enum AccountPositionModel { HEDGED, NETTED, SPREAD_BETTING, UNKNOWN }

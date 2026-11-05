@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.controller;
 
 import com.hope.trading.trading_core.broker.service.BrokerSynchronizationService;
 import com.hope.trading.trading_core.broker.service.LiveCfdReconciliationService;
+import com.hope.trading.trading_core.broker.dto.BrokerAccountSynchronizationResult;
 import com.hope.trading.trading_core.dto.UserDto;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -23,11 +24,10 @@ public class AccountSynchronizationV2Controller {
     }
 
     @PostMapping("/{brokerAccountId}/synchronize")
-    public ResponseEntity<String> synchronize(@PathVariable UUID brokerAccountId,
-                                              Authentication authentication) {
+    public ResponseEntity<BrokerAccountSynchronizationResult> synchronize(
+            @PathVariable UUID brokerAccountId, Authentication authentication) {
         UserDto user = (UserDto) authentication.getPrincipal();
-        synchronization.synchronize(user.getUserId(), brokerAccountId);
-        return ResponseEntity.ok("Broker account synchronized successfully");
+        return ResponseEntity.ok(synchronization.synchronize(user.getUserId(), brokerAccountId));
     }
 
     @GetMapping("/{brokerAccountId}/live-cfd-reconciliation")

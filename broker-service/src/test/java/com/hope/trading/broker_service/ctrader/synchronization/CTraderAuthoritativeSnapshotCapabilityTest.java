@@ -122,6 +122,13 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
             assertThat(pnl.monetaryScale()).isEqualTo(2);
         });
         assertThat(snapshot.unavailabilityReasons()).isEmpty();
+        assertThat(snapshot.account().equityFact().provenance()).isEqualTo(EquityProvenance.UNAVAILABLE);
+        assertThat(snapshot.account().derivedEquityFact()).satisfies(derived -> {
+            assertThat(derived.value()).isEqualByComparingTo("1008");
+            assertThat(derived.provenance()).isEqualTo("BROKER_DERIVED");
+            assertThat(derived.validationStatus()).isEqualTo("UNVERIFIED");
+            assertThat(derived.calculationVersion()).isEqualTo("CTRADER_DERIVED_EQUITY_V1");
+        });
     }
 
     @Test

@@ -23,12 +23,41 @@ public class AccountMapper {
                     .name(account.getName())
                     .baseCurrency(account.getBaseCurrency())
                     .settlementModel(account.getSettlementModel())
-                    .equity(account.getEquity())
+                    .equity(exposedEquity(account))
                     .peakEquity(account.getPeakEquity())
                     .realizedBalance(account.getRealizedBalance())
                     .valuationStatus(account.getValuationStatus())
                     .valuedAt(account.getValuedAt())
                     .marketDataTimestamp(account.getMarketDataTimestamp())
+                    .synchronizationStatus(account.getBrokerSnapshotCompleteness() == null
+                            ? null : "ACCOUNT_SYNCHRONIZED")
+                    .financialDataStatus(account.getBrokerSnapshotCompleteness() == null
+                            ? null : ("COMPLETE".equals(account.getBrokerSnapshotCompleteness())
+                            ? "FINANCIAL_DATA_COMPLETE" : "FINANCIAL_DATA_PARTIAL"))
+                    .riskEvidenceStatus(account.getBrokerSnapshotCompleteness() == null
+                            ? null : ("COMPLETE".equals(account.getBrokerSnapshotCompleteness())
+                            ? "RISK_EVIDENCE_PENDING" : "RISK_EVIDENCE_INCOMPLETE"))
+                    .tradingReadinessStatus("TRADING_NOT_AUTHORIZED")
+                    .snapshotCompleteness(account.getBrokerSnapshotCompleteness())
+                    .snapshotFreshness(account.getBrokerSnapshotFreshness())
+                    .positionAvailability(account.getBrokerSnapshotPositionAvailability())
+                    .orderAvailability(account.getBrokerSnapshotOrderAvailability())
+                    .pnlAvailability(account.getBrokerSnapshotPnlAvailability())
+                    .dealAvailability(account.getBrokerSnapshotDealAvailability())
+                    .synchronizationReasons(splitReasons(account.getBrokerSnapshotUnavailabilityReasons()))
+                    .derivedEquityCandidate(account.getBrokerDerivedEquityCandidate())
+                    .derivedEquityCurrency(account.getBrokerDerivedEquityCurrency())
+                    .derivedEquityProvenance(account.getBrokerDerivedEquityProvenance())
+                    .derivedEquityCalculationVersion(account.getBrokerDerivedEquityCalculationVersion())
+                    .derivedEquityHypothesis(account.getBrokerDerivedEquityHypothesis())
+                    .derivedEquityConsistencyStatus(account.getBrokerDerivedEquityConsistencyStatus())
+                    .derivedEquityValidationStatus(account.getBrokerDerivedEquityValidationStatus())
+                    .derivedEquityReasons(splitReasons(account.getBrokerDerivedEquityReasons()))
+                    .diagnosticOnly(account.getBrokerSnapshotCompleteness() != null
+                            && !"COMPLETE".equals(account.getBrokerSnapshotCompleteness()))
+                    .riskEvidenceIncomplete(account.getBrokerSnapshotCompleteness() != null
+                            && !"COMPLETE".equals(account.getBrokerSnapshotCompleteness()))
+                    .tradingNotAuthorized(true)
                     .rulesId(
                             account.getRules() != null
                                     ? account.getRules().getRulesId()
@@ -46,6 +75,18 @@ public class AccountMapper {
                     )
 
                     .build();
+        }
+
+        private java.math.BigDecimal exposedEquity(Account account) {
+            String completeness = account.getBrokerSnapshotCompleteness();
+            return completeness == null || "COMPLETE".equals(completeness)
+                    ? account.getEquity()
+                    : null;
+        }
+
+        private List<String> splitReasons(String value) {
+            if (value == null || value.isBlank()) return List.of();
+            return List.of(value.split(","));
         }
 
 

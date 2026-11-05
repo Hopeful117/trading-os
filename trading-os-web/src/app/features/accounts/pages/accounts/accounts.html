@@ -354,6 +354,23 @@
 }
 <div class="accounts-container">
   @for (account of accounts | async; track account.accountId) {
-    <app-account-card [account]="account"> </app-account-card>
+    <div>
+      <app-account-card [account]="account"> </app-account-card>
+      @if (account.brokerAccountId) {
+        <button
+          type="button"
+          class="secondary-button"
+          data-testid="operational-synchronize-button"
+          [disabled]="operationalSyncingAccountId() !== null"
+          (click)="synchronizeOperationalAccount(account)"
+        >
+          {{
+            operationalSyncingAccountId() === account.brokerAccountId
+              ? 'Synchronisation…'
+              : 'Synchroniser le compte'
+          }}
+        </button>
+      }
+    </div>
   }
 </div>

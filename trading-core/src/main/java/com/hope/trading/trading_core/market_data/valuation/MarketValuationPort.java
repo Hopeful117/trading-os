@@ -14,7 +14,12 @@ public interface MarketValuationPort {
         return value(reportingCurrency, at, instruments, assets);
     }
 
-    record Instrument(String id, String symbol, PriceUse priceUse) { }
+    record Instrument(String id, String symbol, PriceUse priceUse,
+                      String provider, String productType) {
+        public Instrument(String id, String symbol, PriceUse priceUse) {
+            this(id, symbol, priceUse, null, null);
+        }
+    }
     record Asset(String id, String currency) { }
     enum PriceUse { LAST, CONSERVATIVE_SELL, CONSERVATIVE_BUY }
     enum DecisionBoundary { PRE_TRADE, EXECUTION_TIME }

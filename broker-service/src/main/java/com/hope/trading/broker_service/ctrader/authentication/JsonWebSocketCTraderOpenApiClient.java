@@ -33,6 +33,7 @@ import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.*;
 
 @Component
 public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
+    private static final Duration MAX_READ_ONLY_OBSERVATION_DURATION = Duration.ofSeconds(30);
     private static final int EXPECTED_MARGIN_REQUEST = 2139;
     private static final int EXPECTED_MARGIN_RESPONSE = 2140;
     private static final Logger log = LoggerFactory.getLogger(JsonWebSocketCTraderOpenApiClient.class);
@@ -51,7 +52,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     @Override
     public List<String> discoverAuthorizedAccountIds(CTraderToken token) {
-        try (Session session = new Session(null)) {
+        try (Session session = new Session(null, requestMetadata("ACCOUNT_DISCOVERY", "AUTHENTICATION", "REQUIRED"))) {
             session.request(APPLICATION_AUTH_REQUEST, APPLICATION_AUTH_RESPONSE,
                     objectMapper.createObjectNode()
                             .put("clientId", required(properties.clientId()))
@@ -79,7 +80,9 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     @Override
     public void authorizeAccount(CTraderToken token, String externalAccountId) {
-        try (Session session = new Session(externalAccountId)) {
+        try (Session session = new Session(externalAccountId,
+                System.nanoTime() + MAX_READ_ONLY_OBSERVATION_DURATION.toNanos(),
+                requestMetadata("ACCOUNT_AUTHORIZATION", "AUTHENTICATION", "REQUIRED"))) {
             session.request(APPLICATION_AUTH_REQUEST, APPLICATION_AUTH_RESPONSE,
                     objectMapper.createObjectNode()
                             .put("clientId", required(properties.clientId()))
@@ -97,7 +100,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     @Override
     public boolean isDemoAccount(CTraderToken token, String externalAccountId) {
-        try (Session session = new Session(null)) {
+        try (Session session = new Session(externalAccountId,
+                requestMetadata("ACCOUNT_ENVIRONMENT", "AUTHENTICATION", "REQUIRED"))) {
             authenticateApplication(session);
             JsonNode response = session.request(ACCOUNT_LIST_REQUEST, ACCOUNT_LIST_RESPONSE,
                     objectMapper.createObjectNode().put("accessToken", token.accessToken()));
@@ -129,7 +133,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if (request.stopLossPrice() == null) {
             throw new CTraderAuthenticationException("cTrader demo execution requires a protective stop");
         }
-        try (Session session = new Session(request.externalAccountId())) {
+        try (Session session = new Session(request.externalAccountId(),
+                requestMetadata("ORDER_SUBMISSION", "EXECUTION", "SAFETY_CRITICAL"))) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(request.externalAccountId());
@@ -198,7 +203,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     @Override
     public CTraderClosePositionResponse closePosition(CTraderToken token, CTraderClosePositionRequest request) {
         safety.requireExecutionEnabled();
-        try (Session session = new Session(request.externalAccountId())) {
+        try (Session session = new Session(request.externalAccountId(),
+                requestMetadata("POSITION_CLOSE", "EXECUTION", "SAFETY_CRITICAL"))) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(request.externalAccountId());
@@ -369,7 +375,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     public CTraderReadOnlyObservation readOnlyObservation(CTraderToken token, String externalAccountId,
                                                            java.time.Instant from, java.time.Instant to) {
         Instant started = Instant.now();
-        try (Session session = new Session(externalAccountId)) {
+        try (Session session = new Session(externalAccountId,
+                requestMetadata("ACCOUNT_SNAPSHOT", "SYNCHRONIZATION", "REQUIRED"))) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(externalAccountId);
@@ -406,7 +413,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     public CTraderExecutionInstrumentContract readExecutionInstrumentContract(CTraderToken token,
                                                                                 String externalAccountId,
                                                                                 String instrument) {
-        try (Session session = new Session(externalAccountId)) {
+        try (Session session = new Session(externalAccountId,
+                requestMetadata("INSTRUMENT_CONTRACT", "VALIDATION", "REQUIRED"))) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(externalAccountId);
@@ -425,7 +433,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     public CTraderInstrumentMetadata readInstrumentMetadata(CTraderToken token,
                                                              String externalAccountId,
                                                              String instrument) {
-        try (Session session = new Session(externalAccountId)) {
+        try (Session session = new Session(externalAccountId,
+                requestMetadata("INSTRUMENT_METADATA", "VALIDATION", "OPTIONAL"))) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(externalAccountId);
@@ -497,7 +506,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
 
     @Override
     public CTraderQuote readCurrentQuote(CTraderToken token, String externalAccountId, String instrument) {
-        try (Session session = new Session(externalAccountId)) {
+        try (Session session = new Session(externalAccountId,
+                requestMetadata("CURRENT_QUOTE", "VALIDATION", "OPTIONAL"))) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(externalAccountId);
@@ -539,7 +549,8 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             throw new CTraderAuthenticationException("CTRADER_INVALID_MARGIN_QUANTITY");
         }
         Instant observedAt = Instant.now();
-        try (Session session = new Session(externalAccountId)) {
+        try (Session session = new Session(externalAccountId,
+                requestMetadata("EXPECTED_MARGIN", "RISK_PREFLIGHT", "REQUIRED"))) {
             validateEnvironment();
             authenticateApplication(session);
             long accountId = Long.parseLong(externalAccountId);
@@ -594,6 +605,12 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 objectMapper.createObjectNode()
                         .put("clientId", required(properties.clientId()))
                         .put("clientSecret", required(properties.clientSecret())));
+    }
+
+    private CTraderRequestSafetyGuard.RequestMetadata requestMetadata(String operation,
+                                                                       String trigger,
+                                                                       String priority) {
+        return new CTraderRequestSafetyGuard.RequestMetadata(operation, trigger, priority, 0);
     }
 
     private CTraderReadOnlyObservation mapObservation(String externalAccountId, JsonNode trader,
@@ -1018,29 +1035,63 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         private final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
         private final WebSocket socket;
         private final String externalAccountId;
+        private final long overallDeadlineNanos;
+        private final CTraderRequestSafetyGuard.RequestMetadata metadata;
 
         private Session(String externalAccountId) {
+            this(externalAccountId, Long.MAX_VALUE,
+                    requestMetadata("UNKNOWN_OPERATION", "UNKNOWN_TRIGGER", "NORMAL"));
+        }
+
+        private Session(String externalAccountId, long overallDeadlineNanos) {
+            this(externalAccountId, overallDeadlineNanos,
+                    requestMetadata("UNKNOWN_OPERATION", "UNKNOWN_TRIGGER", "NORMAL"));
+        }
+
+        private Session(String externalAccountId,
+                        CTraderRequestSafetyGuard.RequestMetadata metadata) {
+            this(externalAccountId, Long.MAX_VALUE, metadata);
+        }
+
+        private Session(String externalAccountId, long overallDeadlineNanos,
+                        CTraderRequestSafetyGuard.RequestMetadata metadata) {
             this.externalAccountId = externalAccountId;
-            safety.reserveRequest(externalAccountId, 0);
+            this.overallDeadlineNanos = overallDeadlineNanos;
+            this.metadata = metadata;
+            safety.reserveRequest(externalAccountId, metadata.withPayloadType(0));
             try {
                 socket = httpClient.newWebSocketBuilder()
                         .connectTimeout(Duration.ofSeconds(10))
                         .buildAsync(URI.create(properties.websocketEndpoint()), new Listener(messages))
                         .orTimeout(15, TimeUnit.SECONDS).join();
+                safety.recordSession(metadata);
             } catch (Exception exception) {
                 throw new CTraderAuthenticationException("cTrader Open API transport is unavailable", exception);
             }
         }
 
         private JsonNode request(int requestType, int responseType, ObjectNode payload) {
-            safety.reserveRequest(externalAccountId, requestType);
+            safety.reserveRequest(externalAccountId, metadata.withPayloadType(requestType));
             String clientMsgId = UUID.randomUUID().toString();
             ObjectNode message = objectMapper.createObjectNode()
                     .put("clientMsgId", clientMsgId)
                     .put("payloadType", requestType)
                     .set("payload", payload);
-            socket.sendText(message.toString(), true).join();
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+            long sendTimeoutNanos = overallDeadlineNanos == Long.MAX_VALUE
+                    ? TimeUnit.SECONDS.toNanos(15)
+                    : overallDeadlineNanos - System.nanoTime();
+            if (sendTimeoutNanos <= 0) {
+                throw new CTraderAuthenticationException("cTrader Open API synchronization timed out");
+            }
+            socket.sendText(message.toString(), true)
+                    .orTimeout(sendTimeoutNanos, TimeUnit.NANOSECONDS)
+                    .join();
+            safety.recordEmission(metadata.withPayloadType(requestType));
+            long deadline = Math.min(overallDeadlineNanos,
+                    System.nanoTime() + TimeUnit.SECONDS.toNanos(15));
+            if (deadline <= System.nanoTime()) {
+                throw new CTraderAuthenticationException("cTrader Open API synchronization timed out");
+            }
             try {
                 while (System.nanoTime() < deadline) {
                     String raw = messages.poll(1, TimeUnit.SECONDS);

@@ -33,7 +33,12 @@ interface MarketValuationFeignClient {
     List<PriceSnapshotTransport> refresh(@RequestBody MarketPriceSnapshotRequest request);
 }
 
-record CatalogueMarket(UUID marketId, String provider, String symbol, String baseAsset, String quoteAsset) { }
+record CatalogueMarket(UUID marketId, String provider, String symbol, String baseAsset, String quoteAsset,
+                       String productType) {
+    CatalogueMarket(UUID marketId, String provider, String symbol, String baseAsset, String quoteAsset) {
+        this(marketId, provider, symbol, baseAsset, quoteAsset, null);
+    }
+}
 record ValuationRequest(String reportingCurrency, Instant valuationTimestamp,
                         List<InstrumentRequest> instruments, List<AssetRequest> assets,
                         String decisionBoundary, String acquisitionMode,
@@ -100,6 +105,10 @@ public final class MarketValuationClient implements MarketValuationPort, ReadOnl
         List<InstrumentRequest> instrumentRequests = instruments.stream().map(item -> {
             List<CatalogueMarket> matches = catalogue.stream()
                     .filter(market -> market.symbol() != null && market.symbol().equalsIgnoreCase(item.symbol()))
+                    .filter(market -> item.provider() == null || item.provider().isBlank()
+                            || item.provider().equalsIgnoreCase(market.provider()))
+                    .filter(market -> item.productType() == null || item.productType().isBlank()
+                            || item.productType().equalsIgnoreCase(market.productType()))
                     .toList();
             UUID marketId = matches.size() == 1 ? matches.getFirst().marketId() : null;
             return new InstrumentRequest(item.id(), marketId, item.priceUse().name());

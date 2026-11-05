@@ -95,6 +95,40 @@ class AccountMapperTest {
     }
 
     @Test
+    void toDtoExposesPartialSnapshotAndDerivedEquityAsDiagnosticOnly() {
+        Account account = new Account();
+        account.setName("ftmo");
+        account.setBaseCurrency("USD");
+        account.setBalances(List.of());
+        account.setEquity(new BigDecimal("50000"));
+        account.setBrokerSnapshotCompleteness("INCOMPLETE");
+        account.setBrokerSnapshotFreshness("FRESH");
+        account.setBrokerSnapshotPositionAvailability("AVAILABLE_EMPTY");
+        account.setBrokerSnapshotOrderAvailability("AVAILABLE_EMPTY");
+        account.setBrokerSnapshotPnlAvailability("AVAILABLE_EMPTY");
+        account.setBrokerSnapshotDealAvailability("UNAVAILABLE_OR_ABSENT");
+        account.setBrokerSnapshotUnavailabilityReasons("EQUITY_UNAVAILABLE,DEAL_HISTORY_UNAVAILABLE");
+        account.setBrokerDerivedEquityCandidate(new BigDecimal("50000"));
+        account.setBrokerDerivedEquityCurrency("USD");
+        account.setBrokerDerivedEquityProvenance("BROKER_DERIVED");
+        account.setBrokerDerivedEquityCalculationVersion("CTRADER_DERIVED_EQUITY_V1");
+        account.setBrokerDerivedEquityValidationStatus("UNVERIFIED");
+
+        AccountDto dto = mapper.toDto(account);
+
+        assertThat(dto.getSynchronizationStatus()).isEqualTo("ACCOUNT_SYNCHRONIZED");
+        assertThat(dto.getFinancialDataStatus()).isEqualTo("FINANCIAL_DATA_PARTIAL");
+        assertThat(dto.getRiskEvidenceStatus()).isEqualTo("RISK_EVIDENCE_INCOMPLETE");
+        assertThat(dto.getTradingReadinessStatus()).isEqualTo("TRADING_NOT_AUTHORIZED");
+        assertThat(dto.getEquity()).isNull();
+        assertThat(dto.getDerivedEquityCandidate()).isEqualByComparingTo("50000");
+        assertThat(dto.getDerivedEquityProvenance()).isEqualTo("BROKER_DERIVED");
+        assertThat(dto.getDerivedEquityValidationStatus()).isEqualTo("UNVERIFIED");
+        assertThat(dto.getSynchronizationReasons())
+                .containsExactly("EQUITY_UNAVAILABLE", "DEAL_HISTORY_UNAVAILABLE");
+    }
+
+    @Test
     void toAccountBalanceConvertsMapEntriesToEntityList() {
         AccountBalanceDto balanceDto = AccountBalanceDto.builder()
                 .balances(Map.of(

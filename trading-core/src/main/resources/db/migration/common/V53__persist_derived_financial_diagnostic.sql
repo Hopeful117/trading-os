@@ -1,0 +1,10 @@
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_candidate NUMERIC(30, 10);
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_currency VARCHAR(16);
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_provenance VARCHAR(32);
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_calculation_version VARCHAR(64);
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_hypothesis VARCHAR(128);
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_consistency_status VARCHAR(32);
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_validation_status VARCHAR(32);
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_observed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_captured_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE accounts ADD COLUMN broker_derived_equity_reasons VARCHAR(4000);

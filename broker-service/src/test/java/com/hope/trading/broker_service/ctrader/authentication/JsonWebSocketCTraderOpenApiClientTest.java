@@ -20,6 +20,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class JsonWebSocketCTraderOpenApiClientTest {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -39,6 +42,24 @@ class JsonWebSocketCTraderOpenApiClientTest {
         assertThatThrownBy(() -> client.submitOrder(null, request))
                 .isInstanceOf(CTraderSafetyException.class)
                 .hasMessage("cTrader execution is disabled by safety policy");
+    }
+
+    @Test
+    void exhaustedBudgetRefusesBeforeWebSocketCreation() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.update(anyString(), any(Object[].class))).thenAnswer(invocation ->
+                invocation.getArgument(0, String.class).contains("request_count = request_count + 1") ? 0 : 1);
+        var guard = new CTraderRequestSafetyGuard(jdbc,
+                new CTraderSafetyProperties(true, 1, 1, 1,
+                        Duration.ofMinutes(20), Duration.ofMinutes(30)), Clock.systemUTC());
+        var properties = new CTraderProperties("client", "secret", "redirect", "auth", "demo", "token",
+                "not-a-websocket-uri", 60);
+        var refusedClient = new JsonWebSocketCTraderOpenApiClient(properties, guard, mapper);
+
+        assertThatThrownBy(() -> refusedClient.discoverAuthorizedAccountIds(
+                new CTraderToken("access", "refresh", Instant.now().plusSeconds(3600))))
+                .isInstanceOf(CTraderSafetyException.class)
+                .hasMessage("cTrader daily request safety stop reached");
     }
 
     @Test

@@ -60,6 +60,7 @@ export class Accounts {
   readonly provisioningFeedback = signal<ConnectionFeedback>(null);
   readonly syncing = signal(false);
   readonly syncFeedback = signal<ConnectionFeedback>(null);
+  readonly operationalSyncingAccountId = signal<string | null>(null);
   readonly readOnlyStatusAccountId = signal<string | null>(null);
   readonly readOnlyStatus = signal<BrokerAccountReadOnlyStatus | null>(null);
   readonly readOnlyStatusLoading = signal(false);
@@ -614,6 +615,29 @@ export class Accounts {
         this.syncFeedback.set({
           kind: 'error',
           message: 'Erreur lors de la synchronisation.',
+        });
+      },
+    });
+  }
+
+  synchronizeOperationalAccount(account: Account): void {
+    if (this.operationalSyncingAccountId() !== null || !account.brokerAccountId) return;
+    this.operationalSyncingAccountId.set(account.brokerAccountId);
+    this.syncFeedback.set(null);
+    this.accountService.synchronizeAccount(account.brokerAccountId).subscribe({
+      next: (result) => {
+        this.operationalSyncingAccountId.set(null);
+        this.syncFeedback.set({
+          kind: 'success',
+          message: `${result.status} · ${result.completeness}/${result.freshness}. Diagnostic uniquement; aucun ordre n'est autorisé.`,
+        });
+        this.loadAccounts();
+      },
+      error: () => {
+        this.operationalSyncingAccountId.set(null);
+        this.syncFeedback.set({
+          kind: 'error',
+          message: 'La synchronisation opérationnelle n’a pas pu être confirmée.',
         });
       },
     });
