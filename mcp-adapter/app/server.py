@@ -19,6 +19,12 @@ def list_markets() -> str:
 
 
 @mcp.tool()
+def get_active_scan(scan_id: Annotated[UUID, Field(description="Trading OS active scan UUID.")]) -> str:
+    """Read an authorized active-scan projection without starting or changing a scan."""
+    return client_from_environment().get(f"/api/v1/intelligence/scans/{scan_id}")
+
+
+@mcp.tool()
 def get_market_thesis(
     market_id: Annotated[UUID, Field(description="Trading OS market UUID.")],
     instrument: Annotated[str, Field(description="Canonical instrument identifier.")],
