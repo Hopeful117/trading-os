@@ -1,5 +1,7 @@
 package com.hope.trading.market_intelligence.domain;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -105,6 +107,36 @@ class IntelligenceContextTest {
                 ContextSectionType.NEWS, ContextSectionType.MARKET_SNAPSHOT));
 
         assertThat(selected.sections()).containsOnlyKeys(ContextSectionType.NEWS);
+    }
+
+    @Test
+    void contextIsSerializableAsProviderNeutralAiInput() throws Exception {
+        UUID marketId = UUID.randomUUID();
+        IntelligenceContext context = new IntelligenceContext(
+                marketId, AnalysisExecutionMode.ACTIVE, "validate crypto context",
+                Instant.parse("2026-10-15T12:00:00Z"), "analysis-context-v1",
+                ContextQuality.PARTIAL, List.of("HISTORICAL_OHLC:STALE"),
+                new com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint(
+                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
+                Map.of(
+                        ContextSectionType.MARKET_IDENTITY, section(ContextSectionType.MARKET_IDENTITY),
+                        ContextSectionType.ACCOUNT, new ContextSection(
+                                ContextSectionType.ACCOUNT, ContextSectionStatus.AVAILABLE,
+                                ContextSensitivity.USER_PRIVATE, null, null,
+                                "private-secret-must-not-cross-ai-boundary")));
+
+        assertThat(context.sections()).containsKey(ContextSectionType.ACCOUNT);
+
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        JsonNode json = mapper.readTree(mapper.writeValueAsString(context));
+
+        assertThat(json.get("marketId").asText()).isEqualTo(marketId.toString());
+        assertThat(json.get("schemaVersion").asText()).isEqualTo("analysis-context-v1");
+        assertThat(json.get("quality").asText()).isEqualTo("PARTIAL");
+        assertThat(json.get("diagnostics").get(0).asText()).isEqualTo("HISTORICAL_OHLC:STALE");
+        assertThat(json.get("sections").has("MARKET_IDENTITY")).isTrue();
+        assertThat(json.get("sections").has("ACCOUNT")).isFalse();
+        assertThat(json.toString()).doesNotContain("password", "secret", "token", "credential");
     }
 
     private ContextSection section(ContextSectionType type) {
