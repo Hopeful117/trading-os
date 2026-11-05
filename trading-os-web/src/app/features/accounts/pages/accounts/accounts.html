@@ -364,7 +364,11 @@
           [disabled]="operationalSyncingAccountId() !== null"
           (click)="synchronizeOperationalAccount(account)"
         >
-          {{ operationalSyncingAccountId() === account.brokerAccountId ? 'Synchronisation…' : 'Synchroniser le compte' }}
+          {{
+            operationalSyncingAccountId() === account.brokerAccountId
+              ? 'Synchronisation…'
+              : 'Synchroniser le compte'
+          }}
         </button>
       }
     </div>

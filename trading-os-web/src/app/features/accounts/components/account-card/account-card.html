@@ -11,8 +11,10 @@
 
     @if (account.snapshotCompleteness) {
       <p data-testid="account-sync-state">
-        Synchronization: <strong>{{ account.synchronizationStatus }}</strong>
-        ({{ account.snapshotCompleteness }} / {{ account.snapshotFreshness }})
+        Synchronization: <strong>{{ account.synchronizationStatus }}</strong> ({{
+          account.snapshotCompleteness
+        }}
+        / {{ account.snapshotFreshness }})
       </p>
       <p data-testid="account-risk-state">
         {{ account.financialDataStatus || 'Financial data status unknown' }} ·
@@ -36,7 +38,10 @@
     }
 
     <h3>Financial facts</h3>
-    <p>Equity: {{ account.equity === null || account.equity === undefined ? 'Unavailable' : account.equity }}</p>
+    <p>
+      Equity:
+      {{ account.equity === null || account.equity === undefined ? 'Unavailable' : account.equity }}
+    </p>
     <p>Positions: {{ account.positionAvailability || 'Unknown' }}</p>
     <p>Orders: {{ account.orderAvailability || 'Unknown' }}</p>
     <p>Deals: {{ account.dealAvailability || 'Unknown' }}</p>

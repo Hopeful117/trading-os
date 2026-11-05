@@ -40,21 +40,23 @@ describe('Accounts', () => {
     accountService = {
       getAccounts: vi.fn(() => accounts),
       synchronize: vi.fn(() => of('Accounts synchronized successfully')),
-      synchronizeAccount: vi.fn(() => of({
-        brokerAccountId: 'broker-account-1',
-        status: 'SYNCED_PARTIAL',
-        observedAt: '2026-11-05T00:00:00Z',
-        completedAt: '2026-11-05T00:00:01Z',
-        completeness: 'INCOMPLETE',
-        freshness: 'FRESH',
-        positionAvailability: 'AVAILABLE_EMPTY',
-        orderAvailability: 'AVAILABLE_EMPTY',
-        pnlAvailability: 'AVAILABLE_EMPTY',
-        dealAvailability: 'UNAVAILABLE_OR_ABSENT',
-        persistedCapabilities: ['ACCOUNT_FACTS', 'BALANCES'],
-        unavailabilityReasons: ['EQUITY_UNAVAILABLE'],
-        diagnosticOnly: true,
-      })),
+      synchronizeAccount: vi.fn(() =>
+        of({
+          brokerAccountId: 'broker-account-1',
+          status: 'SYNCED_PARTIAL',
+          observedAt: '2026-11-05T00:00:00Z',
+          completedAt: '2026-11-05T00:00:01Z',
+          completeness: 'INCOMPLETE',
+          freshness: 'FRESH',
+          positionAvailability: 'AVAILABLE_EMPTY',
+          orderAvailability: 'AVAILABLE_EMPTY',
+          pnlAvailability: 'AVAILABLE_EMPTY',
+          dealAvailability: 'UNAVAILABLE_OR_ABSENT',
+          persistedCapabilities: ['ACCOUNT_FACTS', 'BALANCES'],
+          unavailabilityReasons: ['EQUITY_UNAVAILABLE'],
+          diagnosticOnly: true,
+        }),
+      ),
     };
     brokerAccountService = {
       list: vi.fn(() => brokerAccounts),
