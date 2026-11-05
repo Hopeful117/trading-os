@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-os-mcp-adapter"
+version = "0.1.0"
+description = "Local read-only MCP adapter for Trading OS public Gateway APIs"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27,<1",
+    "mcp>=2,<3",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9", "pytest-asyncio>=0.24,<1"]
+
+[project.scripts]
+trading-os-mcp = "app.server:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
