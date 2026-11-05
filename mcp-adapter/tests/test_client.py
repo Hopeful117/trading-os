@@ -5,7 +5,14 @@ import json
 import httpx
 import pytest
 
-from app.client import TradingOsClient
+from app.client import TradingOsClient, client_from_environment
+
+
+def test_client_requires_jwt(monkeypatch):
+    monkeypatch.delenv("TRADING_OS_JWT", raising=False)
+
+    with pytest.raises(RuntimeError, match="TRADING_OS_JWT is required"):
+        client_from_environment()
 
 
 def test_client_uses_gateway_jwt(monkeypatch):
@@ -131,8 +138,10 @@ def test_client_sanitizes_gateway_status_errors(monkeypatch, status_code):
 
     monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: Stream())
 
-    with pytest.raises(RuntimeError, match=f"Gateway request failed with HTTP {status_code}"):
+    with pytest.raises(RuntimeError, match=f"Gateway request failed with HTTP {status_code}") as error:
         TradingOsClient("http://127.0.0.1", "test-token").get("/api/v1/markets")
+
+    assert "must not escape" not in str(error.value)
 
 
 def test_client_sanitizes_timeout(monkeypatch):

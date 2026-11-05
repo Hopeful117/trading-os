@@ -8,11 +8,16 @@ The adapter runs over stdio and calls only public Trading OS Gateway GET
 contracts. It exposes exactly:
 
 - `list_markets`
+- `get_active_scan`
 - `get_market_thesis`
 - `get_opportunities`
 
+`get_active_scan` reads an already-created, Gateway-authorized active-scan
+projection. It does not start, cancel or modify a scan.
+
 It cannot create Trade Plans, evaluate Risk, modify positions, place orders,
-call cTrader, call providers directly, or access internal service endpoints.
+call cTrader, call providers directly, access internal service endpoints or
+submit analysis executions.
 
 ## Install and Test
 
@@ -72,5 +77,8 @@ export TRADING_OS_JWT='<short-lived user JWT>'
 The `opencode mcp add` command was not executed automatically because it would
 modify user configuration and require a real JWT.
 
-Do not place a real JWT in repository configuration. Remote MCP HTTP transport,
-MCP OAuth and external cTrader MCP servers are not implemented or authorized.
+Do not place a real JWT in repository configuration. Starting a market scan is
+not exposed by this adapter because it is a controlled analytical command and
+requires a separately approved authorization boundary. Remote MCP HTTP
+transport, MCP OAuth and external cTrader MCP servers are not implemented or
+authorized.

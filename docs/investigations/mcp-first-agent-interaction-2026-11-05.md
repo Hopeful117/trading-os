@@ -54,9 +54,10 @@ approval and security review decision.
 
 ## Prototype
 
-`mcp-adapter/` provides a local stdio MCP server with three read-only tools:
+`mcp-adapter/` provides a local stdio MCP server with four read-only tools:
 
 - `list_markets`
+- `get_active_scan`
 - `get_market_thesis`
 - `get_opportunities`
 
@@ -69,8 +70,9 @@ TRADING_OS_HTTP_TIMEOUT_SECONDS=10
 ```
 
 The adapter uses the official MCP Python SDK and `httpx`. It does not bind a
-port, persist credentials, call providers, create plans, evaluate risk or
-execute orders.
+port, persist credentials, call providers, create plans, evaluate risk, start
+or cancel scans, submit analysis executions or execute orders. `get_active_scan`
+only reads an existing Gateway-authorized scan projection.
 
 ## OpenCode Configuration Guide
 
