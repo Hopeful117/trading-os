@@ -2,10 +2,12 @@ package com.hope.trading.market_intelligence.adapter.ai;
 
 import com.hope.trading.market_intelligence.application.port.*;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.util.Optional;
 
 @Component
+@ConditionalOnProperty(name = "ai.engine.enabled", havingValue = "false", matchIfMissing = true)
 public class DisabledAiEngineAdapter implements AiEnginePort {
     @Override
     public boolean available() {

@@ -12,7 +12,8 @@ public record PlanningRequest(
         Set<String> satisfiedConditions,
         Set<ArtifactDescriptor> initialArtifacts,
         String contextFingerprint,
-        Instant evaluationCutoff
+        Instant evaluationCutoff,
+        Map<String, Object> parameters
 ) {
     public PlanningRequest(
             UUID analysisExecutionId,
@@ -28,12 +29,21 @@ public record PlanningRequest(
             Set<String> satisfiedConditions, Set<ArtifactDescriptor> initialArtifacts,
             String contextFingerprint) {
         this(analysisExecutionId, explicitlySelected, satisfiedConditions, initialArtifacts,
-                contextFingerprint, null);
+                contextFingerprint, null, Map.of());
     }
 
     public PlanningRequest {
         explicitlySelected = Set.copyOf(explicitlySelected);
         satisfiedConditions = Set.copyOf(satisfiedConditions);
         initialArtifacts = Set.copyOf(initialArtifacts);
+        parameters = Map.copyOf(parameters);
+    }
+
+    public PlanningRequest(
+            UUID analysisExecutionId, Set<CapabilityId> explicitlySelected,
+            Set<String> satisfiedConditions, Set<ArtifactDescriptor> initialArtifacts,
+            String contextFingerprint, Instant evaluationCutoff) {
+        this(analysisExecutionId, explicitlySelected, satisfiedConditions, initialArtifacts,
+                contextFingerprint, evaluationCutoff, Map.of());
     }
 }

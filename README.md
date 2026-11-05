@@ -39,7 +39,7 @@ Services ou composants encore incomplets dans l'architecture cible :
 | Service ou composant | Responsabilité cible |
 | --- | --- |
 | `news-service` | Calendrier économique, actualités et contexte macroéconomique normalisés (fondation implémentée, provider réel à intégrer) |
-| `ai-engine` | Interprétation, scénarios, explications et classement d'opportunités |
+| `ai-engine` | Interprétation shadow-mode de Market Thesis, scénarios et explications |
 | Passive Scanner | Planification continue de la stratégie passive Market Intelligence |
 | Active Scanner UI | Déclenchement et présentation de l'analyse approfondie |
 | Position Monitoring | Surveillance des positions et recommandations sans exécution automatique |
@@ -82,7 +82,24 @@ et symbole afin de préserver les consommateurs lors d'un désabonnement partiel
 - Execution Domain ADR-029 : cycle de vie, idempotence, audit, retry contrôlé, annulation et récupération dans Trading Core.
 - Broker Architecture ADR-030 : contrats broker-neutres, capacités, registre de providers, adaptateur Kraken, résilience et observabilité.
 - News Service : fondation provider-neutral implémentée ; fournisseur externe et synchronisation réelle non commencés.
-- Scheduling passif, interface Scanner et AI Engine réel : non commencés.
+- Scheduling passif et interface Scanner : non commencés. L'AI Engine possède
+  désormais une fondation FastAPI/Pydantic shadow-mode, désactivée par défaut,
+  sans route Gateway ni accès direct aux données métier.
+
+### AI Engine local
+
+Le service Python peut être lancé indépendamment pour les validations hors ligne :
+
+```bash
+cd ai-engine
+python3 -m venv .venv
+.venv/bin/pip install -e '.[test]'
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8086
+```
+
+Le service reste désactivé par défaut (`AI_ENGINE_ENABLED=false`). Le provider
+`mock` permet les tests locaux sans réseau externe. L'activation du provider
+OpenAI et toute validation LLM réelle nécessitent une autorisation séparée.
 
 ### Avancées récentes
 
