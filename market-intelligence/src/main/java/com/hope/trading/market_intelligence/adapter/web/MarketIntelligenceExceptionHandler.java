@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.scan.ActiveScanException;
+import com.hope.trading.market_intelligence.application.research.ResearchException;
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionNotFoundException;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionException;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanRiskHandoffException;
@@ -48,6 +49,12 @@ public class MarketIntelligenceExceptionHandler {
     ResponseEntity<Map<String, String>> activeScan(ActiveScanException exception) {
         return ResponseEntity.status(exception.status()).body(Map.of(
                  "code", exception.code(), ERROR, exception.getMessage()));
+    }
+
+    @ExceptionHandler(ResearchException.class)
+    ResponseEntity<Map<String, String>> research(ResearchException exception) {
+        return ResponseEntity.status(exception.status()).body(Map.of(
+                "code", exception.code(), "error", exception.getMessage()));
     }
 
     @ExceptionHandler({IllegalExecutionTransitionException.class, IllegalArgumentException.class})
