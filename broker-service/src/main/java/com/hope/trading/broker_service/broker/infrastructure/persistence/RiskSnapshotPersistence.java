@@ -1,8 +1,12 @@
 package com.hope.trading.broker_service.broker.infrastructure.persistence;
 
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.SnapshotCompleteness;
+import com.hope.trading.broker_service.broker.domain.model.BrokerModels.BrokerAccountSnapshotV2;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,16 +17,48 @@ import org.springframework.transaction.annotation.Transactional;
 public class RiskSnapshotPersistence {
     private final RiskSnapshotVersionRepository snapshots;
     private final BrokerPositionIdentityRepository positions;
+    private final ObjectMapper mapper;
 
     public RiskSnapshotPersistence(RiskSnapshotVersionRepository snapshots,
-            BrokerPositionIdentityRepository positions) {
+            BrokerPositionIdentityRepository positions, ObjectMapper mapper) {
         this.snapshots = snapshots;
         this.positions = positions;
+        this.mapper = mapper;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RiskSnapshotPersistence(RiskSnapshotVersionRepository snapshots,
+            BrokerPositionIdentityRepository positions) {
+        this(snapshots, positions, new ObjectMapper().findAndRegisterModules());
     }
 
     @Transactional
     public long issueVersion(UUID accountId, Instant observedAt, SnapshotCompleteness completeness) {
         return snapshots.saveAndFlush(new RiskSnapshotVersionEntity(accountId, observedAt, completeness)).version();
+    }
+
+    @Transactional
+    public long persist(BrokerAccountSnapshotV2 snapshot) {
+        try {
+            return snapshots.saveAndFlush(new RiskSnapshotVersionEntity(snapshot.brokerAccountId(),
+                    snapshot.observedAt(), snapshot.completedAt(), snapshot.completeness(),
+                    mapper.writeValueAsString(snapshot))).version();
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Broker account snapshot cannot be serialized", exception);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<BrokerAccountSnapshotV2> latest(UUID accountId) {
+        return snapshots.findTopByBrokerAccountIdAndSnapshotPayloadIsNotNullOrderBySnapshotVersionDesc(accountId)
+                .map(RiskSnapshotVersionEntity::snapshotPayload)
+                .map(payload -> {
+                    try {
+                        return mapper.readValue(payload, BrokerAccountSnapshotV2.class);
+                    } catch (JsonProcessingException exception) {
+                        throw new IllegalStateException("Persisted broker account snapshot cannot be read", exception);
+                    }
+                });
     }
 
     @Transactional
@@ -54,13 +90,22 @@ class RiskSnapshotVersionEntity {
     @Column(name = "snapshot_version") private Long snapshotVersion;
     @Column(name = "broker_account_id", nullable = false, updatable = false) private UUID brokerAccountId;
     @Column(name = "observed_at", nullable = false, updatable = false) private Instant observedAt;
+    @Column(name = "completed_at", updatable = false) private Instant completedAt;
+    @Column(name = "snapshot_payload", columnDefinition = "text", updatable = false) private String snapshotPayload;
     @Enumerated(EnumType.STRING) @Column(nullable = false, updatable = false)
     private SnapshotCompleteness completeness;
     protected RiskSnapshotVersionEntity() {}
     RiskSnapshotVersionEntity(UUID accountId, Instant observedAt, SnapshotCompleteness completeness) {
         this.brokerAccountId=accountId;this.observedAt=observedAt;this.completeness=completeness;
     }
+    RiskSnapshotVersionEntity(UUID accountId, Instant observedAt, Instant completedAt,
+            SnapshotCompleteness completeness, String snapshotPayload) {
+        this(accountId, observedAt, completeness);
+        this.completedAt = completedAt;
+        this.snapshotPayload = snapshotPayload;
+    }
     long version() { return snapshotVersion; }
+    String snapshotPayload() { return snapshotPayload; }
 }
 
 @Entity
@@ -82,7 +127,10 @@ class BrokerPositionIdentityEntity {
     UUID positionId() { return positionId; }
 }
 
-interface RiskSnapshotVersionRepository extends JpaRepository<RiskSnapshotVersionEntity, Long> {}
+interface RiskSnapshotVersionRepository extends JpaRepository<RiskSnapshotVersionEntity, Long> {
+    Optional<RiskSnapshotVersionEntity> findTopByBrokerAccountIdAndSnapshotPayloadIsNotNullOrderBySnapshotVersionDesc(
+            UUID brokerAccountId);
+}
 interface BrokerPositionIdentityRepository extends JpaRepository<BrokerPositionIdentityEntity, UUID> {
     java.util.Optional<BrokerPositionIdentityEntity> findByBrokerAccountIdAndProviderAndProviderPositionReference(
             UUID brokerAccountId, String provider, String providerPositionReference);

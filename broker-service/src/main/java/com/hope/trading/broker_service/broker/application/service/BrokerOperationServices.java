@@ -22,16 +22,19 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
      @Service public static class GetAccountSnapshotV2Service {
          private final BrokerProviderResolver providers;
          private final BrokerOperationsMetrics metrics;
-         private final BrokerConnectionRepository connections;
-         private final BrokerProviderRegistrationCatalog providerRegistrations;
+          private final BrokerConnectionRepository connections;
+          private final BrokerProviderRegistrationCatalog providerRegistrations;
+          private final com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots;
 
-         public GetAccountSnapshotV2Service(BrokerProviderResolver providers, BrokerOperationsMetrics metrics,
-                                             BrokerConnectionRepository connections,
-                                             BrokerProviderRegistrationCatalog providerRegistrations) {
+          public GetAccountSnapshotV2Service(BrokerProviderResolver providers, BrokerOperationsMetrics metrics,
+                                              BrokerConnectionRepository connections,
+                                              BrokerProviderRegistrationCatalog providerRegistrations,
+                                              com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots) {
              this.providers = providers;
              this.metrics = metrics;
-             this.connections = connections;
-             this.providerRegistrations = providerRegistrations;
+              this.connections = connections;
+              this.providerRegistrations = providerRegistrations;
+              this.snapshots = snapshots;
          }
 
          public BrokerAccountSnapshotV2 get(UUID ownerId, UUID brokerAccountId) {
@@ -40,15 +43,34 @@ public final class BrokerOperationServices { private BrokerOperationServices(){}
               var provider = providers.resolve(brokerAccountId);
               var authoritative = provider.capability(AuthoritativeSnapshotCapability.class);
               if (authoritative.isPresent()) {
-                  return metrics.record("account_snapshot_v2", () -> authoritative.get().snapshot(brokerAccountId));
+                   return metrics.record("account_snapshot_v2", () -> persist(authoritative.get().snapshot(brokerAccountId)));
               }
               var account = require(provider, AccountCapability.class).account(brokerAccountId);
              var positions = require(provider, PositionCapability.class).positions(brokerAccountId);
-             return metrics.record("account_snapshot_v2", () -> new BrokerAccountSnapshotV2(
-                      brokerAccountId, providerRegistrations.referenceFor(connection.provider()), connection.externalAccountId(),
-                     account.balances(), positions, account.observedAt()));
-         }
-     }
+              return metrics.record("account_snapshot_v2", () -> persist(new BrokerAccountSnapshotV2(
+                       brokerAccountId, providerRegistrations.referenceFor(connection.provider()), connection.externalAccountId(),
+                      account.balances(), positions, account.observedAt())));
+          }
+          private BrokerAccountSnapshotV2 persist(BrokerAccountSnapshotV2 snapshot) {
+              snapshots.persist(snapshot);
+              return snapshot;
+          }
+      }
+      @Service public static final class GetLatestAccountSnapshotV2Service {
+          private final BrokerConnectionRepository connections;
+          private final com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots;
+
+          public GetLatestAccountSnapshotV2Service(BrokerConnectionRepository connections,
+                  com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence snapshots) {
+              this.connections = connections;
+              this.snapshots = snapshots;
+          }
+
+          public Optional<BrokerAccountSnapshotV2> get(UUID ownerId, UUID brokerAccountId) {
+              requireOwnership(connections, brokerAccountId, ownerId);
+              return snapshots.latest(brokerAccountId);
+          }
+      }
     @Service public static final class GetPositionsService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public GetPositionsService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public List<PositionSnapshot> get(UUID id){return metrics.record("positions",()->require(providers.resolve(id),PositionCapability.class).positions(id));}}
     @Service public static final class GetOrdersService {private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;public GetOrdersService(BrokerProviderResolver p,BrokerOperationsMetrics m){providers=p;metrics=m;}public List<OrderSnapshot> get(UUID id){return metrics.record("orders",()->require(providers.resolve(id),OrderCapability.class).orders(id));}}
     @Service public static final class ExecuteOrderService {private static final Logger log=LoggerFactory.getLogger(ExecuteOrderService.class);private final BrokerProviderResolver providers;private final BrokerOperationsMetrics metrics;private final com.hope.trading.broker_service.connection.application.BrokerConnectionRepository connections;public ExecuteOrderService(BrokerProviderResolver p,BrokerOperationsMetrics m,com.hope.trading.broker_service.connection.application.BrokerConnectionRepository c){providers=p;metrics=m;connections=c;}public ExecutionResult execute(ExecutionRequest r,UUID ownerId){log.info("broker_execution providerAccount={} attempt={}",r.brokerAccountId(),r.executionAttemptId());requireOwnership(connections,r.brokerAccountId(),ownerId);return metrics.record("execution",()->require(providers.resolve(r.brokerAccountId()),ExecutionCapability.class).execute(r));}}

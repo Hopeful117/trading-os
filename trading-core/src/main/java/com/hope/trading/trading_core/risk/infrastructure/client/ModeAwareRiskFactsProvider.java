@@ -17,6 +17,7 @@ import com.hope.trading.trading_core.valuation.application.PaperDerivativeAccoun
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
@@ -34,29 +35,39 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
     private final ObjectMapper mapper;
     private final Clock clock;
     private final PaperDerivativeAccountValuationService derivativeValuation;
+    private final Duration maxAge;
 
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper) {
-        this(liveFacts, null, mapper, Clock.systemUTC(), null);
+        this(liveFacts, null, mapper, Clock.systemUTC(), null, Duration.ofMinutes(5));
     }
 
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock) {
-        this(liveFacts, null, mapper, clock, null);
+        this(liveFacts, null, mapper, clock, null, Duration.ofMinutes(5));
+    }
+
+    public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts,
+                                      BrokerAccountSnapshotV2Client authoritativeSnapshots,
+                                      ObjectMapper mapper, Clock clock,
+                                      PaperDerivativeAccountValuationService derivativeValuation) {
+        this(liveFacts, authoritativeSnapshots, mapper, clock, derivativeValuation, Duration.ofMinutes(5));
     }
 
     @Autowired
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, BrokerAccountSnapshotV2Client authoritativeSnapshots,
                                       ObjectMapper mapper, Clock clock,
-                                      PaperDerivativeAccountValuationService derivativeValuation) {
+                                      PaperDerivativeAccountValuationService derivativeValuation,
+                                      @org.springframework.beans.factory.annotation.Value("${trading-core.risk.broker-facts-max-age:PT5M}") Duration maxAge) {
         this.liveFacts = liveFacts;
         this.authoritativeSnapshots = authoritativeSnapshots;
         this.mapper = mapper;
         this.clock = clock;
         this.derivativeValuation = derivativeValuation;
+        this.maxAge = maxAge;
     }
 
     public ModeAwareRiskFactsProvider(BrokerRiskFactsPort liveFacts, ObjectMapper mapper, Clock clock,
                                       PaperDerivativeAccountValuationService derivativeValuation) {
-        this(liveFacts, null, mapper, clock, derivativeValuation);
+        this(liveFacts, null, mapper, clock, derivativeValuation, Duration.ofMinutes(5));
     }
 
     @Override
@@ -76,12 +87,10 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 try {
                     UUID actorId = account.getUser() == null ? null : account.getUser().getUserId();
                     authoritative = actorId == null
-                            ? authoritativeSnapshots.getAccountSnapshot(sourceId)
-                            : authoritativeSnapshots.getAccountSnapshot(actorId, sourceId);
-                } catch (RetryableException ignored) {
-                    // The v2 compatibility route is unavailable for Kraken in
-                    // this state. Its established RiskSnapshot route remains
-                    // the fallback; cTrader has no legacy Risk capability.
+                            ? authoritativeSnapshots.getLatestAccountSnapshot(sourceId)
+                            : authoritativeSnapshots.getLatestAccountSnapshot(actorId, sourceId);
+                } catch (RetryableException | feign.FeignException.NotFound ignored) {
+                    throw new IllegalStateException("Authoritative broker snapshot is unavailable", ignored);
                 }
                 if (authoritative != null) {
                     validateIdentity(brokerAccount, sourceId, authoritative);
@@ -89,6 +98,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                         return fromAuthoritative(authoritative, account, from, to, requirements);
                     }
                 }
+                throw new IllegalStateException("Authoritative broker snapshot is unavailable");
             }
             return RiskFactsProvider.fromBroker(liveFacts.load(sourceId, from, to), requirements);
         }
@@ -201,9 +211,10 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                                          com.hope.trading.trading_core.model.Account localAccount,
                                          RiskFactRequirements requirements) {
         if (snapshot == null || snapshot.account() == null
-                || snapshot.observedAt() == null || snapshot.completedAt() == null
-                || snapshot.completedAt().toEpochMilli() < 1
-                || !"FRESH".equals(snapshot.freshness())
+                 || snapshot.observedAt() == null || snapshot.completedAt() == null
+                 || snapshot.completedAt().toEpochMilli() < 1
+                 || snapshot.completedAt().isBefore(clock.instant().minus(maxAge))
+                 || !"FRESH".equals(snapshot.freshness())
                 || snapshot.balances() == null || snapshot.positions() == null
                 || snapshot.deals() == null || snapshot.positionPnls() == null) {
             return false;

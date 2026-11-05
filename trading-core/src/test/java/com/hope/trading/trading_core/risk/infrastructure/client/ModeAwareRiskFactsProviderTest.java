@@ -48,14 +48,14 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", new BigDecimal("1000")), List.of(),
                 from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", new BigDecimal("1000"),
                 new BigDecimal("990"), new BigDecimal("10"), new BigDecimal("980")), List.of(), List.of(),
                 "COMPLETE", "FRESH", from, from.plusSeconds(1), List.of()));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isTrue();
@@ -71,14 +71,14 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
                 from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ZERO, BigDecimal.ONE), List.of(), List.of(), "INCOMPLETE", "STALE", from,
                 from.plusSeconds(1), List.of("OBSERVATION_STALE")));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isFalse();
@@ -95,7 +95,7 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", new BigDecimal("1000")),
                 List.of(new com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto(
                         "EUR/USD", new BigDecimal("2"), new BigDecimal("1.1"), from.plusSeconds(1),
@@ -105,7 +105,7 @@ class ModeAwareRiskFactsProviderTest {
                 "COMPLETE", "FRESH", from, from.plusSeconds(2), List.of()));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isTrue();
@@ -128,7 +128,7 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", new BigDecimal("1000")),
                 List.of(new com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto(
                         "EUR/USD", new BigDecimal("2"), new BigDecimal("1.1"), from.plusSeconds(1),
@@ -138,7 +138,7 @@ class ModeAwareRiskFactsProviderTest {
                 "COMPLETE", "FRESH", from, from.plusSeconds(2), List.of()));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isTrue();
@@ -155,7 +155,7 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", new BigDecimal("1000")),
                 List.of(new com.hope.trading.trading_core.broker.dto.BrokerPositionSnapshotV2Dto(
                         "EUR/USD", new BigDecimal("2"), new BigDecimal("1.1"), from.plusSeconds(1),
@@ -165,7 +165,7 @@ class ModeAwareRiskFactsProviderTest {
                 "COMPLETE", "FRESH", from, from.plusSeconds(2), List.of()));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isTrue();
@@ -174,26 +174,19 @@ class ModeAwareRiskFactsProviderTest {
     }
 
     @Test
-    void liveFallsBackToLegacyFactsWhenV2IsUnavailable() {
+    void liveFailsClosedWhenCachedV2FactsAreUnavailable() {
         UUID brokerId = UUID.randomUUID();
         BrokerAccountSnapshotV2Client authoritative = mock(BrokerAccountSnapshotV2Client.class);
-        BrokerRiskFactsPort.Snapshot legacy = new BrokerRiskFactsPort.Snapshot(
-                brokerId, 2, from.plusSeconds(1), true, List.of(), Map.of(),
-                new BrokerRiskFactsPort.Account("USD", BigDecimal.ONE, BigDecimal.ONE,
-                        BigDecimal.ZERO, BigDecimal.ONE), List.of(), List.of(), List.of(), "{}");
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         Request request = Request.create(Request.HttpMethod.GET, "http://broker", Map.of(),
                 (byte[]) null, null);
-        when(authoritative.getAccountSnapshot(brokerId)).thenThrow(new RetryableException(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenThrow(new RetryableException(
                 503, "timeout", Request.HttpMethod.GET, (Long) null, request));
-        when(liveFacts.load(brokerId, from, to)).thenReturn(legacy);
-
-        RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper(), java.time.Clock.systemUTC(), null)
-                .load(mock(Account.class), brokerAccount, brokerId, from, to);
-
-        assertThat(snapshot.sourceVersion()).isEqualTo(2);
-        verify(liveFacts).load(brokerId, from, to);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ModeAwareRiskFactsProvider(
+                liveFacts, authoritative, new ObjectMapper(), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
+                .load(mock(Account.class), brokerAccount, brokerId, from, to))
+                .isInstanceOf(IllegalStateException.class);
+        verifyNoInteractions(liveFacts);
     }
 
     @Test
@@ -210,14 +203,14 @@ class ModeAwareRiskFactsProviderTest {
         var outside = new com.hope.trading.trading_core.broker.dto.BrokerDealSnapshotV2Dto(
                 "deal-2", "EUR/USD", "JPY", "BUY", BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.TEN, to.plusSeconds(1));
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", new BigDecimal("1000")), List.of(),
                 from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", new BigDecimal("1000"),
                 new BigDecimal("990"), new BigDecimal("10"), new BigDecimal("980")), List.of(),
                 List.of(deal, outside), "COMPLETE", "FRESH", from, from.plusSeconds(2), List.of()));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.closedTrades()).singleElement()
@@ -234,13 +227,13 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(UUID.randomUUID());
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 UUID.randomUUID(), UUID.randomUUID(), "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
                 from.plusSeconds(1), null, List.of(), List.of(), "COMPLETE", "FRESH", from,
                 from.plusSeconds(1), List.of()));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ModeAwareRiskFactsProvider(
-                liveFacts, authoritative, new ObjectMapper(), java.time.Clock.systemUTC(), null)
+                liveFacts, authoritative, new ObjectMapper(), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Authoritative broker snapshot identity mismatch");
@@ -272,14 +265,14 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
                 from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.ZERO, null), List.of(), List.of(),
                 "COMPLETE", "FRESH", from, from.plusSeconds(1), List.of()));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isTrue();
@@ -295,14 +288,14 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
                 from.plusSeconds(1), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE,
                 BigDecimal.ONE, null, null), List.of(), List.of(),
                 "COMPLETE", "FRESH", from, from.plusSeconds(1), List.of()));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to);
 
         assertThat(snapshot.complete()).isTrue();
@@ -317,7 +310,7 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
                 from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, BigDecimal.ONE,
                 null, null), List.of(), List.of(), List.of(),
@@ -327,7 +320,7 @@ class ModeAwareRiskFactsProviderTest {
                 List.of("DEAL_HISTORY_UNAVAILABLE", "OBSERVATION_INCOMPLETE")));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to,
                         new RiskFactRequirements(true, true, false, false, false, false, false));
 
@@ -344,7 +337,7 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
                 from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, BigDecimal.ONE,
                 null, null), List.of(), List.of(), List.of(),
@@ -354,7 +347,7 @@ class ModeAwareRiskFactsProviderTest {
                 List.of("DEAL_HISTORY_UNAVAILABLE", "OBSERVATION_INCOMPLETE")));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to,
                         new RiskFactRequirements(true, true, false, false, false, false, true));
 
@@ -370,7 +363,7 @@ class ModeAwareRiskFactsProviderTest {
         when(brokerAccount.executionMode()).thenReturn(ExecutionMode.LIVE);
         when(brokerAccount.providerRegistrationReference()).thenReturn(providerReference);
         when(brokerAccount.externalAccountId()).thenReturn("ctrader-1");
-        when(authoritative.getAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
+        when(authoritative.getLatestAccountSnapshot(brokerId)).thenReturn(new BrokerAccountSnapshotV2Dto(
                 brokerId, providerReference, "ctrader-1", Map.of("USD", BigDecimal.ONE), List.of(),
                 from.plusSeconds(2), new BrokerAccountFactsV2Dto("USD", BigDecimal.ONE, null,
                 null, null), List.of(), List.of(), List.of(),
@@ -380,7 +373,7 @@ class ModeAwareRiskFactsProviderTest {
                 List.of("EQUITY_UNAVAILABLE", "OBSERVATION_INCOMPLETE")));
 
         RiskFactsProvider.Snapshot snapshot = new ModeAwareRiskFactsProvider(liveFacts, authoritative,
-                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.systemUTC(), null)
+                new ObjectMapper().registerModule(new JavaTimeModule()), java.time.Clock.fixed(from.plusSeconds(10), java.time.ZoneOffset.UTC), null)
                 .load(mock(Account.class), brokerAccount, brokerId, from, to,
                         new RiskFactRequirements(true, true, false, false, false, false, false));
 

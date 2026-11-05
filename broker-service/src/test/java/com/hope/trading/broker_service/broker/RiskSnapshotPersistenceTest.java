@@ -3,6 +3,7 @@ package com.hope.trading.broker_service.broker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hope.trading.broker_service.broker.domain.model.BrokerModels.SnapshotCompleteness;
+import com.hope.trading.broker_service.broker.domain.model.BrokerModels.BrokerAccountSnapshotV2;
 import com.hope.trading.broker_service.broker.infrastructure.persistence.RiskSnapshotPersistence;
 import java.time.Instant;
 import java.util.UUID;
@@ -31,5 +32,18 @@ class RiskSnapshotPersistenceTest {
                 "KRAKEN_OPEN_POSITION_TXID",now)).isEqualTo(firstPosition);
         assertThat(persistence.positionId(secondAccount,"KRAKEN","POSITION-1",
                 "KRAKEN_OPEN_POSITION_TXID",now)).isNotEqualTo(firstPosition);
+    }
+
+    @Test
+    void persistsAndReadsTheLatestCompleteSnapshotPayload() {
+        UUID accountId = UUID.randomUUID();
+        UUID providerReference = UUID.randomUUID();
+        Instant observedAt = Instant.parse("2026-08-01T10:00:00Z");
+        BrokerAccountSnapshotV2 snapshot = new BrokerAccountSnapshotV2(accountId, providerReference,
+                "external-1", java.util.Map.of("USD", java.math.BigDecimal.TEN), java.util.List.of(), observedAt);
+
+        persistence.persist(snapshot);
+
+        assertThat(persistence.latest(accountId)).contains(snapshot);
     }
 }
