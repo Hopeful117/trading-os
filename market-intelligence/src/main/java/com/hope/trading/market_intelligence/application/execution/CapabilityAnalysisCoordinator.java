@@ -68,6 +68,12 @@ public class CapabilityAnalysisCoordinator {
 
     public ConsolidatedIntelligence analyze(
             UUID analysisExecutionId, IntelligenceAnalysisRequest request) {
+        return analyze(analysisExecutionId, request, null);
+    }
+
+    public ConsolidatedIntelligence analyze(
+            UUID analysisExecutionId, IntelligenceAnalysisRequest request,
+            Set<String> requestedCapabilityIds) {
         request = enrichThesis(request);
         Instant startedAt = clock.instant();
         AnalysisExecutionPlan strategy = strategies.strategy(request.mode()).plan(request);
@@ -76,10 +82,13 @@ public class CapabilityAnalysisCoordinator {
         validateRequiredContext(context, requirements);
         Set<ArtifactDescriptor> descriptors = materializeInitialArtifacts(
                 analysisExecutionId, request, context);
-        Set<CapabilityId> selected = new HashSet<>(strategy.capabilityIds().stream()
+        Set<CapabilityId> selected = requestedCapabilityIds == null
+                ? strategy.capabilityIds().stream()
                 .limit(strategy.maximumCapabilities())
                 .map(CapabilityId::new)
-                .collect(java.util.stream.Collectors.toSet()));
+                .collect(java.util.stream.Collectors.toSet())
+                : requestedCapabilityIds.stream().map(CapabilityId::new)
+                .collect(java.util.stream.Collectors.toSet());
         ExecutionControl control = new ExecutionControl();
         controls.put(analysisExecutionId, control);
         try {

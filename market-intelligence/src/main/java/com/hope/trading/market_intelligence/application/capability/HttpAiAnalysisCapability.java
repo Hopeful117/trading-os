@@ -51,12 +51,23 @@ public class HttpAiAnalysisCapability implements AiAnalysisCapability {
     @Override
     public CapabilityAnalysisResult analyze(
             IntelligenceAnalysisRequest request, IntelligenceContext context) {
+        return execute(request, context, false);
+    }
+
+    @Override
+    public CapabilityAnalysisResult analyzeAdaptive(
+            IntelligenceAnalysisRequest request, IntelligenceContext context) {
+        return execute(request, context, true);
+    }
+
+    private CapabilityAnalysisResult execute(
+            IntelligenceAnalysisRequest request, IntelligenceContext context, boolean adaptive) {
         if (request.thesis() == null) {
             return CapabilityAnalysisResult.empty("Market Thesis is required for AI interpretation");
         }
         Instant deadline = Instant.now().plus(Duration.ofSeconds(30));
         AiExecutionReference reference = aiEnginePort.submit(new AiAnalysisCommand(
-                request.analysisId(), List.of(CAPABILITY_ID), context, request.thesis(),
+                request.analysisId(), List.of(CAPABILITY_ID), context, request.thesis(), adaptive,
                 new AnalysisExecutionPolicy(
                         Duration.ofSeconds(30), Duration.ofSeconds(30), 1, 1,
                         new ContextLimits(32, 10_000, 1_000, 8, ContextClassification.PUBLIC),

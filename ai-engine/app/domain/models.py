@@ -152,6 +152,7 @@ class InterpretationRequest(StrictModel):
     policy: ExecutionPolicy
     trace: Trace
     idempotency_key: str = Field(min_length=1, max_length=128)
+    research_mode: str = Field(default="THESIS_INTERPRETATION", pattern="^(THESIS_INTERPRETATION|ADAPTIVE_RESEARCH)$")
 
     @field_validator("capabilities")
     @classmethod
@@ -175,6 +176,14 @@ class Argument(StrictModel):
     evidence_refs: list[UUID] = Field(max_length=32)
 
 
+class RequestedAnalysis(StrictModel):
+    capability_id: str = Field(min_length=1, max_length=120)
+    capability_version: str = Field(min_length=1, max_length=32)
+    market_id: UUID
+    reason: str = Field(min_length=1, max_length=2_000)
+    expected_evidence: str = Field(min_length=1, max_length=2_000)
+
+
 class InterpretationDraft(StrictModel):
     market_summary: str = Field(min_length=1, max_length=4_000)
     primary_scenario: str = Field(min_length=1, max_length=4_000)
@@ -185,6 +194,7 @@ class InterpretationDraft(StrictModel):
     invalidation_conditions: list[str] = Field(max_length=64)
     uncertainty: list[str] = Field(max_length=64)
     suggested_decision: SuggestedDecision
+    requested_analysis: RequestedAnalysis | None = None
 
 
 class InterpretationResult(StrictModel):

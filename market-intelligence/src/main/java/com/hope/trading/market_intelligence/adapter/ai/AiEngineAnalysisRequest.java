@@ -15,6 +15,7 @@ record AiEngineAnalysisRequest(
         MarketThesisWire thesis,
         PolicyWire policy,
         TraceWire trace,
+        String researchMode,
         String idempotencyKey
 ) {
     static AiEngineAnalysisRequest from(
@@ -30,7 +31,8 @@ record AiEngineAnalysisRequest(
                 command.executionId(), command.capabilities(), command.authorizedContext(),
                 MarketThesisWire.from(command.thesis()),
                 PolicyWire.from(command.policy(), contextLimitBytes, maxOutputTokens),
-                TraceWire.from(command.trace()), command.executionId().toString());
+                TraceWire.from(command.trace()), command.adaptive() ? "ADAPTIVE_RESEARCH" : "THESIS_INTERPRETATION",
+                command.executionId().toString());
     }
 
     record MarketThesisWire(

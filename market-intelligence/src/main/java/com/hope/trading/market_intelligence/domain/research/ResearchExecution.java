@@ -66,6 +66,10 @@ public final class ResearchExecution {
         return copy(ResearchExecutionStatus.FAILED, now, now, code, null);
     }
 
+    public ResearchExecution expire(Instant now) {
+        return copy(ResearchExecutionStatus.EXPIRED, now, now, "RESEARCH_EXECUTION_EXPIRED", null);
+    }
+
     public static ResearchExecution restore(
             UUID researchId, UUID actorId, String idempotencyKey, String requestFingerprint,
             List<UUID> marketIds, String objective, String depth, ResearchExecutionStatus status,

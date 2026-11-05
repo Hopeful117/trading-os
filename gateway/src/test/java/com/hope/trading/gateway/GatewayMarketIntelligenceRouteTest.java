@@ -54,6 +54,19 @@ class GatewayMarketIntelligenceRouteTest {
     }
 
     @Test
+    void publicResearchLifecycleRoutesToMarketIntelligence() {
+        UUID researchId = UUID.randomUUID();
+        for (var request : List.of(
+                new Object[] {HttpMethod.POST, "/api/v1/intelligence/research"},
+                new Object[] {HttpMethod.GET, "/api/v1/intelligence/research/" + researchId},
+                new Object[] {HttpMethod.GET, "/api/v1/intelligence/research/" + researchId + "/report"})) {
+            Route route = matchedRoute((HttpMethod) request[0], (String) request[1]);
+            assertThat(route.getId()).isEqualTo("market-intelligence");
+            assertThat(route.getUri()).isEqualTo(URI.create("lb://market-intelligence"));
+        }
+    }
+
+    @Test
     void cTraderBrokerAuthorizationRoutesToBrokerService() {
         Route route = matchedRoute(HttpMethod.POST,
                 "/api/v1/broker-accounts/" + UUID.randomUUID() + "/ctrader/authorization");

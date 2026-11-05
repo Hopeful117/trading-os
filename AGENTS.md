@@ -41,9 +41,13 @@ Trading Core
 Broker Service
 Market Data Service
 Market Intelligence
+News Service
 Risk Domain
 Eureka Server
 Trading OS Web
+AI Engine (shadow-mode, disabled by default)
+MCP Adapter (local stdio client)
+Research ML (offline dataset consumer)
 ```
 
 ### Gateway
@@ -88,6 +92,11 @@ Broker Service must expose broker-neutral contracts.
 
 Kraken-specific payloads, signatures, mappings, transport details, and errors must remain inside the Kraken infrastructure adapter.
 
+cTrader-specific payloads, OAuth details, mappings, transport details, and
+provider errors must remain inside the cTrader infrastructure adapters. The
+`ctrader-openapi-technical` module is an isolated technical codec/support
+module, not a public domain contract.
+
 ### Market Data Service
 
 Responsibilities:
@@ -119,6 +128,24 @@ Responsibilities:
 * analysis orchestration.
 
 Market Intelligence interprets market context but must not override deterministic risk decisions.
+
+### News Service
+
+Responsibilities:
+
+* normalized economic events and news;
+* provider-neutral persistence;
+* controlled context delivery to Market Intelligence.
+
+The current foundation is implemented, but real provider synchronization and
+the complete news/calendar product remain incomplete.
+
+### AI Engine
+
+The Python AI Engine is a disabled-by-default shadow-mode service. It may
+interpret normalized context and produce explanations, but it must not become
+an execution authority, access internal service endpoints directly, or bypass
+deterministic risk and human validation.
 
 ### Risk Domain
 
@@ -212,6 +239,12 @@ The human trader remains responsible for:
 * managing open positions;
 * approving architectural decisions;
 * approving merges and deployments.
+
+### Tool Boundary
+
+Operational commands, local ports, validation scripts, Python environments and
+MCP limitations are documented in `TOOLS.md`. Tooling must not bypass Gateway
+authentication, deterministic risk, human approval or the broker boundary.
 
 ---
 
@@ -549,10 +582,19 @@ Market Data tests
 Market Intelligence tests
 Risk Domain tests
 Gateway tests
+News Service tests
 Angular tests
 Angular production build
+AI Engine tests
+MCP Adapter tests
+Research ML tests
 git diff --check
 ```
+
+The standard Java/frontend validation is provided by `./scripts/test-all.sh`
+and `./scripts/quality-verify.sh`. Python projects and the isolated
+`ctrader-openapi-technical` module require targeted validation; see
+`TOOLS.md`.
 
 Agents must never report a test as passing unless it was actually executed successfully.
 
@@ -583,7 +625,9 @@ Important current areas include:
 * opportunities;
 * trade planning;
 * execution;
-* broker architecture.
+* broker architecture;
+* cTrader boundaries;
+* research lifecycle and MCP responsibility boundaries.
 
 Agents must report conflicts between current code, Stories, and ADRs rather than silently choosing one interpretation.
 
@@ -599,8 +643,8 @@ The highest-value remaining work includes:
 4. Expose Market Intelligence in the frontend.
 5. Make critical Market Intelligence storage durable.
 6. Add configurable and versioned risk profiles.
-7. Add News and economic-calendar capabilities.
-8. Introduce a real explainable AI engine.
+7. Complete News provider synchronization and economic-calendar capabilities.
+8. Integrate and validate an explainable AI engine without expanding its authority.
 9. Add passive and active scanners.
 10. Add active position monitoring.
 
@@ -619,9 +663,11 @@ The repository currently includes:
 * some in-memory state;
 * incomplete Gateway routing;
 * incomplete frontend routes;
-* one broker provider;
-* no real AI Engine;
-* no News Service;
+* Kraken and cTrader adapters with incomplete provider/deployed validation;
+* AI Engine shadow-mode foundation disabled by default;
+* News Service foundation without complete external synchronization;
+* MCP Adapter limited to Gateway-backed reads and bounded research;
+* research/ml limited to offline validated dataset consumption;
 * local-only resilience limits in Broker Service;
 * pending sandbox and deployed E2E validation.
 

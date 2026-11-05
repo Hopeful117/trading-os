@@ -17,14 +17,22 @@
   Engine bean is enabled and a Market Thesis is available.
 - Added MCP mappings for `start_market_research`, `get_research_status` and
   `get_research_report` while preserving the four existing direct tools.
+- Consolidated the MCP identity and documentation: the server is now named
+  `trading-os-research`, and the README distinguishes direct reads from the
+  controlled research lifecycle, including authentication and idempotency.
+- Added explicit Gateway route coverage for the three public research endpoints.
+- Classified AI responses with warnings and no findings as `FAILED`, so timeout
+  and unavailable-provider outcomes are not reported as completed interpretation.
 - Kept the Gateway route boundary unchanged because the existing
   `/api/v1/intelligence/**` public route already covers these endpoints and does
   not expose `/internal/**` routes.
 
 ## Validation
 
-- `mvn -Dtest=ResearchApplicationServiceTest test`: passed, 3 tests.
-- `mvn test`: passed, 847 tests.
+- `mvn -Dtest=ResearchApplicationServiceTest test`: passed, 4 tests.
+- `mvn test` in `market-intelligence`: passed, 848 tests.
+- `mvn test` in `gateway`: passed, 51 tests.
+- `mvn -Dtest=GatewayMarketIntelligenceRouteTest test` in `gateway`: passed, 12 tests.
 - Flyway validation in the integration suite: 19 migrations applied successfully.
 - `python3 -m py_compile app/*.py tests/*.py` in `mcp-adapter`: passed.
 - `mcp-adapter/.venv/bin/pytest`: passed, 29 tests.
@@ -48,9 +56,10 @@
 ## Known Follow-Up Work
 
 - Add an asynchronous worker and explicit cancellation/expiry transitions.
-- Add an end-to-end REST/Gateway integration test for research ownership and
-  report retrieval.
-- Install the MCP adapter test dependencies and run the complete Python suite.
+- Add an end-to-end authenticated REST/Gateway test for research ownership and
+  persisted report retrieval.
+- Replace synchronous request execution with a durable worker-backed lifecycle
+  before adaptive research can issue multiple analysis rounds.
 - Add AI-enabled integration fixtures covering completed, partial, timeout and
   malformed AI results.
 - Decide whether the final report should use a normalized child table instead of

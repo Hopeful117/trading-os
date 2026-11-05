@@ -14,6 +14,9 @@ public record ResearchReport(
         Instant sourceCutoff,
         List<String> hypotheses,
         List<MarketResearchResult> markets,
+        List<AdaptiveCapabilityRecord> requestedCapabilities,
+        List<AdaptiveCapabilityRecord> executedCapabilities,
+        List<AdaptiveCapabilityRecord> rejectedCapabilities,
         List<String> limitations,
         String modelProvenance,
         List<String> diagnostics,
@@ -22,8 +25,23 @@ public record ResearchReport(
     public ResearchReport {
         hypotheses = List.copyOf(hypotheses);
         markets = List.copyOf(markets);
+        requestedCapabilities = List.copyOf(requestedCapabilities);
+        executedCapabilities = List.copyOf(executedCapabilities);
+        rejectedCapabilities = List.copyOf(rejectedCapabilities);
         limitations = List.copyOf(limitations);
         diagnostics = List.copyOf(diagnostics);
+    }
+
+    public record AdaptiveCapabilityRecord(
+            String capabilityId,
+            String capabilityVersion,
+            UUID marketId,
+            String reason,
+            String expectedEvidence,
+            String status,
+            UUID executionId,
+            String diagnostic
+    ) {
     }
 
     public record MarketResearchResult(
