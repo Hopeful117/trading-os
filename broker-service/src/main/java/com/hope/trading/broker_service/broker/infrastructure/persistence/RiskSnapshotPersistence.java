@@ -91,7 +91,7 @@ class RiskSnapshotVersionEntity {
     @Column(name = "broker_account_id", nullable = false, updatable = false) private UUID brokerAccountId;
     @Column(name = "observed_at", nullable = false, updatable = false) private Instant observedAt;
     @Column(name = "completed_at", updatable = false) private Instant completedAt;
-    @Lob @Column(name = "snapshot_payload", updatable = false) private String snapshotPayload;
+    @Column(name = "snapshot_payload", columnDefinition = "text", updatable = false) private String snapshotPayload;
     @Enumerated(EnumType.STRING) @Column(nullable = false, updatable = false)
     private SnapshotCompleteness completeness;
     protected RiskSnapshotVersionEntity() {}
