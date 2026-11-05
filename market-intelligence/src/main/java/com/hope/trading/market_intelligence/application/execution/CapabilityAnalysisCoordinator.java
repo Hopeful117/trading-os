@@ -1,20 +1,24 @@
 package com.hope.trading.market_intelligence.application.execution;
 
 import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
+import com.hope.trading.market_intelligence.application.capability.DisabledAiAnalysisCapability;
 import com.hope.trading.market_intelligence.application.context.IntelligenceContextAssembler;
 import com.hope.trading.market_intelligence.application.planning.ExecutionPlanner;
 import com.hope.trading.market_intelligence.application.planning.PlanningRequest;
 import com.hope.trading.market_intelligence.application.port.ArtifactPersistencePort;
+import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
 import com.hope.trading.market_intelligence.application.strategy.AnalysisExecutionPlan;
 import com.hope.trading.market_intelligence.application.strategy.AnalysisStrategyRegistry;
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent;
+import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
 import com.hope.trading.market_intelligence.domain.artifact.*;
 import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.planning.ArtifactDescriptor;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
 import com.hope.trading.market_intelligence.domain.orderbook.OrderBookLiquidityFeatureSet;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.time.*;
@@ -30,15 +34,18 @@ public class CapabilityAnalysisCoordinator {
     private final ExecutionPlanner planner;
     private final ExecutionEngine engine;
     private final Clock clock;
+    private final MarketThesisRepository theses;
     private final Map<UUID, ExecutionControl> controls = new ConcurrentHashMap<>();
 
+    @Autowired
     public CapabilityAnalysisCoordinator(
             AnalysisStrategyRegistry strategies,
             IntelligenceContextAssembler contexts,
             ArtifactPersistencePort artifacts,
             ExecutionPlanner planner,
             ExecutionEngine engine,
-            Clock clock
+            Clock clock,
+            MarketThesisRepository theses
     ) {
         this.strategies = strategies;
         this.contexts = contexts;
@@ -46,10 +53,22 @@ public class CapabilityAnalysisCoordinator {
         this.planner = planner;
         this.engine = engine;
         this.clock = clock;
+        this.theses = theses;
+    }
+
+    public CapabilityAnalysisCoordinator(
+            AnalysisStrategyRegistry strategies,
+            IntelligenceContextAssembler contexts,
+            ArtifactPersistencePort artifacts,
+            ExecutionPlanner planner,
+            ExecutionEngine engine,
+            Clock clock) {
+        this(strategies, contexts, artifacts, planner, engine, clock, null);
     }
 
     public ConsolidatedIntelligence analyze(
             UUID analysisExecutionId, IntelligenceAnalysisRequest request) {
+        request = enrichThesis(request);
         Instant startedAt = clock.instant();
         AnalysisExecutionPlan strategy = strategies.strategy(request.mode()).plan(request);
         List<ContextRequirement> requirements = strategy.baselineContext();
@@ -67,11 +86,29 @@ public class CapabilityAnalysisCoordinator {
             ExecutionSummary summary = engine.execute(
                     planner.plan(new PlanningRequest(
                             analysisExecutionId, selected, Set.of(), descriptors,
-                             context.fingerprint().value(), request.evaluationCutoff())), control);
+                             context.fingerprint().value(), request.evaluationCutoff(),
+                             request.thesis() == null ? Map.of() : Map.of(
+                                     "marketThesis", request.thesis(), "authorizedContext", context,
+                                     "capabilityTimeout", strategy.timeout()))), control);
             return consolidate(request, context, summary, startedAt, strategy.timeout());
         } finally {
             controls.remove(analysisExecutionId);
         }
+    }
+
+    private IntelligenceAnalysisRequest enrichThesis(IntelligenceAnalysisRequest request) {
+        if (request.thesis() != null || theses == null) return request;
+        var candidates = theses.findByMarket(request.marketId()).stream()
+                .filter(value -> request.evaluationCutoff() == null
+                        || !value.sourceCutoff().isAfter(request.evaluationCutoff()))
+                .toList();
+        var instruments = candidates.stream().map(value -> value.instrument().toLowerCase()).distinct().toList();
+        if (instruments.size() != 1) return request;
+        return candidates.stream()
+                .filter(value -> value.instrument().equalsIgnoreCase(instruments.getFirst()))
+                .max(java.util.Comparator.comparing(MarketThesis::version))
+                .map(request::withThesis)
+                .orElse(request);
     }
 
     private void validateRequiredContext(
@@ -173,11 +210,16 @@ public class CapabilityAnalysisCoordinator {
         List<IntelligenceFinding> findings = terminal.stream()
                 .filter(item -> item.state() == CapabilityExecutionState.COMPLETED)
                 .flatMap(item -> item.result().stream())
+                .flatMap(result -> result.findings().stream())
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        findings.addAll(terminal.stream()
+                .filter(item -> item.state() == CapabilityExecutionState.COMPLETED)
+                .flatMap(item -> item.result().stream())
                 .filter(item -> item.completeness() == CapabilityCompleteness.COMPLETE)
                 .filter(item -> !item.metrics().isEmpty())
                 .filter(this::hasDeterministicMeasurementsArtifact)
                 .map(result -> finding(request, result, completedAt))
-                .toList();
+                .toList());
         List<String> warnings = new ArrayList<>();
         context.sections().values().stream()
                 .filter(item -> item.status() != ContextSectionStatus.AVAILABLE)
@@ -201,7 +243,9 @@ public class CapabilityAnalysisCoordinator {
                 .map(this::summary).toList();
         List<com.hope.trading.market_intelligence.domain.CapabilityExecution> executions = terminal.stream()
                 .map(item -> new com.hope.trading.market_intelligence.domain.CapabilityExecution(
-                        item.capabilityId().value(), AnalysisOrigin.DETERMINISTIC,
+                        item.capabilityId().value(), item.capabilityId().value()
+                                .equals(DisabledAiAnalysisCapability.CAPABILITY_ID)
+                                ? AnalysisOrigin.AI : AnalysisOrigin.DETERMINISTIC,
                         legacyState(item.state()), duration(item),
                         item.failure().map(value -> value.errorCode()).orElse(null)))
                 .toList();

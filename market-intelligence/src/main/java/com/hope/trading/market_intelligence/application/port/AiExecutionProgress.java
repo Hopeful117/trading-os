@@ -7,6 +7,12 @@ public record AiExecutionProgress(
         String status,
         int completedCapabilities,
         int totalCapabilities,
-        Instant updatedAt
+        Instant updatedAt,
+        String errorType
 ) {
+    public AiExecutionProgress(
+            AiExecutionReference reference, String status, int completedCapabilities,
+            int totalCapabilities, Instant updatedAt) {
+        this(reference, status, completedCapabilities, totalCapabilities, updatedAt, null);
+    }
 }

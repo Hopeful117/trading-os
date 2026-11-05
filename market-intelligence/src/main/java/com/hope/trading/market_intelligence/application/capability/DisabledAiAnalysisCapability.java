@@ -3,12 +3,14 @@ package com.hope.trading.market_intelligence.application.capability;
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.application.port.AiEnginePort;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
 @Component
+@ConditionalOnProperty(name = "ai.engine.enabled", havingValue = "false", matchIfMissing = true)
 public class DisabledAiAnalysisCapability implements AiAnalysisCapability {
     public static final String CAPABILITY_ID = "ai-market-reasoning";
     private final AiEnginePort aiEnginePort;

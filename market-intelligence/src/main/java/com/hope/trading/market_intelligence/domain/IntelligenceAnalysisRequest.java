@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.domain;
 
 import java.util.UUID;
 import java.time.Instant;
+import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
 
 public record IntelligenceAnalysisRequest(
         UUID analysisId,
@@ -12,7 +13,8 @@ public record IntelligenceAnalysisRequest(
         UUID scanId,
         UUID scanMarketId,
         Instant evaluationCutoff,
-        EvidenceAcquisitionPolicy evidencePolicy
+        EvidenceAcquisitionPolicy evidencePolicy,
+        MarketThesis thesis
 ) {
     public IntelligenceAnalysisRequest {
         evidencePolicy = evidencePolicy == null
@@ -22,7 +24,7 @@ public record IntelligenceAnalysisRequest(
     public IntelligenceAnalysisRequest(
             UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective) {
         this(analysisId, marketId, mode, objective, null, null, null, null,
-                EvidenceAcquisitionPolicy.LIVE_CURRENT);
+                EvidenceAcquisitionPolicy.LIVE_CURRENT, null);
     }
 
     public IntelligenceAnalysisRequest(
@@ -35,7 +37,7 @@ public record IntelligenceAnalysisRequest(
             UUID scanMarketId
     ) {
         this(analysisId, marketId, mode, objective,
-                accountId, scanId, scanMarketId, null, EvidenceAcquisitionPolicy.LIVE_CURRENT);
+                accountId, scanId, scanMarketId, null, EvidenceAcquisitionPolicy.LIVE_CURRENT, null);
     }
 
     public IntelligenceAnalysisRequest(
@@ -49,18 +51,39 @@ public record IntelligenceAnalysisRequest(
             Instant evaluationCutoff
     ) {
         this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
-                evaluationCutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT);
+                evaluationCutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT, null);
+    }
+
+    public IntelligenceAnalysisRequest(
+            UUID analysisId,
+            UUID marketId,
+            AnalysisExecutionMode mode,
+            String objective,
+            UUID accountId,
+            UUID scanId,
+            UUID scanMarketId,
+            Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy
+    ) {
+        this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
+                evaluationCutoff, evidencePolicy, null);
     }
 
     public IntelligenceAnalysisRequest withEvaluationCutoff(Instant cutoff) {
         return new IntelligenceAnalysisRequest(
                 analysisId(), marketId(), mode(), objective(), accountId(), scanId(),
-                scanMarketId(), cutoff, evidencePolicy());
+                scanMarketId(), cutoff, evidencePolicy(), thesis());
     }
 
     public IntelligenceAnalysisRequest withEvidencePolicy(EvidenceAcquisitionPolicy policy) {
         return new IntelligenceAnalysisRequest(
                 analysisId(), marketId(), mode(), objective(), accountId(), scanId(),
-                scanMarketId(), evaluationCutoff(), policy);
+                scanMarketId(), evaluationCutoff(), policy, thesis());
+    }
+
+    public IntelligenceAnalysisRequest withThesis(MarketThesis value) {
+        return new IntelligenceAnalysisRequest(
+                analysisId(), marketId(), mode(), objective(), accountId(), scanId(), scanMarketId(),
+                evaluationCutoff(), evidencePolicy(), value);
     }
 }
