@@ -62,6 +62,41 @@ def get_opportunities(
     )
 
 
+@mcp.tool()
+def start_market_research(
+    market_ids: Annotated[list[UUID], Field(min_length=2, max_length=2, description="Exactly two canonical market UUIDs.")],
+    objective: Annotated[str, Field(min_length=1, max_length=500, description="Bounded research objective.")],
+    depth: Annotated[Literal["STANDARD", "DEEP"], Field(description="Research depth budget.")] = "STANDARD",
+    idempotency_key: Annotated[str, Field(min_length=1, max_length=200, description="Stable key reused for retries.")] = "",
+) -> str:
+    """Start a bounded Trading OS-owned research workflow; this never authorizes a trade."""
+    if len(market_ids) != 2 or market_ids[0] == market_ids[1]:
+        raise ValueError("market_ids must contain exactly two distinct UUIDs")
+    if not idempotency_key.strip():
+        raise ValueError("idempotency_key is required and must be reused for retries")
+    return client_from_environment().post(
+        "/api/v1/intelligence/research",
+        {"marketIds": [str(value) for value in market_ids], "objective": objective, "depth": depth},
+        idempotency_key,
+    )
+
+
+@mcp.tool()
+def get_research_status(
+    research_id: Annotated[UUID, Field(description="Trading OS research UUID.")],
+) -> str:
+    """Read the status of an owned Trading OS research workflow."""
+    return client_from_environment().get(f"/api/v1/intelligence/research/{research_id}")
+
+
+@mcp.tool()
+def get_research_report(
+    research_id: Annotated[UUID, Field(description="Trading OS research UUID.")],
+) -> str:
+    """Read the structured advisory research report without any execution authority."""
+    return client_from_environment().get(f"/api/v1/intelligence/research/{research_id}/report")
+
+
 def main() -> None:
     mcp.run()
 

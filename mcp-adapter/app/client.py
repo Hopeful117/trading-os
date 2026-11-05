@@ -58,6 +58,40 @@ class TradingOsClient:
         except httpx.RequestError as error:
             raise GatewayClientError("Gateway is unavailable") from error
 
+    def post(self, path: str, payload: dict[str, Any], idempotency_key: str) -> str:
+        parsed = urlparse(self.base_url)
+        if parsed.hostname not in {"127.0.0.1", "localhost", "::1"} and parsed.scheme != "https":
+            raise GatewayClientError("TRADING_OS_GATEWAY_URL must use HTTPS outside localhost")
+        try:
+            response = httpx.post(
+                f"{self.base_url.rstrip('/')}{path}",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {self.jwt}",
+                    "Idempotency-Key": idempotency_key,
+                },
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+            if len(response.content) > self.max_response_bytes:
+                raise GatewayClientError("Gateway response exceeds the configured MCP response limit")
+            try:
+                text = response.content.decode(response.encoding or "utf-8")
+                json.loads(text)
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise GatewayClientError("Gateway returned invalid JSON") from error
+            return text
+        except GatewayClientError:
+            raise
+        except httpx.HTTPStatusError as error:
+            raise GatewayClientError(
+                f"Gateway request failed with HTTP {error.response.status_code}"
+            ) from error
+        except httpx.TimeoutException as error:
+            raise GatewayClientError("Gateway request timed out") from error
+        except httpx.RequestError as error:
+            raise GatewayClientError("Gateway is unavailable") from error
+
 
 def client_from_environment() -> TradingOsClient:
     base_url = os.environ.get("TRADING_OS_GATEWAY_URL", "http://127.0.0.1:17080")

@@ -14,11 +14,18 @@ from app.client import GatewayClientError
 class FakeClient:
     def __init__(self):
         self.calls: list[tuple[str, dict | None]] = []
+        self.post_calls: list[tuple[str, dict, str]] = []
         self.response = '{"source":"gateway"}'
         self.error: GatewayClientError | None = None
 
     def get(self, path: str, params: dict | None = None) -> str:
         self.calls.append((path, params))
+        if self.error is not None:
+            raise self.error
+        return self.response
+
+    def post(self, path: str, payload: dict, idempotency_key: str) -> str:
+        self.post_calls.append((path, payload, idempotency_key))
         if self.error is not None:
             raise self.error
         return self.response
@@ -41,6 +48,9 @@ async def test_server_exposes_exactly_the_read_only_tools(fake_client):
         "get_active_scan",
         "get_market_thesis",
         "get_opportunities",
+        "start_market_research",
+        "get_research_status",
+        "get_research_report",
     }
 
 
@@ -64,14 +74,38 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
             "get_opportunities",
             {"instrument": "BTC/USD", "active_only": True, "limit": 10},
         )
+        await client.call_tool(
+            "start_market_research",
+            {
+                "market_ids": [
+                    "00000000-0000-0000-0000-000000000001",
+                    "00000000-0000-0000-0000-000000000002",
+                ],
+                "objective": "Compare BTC and ETH",
+                "depth": "STANDARD",
+                "idempotency_key": "research-btc-eth-1",
+            },
+        )
+        await client.call_tool(
+            "get_research_status",
+            {"research_id": "00000000-0000-0000-0000-000000000003"},
+        )
+        await client.call_tool(
+            "get_research_report",
+            {"research_id": "00000000-0000-0000-0000-000000000003"},
+        )
 
     assert [path for path, _ in fake_client.calls] == [
         "/api/v1/markets",
         "/api/v1/intelligence/scans/00000000-0000-0000-0000-000000000002",
         "/api/v1/intelligence/market-theses/latest",
         "/api/v1/opportunities",
+        "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003",
+        "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003/report",
     ]
     assert fake_client.calls[3][1]["size"] == 10
+    assert fake_client.post_calls[0][0] == "/api/v1/intelligence/research"
+    assert fake_client.post_calls[0][2] == "research-btc-eth-1"
 
 
 @pytest.mark.asyncio
@@ -235,4 +269,7 @@ async def test_server_starts_over_stdio():
         "get_active_scan",
         "get_market_thesis",
         "get_opportunities",
+        "start_market_research",
+        "get_research_status",
+        "get_research_report",
     }

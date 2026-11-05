@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.adapter.web;
 import com.hope.trading.market_intelligence.application.scan.ActiveScanApplicationService;
 import com.hope.trading.market_intelligence.application.scan.CreateActiveScanCommand;
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService;
+import com.hope.trading.market_intelligence.application.research.ResearchApplicationService;
 import com.hope.trading.market_intelligence.application.observation.TrendContextReadModel;
 import com.hope.trading.market_intelligence.application.observation.TrendContextReadService;
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionService;
@@ -29,6 +30,7 @@ public class MarketIntelligenceController {
     private final ActiveScanApplicationService scans;
     private final com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches;
     private final TrendContextReadService trendContextReads;
+    private final ResearchApplicationService research;
 
     public MarketIntelligenceController(
             AnalysisExecutionService executions,
@@ -36,7 +38,17 @@ public class MarketIntelligenceController {
             ActiveScanApplicationService scans,
             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches
     ) {
-        this(executions, activeScanScopeResolution, scans, matches, null);
+        this(executions, activeScanScopeResolution, scans, matches, null, null);
+    }
+
+    public MarketIntelligenceController(
+            AnalysisExecutionService executions,
+            ActiveScanScopeResolutionService activeScanScopeResolution,
+            ActiveScanApplicationService scans,
+            com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches,
+            TrendContextReadService trendContextReads
+    ) {
+        this(executions, activeScanScopeResolution, scans, matches, trendContextReads, null);
     }
 
     @Autowired
@@ -45,13 +57,15 @@ public class MarketIntelligenceController {
             ActiveScanScopeResolutionService activeScanScopeResolution,
             ActiveScanApplicationService scans,
             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches,
-            TrendContextReadService trendContextReads
+            TrendContextReadService trendContextReads,
+            ResearchApplicationService research
     ) {
         this.executions = executions;
         this.activeScanScopeResolution = activeScanScopeResolution;
         this.scans = scans;
         this.matches = matches;
         this.trendContextReads = trendContextReads;
+        this.research = research;
     }
 
     @PostMapping("/analyses")
@@ -83,6 +97,37 @@ public class MarketIntelligenceController {
                                 + "/trade-plans"
                 ))
                 .body(AnalysisExecutionResponse.from(execution));
+    }
+
+    @PostMapping("/research")
+    public ResponseEntity<ResearchExecutionResponse> startResearch(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            Authentication authentication,
+            @Valid @RequestBody ResearchExecutionRequest request) {
+        ResearchExecutionResponse response = ResearchExecutionResponse.from(
+                research.start(actorId(authentication), idempotencyKey,
+                        new ResearchApplicationService.ResearchRequest(
+                                request.marketIds(), request.objective(), request.depth())));
+        return ResponseEntity.accepted()
+                .location(URI.create("/api/v1/intelligence/research/" + response.researchId()))
+                .body(response);
+    }
+
+    @GetMapping("/research/{researchId}")
+    public ResponseEntity<ResearchExecutionResponse> findResearch(
+            Authentication authentication, @PathVariable UUID researchId) {
+        return ResponseEntity.ok(ResearchExecutionResponse.from(
+                research.findOwned(actorId(authentication), researchId)));
+    }
+
+    @GetMapping("/research/{researchId}/report")
+    public ResponseEntity<?> findResearchReport(
+            Authentication authentication, @PathVariable UUID researchId) {
+        var execution = research.findOwned(actorId(authentication), researchId);
+        if (execution.report() == null) {
+            return ResponseEntity.accepted().body(ResearchExecutionResponse.from(execution));
+        }
+        return ResponseEntity.ok(execution.report());
     }
 
     @PostMapping("/scans/scope")
