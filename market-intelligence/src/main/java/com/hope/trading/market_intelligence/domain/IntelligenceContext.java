@@ -1,5 +1,7 @@
 package com.hope.trading.market_intelligence.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 
 import java.time.Instant;
@@ -9,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public final class IntelligenceContext {
     private final Map<ContextSectionType, ContextSection> sections;
@@ -56,38 +59,55 @@ public final class IntelligenceContext {
         return Optional.ofNullable(sections.get(type));
     }
 
+    @JsonIgnore
     public Map<ContextSectionType, ContextSection> sections() {
         return sections;
     }
 
+    @JsonProperty("sections")
+    public Map<ContextSectionType, ContextSection> publicSections() {
+        return sections.entrySet().stream()
+                .filter(entry -> entry.getValue().sensitivity() == ContextSensitivity.PUBLIC)
+                .collect(Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @JsonProperty
     public Optional<UUID> marketId() {
         return Optional.ofNullable(marketId);
     }
 
+    @JsonProperty
     public Optional<AnalysisExecutionMode> mode() {
         return Optional.ofNullable(mode);
     }
 
+    @JsonProperty
     public Optional<String> objective() {
         return Optional.ofNullable(objective);
     }
 
+    @JsonProperty
     public Optional<Instant> evaluationCutoff() {
         return Optional.ofNullable(evaluationCutoff);
     }
 
+    @JsonProperty
     public String schemaVersion() {
         return schemaVersion;
     }
 
+    @JsonProperty
     public ContextQuality quality() {
         return quality;
     }
 
+    @JsonProperty
     public List<String> diagnostics() {
         return diagnostics;
     }
 
+    @JsonProperty
     public ArtifactFingerprint fingerprint() {
         return fingerprint;
     }
