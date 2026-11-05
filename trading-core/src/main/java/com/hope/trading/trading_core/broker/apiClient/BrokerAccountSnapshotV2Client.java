@@ -24,4 +24,14 @@ public interface BrokerAccountSnapshotV2Client {
     BrokerAccountSnapshotV2Dto getAccountSnapshot(
             @RequestHeader(value = "X-Delegated-Actor", required = false) UUID actorId,
             @PathVariable UUID brokerAccountId);
+
+    @GetMapping("/internal/v2/broker-accounts/{brokerAccountId}/snapshot/latest")
+    default BrokerAccountSnapshotV2Dto getLatestAccountSnapshot(UUID brokerAccountId) {
+        return getLatestAccountSnapshot(null, brokerAccountId);
+    }
+
+    @GetMapping("/internal/v2/broker-accounts/{brokerAccountId}/snapshot/latest")
+    BrokerAccountSnapshotV2Dto getLatestAccountSnapshot(
+            @RequestHeader(value = "X-Delegated-Actor", required = false) UUID actorId,
+            @PathVariable UUID brokerAccountId);
 }
