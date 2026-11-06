@@ -10,8 +10,11 @@ import com.hope.trading.market_intelligence.application.capability.CapabilityAna
 import com.hope.trading.market_intelligence.application.capability.HttpAiAnalysisCapability;
 import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
 import com.hope.trading.market_intelligence.application.port.RequestedAnalysis;
+import com.hope.trading.market_intelligence.application.port.AiHypothesisReconciliation;
+import com.hope.trading.market_intelligence.application.port.AiSynthesisContext;
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
+import com.hope.trading.market_intelligence.domain.research.ResearchReport;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
 import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.Test;
@@ -124,6 +127,34 @@ class ResearchApplicationServiceTest {
     }
 
     @Test
+    void deserializesPreFinalSynthesisMarketReportsWithCompatibilityDefaults() throws Exception {
+        String legacy = """
+                {
+                  "marketId":"11111111-1111-1111-1111-111111111111",
+                  "provider":"KRAKEN",
+                  "instrument":"BTC/USD",
+                  "productType":"SPOT",
+                  "status":"COMPLETE",
+                  "freshness":"CURRENT",
+                  "supportingEvidence":[],
+                  "contradictingEvidence":[],
+                  "missingEvidence":[],
+                  "invalidationConditions":[],
+                  "aiStatus":"DISABLED",
+                  "diagnostics":[]
+                }
+                """;
+
+        ResearchReport.MarketResearchResult report = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .readValue(legacy, ResearchReport.MarketResearchResult.class);
+
+        assertThat(report.reconciliations()).isEmpty();
+        assertThat(report.finalAiInterpretation()).isNull();
+        assertThat(report.followUpEvidence()).isNull();
+    }
+
+    @Test
     void enforcesOneAdaptiveFollowUpAcrossTheResearchExecution() {
         HttpAiAnalysisCapability aiCapability = mock(HttpAiAnalysisCapability.class);
         ObjectProvider<HttpAiAnalysisCapability> aiProvider = mock(ObjectProvider.class);
@@ -152,9 +183,53 @@ class ResearchApplicationServiceTest {
                         List.of(firstMarket, secondMarket), "Compare BTC and ETH", "STANDARD"));
 
         assertThat(execution.report().get("executedCapabilities")).as("report=%s", execution.report()).hasSize(1);
-        assertThat(execution.report().get("rejectedCapabilities")).hasSize(1);
-        assertThat(execution.report().get("rejectedCapabilities").get(0).get("diagnostic").asText())
-                .isEqualTo("ADAPTIVE_BUDGET_EXHAUSTED");
+        assertThat(execution.report().get("rejectedCapabilities")).isEmpty();
+    }
+
+    @Test
+    void sendsActualFollowUpEvidenceToFinalSynthesisAndPersistsReconciliation() {
+        HttpAiAnalysisCapability aiCapability = mock(HttpAiAnalysisCapability.class);
+        ObjectProvider<HttpAiAnalysisCapability> aiProvider = mock(ObjectProvider.class);
+        when(aiProvider.getIfAvailable()).thenReturn(aiCapability);
+        RequestedAnalysis requested = new RequestedAnalysis(
+                "market-structure-analysis", "1.1.0", firstMarket,
+                "Test market structure", "Structure levels");
+        when(aiCapability.analyzeAdaptive(any(), any())).thenReturn(
+                new CapabilityAnalysisResult(List.of(aiFinding("initial")), List.of(), requested));
+        when(aiCapability.analyzeFinal(any(), any(), any())).thenAnswer(invocation -> {
+            AiSynthesisContext context = invocation.getArgument(2);
+            UUID followUpEvidence = context.followUpEvidence().findings().get(0).evidenceReferences().get(0);
+            return new CapabilityAnalysisResult(
+                    List.of(aiFinding("final")), List.of(), null,
+                    List.of(new AiHypothesisReconciliation(
+                            "hypothesis-0", "Initial structure hypothesis", "STRENGTHENED",
+                            "Follow-up evidence supports the initial hypothesis.", List.of(followUpEvidence))));
+        });
+        when(marketData.findMarket(firstMarket)).thenReturn(market(firstMarket, "BTC/USD"));
+        when(marketData.findMarket(secondMarket)).thenReturn(market(secondMarket, "ETH/USD"));
+        MarketThesis marketThesis = thesis();
+        when(theses.findByMarket(any())).thenReturn(List.of(marketThesis));
+        when(analysis.analyze(any(), any())).thenReturn(new ConsolidatedIntelligence(
+                UUID.randomUUID(), firstMarket, AnalysisExecutionMode.PASSIVE,
+                IntelligenceExecutionStatus.COMPLETE, List.of(), List.of(), List.of(), null));
+        when(analysis.analyze(any(), any(), any())).thenReturn(new ConsolidatedIntelligence(
+                UUID.randomUUID(), firstMarket, AnalysisExecutionMode.PASSIVE,
+                IntelligenceExecutionStatus.COMPLETE, List.of(), List.of(aiFinding("follow-up")), List.of(), null));
+
+        ResearchApplicationService serviceWithAi = new ResearchApplicationService(
+                new InMemoryResearchExecutionRepository(), marketData, theses, analysis,
+                new ObjectMapper().registerModule(new JavaTimeModule()), clock, aiProvider);
+
+        var execution = serviceWithAi.start(actor, "adaptive-synthesis-key",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket, secondMarket), "Compare BTC and ETH", "STANDARD"));
+
+        var marketReport = execution.report().get("markets").get(0);
+        assertThat(marketReport.get("finalAiInterpretation")).isNotNull();
+        assertThat(marketReport.get("reconciliations")).hasSize(1);
+        assertThat(execution.report().get("executedCapabilities").get(0)
+                .get("interpretationEffect").asText()).isEqualTo("STRENGTHENED");
+        verify(aiCapability).analyzeFinal(any(), any(), any());
     }
 
     @Test
@@ -181,7 +256,7 @@ class ResearchApplicationServiceTest {
                 new ResearchApplicationService.ResearchRequest(
                         List.of(firstMarket, secondMarket), "Compare BTC and ETH", "STANDARD"));
 
-        assertThat(execution.report().get("rejectedCapabilities")).hasSize(2);
+        assertThat(execution.report().get("rejectedCapabilities")).hasSize(1);
         assertThat(execution.report().get("rejectedCapabilities").get(0).get("diagnostic").asText())
                 .isEqualTo("ADAPTIVE_REQUEST_MALFORMED");
         assertThat(execution.report().get("markets").get(0).get("aiStatus").asText())
@@ -199,6 +274,12 @@ class ResearchApplicationServiceTest {
         when(thesis.missingEvidence()).thenReturn(List.of());
         when(thesis.scenario()).thenReturn(java.util.Optional.empty());
         return thesis;
+    }
+
+    private IntelligenceFinding aiFinding(String id) {
+        return new IntelligenceFinding(id, "test-capability", AnalysisOrigin.AI,
+                FindingType.AI_FINDING, id, "Evidence-backed finding", java.util.Map.of(), null,
+                java.util.Set.of(ContextSectionType.DETERMINISTIC_FINDINGS), clock.instant());
     }
 
     private MarketResponse market(UUID id, String symbol) {

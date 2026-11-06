@@ -15,6 +15,7 @@ import static com.hope.trading.market_intelligence.application.research.evaluati
 public final class ResearchEvaluationFixtures {
     private static final UUID BTC = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID ETH = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID FOLLOW_UP = UUID.fromString("00000000-0000-0000-0000-000000000003");
 
     private ResearchEvaluationFixtures() {
     }
@@ -26,7 +27,8 @@ public final class ResearchEvaluationFixtures {
                 new ResearchEvaluation.Scenario("C-missing-evidence", SYNTHETIC, false, true, false, false, false),
                 new ResearchEvaluation.Scenario("D-stale-market-data", SYNTHETIC, false, false, true, true, false),
                 new ResearchEvaluation.Scenario("E-comparative-markets", SYNTHETIC, true, false, false, true, false),
-                new ResearchEvaluation.Scenario("F-adaptive-investigation", SYNTHETIC, false, true, false, true, true)
+                new ResearchEvaluation.Scenario("F-adaptive-investigation", SYNTHETIC, false, true, false, true, true),
+                new ResearchEvaluation.Scenario("G-no-follow-up", SYNTHETIC, false, false, false, true, false)
         );
     }
 
@@ -44,10 +46,12 @@ public final class ResearchEvaluationFixtures {
                 "E-comparative-markets", report(mapper, List.of(
                         market(mapper, BTC, "BTC/USD", "CURRENT", List.of(evidence(mapper, BTC, "SUPPORTING")), List.of(), List.of(), List.of("relative strength changes")),
                         market(mapper, ETH, "ETH/USD", "CURRENT", List.of(), List.of(evidence(mapper, ETH, "CONTRADICTING")), List.of(), List.of("relative strength changes"))), List.of()),
-                "F-adaptive-investigation", report(mapper, List.of(market(mapper, BTC, "BTC/USD", "CURRENT", List.of(), List.of(),
-                        List.of(evidence(mapper, BTC, "MISSING")), List.of("fixture invalidation"))),
-                        List.of(new ResearchReport.AdaptiveCapabilityRecord("market-structure-analysis", "1.1.0", BTC,
-                                "resolve trend ambiguity", "market structure levels", "COMPLETE", UUID.randomUUID(), null))));
+                "F-adaptive-investigation", report(mapper, List.of(adaptiveMarket(mapper)),
+                         List.of(new ResearchReport.AdaptiveCapabilityRecord("market-structure-analysis", "1.1.0", BTC,
+                                 "resolve trend ambiguity", "market structure levels", "COMPLETE", UUID.randomUUID(), null,
+                                 "STRENGTHENED"))),
+                "G-no-follow-up", report(mapper, List.of(market(mapper, BTC, "BTC/USD", "CURRENT",
+                        List.of(evidence(mapper, BTC, "SUPPORTING")), List.of(), List.of(), List.of("breaks support"))), List.of()));
     }
 
     private static ResearchReport report(ObjectMapper mapper,
@@ -79,7 +83,33 @@ public final class ResearchEvaluationFixtures {
                         .put("evaluatedAt", "2026-11-05T12:00:00Z")
                         .put("sourceCutoff", "2026-11-05T11:00:00Z")
                         .put("inputFingerprint", "synthetic-input"),
-                supporting, contradicting, missing, invalidation, "DISABLED", null, List.of());
+                 supporting, contradicting, missing, invalidation, "DISABLED", null, List.of());
+    }
+
+    private static ResearchReport.MarketResearchResult adaptiveMarket(ObjectMapper mapper) {
+        ResearchReport.MarketResearchResult base = market(mapper, BTC, "BTC/USD", "CURRENT", List.of(), List.of(),
+                List.of(evidence(mapper, BTC, "MISSING")), List.of("fixture invalidation"));
+        JsonNode followUp = mapper.createObjectNode().set("findings", mapper.createArrayNode().add(
+                mapper.createObjectNode().put("findingId", FOLLOW_UP.toString())
+                        .put("description", "Structure supports the initial hypothesis")
+                        .put("type", "AI_FINDING")
+                        .set("evidenceReferences", mapper.createArrayNode().add(FOLLOW_UP.toString()))));
+        JsonNode finalInterpretation = mapper.createObjectNode().set("findings", mapper.createArrayNode().add(
+                mapper.createObjectNode().put("findingId", "final-finding")
+                        .put("description", "Follow-up strengthened the hypothesis")
+                        .put("type", "AI_FINDING")
+                        .put("title", "supporting")
+                        .set("evidenceReferences", mapper.createArrayNode().add(FOLLOW_UP.toString()))));
+        return new ResearchReport.MarketResearchResult(
+                base.marketId(), base.provider(), base.instrument(), base.productType(), base.status(),
+                base.thesisId(), base.thesisVersion(), base.deterministicAnalysis(), base.freshness(),
+                base.provenance(), base.supportingEvidence(), base.contradictingEvidence(), base.missingEvidence(),
+                base.invalidationConditions(), "COMPLETED", base.aiInterpretation(), base.diagnostics(),
+                finalInterpretation,
+                List.of(new ResearchReport.HypothesisReconciliation(
+                        "hypothesis-0", "fixture hypothesis", "STRENGTHENED",
+                        "Follow-up evidence strengthened the hypothesis", List.of(FOLLOW_UP))),
+                followUp);
     }
 
     private static JsonNode evidence(ObjectMapper mapper, UUID marketId, String role) {

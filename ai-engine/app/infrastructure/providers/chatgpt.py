@@ -38,7 +38,7 @@ class ChatGptOAuthProvider:
                 credential = self._oauth.refresh(credential)
             if not {"resource.invoke", "chatgpt.tokens.use.direct"}.issubset(set(credential.scopes.split())):
                 raise ChatGptProviderError("ChatGPT plan authorization is incomplete")
-            evidence_ids = [str(item.evidence_id) for item in request.thesis.evidence]
+            evidence_ids = self._authorized_evidence_ids(request)
             body = {
                 "model": self.model,
                 "store": False,
@@ -61,6 +61,16 @@ class ChatGptOAuthProvider:
             raise ChatGptProviderError(str(error)) from error
         except (httpx.HTTPError, ValueError, KeyError, json.JSONDecodeError) as error:
             raise ChatGptProviderError("ChatGPT provider request failed") from error
+
+    @staticmethod
+    def _authorized_evidence_ids(request: InterpretationRequest) -> list[str]:
+        evidence_ids = {str(item.evidence_id) for item in request.thesis.evidence}
+        if request.synthesis_context is not None:
+            for finding in request.synthesis_context.initial_findings:
+                evidence_ids.update(str(value) for value in finding.evidence_references)
+            for finding in request.synthesis_context.follow_up_evidence.findings:
+                evidence_ids.update(str(value) for value in finding.evidence_references)
+        return sorted(evidence_ids)
 
     def _stream(self, access_token: str, body: dict) -> str:
         chunks: list[str] = []

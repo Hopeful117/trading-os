@@ -9,6 +9,9 @@ import com.hope.trading.market_intelligence.application.capability.CapabilityAna
 import com.hope.trading.market_intelligence.application.capability.HttpAiAnalysisCapability;
 import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
 import com.hope.trading.market_intelligence.application.port.ResearchExecutionRepository;
+import com.hope.trading.market_intelligence.application.port.AiHypothesisReconciliation;
+import com.hope.trading.market_intelligence.application.port.AiSynthesisContext;
+import com.hope.trading.market_intelligence.application.port.RequestedAnalysis;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
@@ -190,6 +193,8 @@ public class ResearchApplicationService {
         List<ResearchReport.AdaptiveCapabilityRecord> rejectedCapabilities = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
         boolean followUpUsed = false;
+        boolean initialAiUsed = false;
+        boolean finalAiUsed = false;
         for (UUID marketId : request.marketIds()) {
             MarketResponse market;
             try {
@@ -222,6 +227,9 @@ public class ResearchApplicationService {
             ConsolidatedIntelligence deterministic = null;
             String aiStatus = "DISABLED";
             JsonNode aiInterpretation = null;
+            JsonNode finalAiInterpretation = null;
+            List<ResearchReport.HypothesisReconciliation> reconciliations = List.of();
+            JsonNode followUpEvidence = null;
             String freshness = thesis.map(value -> value.validUntil()
                             .map(until -> clock.instant().isBefore(until) ? "CURRENT" : "STALE")
                             .orElse("UNKNOWN"))
@@ -253,8 +261,9 @@ public class ResearchApplicationService {
             if (thesis.isEmpty()) {
                 marketDiagnostics.add("MARKET_THESIS_MISSING");
                 aiStatus = "NOT_REQUESTED";
-            } else if (ai != null && ai.getIfAvailable() != null) {
+            } else if (ai != null && ai.getIfAvailable() != null && !initialAiUsed) {
                 HttpAiAnalysisCapability aiCapability = ai.getIfAvailable();
+                initialAiUsed = true;
                 try {
                     CapabilityAnalysisResult interpreted = aiCapability.analyzeAdaptive(
                             new IntelligenceAnalysisRequest(
@@ -262,8 +271,10 @@ public class ResearchApplicationService {
                                     request.objective(), null, researchId, null, clock.instant(),
                                     EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElseThrow()),
                             new com.hope.trading.market_intelligence.domain.IntelligenceContext(Map.of()));
-                    com.hope.trading.market_intelligence.application.port.RequestedAnalysis requested =
-                            interpreted.requestedAnalysis();
+                    RequestedAnalysis requested = interpreted.requestedAnalysis();
+                    ConsolidatedIntelligence followUp = null;
+                    UUID followUpId = null;
+                    String followUpStatus = null;
                     if (requested != null) {
                         ResearchReport.AdaptiveCapabilityRecord requestedRecord =
                                 new ResearchReport.AdaptiveCapabilityRecord(
@@ -296,18 +307,22 @@ public class ResearchApplicationService {
                             marketDiagnostics.add(rejection);
                         } else {
                             followUpUsed = true;
-                            UUID followUpId = UUID.randomUUID();
-                            ConsolidatedIntelligence followUp = analysis.analyze(followUpId,
-                                    new IntelligenceAnalysisRequest(
-                                            followUpId, marketId, AnalysisExecutionMode.PASSIVE,
-                                            requested.reason(), null, researchId, null,
-                                            clock.instant(), EvidenceAcquisitionPolicy.LIVE_CURRENT,
-                                            thesis.orElseThrow()), Set.of(requested.capabilityId()));
-                            String followUpStatus = followUp.status().name();
-                            executedCapabilities.add(new ResearchReport.AdaptiveCapabilityRecord(
-                                    requested.capabilityId(), requested.capabilityVersion(), requested.marketId(),
-                                    requested.reason(), requested.expectedEvidence(), followUpStatus,
-                                    followUpId, null));
+                            followUpId = UUID.randomUUID();
+                            try {
+                                followUp = analysis.analyze(followUpId,
+                                        new IntelligenceAnalysisRequest(
+                                                followUpId, marketId, AnalysisExecutionMode.PASSIVE,
+                                                requested.reason(), null, researchId, null,
+                                                clock.instant(), EvidenceAcquisitionPolicy.LIVE_CURRENT,
+                                                thesis.orElseThrow()), Set.of(requested.capabilityId()));
+                                followUpStatus = followUp == null ? "FAILED" : followUp.status().name();
+                            } catch (RuntimeException exception) {
+                                followUpStatus = "FAILED";
+                                marketDiagnostics.add("FOLLOW_UP_ANALYSIS_FAILED");
+                            }
+                            if (followUp != null) {
+                                followUpEvidence = mapper.valueToTree(followUp);
+                            }
                         }
                     }
                     if (interpreted.findings().isEmpty()) {
@@ -319,6 +334,48 @@ public class ResearchApplicationService {
                         aiStatus = interpreted.warnings().isEmpty() ? "COMPLETED" : "PARTIAL";
                     }
                     aiInterpretation = mapper.valueToTree(interpreted);
+                    if (!finalAiUsed && requested != null && followUpId != null && followUp != null
+                            && !interpreted.findings().isEmpty()) {
+                        finalAiUsed = true;
+                        AiSynthesisContext synthesisContext = synthesisContext(
+                                request, marketId, thesis.orElseThrow(), interpreted, requested,
+                                followUpId, followUp);
+                        followUpEvidence = mapper.valueToTree(synthesisContext.followUpEvidence());
+                        try {
+                            CapabilityAnalysisResult finalInterpretation = aiCapability.analyzeFinal(
+                                    new IntelligenceAnalysisRequest(
+                                            UUID.randomUUID(), marketId, AnalysisExecutionMode.PASSIVE,
+                                            request.objective(), null, researchId, null, clock.instant(),
+                                            EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElseThrow()),
+                                    new com.hope.trading.market_intelligence.domain.IntelligenceContext(Map.of()),
+                                    synthesisContext);
+                            if (finalInterpretation == null || finalInterpretation.requestedAnalysis() != null) {
+                                marketDiagnostics.add("FINAL_SYNTHESIS_UNSUPPORTED");
+                            } else if (finalInterpretation.findings().isEmpty()
+                                    || !validReconciliations(finalInterpretation.reconciliations(), synthesisContext,
+                                    thesis.orElseThrow().evidence().stream()
+                                            .map(com.hope.trading.market_intelligence.domain.thesis.MarketThesisEvidence::evidenceId)
+                                            .collect(java.util.stream.Collectors.toSet()))) {
+                                marketDiagnostics.add("FINAL_SYNTHESIS_UNSUPPORTED");
+                            } else {
+                                finalAiInterpretation = mapper.valueToTree(finalInterpretation);
+                                reconciliations = finalInterpretation.reconciliations().stream()
+                                        .map(this::toReportReconciliation).toList();
+                                aiStatus = finalInterpretation.warnings().isEmpty() ? "COMPLETED" : "PARTIAL";
+                            }
+                        } catch (RuntimeException exception) {
+                            marketDiagnostics.add("FINAL_SYNTHESIS_FAILED");
+                        }
+                    }
+                    if (requested != null && followUpId != null) {
+                        String effect = finalAiInterpretation == null
+                                ? "FINAL_SYNTHESIS_FAILED" : interpretationEffect(reconciliations);
+                        executedCapabilities.add(new ResearchReport.AdaptiveCapabilityRecord(
+                                requested.capabilityId(), requested.capabilityVersion(), requested.marketId(),
+                                requested.reason(), requested.expectedEvidence(), followUpStatus,
+                                followUpId, finalAiInterpretation == null ? "FINAL_SYNTHESIS_UNAVAILABLE" : null,
+                                effect));
+                    }
                 } catch (RuntimeException exception) {
                     aiStatus = "FAILED";
                     marketDiagnostics.add("AI_INTERPRETATION_FAILED");
@@ -342,9 +399,12 @@ public class ResearchApplicationService {
                             .map(value -> value.invalidationConditions().stream()
                                     .map(condition -> condition.explanation()).toList())
                             .orElse(List.of()),
-                    aiStatus,
-                    aiInterpretation,
-                    marketDiagnostics));
+                     aiStatus,
+                     aiInterpretation,
+                     marketDiagnostics,
+                     finalAiInterpretation,
+                     reconciliations,
+                     followUpEvidence));
         }
         long completed = results.stream().filter(value -> "COMPLETE".equals(value.status())).count();
         Instant sourceCutoff = request.marketIds().stream()
@@ -369,6 +429,100 @@ public class ResearchApplicationService {
                 List.of("This report is advisory and does not authorize a trade.",
                         "No calibrated probability or profitability claim is produced."),
                 "existing-ai-engine-contract:v1", diagnostics, conclusion);
+    }
+
+    private AiSynthesisContext synthesisContext(
+            ResearchRequest request, UUID marketId, MarketThesis thesis,
+            CapabilityAnalysisResult initial, RequestedAnalysis requested,
+            UUID followUpId, ConsolidatedIntelligence followUp) {
+        List<AiSynthesisContext.AiSynthesisFinding> initialFindings = initial.findings().stream()
+                .map(value -> new AiSynthesisContext.AiSynthesisFinding(
+                        value.findingId(), value.title(), value.description(),
+                        value.evidenceReferences().stream().toList()))
+                .toList();
+        List<AiSynthesisContext.AiSynthesisFinding> followUpFindings = followUp.findings().stream()
+                .map(value -> {
+                    UUID generatedEvidenceId = UUID.nameUUIDFromBytes(
+                            (followUpId + ":" + value.findingId()).getBytes(StandardCharsets.UTF_8));
+                    Set<UUID> evidence = new LinkedHashSet<>(value.evidenceReferences());
+                    evidence.add(generatedEvidenceId);
+                    return new AiSynthesisContext.AiSynthesisFinding(
+                            generatedEvidenceId.toString(), value.title(), value.description(), evidence.stream().toList());
+                }).toList();
+        return new AiSynthesisContext(
+                request.objective(), marketId,
+                thesis.scenario().map(value -> List.of(value.statement())).orElse(List.of()),
+                initialFindings, requested,
+                new AiSynthesisContext.FollowUpEvidence(
+                        followUpId, requested.capabilityId(), requested.capabilityVersion(),
+                        followUp.status().name(),
+                        followUp.executionMetadata() == null ? clock.instant() : followUp.executionMetadata().completedAt(),
+                        thesis.inputFingerprint(), followUpFindings, followUp.warnings()));
+    }
+
+    private boolean validReconciliations(
+            List<AiHypothesisReconciliation> reconciliations, AiSynthesisContext context,
+            Set<UUID> thesisEvidenceIds) {
+        Set<UUID> allowed = new HashSet<>();
+        allowed.addAll(thesisEvidenceIds);
+        boolean initialReferencesValid = context.initialFindings().stream()
+                .allMatch(value -> thesisEvidenceIds.containsAll(value.evidenceReferences()));
+        if (!initialReferencesValid) return false;
+        context.initialFindings().forEach(value -> allowed.addAll(value.evidenceReferences()));
+        context.followUpEvidence().findings().forEach(value -> allowed.addAll(value.evidenceReferences()));
+        Set<UUID> followUpEvidenceIds = context.followUpEvidence().findings().stream()
+                .map(AiSynthesisContext.AiSynthesisFinding::findingId)
+                .map(this::parseUuid)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<String> effects = Set.of("CONFIRMED", "STRENGTHENED", "WEAKENED", "INVALIDATED",
+                "UNCHANGED", "INCONCLUSIVE");
+        return reconciliations.stream().allMatch(value -> value.evidenceReferences() != null
+                && validAdaptiveText(value.hypothesisId(), 200)
+                && validAdaptiveText(value.hypothesis(), 4_000)
+                && validAdaptiveText(value.explanation(), 4_000)
+                && effects.contains(value.effect())
+                && ("UNCHANGED".equals(value.effect()) || "INCONCLUSIVE".equals(value.effect())
+                || (!value.evidenceReferences().isEmpty()
+                && !Collections.disjoint(value.evidenceReferences(), followUpEvidenceIds)))
+                && allowed.containsAll(value.evidenceReferences()));
+    }
+
+    private ResearchReport.HypothesisReconciliation toReportReconciliation(
+            AiHypothesisReconciliation value) {
+        return new ResearchReport.HypothesisReconciliation(value.hypothesisId(), value.hypothesis(),
+                value.effect(), value.explanation(), value.evidenceReferences());
+    }
+
+    private String interpretationEffect(List<ResearchReport.HypothesisReconciliation> reconciliations) {
+        if (reconciliations.isEmpty()
+                || reconciliations.stream().allMatch(value -> "UNCHANGED".equals(value.effect()))) {
+            return "NO_MATERIAL_CHANGE";
+        }
+        if (reconciliations.stream().allMatch(value -> "INCONCLUSIVE".equals(value.effect()))) {
+            return "INCONCLUSIVE";
+        }
+        if (reconciliations.stream().allMatch(value -> "CONFIRMED".equals(value.effect()))) {
+            return "CONFIRMED";
+        }
+        if (reconciliations.stream().allMatch(value -> "STRENGTHENED".equals(value.effect()))) {
+            return "STRENGTHENED";
+        }
+        if (reconciliations.stream().allMatch(value -> "WEAKENED".equals(value.effect()))) {
+            return "WEAKENED";
+        }
+        if (reconciliations.stream().allMatch(value -> "INVALIDATED".equals(value.effect()))) {
+            return "INVALIDATED";
+        }
+        return "SUPPORTED_REVISION";
+    }
+
+    private UUID parseUuid(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 
     private Optional<MarketThesis> latestThesis(UUID marketId) {

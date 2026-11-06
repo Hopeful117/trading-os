@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.adapter.ai;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import com.hope.trading.market_intelligence.application.port.AiHypothesisReconciliation;
 
 record AiEngineAcceptedResponse(UUID executionId, String status, Instant acceptedAt) {
 }
@@ -34,8 +35,25 @@ record InterpretationWire(
         List<String> invalidationConditions,
         List<String> uncertainty,
         String suggestedDecision,
-        RequestedAnalysisWire requestedAnalysis
+        RequestedAnalysisWire requestedAnalysis,
+        List<AiHypothesisReconciliation> reconciliations
 ) {
+    InterpretationWire(
+            String marketSummary,
+            String primaryScenario,
+            List<ArgumentWire> supportingArguments,
+            List<ArgumentWire> contradictions,
+            List<String> missingInformation,
+            List<String> confirmationConditions,
+            List<String> invalidationConditions,
+            List<String> uncertainty,
+            String suggestedDecision,
+            RequestedAnalysisWire requestedAnalysis) {
+        this(marketSummary, primaryScenario, supportingArguments, contradictions,
+                missingInformation, confirmationConditions, invalidationConditions,
+                uncertainty, suggestedDecision, requestedAnalysis, List.of());
+    }
+
     InterpretationWire(
             String marketSummary,
             String primaryScenario,
@@ -48,7 +66,7 @@ record InterpretationWire(
             String suggestedDecision) {
         this(marketSummary, primaryScenario, supportingArguments, contradictions,
                 missingInformation, confirmationConditions, invalidationConditions,
-                uncertainty, suggestedDecision, null);
+                uncertainty, suggestedDecision, null, List.of());
     }
 }
 

@@ -85,6 +85,23 @@ public final class ResearchEvaluation {
                 }
             }
             collectAiReferences(market.aiInterpretation(), claimEvidenceIds, diagnostics);
+            Set<UUID> authorizedEvidenceIds = new HashSet<>(claimEvidenceIds);
+            collectEvidenceReferences(market.followUpEvidence(), authorizedEvidenceIds);
+            collectAiReferences(market.finalAiInterpretation(), authorizedEvidenceIds, diagnostics);
+            Set<UUID> followUpEvidenceIds = followUpEvidenceIds(market.followUpEvidence());
+            for (ResearchReport.HypothesisReconciliation reconciliation : market.reconciliations()) {
+                if (reconciliation.evidenceReferences().stream().anyMatch(value -> !authorizedEvidenceIds.contains(value))) {
+                    diagnostics.add("hypothesis reconciliation references unknown evidence");
+                }
+                if (!List.of("UNCHANGED", "INCONCLUSIVE").contains(reconciliation.effect())
+                        && reconciliation.evidenceReferences().isEmpty()) {
+                    diagnostics.add("hypothesis revision has no supporting evidence reference");
+                }
+                if (!List.of("UNCHANGED", "INCONCLUSIVE").contains(reconciliation.effect())
+                        && java.util.Collections.disjoint(reconciliation.evidenceReferences(), followUpEvidenceIds)) {
+                    diagnostics.add("hypothesis revision does not reference follow-up evidence");
+                }
+            }
         }
         return result("evidence-grounding", diagnostics);
     }
@@ -182,12 +199,22 @@ public final class ResearchEvaluation {
 
     private static CriterionResult followUpEffect(Scenario scenario, ResearchReport report) {
         if (!scenario.expectsFollowUp()) return result("follow-up-effect", List.of());
+        Set<String> validEffects = Set.of("CONFIRMED", "STRENGTHENED", "WEAKENED", "INVALIDATED",
+                "UNCHANGED", "INCONCLUSIVE", "SUPPORTED_REVISION", "NO_MATERIAL_CHANGE");
+        boolean invalid = report.executedCapabilities().stream()
+                .anyMatch(value -> value.interpretationEffect() == null
+                        || !validEffects.contains(value.interpretationEffect()));
         boolean notReevaluated = report.executedCapabilities().stream()
                 .anyMatch(value -> value.interpretationEffect() == null
-                        || "NOT_REEVALUATED".equals(value.interpretationEffect()));
-        return notReevaluated
+                        || "NOT_REEVALUATED".equals(value.interpretationEffect())
+                        || "FINAL_SYNTHESIS_FAILED".equals(value.interpretationEffect()));
+        boolean finalSynthesisMissing = report.executedCapabilities().stream()
+                .anyMatch(value -> report.markets().stream().anyMatch(market ->
+                        java.util.Objects.equals(market.marketId(), value.marketId())
+                                && (market.finalAiInterpretation() == null || market.reconciliations().isEmpty())));
+        return invalid || notReevaluated || finalSynthesisMissing
                 ? new CriterionResult("follow-up-effect", Outcome.INSUFFICIENT_EVIDENCE,
-                List.of("follow-up evidence was executed but no final interpretation reevaluation was recorded"))
+                List.of("follow-up evidence was executed but final interpretation was unavailable"))
                 : result("follow-up-effect", List.of());
     }
 
@@ -206,6 +233,36 @@ public final class ResearchEvaluation {
         evidence.addAll(market.contradictingEvidence());
         evidence.addAll(market.missingEvidence());
         return evidence;
+    }
+
+    private static void collectEvidenceReferences(JsonNode node, Set<UUID> target) {
+        if (node == null || node.isNull()) return;
+        if (node.isObject()) {
+            JsonNode references = node.get("evidenceReferences");
+            if (references != null && references.isArray()) {
+                references.forEach(value -> {
+                    if (value.isTextual()) parseUuid(value.asText(), target);
+                });
+            }
+            node.elements().forEachRemaining(value -> collectEvidenceReferences(value, target));
+        } else if (node.isArray()) {
+            node.forEach(value -> collectEvidenceReferences(value, target));
+        }
+    }
+
+    private static Set<UUID> followUpEvidenceIds(JsonNode node) {
+        Set<UUID> ids = new HashSet<>();
+        if (node == null || !node.isObject()) return ids;
+        JsonNode findings = node.get("findings");
+        if (findings == null || !findings.isArray()) return ids;
+        findings.forEach(finding -> {
+            JsonNode id = finding.get("findingId");
+            if (id != null && id.isTextual()) {
+                UUID parsed = parseUuid(id.asText());
+                if (parsed != null) ids.add(parsed);
+            }
+        });
+        return ids;
     }
 
     private static void collectAiReferences(JsonNode node, Set<UUID> evidenceIds, List<String> diagnostics) {

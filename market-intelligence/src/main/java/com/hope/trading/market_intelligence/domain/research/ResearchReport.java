@@ -68,14 +68,43 @@ public record ResearchReport(
             List<String> invalidationConditions,
             String aiStatus,
             JsonNode aiInterpretation,
-            List<String> diagnostics
+            List<String> diagnostics,
+            JsonNode finalAiInterpretation,
+            List<HypothesisReconciliation> reconciliations,
+            JsonNode followUpEvidence
     ) {
         public MarketResearchResult {
-            supportingEvidence = List.copyOf(supportingEvidence);
-            contradictingEvidence = List.copyOf(contradictingEvidence);
-            missingEvidence = List.copyOf(missingEvidence);
-            invalidationConditions = List.copyOf(invalidationConditions);
-            diagnostics = List.copyOf(diagnostics);
+            supportingEvidence = supportingEvidence == null ? List.of() : List.copyOf(supportingEvidence);
+            contradictingEvidence = contradictingEvidence == null ? List.of() : List.copyOf(contradictingEvidence);
+            missingEvidence = missingEvidence == null ? List.of() : List.copyOf(missingEvidence);
+            invalidationConditions = invalidationConditions == null ? List.of() : List.copyOf(invalidationConditions);
+            diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
+            reconciliations = reconciliations == null ? List.of() : List.copyOf(reconciliations);
+        }
+
+        public MarketResearchResult(
+                UUID marketId, String provider, String instrument, String productType,
+                String status, UUID thesisId, Long thesisVersion, JsonNode deterministicAnalysis,
+                String freshness, JsonNode provenance, List<JsonNode> supportingEvidence,
+                List<JsonNode> contradictingEvidence, List<JsonNode> missingEvidence,
+                List<String> invalidationConditions, String aiStatus, JsonNode aiInterpretation,
+                List<String> diagnostics) {
+            this(marketId, provider, instrument, productType, status, thesisId, thesisVersion,
+                    deterministicAnalysis, freshness, provenance, supportingEvidence,
+                    contradictingEvidence, missingEvidence, invalidationConditions, aiStatus,
+                    aiInterpretation, diagnostics, null, List.of(), null);
+        }
+    }
+
+    public record HypothesisReconciliation(
+            String hypothesisId,
+            String hypothesis,
+            String effect,
+            String explanation,
+            List<UUID> evidenceReferences
+    ) {
+        public HypothesisReconciliation {
+            evidenceReferences = List.copyOf(evidenceReferences);
         }
     }
 }

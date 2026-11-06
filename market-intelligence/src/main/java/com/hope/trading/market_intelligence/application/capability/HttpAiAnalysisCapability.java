@@ -4,6 +4,8 @@ import com.hope.trading.market_intelligence.application.port.AiAnalysisCommand;
 import com.hope.trading.market_intelligence.application.port.AiEnginePort;
 import com.hope.trading.market_intelligence.application.port.AiExecutionProgress;
 import com.hope.trading.market_intelligence.application.port.AiExecutionReference;
+import com.hope.trading.market_intelligence.application.port.AiInterpretationPhase;
+import com.hope.trading.market_intelligence.application.port.AiSynthesisContext;
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.context.ContextClassification;
 import com.hope.trading.market_intelligence.domain.execution.*;
@@ -51,23 +53,31 @@ public class HttpAiAnalysisCapability implements AiAnalysisCapability {
     @Override
     public CapabilityAnalysisResult analyze(
             IntelligenceAnalysisRequest request, IntelligenceContext context) {
-        return execute(request, context, false);
+        return execute(request, context, false, AiInterpretationPhase.INITIAL, null);
     }
 
     @Override
     public CapabilityAnalysisResult analyzeAdaptive(
             IntelligenceAnalysisRequest request, IntelligenceContext context) {
-        return execute(request, context, true);
+        return execute(request, context, true, AiInterpretationPhase.INITIAL, null);
+    }
+
+    public CapabilityAnalysisResult analyzeFinal(
+            IntelligenceAnalysisRequest request, IntelligenceContext context,
+            AiSynthesisContext synthesisContext) {
+        return execute(request, context, false, AiInterpretationPhase.FINAL_SYNTHESIS, synthesisContext);
     }
 
     private CapabilityAnalysisResult execute(
-            IntelligenceAnalysisRequest request, IntelligenceContext context, boolean adaptive) {
+            IntelligenceAnalysisRequest request, IntelligenceContext context, boolean adaptive,
+            AiInterpretationPhase phase, AiSynthesisContext synthesisContext) {
         if (request.thesis() == null) {
             return CapabilityAnalysisResult.empty("Market Thesis is required for AI interpretation");
         }
         Instant deadline = Instant.now().plus(Duration.ofSeconds(30));
         AiExecutionReference reference = aiEnginePort.submit(new AiAnalysisCommand(
-                request.analysisId(), List.of(CAPABILITY_ID), context, request.thesis(), adaptive,
+                request.analysisId(), List.of(CAPABILITY_ID), context, request.thesis(), adaptive, phase,
+                synthesisContext,
                 new AnalysisExecutionPolicy(
                         Duration.ofSeconds(30), Duration.ofSeconds(30), 1, 1,
                         new ContextLimits(32, 10_000, 1_000, 8, ContextClassification.PUBLIC),

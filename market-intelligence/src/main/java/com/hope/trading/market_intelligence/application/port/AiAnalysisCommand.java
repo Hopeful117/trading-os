@@ -14,6 +14,8 @@ public record AiAnalysisCommand(
         IntelligenceContext authorizedContext,
         MarketThesis thesis,
         boolean adaptive,
+        AiInterpretationPhase phase,
+        AiSynthesisContext synthesisContext,
         AnalysisExecutionPolicy policy,
         ExecutionTrace trace
 ) {
@@ -31,5 +33,12 @@ public record AiAnalysisCommand(
             UUID executionId, List<String> capabilities, IntelligenceContext authorizedContext,
             MarketThesis thesis, AnalysisExecutionPolicy policy, ExecutionTrace trace) {
         this(executionId, capabilities, authorizedContext, thesis, false, policy, trace);
+    }
+
+    public AiAnalysisCommand(
+            UUID executionId, List<String> capabilities, IntelligenceContext authorizedContext,
+            MarketThesis thesis, boolean adaptive, AnalysisExecutionPolicy policy, ExecutionTrace trace) {
+        this(executionId, capabilities, authorizedContext, thesis, adaptive,
+                AiInterpretationPhase.INITIAL, null, policy, trace);
     }
 }

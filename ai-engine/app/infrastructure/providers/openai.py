@@ -23,6 +23,12 @@ class OpenAILLMProvider:
 
     def interpret(self, request: InterpretationRequest) -> InterpretationDraft:
         payload = request.model_dump(mode="json", exclude={"policy", "trace"})
+        evidence_ids = {str(item.evidence_id) for item in request.thesis.evidence}
+        if request.synthesis_context is not None:
+            for finding in request.synthesis_context.initial_findings:
+                evidence_ids.update(str(value) for value in finding.evidence_references)
+            for finding in request.synthesis_context.follow_up_evidence.findings:
+                evidence_ids.update(str(value) for value in finding.evidence_references)
         response = self._client.chat.completions.create(
             model=self.model,
             messages=[
@@ -31,7 +37,8 @@ class OpenAILLMProvider:
                     "content": (
                         "Interpret the supplied deterministic Market Thesis. "
                         "Return only JSON matching the requested schema. "
-                        "Never invent prices, orders, risk decisions or evidence references."
+                        "Never invent prices, orders, risk decisions or evidence references. "
+                        f"Use only these authorized evidence references: {sorted(evidence_ids)}"
                     ),
                 },
                 {"role": "user", "content": json.dumps(payload)},

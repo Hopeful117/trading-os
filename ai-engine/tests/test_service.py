@@ -10,11 +10,15 @@ from app.domain.models import (
     ContextSection,
     ExecutionPolicy,
     InterpretationDraft,
+    InterpretationPhase,
     InterpretationRequest,
     MarketThesisInput,
     ThesisEvidence,
     Trace,
     RequestedAnalysis,
+    FollowUpEvidence,
+    SynthesisContext,
+    SynthesisFinding,
 )
 
 
@@ -95,6 +99,53 @@ class InvalidReferenceProvider:
         )
 
 
+class FinalRequestingProvider:
+    def interpret(self, request):
+        return InterpretationDraft(
+            market_summary="summary",
+            primary_scenario="scenario",
+            supporting_arguments=[],
+            contradictions=[],
+            missing_information=[],
+            confirmation_conditions=[],
+            invalidation_conditions=[],
+            uncertainty=[],
+            suggested_decision="WAIT",
+            requested_analysis=RequestedAnalysis(
+                capability_id="market-structure-analysis",
+                capability_version="1.1.0",
+                market_id=request.thesis.market_id,
+                reason="another call",
+                expected_evidence="more",
+            ),
+        )
+
+
+class FinalSynthesisProvider:
+    def __init__(self, evidence_id):
+        self.evidence_id = evidence_id
+
+    def interpret(self, request):
+        return InterpretationDraft(
+            market_summary="revised summary",
+            primary_scenario="revised scenario",
+            supporting_arguments=[],
+            contradictions=[],
+            missing_information=[],
+            confirmation_conditions=[],
+            invalidation_conditions=[],
+            uncertainty=[],
+            suggested_decision="WAIT",
+            reconciliations=[{
+                "hypothesis_id": "hypothesis-1",
+                "hypothesis": "initial hypothesis",
+                "effect": "STRENGTHENED",
+                "explanation": "follow-up supports the hypothesis",
+                "evidence_references": [self.evidence_id],
+            }],
+        )
+
+
 def test_unknown_evidence_reference_is_rejected():
     with pytest.raises(InvalidInterpretation):
         InterpretationService(InvalidReferenceProvider()).interpret(request_with([evidence()]))
@@ -118,3 +169,59 @@ def test_adaptive_request_is_strict_and_serializes_with_camel_case():
             reason="",
             expected_evidence="Levels",
         )
+
+
+def test_final_synthesis_accepts_follow_up_evidence_reference():
+    request = request_with([evidence()])
+    follow_up_id = uuid4()
+    final_evidence = uuid4()
+    request = request.model_copy(update={
+        "phase": InterpretationPhase.FINAL_SYNTHESIS,
+        "synthesis_context": SynthesisContext(
+            objective="reconcile",
+            market_id=request.thesis.market_id,
+            initial_hypotheses=["initial hypothesis"],
+            initial_findings=[],
+            follow_up_evidence=FollowUpEvidence(
+                execution_id=follow_up_id,
+                capability_id="market-structure-analysis",
+                capability_version="1.1.0",
+                status="COMPLETE",
+                findings=[SynthesisFinding(
+                    finding_id=str(final_evidence),
+                    title="follow-up",
+                    description="new evidence",
+                    evidence_references=[final_evidence],
+                )],
+                diagnostics=[],
+            ),
+        ),
+    })
+
+    result = InterpretationService(FinalSynthesisProvider(final_evidence)).interpret(request)
+
+    assert result.reconciliations[0].effect == "STRENGTHENED"
+
+
+def test_final_synthesis_cannot_request_another_analysis():
+    request = request_with([evidence()])
+    request = request.model_copy(update={
+        "phase": InterpretationPhase.FINAL_SYNTHESIS,
+        "synthesis_context": SynthesisContext(
+            objective="reconcile",
+            market_id=request.thesis.market_id,
+            initial_hypotheses=[],
+            initial_findings=[],
+            follow_up_evidence=FollowUpEvidence(
+                execution_id=uuid4(),
+                capability_id="market-structure-analysis",
+                capability_version="1.1.0",
+                status="COMPLETE",
+                findings=[],
+                diagnostics=[],
+            ),
+        ),
+    })
+
+    with pytest.raises(InvalidInterpretation, match="cannot request"):
+        InterpretationService(FinalRequestingProvider()).interpret(request)
