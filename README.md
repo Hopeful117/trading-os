@@ -98,8 +98,22 @@ python3 -m venv .venv
 ```
 
 Le service reste désactivé par défaut (`AI_ENGINE_ENABLED=false`). Le provider
-`mock` permet les tests locaux sans réseau externe. L'activation du provider
-OpenAI et toute validation LLM réelle nécessitent une autorisation séparée.
+`mock` permet les tests locaux sans réseau externe. Le provider API-key
+`openai` reste disponible pour compatibilité. Le premier provider OAuth réel est
+`openai_chatgpt` : il nécessite `AI_ENGINE_ENABLED=true`,
+`AI_ENGINE_CHATGPT_OAUTH_ENABLED=true`, un `AI_ENGINE_MODEL`, un
+`AI_ENGINE_CHATGPT_CREDENTIAL_HANDLE` et une clé de chiffrement fournie par
+l'environnement dans `AI_ENGINE_CREDENTIAL_ENCRYPTION_KEY`.
+Pour une premiere inscription d'application, configurer aussi
+`AI_ENGINE_CHATGPT_AGENT_NAME=Trading OS` et un identifiant stable non-secret
+dans `AI_ENGINE_CHATGPT_EXT_AGENT_HOST_ID`.
+
+Les credentials OAuth sont stockés chiffrés dans le stockage local de l'AI
+Engine. Le flux opérateur limité est `GET /internal/v1/oauth/chatgpt/start`
+puis le callback configuré ; ces routes ne sont pas exposées par le Gateway ou
+MCP. Les tokens ne doivent jamais être ajoutés au dépôt, aux prompts, aux
+rapports ou aux logs. Toute validation LLM réelle nécessite une autorisation
+séparée pour le modèle, le contexte, le nombre de requêtes et le budget.
 
 ### Avancées récentes
 

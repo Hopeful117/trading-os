@@ -8,19 +8,21 @@ from app.application.service import InterpretationService
 from app.config import Settings, settings
 from app.domain.models import InterpretationRequest
 from app.infrastructure.execution_store import ExecutionStore
-from app.infrastructure.providers.mock import MockLLMProvider
-from app.infrastructure.providers.openai import OpenAILLMProvider
+from app.infrastructure.provider_registry import build_provider
 
 
 def create_app(config: Settings | None = None) -> FastAPI:
     config = config or settings
-    provider = MockLLMProvider()
-    if config.enabled and config.provider.lower() == "openai":
-        provider = OpenAILLMProvider(config)
+    provider = build_provider(config)
     store = ExecutionStore(InterpretationService(provider), config.max_evidence)
     app = FastAPI(title="Trading OS AI Engine", version="0.1.0")
     app.state.settings = config
     app.state.store = store
+    if config.chatgpt_oauth_enabled and config.credential_encryption_key:
+        from app.infrastructure.credential_store import EncryptedCredentialStore
+        from app.infrastructure.oauth import ChatGptOAuthService
+        credentials = EncryptedCredentialStore(config.credential_store_path, config.credential_encryption_key)
+        app.state.chatgpt_oauth = ChatGptOAuthService(config, credentials)
 
     def authorize_service(
         authorization: str | None = Header(default=None, alias="X-Service-Authorization")
@@ -48,6 +50,29 @@ def create_app(config: Settings | None = None) -> FastAPI:
             "shadowMode": config.shadow_mode,
             "provider": provider.name,
         }
+
+    @app.get("/internal/v1/oauth/chatgpt/start")
+    def start_chatgpt_oauth(_: None = Depends(authorize_service)) -> dict[str, str]:
+        oauth = getattr(app.state, "chatgpt_oauth", None)
+        if oauth is None:
+            raise HTTPException(status_code=503, detail="ChatGPT OAuth is unavailable")
+        try:
+            return {"authorizationUrl": oauth.start()}
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @app.get("/internal/v1/oauth/chatgpt/callback")
+    def complete_chatgpt_oauth(state: str, code: str | None = None,
+                               client_id: str | None = None,
+                               error: str | None = None) -> dict[str, str]:
+        oauth = getattr(app.state, "chatgpt_oauth", None)
+        if oauth is None:
+            raise HTTPException(status_code=503, detail="ChatGPT OAuth is unavailable")
+        try:
+            credential = oauth.callback(state, code or "", client_id, error)
+            return {"status": "AUTHORIZED", "provider": credential.provider}
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
     @app.post("/internal/v1/analyses", status_code=status.HTTP_202_ACCEPTED)
     def submit(
