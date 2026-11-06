@@ -40,8 +40,15 @@ public record ResearchReport(
             String expectedEvidence,
             String status,
             UUID executionId,
-            String diagnostic
+            String diagnostic,
+            String interpretationEffect
     ) {
+        public AdaptiveCapabilityRecord(
+                String capabilityId, String capabilityVersion, UUID marketId, String reason,
+                String expectedEvidence, String status, UUID executionId, String diagnostic) {
+            this(capabilityId, capabilityVersion, marketId, reason, expectedEvidence, status,
+                    executionId, diagnostic, "NOT_REEVALUATED");
+        }
     }
 
     public record MarketResearchResult(

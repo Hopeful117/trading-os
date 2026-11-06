@@ -226,15 +226,25 @@ public class ResearchApplicationService {
                             .map(until -> clock.instant().isBefore(until) ? "CURRENT" : "STALE")
                             .orElse("UNKNOWN"))
                     .orElse("UNKNOWN");
-            JsonNode provenance = mapper.valueToTree(Map.of(
-                    "source", "market-intelligence",
-                    "provider", market.provider(),
-                    "marketId", market.marketId().toString(),
-                    "thesisId", thesis.map(value -> value.id().toString()).orElse("MISSING")));
+            UUID deterministicAnalysisExecutionId = UUID.randomUUID();
+            JsonNode provenance = mapper.valueToTree(Map.ofEntries(
+                    Map.entry("source", "market-intelligence"),
+                    Map.entry("capabilityId", "deterministic-market-research"),
+                    Map.entry("capabilityVersion", "1.0.0"),
+                    Map.entry("provider", market.provider()),
+                    Map.entry("marketId", market.marketId().toString()),
+                    Map.entry("thesisId", thesis.map(value -> value.id().toString()).orElse("MISSING")),
+                    Map.entry("thesisLineageId", thesis.map(value -> value.lineageId() == null
+                            ? "MISSING" : value.lineageId().toString()).orElse("MISSING")),
+                    Map.entry("thesisVersion", thesis.map(value -> Long.toString(value.version())).orElse("MISSING")),
+                    Map.entry("analysisExecutionId", deterministicAnalysisExecutionId.toString()),
+                    Map.entry("evaluatedAt", clock.instant().toString()),
+                    Map.entry("sourceCutoff", thesis.map(value -> value.sourceCutoff().toString()).orElse("MISSING")),
+                    Map.entry("inputFingerprint", thesis.map(value -> value.inputFingerprint() == null
+                            ? "MISSING" : value.inputFingerprint()).orElse("MISSING"))));
             try {
-                UUID analysisId = UUID.randomUUID();
-                deterministic = analysis.analyze(analysisId, new IntelligenceAnalysisRequest(
-                        analysisId, marketId, AnalysisExecutionMode.PASSIVE,
+                deterministic = analysis.analyze(deterministicAnalysisExecutionId, new IntelligenceAnalysisRequest(
+                        deterministicAnalysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE,
                         request.objective(), null, researchId, null, clock.instant(),
                         EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElse(null)));
             } catch (RuntimeException exception) {
