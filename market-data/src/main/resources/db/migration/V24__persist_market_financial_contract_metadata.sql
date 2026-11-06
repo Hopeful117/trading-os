@@ -9,6 +9,9 @@ ALTER TABLE markets ADD CONSTRAINT markets_financial_contract_complete
         (product_type <> 'CFD' AND quantity_unit IS NULL AND contract_multiplier IS NULL
             AND contract_source_id IS NULL AND contract_source_version IS NULL
             AND contract_observed_at IS NULL)
+        OR (product_type = 'CFD' AND quantity_unit IS NULL AND contract_multiplier IS NULL
+            AND contract_source_id IS NULL AND contract_source_version IS NULL
+            AND contract_observed_at IS NULL)
         OR (product_type = 'CFD' AND quantity_unit IS NOT NULL AND contract_multiplier IS NOT NULL
             AND contract_multiplier > 0 AND contract_source_id IS NOT NULL
             AND contract_source_version IS NOT NULL AND contract_source_version > 0

@@ -28,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.Mockito.*;
 
 class ResearchApplicationServiceTest {
@@ -69,7 +70,14 @@ class ResearchApplicationServiceTest {
                 .isEqualTo(ResearchExecutionStatus.COMPLETED);
         assertThat(first.report()).isNotNull();
         assertThat(replay.researchId()).isEqualTo(first.researchId());
-        verify(analysis, times(2)).analyze(any(), any());
+        ArgumentCaptor<IntelligenceAnalysisRequest> requests =
+                ArgumentCaptor.forClass(IntelligenceAnalysisRequest.class);
+        verify(analysis, times(2)).analyze(any(), requests.capture());
+        assertThat(requests.getAllValues())
+                .allSatisfy(value -> assertThat(value.evidencePolicy())
+                        .isEqualTo(EvidenceAcquisitionPolicy.LIVE_CURRENT));
+        assertThat(requests.getAllValues())
+                .allSatisfy(value -> assertThat(value.evaluationCutoff()).isNull());
     }
 
     @Test
@@ -229,7 +237,15 @@ class ResearchApplicationServiceTest {
         assertThat(marketReport.get("reconciliations")).hasSize(1);
         assertThat(execution.report().get("executedCapabilities").get(0)
                 .get("interpretationEffect").asText()).isEqualTo("STRENGTHENED");
-        verify(aiCapability).analyzeFinal(any(), any(), any());
+        ArgumentCaptor<IntelligenceAnalysisRequest> aiRequests =
+                ArgumentCaptor.forClass(IntelligenceAnalysisRequest.class);
+        verify(aiCapability).analyzeAdaptive(aiRequests.capture(), any());
+        verify(aiCapability).analyzeFinal(aiRequests.capture(), any(), any());
+        assertThat(aiRequests.getAllValues())
+                .allSatisfy(value -> assertThat(value.evidencePolicy())
+                        .isEqualTo(EvidenceAcquisitionPolicy.LIVE_CURRENT));
+        assertThat(aiRequests.getAllValues())
+                .allSatisfy(value -> assertThat(value.evaluationCutoff()).isNull());
     }
 
     @Test

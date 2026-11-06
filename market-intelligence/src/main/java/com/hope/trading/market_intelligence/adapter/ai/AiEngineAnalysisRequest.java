@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.adapter.ai;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hope.trading.market_intelligence.domain.IntelligenceContext;
+import com.hope.trading.market_intelligence.domain.ContextSection;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
 import com.hope.trading.market_intelligence.application.port.AiInterpretationPhase;
 import com.hope.trading.market_intelligence.application.port.AiSynthesisContext;
@@ -13,7 +14,7 @@ import java.util.UUID;
 record AiEngineAnalysisRequest(
         UUID executionId,
         List<String> capabilities,
-        IntelligenceContext authorizedContext,
+        AuthorizedContextWire authorizedContext,
         MarketThesisWire thesis,
         PolicyWire policy,
         TraceWire trace,
@@ -32,13 +33,35 @@ record AiEngineAnalysisRequest(
             int contextLimitBytes,
             int maxOutputTokens) {
         return new AiEngineAnalysisRequest(
-                command.executionId(), command.capabilities(), command.authorizedContext(),
+                command.executionId(), command.capabilities(), AuthorizedContextWire.from(command.authorizedContext()),
                 MarketThesisWire.from(command.thesis()),
                 PolicyWire.from(command.policy(), contextLimitBytes, maxOutputTokens),
                 TraceWire.from(command.trace()), command.adaptive()
                         || command.phase() == AiInterpretationPhase.FINAL_SYNTHESIS
                         ? "ADAPTIVE_RESEARCH" : "THESIS_INTERPRETATION",
                 command.executionId().toString(), command.phase(), command.synthesisContext());
+    }
+
+    record AuthorizedContextWire(
+            UUID marketId, String mode, String objective, Instant evaluationCutoff,
+            String schemaVersion, String quality, List<String> diagnostics,
+            String fingerprint, java.util.Map<String, ContextSection> sections
+    ) {
+        static AuthorizedContextWire from(IntelligenceContext context) {
+            return new AuthorizedContextWire(
+                    context.marketId().orElse(null),
+                    context.mode().map(Enum::name).orElse(null),
+                    context.objective().orElse(null),
+                    context.evaluationCutoff().orElse(null),
+                    context.schemaVersion(),
+                    context.quality().name(),
+                    context.diagnostics(),
+                    context.fingerprint().value(),
+                    context.publicSections().entrySet().stream().collect(
+                            java.util.stream.Collectors.toUnmodifiableMap(
+                                    entry -> entry.getKey().name(),
+                                    java.util.Map.Entry::getValue)));
+        }
     }
 
     record MarketThesisWire(

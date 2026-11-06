@@ -88,7 +88,8 @@ et symbole afin de préserver les consommateurs lors d'un désabonnement partiel
 
 ### AI Engine local
 
-Le service Python peut être lancé indépendamment pour les validations hors ligne :
+Le service Python est intégré à la stack Docker sous le nom `ai-engine` et peut
+également être lancé indépendamment pour les validations hors ligne :
 
 ```bash
 cd ai-engine
@@ -96,6 +97,11 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[test]'
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8086
 ```
+
+La stack expose localement le port `127.0.0.1:8086` pour le flux OAuth opérateur
+interne et conserve les stores AI Engine dans le volume Docker `ai_engine_data`.
+Le service reste désactivé par défaut tant que `AI_ENGINE_ENABLED` n'est pas
+activé explicitement.
 
 Le service reste désactivé par défaut (`AI_ENGINE_ENABLED=false`). Le provider
 `mock` permet les tests locaux sans réseau externe. Le provider API-key

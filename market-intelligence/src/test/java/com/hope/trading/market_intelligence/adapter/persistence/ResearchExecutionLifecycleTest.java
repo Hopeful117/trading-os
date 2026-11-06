@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,19 @@ class ResearchExecutionLifecycleTest {
         assertThat(repository.findById(requested.researchId()))
                 .get().extracting(ResearchExecution::status)
                 .isEqualTo(ResearchExecutionStatus.COMPLETED);
+    }
+
+    @Test
+    void checkpointIsRetainedWhenAStaleRunningExecutionIsRequeued() {
+        ResearchExecution running = requested().running(REQUESTED_AT.plusSeconds(1));
+        var checkpoint = JsonNodeFactory.instance.objectNode().put("completedMarkets", 1);
+        ResearchExecution requeued = running.checkpoint(checkpoint, REQUESTED_AT.plusSeconds(2))
+                .requeue(REQUESTED_AT.plusSeconds(301));
+
+        assertThat(requeued.status()).isEqualTo(ResearchExecutionStatus.REQUESTED);
+        assertThat(requeued.report()).isEqualTo(checkpoint);
+        assertThat(requeued.completedAt()).isNull();
+        assertThat(requeued.running(REQUESTED_AT.plusSeconds(302)).report()).isEqualTo(checkpoint);
     }
 
     private ResearchExecution requested() {

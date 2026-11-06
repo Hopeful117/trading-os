@@ -21,9 +21,11 @@ class MarketFinancialContractMigrationTest {
                 "jdbc:h2:mem:market-financial-contract-migration;DB_CLOSE_DELAY=-1");
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         UUID completeMarket = UUID.randomUUID();
+        UUID legacyCfdMarket = UUID.randomUUID();
         UUID partialMarket = UUID.randomUUID();
 
         jdbc.execute("create table markets (market_id uuid primary key, product_type varchar(32))");
+        jdbc.update("insert into markets(market_id, product_type) values (?, ?)", legacyCfdMarket, "CFD");
         try (var connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection, new ClassPathResource(
                     "db/migration/V24__persist_market_financial_contract_metadata.sql"));

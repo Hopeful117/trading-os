@@ -20,9 +20,17 @@ public record IntelligenceFinding(
         Set<UUID> evidenceReferences
 ) {
     public IntelligenceFinding {
-        metrics = Map.copyOf(metrics);
-        contextSectionsUsed = Set.copyOf(contextSectionsUsed);
-        evidenceReferences = Set.copyOf(evidenceReferences);
+        metrics = immutableOrEmpty(metrics);
+        contextSectionsUsed = immutableOrEmpty(contextSectionsUsed);
+        evidenceReferences = immutableOrEmpty(evidenceReferences);
+    }
+
+    private static <T> Set<T> immutableOrEmpty(Set<T> values) {
+        return values == null ? Set.of() : Set.copyOf(values);
+    }
+
+    private static <K, V> Map<K, V> immutableOrEmpty(Map<K, V> values) {
+        return values == null ? Map.of() : Map.copyOf(values);
     }
 
     public IntelligenceFinding(
