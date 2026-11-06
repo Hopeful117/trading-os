@@ -9,9 +9,11 @@ import com.hope.trading.market_intelligence.domain.feature.FeatureGroupStatus;
 import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
 import com.hope.trading.market_intelligence.domain.feature.FeatureValue;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -24,15 +26,18 @@ public class JpaFeatureSnapshotRepository implements FeatureSnapshotRepository {
     private final SpringDataFeatureSnapshotRepository repository;
     private final ObjectMapper mapper;
     private final TransactionTemplate transactions;
+    private final JdbcTemplate jdbc;
 
     public JpaFeatureSnapshotRepository(
             SpringDataFeatureSnapshotRepository repository,
             ObjectMapper mapper,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            JdbcTemplate jdbc
     ) {
         this.repository = repository;
         this.mapper = mapper;
         this.transactions = new TransactionTemplate(transactionManager);
+        this.jdbc = jdbc;
     }
 
     @Override
@@ -90,6 +95,47 @@ public class JpaFeatureSnapshotRepository implements FeatureSnapshotRepository {
                     .filter(value -> value.hasSameSemanticContent(snapshot))
                     .orElseThrow(() -> new IllegalStateException(
                             "Concurrent feature snapshot insert has conflicting content", race));
+        }
+    }
+
+    @Override
+    public FeatureSnapshot saveIfAbsentOwned(FeatureSnapshot snapshot, UUID leaseId) {
+        try {
+            return transactions.execute(status -> {
+                requireLease(snapshot.analysisExecutionId(), leaseId);
+                Optional<JpaFeatureSnapshotEntity> existing = repository.findByIdentityFingerprint(
+                        snapshot.identityFingerprint());
+                if (existing.isPresent()) {
+                    FeatureSnapshot value = existing.map(this::toDomain).orElseThrow();
+                    if (!value.hasSameSemanticContent(snapshot)) {
+                        throw new IllegalStateException("Feature snapshot identity has conflicting content");
+                    }
+                    return value;
+                }
+                return toDomain(repository.saveAndFlush(from(snapshot)));
+            });
+        } catch (DataIntegrityViolationException race) {
+            return repository.findByIdentityFingerprint(snapshot.identityFingerprint())
+                    .or(() -> repository.findBySnapshotFingerprint(snapshot.fingerprint()))
+                    .map(this::toDomain)
+                    .filter(value -> value.hasSameSemanticContent(snapshot))
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Concurrent feature snapshot insert has conflicting content", race));
+        }
+    }
+
+    private void requireLease(UUID executionId, UUID leaseId) {
+        try {
+            UUID currentLease = jdbc.queryForObject("""
+                    select lease_id from historical_reconstruction_lifecycles
+                    where execution_id = ? and status = 'RUNNING'
+                    for update
+                    """, UUID.class, executionId);
+            if (!leaseId.equals(currentLease)) {
+                throw new IllegalStateException("Historical reconstruction lifecycle lease was lost before feature persistence");
+            }
+        } catch (EmptyResultDataAccessException missing) {
+            throw new IllegalStateException("Historical reconstruction lifecycle lease was lost before feature persistence");
         }
     }
 

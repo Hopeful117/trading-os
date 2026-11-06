@@ -4,8 +4,12 @@ import com.hope.trading.market_intelligence.application.port.ObservedMarketOutco
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeIdentity;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,9 +20,15 @@ import java.util.UUID;
 @Repository
 public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcomeRepository {
     private final SpringDataObservedMarketOutcomeRepository repository;
+    private final TransactionTemplate transactions;
+    private final JdbcTemplate jdbc;
 
-    public JpaObservedMarketOutcomeRepository(SpringDataObservedMarketOutcomeRepository repository) {
+    public JpaObservedMarketOutcomeRepository(SpringDataObservedMarketOutcomeRepository repository,
+                                              PlatformTransactionManager transactionManager,
+                                              JdbcTemplate jdbc) {
         this.repository = repository;
+        this.transactions = new TransactionTemplate(transactionManager);
+        this.jdbc = jdbc;
     }
 
     @Override
@@ -87,6 +97,45 @@ public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcome
                     .map(JpaObservedMarketOutcomeEntity::toDomain)
                     .orElseThrow(() -> new IllegalStateException(
                             "Concurrent outcome insert has conflicting content", race));
+        }
+    }
+
+    @Override
+    public ObservedMarketOutcome saveIfAbsentOwned(ObservedMarketOutcome outcome, UUID leaseId) {
+        try {
+            return transactions.execute(status -> {
+                requireLease(outcome.analysisExecutionId(), leaseId);
+                Optional<JpaObservedMarketOutcomeEntity> existing =
+                        repository.findByOutcomeFingerprint(outcome.outcomeFingerprint());
+                if (existing.isPresent()) {
+                    if (!existing.get().hasSameSemanticContent(outcome)) {
+                        throw new IllegalStateException("Outcome fingerprint has conflicting content");
+                    }
+                    return existing.get().toDomain();
+                }
+                return repository.saveAndFlush(JpaObservedMarketOutcomeEntity.from(outcome)).toDomain();
+            });
+        } catch (DataIntegrityViolationException race) {
+            return repository.findByOutcomeFingerprint(outcome.outcomeFingerprint())
+                    .filter(entity -> entity.hasSameSemanticContent(outcome))
+                    .map(JpaObservedMarketOutcomeEntity::toDomain)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Concurrent owned outcome insert has conflicting content", race));
+        }
+    }
+
+    private void requireLease(UUID executionId, UUID leaseId) {
+        try {
+            UUID currentLease = jdbc.queryForObject("""
+                    select lease_id from historical_reconstruction_lifecycles
+                    where execution_id = ? and status = 'RUNNING'
+                    for update
+                    """, UUID.class, executionId);
+            if (!leaseId.equals(currentLease)) {
+                throw new IllegalStateException("Historical reconstruction lifecycle lease was lost before outcome persistence");
+            }
+        } catch (EmptyResultDataAccessException missing) {
+            throw new IllegalStateException("Historical reconstruction lifecycle lease was lost before outcome persistence");
         }
     }
 }

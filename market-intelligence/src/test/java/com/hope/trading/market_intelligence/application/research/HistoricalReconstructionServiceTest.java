@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.application.port.HistoricalReconstru
 import com.hope.trading.market_intelligence.adapter.persistence.InMemoryHistoricalReconstructionLifecycleRepository;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
+import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionProvenance;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
@@ -16,6 +17,7 @@ import com.hope.trading.market_intelligence.domain.execution.ExecutionOrigin;
 import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
+import com.hope.trading.market_intelligence.domain.research.HistoricalReconstructionLifecycle;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -33,6 +35,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -58,7 +61,8 @@ class HistoricalReconstructionServiceTest {
         AnalysisExecutionRepository executionRepository = mock(AnalysisExecutionRepository.class);
         when(executionRepository.findById(executionId)).thenReturn(Optional.of(execution));
         FeatureSnapshotProjectionService projections = mock(FeatureSnapshotProjectionService.class);
-        doThrow(new IllegalStateException("structure artifact unavailable")).when(projections).project(executionId);
+        doThrow(new IllegalStateException("structure artifact unavailable")).when(projections)
+                .project(eq(executionId), any());
 
         HistoricalReconstructionService service = service(preflight, executions, executionRepository, projections,
                 mock(FeatureSnapshotRepository.class), mock(MarketOutcomeEvaluationService.class),
@@ -90,7 +94,7 @@ class HistoricalReconstructionServiceTest {
         FeatureSnapshot snapshot = mock(FeatureSnapshot.class);
         when(snapshot.fingerprint()).thenReturn("snapshot-fingerprint");
         FeatureSnapshotProjectionService projections = mock(FeatureSnapshotProjectionService.class);
-        when(projections.project(executionId)).thenReturn(snapshot);
+        when(projections.project(eq(executionId), any())).thenReturn(snapshot);
         ObservedMarketOutcome outcome = mock(ObservedMarketOutcome.class);
         when(outcome.status()).thenReturn(ObservedMarketOutcomeStatus.AVAILABLE);
         when(outcome.outcomeFingerprint()).thenReturn("outcome-fingerprint");
@@ -98,7 +102,16 @@ class HistoricalReconstructionServiceTest {
         MarketOutcomeEvaluationService outcomes = mock(MarketOutcomeEvaluationService.class);
         when(outcomes.evaluate(any())).thenReturn(outcome);
         ResearchDatasetExportService exports = mock(ResearchDatasetExportService.class);
-        when(exports.export(any(), any(), any())).thenReturn(new ResearchDatasetExportService.ExportResult(1, 1, 0));
+        when(exports.export(any(), any(), any())).thenAnswer(invocation -> {
+            Path output = invocation.getArgument(1);
+            Files.createDirectories(output);
+            Files.writeString(output.resolve(ResearchDatasetBundleExporter.SAMPLES_FILE), "{}");
+            Files.writeString(output.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE), """
+                    {"exportSchemaVersion":"research-dataset-bundle-v1","samplesSha256":"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","population":{"selectedFeatureSnapshotFingerprints":[{"snapshotFingerprint":"snapshot-fingerprint"}],"selectedOutcomeFingerprints":[{"outcomeFingerprint":"outcome-fingerprint"}]}}
+                    """);
+            Files.writeString(output.resolve(ResearchDatasetBundleExporter.README_FILE), "published");
+            return new ResearchDatasetExportService.ExportResult(1, 1, 0);
+        });
         HistoricalReconstructionService service = service(preflight, executions, executionRepository, projections,
                 mock(FeatureSnapshotRepository.class), outcomes, exports, lifecycles);
 
@@ -110,6 +123,34 @@ class HistoricalReconstructionServiceTest {
         assertThat(first.status()).isEqualTo("EXPORTED");
         assertThat(second.status()).isEqualTo("EXPORTED");
         verify(exports, times(1)).export(any(), any(), any());
+        var key = forClass(IdempotencyKey.class);
+        verify(executions, times(2)).registerHistorical(any(), key.capture(), anyString(), anyString(), anyString());
+        assertThat(key.getAllValues()).allSatisfy(value ->
+                assertThat(value.value()).isEqualTo("historical-reconstruction:v2:" + MARKET_ID + ":" + CUTOFF
+                        + ":PT1H:STRICT_OBSERVED"));
+    }
+
+    @Test
+    void successfulLifecycleWithMissingBundleFailsClosed() {
+        InMemoryHistoricalReconstructionLifecycleRepository lifecycles = new InMemoryHistoricalReconstructionLifecycleRepository();
+        AnalysisExecution execution = completedExecution();
+        HistoricalReconstructionPreflight preflight = mock(HistoricalReconstructionPreflight.class);
+        when(preflight.verify(MARKET_ID, CUTOFF)).thenReturn(new HistoricalReconstructionPreflight.Result(
+                List.of("feature-evidence"), "selection"));
+        AnalysisExecutionService executions = mock(AnalysisExecutionService.class);
+        when(executions.registerHistorical(any(), any(), anyString(), anyString(), anyString())).thenReturn(execution);
+        Path missingOutput = outputRoot.resolve("missing-generation");
+        lifecycles.save(HistoricalReconstructionLifecycle.started(
+                execution.executionId(), UUID.randomUUID(), missingOutput.toString(), NOW)
+                .success("snapshot-fingerprint", "outcome-fingerprint", NOW.plusSeconds(1)));
+        HistoricalReconstructionService service = service(preflight, executions,
+                mock(AnalysisExecutionRepository.class), mock(FeatureSnapshotProjectionService.class),
+                mock(FeatureSnapshotRepository.class), mock(MarketOutcomeEvaluationService.class),
+                mock(ResearchDatasetExportService.class), lifecycles);
+
+        assertThatThrownBy(() -> service.run(MARKET_ID, CUTOFF, outputRoot, "missing-output", true, "approval-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("bundle is incomplete");
     }
 
     @Test
@@ -152,7 +193,7 @@ class HistoricalReconstructionServiceTest {
         FeatureSnapshot snapshot = mock(FeatureSnapshot.class);
         when(snapshot.fingerprint()).thenReturn("snapshot-fingerprint");
         FeatureSnapshotProjectionService projections = mock(FeatureSnapshotProjectionService.class);
-        when(projections.project(execution.executionId())).thenAnswer(invocation -> {
+        when(projections.project(eq(execution.executionId()), any())).thenAnswer(invocation -> {
             owner.set(false);
             return snapshot;
         });

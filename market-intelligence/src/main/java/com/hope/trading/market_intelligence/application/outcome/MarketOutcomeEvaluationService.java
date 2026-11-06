@@ -52,7 +52,7 @@ public class MarketOutcomeEvaluationService {
         if (reference == null) {
             return persist(create(
                     request, maturityAt, computedAt, ObservedMarketOutcomeStatus.UNAVAILABLE,
-                    "REFERENCE_EVIDENCE_UNAVAILABLE", OutcomeValues.empty()));
+                    "REFERENCE_EVIDENCE_UNAVAILABLE", OutcomeValues.empty()), request.reconstructionLeaseId());
         }
         HistoricalOhlcFutureEvidenceSource.HistoricalOhlcRangeSnapshot future =
                 request.historicalEvidenceSelection() == null
@@ -69,7 +69,8 @@ public class MarketOutcomeEvaluationService {
                     future.reason() == null ? "FUTURE_EVIDENCE_INCOMPLETE" : future.reason(),
                     new OutcomeValues(reference.close(), reference.observationFingerprint(), null, null, null,
                             null, null, null, null, future.expectedObservationCount(), future.observedObservationCount(),
-                            future.evidenceFingerprint(), reference.normalizationVersion(), future.normalizationVersions())));
+                            future.evidenceFingerprint(), reference.normalizationVersion(), future.normalizationVersions())),
+                    request.reconstructionLeaseId());
         }
 
         MarketOutcomeCalculator.CalculatedOutcome calculated = calculator.calculate(
@@ -87,11 +88,14 @@ public class MarketOutcomeEvaluationService {
                         calculated.futureHigh(), calculated.futureLow(), calculated.forwardReturn(),
                         calculated.futureHighReturn(), calculated.futureLowReturn(), calculated.futureRange(),
                         future.expectedObservationCount(), future.observedObservationCount(),
-                        future.evidenceFingerprint(), reference.normalizationVersion(), future.normalizationVersions())));
+                        future.evidenceFingerprint(), reference.normalizationVersion(), future.normalizationVersions())),
+                request.reconstructionLeaseId());
     }
 
-    private ObservedMarketOutcome persist(ObservedMarketOutcome outcome) {
-        return repository.saveIfAbsent(outcome);
+    private ObservedMarketOutcome persist(ObservedMarketOutcome outcome, java.util.UUID reconstructionLeaseId) {
+        return reconstructionLeaseId == null
+                ? repository.saveIfAbsent(outcome)
+                : repository.saveIfAbsentOwned(outcome, reconstructionLeaseId);
     }
 
     private ObservedMarketOutcome create(

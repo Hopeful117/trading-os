@@ -36,7 +36,7 @@ public class InMemoryHistoricalReconstructionLifecycleRepository
 
     @Override
     public boolean claimIfStale(UUID executionId, UUID leaseId, java.time.Instant staleBefore,
-                                java.time.Instant claimedAt) {
+                                java.time.Instant claimedAt, String outputDirectory) {
         java.util.concurrent.atomic.AtomicBoolean claimed = new java.util.concurrent.atomic.AtomicBoolean(false);
         lifecycles.computeIfPresent(executionId, (ignored, current) -> {
             if (current.status() != com.hope.trading.market_intelligence.domain.research.HistoricalReconstructionLifecycleStatus.RUNNING
@@ -45,7 +45,7 @@ public class InMemoryHistoricalReconstructionLifecycleRepository
             return new com.hope.trading.market_intelligence.domain.research.HistoricalReconstructionLifecycle(
                     current.executionId(), leaseId, current.status(), current.phase(), current.failureCode(),
                     current.failureReason(), current.snapshotFingerprint(), current.outcomeFingerprint(),
-                    current.outputDirectory(), current.startedAt(), claimedAt, current.completedAt());
+                    outputDirectory, current.startedAt(), claimedAt, current.completedAt());
         });
         return claimed.get();
     }

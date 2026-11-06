@@ -62,6 +62,46 @@ public final class ResearchDatasetBundleExporter {
         }
     }
 
+    public void validatePublishedBundle(Path outputDirectory, String snapshotFingerprint,
+                                        String outcomeFingerprint) {
+        Path manifestPath = outputDirectory.resolve(MANIFEST_FILE);
+        Path samplesPath = outputDirectory.resolve(SAMPLES_FILE);
+        if (!Files.isDirectory(outputDirectory, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(manifestPath, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(samplesPath, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(outputDirectory.resolve(README_FILE), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalStateException("Published research dataset bundle is incomplete");
+        }
+        try {
+            var manifest = mapper.readTree(Files.readString(manifestPath, StandardCharsets.UTF_8));
+            if (!EXPORT_SCHEMA_VERSION.equals(manifest.path("exportSchemaVersion").asText())) {
+                throw new IllegalStateException("Published research dataset bundle schema is unsupported");
+            }
+            String actualSha = sha256(Files.readAllBytes(samplesPath));
+            if (!actualSha.equals(manifest.path("samplesSha256").asText())) {
+                throw new IllegalStateException("Published research dataset samples checksum is invalid");
+            }
+            var population = manifest.path("population");
+            if (!containsSelection(population.path("selectedFeatureSnapshotFingerprints"),
+                    "snapshotFingerprint", snapshotFingerprint)
+                    || !containsSelection(population.path("selectedOutcomeFingerprints"),
+                    "outcomeFingerprint", outcomeFingerprint)) {
+                throw new IllegalStateException("Published research dataset lineage does not match reconstruction lifecycle");
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Cannot validate published research dataset bundle", exception);
+        }
+    }
+
+    private boolean containsSelection(com.fasterxml.jackson.databind.JsonNode selections,
+                                      String field, String expected) {
+        if (!selections.isArray() || expected == null) return false;
+        for (var selection : selections) {
+            if (expected.equals(selection.path(field).asText())) return true;
+        }
+        return false;
+    }
+
     private void exportTemporary(DatasetBuildResult dataset, Path outputDirectory, Path temporary,
                                  BooleanSupplier publicationAllowed)
             throws IOException {

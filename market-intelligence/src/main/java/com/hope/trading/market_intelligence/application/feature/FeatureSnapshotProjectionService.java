@@ -39,6 +39,10 @@ public class FeatureSnapshotProjectionService {
     }
 
     public FeatureSnapshot project(UUID analysisExecutionId) {
+        return project(analysisExecutionId, null);
+    }
+
+    public FeatureSnapshot project(UUID analysisExecutionId, UUID reconstructionLeaseId) {
         AnalysisExecution execution = executions.findById(analysisExecutionId)
                 .orElseThrow(() -> new IllegalArgumentException("Analysis execution not found: " + analysisExecutionId));
         if (execution.provenance().evidencePolicy() != EvidenceAcquisitionPolicy.STRICT_OBSERVED) {
@@ -70,7 +74,9 @@ public class FeatureSnapshotProjectionService {
                 UUID.randomUUID(), analysisExecutionId, execution.provenance().marketId(), cutoff,
                 execution.provenance().evidencePolicy(), projection.schema().version(), contextFingerprint,
                 projection.values(), projection.groups(), projection.provenance(), projection.fingerprint(), clock.instant());
-        return snapshots.saveIfAbsent(snapshot);
+        return reconstructionLeaseId == null
+                ? snapshots.saveIfAbsent(snapshot)
+                : snapshots.saveIfAbsentOwned(snapshot, reconstructionLeaseId);
     }
 
     private void validateArtifacts(

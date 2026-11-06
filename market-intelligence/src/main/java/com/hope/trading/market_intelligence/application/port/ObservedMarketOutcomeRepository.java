@@ -27,4 +27,8 @@ public interface ObservedMarketOutcomeRepository {
             Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive);
 
     ObservedMarketOutcome saveIfAbsent(ObservedMarketOutcome outcome);
+
+    default ObservedMarketOutcome saveIfAbsentOwned(ObservedMarketOutcome outcome, UUID leaseId) {
+        return saveIfAbsent(outcome);
+    }
 }

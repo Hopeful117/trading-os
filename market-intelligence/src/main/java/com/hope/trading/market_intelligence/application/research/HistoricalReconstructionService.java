@@ -97,19 +97,19 @@ public class HistoricalReconstructionService {
             throw new IllegalStateException("Trusted local operator principal is unavailable");
         }
         long deadline = System.nanoTime() + TIMEOUT.toNanos();
-        Path output = resolveOutput(outputRoot, runId);
         HistoricalReconstructionPreflight.Result selected = null;
         AnalysisExecution execution = null;
         HistoricalReconstructionLifecycle lifecycle = null;
         IdempotencyKey idempotencyKey = null;
         UUID leaseId = UUID.randomUUID();
+        Path output = resolveOutput(outputRoot, generationRunId(runId, leaseId));
         String terminalStatus = "FAILED_BEFORE_EXECUTION";
         ExecutorService phases = Executors.newVirtualThreadPerTaskExecutor();
         try {
             selected = runPhase(phases, () -> preflight.verify(marketId, cutoff), deadline, "preflight");
             ensureWithinDeadline(deadline, "preflight");
             IdempotencyKey key = new IdempotencyKey("historical-reconstruction:v2:" + marketId + ":"
-                    + cutoff + ":PT1H:STRICT_OBSERVED:" + digest(selectionBinding(selected)));
+                    + cutoff + ":PT1H:STRICT_OBSERVED");
             idempotencyKey = key;
             execution = executions.registerHistorical(
                     new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.PASSIVE,
@@ -135,8 +135,8 @@ public class HistoricalReconstructionService {
             if (!owner && lifecycle.status() == HistoricalReconstructionLifecycleStatus.RUNNING) {
                 if (!lifecycle.updatedAt().plus(LEASE).isAfter(clock.instant())
                         && lifecycles.claimIfStale(execution.executionId(), leaseId,
-                        clock.instant().minus(LEASE), clock.instant())) {
-                    lifecycle = lifecycle.claimed(leaseId, clock.instant());
+                        clock.instant().minus(LEASE), clock.instant(), output.toString())) {
+                    lifecycle = lifecycle.claimed(leaseId, output.toString(), clock.instant());
                     owner = true;
                 }
             }
@@ -159,9 +159,10 @@ public class HistoricalReconstructionService {
             lifecycle = saveOwned(lifecycle.progress(
                     HistoricalReconstructionLifecyclePhase.ANALYSIS_COMPLETED, null, null, clock.instant()));
             UUID executionId = execution.executionId();
+            UUID publicationLeaseId = lifecycle.leaseId();
             String evidenceSelection = execution.provenance().historicalEvidenceSelection();
             requireLease(lifecycle);
-            FeatureSnapshot snapshot = runPhase(phases, () -> projections.project(executionId),
+            FeatureSnapshot snapshot = runPhase(phases, () -> projections.project(executionId, publicationLeaseId),
                     deadline, "feature projection");
             ensureWithinDeadline(deadline, "feature projection");
             requireLease(lifecycle);
@@ -170,7 +171,7 @@ public class HistoricalReconstructionService {
                     snapshot.fingerprint(), null, clock.instant()));
             ObservedMarketOutcome outcome = runPhase(phases, () -> outcomes.evaluate(new MarketOutcomeEvaluationRequest(
                     marketId, cutoff, new OutcomeHorizon(Duration.ofHours(1)), executionId,
-                    evidenceSelection)), deadline, "outcome evaluation");
+                    evidenceSelection, publicationLeaseId)), deadline, "outcome evaluation");
             ensureWithinDeadline(deadline, "outcome evaluation");
             requireLease(lifecycle);
             if (outcome.status() != ObservedMarketOutcomeStatus.AVAILABLE) {
@@ -194,7 +195,6 @@ public class HistoricalReconstructionService {
                     java.util.Map.of(new ResearchOutcomeKey(marketId, cutoff, new OutcomeHorizon(Duration.ofHours(1))),
                      outcome.outcomeFingerprint()));
             requireLease(lifecycle);
-            UUID publicationLeaseId = lifecycle.leaseId();
             ResearchDatasetExportService.ExportResult export = runPhase(phases,
                     () -> exports.export(population, output,
                             () -> lifecycles.isOwned(executionId, publicationLeaseId)),
@@ -250,6 +250,10 @@ public class HistoricalReconstructionService {
         String status = lifecycle.status() == HistoricalReconstructionLifecycleStatus.SUCCEEDED
                 ? "EXPORTED" : lifecycle.status().name();
         Path output = lifecycle.outputDirectory() == null ? requestedOutput : Path.of(lifecycle.outputDirectory());
+        if (lifecycle.status() == HistoricalReconstructionLifecycleStatus.SUCCEEDED) {
+            new ResearchDatasetBundleExporter(new com.fasterxml.jackson.databind.ObjectMapper())
+                    .validatePublishedBundle(output, lifecycle.snapshotFingerprint(), lifecycle.outcomeFingerprint());
+        }
         return new Result(lifecycle.executionId(), lifecycle.snapshotFingerprint(),
                 lifecycle.outcomeFingerprint(), status, output);
     }
@@ -359,6 +363,10 @@ public class HistoricalReconstructionService {
         return resolved;
     }
 
+    private String generationRunId(String runId, UUID leaseId) {
+        return runId + "-" + leaseId;
+    }
+
     private boolean isGroupOrOtherWritable(Path path) {
         try {
             var permissions = Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS);
@@ -379,15 +387,6 @@ public class HistoricalReconstructionService {
     private String selectionBinding(HistoricalReconstructionPreflight.Result selected) {
         return selected.selectionFingerprint() + "|references="
                 + String.join(",", selected.selectedEvidence());
-    }
-
-    private String digest(String value) {
-        try {
-            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        } catch (java.security.NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 unavailable", exception);
-        }
     }
 
     public record Result(UUID executionId, String snapshotFingerprint, String outcomeFingerprint,
