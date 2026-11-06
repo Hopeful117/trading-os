@@ -11,3 +11,8 @@ class LLMProvider(Protocol):
 
     def interpret(self, request: InterpretationRequest) -> InterpretationDraft:
         ...
+
+
+class ProviderFactory(Protocol):
+    def create(self) -> LLMProvider:
+        ...
