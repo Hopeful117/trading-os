@@ -180,7 +180,9 @@ public class TrendContextInputMapper {
                 response.open(), response.high(), response.low(), response.close(),
                 response.volume(), response.closed(), response.synthetic(),
                 required(response.sourceId(), SOURCE_ID), response.occurredAt(),
-                Objects.requireNonNull(response.fetchedAt(), "fetchedAt is required"));
+                Objects.requireNonNull(response.fetchedAt(), "fetchedAt is required"),
+                response.observationId(), response.capturedAt(), response.knownAt(),
+                response.observationFingerprint(), response.normalizationVersion());
     }
 
     private TrendContextSourceReference sourceReference(

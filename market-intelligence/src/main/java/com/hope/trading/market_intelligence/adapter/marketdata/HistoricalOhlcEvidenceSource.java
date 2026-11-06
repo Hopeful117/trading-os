@@ -36,12 +36,13 @@ public class HistoricalOhlcEvidenceSource implements OhlcEvidenceSource {
 
     private OhlcResponse map(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse value) {
         Instant occurredAt = value.sourceUpdatedAt() == null ? value.closeTime() : value.sourceUpdatedAt();
-        Instant fetchedAt = value.knownAt();
         return new OhlcResponse(
                 value.marketId(), value.provider(), value.providerSymbol(), value.interval(),
                 value.openTime(), value.closeTime(), value.open(), value.high(), value.low(),
                 value.close(), value.volume(), value.vwap(), value.tradeCount(), value.closed(),
-                occurredAt, value.synthetic(), value.sourceId(), fetchedAt);
+                occurredAt, value.synthetic(), value.sourceId(), value.fetchedAt(),
+                value.observationId(), value.capturedAt(), value.knownAt(),
+                value.observationFingerprint(), value.normalizationVersion());
     }
 
 }

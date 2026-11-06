@@ -15,6 +15,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -31,6 +32,7 @@ import java.util.UUID;
 
 @Component
 @ConditionalOnProperty(name = "research.dataset.export.enabled", havingValue = "true")
+@Order(Integer.MAX_VALUE)
 public final class ResearchDatasetExportCommand implements ApplicationRunner {
     private final ObjectMapper mapper;
     private final ResearchDatasetExportService service;

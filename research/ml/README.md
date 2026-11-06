@@ -69,6 +69,31 @@ When ready, the output contains `experiment-manifest.json`, `metrics.json`, and
 test-only `predictions.jsonl`. Predictive improvement is not a tradable edge
 or a profitability claim.
 
+## Historical AI Benchmark
+
+The approved exploratory benchmark scores an externally produced AI prediction
+file against the same validated BTC/USD samples used by the deterministic
+baseline. It never calls a provider and never executes a trade:
+
+```text
+PYTHONPATH=src python3 -m research_dataset benchmark \
+  --manifest=/path/export/dataset-manifest.json \
+  --samples=/path/export/samples.jsonl \
+  --ai-predictions=/path/ai-predictions.jsonl \
+  --market-id=<validated-btc-usd-market-uuid> \
+  --output-dir=/path/benchmark-output
+```
+
+Each prediction line must contain `sampleId`, `direction` (`LONG`, `SHORT`, or
+`NONE`), `contextCutoff`, and `evidenceCutoffs`. The supported exported horizons
+are `PT1H`, `PT4H`, and `PT24H`. Every declared cutoff must be
+at or before that sample's `evaluationCutoff`; duplicate, missing, unknown, or
+post-cutoff predictions are rejected. The output compares the deterministic
+trend-direction rule with the AI directions using directional accuracy,
+non-neutral coverage, and a gross directional-return proxy. The proxy excludes
+fees, funding, slippage, execution and tradeability, and must not be reported
+as profitability.
+
 ## Interactive Research Workflow
 
 Story 0110 establishes the research-layer boundary:

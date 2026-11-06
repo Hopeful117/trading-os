@@ -18,12 +18,14 @@ MANIFEST_FIELDS = {
 }
 SAMPLE_FIELDS = {
     "sampleId", "marketId", "evaluationCutoff", "horizon", "featureProjectionVersion",
-    "evidencePolicy", "featureSnapshotCreatedAt", "status", "exclusionReason", "features",
+    "evidencePolicy", "featureSnapshotCreatedAt", "featureEvidenceKnownAt", "status", "exclusionReason", "features",
     "outcome", "featureProvenance", "lineage",
 }
 LINEAGE_FIELDS = {
     "featureSnapshotFingerprint", "featureIdentityFingerprint", "contextFingerprint",
     "outcomeFingerprint", "sampleFingerprint", "sampleFingerprintMaterial",
+    "featureSnapshotAnalysisExecutionId", "executionId", "executionOrigin",
+    "reconstructionRequestFingerprint",
 }
 OUTCOME_FIELDS = {
     "status", "maturityAt", "computedAt", "outcomeDefinitionVersion", "referenceObservationFingerprint",
@@ -42,7 +44,7 @@ VALID_HORIZON = re.compile(r"^P(?:(?:\d+D)?(?:T(?:(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\
 VALID_MISSINGNESS = {"PRESENT", "MISSING", "INSUFFICIENT_DATA", "STALE_INPUT", "INVALID_INPUT",
                      "UNAVAILABLE", "UNSUPPORTED", "NOT_APPLICABLE"}
 VALID_EXCLUSION_REASONS = {
-    "FEATURE_SNAPSHOT_INVALID", "FEATURE_MISSING_REQUIRED_VALUE", "OUTCOME_MISSING", "OUTCOME_NOT_MATURE",
+    "FEATURE_SNAPSHOT_INVALID", "FEATURE_EVIDENCE_UNAVAILABLE", "FEATURE_MISSING_REQUIRED_VALUE", "OUTCOME_MISSING", "OUTCOME_NOT_MATURE",
     "OUTCOME_INCOMPLETE", "OUTCOME_UNAVAILABLE", "OUTCOME_VERSION_NOT_SELECTED", "OUTCOME_VERSION_MISMATCH",
     "OUTCOME_IDENTITY_CONFLICT", "VERSION_MISMATCH", "MARKET_MISMATCH", "CUTOFF_MISMATCH",
     "HORIZON_UNSUPPORTED", "DUPLICATE_FEATURE_SNAPSHOT",
@@ -220,6 +222,15 @@ def _validate_row(row: dict[str, Any], line: int, population: dict[str, Any],
                 _add(diagnostics, "samples.cutoff_outside_population", "evaluationCutoff is outside the declared population", line)
         except (KeyError, TypeError, ValueError):
             pass
+    known_at = row.get("featureEvidenceKnownAt")
+    if known_at is not None and cutoff is not None:
+        try:
+            if _parse_time(known_at) > cutoff:
+                _add(diagnostics, "evidence.feature_known_at_after_cutoff",
+                     "featureEvidenceKnownAt is after evaluationCutoff", line)
+        except (TypeError, ValueError):
+            _add(diagnostics, "evidence.invalid_feature_known_at",
+                 "featureEvidenceKnownAt must be an ISO timestamp", line)
     if row.get("evidencePolicy") != population.get("featureEvidencePolicy"):
         _add(diagnostics, "samples.evidence_policy_mismatch", "row evidence policy differs from manifest", line)
     _validate_known_at(row, cutoff, diagnostics, line)
@@ -282,6 +293,11 @@ def _validate_row(row: dict[str, Any], line: int, population: dict[str, Any],
             _add(diagnostics, "lineage.invalid_fingerprint", "sampleFingerprint must be lowercase SHA-256", line)
         if row.get("status") == "ELIGIBLE" and not isinstance(lineage.get("outcomeFingerprint"), str):
             _add(diagnostics, "lineage.missing_outcome", "eligible row requires an outcome fingerprint", line)
+        if lineage.get("executionOrigin") == "HISTORICAL_RECONSTRUCTION":
+            for field in ("featureSnapshotAnalysisExecutionId", "executionId", "reconstructionRequestFingerprint"):
+                if not isinstance(lineage.get(field), str) or not lineage[field]:
+                    _add(diagnostics, "lineage.missing_reconstruction_field",
+                         f"historical row requires lineage field: {field}", line)
         material = lineage.get("sampleFingerprintMaterial")
         if isinstance(material, list) and all(isinstance(value, str) for value in material):
             if lineage.get("sampleFingerprint") != _fingerprint(material):

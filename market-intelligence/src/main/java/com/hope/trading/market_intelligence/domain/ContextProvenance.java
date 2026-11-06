@@ -12,10 +12,12 @@ public record ContextProvenance(
         EvidenceAcquisitionPolicy evidencePolicy,
         String evidenceFingerprint,
         Integer observationCount,
-        Instant evaluationCutoff
+        Instant evaluationCutoff,
+        Instant capturedAt,
+        Instant knownAt
 ) {
     public ContextProvenance(String source, Instant sourceOccurredAt, Instant fetchedAt) {
-        this(source, sourceOccurredAt, fetchedAt, null, null, null, null, null, null, null);
+        this(source, sourceOccurredAt, fetchedAt, null, null, null, null, null, null, null, null, null);
     }
 
     public ContextProvenance(
@@ -27,7 +29,7 @@ public record ContextProvenance(
             String normalizationVersion
     ) {
         this(source, sourceOccurredAt, fetchedAt, sourceReference, sourceVersion,
-                normalizationVersion, null, null, null, null);
+                normalizationVersion, null, null, null, null, null, null);
     }
 
     public ContextProvenance(
@@ -42,6 +44,23 @@ public record ContextProvenance(
             Integer observationCount
     ) {
         this(source, sourceOccurredAt, fetchedAt, sourceReference, sourceVersion,
-                normalizationVersion, evidencePolicy, evidenceFingerprint, observationCount, null);
+                normalizationVersion, evidencePolicy, evidenceFingerprint, observationCount, null, null, null);
+    }
+
+    public ContextProvenance(
+            String source,
+            Instant sourceOccurredAt,
+            Instant fetchedAt,
+            String sourceReference,
+            String sourceVersion,
+            String normalizationVersion,
+            EvidenceAcquisitionPolicy evidencePolicy,
+            String evidenceFingerprint,
+            Integer observationCount,
+            Instant evaluationCutoff
+    ) {
+        this(source, sourceOccurredAt, fetchedAt, sourceReference, sourceVersion,
+                normalizationVersion, evidencePolicy, evidenceFingerprint, observationCount,
+                evaluationCutoff, null, null);
     }
 }

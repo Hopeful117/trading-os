@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.domain.research.DatasetManifest;
 import com.hope.trading.market_intelligence.domain.research.ResearchFeatureSnapshotKey;
 import com.hope.trading.market_intelligence.domain.research.ResearchOutcomeKey;
+import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -29,8 +30,12 @@ public final class ResearchDatasetBundleExporter {
     private final ResearchDatasetJsonlExporter samplesExporter;
 
     public ResearchDatasetBundleExporter(ObjectMapper mapper) {
+        this(mapper, null);
+    }
+
+    public ResearchDatasetBundleExporter(ObjectMapper mapper, AnalysisExecutionRepository executions) {
         this.mapper = Objects.requireNonNull(mapper, "object mapper");
-        this.samplesExporter = new ResearchDatasetJsonlExporter(mapper);
+        this.samplesExporter = new ResearchDatasetJsonlExporter(mapper, executions);
     }
 
     public void export(DatasetBuildResult dataset, Path outputDirectory) {

@@ -5,6 +5,7 @@ import json
 import sys
 
 from .dataset import DatasetValidationError
+from .benchmark import BenchmarkInputError, run_benchmark
 from .experiment import DataReadinessBlocked, run_from_paths
 from .validator import validate_bundle
 
@@ -22,6 +23,12 @@ def main(argv: list[str] | None = None) -> int:
     experiment.add_argument("--market-id")
     experiment.add_argument("--horizon", default="PT4H")
     experiment.add_argument("--output-dir", required=True)
+    benchmark = subparsers.add_parser("benchmark")
+    benchmark.add_argument("--manifest", required=True)
+    benchmark.add_argument("--samples", required=True)
+    benchmark.add_argument("--ai-predictions", required=True)
+    benchmark.add_argument("--market-id", required=True)
+    benchmark.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     if args.command == "experiment":
         try:
@@ -39,6 +46,15 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(result["status"])
         return 0 if result["status"] == "COMPLETED" else 2
+    if args.command == "benchmark":
+        try:
+            result = run_benchmark(args.manifest, args.samples, args.ai_predictions,
+                                   args.market_id, args.output_dir)
+        except (DatasetValidationError, BenchmarkInputError, OSError, ValueError, KeyError) as error:
+            print(f"benchmark.error: {error}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, sort_keys=True))
+        return 0
     result = validate_bundle(args.bundle)
     if args.command == "diagnose":
         print(json.dumps(result.as_dict(), indent=2, sort_keys=True))

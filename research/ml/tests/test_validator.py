@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from research_dataset.validator import validate_bundle
+from research_dataset.validator import VALID_EXCLUSION_REASONS, validate_bundle
 from research_dataset.__main__ import main
 
 
@@ -15,6 +15,9 @@ def fingerprint(material):
 
 
 class ValidatorTest(unittest.TestCase):
+    def test_accepts_temporal_evidence_unavailable_exclusion_reason(self):
+        self.assertIn("FEATURE_EVIDENCE_UNAVAILABLE", VALID_EXCLUSION_REASONS)
+
     def test_accepts_committed_java_generated_fixture(self):
         fixture = Path(__file__).parent / "fixtures" / "java-generated"
         result = validate_bundle(fixture)

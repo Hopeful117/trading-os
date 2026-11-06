@@ -4,25 +4,33 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.domain.feature.*;
 import com.hope.trading.market_intelligence.domain.research.ResearchSample;
+import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 
 import java.util.*;
 
 public final class ResearchDatasetJsonlExporter {
     private static final String STATUS = "status";
     private final ObjectMapper mapper;
+    private final AnalysisExecutionRepository executions;
 
     public ResearchDatasetJsonlExporter(ObjectMapper mapper) {
+        this(mapper, null);
+    }
+
+    public ResearchDatasetJsonlExporter(ObjectMapper mapper, AnalysisExecutionRepository executions) {
         this.mapper = Objects.requireNonNull(mapper, "object mapper");
+        this.executions = executions;
     }
 
     public String export(DatasetBuildResult dataset) {
         Objects.requireNonNull(dataset, "dataset");
-        return dataset.samples().stream().map(sample -> line(dataset.manifest().featureSchema(), sample))
+        return dataset.samples().stream().map(sample -> line(dataset, sample))
                 .collect(java.util.stream.Collectors.joining("\n"))
                 + (dataset.samples().isEmpty() ? "" : "\n");
     }
 
-    private String line(FeatureSchema schema, ResearchSample sample) {
+    private String line(DatasetBuildResult dataset, ResearchSample sample) {
+        FeatureSchema schema = dataset.manifest().featureSchema();
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("sampleId", sample.sampleId().toString());
         document.put("marketId", sample.marketId().toString());
@@ -31,6 +39,9 @@ public final class ResearchDatasetJsonlExporter {
         document.put("featureProjectionVersion", sample.featureProjectionVersion());
         document.put("evidencePolicy", sample.featureSnapshot().evidencePolicy().name());
         document.put("featureSnapshotCreatedAt", sample.featureSnapshot().createdAt().toString());
+        var knownAt = dataset.featureEvidenceKnownAtBySnapshotFingerprint()
+                .get(sample.featureSnapshot().fingerprint());
+        if (knownAt != null) document.put("featureEvidenceKnownAt", knownAt.toString());
         document.put(STATUS, sample.status().name());
         document.put("exclusionReason", sample.exclusionReason() == null ? null : sample.exclusionReason().name());
         document.put("features", features(schema, sample));
@@ -43,6 +54,17 @@ public final class ResearchDatasetJsonlExporter {
         lineage.put("outcomeFingerprint", sample.outcome() == null ? null : sample.outcome().outcomeFingerprint());
         lineage.put("sampleFingerprint", sample.sampleFingerprint());
         lineage.put("sampleFingerprintMaterial", sampleFingerprintMaterial(sample));
+        if (executions != null) {
+            var execution = executions.findById(sample.featureSnapshot().analysisExecutionId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "feature snapshot execution is missing: "
+                                    + sample.featureSnapshot().analysisExecutionId()));
+            lineage.put("featureSnapshotAnalysisExecutionId", sample.featureSnapshot().analysisExecutionId());
+            lineage.put("executionId", execution.executionId());
+            lineage.put("executionOrigin", execution.provenance().executionOrigin().name());
+            lineage.put("reconstructionRequestFingerprint",
+                    execution.provenance().reconstructionRequestFingerprint());
+        }
         document.put("lineage", lineage);
         try {
             return mapper.writeValueAsString(document);

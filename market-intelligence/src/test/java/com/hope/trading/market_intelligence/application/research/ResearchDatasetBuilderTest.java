@@ -85,6 +85,57 @@ class ResearchDatasetBuilderTest {
     }
 
     @Test
+    void excludesSamplesWithoutTemporalEvidenceWhenExportProvidesEvidenceMap() {
+        FeatureSnapshot snapshot = snapshot("snapshot-temporal-evidence");
+        ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-temporal-evidence",
+                ObservedMarketOutcomeStatus.AVAILABLE);
+        ResearchPopulationSpec population = population(snapshot, Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-temporal-evidence"),
+                Set.of(OutcomeHorizon.oneHour()));
+
+        DatasetBuildResult result = builder().build(population, List.of(snapshot), List.of(outcome),
+                Map.of("another-snapshot", T0.minusSeconds(1)), true);
+
+        assertThat(result.manifest().eligibleCount()).isZero();
+        assertThat(result.manifest().excludedCount()).isEqualTo(1);
+        assertThat(result.samples().getFirst().exclusionReason())
+                .isEqualTo(ResearchExclusionReason.FEATURE_EVIDENCE_UNAVAILABLE);
+    }
+
+    @Test
+    void acceptsCompleteTemporalEvidenceAtOrBeforeEvaluationCutoff() {
+        FeatureSnapshot snapshot = snapshot("snapshot-temporal-valid");
+        ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-temporal-valid",
+                ObservedMarketOutcomeStatus.AVAILABLE);
+        ResearchPopulationSpec population = population(snapshot, Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-temporal-valid"),
+                Set.of(OutcomeHorizon.oneHour()));
+
+        DatasetBuildResult result = builder().build(population, List.of(snapshot), List.of(outcome),
+                Map.of(snapshot.fingerprint(), T0.minusSeconds(1)), true);
+
+        assertThat(result.manifest().eligibleCount()).isEqualTo(1);
+        assertThat(result.samples().getFirst().status()).isEqualTo(ResearchSampleStatus.ELIGIBLE);
+    }
+
+    @Test
+    void rejectsTemporalEvidenceKnownAfterEvaluationCutoff() {
+        FeatureSnapshot snapshot = snapshot("snapshot-temporal-future");
+        ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-temporal-future",
+                ObservedMarketOutcomeStatus.AVAILABLE);
+        ResearchPopulationSpec population = population(snapshot, Map.of(
+                new ResearchOutcomeKey(MARKET_ID, T0, OutcomeHorizon.oneHour()), "outcome-temporal-future"),
+                Set.of(OutcomeHorizon.oneHour()));
+
+        DatasetBuildResult result = builder().build(population, List.of(snapshot), List.of(outcome),
+                Map.of(snapshot.fingerprint(), T0.plusSeconds(1)), true);
+
+        assertThat(result.manifest().eligibleCount()).isZero();
+        assertThat(result.samples().getFirst().exclusionReason())
+                .isEqualTo(ResearchExclusionReason.FEATURE_EVIDENCE_UNAVAILABLE);
+    }
+
+    @Test
     void samePopulationAndReorderedInputsProduceSameDatasetFingerprint() {
         FeatureSnapshot snapshot = snapshot("snapshot-stable");
         ObservedMarketOutcome first = outcome(OutcomeHorizon.oneHour(), "outcome-stable-1", ObservedMarketOutcomeStatus.AVAILABLE);

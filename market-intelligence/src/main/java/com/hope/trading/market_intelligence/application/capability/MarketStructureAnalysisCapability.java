@@ -94,7 +94,9 @@ public final class MarketStructureAnalysisCapability implements Capability {
         MarketStructureInput structureInput = new MarketStructureInput(
                 input.marketId(), input.provider(), input.symbol(), series.interval(),
                 candles.stream().map(c -> new MarketStructureCandle(c.openTime(), c.closeTime(), c.high(), c.low(),
-                        c.sourceId(), c.sourceOccurredAt(), c.fetchedAt(), c.closed(), c.synthetic())).toList(),
+                        c.sourceId(), c.sourceOccurredAt(), c.fetchedAt(), c.closed(), c.synthetic(),
+                        c.observationId(), c.capturedAt(), c.knownAt(), c.observationFingerprint(),
+                        c.normalizationVersion())).toList(),
                 series.gapFindings().stream().map(g -> new MarketStructureGap(g.from(), g.to())).toList(),
                 input.cutOffAt(), "CONFIRMED_SWING_V1", input.ruleVersion(), input.profile().profileId(),
                 input.profile().profileVersion(), parameterFingerprint(input.profile()), input.fingerprint(),

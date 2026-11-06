@@ -131,6 +131,18 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 .filter(Objects::nonNull)
                 .max(Comparator.naturalOrder())
                 .orElse(null);
+        Instant capturedAt = responses.values().stream()
+                .flatMap(Collection::stream)
+                .map(OhlcResponse::capturedAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        Instant knownAt = responses.values().stream()
+                .flatMap(Collection::stream)
+                .map(OhlcResponse::knownAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
         return new ContextSection(
                 sectionType(),
                 occurredAt == null ? ContextSectionStatus.MISSING : ContextSectionStatus.AVAILABLE,
@@ -138,7 +150,8 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 history,
                 new ContextProvenance("market-data", occurredAt, boundary,
                         null, null, metadata.normalizationVersion(), request.evidencePolicy(),
-                        metadata.evidenceFingerprint(), metadata.observationCount()),
+                        metadata.evidenceFingerprint(), metadata.observationCount(), boundary,
+                        capturedAt, knownAt),
                 occurredAt == null ? "Trend Context history is unavailable" : null
         );
     }
@@ -154,7 +167,8 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 .filter(value -> !after(value.openTime(), cutoff)
                         && !after(value.closeTime(), cutoff)
                         && !after(value.occurredAt(), cutoff)
-                        && (!strictFetchedAtCutoff || !after(value.fetchedAt(), cutoff)))
+                        && (!strictFetchedAtCutoff || !after(value.fetchedAt(), cutoff))
+                        && (!strictFetchedAtCutoff || !after(value.knownAt(), cutoff)))
                 .toList()));
         return Map.copyOf(filtered);
     }
@@ -167,7 +181,8 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 .anyMatch(value -> after(value.openTime(), cutoff)
                         || after(value.closeTime(), cutoff)
                         || after(value.occurredAt(), cutoff)
-                        || (strictFetchedAtCutoff && after(value.fetchedAt(), cutoff)));
+                        || (strictFetchedAtCutoff && after(value.fetchedAt(), cutoff))
+                        || (strictFetchedAtCutoff && after(value.knownAt(), cutoff)));
     }
 
     private boolean after(Instant value, Instant cutoff) {

@@ -171,6 +171,26 @@ git diff --check
 git diff -- AGENTS.md TOOLS.md
 ```
 
+### Reconstruction historique controlee
+
+La reconstruction historique est desactivee par defaut et ne doit etre activee
+que pour une execution operateur explicitement approuvee. Elle n'est pas exposee
+par le Gateway.
+
+```bash
+java -jar market-intelligence.jar \
+  --research.historical-reconstruction.enabled=true \
+  --market-id=<market-uuid> \
+  --cutoff=<evaluation-cutoff> \
+  --run-id=<new-run-id> \
+  --approval-reference=<human-approval-reference> \
+  --confirm-historical-reconstruction
+```
+
+La commande utilise uniquement les preuves OHLC historiques strictes, produit au
+maximum un echantillon et refuse un repertoire de sortie existant ou hors de la
+racine configuree. Elle ne lance ni replay Order Book, ni appel LLM, ni ordre.
+
 Ne pas utiliser de commande destructive pour nettoyer le worktree. Les
 modifications existantes doivent rester intactes et visibles pour la revue
 humaine.

@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.execution.*;
 import com.hope.trading.market_intelligence.domain.security.*;
+import com.hope.trading.market_intelligence.application.research.HistoricalReconstructionPolicy;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -61,14 +62,75 @@ public class AnalysisExecutionService {
             String requestId,
             String traceId
     ) {
+        if (HistoricalReconstructionPolicy.OBJECTIVE.equals(request.objective())) {
+            throw new IllegalArgumentException(
+                    "Historical reconstruction must use the controlled operator boundary");
+        }
+        return registerInternal(request, idempotencyKey, requestId, traceId, false);
+    }
+
+    public AnalysisExecution createHistorical(
+            IntelligenceAnalysisRequest request,
+            IdempotencyKey idempotencyKey,
+            String requestId,
+            String traceId
+    ) {
+        return createHistorical(request, idempotencyKey, requestId, traceId, null);
+    }
+
+    public AnalysisExecution createHistorical(
+            IntelligenceAnalysisRequest request,
+            IdempotencyKey idempotencyKey,
+            String requestId,
+            String traceId,
+            String selectionFingerprint
+    ) {
+        AnalysisExecution execution = registerInternal(
+                request, idempotencyKey, requestId, traceId, true, selectionFingerprint);
+        if (claimForDispatch(execution.executionId())) {
+            dispatchRegistered(execution.executionId());
+        }
+        return execution;
+    }
+
+    private AnalysisExecution registerInternal(
+            IntelligenceAnalysisRequest request,
+            IdempotencyKey idempotencyKey,
+            String requestId,
+            String traceId,
+            boolean historicalBoundary
+    ) {
+        return registerInternal(request, idempotencyKey, requestId, traceId, historicalBoundary, null);
+    }
+
+    private AnalysisExecution registerInternal(
+            IntelligenceAnalysisRequest request,
+            IdempotencyKey idempotencyKey,
+            String requestId,
+            String traceId,
+            boolean historicalBoundary,
+            String selectionFingerprint
+    ) {
+        if (historicalBoundary != HistoricalReconstructionPolicy.OBJECTIVE.equals(request.objective())) {
+            throw new IllegalArgumentException("Controlled historical boundary requires its reconstruction objective");
+        }
         if (request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
                 && request.evaluationCutoff() == null) {
             throw new IllegalArgumentException(
                     "Strict observed analysis requires an explicit evaluation cutoff");
         }
         Instant now = clock.instant();
-        return repository.findReusable(idempotencyKey, now).orElseGet(() -> {
-            AnalysisExecutionPlan plan = strategies.strategy(request.mode()).plan(request);
+        var reusable = repository.findReusable(idempotencyKey, now);
+        if (reusable.isPresent()) {
+            if (historicalBoundary && !java.util.Objects.equals(
+                    reusable.get().provenance().reconstructionRequestFingerprint(),
+                    provenance(request, true, selectionFingerprint).reconstructionRequestFingerprint())) {
+                throw new IllegalStateException(
+                        "Conflicting historical reconstruction request for idempotency key");
+            }
+            return reusable.get();
+        }
+        AnalysisExecutionPlan plan = strategies.strategy(request.mode()).plan(request);
             ExecutionTrace trace = new ExecutionTrace(
                     request.analysisId(),
                     requestId,
@@ -84,16 +146,38 @@ public class AnalysisExecutionService {
                     policyFactory.from(plan),
                     now,
                     plan.capabilityIds(),
-                    new AnalysisExecutionProvenance(
-                            request.marketId(), request.mode(), request.objective(), "v1",
-                            request.accountId(), request.scanId(), request.scanMarketId(),
-                            request.evaluationCutoff(), request.evidencePolicy()
-                    ),
+                    provenance(request, historicalBoundary, selectionFingerprint),
                     new AnalysisTraceMetadata(List.of(trace))
             );
             repository.save(execution);
             return execution;
-        });
+    }
+
+    private AnalysisExecutionProvenance provenance(
+            IntelligenceAnalysisRequest request,
+            boolean historicalBoundary,
+            String selectionFingerprint
+    ) {
+        if (!historicalBoundary) {
+            return new AnalysisExecutionProvenance(
+                    request.marketId(), request.mode(), request.objective(), "v1",
+                    request.accountId(), request.scanId(), request.scanMarketId(),
+                    request.evaluationCutoff(), request.evidencePolicy());
+        }
+        if (request.evidencePolicy() != EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                || request.evaluationCutoff() == null) {
+            throw new IllegalArgumentException(
+                    "Historical reconstruction requires strict observed evidence and a cutoff");
+        }
+        String fingerprint = request.marketId() + "|" + request.evaluationCutoff()
+                + "|feature-projection-v1|PT1H|STRICT_OBSERVED|"
+                + String.join(",", HistoricalReconstructionPolicy.ALLOWED_CAPABILITIES)
+                + "|selection=" + (selectionFingerprint == null ? "preflight-unavailable" : selectionFingerprint);
+        return new AnalysisExecutionProvenance(
+                request.marketId(), request.mode(), request.objective(), "v1",
+                request.accountId(), request.scanId(), request.scanMarketId(),
+                request.evaluationCutoff(), request.evidencePolicy(),
+                ExecutionOrigin.HISTORICAL_RECONSTRUCTION, fingerprint);
     }
 
     public boolean claimForDispatch(UUID executionId) {

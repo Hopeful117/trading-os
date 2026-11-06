@@ -32,13 +32,17 @@ public final class StrictObservedOhlcEvidenceValidator {
                     || !evidence.closed()
                     || evidence.synthetic()
                     || !"CAPTURED".equals(evidence.origin())
-                    || evidence.closeTime() == null
-                    || evidence.knownAt() == null
+                     || evidence.closeTime() == null
+                     || evidence.observationId() == null
+                     || evidence.fetchedAt() == null
+                     || evidence.capturedAt() == null
+                     || evidence.knownAt() == null
                     || evidence.closeTime().isAfter(cutoff)
                     || evidence.knownAt().isAfter(cutoff)
                     || evidence.sourceUpdatedAt() != null && evidence.sourceUpdatedAt().isAfter(cutoff)
-                    || evidence.sourceId() == null
-                    || evidence.observationFingerprint() == null) {
+                     || evidence.sourceId() == null
+                     || evidence.observationFingerprint() == null
+                     || evidence.normalizationVersion() == null) {
                 throw invalid("Historical OHLC evidence violates strict observed contract");
             }
         }
