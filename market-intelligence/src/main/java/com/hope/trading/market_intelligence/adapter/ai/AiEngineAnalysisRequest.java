@@ -3,6 +3,8 @@ package com.hope.trading.market_intelligence.adapter.ai;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hope.trading.market_intelligence.domain.IntelligenceContext;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
+import com.hope.trading.market_intelligence.application.port.AiInterpretationPhase;
+import com.hope.trading.market_intelligence.application.port.AiSynthesisContext;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,7 +18,9 @@ record AiEngineAnalysisRequest(
         PolicyWire policy,
         TraceWire trace,
         String researchMode,
-        String idempotencyKey
+        String idempotencyKey,
+        AiInterpretationPhase phase,
+        AiSynthesisContext synthesisContext
 ) {
     static AiEngineAnalysisRequest from(
             com.hope.trading.market_intelligence.application.port.AiAnalysisCommand command) {
@@ -31,8 +35,10 @@ record AiEngineAnalysisRequest(
                 command.executionId(), command.capabilities(), command.authorizedContext(),
                 MarketThesisWire.from(command.thesis()),
                 PolicyWire.from(command.policy(), contextLimitBytes, maxOutputTokens),
-                TraceWire.from(command.trace()), command.adaptive() ? "ADAPTIVE_RESEARCH" : "THESIS_INTERPRETATION",
-                command.executionId().toString());
+                TraceWire.from(command.trace()), command.adaptive()
+                        || command.phase() == AiInterpretationPhase.FINAL_SYNTHESIS
+                        ? "ADAPTIVE_RESEARCH" : "THESIS_INTERPRETATION",
+                command.executionId().toString(), command.phase(), command.synthesisContext());
     }
 
     record MarketThesisWire(

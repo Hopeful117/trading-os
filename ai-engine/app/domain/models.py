@@ -138,10 +138,50 @@ class ExecutionPolicy(StrictModel):
     max_output_tokens: int = Field(gt=0, le=8_000)
 
 
+class InterpretationPhase(StrEnum):
+    INITIAL = "INITIAL"
+    FINAL_SYNTHESIS = "FINAL_SYNTHESIS"
+
+
 class Trace(StrictModel):
     request_id: str = Field(min_length=1, max_length=128)
     trace_id: str = Field(min_length=1, max_length=128)
     contract_version: str = Field(min_length=1, max_length=64)
+
+
+class SynthesisFinding(StrictModel):
+    finding_id: str = Field(min_length=1, max_length=200)
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=4_000)
+    evidence_references: list[UUID] = Field(max_length=32)
+
+
+class FollowUpEvidence(StrictModel):
+    execution_id: UUID
+    capability_id: str = Field(min_length=1, max_length=120)
+    capability_version: str = Field(min_length=1, max_length=32)
+    status: str = Field(min_length=1, max_length=64)
+    generated_at: datetime | None = None
+    source_fingerprint: str | None = Field(default=None, max_length=128)
+    findings: list[SynthesisFinding] = Field(max_length=256)
+    diagnostics: list[str] = Field(max_length=64)
+
+
+class RequestedAnalysis(StrictModel):
+    capability_id: str = Field(min_length=1, max_length=120)
+    capability_version: str = Field(min_length=1, max_length=32)
+    market_id: UUID
+    reason: str = Field(min_length=1, max_length=2_000)
+    expected_evidence: str = Field(min_length=1, max_length=2_000)
+
+
+class SynthesisContext(StrictModel):
+    objective: str = Field(min_length=1, max_length=500)
+    market_id: UUID
+    initial_hypotheses: list[str] = Field(max_length=64)
+    initial_findings: list[SynthesisFinding] = Field(max_length=256)
+    requested_analysis: RequestedAnalysis | None = None
+    follow_up_evidence: FollowUpEvidence
 
 
 class InterpretationRequest(StrictModel):
@@ -153,6 +193,8 @@ class InterpretationRequest(StrictModel):
     trace: Trace
     idempotency_key: str = Field(min_length=1, max_length=128)
     research_mode: str = Field(default="THESIS_INTERPRETATION", pattern="^(THESIS_INTERPRETATION|ADAPTIVE_RESEARCH)$")
+    phase: InterpretationPhase = InterpretationPhase.INITIAL
+    synthesis_context: SynthesisContext | None = None
 
     @field_validator("capabilities")
     @classmethod
@@ -168,6 +210,10 @@ class InterpretationRequest(StrictModel):
         evidence_count = len(self.thesis.evidence)
         if evidence_count > 2_000:
             raise ValueError("too many evidence items")
+        if self.phase == InterpretationPhase.FINAL_SYNTHESIS and self.synthesis_context is None:
+            raise ValueError("final synthesis requires synthesis context")
+        if self.synthesis_context is not None and self.synthesis_context.market_id != self.thesis.market_id:
+            raise ValueError("synthesis market_id must match thesis market_id")
         return self
 
 
@@ -176,12 +222,12 @@ class Argument(StrictModel):
     evidence_refs: list[UUID] = Field(max_length=32)
 
 
-class RequestedAnalysis(StrictModel):
-    capability_id: str = Field(min_length=1, max_length=120)
-    capability_version: str = Field(min_length=1, max_length=32)
-    market_id: UUID
-    reason: str = Field(min_length=1, max_length=2_000)
-    expected_evidence: str = Field(min_length=1, max_length=2_000)
+class HypothesisReconciliation(StrictModel):
+    hypothesis_id: str = Field(min_length=1, max_length=200)
+    hypothesis: str = Field(min_length=1, max_length=4_000)
+    effect: str = Field(pattern="^(CONFIRMED|STRENGTHENED|WEAKENED|INVALIDATED|UNCHANGED|INCONCLUSIVE)$")
+    explanation: str = Field(min_length=1, max_length=4_000)
+    evidence_references: list[UUID] = Field(max_length=32)
 
 
 class InterpretationDraft(StrictModel):
@@ -195,6 +241,7 @@ class InterpretationDraft(StrictModel):
     uncertainty: list[str] = Field(max_length=64)
     suggested_decision: SuggestedDecision
     requested_analysis: RequestedAnalysis | None = None
+    reconciliations: list[HypothesisReconciliation] = Field(default_factory=list, max_length=64)
 
 
 class InterpretationResult(StrictModel):

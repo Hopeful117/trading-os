@@ -20,7 +20,7 @@ class ResearchEvaluationTest {
 
     @Test
     void publishesSixExplicitSyntheticScenarios() {
-        assertThat(ResearchEvaluationFixtures.all()).hasSize(6)
+        assertThat(ResearchEvaluationFixtures.all()).hasSize(7)
                 .allSatisfy(value -> assertThat(value.datasetKind()).isEqualTo(SYNTHETIC));
     }
 
@@ -30,11 +30,7 @@ class ResearchEvaluationTest {
 
         for (ResearchEvaluation.Scenario scenario : ResearchEvaluationFixtures.all()) {
             ResearchEvaluation.Result result = ResearchEvaluation.evaluate(scenario, reports.get(scenario.id()));
-            if (scenario.expectsFollowUp()) {
-                assertThat(result.passedMachineChecks()).as(scenario.id() + " -> " + result.criteria()).isFalse();
-            } else {
-                assertThat(result.passedMachineChecks()).as(scenario.id() + " -> " + result.criteria()).isTrue();
-            }
+            assertThat(result.passedMachineChecks()).as(scenario.id() + " -> " + result.criteria()).isTrue();
         }
     }
 
