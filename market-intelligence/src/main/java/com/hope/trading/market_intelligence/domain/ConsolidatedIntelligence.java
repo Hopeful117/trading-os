@@ -14,8 +14,12 @@ public record ConsolidatedIntelligence(
         AnalysisExecutionMetadata executionMetadata
 ) {
     public ConsolidatedIntelligence {
-        contextSections = List.copyOf(contextSections);
-        findings = List.copyOf(findings);
-        warnings = List.copyOf(warnings);
+        contextSections = immutableOrEmpty(contextSections);
+        findings = immutableOrEmpty(findings);
+        warnings = immutableOrEmpty(warnings);
+    }
+
+    private static <T> List<T> immutableOrEmpty(List<T> values) {
+        return values == null ? List.of() : List.copyOf(values);
     }
 }

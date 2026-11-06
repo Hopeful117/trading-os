@@ -51,7 +51,15 @@ public final class ResearchExecution {
     }
 
     public ResearchExecution running(Instant now) {
-        return copy(ResearchExecutionStatus.RUNNING, now, null, null, null);
+        return copy(ResearchExecutionStatus.RUNNING, now, null, null, report);
+    }
+
+    public ResearchExecution checkpoint(JsonNode result, Instant now) {
+        return copy(ResearchExecutionStatus.RUNNING, now, null, null, result);
+    }
+
+    public ResearchExecution requeue(Instant now) {
+        return copy(ResearchExecutionStatus.REQUESTED, now, null, null, report);
     }
 
     public ResearchExecution complete(JsonNode result, Instant now) {

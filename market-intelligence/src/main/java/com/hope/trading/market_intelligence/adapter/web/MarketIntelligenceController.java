@@ -127,7 +127,7 @@ public class MarketIntelligenceController {
         if (execution.report() == null) {
             return ResponseEntity.accepted().body(ResearchExecutionResponse.from(execution));
         }
-        return ResponseEntity.ok(execution.report());
+        return ResponseEntity.ok(ResearchExecutionResponse.from(execution).report());
     }
 
     @PostMapping("/scans/scope")

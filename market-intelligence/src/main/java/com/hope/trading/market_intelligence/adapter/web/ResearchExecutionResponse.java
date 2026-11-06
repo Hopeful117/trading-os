@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 
@@ -18,12 +19,18 @@ public record ResearchExecutionResponse(
         Instant updatedAt,
         Instant completedAt,
         String failureCode,
-        JsonNode report
+        Object report
 ) {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     static ResearchExecutionResponse from(ResearchExecution execution) {
         return new ResearchExecutionResponse(
                 execution.researchId(), execution.status(), execution.marketIds(), execution.objective(),
                 execution.depth(), execution.requestedAt(), execution.updatedAt(), execution.completedAt(),
-                execution.failureCode(), execution.report());
+                execution.failureCode(), reportValue(execution.report()));
+    }
+
+    private static Object reportValue(JsonNode report) {
+        return report == null ? null : MAPPER.convertValue(report, Object.class);
     }
 }

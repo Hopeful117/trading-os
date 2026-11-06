@@ -35,6 +35,7 @@ import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.time.Duration;
 
 @Service
@@ -139,7 +140,9 @@ public class ResearchApplicationService {
         try {
             ResearchReport report = buildReport(
                     new ResearchRequest(execution.marketIds(), execution.objective(), execution.depth()),
-                    execution.researchId());
+                    execution.researchId(), partial -> executions.saveIfStatus(
+                            execution.checkpoint(mapper.valueToTree(partial), clock.instant()),
+                            com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING));
             JsonNode reportJson = mapper.valueToTree(report);
             ResearchExecution terminal = report.markets().stream().allMatch(
                     value -> "COMPLETE".equals(value.status()))
@@ -164,8 +167,12 @@ public class ResearchApplicationService {
         Instant cutoff = clock.instant().minus(Duration.ofMinutes(5));
         executions.findByStatus(com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING)
                 .stream().filter(value -> value.updatedAt().isBefore(cutoff))
-                .forEach(value -> executions.saveIfStatus(value.expire(clock.instant()),
-                        com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING));
+                .forEach(value -> {
+                    if (executions.saveIfStatus(value.requeue(clock.instant()),
+                            com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING)) {
+                        enqueue(value.researchId());
+                    }
+                });
     }
 
     private void enqueue(UUID researchId) {
@@ -186,7 +193,8 @@ public class ResearchApplicationService {
         return execution;
     }
 
-    private ResearchReport buildReport(ResearchRequest request, UUID researchId) {
+    private ResearchReport buildReport(ResearchRequest request, UUID researchId,
+                                       Consumer<ResearchReport> checkpoint) {
         List<ResearchReport.MarketResearchResult> results = new ArrayList<>();
         List<ResearchReport.AdaptiveCapabilityRecord> requestedCapabilities = new ArrayList<>();
         List<ResearchReport.AdaptiveCapabilityRecord> executedCapabilities = new ArrayList<>();
@@ -205,6 +213,8 @@ public class ResearchApplicationService {
                         "UNKNOWN", null, List.of(), List.of(), List.of(), List.of(),
                         "NOT_REQUESTED", null,
                         List.of("MARKET_UNAVAILABLE")));
+                checkpoint.accept(buildReportSnapshot(request, results, requestedCapabilities,
+                        executedCapabilities, rejectedCapabilities, diagnostics));
                 continue;
             }
             if (market == null || !marketId.equals(market.marketId())) {
@@ -213,6 +223,8 @@ public class ResearchApplicationService {
                         "UNKNOWN", null, List.of(), List.of(), List.of(), List.of(),
                         "NOT_REQUESTED", null,
                         List.of("MARKET_NOT_FOUND")));
+                checkpoint.accept(buildReportSnapshot(request, results, requestedCapabilities,
+                        executedCapabilities, rejectedCapabilities, diagnostics));
                 continue;
             }
             if (isBlank(market.provider()) || isBlank(market.symbol()) || isBlank(market.productType())) {
@@ -220,6 +232,8 @@ public class ResearchApplicationService {
                         marketId, market.provider(), market.symbol(), market.productType(), "FAILED",
                         null, null, null, "UNKNOWN", null, List.of(), List.of(), List.of(), List.of(),
                         "NOT_REQUESTED", null, List.of("MARKET_IDENTITY_INCOMPLETE")));
+                checkpoint.accept(buildReportSnapshot(request, results, requestedCapabilities,
+                        executedCapabilities, rejectedCapabilities, diagnostics));
                 continue;
             }
             Optional<MarketThesis> thesis = latestThesis(marketId);
@@ -252,9 +266,9 @@ public class ResearchApplicationService {
                             ? "MISSING" : value.inputFingerprint()).orElse("MISSING"))));
             try {
                 deterministic = analysis.analyze(deterministicAnalysisExecutionId, new IntelligenceAnalysisRequest(
-                        deterministicAnalysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE,
-                        request.objective(), null, researchId, null, clock.instant(),
-                        EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElse(null)));
+                         deterministicAnalysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE,
+                         request.objective(), null, researchId, null, null,
+                         EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElse(null)));
             } catch (RuntimeException exception) {
                 marketDiagnostics.add("DETERMINISTIC_ANALYSIS_FAILED");
             }
@@ -268,7 +282,7 @@ public class ResearchApplicationService {
                     CapabilityAnalysisResult interpreted = aiCapability.analyzeAdaptive(
                             new IntelligenceAnalysisRequest(
                                     UUID.randomUUID(), marketId, AnalysisExecutionMode.PASSIVE,
-                                    request.objective(), null, researchId, null, clock.instant(),
+                                     request.objective(), null, researchId, null, null,
                                     EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElseThrow()),
                             new com.hope.trading.market_intelligence.domain.IntelligenceContext(Map.of()));
                     RequestedAnalysis requested = interpreted.requestedAnalysis();
@@ -312,8 +326,8 @@ public class ResearchApplicationService {
                                 followUp = analysis.analyze(followUpId,
                                         new IntelligenceAnalysisRequest(
                                                 followUpId, marketId, AnalysisExecutionMode.PASSIVE,
-                                                requested.reason(), null, researchId, null,
-                                                clock.instant(), EvidenceAcquisitionPolicy.LIVE_CURRENT,
+                                                 requested.reason(), null, researchId, null,
+                                                 null, EvidenceAcquisitionPolicy.LIVE_CURRENT,
                                                 thesis.orElseThrow()), Set.of(requested.capabilityId()));
                                 followUpStatus = followUp == null ? "FAILED" : followUp.status().name();
                             } catch (RuntimeException exception) {
@@ -345,7 +359,7 @@ public class ResearchApplicationService {
                             CapabilityAnalysisResult finalInterpretation = aiCapability.analyzeFinal(
                                     new IntelligenceAnalysisRequest(
                                             UUID.randomUUID(), marketId, AnalysisExecutionMode.PASSIVE,
-                                            request.objective(), null, researchId, null, clock.instant(),
+                                             request.objective(), null, researchId, null, null,
                                             EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElseThrow()),
                                     new com.hope.trading.market_intelligence.domain.IntelligenceContext(Map.of()),
                                     synthesisContext);
@@ -403,9 +417,22 @@ public class ResearchApplicationService {
                      aiInterpretation,
                      marketDiagnostics,
                      finalAiInterpretation,
-                     reconciliations,
-                     followUpEvidence));
+                      reconciliations,
+                      followUpEvidence));
+            checkpoint.accept(buildReportSnapshot(request, results, requestedCapabilities,
+                    executedCapabilities, rejectedCapabilities, diagnostics));
         }
+        return buildReportSnapshot(request, results, requestedCapabilities,
+                executedCapabilities, rejectedCapabilities, diagnostics);
+    }
+
+    private ResearchReport buildReportSnapshot(
+            ResearchRequest request,
+            List<ResearchReport.MarketResearchResult> results,
+            List<ResearchReport.AdaptiveCapabilityRecord> requestedCapabilities,
+            List<ResearchReport.AdaptiveCapabilityRecord> executedCapabilities,
+            List<ResearchReport.AdaptiveCapabilityRecord> rejectedCapabilities,
+            List<String> diagnostics) {
         long completed = results.stream().filter(value -> "COMPLETE".equals(value.status())).count();
         Instant sourceCutoff = request.marketIds().stream()
                 .flatMap(value -> latestThesis(value).stream())
@@ -415,10 +442,11 @@ public class ResearchApplicationService {
         List<String> hypotheses = request.marketIds().stream()
                 .flatMap(value -> latestThesis(value).flatMap(MarketThesis::scenario).stream())
                 .map(value -> value.statement()).toList();
-        if (completed == 0) diagnostics.add("NO_MARKET_ANALYSIS_COMPLETED");
+        List<String> reportDiagnostics = new ArrayList<>(diagnostics);
+        if (completed == 0) reportDiagnostics.add("NO_MARKET_ANALYSIS_COMPLETED");
         if (results.stream().allMatch(value -> "DISABLED".equals(value.aiStatus())
                 || "NOT_REQUESTED".equals(value.aiStatus()))) {
-            diagnostics.add("AI_INTERPRETATION_DISABLED");
+            reportDiagnostics.add("AI_INTERPRETATION_DISABLED");
         }
         String conclusion = completed == results.size()
                 ? "Deterministic comparison completed; no trade authorization was produced."
@@ -428,7 +456,7 @@ public class ResearchApplicationService {
                 requestedCapabilities, executedCapabilities, rejectedCapabilities,
                 List.of("This report is advisory and does not authorize a trade.",
                         "No calibrated probability or profitability claim is produced."),
-                "existing-ai-engine-contract:v1", diagnostics, conclusion);
+                "existing-ai-engine-contract:v1", reportDiagnostics, conclusion);
     }
 
     private AiSynthesisContext synthesisContext(
