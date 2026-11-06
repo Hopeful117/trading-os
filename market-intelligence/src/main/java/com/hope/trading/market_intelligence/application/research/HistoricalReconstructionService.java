@@ -32,7 +32,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -158,9 +160,11 @@ public class HistoricalReconstructionService {
                     HistoricalReconstructionLifecyclePhase.ANALYSIS_COMPLETED, null, null, clock.instant()));
             UUID executionId = execution.executionId();
             String evidenceSelection = execution.provenance().historicalEvidenceSelection();
+            requireLease(lifecycle);
             FeatureSnapshot snapshot = runPhase(phases, () -> projections.project(executionId),
                     deadline, "feature projection");
             ensureWithinDeadline(deadline, "feature projection");
+            requireLease(lifecycle);
             lifecycle = saveOwned(lifecycle.progress(
                     HistoricalReconstructionLifecyclePhase.FEATURE_PROJECTION_COMPLETED,
                     snapshot.fingerprint(), null, clock.instant()));
@@ -168,6 +172,7 @@ public class HistoricalReconstructionService {
                     marketId, cutoff, new OutcomeHorizon(Duration.ofHours(1)), executionId,
                     evidenceSelection)), deadline, "outcome evaluation");
             ensureWithinDeadline(deadline, "outcome evaluation");
+            requireLease(lifecycle);
             if (outcome.status() != ObservedMarketOutcomeStatus.AVAILABLE) {
                 terminalStatus = "OUTCOME_" + outcome.status().name();
                 lifecycle = recordFailure(lifecycle, HistoricalReconstructionLifecycleStatus.PARTIAL,
@@ -187,10 +192,15 @@ public class HistoricalReconstructionService {
                     java.util.Map.of(new ResearchFeatureSnapshotKey(marketId, cutoff), snapshot.fingerprint()),
                     ResearchFeatureRequirements.q1(),
                     java.util.Map.of(new ResearchOutcomeKey(marketId, cutoff, new OutcomeHorizon(Duration.ofHours(1))),
-                    outcome.outcomeFingerprint()));
+                     outcome.outcomeFingerprint()));
+            requireLease(lifecycle);
+            UUID publicationLeaseId = lifecycle.leaseId();
             ResearchDatasetExportService.ExportResult export = runPhase(phases,
-                    () -> exports.export(population, output), deadline, "dataset export");
+                    () -> exports.export(population, output,
+                            () -> lifecycles.isOwned(executionId, publicationLeaseId)),
+                    deadline, "dataset export");
             ensureWithinDeadline(deadline, "dataset export");
+            requireLease(lifecycle);
             if (export.eligibleCount() != 1) {
                 recordFailure(lifecycle, HistoricalReconstructionLifecycleStatus.PARTIAL,
                         "EXPORT_ELIGIBILITY_COUNT", "Expected exactly one eligible sample, got "
@@ -266,6 +276,12 @@ public class HistoricalReconstructionService {
         return next;
     }
 
+    private void requireLease(HistoricalReconstructionLifecycle current) {
+        if (!lifecycles.isOwned(current.executionId(), current.leaseId())) {
+            throw new IllegalStateException("Historical reconstruction lifecycle lease was lost");
+        }
+    }
+
     private String failureCode(String terminalStatus) {
         return terminalStatus == null || terminalStatus.isBlank() ? "RECONSTRUCTION_FAILED" : terminalStatus;
     }
@@ -329,16 +345,35 @@ public class HistoricalReconstructionService {
                 || runId.contains("/") || runId.contains("\\")) {
             throw new IllegalArgumentException("Invalid reconstruction output location");
         }
-        if (!Files.isDirectory(root) || Files.isSymbolicLink(root)) {
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        if (!root.isAbsolute() || !Files.isDirectory(normalizedRoot, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(normalizedRoot) || !Files.isWritable(normalizedRoot)
+                || isGroupOrOtherWritable(normalizedRoot) || containsSymbolicLink(normalizedRoot)) {
             throw new IllegalArgumentException("Reconstruction output root is not a trusted directory");
         }
-        Path normalizedRoot = root.toAbsolutePath().normalize();
         Path resolved = normalizedRoot.resolve(runId).normalize();
         if (!resolved.startsWith(normalizedRoot) || Files.exists(resolved)
                 || Files.isSymbolicLink(resolved)) {
             throw new IllegalArgumentException("Reconstruction output path is not available");
         }
         return resolved;
+    }
+
+    private boolean isGroupOrOtherWritable(Path path) {
+        try {
+            var permissions = Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS);
+            return permissions.contains(PosixFilePermission.GROUP_WRITE)
+                    || permissions.contains(PosixFilePermission.OTHERS_WRITE);
+        } catch (java.io.IOException | UnsupportedOperationException ignored) {
+            return true;
+        }
+    }
+
+    private boolean containsSymbolicLink(Path path) {
+        for (Path current = path; current != null; current = current.getParent()) {
+            if (Files.isSymbolicLink(current)) return true;
+        }
+        return false;
     }
 
     private String selectionBinding(HistoricalReconstructionPreflight.Result selected) {

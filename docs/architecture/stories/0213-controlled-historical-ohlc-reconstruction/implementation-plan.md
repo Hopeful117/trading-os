@@ -304,3 +304,33 @@ This plan is not implementation approval. Human approval is required for this
 plan before production code changes. A second explicit human approval is
 required before the single bounded runtime reconstruction that writes derived
 Market Intelligence artifacts.
+
+## 15. Final Safety Hardening Notes
+
+The final hardening implementation adds lifecycle ownership checks immediately
+before and after reconstruction publication phases and a publication guard
+before the exporter's atomic move. A stale or timed-out worker may be
+interrupted cooperatively; it cannot complete the lifecycle after lease loss,
+and stale publication is rejected at the guarded publication boundary. Java
+cannot provide hard interruption of an ignored downstream interrupt, and the
+remaining check-to-move race requires the lifecycle state to remain the
+authority for accepted output.
+
+The output root is now required to be an existing absolute writable directory
+with no symlink in its path and no group/other write permission. The command
+still records the trusted process principal and requires explicit confirmation
+and a non-empty approval reference. The repository has no authoritative
+approval-reference registry, so the reference remains an auditable local
+operator token rather than independently verified authorization.
+
+Historical preflight now rejects incomplete required role responses, missing
+open timestamps, invalid candle durations, duplicate timestamps, and interior
+continuity gaps. The existing profile-specific minimum candle requirements
+remain authoritative.
+
+The reported idempotency defect was not reproduced: the historical request
+fingerprint has six fields before `|selection=`, matching the comparator. A
+regression test now covers equivalent active historical registration reuse.
+
+No runtime service, database, migration, output directory, replay, or
+reconstruction was executed during hardening.

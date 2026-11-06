@@ -196,6 +196,19 @@ class ResearchDatasetBuilderTest {
     }
 
     @Test
+    void stalePublicationGuardPreventsFinalBundlePublication() {
+        ResearchPopulationSpec population = population(Map.of(), Set.of(OutcomeHorizon.oneHour()));
+        DatasetBuildResult result = builder().build(population, List.of(), List.of());
+        Path output = temporaryDirectory.resolve("stale");
+
+        assertThatThrownBy(() -> new ResearchDatasetBundleExporter(new ObjectMapper())
+                .export(result, output, () -> false))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("publication lease");
+        assertThat(Files.exists(output)).isFalse();
+    }
+
+    @Test
     void currentExporterMatchesCommittedCrossLanguageFixture() throws Exception {
         FeatureSnapshot snapshot = snapshot("snapshot-cross-language");
         ObservedMarketOutcome outcome = outcome(OutcomeHorizon.oneHour(), "outcome-cross-language", ObservedMarketOutcomeStatus.AVAILABLE);

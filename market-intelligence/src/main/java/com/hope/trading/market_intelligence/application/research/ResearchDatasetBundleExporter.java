@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 public final class ResearchDatasetBundleExporter {
     private static final long TEMPORARY_OUTPUT_BUDGET_BYTES = 100L * 1024L * 1024L;
@@ -40,8 +41,13 @@ public final class ResearchDatasetBundleExporter {
     }
 
     public void export(DatasetBuildResult dataset, Path outputDirectory) {
+        export(dataset, outputDirectory, () -> true);
+    }
+
+    public void export(DatasetBuildResult dataset, Path outputDirectory, BooleanSupplier publicationAllowed) {
         Objects.requireNonNull(dataset, "dataset");
         Objects.requireNonNull(outputDirectory, "output directory");
+        Objects.requireNonNull(publicationAllowed, "publication guard");
         if (Files.exists(outputDirectory)) {
             throw new IllegalArgumentException("export directory already exists: " + outputDirectory);
         }
@@ -50,13 +56,14 @@ public final class ResearchDatasetBundleExporter {
         try {
             Files.createDirectories(parent);
             Path temporary = Files.createTempDirectory(parent, outputDirectory.getFileName() + ".tmp-");
-            exportTemporary(dataset, outputDirectory, temporary);
+            exportTemporary(dataset, outputDirectory, temporary, publicationAllowed);
         } catch (IOException exception) {
             throw new IllegalStateException("Cannot export research dataset bundle", exception);
         }
     }
 
-    private void exportTemporary(DatasetBuildResult dataset, Path outputDirectory, Path temporary)
+    private void exportTemporary(DatasetBuildResult dataset, Path outputDirectory, Path temporary,
+                                 BooleanSupplier publicationAllowed)
             throws IOException {
         try {
             String samples = samplesExporter.export(dataset);
@@ -71,6 +78,9 @@ public final class ResearchDatasetBundleExporter {
             write(temporary.resolve(SAMPLES_FILE), samples);
             write(temporary.resolve(MANIFEST_FILE), manifest);
             write(temporary.resolve(README_FILE), readme);
+            if (!publicationAllowed.getAsBoolean()) {
+                throw new IllegalStateException("Research dataset publication lease is no longer valid");
+            }
             Files.move(temporary, outputDirectory, StandardCopyOption.ATOMIC_MOVE);
         } catch (Exception exception) {
             deleteRecursively(temporary);

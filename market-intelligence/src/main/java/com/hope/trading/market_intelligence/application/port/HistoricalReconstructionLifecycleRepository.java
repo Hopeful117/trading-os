@@ -15,5 +15,7 @@ public interface HistoricalReconstructionLifecycleRepository {
 
     boolean claimIfStale(UUID executionId, UUID leaseId, Instant staleBefore, Instant claimedAt);
 
+    boolean isOwned(UUID executionId, UUID leaseId);
+
     Optional<HistoricalReconstructionLifecycle> findByExecutionId(UUID executionId);
 }

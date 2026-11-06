@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -41,7 +42,14 @@ public class ResearchDatasetExportService {
 
     @Transactional(readOnly = true)
     public ExportResult export(ResearchPopulationSpec population, Path outputDirectory) {
+        return export(population, outputDirectory, () -> true);
+    }
+
+    @Transactional(readOnly = true)
+    public ExportResult export(ResearchPopulationSpec population, Path outputDirectory,
+                               BooleanSupplier publicationAllowed) {
         Objects.requireNonNull(population, "population");
+        Objects.requireNonNull(publicationAllowed, "publication guard");
         var domainSnapshots = snapshots.findByPopulation(
                 population.marketIds(),
                 population.startCutoffInclusive(), population.endCutoffExclusive(),
@@ -51,7 +59,7 @@ public class ResearchDatasetExportService {
                 .toList();
         DatasetBuildResult dataset = builder.build(population, domainSnapshots, selectedOutcomes,
                 evidenceKnownAt(domainSnapshots), true);
-        exporter.export(dataset, outputDirectory);
+        exporter.export(dataset, outputDirectory, publicationAllowed);
         return new ExportResult(dataset.manifest().sampleCount(), dataset.manifest().eligibleCount(),
                 dataset.manifest().excludedCount());
     }
