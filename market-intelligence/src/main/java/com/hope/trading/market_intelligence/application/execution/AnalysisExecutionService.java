@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,6 +24,7 @@ import java.util.UUID;
  */
 @Service
 public class AnalysisExecutionService {
+    private static final Duration DISPATCH_CLAIM_LEASE = Duration.ofSeconds(5);
     private final AnalysisExecutionRepository repository;
     private final AnalysisExecutionDispatcher dispatcher;
     private final AnalysisStrategyRegistry strategies;
@@ -85,12 +87,48 @@ public class AnalysisExecutionService {
             String traceId,
             String selectionFingerprint
     ) {
-        AnalysisExecution execution = registerInternal(
-                request, idempotencyKey, requestId, traceId, true, selectionFingerprint);
+        return dispatchHistorical(registerHistorical(
+                request, idempotencyKey, requestId, traceId, selectionFingerprint));
+    }
+
+    public AnalysisExecution registerHistorical(
+            IntelligenceAnalysisRequest request,
+            IdempotencyKey idempotencyKey,
+            String requestId,
+            String traceId,
+            String selectionFingerprint
+    ) {
+        return registerInternal(request, idempotencyKey, requestId, traceId, true, selectionFingerprint);
+    }
+
+    public AnalysisExecution dispatchHistorical(AnalysisExecution execution) {
         if (claimForDispatch(execution.executionId())) {
-            dispatchRegistered(execution.executionId());
+            return dispatchHistoricalOrFail(execution);
+        } else if (execution.status() == AnalysisExecutionStatus.ACCEPTED
+                && !execution.updatedAt().plus(DISPATCH_CLAIM_LEASE).isAfter(clock.instant())
+                && repository.requeueAcceptedForRecovery(
+                execution.executionId(), clock.instant().minus(DISPATCH_CLAIM_LEASE), clock.instant())) {
+            AnalysisExecution requeued = find(execution.executionId());
+            if (claimForDispatch(requeued.executionId())) {
+                return dispatchHistoricalOrFail(requeued);
+            }
         }
-        return execution;
+        return find(execution.executionId());
+    }
+
+    private AnalysisExecution dispatchHistoricalOrFail(AnalysisExecution execution) {
+        try {
+            dispatchRegistered(execution.executionId());
+            return execution;
+        } catch (RuntimeException dispatchFailure) {
+            if (repository.failIfStatus(execution.executionId(), AnalysisExecutionStatus.ACCEPTED,
+                    "DISPATCH_FAILED", clock.instant())) {
+                throw new IllegalStateException("Historical analysis dispatch failed", dispatchFailure);
+            }
+            AnalysisExecution current = find(execution.executionId());
+            if (current.status() != AnalysisExecutionStatus.ACCEPTED) return current;
+            throw new IllegalStateException("Historical analysis dispatch state is unavailable", dispatchFailure);
+        }
     }
 
     private AnalysisExecution registerInternal(

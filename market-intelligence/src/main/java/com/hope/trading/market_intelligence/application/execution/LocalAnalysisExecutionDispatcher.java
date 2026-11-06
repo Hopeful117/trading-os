@@ -59,7 +59,7 @@ public class LocalAnalysisExecutionDispatcher implements AnalysisExecutionDispat
 
     @Override
     public void dispatch(UUID executionId, IntelligenceAnalysisRequest request) {
-        tasks.put(executionId, executor.submit(() -> execute(executionId, request)));
+        tasks.computeIfAbsent(executionId, ignored -> executor.submit(() -> execute(executionId, request)));
     }
 
     @Override

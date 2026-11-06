@@ -21,6 +21,7 @@ public final class AnalysisExecution {
                             AnalysisExecutionStatus.EXPIRED
                     ),
                     AnalysisExecutionStatus.ACCEPTED, EnumSet.of(
+                            AnalysisExecutionStatus.REQUESTED,
                             AnalysisExecutionStatus.CONTEXT_BUILDING,
                             AnalysisExecutionStatus.FAILED,
                             AnalysisExecutionStatus.CANCELLED,

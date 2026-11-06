@@ -25,14 +25,7 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
     @Override
     public AnalysisExecution save(AnalysisExecution value) {
         JpaAnalysisExecutionEntity entity = new JpaAnalysisExecutionEntity();
-        entity.executionId = value.executionId(); entity.idempotencyKey = value.idempotencyKey().value();
-        entity.status = value.status().name(); entity.requestedAt = value.requestedAt();
-        entity.updatedAt = value.updatedAt(); entity.expiresAt = value.expiresAt();
-        entity.completedAt = value.completedAt().orElse(null);
-        entity.marketId = value.provenance().marketId(); entity.mode = value.provenance().mode().name();
-        entity.evaluationCutoff = value.provenance().evaluationCutoff();
-        entity.evidencePolicy = value.provenance().evidencePolicy().name();
-        entity.payload = write(snapshot(value));
+        copy(value, entity);
         try {
             repository.saveAndFlush(entity);
             return value;
@@ -107,11 +100,39 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
         ) == 1;
     }
 
+    @Override
+    @Transactional
+    public boolean failIfStatus(UUID executionId, AnalysisExecutionStatus expected, String failureCode, Instant updatedAt) {
+        JpaAnalysisExecutionEntity entity = repository.findForUpdate(executionId).orElse(null);
+        if (entity == null || !expected.name().equals(entity.status)) return false;
+        AnalysisExecution failed = domain(entity).fail(failureCode, updatedAt);
+        copy(failed, entity);
+        repository.saveAndFlush(entity);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean requeueAcceptedForRecovery(UUID executionId, Instant staleBefore, Instant requeuedAt) {
+        return repository.requeueAcceptedForRecovery(executionId, staleBefore, requeuedAt) == 1;
+    }
+
     private Snapshot snapshot(AnalysisExecution value) {
         return new Snapshot(
                 value.resultQuality().orElse(null), value.failureCode().orElse(null), value.executionPolicy(), value.capabilities(),
                 value.retryMetadata(), value.provenance(), value.traceMetadata(),
                 value.result().orElse(null));
+    }
+
+    private void copy(AnalysisExecution value, JpaAnalysisExecutionEntity entity) {
+        entity.executionId = value.executionId(); entity.idempotencyKey = value.idempotencyKey().value();
+        entity.status = value.status().name(); entity.requestedAt = value.requestedAt();
+        entity.updatedAt = value.updatedAt(); entity.expiresAt = value.expiresAt();
+        entity.completedAt = value.completedAt().orElse(null);
+        entity.marketId = value.provenance().marketId(); entity.mode = value.provenance().mode().name();
+        entity.evaluationCutoff = value.provenance().evaluationCutoff();
+        entity.evidencePolicy = value.provenance().evidencePolicy().name();
+        entity.payload = write(snapshot(value));
     }
     private AnalysisExecution domain(JpaAnalysisExecutionEntity entity) {
         Snapshot value = read(entity.payload, Snapshot.class);

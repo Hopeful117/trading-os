@@ -99,4 +99,27 @@ public class InMemoryAnalysisExecutionRepository implements AnalysisExecutionRep
         });
         return transitioned.get();
     }
+
+    @Override
+    public boolean failIfStatus(UUID executionId, AnalysisExecutionStatus expected, String failureCode, Instant updatedAt) {
+        java.util.concurrent.atomic.AtomicBoolean transitioned = new java.util.concurrent.atomic.AtomicBoolean(false);
+        executions.computeIfPresent(executionId, (ignored, current) -> {
+            if (current.status() != expected) return current;
+            transitioned.set(true);
+            return current.fail(failureCode, updatedAt);
+        });
+        return transitioned.get();
+    }
+
+    @Override
+    public boolean requeueAcceptedForRecovery(UUID executionId, Instant staleBefore, Instant requeuedAt) {
+        java.util.concurrent.atomic.AtomicBoolean claimed = new java.util.concurrent.atomic.AtomicBoolean(false);
+        executions.computeIfPresent(executionId, (ignored, current) -> {
+            if (current.status() != AnalysisExecutionStatus.ACCEPTED
+                    || current.updatedAt().isAfter(staleBefore)) return current;
+            claimed.set(true);
+            return current.transitionTo(AnalysisExecutionStatus.REQUESTED, requeuedAt);
+        });
+        return claimed.get();
+    }
 }

@@ -41,4 +41,8 @@ public interface AnalysisExecutionRepository {
             AnalysisExecutionStatus target,
             Instant updatedAt
     );
+
+    boolean failIfStatus(UUID executionId, AnalysisExecutionStatus expected, String failureCode, Instant updatedAt);
+
+    boolean requeueAcceptedForRecovery(UUID executionId, Instant staleBefore, Instant requeuedAt);
 }
