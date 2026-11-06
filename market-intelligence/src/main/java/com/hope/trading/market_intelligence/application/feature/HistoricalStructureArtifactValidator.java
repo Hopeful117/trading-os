@@ -48,9 +48,10 @@ final class HistoricalStructureArtifactValidator {
                 || reference.sourceOccurredAt() == null
                 || reference.fetchedAt() == null
                 || reference.capturedAt() == null
-                || reference.knownAt() == null
-                || reference.knownAt().isAfter(cutoff)
-                || blank(reference.normalizationVersion())) {
+                 || reference.knownAt() == null
+                 || reference.knownAt().isAfter(cutoff)
+                 || blank(reference.normalizationVersion())
+                 || !"CAPTURED".equals(reference.origin())) {
             throw new IllegalStateException("Historical market structure evidence provenance is incomplete");
         }
     }

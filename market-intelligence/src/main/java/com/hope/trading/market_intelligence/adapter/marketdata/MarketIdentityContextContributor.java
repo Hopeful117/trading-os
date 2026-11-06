@@ -54,7 +54,7 @@ public class MarketIdentityContextContributor implements ContextContributor {
                         provenance.source(), provenance.sourceOccurredAt(), provenance.fetchedAt(),
                         provenance.sourceReference(), provenance.sourceVersion(), provenance.normalizationVersion(),
                         request.evidencePolicy(), provenance.evidenceFingerprint(), provenance.observationCount(),
-                        request.evaluationCutoff()),
+                        request.evaluationCutoff(), provenance.fetchedAt(), provenance.fetchedAt()),
                 section.message());
     }
 }

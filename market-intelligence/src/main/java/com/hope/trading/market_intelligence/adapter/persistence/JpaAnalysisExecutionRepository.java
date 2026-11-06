@@ -37,10 +37,16 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
             repository.saveAndFlush(entity);
             return value;
         } catch (DataIntegrityViolationException race) {
-            return repository.findByIdempotencyKey(value.idempotencyKey().value())
+            AnalysisExecution winner = repository.findByIdempotencyKey(value.idempotencyKey().value())
                     .map(this::domain)
                     .orElseThrow(() -> new IllegalStateException(
                             "Concurrent execution insert has no durable idempotent result", race));
+            if (value.provenance().executionOrigin() == ExecutionOrigin.HISTORICAL_RECONSTRUCTION
+                    && !value.provenance().equals(winner.provenance())) {
+                throw new IllegalStateException(
+                        "Concurrent historical execution has conflicting provenance", race);
+            }
+            return winner;
         }
     }
     @Override @Transactional(readOnly = true)
@@ -59,8 +65,7 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
     }
     @Override @Transactional(readOnly = true)
     public Optional<AnalysisExecution> findReusable(IdempotencyKey key, Instant now) {
-        return repository.findByIdempotencyKey(key.value()).map(this::domain)
-                .filter(value -> !value.isExpiredAt(now));
+        return repository.findReusable(key.value(), now).map(this::domain);
     }
 
     @Override

@@ -4,7 +4,6 @@ import com.hope.trading.market_intelligence.application.port.FeatureSnapshotRepo
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 import com.hope.trading.market_intelligence.application.port.ObservedMarketOutcomeRepository;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
-import com.hope.trading.market_intelligence.domain.execution.ExecutionOrigin;
 import com.hope.trading.market_intelligence.domain.research.ResearchOutcomeKey;
 import com.hope.trading.market_intelligence.domain.research.ResearchPopulationSpec;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,7 +40,7 @@ public class ResearchDatasetExportService {
     }
 
     @Transactional(readOnly = true)
-    public void export(ResearchPopulationSpec population, Path outputDirectory) {
+    public ExportResult export(ResearchPopulationSpec population, Path outputDirectory) {
         Objects.requireNonNull(population, "population");
         var domainSnapshots = snapshots.findByPopulation(
                 population.marketIds(),
@@ -50,8 +49,11 @@ public class ResearchDatasetExportService {
         var selectedOutcomes = population.selectedOutcomeFingerprints().entrySet().stream()
                 .map(entry -> resolveSelectedOutcome(population, entry.getKey(), entry.getValue()))
                 .toList();
-        exporter.export(builder.build(population, domainSnapshots, selectedOutcomes,
-                evidenceKnownAt(domainSnapshots), true), outputDirectory);
+        DatasetBuildResult dataset = builder.build(population, domainSnapshots, selectedOutcomes,
+                evidenceKnownAt(domainSnapshots), true);
+        exporter.export(dataset, outputDirectory);
+        return new ExportResult(dataset.manifest().sampleCount(), dataset.manifest().eligibleCount(),
+                dataset.manifest().excludedCount());
     }
 
     private Map<String, Instant> evidenceKnownAt(
@@ -72,15 +74,14 @@ public class ResearchDatasetExportService {
         if (result == null || result.contextSections().isEmpty()) {
             return Optional.empty();
         }
-        boolean historical = execution != null
-                && execution.provenance().executionOrigin() == ExecutionOrigin.HISTORICAL_RECONSTRUCTION;
-        if (historical && result.contextSections().stream().anyMatch(value -> value.knownAt() == null)) {
-            return Optional.empty();
-        }
         Instant knownAt = result.contextSections().stream()
                 .map(value -> value.knownAt() == null ? value.fetchedAt() : value.knownAt())
+                .filter(Objects::nonNull)
                 .max(Instant::compareTo)
-                .orElseThrow();
+                .orElse(null);
+        if (knownAt == null) {
+            return Optional.empty();
+        }
         if (knownAt.isAfter(snapshot.evaluationCutoff())) {
             return Optional.empty();
         }
@@ -100,4 +101,6 @@ public class ResearchDatasetExportService {
         }
         return outcome;
     }
+
+    public record ExportResult(int sampleCount, int eligibleCount, int excludedCount) { }
 }

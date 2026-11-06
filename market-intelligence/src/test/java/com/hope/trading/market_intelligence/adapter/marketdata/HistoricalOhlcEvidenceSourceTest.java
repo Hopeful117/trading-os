@@ -60,6 +60,21 @@ class HistoricalOhlcEvidenceSourceTest {
                 .hasMessageContaining("unsupported normalization version");
     }
 
+    @Test
+    void rejectsEvidenceThatDoesNotMatchPreflightSelection() {
+        HistoricalOhlcClient client = mock(HistoricalOhlcClient.class);
+        var selected = evidence(CUTOFF.minusSeconds(900), CUTOFF.minusSeconds(60), "obs-1", "fp-1");
+        when(client.findHistoricalOhlc(MARKET_ID, "FIFTEEN_MINUTES", CUTOFF, 200))
+                .thenReturn(series(selected));
+
+        HistoricalOhlcEvidenceSource source = new HistoricalOhlcEvidenceSource(client);
+        assertThatThrownBy(() -> source.acquire(
+                MARKET_ID, "FIFTEEN_MINUTES", 200, CUTOFF,
+                "BIAS|" + selected.observationId() + "|different-fingerprint", "BIAS"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("does not match preflight");
+    }
+
     private HistoricalOhlcClient.HistoricalOhlcSeriesResponse series(
             HistoricalOhlcClient.HistoricalOhlcEvidenceResponse evidence) {
         return new HistoricalOhlcClient.HistoricalOhlcSeriesResponse(

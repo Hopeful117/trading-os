@@ -34,6 +34,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class HistoricalReconstructionService {
@@ -79,42 +86,49 @@ public class HistoricalReconstructionService {
         if (operatorPrincipal == null || operatorPrincipal.isBlank()) {
             throw new IllegalStateException("Trusted local operator principal is unavailable");
         }
+        long deadline = System.nanoTime() + TIMEOUT.toNanos();
         Path output = resolveOutput(outputRoot, runId);
-        HistoricalReconstructionPreflight.Result selected = preflight.verify(marketId, cutoff);
+        HistoricalReconstructionPreflight.Result selected = null;
         AnalysisExecution execution = null;
         String terminalStatus = "FAILED_BEFORE_EXECUTION";
+        ExecutorService phases = Executors.newVirtualThreadPerTaskExecutor();
         try {
+            selected = runPhase(phases, () -> preflight.verify(marketId, cutoff), deadline, "preflight");
+            ensureWithinDeadline(deadline, "preflight");
             IdempotencyKey key = new IdempotencyKey("historical-reconstruction:v2:" + marketId + ":"
                     + cutoff + ":PT1H:STRICT_OBSERVED:" + digest(selectionBinding(selected)));
             execution = executions.createHistorical(
                     new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.PASSIVE,
                             HistoricalReconstructionPolicy.OBJECTIVE, null, null, null, cutoff,
-                            EvidenceAcquisitionPolicy.STRICT_OBSERVED),
+                            EvidenceAcquisitionPolicy.STRICT_OBSERVED)
+                            .withHistoricalEvidenceSelection(String.join("\n", selected.selectedEvidence())),
                     key, key.value(), key.value(), selectionBinding(selected));
             log.info("historical_reconstruction_audit phase=START operator={} approvalReference={} marketId={} cutoff={} runId={} executionId={} requestFingerprint={} selectionFingerprint={}",
                     operatorPrincipal, approvalReference, marketId, cutoff, runId, execution.executionId(),
                     execution.provenance().reconstructionRequestFingerprint(), selected.selectionFingerprint());
-            execution = awaitTerminal(execution.executionId());
+            execution = awaitTerminal(execution.executionId(), deadline);
+            ensureWithinDeadline(deadline, "execution");
             terminalStatus = execution.status().name();
             if (execution.status() != AnalysisExecutionStatus.COMPLETED) {
                 return new Result(execution.executionId(), null, null, execution.status().name(), output);
             }
-            HistoricalReconstructionPreflight.Result acquiredSelection = preflight.verify(marketId, cutoff);
-            if (!selected.selectedEvidence().equals(acquiredSelection.selectedEvidence())
-                    || !selected.selectionFingerprint().equals(acquiredSelection.selectionFingerprint())) {
-                throw new IllegalStateException(
-                        "Historical evidence selection changed during reconstruction");
-            }
-            FeatureSnapshot snapshot = projections.project(execution.executionId());
-            ObservedMarketOutcome outcome = outcomes.evaluate(new MarketOutcomeEvaluationRequest(
-                    marketId, cutoff, new OutcomeHorizon(Duration.ofHours(1)), execution.executionId()));
+            UUID executionId = execution.executionId();
+            String evidenceSelection = execution.provenance().historicalEvidenceSelection();
+            FeatureSnapshot snapshot = runPhase(phases, () -> projections.project(executionId),
+                    deadline, "feature projection");
+            ensureWithinDeadline(deadline, "feature projection");
+            ObservedMarketOutcome outcome = runPhase(phases, () -> outcomes.evaluate(new MarketOutcomeEvaluationRequest(
+                    marketId, cutoff, new OutcomeHorizon(Duration.ofHours(1)), executionId,
+                    evidenceSelection)), deadline, "outcome evaluation");
+            ensureWithinDeadline(deadline, "outcome evaluation");
             if (outcome.status() != ObservedMarketOutcomeStatus.AVAILABLE) {
                 terminalStatus = "OUTCOME_" + outcome.status().name();
                 return new Result(execution.executionId(), snapshot.fingerprint(), outcome.outcomeFingerprint(),
                         terminalStatus, output);
             }
             ResearchPopulationSpec population = new ResearchPopulationSpec(
-                    "historical-reconstruction-v1", Set.of(marketId), cutoff, cutoff.plusNanos(1),
+                    // PostgreSQL timestamp(6) truncates nanosecond-only bounds.
+                    "historical-reconstruction-v1", Set.of(marketId), cutoff, cutoff.plusNanos(1_000),
                     PROJECTION, EvidenceAcquisitionPolicy.STRICT_OBSERVED,
                     outcome.outcomeDefinitionVersion(), Set.of(new OutcomeHorizon(Duration.ofHours(1))),
                     ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT, Set.of(),
@@ -122,18 +136,30 @@ public class HistoricalReconstructionService {
                     ResearchFeatureRequirements.q1(),
                     java.util.Map.of(new ResearchOutcomeKey(marketId, cutoff, new OutcomeHorizon(Duration.ofHours(1))),
                     outcome.outcomeFingerprint()));
-            exports.export(population, output);
+            ResearchDatasetExportService.ExportResult export = runPhase(phases,
+                    () -> exports.export(population, output), deadline, "dataset export");
+            ensureWithinDeadline(deadline, "dataset export");
+            if (export.eligibleCount() != 1) {
+                throw new IllegalStateException(
+                        "Historical reconstruction requires exactly one eligible dataset sample, got "
+                                + export.eligibleCount());
+            }
             terminalStatus = "EXPORTED";
             return new Result(execution.executionId(), snapshot.fingerprint(), outcome.outcomeFingerprint(), terminalStatus, output);
+        } catch (RuntimeException failure) {
+            if (execution != null && !execution.status().isTerminal()) {
+                cancelIfActive(execution.executionId());
+            }
+            throw failure;
         } finally {
+            phases.shutdownNow();
             log.info("historical_reconstruction_audit phase=FINAL operator={} approvalReference={} marketId={} cutoff={} runId={} executionId={} terminalStatus={} outputDirectory={}",
                     operatorPrincipal, approvalReference, marketId, cutoff, runId,
                     execution == null ? null : execution.executionId(), terminalStatus, output);
         }
     }
 
-    private AnalysisExecution awaitTerminal(UUID executionId) {
-        long deadline = System.nanoTime() + TIMEOUT.toNanos();
+    private AnalysisExecution awaitTerminal(UUID executionId, long deadline) {
         while (System.nanoTime() < deadline) {
             AnalysisExecution current = executionRepository.findById(executionId)
                     .orElseThrow(() -> new IllegalStateException("Reconstruction execution disappeared"));
@@ -142,12 +168,49 @@ public class HistoricalReconstructionService {
                 Thread.sleep(100);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
-                executions.cancel(executionId);
+                cancelIfActive(executionId);
                 throw new IllegalStateException("Historical reconstruction interrupted", interrupted);
             }
         }
-        executions.cancel(executionId);
-        return executionRepository.findById(executionId).orElseThrow();
+        cancelIfActive(executionId);
+        AnalysisExecution cancelled = executionRepository.findById(executionId).orElseThrow();
+        if (!cancelled.status().isTerminal()) {
+            throw new IllegalStateException("Historical reconstruction cancellation did not reach a terminal state");
+        }
+        return cancelled;
+    }
+
+    private void cancelIfActive(UUID executionId) {
+        AnalysisExecution current = executionRepository.findById(executionId).orElseThrow();
+        if (!current.status().isTerminal()) {
+            executions.cancel(executionId);
+        }
+    }
+
+    private void ensureWithinDeadline(long deadline, String phase) {
+        if (System.nanoTime() >= deadline) {
+            throw new IllegalStateException("Historical reconstruction exceeded five-minute timeout during " + phase);
+        }
+    }
+
+    private <T> T runPhase(ExecutorService executor, Callable<T> phase, long deadline, String name) {
+        ensureWithinDeadline(deadline, name);
+        Future<T> future = executor.submit(phase);
+        long remaining = deadline - System.nanoTime();
+        try {
+            return future.get(Math.max(1, remaining), TimeUnit.NANOSECONDS);
+        } catch (TimeoutException timeout) {
+            future.cancel(true);
+            throw new IllegalStateException("Historical reconstruction timed out during " + name, timeout);
+        } catch (InterruptedException interrupted) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Historical reconstruction interrupted during " + name, interrupted);
+        } catch (ExecutionException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof RuntimeException runtime) throw runtime;
+            throw new IllegalStateException("Historical reconstruction failed during " + name, cause);
+        }
     }
 
     private Path resolveOutput(Path root, String runId) {

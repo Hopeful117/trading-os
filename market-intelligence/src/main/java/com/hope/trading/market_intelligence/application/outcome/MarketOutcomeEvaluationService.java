@@ -45,15 +45,20 @@ public class MarketOutcomeEvaluationService {
                     "HORIZON_NOT_MATURED", OutcomeValues.empty());
         }
 
-        OutcomeReferenceEvidence reference = referenceSource
-                .findLatest(request.marketId(), request.evaluationCutoff()).orElse(null);
+        OutcomeReferenceEvidence reference = request.historicalEvidenceSelection() == null
+                ? referenceSource.findLatest(request.marketId(), request.evaluationCutoff()).orElse(null)
+                : referenceSource.findLatest(request.marketId(), request.evaluationCutoff(),
+                request.historicalEvidenceSelection()).orElse(null);
         if (reference == null) {
             return persist(create(
                     request, maturityAt, computedAt, ObservedMarketOutcomeStatus.UNAVAILABLE,
                     "REFERENCE_EVIDENCE_UNAVAILABLE", OutcomeValues.empty()));
         }
-        HistoricalOhlcFutureEvidenceSource.HistoricalOhlcRangeSnapshot future = futureSource.find(
-                request.marketId(), request.evaluationCutoff(), maturityAt);
+        HistoricalOhlcFutureEvidenceSource.HistoricalOhlcRangeSnapshot future =
+                request.historicalEvidenceSelection() == null
+                        ? futureSource.find(request.marketId(), request.evaluationCutoff(), maturityAt)
+                        : futureSource.find(request.marketId(), request.evaluationCutoff(), maturityAt,
+                        request.historicalEvidenceSelection());
         if (!"AVAILABLE".equals(future.status()) || future.expectedObservationCount() <= 0
                 || future.observedObservationCount() != future.expectedObservationCount()
                 || !future.gaps().isEmpty()) {

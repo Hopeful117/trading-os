@@ -35,9 +35,20 @@ public final class HistoricalReconstructionCommand implements ApplicationRunner 
         Instant cutoff = Instant.parse(required(arguments, "cutoff"));
         String runId = required(arguments, "run-id");
         String approval = required(arguments, "approval-reference");
+        var confirmationValues = arguments.getOptionValues("confirm-historical-reconstruction");
+        if (confirmationValues != null && !confirmationValues.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "--confirm-historical-reconstruction is a flag and must not have a value");
+        }
         boolean confirmed = arguments.containsOption("confirm-historical-reconstruction");
-        service.run(marketId, cutoff, outputRoot, runId, confirmed, approval);
-        SpringApplication.exit(context, () -> 0);
+        HistoricalReconstructionService.Result result =
+                service.run(marketId, cutoff, outputRoot, runId, confirmed, approval);
+        int exitCode = "EXPORTED".equals(result.status()) ? 0 : 1;
+        SpringApplication.exit(context, () -> exitCode);
+        if (exitCode != 0) {
+            throw new IllegalStateException("Historical reconstruction did not export an eligible sample: "
+                    + result.status());
+        }
     }
 
     private String required(ApplicationArguments arguments, String name) {

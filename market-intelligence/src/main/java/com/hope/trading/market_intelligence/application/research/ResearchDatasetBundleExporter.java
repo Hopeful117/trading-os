@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class ResearchDatasetBundleExporter {
+    private static final long TEMPORARY_OUTPUT_BUDGET_BYTES = 100L * 1024L * 1024L;
     public static final String MANIFEST_FILE = "dataset-manifest.json";
     public static final String SAMPLES_FILE = "samples.jsonl";
     public static final String README_FILE = "README.md";
@@ -59,10 +60,17 @@ public final class ResearchDatasetBundleExporter {
             throws IOException {
         try {
             String samples = samplesExporter.export(dataset);
+            String manifest = manifest(dataset.manifest(), sha256(samples.getBytes(StandardCharsets.UTF_8)));
+            String readme = readme(dataset.manifest());
+            long outputBytes = samples.getBytes(StandardCharsets.UTF_8).length
+                    + manifest.getBytes(StandardCharsets.UTF_8).length
+                    + readme.getBytes(StandardCharsets.UTF_8).length;
+            if (outputBytes > TEMPORARY_OUTPUT_BUDGET_BYTES) {
+                throw new IllegalStateException("Temporary research dataset output exceeds 100 MiB budget");
+            }
             write(temporary.resolve(SAMPLES_FILE), samples);
-            String samplesFingerprint = sha256(samples.getBytes(StandardCharsets.UTF_8));
-            write(temporary.resolve(MANIFEST_FILE), manifest(dataset.manifest(), samplesFingerprint));
-            write(temporary.resolve(README_FILE), readme(dataset.manifest()));
+            write(temporary.resolve(MANIFEST_FILE), manifest);
+            write(temporary.resolve(README_FILE), readme);
             Files.move(temporary, outputDirectory, StandardCopyOption.ATOMIC_MOVE);
         } catch (Exception exception) {
             deleteRecursively(temporary);

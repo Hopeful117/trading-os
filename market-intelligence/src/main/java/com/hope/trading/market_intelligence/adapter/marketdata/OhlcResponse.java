@@ -27,7 +27,8 @@ public record OhlcResponse(
         Instant capturedAt,
         Instant knownAt,
         String observationFingerprint,
-        String normalizationVersion
+        String normalizationVersion,
+        String origin
 ) {
     public OhlcResponse(
             UUID marketId,
@@ -51,7 +52,7 @@ public record OhlcResponse(
     ) {
         this(marketId, provider, symbol, interval, openTime, closeTime, open, high, low, close,
                 volume, vwap, trades, closed, occurredAt, synthetic, sourceId, fetchedAt,
-                null, null, fetchedAt, null, null);
+                null, null, fetchedAt, null, null, null);
     }
 
     public OhlcResponse(
@@ -73,6 +74,6 @@ public record OhlcResponse(
     ) {
         this(marketId, provider, symbol, interval, openTime, closeTime, open, high,
                 low, close, volume, vwap, trades, closed, occurredAt, false,
-                null, occurredAt, null, null, occurredAt, null, null);
+                null, occurredAt, null, null, occurredAt, null, null, null);
     }
 }

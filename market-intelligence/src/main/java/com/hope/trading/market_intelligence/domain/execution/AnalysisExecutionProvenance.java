@@ -18,12 +18,13 @@ public record AnalysisExecutionProvenance(
         Instant evaluationCutoff,
         EvidenceAcquisitionPolicy evidencePolicy,
         ExecutionOrigin executionOrigin,
-        String reconstructionRequestFingerprint
+        String reconstructionRequestFingerprint,
+        String historicalEvidenceSelection
 ) {
     public AnalysisExecutionProvenance(
             UUID marketId, AnalysisExecutionMode mode, String objective, String strategyVersion) {
         this(marketId, mode, objective, strategyVersion, null, null, null, null,
-                EvidenceAcquisitionPolicy.LIVE_CURRENT);
+                EvidenceAcquisitionPolicy.LIVE_CURRENT, ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null);
     }
 
     public AnalysisExecutionProvenance(
@@ -36,7 +37,7 @@ public record AnalysisExecutionProvenance(
             UUID scanMarketId
     ) {
         this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
-                null, EvidenceAcquisitionPolicy.LIVE_CURRENT);
+                null, EvidenceAcquisitionPolicy.LIVE_CURRENT, ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null);
     }
 
     public AnalysisExecutionProvenance(
@@ -51,7 +52,24 @@ public record AnalysisExecutionProvenance(
             EvidenceAcquisitionPolicy evidencePolicy
     ) {
         this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
-                evaluationCutoff, evidencePolicy, ExecutionOrigin.CONTEMPORARY_ANALYSIS, null);
+                evaluationCutoff, evidencePolicy, ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null);
+    }
+
+    public AnalysisExecutionProvenance(
+            UUID marketId,
+            AnalysisExecutionMode mode,
+            String objective,
+            String strategyVersion,
+            UUID accountId,
+            UUID scanId,
+            UUID scanMarketId,
+            Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy,
+            ExecutionOrigin executionOrigin,
+            String reconstructionRequestFingerprint
+    ) {
+        this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
+                evaluationCutoff, evidencePolicy, executionOrigin, reconstructionRequestFingerprint, null);
     }
 
     public AnalysisExecutionProvenance {
@@ -71,5 +89,7 @@ public record AnalysisExecutionProvenance(
         }
         reconstructionRequestFingerprint = reconstructionRequestFingerprint == null
                 ? null : reconstructionRequestFingerprint.trim();
+        historicalEvidenceSelection = historicalEvidenceSelection == null
+                ? null : historicalEvidenceSelection.trim();
     }
 }
