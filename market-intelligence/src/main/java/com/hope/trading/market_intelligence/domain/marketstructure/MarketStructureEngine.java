@@ -136,7 +136,9 @@ public final class MarketStructureEngine {
                 candles.get(from).openTime(), candles.get(to).closeTime(),
                 candles.subList(from, to + 1).stream().map(MarketStructureCandle::sourceId).toList(),
                 candles.subList(from, to + 1).stream().map(c -> new MarketStructureSourceReference(
-                        c.sourceId(), c.sourceOccurredAt(), c.fetchedAt())).toList(), false, "");
+                        c.sourceId(), c.sourceOccurredAt(), c.fetchedAt(), c.observationId(),
+                        c.capturedAt(), c.knownAt(), c.observationFingerprint(),
+                        c.normalizationVersion())).toList(), false, "");
     }
 
     private boolean intersectsGap(MarketStructureInput input, List<MarketStructureCandle> candles, int index, int radius) {

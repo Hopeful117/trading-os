@@ -7,6 +7,7 @@ import com.hope.trading.market_intelligence.application.planning.ExecutionPlanne
 import com.hope.trading.market_intelligence.application.planning.PlanningRequest;
 import com.hope.trading.market_intelligence.application.port.ArtifactPersistencePort;
 import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
+import com.hope.trading.market_intelligence.application.research.HistoricalReconstructionPolicy;
 import com.hope.trading.market_intelligence.application.strategy.AnalysisExecutionPlan;
 import com.hope.trading.market_intelligence.application.strategy.AnalysisStrategyRegistry;
 import com.hope.trading.market_intelligence.domain.*;
@@ -82,13 +83,20 @@ public class CapabilityAnalysisCoordinator {
         validateRequiredContext(context, requirements);
         Set<ArtifactDescriptor> descriptors = materializeInitialArtifacts(
                 analysisExecutionId, request, context);
-        Set<CapabilityId> selected = requestedCapabilityIds == null
+        Set<CapabilityId> selected = HistoricalReconstructionPolicy.OBJECTIVE.equals(request.objective())
+                ? HistoricalReconstructionPolicy.ALLOWED_CAPABILITIES.stream()
+                .map(CapabilityId::new).collect(java.util.stream.Collectors.toSet())
+                : requestedCapabilityIds == null
                 ? strategy.capabilityIds().stream()
                 .limit(strategy.maximumCapabilities())
                 .map(CapabilityId::new)
                 .collect(java.util.stream.Collectors.toSet())
                 : requestedCapabilityIds.stream().map(CapabilityId::new)
                 .collect(java.util.stream.Collectors.toSet());
+        if (HistoricalReconstructionPolicy.OBJECTIVE.equals(request.objective())) {
+            HistoricalReconstructionPolicy.requireAllowed(
+                    selected.stream().map(CapabilityId::value).collect(java.util.stream.Collectors.toSet()));
+        }
         ExecutionControl control = new ExecutionControl();
         controls.put(analysisExecutionId, control);
         try {
@@ -313,7 +321,18 @@ public class CapabilityAnalysisCoordinator {
         return new ContextSectionSummary(
                 section.type(), section.status(), section.sensitivity(),
                 provenance == null ? null : provenance.source(),
-                provenance == null ? null : provenance.sourceOccurredAt(), section.message());
+                provenance == null ? null : provenance.sourceOccurredAt(),
+                provenance == null ? null : provenance.fetchedAt(),
+                provenance == null ? null : provenance.sourceReference(),
+                provenance == null ? null : provenance.sourceVersion(),
+                provenance == null ? null : provenance.normalizationVersion(),
+                provenance == null ? null : provenance.evidencePolicy(),
+                provenance == null ? null : provenance.evidenceFingerprint(),
+                provenance == null ? null : provenance.observationCount(),
+                provenance == null ? null : provenance.evaluationCutoff(),
+                provenance == null ? null : provenance.capturedAt(),
+                provenance == null ? null : provenance.knownAt(),
+                section.message());
     }
 
     private String sourceVersion(ContextSection section) {

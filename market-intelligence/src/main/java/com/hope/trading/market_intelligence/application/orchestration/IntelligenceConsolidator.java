@@ -109,6 +109,16 @@ public class IntelligenceConsolidator {
                 section.sensitivity(),
                 provenance == null ? null : provenance.source(),
                 provenance == null ? null : provenance.sourceOccurredAt(),
+                provenance == null ? null : provenance.fetchedAt(),
+                provenance == null ? null : provenance.sourceReference(),
+                provenance == null ? null : provenance.sourceVersion(),
+                provenance == null ? null : provenance.normalizationVersion(),
+                provenance == null ? null : provenance.evidencePolicy(),
+                provenance == null ? null : provenance.evidenceFingerprint(),
+                provenance == null ? null : provenance.observationCount(),
+                provenance == null ? null : provenance.evaluationCutoff(),
+                provenance == null ? null : provenance.capturedAt(),
+                provenance == null ? null : provenance.knownAt(),
                 section.message()
         );
     }

@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.domain.artifact.DeterministicMeasure
 import com.hope.trading.market_intelligence.domain.artifact.StoredArtifact;
 import com.hope.trading.market_intelligence.domain.marketstructure.MarketStructureArtifactContent;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
+import com.hope.trading.market_intelligence.domain.execution.ExecutionOrigin;
 import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
 import com.hope.trading.market_intelligence.domain.trendcontext.TrendContextCapabilityContent;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,9 @@ public class FeatureSnapshotProjectionService {
         validateArtifacts(analysisExecutionId, execution.provenance().marketId(), cutoff, contextFingerprint, ohlc);
         validateArtifacts(analysisExecutionId, execution.provenance().marketId(), cutoff, contextFingerprint, structures);
         validateArtifacts(analysisExecutionId, execution.provenance().marketId(), cutoff, contextFingerprint, trend);
+        if (execution.provenance().executionOrigin() == ExecutionOrigin.HISTORICAL_RECONSTRUCTION) {
+            HistoricalStructureArtifactValidator.requireAvailable(structures, cutoff);
+        }
         FeatureProjectionV1.ProjectionResult projection = FeatureProjectionV1.project(
                 analysisExecutionId, execution.provenance().marketId(), cutoff,
                 execution.provenance().evidencePolicy(), contextFingerprint,

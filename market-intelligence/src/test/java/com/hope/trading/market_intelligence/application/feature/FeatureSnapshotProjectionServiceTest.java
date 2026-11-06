@@ -14,15 +14,18 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentCaptor;
 
 class FeatureSnapshotProjectionServiceTest {
     private static final UUID EXECUTION_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -116,6 +119,28 @@ class FeatureSnapshotProjectionServiceTest {
         service.project(EXECUTION_ID);
 
         verify(snapshots).saveIfAbsent(any());
+    }
+
+    @Test
+    void keepsRetrospectiveProjectionTimeDistinctFromEvaluationCutoff() {
+        AnalysisExecutionRepository executions = mock(AnalysisExecutionRepository.class);
+        ArtifactPersistencePort artifacts = mock(ArtifactPersistencePort.class);
+        FeatureSnapshotRepository snapshots = mock(FeatureSnapshotRepository.class);
+        when(executions.findById(EXECUTION_ID)).thenReturn(java.util.Optional.of(execution()));
+        when(artifacts.find(any(), any(), any())).thenReturn(List.of());
+
+        Instant projectedAt = CUTOFF.plus(Duration.ofHours(1));
+        FeatureSnapshotProjectionService service = new FeatureSnapshotProjectionService(
+                executions, artifacts, snapshots, Clock.fixed(projectedAt, ZoneOffset.UTC));
+
+        service.project(EXECUTION_ID);
+
+        ArgumentCaptor<com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot> captor =
+                ArgumentCaptor.forClass(com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot.class);
+        verify(snapshots).saveIfAbsent(captor.capture());
+        assertThat(captor.getValue().evaluationCutoff()).isEqualTo(CUTOFF);
+        assertThat(captor.getValue().createdAt()).isEqualTo(projectedAt);
+        assertThat(captor.getValue().createdAt()).isAfter(captor.getValue().evaluationCutoff());
     }
 
     private AnalysisExecution execution() {

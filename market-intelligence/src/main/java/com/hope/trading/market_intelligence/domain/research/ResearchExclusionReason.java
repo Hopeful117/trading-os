@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.domain.research;
 
 public enum ResearchExclusionReason {
     FEATURE_SNAPSHOT_INVALID,
+    FEATURE_EVIDENCE_UNAVAILABLE,
     FEATURE_MISSING_REQUIRED_VALUE,
     OUTCOME_MISSING,
     OUTCOME_NOT_MATURE,

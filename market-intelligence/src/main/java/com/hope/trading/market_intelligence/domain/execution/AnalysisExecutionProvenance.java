@@ -16,7 +16,9 @@ public record AnalysisExecutionProvenance(
         UUID scanId,
         UUID scanMarketId,
         Instant evaluationCutoff,
-        EvidenceAcquisitionPolicy evidencePolicy
+        EvidenceAcquisitionPolicy evidencePolicy,
+        ExecutionOrigin executionOrigin,
+        String reconstructionRequestFingerprint
 ) {
     public AnalysisExecutionProvenance(
             UUID marketId, AnalysisExecutionMode mode, String objective, String strategyVersion) {
@@ -37,6 +39,21 @@ public record AnalysisExecutionProvenance(
                 null, EvidenceAcquisitionPolicy.LIVE_CURRENT);
     }
 
+    public AnalysisExecutionProvenance(
+            UUID marketId,
+            AnalysisExecutionMode mode,
+            String objective,
+            String strategyVersion,
+            UUID accountId,
+            UUID scanId,
+            UUID scanMarketId,
+            Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy
+    ) {
+        this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
+                evaluationCutoff, evidencePolicy, ExecutionOrigin.CONTEMPORARY_ANALYSIS, null);
+    }
+
     public AnalysisExecutionProvenance {
         Objects.requireNonNull(marketId);
         Objects.requireNonNull(mode);
@@ -44,5 +61,15 @@ public record AnalysisExecutionProvenance(
         Objects.requireNonNull(strategyVersion);
         evidencePolicy = evidencePolicy == null
                 ? EvidenceAcquisitionPolicy.LIVE_CURRENT : evidencePolicy;
+        executionOrigin = executionOrigin == null
+                ? ExecutionOrigin.CONTEMPORARY_ANALYSIS : executionOrigin;
+        if (executionOrigin == ExecutionOrigin.HISTORICAL_RECONSTRUCTION
+                && (reconstructionRequestFingerprint == null
+                || reconstructionRequestFingerprint.isBlank())) {
+            throw new IllegalArgumentException(
+                    "Historical reconstruction requires a request fingerprint");
+        }
+        reconstructionRequestFingerprint = reconstructionRequestFingerprint == null
+                ? null : reconstructionRequestFingerprint.trim();
     }
 }

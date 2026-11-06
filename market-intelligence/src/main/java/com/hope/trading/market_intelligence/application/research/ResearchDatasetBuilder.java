@@ -9,6 +9,7 @@ import com.hope.trading.market_intelligence.domain.research.*;
 import com.hope.trading.market_intelligence.application.feature.FeatureProjectionV1;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -26,6 +27,25 @@ public final class ResearchDatasetBuilder {
             ResearchPopulationSpec population,
             List<FeatureSnapshot> snapshots,
             List<ObservedMarketOutcome> outcomes
+    ) {
+        return build(population, snapshots, outcomes, Map.of());
+    }
+
+    public DatasetBuildResult build(
+            ResearchPopulationSpec population,
+            List<FeatureSnapshot> snapshots,
+            List<ObservedMarketOutcome> outcomes,
+            Map<String, Instant> featureEvidenceKnownAtBySnapshotFingerprint
+    ) {
+        return build(population, snapshots, outcomes, featureEvidenceKnownAtBySnapshotFingerprint, false);
+    }
+
+    public DatasetBuildResult build(
+            ResearchPopulationSpec population,
+            List<FeatureSnapshot> snapshots,
+            List<ObservedMarketOutcome> outcomes,
+            Map<String, Instant> featureEvidenceKnownAtBySnapshotFingerprint,
+            boolean requireTemporalEvidence
     ) {
         Objects.requireNonNull(population, "population");
         var schema = FeatureProjectionV1.schema();
@@ -71,7 +91,8 @@ public final class ResearchDatasetBuilder {
             }
             for (var horizon : population.horizons().stream()
                     .sorted(Comparator.comparing(com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon::value)).toList()) {
-                samples.add(buildSample(population, snapshot, horizon, outcomesByKey, schema));
+                samples.add(buildSample(population, snapshot, horizon, outcomesByKey, schema,
+                        featureEvidenceKnownAtBySnapshotFingerprint, requireTemporalEvidence));
             }
         }
         samples.sort(Comparator.comparing(ResearchSample::marketId)
@@ -91,13 +112,20 @@ public final class ResearchDatasetBuilder {
                 (int) samples.stream().filter(value -> value.status() == ResearchSampleStatus.ELIGIBLE).count(),
                 (int) samples.stream().filter(value -> value.status() == ResearchSampleStatus.EXCLUDED).count(),
                  exclusions, clock.instant(), datasetFingerprint, fingerprintMaterial);
-        return new DatasetBuildResult(manifest, samples);
+        return new DatasetBuildResult(manifest, samples, featureEvidenceKnownAtBySnapshotFingerprint);
     }
 
     private ResearchSample buildSample(ResearchPopulationSpec population, FeatureSnapshot snapshot,
                                        com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon horizon,
                                        Map<ResearchOutcomeKey, List<ObservedMarketOutcome>> outcomesByKey,
-                                       com.hope.trading.market_intelligence.domain.feature.FeatureSchema schema) {
+                                       com.hope.trading.market_intelligence.domain.feature.FeatureSchema schema,
+                                       Map<String, Instant> featureEvidenceKnownAtBySnapshotFingerprint,
+                                       boolean requireTemporalEvidence) {
+        if (requireTemporalEvidence && !hasTemporalEvidenceAtCutoff(
+                snapshot, featureEvidenceKnownAtBySnapshotFingerprint)) {
+            return ResearchSample.excluded(DATASET_DEFINITION_VERSION, snapshot, horizon,
+                    ResearchExclusionReason.FEATURE_EVIDENCE_UNAVAILABLE);
+        }
         if (!snapshot.featureProjectionVersion().equals(population.featureProjectionVersion())
                 || snapshot.evidencePolicy() != EvidenceAcquisitionPolicy.STRICT_OBSERVED) {
             return ResearchSample.excluded(DATASET_DEFINITION_VERSION, snapshot, horizon, ResearchExclusionReason.VERSION_MISMATCH);
@@ -146,6 +174,12 @@ public final class ResearchDatasetBuilder {
         };
         return ResearchSample.create(DATASET_DEFINITION_VERSION, snapshot, outcome,
                 outcomeReason == null ? ResearchSampleStatus.ELIGIBLE : ResearchSampleStatus.EXCLUDED, outcomeReason);
+    }
+
+    private boolean hasTemporalEvidenceAtCutoff(
+            FeatureSnapshot snapshot, Map<String, Instant> featureEvidenceKnownAtBySnapshotFingerprint) {
+        Instant knownAt = featureEvidenceKnownAtBySnapshotFingerprint.get(snapshot.fingerprint());
+        return knownAt != null && !knownAt.isAfter(snapshot.evaluationCutoff());
     }
 
     private boolean matchesSchema(FeatureSnapshot snapshot,

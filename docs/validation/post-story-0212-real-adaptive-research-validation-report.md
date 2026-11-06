@@ -6,8 +6,8 @@
 |---|---|
 | Date | 2026-11-06 |
 | Branch | `main` |
-| Commit under test | `983497204fe0863c5bf59c334371210a1965967e` plus current uncommitted worktree |
-| Scope | Post-merge real-provider validation of Story 0212 |
+| Commit under test | `ec84cf7384b1b598db369c43c2fbd58ae07c982c` (`main`, merge of PR #257) |
+| Scope | Post-merge real-provider validation of Story 0212 and current architecture assessment |
 | Provider target | `openai_chatgpt` through the existing ChatGPT OAuth adapter |
 | Production changes | None |
 | Trades, broker actions or strategy changes | None |
@@ -313,9 +313,10 @@ adds useful information in a deployed runtime.
 
 ### Review status
 
-The independent review blocker and the two approved lifecycle corrections are
-addressed in the current worktree. The corrected worktree still requires human
-diff review and a future commit decision; no Git integration was performed.
+The independent review blocker and the two approved lifecycle corrections were
+addressed, reviewed and merged through PR #257. The `main` baseline was clean
+before this documentation update. This report remains a validation artifact, not
+an authorization to trade.
 
 ## Conclusions
 
@@ -354,3 +355,227 @@ can submit research and market subscriptions, but direct `ACTIVE` analysis is
 forbidden. Once tradeability evidence is present, rerun one bounded adaptive
 attempt and one authenticated MCP retrieval without exposing or committing
 credentials.
+
+## Architecture Assessment Update
+
+### Baseline and pipeline
+
+The merged implementation follows this actual sequence:
+
+```text
+Market Data contributors
+    -> IntelligenceContextAssembler
+    -> CapabilityAnalysisCoordinator / deterministic capabilities
+    -> MarketThesisComposer and persisted Market Thesis
+    -> ResearchApplicationService
+    -> initial AI interpretation (optional)
+    -> Java allowlisted deterministic follow-up (optional)
+    -> final AI synthesis (optional, terminal)
+    -> persisted ResearchExecution / ResearchReport
+```
+
+The Java application owns market scope, context assembly, deterministic execution,
+AI authorization, budgets, evidence validation, persistence and REST contracts.
+The Python service owns bounded provider execution and structured interpretation.
+MCP maps only to Gateway contracts. Risk remains an independent deterministic
+authorization engine and was not involved in the research execution.
+
+### Current validation result
+
+The current baseline was rechecked from `main` at the merge commit above.
+
+| Check | Result |
+|---|---|
+| Market Intelligence full Maven suite | PASS |
+| AI Engine project virtualenv suite | PASS, 18 tests |
+| MCP Adapter project virtualenv suite | PASS, 30 tests |
+| Market Data full Maven suite | PASS; expected malformed-input diagnostics were logged |
+| Research evaluation fixture test | PASS |
+| Docker Compose runtime | PASS; all declared services running |
+| AI Engine health | PASS; enabled, shadow mode, `openai_chatgpt` |
+| Unauthenticated Gateway market/research reads | PASS; `401` |
+| Authenticated REST/MCP replay of historical research IDs | NOT EXECUTED; no authorized user JWT available |
+
+The prior live campaign remains the strongest runtime evidence. It proved real
+initial AI interpretation over authorized evidence, but did not prove a real
+follow-up plus final synthesis cycle. The provider requested
+`ai-market-reasoning:unknown`, which Java rejected by the allowlist. Tradeability
+also remained unavailable. The historical IDs requested for inspection were not
+replayed through REST because doing so without a user JWT would violate the
+Gateway boundary.
+
+### Exact blockers and classification
+
+| Observation | Classification | Consequence |
+|---|---|---|
+| No user JWT available for the local process | Environmental limitation / authorization restriction | No authenticated REST or MCP replay |
+| `LIVE_CURRENT` tradeability is unsupported by the deterministic capability | Legitimate domain constraint plus missing provider capability | Thesis preserves `TRADEABILITY_UNAVAILABLE`; no candidate execution suitability |
+| Real provider follow-up ID/version was not allowlisted | Legitimate authorization restriction | Follow-up and final synthesis are correctly not executed |
+| AI engine receives no canonical context when no thesis exists | Implementation coupling | AI is marked `NOT_REQUESTED` when the persisted thesis artifact is absent |
+| AI test provider used synthetic evidence in Test A | Validation limitation | Proves contract/provider integration, not live-market usefulness |
+
+### Does AI require a complete deterministic Market Thesis?
+
+No, not in the strong sense. The implementation requires a persisted
+`MarketThesis` artifact before AI (`ResearchApplicationService.java`), but it does
+not require `MarketThesisState.CANDIDATE`. `WATCH` and `NO_TRADE` theses can still
+be sent to the AI, with missingness and contradictions preserved.
+
+That artifact requirement is justified because it supplies canonical market
+identity, source cutoff, evidence IDs, freshness, provenance and deterministic
+missingness. Requiring a complete tradeability result, Level II liquidity or a
+`CANDIDATE` state before advisory interpretation would conflate analysis with
+execution suitability and suppress useful explanations of uncertainty.
+
+The correct separation is:
+
+```text
+Research context: validated identity, cutoff, provenance and a bounded thesis artifact
+AI interpretation: advisory explanation of available, missing and contradictory evidence
+Candidate eligibility: deterministic Market Thesis policy
+Trade authorization: independent TradePlan and Risk authorities
+Execution: human authorization, Trading Core and Broker Service
+```
+
+### Deterministic value assessment
+
+The following must remain mandatory for any research context:
+
+- canonical market and instrument identity;
+- evidence market consistency;
+- source cutoff and temporal validity;
+- freshness and provenance validation;
+- evidence-reference validation;
+- bounded capability authorization and budgets;
+- explicit missing, stale and contradictory evidence;
+- deterministic Risk evaluation for any concrete TradePlan;
+- human authorization before execution.
+
+The following should be optional research inputs unless a specific policy makes
+them required for a downstream candidate or execution decision:
+
+- order-book and Level II evidence;
+- advanced liquidity measurements;
+- volume, which is currently not implemented;
+- news context when no blocking-news policy applies;
+- tradeability evidence for informational research;
+- `CANDIDATE` thesis state;
+- additional deterministic follow-up capabilities.
+
+Optional means explicitly represented as missing or degraded, never silently
+treated as support or suitability.
+
+### Architecture comparison
+
+| Scenario | Deterministic-first | Hybrid AI-first under current safeguards |
+|---|---|---|
+| Complete evidence | Reliable report and AI interpretation | Same safety, more flexible interpretation |
+| Missing tradeability | Research is possible only if a thesis artifact exists; execution suitability remains unavailable | Advisory hypotheses can explain the gap; no execution conclusion |
+| Missing order book | Thesis records missingness; candidate policy may block | AI can reason over other evidence and state the limitation |
+| Stale evidence | Deterministic gates reject or degrade the affected path | Same cutoff/freshness gate; AI may explain stale evidence, not refresh it |
+| Contradictory signals | Thesis preserves contradiction and may become `WATCH`/`NO_TRADE` | AI can compare hypotheses, but cannot erase contradiction or change canonical state |
+| Insufficient history | Required context can fail the deterministic branch | AI can summarize the insufficiency only if a bounded thesis/context artifact exists |
+| Volatile market | Deterministic freshness and tradeability policy remain authoritative | AI can describe uncertainty; it cannot infer executable suitability |
+| Provider limitation | Explicit unavailable/partial result | Same result with potentially useful advisory interpretation |
+
+The implementation is therefore already a constrained hybrid in the research
+layer, even though deterministic analysis is performed first. A broad rewrite to
+let Python independently acquire or normalize market data would reduce evidence
+integrity and violate ADR-089.
+
+### AI capability assessment
+
+| Capability | Status | Evidence |
+|---|---|---|
+| Structured interpretation of supplied thesis evidence | Implemented and validated | Python contracts, provider tests, live initial call |
+| Evidence-reference grounding | Implemented and validated | Java/Python validation and evaluation fixtures |
+| Missing/stale/contradictory evidence handling | Implemented and validated in fixtures; live usefulness unvalidated | Story 0211/0212 evaluator |
+| One authorized deterministic follow-up | Implemented and validated offline; live execution unvalidated | Java allowlist and fixture coverage |
+| Final synthesis over returned evidence | Implemented and validated offline; live execution unvalidated | Story 0212 tests |
+| Hypothesis reconciliation | Implemented and validated offline | Reconciliation effects and evidence checks |
+| Multi-timeframe interpretation | Partially implemented | Deterministic Trend Context is supplied; no live qualitative assessment |
+| Support/resistance hypotheses | Partially implemented | Structural-level deterministic capability exists; AI usefulness not measured live |
+| Order-book/liquidity interpretation | Blocked or partial | ADR-079 policy and current evidence availability |
+| News/macro interpretation | Blocked by available trusted context | No validated live research campaign |
+| Calibrated probabilities or predictive performance | Missing by design | Not claimed by current contract or rubric |
+| Conditional entry/stop/target zones | Missing from this research workflow | TradePlan/Risk boundaries remain separate |
+
+### Independent review
+
+An independent repository review was performed against the implementation and
+ADRs 076, 079, 088 and 089. It found no reason to remove deterministic identity,
+cutoff, provenance, evidence validation, Java authorization, budgets or Risk
+separation. It confirmed that a persisted thesis artifact is a valid context
+boundary, while a `CANDIDATE` thesis or complete tradeability is not a necessary
+precondition for advisory AI interpretation.
+
+The reviewer identified unresolved policy questions rather than an implementation
+defect requiring an architectural rewrite:
+
+- whether AI should run for a `NO_TRADE` thesis caused by a blocking contradiction;
+- what defines a research-ready thesis versus a candidate-ready thesis;
+- when Level II liquidity is required by candidate policy;
+- what measurable threshold proves AI value over the deterministic baseline;
+- whether provider fallback is acceptable when provider/model provenance changes.
+
+### Recommendation
+
+**Option 3: controlled experiment, within a constrained hybrid research model.**
+
+Retain deterministic-first authority and do not implement a broad AI-first
+migration yet. The current architecture is safe and reusable, but the available
+runtime evidence is insufficient to claim that adaptive AI adds measurable value.
+The next experiment should compare the same inputs through:
+
+1. deterministic report only;
+2. deterministic report plus initial AI interpretation;
+3. deterministic report plus one authorized follow-up and final synthesis.
+
+Measure evidence coverage, unsupported claims, contradiction preservation,
+missingness, uncertainty reduction, human comprehension, latency, call count and
+provider usage. Do not infer profitability or calibrated prediction from this
+experiment.
+
+### Incremental roadmap
+
+1. Reconcile Story 0209 status metadata with the delivered implementation.
+2. Make report semantics explicit for thesis state, research quality and execution
+   suitability as separate fields or documented projections.
+3. Run an authenticated bounded campaign with current market evidence and an
+   approved follow-up capability/version.
+4. Add controlled comparison telemetry for deterministic, initial-AI and adaptive
+   outputs over identical fixtures and replayable real evidence.
+5. Define policy profiles for research-ready, candidate-ready and
+   liquidity-qualified contexts without weakening ADR-079.
+6. Keep TradePlan, Risk, human validation and broker execution outside AI authority.
+
+No architecture migration, ADR creation, Story creation or code change is
+authorized by this assessment.
+
+## Human Decision
+
+Option 3, the controlled comparison within the constrained hybrid research model,
+was approved by the human owner on 2026-11-06. This approval does not authorize
+an architecture migration, an ADR, a new Story, a provider policy change or any
+trade execution.
+
+## Controlled Experiment Execution
+
+The existing reproducible synthetic experiment was executed without application
+code changes:
+
+- 7 scenarios: trend confirmation, contradictory signals, missing evidence,
+  stale data, comparative markets, adaptive investigation and no-follow-up;
+- deterministic baseline and deterministic-versus-assisted comparison checks;
+- adaptive follow-up governance and final-synthesis checks;
+- 14 tests, 0 failures, 0 errors and 0 skipped;
+- Maven result: `BUILD SUCCESS`.
+
+This validates contract behavior and safety boundaries only. It does not measure
+live trader usefulness or predictive performance. The live three-stage comparison
+remains blocked by the missing authorized user JWT, unavailable current
+tradeability evidence and the real provider follow-up request rejected by the
+Java capability allowlist.
+
+Result: **architecturally safe, analytically inconclusive**. No AI-first
+migration is justified by this run.
