@@ -12,10 +12,11 @@ public record MarketStructureSourceReference(
         Instant capturedAt,
         Instant knownAt,
         String observationFingerprint,
-        String normalizationVersion
+        String normalizationVersion,
+        String origin
 ) {
     public MarketStructureSourceReference(String sourceId, Instant sourceOccurredAt, Instant fetchedAt) {
-        this(sourceId, sourceOccurredAt, fetchedAt, null, null, fetchedAt, null, null);
+        this(sourceId, sourceOccurredAt, fetchedAt, null, null, fetchedAt, null, null, null);
     }
 
     public MarketStructureSourceReference {

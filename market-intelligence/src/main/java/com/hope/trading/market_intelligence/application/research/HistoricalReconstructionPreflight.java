@@ -40,7 +40,7 @@ public class HistoricalReconstructionPreflight {
                 throw new IllegalStateException("Historical role window is insufficient: " + definition.role());
             }
             response.observations().forEach(value -> identities.add(
-                    definition.role() + "|" + value.observationId() + "|" + value.observationFingerprint()));
+                    identity(definition.role().name(), value)));
         }
         Instant maturity = cutoff.plus(Duration.ofHours(1));
         var future = client.findHistoricalOhlcRange(marketId, INTERVAL, cutoff, maturity, "CAPTURED");
@@ -54,13 +54,18 @@ public class HistoricalReconstructionPreflight {
             throw new IllegalStateException("Historical PT1H future range is incomplete");
         }
         future.observations().forEach(value -> {
-            if (value.observationId() == null || value.observationFingerprint() == null
+            if (!Objects.equals(value.marketId(), marketId)
+                    || !Objects.equals(value.interval(), INTERVAL)
+                    || value.openTime() == null || value.closeTime() == null
+                    || value.openTime().isBefore(cutoff) || !value.closeTime().isAfter(cutoff)
+                    || !value.openTime().isBefore(maturity) || value.closeTime().isAfter(maturity)
+                    || value.observationId() == null || value.observationFingerprint() == null
                     || value.fetchedAt() == null || value.capturedAt() == null || value.knownAt() == null
                     || !value.closed() || value.synthetic() || !"CAPTURED".equals(value.origin())
                     || !"historical-ohlc-v1".equals(value.normalizationVersion())) {
                 throw new IllegalStateException("Historical future evidence provenance is incomplete");
             }
-            identities.add("FUTURE|" + value.observationId() + "|" + value.observationFingerprint());
+            identities.add(identity("FUTURE", value));
         });
         return new Result(List.copyOf(identities), orderedFingerprint(identities));
     }
@@ -73,6 +78,13 @@ public class HistoricalReconstructionPreflight {
         } catch (java.security.NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 unavailable", exception);
         }
+    }
+
+    private String identity(String role,
+                            com.hope.trading.market_intelligence.adapter.marketdata.HistoricalOhlcClient.HistoricalOhlcEvidenceResponse value) {
+        return String.join("|", role, value.observationId().toString(), value.observationFingerprint(),
+                value.fetchedAt().toString(), value.capturedAt().toString(), value.knownAt().toString(),
+                value.origin(), value.normalizationVersion());
     }
 
     public record Result(List<String> selectedEvidence, String selectionFingerprint) {

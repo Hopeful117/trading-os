@@ -19,6 +19,11 @@ public class HistoricalOhlcReferenceEvidenceSource {
     }
 
     public Optional<OutcomeReferenceEvidence> findLatest(UUID marketId, Instant cutoff) {
+        return findLatest(marketId, cutoff, null);
+    }
+
+    public Optional<OutcomeReferenceEvidence> findLatest(
+            UUID marketId, Instant cutoff, String selectionBinding) {
         HistoricalOhlcClient.HistoricalOhlcSeriesResponse response = client.findHistoricalOhlc(
                 marketId, "FIFTEEN_MINUTES", cutoff, 200);
         if (response == null || !Objects.equals(response.marketId(), marketId)
@@ -36,8 +41,19 @@ public class HistoricalOhlcReferenceEvidenceSource {
                 .filter(value -> value.observationFingerprint() != null)
                 .filter(value -> NORMALIZATION_VERSION.equals(value.normalizationVersion()))
                 .max(Comparator.comparing(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse::closeTime))
-                .map(value -> new OutcomeReferenceEvidence(
-                        value.close(), value.closeTime(), value.knownAt(),
-                        value.observationFingerprint(), value.normalizationVersion()));
+                .map(value -> {
+                    if (selectionBinding != null && selectionBinding.lines()
+                            .filter(line -> line.startsWith("TRIGGER|"))
+                            .noneMatch(line -> line.startsWith("TRIGGER|" + value.observationId() + "|"
+                                    + value.observationFingerprint() + "|" + value.fetchedAt() + "|"
+                                    + value.capturedAt() + "|" + value.knownAt() + "|" + value.origin()
+                                    + "|" + value.normalizationVersion()))) {
+                        throw new IllegalStateException(
+                                "Historical reference evidence does not match preflight selection");
+                    }
+                    return new OutcomeReferenceEvidence(
+                            value.close(), value.closeTime(), value.knownAt(),
+                            value.observationFingerprint(), value.normalizationVersion());
+                });
     }
 }

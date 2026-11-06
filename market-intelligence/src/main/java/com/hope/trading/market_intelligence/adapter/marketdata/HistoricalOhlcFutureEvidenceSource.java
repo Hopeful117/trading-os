@@ -21,6 +21,11 @@ public class HistoricalOhlcFutureEvidenceSource {
     }
 
     public HistoricalOhlcRangeSnapshot find(UUID marketId, Instant fromExclusive, Instant toInclusive) {
+        return find(marketId, fromExclusive, toInclusive, null);
+    }
+
+    public HistoricalOhlcRangeSnapshot find(UUID marketId, Instant fromExclusive, Instant toInclusive,
+                                            String selectionBinding) {
         HistoricalOhlcClient.HistoricalOhlcRangeResponse response = client.findHistoricalOhlcRange(
                 marketId, INTERVAL, fromExclusive, toInclusive, POLICY);
         if (response == null || !Objects.equals(response.marketId(), marketId)
@@ -30,6 +35,7 @@ public class HistoricalOhlcFutureEvidenceSource {
                 || !Objects.equals(response.evidencePolicy(), POLICY)) {
             throw new IllegalStateException("Historical future range identity does not match request");
         }
+        if (selectionBinding != null) validateSelection(response.observations(), selectionBinding);
         List<OutcomeFutureObservation> observations = response.observations().stream()
                 .map(value -> map(value, marketId, fromExclusive, toInclusive))
                 .sorted(java.util.Comparator.comparing(OutcomeFutureObservation::openTime))
@@ -46,6 +52,23 @@ public class HistoricalOhlcFutureEvidenceSource {
                 response.observedObservationCount(), response.gaps().stream()
                         .map(gap -> gap.openTime() + ".." + gap.closeTime()).toList(),
                 response.evidenceFingerprint(), response.normalizationVersions(), observations);
+    }
+
+    private void validateSelection(
+            List<HistoricalOhlcClient.HistoricalOhlcEvidenceResponse> observations,
+            String selectionBinding) {
+        List<String> expected = selectionBinding.lines()
+                .filter(value -> value.startsWith("FUTURE|"))
+                .toList();
+        List<String> actual = observations.stream()
+                .map(value -> String.join("|", "FUTURE", value.observationId().toString(),
+                        value.observationFingerprint(), value.fetchedAt().toString(),
+                        value.capturedAt().toString(), value.knownAt().toString(), value.origin(),
+                        value.normalizationVersion()))
+                .toList();
+        if (!expected.equals(actual)) {
+            throw new IllegalStateException("Historical future evidence does not match preflight selection");
+        }
     }
 
     private OutcomeFutureObservation map(

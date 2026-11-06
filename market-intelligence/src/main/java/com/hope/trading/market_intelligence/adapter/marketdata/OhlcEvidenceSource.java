@@ -7,6 +7,12 @@ import java.util.UUID;
 public interface OhlcEvidenceSource {
     OhlcEvidenceBatch acquire(UUID marketId, String interval, int limit, Instant cutoff);
 
+    default OhlcEvidenceBatch acquire(
+            UUID marketId, String interval, int limit, Instant cutoff,
+            String selectionBinding, String role) {
+        return acquire(marketId, interval, limit, cutoff);
+    }
+
     record OhlcEvidenceBatch(
             List<OhlcResponse> observations,
             String evidenceFingerprint,

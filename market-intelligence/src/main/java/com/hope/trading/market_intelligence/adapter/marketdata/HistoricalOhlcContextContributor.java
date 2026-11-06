@@ -53,8 +53,19 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
 
     @Override
     public ContextSection contribute(IntelligenceAnalysisRequest request) {
-        OhlcEvidenceSource.OhlcEvidenceBatch batch = source(request).acquire(
-                request.marketId(), ACTIVE_INTERVAL, ACTIVE_LIMIT, request.evaluationCutoff());
+        OhlcEvidenceSource selectedSource = source(request);
+        int limit = request.historicalEvidenceSelection() == null ? ACTIVE_LIMIT
+                : Math.toIntExact(request.historicalEvidenceSelection().lines()
+                .filter(value -> value.startsWith("TRIGGER|"))
+                .count());
+        if (limit <= 0) {
+            throw new IllegalStateException("Historical preflight selection is missing TRIGGER evidence");
+        }
+        OhlcEvidenceSource.OhlcEvidenceBatch batch = request.historicalEvidenceSelection() == null
+                ? selectedSource.acquire(request.marketId(), ACTIVE_INTERVAL, limit,
+                request.evaluationCutoff())
+                : selectedSource.acquire(request.marketId(), ACTIVE_INTERVAL, limit,
+                request.evaluationCutoff(), request.historicalEvidenceSelection(), "TRIGGER");
         List<OhlcResponse> response = batch.observations();
         boolean liveCurrentActive = request.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
                 && request.scanId() != null;

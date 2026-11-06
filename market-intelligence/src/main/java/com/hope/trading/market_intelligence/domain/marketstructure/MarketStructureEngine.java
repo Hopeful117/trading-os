@@ -138,7 +138,7 @@ public final class MarketStructureEngine {
                 candles.subList(from, to + 1).stream().map(c -> new MarketStructureSourceReference(
                         c.sourceId(), c.sourceOccurredAt(), c.fetchedAt(), c.observationId(),
                         c.capturedAt(), c.knownAt(), c.observationFingerprint(),
-                        c.normalizationVersion())).toList(), false, "");
+                         c.normalizationVersion(), c.origin())).toList(), false, "");
     }
 
     private boolean intersectsGap(MarketStructureInput input, List<MarketStructureCandle> candles, int index, int radius) {

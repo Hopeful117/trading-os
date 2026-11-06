@@ -46,6 +46,8 @@ class MarketIdentityContextContributorTest {
         assertThat(section.provenance().evidencePolicy())
                 .isEqualTo(EvidenceAcquisitionPolicy.STRICT_OBSERVED);
         assertThat(section.provenance().evaluationCutoff()).isEqualTo(cutoff);
+        assertThat(section.provenance().capturedAt()).isEqualTo(updatedAt);
+        assertThat(section.provenance().knownAt()).isEqualTo(updatedAt);
     }
 
     @Test

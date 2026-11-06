@@ -120,6 +120,24 @@ public class AnalysisExecutionService {
                     "Strict observed analysis requires an explicit evaluation cutoff");
         }
         Instant now = clock.instant();
+        if (historicalBoundary) {
+            var existing = repository.findByIdempotencyKey(idempotencyKey);
+            if (existing.isPresent()) {
+                AnalysisExecutionProvenance expected = provenance(request, true, selectionFingerprint);
+                AnalysisExecution current = existing.get();
+                if (!sameHistoricalRequest(current.provenance(), expected)) {
+                    throw new IllegalStateException(
+                            "Conflicting historical reconstruction request for idempotency key");
+                }
+                if (!current.isExpiredAt(now)
+                        && (current.status() == AnalysisExecutionStatus.COMPLETED
+                        || !current.status().isTerminal())) {
+                    return current;
+                }
+                throw new IllegalStateException(
+                        "Historical reconstruction idempotency key already has a terminal or expired execution; use a new key");
+            }
+        }
         var reusable = repository.findReusable(idempotencyKey, now);
         if (reusable.isPresent()) {
             if (historicalBoundary && !java.util.Objects.equals(
@@ -153,6 +171,36 @@ public class AnalysisExecutionService {
             return execution;
     }
 
+    private boolean sameHistoricalRequest(
+            AnalysisExecutionProvenance current,
+            AnalysisExecutionProvenance expected
+    ) {
+        String marker = "|selection=";
+        String currentFingerprint = current.reconstructionRequestFingerprint();
+        String expectedFingerprint = expected.reconstructionRequestFingerprint();
+        int currentMarker = currentFingerprint.indexOf(marker);
+        int expectedMarker = expectedFingerprint.indexOf(marker);
+        return currentMarker >= 0 && expectedMarker >= 0
+                && sameFingerprintPrefix(
+                currentFingerprint.substring(0, currentMarker),
+                expectedFingerprint.substring(0, expectedMarker))
+                && java.util.Objects.equals(
+                current.historicalEvidenceSelection(), expected.historicalEvidenceSelection());
+    }
+
+    private boolean sameFingerprintPrefix(String current, String expected) {
+        String[] currentParts = current.split("\\|", -1);
+        String[] expectedParts = expected.split("\\|", -1);
+        if (currentParts.length != 6 || expectedParts.length != 6) return false;
+        for (int index = 0; index < 5; index++) {
+            if (!currentParts[index].equals(expectedParts[index])) return false;
+        }
+        return java.util.Arrays.stream(currentParts[5].split(","))
+                .sorted().toList()
+                .equals(java.util.Arrays.stream(expectedParts[5].split(","))
+                        .sorted().toList());
+    }
+
     private AnalysisExecutionProvenance provenance(
             IntelligenceAnalysisRequest request,
             boolean historicalBoundary,
@@ -162,22 +210,29 @@ public class AnalysisExecutionService {
             return new AnalysisExecutionProvenance(
                     request.marketId(), request.mode(), request.objective(), "v1",
                     request.accountId(), request.scanId(), request.scanMarketId(),
-                    request.evaluationCutoff(), request.evidencePolicy());
+                     request.evaluationCutoff(), request.evidencePolicy());
         }
         if (request.evidencePolicy() != EvidenceAcquisitionPolicy.STRICT_OBSERVED
                 || request.evaluationCutoff() == null) {
             throw new IllegalArgumentException(
                     "Historical reconstruction requires strict observed evidence and a cutoff");
         }
+        if (request.historicalEvidenceSelection() == null
+                || request.historicalEvidenceSelection().isBlank()) {
+            throw new IllegalArgumentException(
+                    "Historical reconstruction requires a preflight evidence selection");
+        }
         String fingerprint = request.marketId() + "|" + request.evaluationCutoff()
                 + "|feature-projection-v1|PT1H|STRICT_OBSERVED|"
-                + String.join(",", HistoricalReconstructionPolicy.ALLOWED_CAPABILITIES)
+                + HistoricalReconstructionPolicy.ALLOWED_CAPABILITIES.stream().sorted()
+                .collect(java.util.stream.Collectors.joining(","))
                 + "|selection=" + (selectionFingerprint == null ? "preflight-unavailable" : selectionFingerprint);
         return new AnalysisExecutionProvenance(
                 request.marketId(), request.mode(), request.objective(), "v1",
                 request.accountId(), request.scanId(), request.scanMarketId(),
-                request.evaluationCutoff(), request.evidencePolicy(),
-                ExecutionOrigin.HISTORICAL_RECONSTRUCTION, fingerprint);
+                 request.evaluationCutoff(), request.evidencePolicy(),
+                 ExecutionOrigin.HISTORICAL_RECONSTRUCTION, fingerprint,
+                 request.historicalEvidenceSelection());
     }
 
     public boolean claimForDispatch(UUID executionId) {
@@ -210,7 +265,7 @@ public class AnalysisExecutionService {
                 execution.provenance().scanMarketId(),
                 execution.provenance().evaluationCutoff(),
                 execution.provenance().evidencePolicy()
-        ));
+        ).withHistoricalEvidenceSelection(execution.provenance().historicalEvidenceSelection()));
     }
 
     public AnalysisExecution find(UUID executionId) {
@@ -227,11 +282,12 @@ public class AnalysisExecutionService {
 
     public AnalysisExecution cancel(UUID executionId) {
         AnalysisExecution current = find(executionId);
-        AnalysisExecution cancelled = current.transitionTo(
-                AnalysisExecutionStatus.CANCELLED, clock.instant()
-        );
-        repository.save(cancelled);
+        if (current.status().isTerminal()) return current;
+        if (!repository.transitionStatus(
+                executionId, current.status(), AnalysisExecutionStatus.CANCELLED, clock.instant())) {
+            return find(executionId);
+        }
         dispatcher.cancel(executionId);
-        return cancelled;
+        return find(executionId);
     }
 }

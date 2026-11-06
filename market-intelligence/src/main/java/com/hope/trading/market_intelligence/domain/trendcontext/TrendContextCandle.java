@@ -25,7 +25,8 @@ public record TrendContextCandle(
         Instant capturedAt,
         Instant knownAt,
         String observationFingerprint,
-        String normalizationVersion
+        String normalizationVersion,
+        String origin
 ) {
     public TrendContextCandle(
             String provider, String symbol, String interval, Instant openTime, Instant closeTime,
@@ -34,8 +35,8 @@ public record TrendContextCandle(
             Instant fetchedAt
     ) {
         this(provider, symbol, interval, openTime, closeTime, open, high, low, close, volume,
-                closed, synthetic, sourceId, sourceOccurredAt, fetchedAt, null, null, fetchedAt,
-                null, null);
+                 closed, synthetic, sourceId, sourceOccurredAt, fetchedAt, null, null, fetchedAt,
+                 null, null, null);
     }
 
     public TrendContextCandle {

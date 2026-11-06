@@ -182,7 +182,7 @@ public class TrendContextInputMapper {
                 required(response.sourceId(), SOURCE_ID), response.occurredAt(),
                 Objects.requireNonNull(response.fetchedAt(), "fetchedAt is required"),
                 response.observationId(), response.capturedAt(), response.knownAt(),
-                response.observationFingerprint(), response.normalizationVersion());
+                response.observationFingerprint(), response.normalizationVersion(), response.origin());
     }
 
     private TrendContextSourceReference sourceReference(
@@ -228,6 +228,12 @@ public class TrendContextInputMapper {
                 && Objects.equals(required(first.sourceId(), SOURCE_ID),
                         required(second.sourceId(), SOURCE_ID))
                 && Objects.equals(first.fetchedAt(), second.fetchedAt())
+                && Objects.equals(first.observationId(), second.observationId())
+                && Objects.equals(first.capturedAt(), second.capturedAt())
+                && Objects.equals(first.knownAt(), second.knownAt())
+                && Objects.equals(first.observationFingerprint(), second.observationFingerprint())
+                && Objects.equals(first.normalizationVersion(), second.normalizationVersion())
+                && Objects.equals(first.origin(), second.origin())
                 && Objects.equals(normalize(first.interval()), normalize(second.interval()));
     }
 

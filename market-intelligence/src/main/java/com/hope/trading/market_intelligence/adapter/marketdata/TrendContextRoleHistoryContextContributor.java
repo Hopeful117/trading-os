@@ -78,7 +78,7 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 ? clock.instant() : request.evaluationCutoff();
         EnumMap<TrendContextRole, Integer> limits = new EnumMap<>(TrendContextRole.class);
         profile.roles().forEach((role, definition) ->
-                limits.put(role, Math.min(definition.requestedCandles(), MAX_OHLC_LIMIT)));
+                limits.put(role, boundLimit(request, role, definition.requestedCandles())));
 
         Map<TrendContextRole, List<OhlcResponse>> responses = Map.of();
         AcquisitionMetadata metadata = AcquisitionMetadata.empty();
@@ -100,14 +100,16 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
                 log.warn("Trend Context input mapping failed analysis={} market={} attempt={} errorType={} message={}",
                         request.analysisId(), request.marketId(), attempt + 1,
                         exception.getClass().getSimpleName(), exception.getMessage());
-                retry = increaseMissingRequiredRole(responses, limits);
+                retry = request.historicalEvidenceSelection() == null
+                        && increaseMissingRequiredRole(responses, limits);
                 if (!retry) {
                     return ContextSection.incomplete(
                             ContextRequirement.optionalPublic(sectionType()),
                             "Trend Context history is incomplete at the evaluation cutoff");
                 }
             }
-            if (!retry && !increaseForInsufficientHistory(mapped, limits)) {
+            if (!retry && (request.historicalEvidenceSelection() != null
+                    || !increaseForInsufficientHistory(mapped, limits))) {
                 break;
             }
         }
@@ -201,9 +203,12 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
             if (definition == null) continue;
             List<OhlcResponse> values;
             try {
-                OhlcEvidenceSource.OhlcEvidenceBatch batch = source(request).acquire(
-                        request.marketId(), definition.interval(), limits.get(role),
-                        request.evaluationCutoff());
+                OhlcEvidenceSource selectedSource = source(request);
+                OhlcEvidenceSource.OhlcEvidenceBatch batch = request.historicalEvidenceSelection() == null
+                        ? selectedSource.acquire(request.marketId(), definition.interval(), limits.get(role),
+                        request.evaluationCutoff())
+                        : selectedSource.acquire(request.marketId(), definition.interval(), limits.get(role),
+                        request.evaluationCutoff(), request.historicalEvidenceSelection(), role.name());
                 values = batch.observations();
                 if (batch.evidenceFingerprint() != null) {
                     fingerprints.add(batch.evidenceFingerprint());
@@ -284,5 +289,18 @@ public class TrendContextRoleHistoryContextContributor implements ContextContrib
         int next = Math.clamp(Math.multiplyExact(current, 2), current + 1, MAX_OHLC_LIMIT);
         limits.put(role, next);
         return true;
+    }
+
+    private int boundLimit(IntelligenceAnalysisRequest request, TrendContextRole role, int fallback) {
+        if (request.historicalEvidenceSelection() == null) {
+            return Math.min(fallback, MAX_OHLC_LIMIT);
+        }
+        long selected = request.historicalEvidenceSelection().lines()
+                .filter(value -> value.startsWith(role.name() + "|"))
+                .count();
+        if (selected <= 0 || selected > MAX_OHLC_LIMIT) {
+            throw new IllegalStateException("Historical preflight selection is missing role " + role);
+        }
+        return Math.toIntExact(selected);
     }
 }
