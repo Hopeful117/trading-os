@@ -20,12 +20,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -94,7 +98,7 @@ class HistoricalReconstructionServiceTest {
         MarketOutcomeEvaluationService outcomes = mock(MarketOutcomeEvaluationService.class);
         when(outcomes.evaluate(any())).thenReturn(outcome);
         ResearchDatasetExportService exports = mock(ResearchDatasetExportService.class);
-        when(exports.export(any(), any())).thenReturn(new ResearchDatasetExportService.ExportResult(1, 1, 0));
+        when(exports.export(any(), any(), any())).thenReturn(new ResearchDatasetExportService.ExportResult(1, 1, 0));
         HistoricalReconstructionService service = service(preflight, executions, executionRepository, projections,
                 mock(FeatureSnapshotRepository.class), outcomes, exports, lifecycles);
 
@@ -105,7 +109,95 @@ class HistoricalReconstructionServiceTest {
 
         assertThat(first.status()).isEqualTo("EXPORTED");
         assertThat(second.status()).isEqualTo("EXPORTED");
-        verify(exports, times(1)).export(any(), any());
+        verify(exports, times(1)).export(any(), any(), any());
+    }
+
+    @Test
+    void relativeOutputRootIsRejectedBeforeAnyReconstructionWork() {
+        HistoricalReconstructionService service = service(
+                mock(HistoricalReconstructionPreflight.class),
+                mock(AnalysisExecutionService.class),
+                mock(AnalysisExecutionRepository.class),
+                mock(FeatureSnapshotProjectionService.class),
+                mock(FeatureSnapshotRepository.class),
+                mock(MarketOutcomeEvaluationService.class),
+                mock(ResearchDatasetExportService.class),
+                new InMemoryHistoricalReconstructionLifecycleRepository());
+
+        assertThatThrownBy(() -> service.run(MARKET_ID, CUTOFF, Path.of("relative-output"),
+                "run-1", true, "approval-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("trusted directory");
+    }
+
+    @Test
+    void leaseLossAfterProjectionPreventsDownstreamPublication() {
+        AtomicBoolean owner = new AtomicBoolean(true);
+        InMemoryHistoricalReconstructionLifecycleRepository lifecycles =
+                new InMemoryHistoricalReconstructionLifecycleRepository() {
+                    @Override
+                    public boolean isOwned(UUID executionId, UUID leaseId) {
+                        return owner.get() && super.isOwned(executionId, leaseId);
+                    }
+                };
+        AnalysisExecution execution = completedExecution();
+        HistoricalReconstructionPreflight preflight = mock(HistoricalReconstructionPreflight.class);
+        when(preflight.verify(MARKET_ID, CUTOFF)).thenReturn(new HistoricalReconstructionPreflight.Result(
+                List.of("feature-evidence"), "selection"));
+        AnalysisExecutionService executions = mock(AnalysisExecutionService.class);
+        when(executions.registerHistorical(any(), any(), anyString(), anyString(), anyString())).thenReturn(execution);
+        when(executions.dispatchHistorical(execution)).thenReturn(execution);
+        AnalysisExecutionRepository executionRepository = mock(AnalysisExecutionRepository.class);
+        when(executionRepository.findById(execution.executionId())).thenReturn(Optional.of(execution));
+        FeatureSnapshot snapshot = mock(FeatureSnapshot.class);
+        when(snapshot.fingerprint()).thenReturn("snapshot-fingerprint");
+        FeatureSnapshotProjectionService projections = mock(FeatureSnapshotProjectionService.class);
+        when(projections.project(execution.executionId())).thenAnswer(invocation -> {
+            owner.set(false);
+            return snapshot;
+        });
+        MarketOutcomeEvaluationService outcomes = mock(MarketOutcomeEvaluationService.class);
+        ResearchDatasetExportService exports = mock(ResearchDatasetExportService.class);
+        HistoricalReconstructionService service = service(preflight, executions, executionRepository, projections,
+                mock(FeatureSnapshotRepository.class), outcomes, exports, lifecycles);
+
+        assertThatThrownBy(() -> service.run(MARKET_ID, CUTOFF, outputRoot, "lease-loss", true, "approval-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("lease was lost");
+        verifyNoInteractions(outcomes, exports);
+    }
+
+    @Test
+    void symlinkedOutputRootIsRejected() throws Exception {
+        Path target = Files.createDirectory(outputRoot.resolve("trusted-target"));
+        Path link = outputRoot.resolve("root-link");
+        Files.createSymbolicLink(link, target);
+        HistoricalReconstructionService service = service(mock(HistoricalReconstructionPreflight.class),
+                mock(AnalysisExecutionService.class), mock(AnalysisExecutionRepository.class),
+                mock(FeatureSnapshotProjectionService.class), mock(FeatureSnapshotRepository.class),
+                mock(MarketOutcomeEvaluationService.class), mock(ResearchDatasetExportService.class),
+                new InMemoryHistoricalReconstructionLifecycleRepository());
+
+        assertThatThrownBy(() -> service.run(MARKET_ID, CUTOFF, link, "run-1", true, "approval-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("trusted directory");
+    }
+
+    @Test
+    void groupWritableOutputRootIsRejected() throws Exception {
+        Path root = Files.createDirectory(outputRoot.resolve("group-writable"));
+        Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(root);
+        permissions.add(PosixFilePermission.GROUP_WRITE);
+        Files.setPosixFilePermissions(root, permissions);
+        HistoricalReconstructionService service = service(mock(HistoricalReconstructionPreflight.class),
+                mock(AnalysisExecutionService.class), mock(AnalysisExecutionRepository.class),
+                mock(FeatureSnapshotProjectionService.class), mock(FeatureSnapshotRepository.class),
+                mock(MarketOutcomeEvaluationService.class), mock(ResearchDatasetExportService.class),
+                new InMemoryHistoricalReconstructionLifecycleRepository());
+
+        assertThatThrownBy(() -> service.run(MARKET_ID, CUTOFF, root, "run-1", true, "approval-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("trusted directory");
     }
 
     private HistoricalReconstructionService service(

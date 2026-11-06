@@ -33,12 +33,16 @@ public class HistoricalReconstructionPreflight {
             int limit = Math.min(definition.requestedCandles(), MAX_LIMIT);
             var response = client.findHistoricalOhlc(marketId, definition.interval(), cutoff, limit);
             StrictObservedOhlcEvidenceValidator.validate(response, marketId, definition.interval(), cutoff);
+            if (definition.required() && !"AVAILABLE".equals(response.status())) {
+                throw new IllegalStateException("Historical role window is incomplete: " + definition.role());
+            }
             long eligible = response.observations().stream()
                     .filter(value -> value.closeTime() != null && !value.closeTime().isAfter(cutoff))
                     .count();
             if (definition.required() && eligible < definition.minimumEligibleCandles()) {
                 throw new IllegalStateException("Historical role window is insufficient: " + definition.role());
             }
+            validateContinuity(response.observations(), definition.intervalDuration(), definition.role().name());
             response.observations().forEach(value -> identities.add(
                     identity(definition.role().name(), value)));
         }
@@ -67,7 +71,28 @@ public class HistoricalReconstructionPreflight {
             }
             identities.add(identity("FUTURE", value));
         });
+        validateContinuity(future.observations(), Duration.ofMinutes(15), "FUTURE");
         return new Result(List.copyOf(identities), orderedFingerprint(identities));
+    }
+
+    private void validateContinuity(
+            List<HistoricalOhlcClient.HistoricalOhlcEvidenceResponse> observations,
+            Duration interval,
+            String scope) {
+        var ordered = observations.stream()
+                .sorted(java.util.Comparator.comparing(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse::openTime))
+                .toList();
+        for (var observation : ordered) {
+            if (!observation.closeTime().equals(observation.openTime().plus(interval))) {
+                throw new IllegalStateException("Historical window contains an invalid candle: " + scope);
+            }
+        }
+        for (int index = 1; index < ordered.size(); index++) {
+            Instant expected = ordered.get(index - 1).openTime().plus(interval);
+            if (!expected.equals(ordered.get(index).openTime())) {
+                throw new IllegalStateException("Historical window contains a gap: " + scope);
+            }
+        }
     }
 
     private String orderedFingerprint(List<String> identities) {

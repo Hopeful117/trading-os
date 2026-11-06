@@ -97,6 +97,14 @@ public class JpaHistoricalReconstructionLifecycleRepository
 
     @Override
     @Transactional(readOnly = true)
+    public boolean isOwned(UUID executionId, UUID leaseId) {
+        return repository.findById(executionId)
+                .filter(entity -> "RUNNING".equals(entity.status) && leaseId.equals(entity.leaseId))
+                .isPresent();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<HistoricalReconstructionLifecycle> findByExecutionId(UUID executionId) {
         return repository.findById(executionId).map(this::domain);
     }

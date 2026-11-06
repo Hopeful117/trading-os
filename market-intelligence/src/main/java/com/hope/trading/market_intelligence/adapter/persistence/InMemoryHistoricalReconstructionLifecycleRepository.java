@@ -51,6 +51,14 @@ public class InMemoryHistoricalReconstructionLifecycleRepository
     }
 
     @Override
+    public boolean isOwned(UUID executionId, UUID leaseId) {
+        HistoricalReconstructionLifecycle current = lifecycles.get(executionId);
+        return current != null
+                && current.status() == com.hope.trading.market_intelligence.domain.research.HistoricalReconstructionLifecycleStatus.RUNNING
+                && current.leaseId().equals(leaseId);
+    }
+
+    @Override
     public Optional<HistoricalReconstructionLifecycle> findByExecutionId(UUID executionId) {
         return Optional.ofNullable(lifecycles.get(executionId));
     }

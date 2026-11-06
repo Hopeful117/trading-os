@@ -32,7 +32,8 @@ public final class StrictObservedOhlcEvidenceValidator {
                     || !evidence.closed()
                     || evidence.synthetic()
                     || !"CAPTURED".equals(evidence.origin())
-                     || evidence.closeTime() == null
+                      || evidence.openTime() == null
+                      || evidence.closeTime() == null
                      || evidence.observationId() == null
                      || evidence.fetchedAt() == null
                      || evidence.capturedAt() == null

@@ -125,6 +125,20 @@ class AnalysisExecutionServiceTest {
     }
 
     @Test
+    void equivalentHistoricalRequestReusesActiveExecution() {
+        Instant now = Instant.parse("2026-07-29T10:00:00Z");
+        InMemoryAnalysisExecutionRepository repository = new InMemoryAnalysisExecutionRepository();
+        AnalysisExecutionService service = service(repository, new CountingDispatcher(), Clock.fixed(now, ZoneOffset.UTC));
+        IntelligenceAnalysisRequest request = historicalRequest();
+        IdempotencyKey key = new IdempotencyKey("historical-equivalent");
+
+        AnalysisExecution first = service.registerHistorical(request, key, "request-1", "trace-1", "selection");
+        AnalysisExecution second = service.registerHistorical(request, key, "request-2", "trace-2", "selection");
+
+        assertThat(second.executionId()).isEqualTo(first.executionId());
+    }
+
+    @Test
     void staleAcceptedHistoricalExecutionCanBeClaimedOnlyOnceForRecovery() {
         Instant initial = Instant.parse("2026-07-29T10:00:00Z");
         InMemoryAnalysisExecutionRepository repository = new InMemoryAnalysisExecutionRepository();
