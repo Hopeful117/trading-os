@@ -39,7 +39,7 @@ def fake_client(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_server_exposes_exactly_the_read_only_tools(fake_client):
+async def test_server_exposes_bounded_tools(fake_client):
     async with Client(server.mcp, raise_exceptions=True) as client:
         tools = await client.list_tools()
 
@@ -55,6 +55,9 @@ async def test_server_exposes_exactly_the_read_only_tools(fake_client):
         "start_market_research",
         "get_research_status",
         "get_research_report",
+        "request_account_synchronization",
+        "get_agent_operation_status",
+        "execute_approved_agent_operation",
     }
 
 
@@ -92,6 +95,18 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
             {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
         )
         await client.call_tool(
+            "request_account_synchronization",
+            {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
+        )
+        await client.call_tool(
+            "get_agent_operation_status",
+            {"request_id": "00000000-0000-0000-0000-000000000005"},
+        )
+        await client.call_tool(
+            "execute_approved_agent_operation",
+            {"request_id": "00000000-0000-0000-0000-000000000005"},
+        )
+        await client.call_tool(
             "start_market_research",
             {
                 "market_ids": [
@@ -121,12 +136,15 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/read-only-status",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/positions",
+        "/api/v1/agent/operation-requests/00000000-0000-0000-0000-000000000005",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003/report",
     ]
     assert fake_client.calls[3][1]["size"] == 10
-    assert fake_client.post_calls[0][0] == "/api/v1/intelligence/research"
-    assert fake_client.post_calls[0][2] == "research-btc-eth-1"
+    assert fake_client.post_calls[0][0] == "/api/v1/agent/operation-requests"
+    assert fake_client.post_calls[1][0].endswith("/execute")
+    assert fake_client.post_calls[2][0] == "/api/v1/intelligence/research"
+    assert fake_client.post_calls[2][2] == "research-btc-eth-1"
 
 
 @pytest.mark.asyncio
@@ -297,4 +315,7 @@ async def test_server_starts_over_stdio():
         "start_market_research",
         "get_research_status",
         "get_research_report",
+        "request_account_synchronization",
+        "get_agent_operation_status",
+        "execute_approved_agent_operation",
     }

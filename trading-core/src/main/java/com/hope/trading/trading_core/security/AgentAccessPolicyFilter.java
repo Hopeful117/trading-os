@@ -12,6 +12,7 @@ import java.io.IOException;
 
 public class AgentAccessPolicyFilter extends OncePerRequestFilter {
     private static final String AGENT_ACCOUNTS = "/api/v1/agent/broker-accounts";
+    private static final String AGENT_OPERATIONS = "/api/v1/agent/operation-requests";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -28,11 +29,15 @@ public class AgentAccessPolicyFilter extends OncePerRequestFilter {
 
     private boolean isAllowedAgentRoute(HttpServletRequest request) {
         String path = request.getRequestURI();
-        if (!path.equals(AGENT_ACCOUNTS) && !path.startsWith(AGENT_ACCOUNTS + "/")) {
+        if (!path.equals(AGENT_ACCOUNTS) && !path.startsWith(AGENT_ACCOUNTS + "/")
+                && !path.equals(AGENT_OPERATIONS) && !path.startsWith(AGENT_OPERATIONS + "/")) {
             return false;
         }
         return switch (request.getMethod()) {
-            case "GET" -> true;
+            case "GET" -> path.equals(AGENT_ACCOUNTS) || path.startsWith(AGENT_ACCOUNTS + "/")
+                    || path.matches(AGENT_OPERATIONS + "/[^/]+$");
+            case "POST" -> path.equals(AGENT_OPERATIONS)
+                    || path.matches(AGENT_OPERATIONS + "/[^/]+/execute$");
             default -> false;
         };
     }

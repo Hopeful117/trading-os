@@ -18,6 +18,7 @@ describe('Agents', () => {
     activate: ReturnType<typeof vi.fn>;
     revoke: ReturnType<typeof vi.fn>;
     revokeGrant: ReturnType<typeof vi.fn>;
+    operationRequests: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -32,6 +33,7 @@ describe('Agents', () => {
       activate: vi.fn(),
       revoke: vi.fn(),
       revokeGrant: vi.fn(),
+      operationRequests: vi.fn(() => of([])),
     };
 
     await TestBed.configureTestingModule({

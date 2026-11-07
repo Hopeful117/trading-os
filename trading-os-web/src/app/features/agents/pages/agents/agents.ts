@@ -1,9 +1,10 @@
+import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { forkJoin, of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { BrokerAccount } from '../../../../core/models/broker-account.model';
-import { Agent, AgentGrant, AgentPermission, AgentType } from '../../../../core/models/agent.model';
+import { Agent, AgentGrant, AgentOperationRequest, AgentPermission, AgentType } from '../../../../core/models/agent.model';
 import { AgentService } from '../../../../core/services/agent.service';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 
@@ -11,7 +12,7 @@ type Feedback = { kind: 'success' | 'error'; message: string } | null;
 
 @Component({
   selector: 'app-agents',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, DatePipe],
   templateUrl: './agents.html',
   styleUrl: './agents.scss',
 })
@@ -22,6 +23,7 @@ export class Agents {
   readonly agents = signal<Agent[]>([]);
   readonly grants = signal<Record<string, AgentGrant[]>>({});
   readonly brokerAccounts = signal<BrokerAccount[]>([]);
+  readonly operationRequests = signal<AgentOperationRequest[]>([]);
   readonly loading = signal(true);
   readonly busy = signal(false);
   readonly feedback = signal<Feedback>(null);
@@ -46,10 +48,12 @@ export class Agents {
     forkJoin({
       agents: this.agentService.list(),
       brokerAccounts: this.brokerAccountService.list(),
+      operationRequests: this.agentService.operationRequests(),
     }).subscribe({
-      next: ({ agents, brokerAccounts }) => {
+      next: ({ agents, brokerAccounts, operationRequests }) => {
         this.agents.set(agents);
         this.brokerAccounts.set(brokerAccounts);
+        this.operationRequests.set(operationRequests);
         this.loadGrants(agents);
         this.loading.set(false);
       },
@@ -176,6 +180,24 @@ export class Agents {
     this.agentService.revokeGrant(agentId, grantId).subscribe({
       next: () => this.finishAction('Grant révoqué.'),
       error: () => this.failAction('La révocation du grant a échoué.'),
+    });
+  }
+
+  approveOperation(request: AgentOperationRequest): void {
+    if (this.busy() || request.status !== 'PENDING_APPROVAL') return;
+    this.busy.set(true);
+    this.agentService.approveOperation(request.id).subscribe({
+      next: () => this.finishAction('Opération approuvée. L’agent doit encore la déclencher.'),
+      error: () => this.failAction('L’approbation de l’opération a échoué.'),
+    });
+  }
+
+  rejectOperation(request: AgentOperationRequest): void {
+    if (this.busy() || request.status !== 'PENDING_APPROVAL') return;
+    this.busy.set(true);
+    this.agentService.rejectOperation(request.id).subscribe({
+      next: () => this.finishAction('Opération rejetée.'),
+      error: () => this.failAction('Le rejet de l’opération a échoué.'),
     });
   }
 

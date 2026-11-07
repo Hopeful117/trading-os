@@ -33,8 +33,9 @@ public class AgentAuthorizationService {
                               UUID resourceId, String correlationId) {
         Instant now = clock.instant();
         String reason = validateInput(agentId, permission, resourceType, resourceId);
+        AgentGrant grant = null;
+        var agent = agents.findById(agentId).orElse(null);
         if (reason == null) {
-            var agent = agents.findById(agentId).orElse(null);
             if (agent == null) {
                 reason = "UNKNOWN_AGENT";
             } else if (agent.status() != AgentStatus.ACTIVE) {
@@ -42,7 +43,7 @@ public class AgentAuthorizationService {
             } else if (!resourceBelongsToOwner(resourceType, resourceId, agent.ownerUserId())) {
                 reason = "RESOURCE_NOT_OWNED_OR_UNKNOWN";
             } else {
-                AgentGrant grant = grants.findEffective(agentId, permission, resourceType, resourceId, now)
+                grant = grants.findEffective(agentId, permission, resourceType, resourceId, now)
                         .orElse(null);
                 if (grant == null) {
                     reason = "MISSING_OR_INEFFECTIVE_GRANT";
@@ -52,7 +53,8 @@ public class AgentAuthorizationService {
         boolean allowed = reason == null;
         recordAudit(agentId, permission, resourceType, resourceId, allowed ? "ALLOWED" : "DENIED",
                 allowed ? null : reason, correlationId, now);
-        return new Decision(allowed, reason);
+        return new Decision(allowed, reason, grant == null ? null : grant.id(),
+                grant == null ? null : grant.grantVersion(), agent == null ? null : agent.version());
     }
 
     private String validateInput(UUID agentId, AgentPermission permission, AgentResourceType resourceType,
@@ -98,7 +100,8 @@ public class AgentAuthorizationService {
         return normalized;
     }
 
-    public record Decision(boolean allowed, String denialReason) {
+    public record Decision(boolean allowed, String denialReason, UUID grantId, Long grantVersion, Long agentVersion) {
+        public Decision(boolean allowed, String denialReason) { this(allowed, denialReason, null, null, null); }
         public Decision {
             if (allowed && denialReason != null) {
                 throw new IllegalArgumentException("Allowed decisions cannot contain a denial reason");
