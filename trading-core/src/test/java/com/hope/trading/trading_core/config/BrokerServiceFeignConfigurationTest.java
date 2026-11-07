@@ -4,6 +4,7 @@ import com.hope.trading.trading_core.dto.UserDto;
 import com.hope.trading.trading_core.helper.Role;
 import com.hope.trading.trading_core.security.ServiceJwtProperties;
 import com.hope.trading.trading_core.security.ServiceJwtService;
+import com.hope.trading.trading_core.security.AgentPrincipal;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -64,6 +65,26 @@ class BrokerServiceFeignConfigurationTest {
                 .build().parseSignedClaims(token).getPayload();
         assertThat(claims.getAudience()).containsExactly("broker-service");
         assertThat(claims.get("actor_id")).isNull();
+    }
+
+    @Test
+    void derivesAgentDelegationFromValidatedPrincipalAndIgnoresClientHeader() {
+        ServiceJwtProperties properties = properties();
+        var interceptor = new BrokerServiceFeignConfiguration(new ServiceJwtService(properties))
+                .brokerServiceAuthenticationInterceptor();
+        UUID owner = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        new AgentPrincipal(UUID.randomUUID(), owner, UUID.randomUUID(), 1, "token-id"), null));
+        RequestTemplate template = new RequestTemplate();
+        template.header("X-Delegated-Actor", actor.toString());
+
+        interceptor.apply(template);
+
+        String token = template.headers().get("X-Service-Authorization").iterator().next().substring(7);
+        var claims = Jwts.parser().verifyWith(Keys.hmacShaKeyFor(Decoders.BASE64.decode(properties.getSecret())))
+                .build().parseSignedClaims(token).getPayload();
+        assertThat(claims.get("actor_id", String.class)).isEqualTo(owner.toString());
     }
 
     @Test

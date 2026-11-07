@@ -28,7 +28,7 @@ public class BrokerAccountReadOnlyStatusService {
             throw new IllegalStateException("Broker account is not connected");
         }
 
-        BrokerAccountSnapshotV2Dto snapshot = snapshots.getAccountSnapshot(ownerId, brokerAccountId);
+        BrokerAccountSnapshotV2Dto snapshot = snapshots.getAccountSnapshot(brokerAccountId);
         String status = completeAndFresh(snapshot)
                 ? "READ_ONLY_COMPLETE"
                 : "CONNECTED_BUT_FACTS_INCOMPLETE";

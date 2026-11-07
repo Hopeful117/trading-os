@@ -130,17 +130,24 @@ python3 -m venv .venv
 .venv/bin/pytest
 ```
 
-Lancer l'adaptateur avec un JWT utilisateur court et fourni par
+Lancer l'adaptateur avec une credential agent opaque fournie par
 l'environnement :
 
 ```bash
 TRADING_OS_GATEWAY_URL=http://127.0.0.1:17080 \
-TRADING_OS_JWT="$TRADING_OS_JWT" \
+TRADING_OS_AGENT_CREDENTIAL="$TRADING_OS_AGENT_CREDENTIAL" \
 .venv/bin/trading-os-mcp
 ```
 
-L'adaptateur utilise stdio, ne persiste pas le JWT et ne peut ni creer de
-Trade Plan, ni evaluer le risque, ni modifier une position, ni placer un ordre.
+La credential est echangee contre un token agent court via le Gateway. Le token
+est partage par les outils pendant la duree du processus MCP, reste en memoire
+et est renouvele une seule fois apres un `401` pour les lectures
+GET uniquement. Un `POST` en erreur `401` n'est jamais rejoue. Aucun JWT humain
+n'est accepte. Les lectures de comptes, statut read-only et positions passent
+par `/api/v1/agent/broker-accounts/**` et exigent des `AgentGrant` exacts.
+L'adaptateur utilise stdio, ne persiste aucune credential et ne peut ni creer de
+Trade Plan, ni evaluer le risque, ni modifier une position, ni placer un ordre,
+ni synchroniser un compte, ni administrer un agent ou ses grants.
 
 ### Research ML
 

@@ -23,6 +23,10 @@ public class ServiceJwtService {
     }
 
     public String issue(String audience, UUID actorId) {
+        return issue(audience, actorId, null);
+    }
+
+    public String issue(String audience, UUID actorId, AgentPrincipal delegatedAgent) {
         Instant now = Instant.now();
         var builder = Jwts.builder()
                 .issuer(properties.getName())
@@ -34,6 +38,11 @@ public class ServiceJwtService {
                 .id(UUID.randomUUID().toString());
         if (actorId != null) {
             builder.claim("actor_id", actorId.toString());
+        }
+        if (delegatedAgent != null) {
+            builder.claim("delegated_agent_id", delegatedAgent.agentId().toString())
+                    .claim("delegated_credential_id", delegatedAgent.credentialId().toString())
+                    .claim("delegated_credential_version", delegatedAgent.credentialVersion());
         }
         return builder.signWith(key(properties.getAudienceSecrets()
                 .getOrDefault(audience, properties.getSecret()))).compact();
