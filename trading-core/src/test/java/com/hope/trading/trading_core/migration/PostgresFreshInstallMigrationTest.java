@@ -51,7 +51,7 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-         assertMigrationHistory(54);
+         assertMigrationHistory(55);
         assertCfdProjectionSchema();
         assertDailyDrawdownBoundarySchema();
         assertTradeExecutionProvenanceConstraints();
@@ -59,7 +59,7 @@ class PostgresFreshInstallMigrationTest {
         assertMarginPolicySchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("54");
+                 String.class)).isEqualTo("55");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -80,9 +80,11 @@ class PostgresFreshInstallMigrationTest {
                         + "and required_provider_registration_reference = ?",
                 Integer.class, UUID.fromString("3d6c3f0a-8d2d-4f4d-9a4c-7a2e1b5c9012"))).isEqualTo(1);
          assertThat(tableExists("challenge_reevaluation_outbox")).isTrue();
-         assertThat(tableExists("agent_identity")).isTrue();
-         assertThat(tableExists("agent_credential")).isTrue();
-         assertThat(tableExists("agent_audit_event")).isTrue();
+          assertThat(tableExists("agent_identity")).isTrue();
+          assertThat(tableExists("agent_credential")).isTrue();
+          assertThat(tableExists("agent_audit_event")).isTrue();
+          assertThat(tableExists("agent_grant")).isTrue();
+          assertThat(tableExists("agent_authorization_audit_event")).isTrue();
          assertAgentSchemaConstraints();
         assertThat(jdbc.queryForObject(
                  "select count(*) from pg_indexes where schemaname = current_schema() "
@@ -102,16 +104,56 @@ class PostgresFreshInstallMigrationTest {
         assertThat(jdbc.queryForObject(
                 "select count(*) from information_schema.table_constraints "
                         + "where table_schema = current_schema() and table_name in "
-                        + "('agent_identity', 'agent_credential', 'agent_audit_event') "
-                        + "and constraint_type = 'FOREIGN KEY'", Integer.class)).isEqualTo(5);
+                         + "('agent_identity', 'agent_credential', 'agent_audit_event', 'agent_grant', "
+                         + "'agent_authorization_audit_event') "
+                          + "and constraint_type = 'FOREIGN KEY'", Integer.class)).isEqualTo(9);
         assertThat(jdbc.queryForObject(
                 "select count(*) from pg_indexes where schemaname = current_schema() "
                         + "and indexname = 'uk_agent_credential_active'", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject(
-                "select count(*) from information_schema.check_constraints "
+                 "select count(*) from information_schema.check_constraints "
                         + "where constraint_schema = current_schema() "
                         + "and constraint_name = 'ck_agent_credential_active_state'", Integer.class))
-                .isEqualTo(1);
+                 .isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                 "select count(*) from pg_indexes where schemaname = current_schema() "
+                         + "and indexname = 'uk_agent_grant_active_scope'", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void enforcesGrantLifecycleAndActiveScopeConstraints() {
+        flyway(jdbcUrlSchema()).migrate();
+
+        UUID userId = UUID.randomUUID();
+        UUID agentId = UUID.randomUUID();
+        UUID resourceId = UUID.randomUUID();
+        jdbc.update("insert into users(user_id, username, password, email, role) values (?, ?, ?, ?, 'TRADER')",
+                userId, "grant-constraint-user", "password", "grant-constraint@example.com");
+        jdbc.update("insert into agent_identity(id, owner_user_id, display_name, agent_type, status, "
+                        + "created_at, updated_at, version) values (?, ?, 'constraint-agent', 'OPENCODE', 'ACTIVE', "
+                        + "current_timestamp, current_timestamp, 0)", agentId, userId);
+
+        insertGrant(UUID.randomUUID(), agentId, userId, resourceId, "accounts:read", "BROKER_ACCOUNT", "ACTIVE", 1);
+        assertThatThrownBy(() -> insertGrant(UUID.randomUUID(), agentId, userId, resourceId,
+                "accounts:read", "BROKER_ACCOUNT", "ACTIVE", 1))
+                .hasMessageContaining("uk_agent_grant_active_scope");
+
+        insertGrant(UUID.randomUUID(), agentId, userId, resourceId, "accounts:read", "BROKER_ACCOUNT", "REVOKED", null);
+        assertThatThrownBy(() -> insertGrant(UUID.randomUUID(), agentId, userId, resourceId,
+                "accounts:read", "BROKER_ACCOUNT", "ACTIVE", null))
+                .hasMessageContaining("ck_agent_grant_active_state");
+        assertThatThrownBy(() -> insertGrant(UUID.randomUUID(), agentId, userId, resourceId,
+                "orders:execute", "BROKER_ACCOUNT", "ACTIVE", 1))
+                .hasMessageContaining("ck_agent_grant_permission");
+    }
+
+    private void insertGrant(UUID grantId, UUID agentId, UUID userId, UUID resourceId,
+                             String permission, String resourceType, String status, Integer activeMarker) {
+        jdbc.update("insert into agent_grant(id, agent_id, permission, resource_type, resource_id, status, "
+                        + "created_at, revoked_at, granted_by_user_id, active_marker, grant_version) "
+                        + "values (?, ?, ?, ?, ?, ?, current_timestamp, "
+                        + "case when ? = 'REVOKED' then current_timestamp else null end, ?, ?, 0)",
+                grantId, agentId, permission, resourceType, resourceId, status, status, userId, activeMarker);
     }
 
     @Test
@@ -129,7 +171,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(54);
+                 Integer.class)).isEqualTo(55);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -178,7 +220,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-           assertMigrationHistory(54);
+           assertMigrationHistory(55);
         assertDailyDrawdownBoundarySchema();
         assertBrokerPositionReconciliationSchema();
         assertMarginPolicySchema();

@@ -1,12 +1,14 @@
 package com.hope.trading.trading_core.agent.api;
 
 import com.hope.trading.trading_core.agent.application.AgentLifecycleService;
+import com.hope.trading.trading_core.agent.application.AgentGrantService;
 import com.hope.trading.trading_core.dto.UserDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,6 +25,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AgentController {
     private final AgentLifecycleService service;
+    private final AgentGrantService grants;
 
     @PostMapping
     public ResponseEntity<AgentResponse> register(@Valid @RequestBody AgentRequest request,
@@ -80,6 +83,36 @@ public class AgentController {
                                                  @RequestHeader(value = "X-Correlation-ID", required = false)
                                                  String correlationId) {
         service.revokeCredential(principal(authentication).getUserId(), agentId, credentialId, correlationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{agentId}/grants")
+    public ResponseEntity<AgentGrantResponse> createGrant(
+            @PathVariable UUID agentId, @Valid @RequestBody AgentGrantRequest request,
+            Authentication authentication,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        return ResponseEntity.status(201).body(grants.create(principal(authentication).getUserId(), agentId,
+                request, correlationId));
+    }
+
+    @GetMapping("/{agentId}/grants")
+    public ResponseEntity<List<AgentGrantResponse>> listGrants(@PathVariable UUID agentId,
+                                                                Authentication authentication) {
+        return ResponseEntity.ok(grants.list(principal(authentication).getUserId(), agentId));
+    }
+
+    @GetMapping("/{agentId}/grants/{grantId}")
+    public ResponseEntity<AgentGrantResponse> getGrant(@PathVariable UUID agentId, @PathVariable UUID grantId,
+                                                        Authentication authentication) {
+        return ResponseEntity.ok(grants.get(principal(authentication).getUserId(), agentId, grantId));
+    }
+
+    @PostMapping("/{agentId}/grants/{grantId}/revoke")
+    public ResponseEntity<Void> revokeGrant(@PathVariable UUID agentId, @PathVariable UUID grantId,
+                                             Authentication authentication,
+                                             @RequestHeader(value = "X-Correlation-ID", required = false)
+                                             String correlationId) {
+        grants.revoke(principal(authentication).getUserId(), agentId, grantId, correlationId);
         return ResponseEntity.noContent().build();
     }
 
