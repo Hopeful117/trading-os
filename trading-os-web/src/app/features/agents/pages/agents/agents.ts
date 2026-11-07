@@ -3,12 +3,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { forkJoin, of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { BrokerAccount } from '../../../../core/models/broker-account.model';
-import {
-  Agent,
-  AgentGrant,
-  AgentPermission,
-  AgentType,
-} from '../../../../core/models/agent.model';
+import { Agent, AgentGrant, AgentPermission, AgentType } from '../../../../core/models/agent.model';
 import { AgentService } from '../../../../core/services/agent.service';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 
@@ -125,7 +120,8 @@ export class Agents {
               this.busy.set(false);
               this.feedback.set({
                 kind: 'error',
-                message: 'Agent créé, mais le bridge OpenCode est indisponible. Redémarrez OpenCode puis émettez un nouveau credential.',
+                message:
+                  'Agent créé, mais le bridge OpenCode est indisponible. Redémarrez OpenCode puis émettez un nouveau credential.',
               });
               this.reload();
             },

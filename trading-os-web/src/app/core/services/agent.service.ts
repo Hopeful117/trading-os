@@ -40,7 +40,8 @@ export class AgentService {
               this.http.post<void>(`${bridgeUrl}/v1/connect`, { challenge, credential }),
             ),
           ),
-      ));
+      ),
+    );
   }
 
   suspend(agentId: string): Observable<void> {
