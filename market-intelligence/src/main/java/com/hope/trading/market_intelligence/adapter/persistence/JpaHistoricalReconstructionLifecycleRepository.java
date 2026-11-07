@@ -91,8 +91,8 @@ public class JpaHistoricalReconstructionLifecycleRepository
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean claimIfStale(UUID executionId, UUID leaseId, java.time.Instant staleBefore,
-                                java.time.Instant claimedAt) {
-        return repository.claimIfStale(executionId, leaseId, staleBefore, claimedAt) == 1;
+                                java.time.Instant claimedAt, String outputDirectory) {
+        return repository.claimIfStale(executionId, leaseId, staleBefore, claimedAt, outputDirectory) == 1;
     }
 
     @Override

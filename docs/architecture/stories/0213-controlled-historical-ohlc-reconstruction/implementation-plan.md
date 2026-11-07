@@ -323,6 +323,37 @@ and a non-empty approval reference. The repository has no authoritative
 approval-reference registry, so the reference remains an auditable local
 operator token rather than independently verified authorization.
 
+The final publication protocol uses the lifecycle row as the authority for the
+accepted export. Every attempt, including a lease takeover, receives a
+generation-scoped output directory. The exporter writes and atomically moves a
+complete temporary bundle into that directory only while the lease guard is
+valid. The worker then performs the guarded PostgreSQL lifecycle success
+transition. The committed success row, including its generation output path, is
+the publication linearization point; an orphaned directory is never accepted
+merely because its files exist. Existing successful results fail closed when
+the recorded directory or any required bundle file is missing.
+
+PostgreSQL and the filesystem are not one atomic transaction. A process failure
+after the filesystem move and before the lifecycle success commit can leave a
+complete orphaned generation directory, but it cannot create an authoritative
+successful lifecycle result. Recovery must inspect the lifecycle row and may
+retry into a new generation directory; it must not overwrite the orphan.
+
+Reconstruction feature-snapshot and outcome inserts use a lease-aware PostgreSQL
+transaction. They lock and validate the current running lifecycle lease before
+the immutable insert, so a takeover either waits for an already-authorized
+insert or causes the stale worker's insert to fail. Non-reconstruction callers
+retain their existing repository paths.
+
+Bundle v1 integrity is validated by the existing offline validator: it checks
+the manifest and JSONL schema, the `samples.jsonl` SHA-256, dataset and sample
+fingerprint material, selected snapshot/outcome fingerprints, strict-observed
+cutoff rules, and historical provenance fields. The Java lifecycle lookup
+still remains the authority for whether the generation is current. The v1
+manifest has no lifecycle lease/generation field, so direct filesystem
+consumers cannot establish publication authority without consulting that
+lifecycle row.
+
 Historical preflight now rejects incomplete required role responses, missing
 open timestamps, invalid candle durations, duplicate timestamps, and interior
 continuity gaps. The existing profile-specific minimum candle requirements

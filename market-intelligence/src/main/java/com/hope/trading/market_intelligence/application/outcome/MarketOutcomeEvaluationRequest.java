@@ -11,7 +11,8 @@ public record MarketOutcomeEvaluationRequest(
         Instant evaluationCutoff,
         OutcomeHorizon horizon,
         UUID analysisExecutionId,
-        String historicalEvidenceSelection
+        String historicalEvidenceSelection,
+        UUID reconstructionLeaseId
 ) {
     public MarketOutcomeEvaluationRequest {
         Objects.requireNonNull(marketId, "market ID is required");
@@ -22,5 +23,11 @@ public record MarketOutcomeEvaluationRequest(
     public MarketOutcomeEvaluationRequest(
             UUID marketId, Instant evaluationCutoff, OutcomeHorizon horizon, UUID analysisExecutionId) {
         this(marketId, evaluationCutoff, horizon, analysisExecutionId, null);
+    }
+
+    public MarketOutcomeEvaluationRequest(
+            UUID marketId, Instant evaluationCutoff, OutcomeHorizon horizon, UUID analysisExecutionId,
+            String historicalEvidenceSelection) {
+        this(marketId, evaluationCutoff, horizon, analysisExecutionId, historicalEvidenceSelection, null);
     }
 }

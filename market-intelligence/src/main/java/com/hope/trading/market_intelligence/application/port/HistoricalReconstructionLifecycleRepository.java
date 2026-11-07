@@ -13,7 +13,8 @@ public interface HistoricalReconstructionLifecycleRepository {
 
     boolean saveIfAbsent(HistoricalReconstructionLifecycle lifecycle);
 
-    boolean claimIfStale(UUID executionId, UUID leaseId, Instant staleBefore, Instant claimedAt);
+    boolean claimIfStale(UUID executionId, UUID leaseId, Instant staleBefore, Instant claimedAt,
+                         String outputDirectory);
 
     boolean isOwned(UUID executionId, UUID leaseId);
 

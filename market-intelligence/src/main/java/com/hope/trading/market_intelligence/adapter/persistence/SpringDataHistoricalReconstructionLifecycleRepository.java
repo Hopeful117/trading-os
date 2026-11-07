@@ -18,12 +18,14 @@ interface SpringDataHistoricalReconstructionLifecycleRepository
     @Modifying
     @Query("""
             update JpaHistoricalReconstructionLifecycleEntity entity
-               set entity.leaseId = :leaseId, entity.updatedAt = :claimedAt
+             set entity.leaseId = :leaseId, entity.updatedAt = :claimedAt,
+                 entity.outputDirectory = :outputDirectory
              where entity.executionId = :executionId
                and entity.status = 'RUNNING'
                and entity.updatedAt <= :staleBefore
             """)
     int claimIfStale(@Param("executionId") UUID executionId, @Param("leaseId") UUID leaseId,
                      @Param("staleBefore") java.time.Instant staleBefore,
-                     @Param("claimedAt") java.time.Instant claimedAt);
+                     @Param("claimedAt") java.time.Instant claimedAt,
+                     @Param("outputDirectory") String outputDirectory);
 }

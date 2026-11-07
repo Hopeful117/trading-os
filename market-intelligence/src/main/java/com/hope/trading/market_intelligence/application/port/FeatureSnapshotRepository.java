@@ -18,4 +18,8 @@ public interface FeatureSnapshotRepository {
                                                   String featureProjectionVersion, String evidencePolicy);
 
     FeatureSnapshot saveIfAbsent(FeatureSnapshot snapshot);
+
+    default FeatureSnapshot saveIfAbsentOwned(FeatureSnapshot snapshot, UUID leaseId) {
+        return saveIfAbsent(snapshot);
+    }
 }

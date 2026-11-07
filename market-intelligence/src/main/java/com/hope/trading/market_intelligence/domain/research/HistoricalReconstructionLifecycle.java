@@ -52,8 +52,12 @@ public record HistoricalReconstructionLifecycle(
     }
 
     public HistoricalReconstructionLifecycle claimed(UUID nextLeaseId, Instant now) {
+        return claimed(nextLeaseId, outputDirectory, now);
+    }
+
+    public HistoricalReconstructionLifecycle claimed(UUID nextLeaseId, String nextOutputDirectory, Instant now) {
         return new HistoricalReconstructionLifecycle(executionId, nextLeaseId, status, phase, failureCode,
-                failureReason, snapshotFingerprint, outcomeFingerprint, outputDirectory, startedAt, now, completedAt);
+                failureReason, snapshotFingerprint, outcomeFingerprint, nextOutputDirectory, startedAt, now, completedAt);
     }
 
     public HistoricalReconstructionLifecycle success(String snapshot, String outcome, Instant now) {
