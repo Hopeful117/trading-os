@@ -17,6 +17,7 @@ test = ["pytest>=8.3,<9", "pytest-asyncio>=0.24,<1"]
 
 [project.scripts]
 trading-os-mcp = "app.server:main"
+trading-os-mcp-bridge = "app.bridge:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

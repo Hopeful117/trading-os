@@ -161,6 +161,23 @@ _cached_client: TradingOsClient | None = None
 _cached_configuration: tuple[str, str, float, int] | None = None
 
 
+def set_runtime_credential(credential: str) -> None:
+    """Replace the process-local credential received through the pairing bridge."""
+    if not credential or len(credential) > 512:
+        raise ValueError("credential is invalid")
+    global _cached_client, _cached_configuration
+    os.environ["TRADING_OS_AGENT_CREDENTIAL"] = credential
+    _cached_client = None
+    _cached_configuration = None
+
+
+def clear_runtime_credential() -> None:
+    global _cached_client, _cached_configuration
+    os.environ.pop("TRADING_OS_AGENT_CREDENTIAL", None)
+    _cached_client = None
+    _cached_configuration = None
+
+
 def client_from_environment() -> TradingOsClient:
     global _cached_client, _cached_configuration
     base_url = os.environ.get("TRADING_OS_GATEWAY_URL", "http://127.0.0.1:17080")

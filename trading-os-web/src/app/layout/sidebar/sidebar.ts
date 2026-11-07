@@ -54,6 +54,7 @@ export class Sidebar {
       label: 'Account & Risk',
       items: [
         { label: 'Accounts', route: '/accounts', exact: false },
+        { label: 'Agents', route: '/agents', exact: false },
         { label: 'Challenges', route: '/challenges', exact: false },
       ],
     },

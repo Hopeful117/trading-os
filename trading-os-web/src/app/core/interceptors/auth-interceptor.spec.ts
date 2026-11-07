@@ -81,6 +81,16 @@ describe('authInterceptor', () => {
     req.flush({});
   });
 
+  it('skips auth header for loopback MCP bridge URL', () => {
+    tokenService.getToken.mockReturnValue('test-jwt-token');
+
+    httpClient.get('http://127.0.0.1:17891/v1/challenge').subscribe();
+
+    const req = httpMock.expectOne('http://127.0.0.1:17891/v1/challenge');
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush({ challenge: 'test-challenge' });
+  });
+
   it('navigates to /error?status=401 on 401 response', () => {
     tokenService.getToken.mockReturnValue('test-jwt-token');
 

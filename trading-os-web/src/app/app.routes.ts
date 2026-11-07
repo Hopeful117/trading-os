@@ -21,6 +21,7 @@ import { ChallengeDashboard } from './features/challenges/pages/challenge-dashbo
 import { EconomicContext } from './features/economic-context/economic-context';
 import { FinancialNews } from './features/financial-news/financial-news';
 import { ResearchOverview } from './features/research/research-overview';
+import { Agents } from './features/agents/pages/agents/agents';
 
 export const routes: Routes = [
   {
@@ -37,6 +38,11 @@ export const routes: Routes = [
   {
     path: 'accounts',
     component: Accounts,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'agents',
+    component: Agents,
     canActivate: [authGuard],
   },
   {

@@ -71,44 +71,51 @@ process memory, refreshed once after an HTTP 401, and
 never returned by a tool. Human JWTs are deliberately not accepted by this
 adapter. Remote Gateway URLs must use HTTPS.
 
-## Launch
+## Direct Launch (diagnostics)
 
 ```bash
 TRADING_OS_GATEWAY_URL=http://127.0.0.1:17080 \
-TRADING_OS_AGENT_CREDENTIAL="$TRADING_OS_AGENT_CREDENTIAL" \
+TRADING_OS_AGENT_CREDENTIAL="<credential only for local diagnostics>" \
 .venv/bin/trading-os-mcp
 ```
 
-The process uses local stdio and does not listen on a TCP port. The adapter does
-not persist credentials, access tokens, research state or reports.
+The direct process uses local stdio and does not listen on a TCP port. Normal
+OpenCode usage should use the bridge below instead of this diagnostic launch.
 
 ## OpenCode
 
-Register the adapter using the MCP configuration syntax supported by the
-installed OpenCode version. With OpenCode `1.18.35`, the supported CLI entry
-point is:
+The repository includes `.opencode/opencode.json`, which starts the local bridge
+automatically as an OpenCode local MCP server. Restart OpenCode after installing
+the adapter so it loads this configuration.
 
-```bash
-opencode mcp add trading-os
-```
+The bridge listens only on `127.0.0.1:17891` and exposes a short-lived pairing
+challenge to the authenticated Trading OS web application. The Agents page
+issues the credential and sends it directly to the bridge; it is never rendered
+or copied by the user. The bridge validates the credential through the Gateway,
+keeps it only in process memory, and exposes the existing read-only MCP tools.
 
-When prompted for a local command, use:
+For installations without the repository configuration, the equivalent local
+server registration is:
 
 ```text
-<repository>/mcp-adapter/.venv/bin/trading-os-mcp
+opencode mcp add trading-os
+# local command: .venv/bin/python -m app.bridge
+# working directory: <repository>/mcp-adapter
 ```
 
-Configure these variables through the OpenCode local-server environment
-settings, or export them before launching the client:
+The bridge process requires no credential environment variable. Its local
+pairing endpoint accepts only configured browser origins and each challenge is
+single-use with a short expiry.
+
+Configure only the Gateway and bridge settings:
 
 ```bash
 export TRADING_OS_GATEWAY_URL=http://127.0.0.1:17080
-export TRADING_OS_AGENT_CREDENTIAL='<opaque agent credential>'
+export TRADING_OS_MCP_BRIDGE_PORT=17891
 ```
 
-The MCP server is named `trading-os-research`. The `opencode mcp add` command
-was not executed automatically because it would modify user configuration and
-require a real JWT.
+The MCP server is named `trading-os-research`. The adapter does not persist
+credentials, access tokens, research state or reports.
 
 Do not place a real credential or token in repository configuration. Starting an
 active market scan is not exposed by this adapter. Execution, broker

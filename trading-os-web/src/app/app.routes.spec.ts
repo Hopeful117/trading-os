@@ -7,7 +7,7 @@ describe('app routes', () => {
     return routes.find((route) => route.path === path);
   }
 
-  it.each([['opportunities'], ['opportunities/:opportunityId'], ['analytics']])(
+  it.each([['opportunities'], ['opportunities/:opportunityId'], ['analytics'], ['agents']])(
     'exposes the %s route behind authentication',
     (path) => {
       const route = findRoute(path);
@@ -22,12 +22,17 @@ describe('app routes', () => {
     const traderPaths: Routes = routes.filter(
       (route) =>
         typeof route.path === 'string' &&
-        ['dashboard', 'accounts', 'markets', 'markets/:marketId', 'opportunities'].includes(
-          route.path,
-        ),
+        [
+          'dashboard',
+          'accounts',
+          'agents',
+          'markets',
+          'markets/:marketId',
+          'opportunities',
+        ].includes(route.path),
     );
 
-    expect(traderPaths.length).toBe(5);
+    expect(traderPaths.length).toBe(6);
     expect(traderPaths.every((route) => route.canActivate?.includes(authGuard))).toBe(true);
   });
 });

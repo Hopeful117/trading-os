@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "trading-os": {
+      "type": "local",
+      "command": [".venv/bin/python", "-m", "app.bridge"],
+      "cwd": "mcp-adapter",
+      "environment": {
+        "TRADING_OS_GATEWAY_URL": "http://127.0.0.1:17080",
+        "TRADING_OS_MCP_BRIDGE_PORT": "17891"
+      }
+    }
+  }
+}

@@ -161,6 +161,16 @@ class GatewayDownstreamRoutingIntegrationTest {
     }
 
     @Test
+    void humanAgentManagementRoutesToTradingCore() throws Exception {
+        HttpResponse<String> response = send("GET", "/api/v1/agents");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(tradingCoreRequests).containsExactly("GET /api/v1/agents");
+        assertThat(tradingCoreAuthorizationHeaders).hasSize(1);
+        assertThat(tradingCoreAuthorizationHeaders.get(0)).startsWith("Bearer ");
+    }
+
+    @Test
     void challengeStartRoutesToTradingCore() throws Exception {
         String path = "/api/v1/accounts/11111111-1111-1111-1111-111111111111/challenge";
         String body = "{\"definitionId\":\"00890000-0000-4000-8000-000000000050\","
