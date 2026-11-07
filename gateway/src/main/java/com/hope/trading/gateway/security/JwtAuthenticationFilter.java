@@ -44,6 +44,10 @@ public class JwtAuthenticationFilter implements WebFilter {
                 .getPath()
                 .value();
 
+        if (Boolean.TRUE.equals(exchange.getAttribute(AgentAuthenticationFilter.AGENT_AUTHENTICATED))) {
+            return chain.filter(exchange);
+        }
+
         if (isPublicEndpoint(path)) {
             log.debug("Public endpoint accessed path={}", path);
             return chain.filter(exchange);
