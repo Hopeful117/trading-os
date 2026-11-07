@@ -2,9 +2,9 @@ package com.hope.trading.trading_core.agent.api;
 
 import com.hope.trading.trading_core.agent.application.AgentLifecycleService;
 import com.hope.trading.trading_core.agent.application.AgentGrantService;
+import com.hope.trading.trading_core.agent.application.AgentTokenExchangeService;
 import com.hope.trading.trading_core.dto.UserDto;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.net.URI;
 import java.util.List;
@@ -22,10 +23,30 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/agents")
-@RequiredArgsConstructor
 public class AgentController {
     private final AgentLifecycleService service;
     private final AgentGrantService grants;
+    private final AgentTokenExchangeService tokenExchange;
+
+    public AgentController(AgentLifecycleService service, AgentGrantService grants) {
+        this(service, grants, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AgentController(AgentLifecycleService service, AgentGrantService grants,
+                           AgentTokenExchangeService tokenExchange) {
+        this.service = service;
+        this.grants = grants;
+        this.tokenExchange = tokenExchange;
+    }
+
+    @PostMapping("/token")
+    public ResponseEntity<AgentTokenResponse> exchangeToken(
+            @Valid @RequestBody AgentTokenRequest request,
+            HttpServletRequest httpRequest,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        return ResponseEntity.ok(tokenExchange.exchange(request, httpRequest.getRemoteAddr(), correlationId));
+    }
 
     @PostMapping
     public ResponseEntity<AgentResponse> register(@Valid @RequestBody AgentRequest request,

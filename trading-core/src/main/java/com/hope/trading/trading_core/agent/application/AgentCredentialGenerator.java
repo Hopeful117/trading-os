@@ -20,7 +20,7 @@ public class AgentCredentialGenerator {
         return new Material(raw, digest, digest.substring(0, 16));
     }
 
-    private String digest(String raw) {
+    public String digest(String raw) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(raw.getBytes(StandardCharsets.UTF_8));

@@ -31,6 +31,14 @@ public class AgentExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(detail);
     }
 
+    @ExceptionHandler(AgentTokenAuthenticationException.class)
+    ResponseEntity<ProblemDetail> tokenUnauthorized(AgentTokenAuthenticationException exception) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNAUTHORIZED, "Invalid agent credentials");
+        detail.setProperty("code", "INVALID_AGENT_CREDENTIALS");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(detail);
+    }
+
     @ExceptionHandler(AgentGrantException.class)
     ResponseEntity<ProblemDetail> grantFailure(AgentGrantException exception) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(

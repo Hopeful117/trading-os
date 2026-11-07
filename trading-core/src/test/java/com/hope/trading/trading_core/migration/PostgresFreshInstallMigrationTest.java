@@ -51,7 +51,7 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-         assertMigrationHistory(55);
+         assertMigrationHistory(56);
         assertCfdProjectionSchema();
         assertDailyDrawdownBoundarySchema();
         assertTradeExecutionProvenanceConstraints();
@@ -59,7 +59,7 @@ class PostgresFreshInstallMigrationTest {
         assertMarginPolicySchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("55");
+                 String.class)).isEqualTo("56");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -84,7 +84,8 @@ class PostgresFreshInstallMigrationTest {
           assertThat(tableExists("agent_credential")).isTrue();
           assertThat(tableExists("agent_audit_event")).isTrue();
           assertThat(tableExists("agent_grant")).isTrue();
-          assertThat(tableExists("agent_authorization_audit_event")).isTrue();
+           assertThat(tableExists("agent_authorization_audit_event")).isTrue();
+           assertThat(tableExists("agent_authentication_audit_event")).isTrue();
          assertAgentSchemaConstraints();
         assertThat(jdbc.queryForObject(
                  "select count(*) from pg_indexes where schemaname = current_schema() "
@@ -105,8 +106,8 @@ class PostgresFreshInstallMigrationTest {
                 "select count(*) from information_schema.table_constraints "
                         + "where table_schema = current_schema() and table_name in "
                          + "('agent_identity', 'agent_credential', 'agent_audit_event', 'agent_grant', "
-                         + "'agent_authorization_audit_event') "
-                          + "and constraint_type = 'FOREIGN KEY'", Integer.class)).isEqualTo(9);
+                          + "'agent_authorization_audit_event', 'agent_authentication_audit_event') "
+                          + "and constraint_type = 'FOREIGN KEY'", Integer.class)).isEqualTo(12);
         assertThat(jdbc.queryForObject(
                 "select count(*) from pg_indexes where schemaname = current_schema() "
                         + "and indexname = 'uk_agent_credential_active'", Integer.class)).isEqualTo(1);
@@ -171,7 +172,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(55);
+                 Integer.class)).isEqualTo(56);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
@@ -220,7 +221,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-           assertMigrationHistory(55);
+            assertMigrationHistory(56);
         assertDailyDrawdownBoundarySchema();
         assertBrokerPositionReconciliationSchema();
         assertMarginPolicySchema();
