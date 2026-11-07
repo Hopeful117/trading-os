@@ -40,7 +40,7 @@ class CTraderMarketDataTest {
         assertThat(market.getMarketConstraints().quantityPrecision()).isZero();
         assertThat(market.getMarketState().isTradable()).isFalse();
         assertThat(market.getMarketState().getTradingStatus()).isEqualTo(
-                com.hope.trading.market_data.helper.TradingStatus.CLOSED);
+                 com.hope.trading.market_data.helper.TradingStatus.UNKNOWN);
         assertThat(events).singleElement().satisfies(event -> {
             assertThat(event.open()).isEqualByComparingTo("1.2346");
             assertThat(event.high()).isEqualByComparingTo("1.2348");

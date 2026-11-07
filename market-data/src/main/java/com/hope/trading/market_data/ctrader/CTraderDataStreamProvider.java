@@ -9,7 +9,6 @@ import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
 import com.hope.trading.market_data.model.OhlcEvent;
 import com.hope.trading.market_data.model.OhlcInterval;
-import com.hope.trading.market_data.model.MarketState;
 import com.hope.trading.market_data.model.OrderBookDelta;
 import com.hope.trading.market_data.model.OrderBookDeltaType;
 import com.hope.trading.market_data.model.OrderBookKey;
@@ -46,6 +45,7 @@ import java.util.Comparator;
 @Slf4j
 public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     private static final int MAX_RECONNECT_ATTEMPTS = 3;
+    private static final Duration SYMBOL_METADATA_MAX_AGE = Duration.ofMinutes(5);
     private static final Duration[] RECONNECT_DELAYS = {
             Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofSeconds(15)
     };
@@ -66,6 +66,9 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     private final Map<OrderBookKey, Object> orderBookLifecycleLocks = new ConcurrentHashMap<>();
     private final AtomicInteger reconnectAttempts = new AtomicInteger();
     private final Map<String, Instant> lastProviderEvents = new ConcurrentHashMap<>();
+    private final Map<Long, CTraderOpenApiClient.CTraderSymbol> symbolMetadata = new ConcurrentHashMap<>();
+    private final Map<Long, Instant> symbolMetadataObservedAt = new ConcurrentHashMap<>();
+    private final CTraderMarketStateResolver marketStateResolver;
     private final OrderBookStateService orderBookStateService;
     private final OrderBookEventPublisher orderBookEventPublisher;
     private final OrderBookEvidenceCaptureService orderBookEvidenceCaptureService;
@@ -114,6 +117,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         this.clock = clock;
         this.properties = properties;
         this.marketStateBuilder = marketStateBuilder;
+        this.marketStateResolver = new CTraderMarketStateResolver(clock);
         this.orderBookStateService = orderBookStateService;
         this.orderBookEventPublisher = orderBookEventPublisher;
         this.orderBookEvidenceCaptureService = orderBookEvidenceCaptureService;
@@ -177,6 +181,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
             List<Market> added = markets.stream().filter(Objects::nonNull)
                     .filter(market -> desired.putIfAbsent(key(market, request), new ActiveSubscription(market, request)) == null)
                     .toList();
+            added.forEach(this::refreshMarketStateFromBroker);
             try {
                 if (request.type() == MarketStreamType.ORDER_BOOK) {
                     subscribeDepth(added);
@@ -384,11 +389,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         matching.forEach(active -> {
             Instant received = clock.instant();
             lastProviderEvents.put(key(active.market(), active.request()), received);
-            active.market().setMarketState(MarketState.builder()
-                    .tradingStatus(com.hope.trading.market_data.helper.TradingStatus.OPEN)
-                    .tradable(true)
-                    .lastUpdated(received)
-                    .build());
+            refreshMarketStateFromBroker(active.market());
             tickerPublisher.publish(new TickerEvent(active.market().getMarketId(), MarketProvider.CTRADER,
                     active.market().getSymbol(), decode(spot.bid(), active.market()), decode(spot.ask(), active.market()),
                     null, null, spot.occurredAt(),
@@ -591,23 +592,44 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     public synchronized void refreshFreshness(Duration silenceAfter) {
         Instant boundary = clock.instant().minus(silenceAfter);
         desired.values().forEach(active -> {
+            refreshMarketStateFromBroker(active.market());
             Instant last = lastProviderEvents.get(key(active.market(), active.request()));
             if (last == null || last.isBefore(boundary)) {
-                active.market().setMarketState(MarketState.builder()
-                        .tradingStatus(com.hope.trading.market_data.helper.TradingStatus.CLOSED)
-                        .tradable(false)
-                        .closureReason(com.hope.trading.market_data.helper.MarketClosureReason.PROVIDER_UNAVAILABLE)
-                        .lastUpdated(clock.instant()).build());
+                active.market().setMarketState(marketStateBuilder.buildUnknownState());
+                tickerPublisher.persistMarketState(active.market());
             }
         });
     }
 
     private void markUnavailable() {
-        desired.values().forEach(active -> active.market().setMarketState(MarketState.builder()
-                .tradingStatus(com.hope.trading.market_data.helper.TradingStatus.CLOSED)
-                .tradable(false)
-                .closureReason(com.hope.trading.market_data.helper.MarketClosureReason.PROVIDER_UNAVAILABLE)
-                .lastUpdated(clock.instant()).build()));
+        desired.values().forEach(active -> {
+            active.market().setMarketState(marketStateBuilder.buildUnknownState());
+            tickerPublisher.persistMarketState(active.market());
+        });
+    }
+
+    private void refreshMarketStateFromBroker(Market market) {
+        long symbolId = symbolId(market);
+        CTraderOpenApiClient.CTraderSymbol symbol = symbolMetadata.get(symbolId);
+        Instant metadataObservedAt = symbolMetadataObservedAt.get(symbolId);
+        if (symbol == null || metadataObservedAt == null
+                || metadataObservedAt.isBefore(clock.instant().minus(SYMBOL_METADATA_MAX_AGE))) {
+            try {
+                symbol = client.symbol(symbolId);
+                symbolMetadata.put(symbolId, symbol);
+                symbolMetadataObservedAt.put(symbolId, clock.instant());
+            } catch (RuntimeException exception) {
+                symbolMetadata.remove(symbolId);
+                symbolMetadataObservedAt.remove(symbolId);
+                market.setMarketState(marketStateBuilder.buildUnknownState());
+                tickerPublisher.persistMarketState(market);
+                log.warn("CTRADER_MARKET_STATUS_UNAVAILABLE marketId={} symbolId={} errorType={} message={}",
+                        market.getMarketId(), symbolId, exception.getClass().getSimpleName(), exception.getMessage());
+                return;
+            }
+        }
+        market.setMarketState(marketStateResolver.resolve(symbol));
+        tickerPublisher.persistMarketState(market);
     }
 
     public boolean isFresh(Market market, MarketStreamRequest request, Duration silenceAfter) {

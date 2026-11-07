@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -129,8 +130,9 @@ class TickerEventPublisherTest {
     void observationsArePersistedOnlyForKnownMarkets() {
         publisher.publish(ticker("BTC/EUR", "100"));
         verify(priceObservationRepository).save(any());
-        assertThat(market.getMarketState().isTradable()).isTrue();
-        verify(marketRepository).save(market);
+        // Quotes are observations only; they must not promote the market to OPEN.
+        assertThat(market.getMarketState()).isNull();
+        verify(marketRepository, never()).save(any(Market.class));
 
         var unknownMarketEvent = new TickerEvent(
                 UUID.randomUUID(), null, "DOGE/EUR",

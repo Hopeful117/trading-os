@@ -5,6 +5,7 @@ import com.hope.trading.trading_core.execution.domain.valueobject.*;
 import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
+import java.time.Instant;
 
 public interface BrokerExecutionPort {
     SubmissionResult submit(ExecutionRequest request);
@@ -14,8 +15,15 @@ public interface BrokerExecutionPort {
     record ExecutionRequest(
             ExecutionIntentId intentId, ExecutionAttemptId attemptId,
             IdempotencyKey idempotencyKey, UUID brokerAccountId,
-            ExecutionParameters parameters
-    ) {}
+            ExecutionParameters parameters, MarketTradabilityEvidence marketState
+    ) {
+        public ExecutionRequest(ExecutionIntentId intentId, ExecutionAttemptId attemptId,
+                                IdempotencyKey idempotencyKey, UUID brokerAccountId,
+                                ExecutionParameters parameters) {
+            this(intentId, attemptId, idempotencyKey, brokerAccountId, parameters, null);
+        }
+    }
+    record MarketTradabilityEvidence(String status, boolean tradable, Instant observedAt) {}
     sealed interface SubmissionResult permits Acknowledged, Rejected, Unknown {}
     record Acknowledged(String externalOrderId, String correlationId, BigDecimal fillPrice)
             implements SubmissionResult {

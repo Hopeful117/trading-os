@@ -102,7 +102,26 @@ public final class BrokerModels {
              String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
              OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
              BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
-             BigDecimal referencePrice) {
+             BigDecimal referencePrice, String marketTradingStatus, Boolean marketTradable,
+             Instant marketStateUpdatedAt) {
+        public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
+                String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
+                OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
+                BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
+                BigDecimal referencePrice) {
+            this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId, instrument, side,
+                    orderType, quantity, limitPrice, stopLossPrice, takeProfitPrices, referencePrice,
+                    null, null, null);
+        }
+        public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
+                String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
+                OrderType orderType, BigDecimal quantity, BigDecimal limitPrice,
+                BigDecimal stopLossPrice, String marketTradingStatus, Boolean marketTradable,
+                Instant marketStateUpdatedAt) {
+            this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId, instrument, side,
+                    orderType, quantity, limitPrice, stopLossPrice, List.of(), null,
+                    marketTradingStatus, marketTradable, marketStateUpdatedAt);
+        }
         public ExecutionRequest(UUID executionIntentId, UUID executionAttemptId,
                 String idempotencyKey, UUID brokerAccountId, String instrument, Side side,
                 OrderType orderType, BigDecimal quantity, BigDecimal limitPrice) {

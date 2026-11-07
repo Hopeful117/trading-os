@@ -15,14 +15,16 @@ retention, migration, reprojection, or new data capture.
 
 The current state is not safe for further unbounded collection:
 
-- The host filesystem is at 100% capacity with approximately 3.0 GB free.
+- The host filesystem is approximately 96% full with approximately 19 GB free.
 - The `market_data` PostgreSQL volume is the dominant Trading OS data volume at
   approximately 85 GB.
 - `historical_order_book_evidence` is estimated at approximately 120.4 million
   rows and approximately 85 GB including indexes. Exact row count was not run
   because the table is large and PostgreSQL statistics are stale.
-- The Order Book capture gate is currently `false`; the separate Order Book
-  acquisition/subscription gate is `true`. Historical OHLC capture remains
+- The Kraken Order Book evidence-capture gate is currently `false`; the
+  separate Order Book acquisition/subscription gate is `true`. cTrader local
+  observation capture follows a separate provider path and is not globally
+  controlled by that Kraken gate. Historical OHLC capture remains
   enabled and is still accepting approximately 199-200 rows per market and
   interval on a 15-minute schedule.
 - The current research export has 96 exclusions and zero eligible samples.
@@ -60,7 +62,7 @@ artifact added by this work.
 ### Host and Docker
 
 ```text
-Filesystem:       449G total, 423G used, 3.0G free, 100%
+Filesystem:       449G total, 408G used, 19G free, 96%
 Docker images:    13.66G total, 5.304G reclaimable
 Docker containers: 238.1M total
 Docker volumes:   96.72G total, 442.2M reclaimable
@@ -113,15 +115,17 @@ query/replay indexes, not the Market Intelligence database or export bundle.
 - Intervals are `FIFTEEN_MINUTES`, `ONE_HOUR`, and `FOUR_HOURS`.
 - Capture runs with a 15-minute delay and logs repeated acceptance of 199-200
   records per market and interval.
-- `ORDER_BOOK_EVIDENCE_CAPTURE_ENABLED=false`.
+- `ORDER_BOOK_EVIDENCE_CAPTURE_ENABLED=false` for the Kraken evidence path.
 - `ORDER_BOOK_ACQUISITION_STARTUP_ENABLED=true`.
-- No destructive retention gate is enabled.
+- Destructive retirement was observed disabled. The retention scheduler is a
+  separate gate, and its preview path records a dry-run operation in the
+  database; it is not a database-read-only operation.
 
-The current state can therefore continue to grow through OHLC capture even
-though new canonical Order Book evidence is disabled. The acquisition/subscription
-gate being enabled is operationally separate from evidence persistence and must
-not be interpreted as proof that new Order Book evidence is being durably
-captured.
+The current state can therefore continue to grow through OHLC capture. The
+Kraken acquisition/subscription gate being enabled is operationally separate
+from Kraken evidence persistence, and cTrader local-observation capture has its
+own persistence path. Neither subscription state nor the Kraken gate alone is
+proof that no new Order Book evidence is durably captured.
 
 ## Evidence And Research Eligibility
 
@@ -144,11 +148,22 @@ Dependencies:          51
 Retention holds:        0
 ```
 
-The initial bounded Order Book scope remains Kraken `BTC/USD`, linear
-perpetual, depth 25. ADR-063 requires trusted, sequence-local replay with
-`knownAt <= cutoff`; ADR-067 requires explicit dependency release before raw
-evidence can become retirement-eligible. Neither condition is established for
-the entire current population by this audit.
+The architectural pilot scope is Kraken `BTC/USD`, linear perpetual, depth 25.
+The live population was confirmed as one market/depth combination, but its
+provider/origin breakdown was not established by a full-table scan. Canonical
+evidence can also be written by the cTrader local-observation path. ADR-063
+requires trusted, sequence-local replay with `knownAt <= cutoff`; ADR-067
+requires explicit dependency release before raw evidence can become
+retirement-eligible. Neither condition is established for the entire current
+population by this audit.
+
+The 51 observed dependencies are replay-artifact dependencies. Promotion creates
+these dependencies, while Market Intelligence can release them after its
+durable successor and terminal outcomes exist. Replay readers do not themselves
+create dependencies, and Trading Core has no current production dependency
+creator. Therefore the observed dependency count must not be treated as a
+complete inventory of every historical consumer or as proof that all consumers
+are protected.
 
 ### Research Export
 
@@ -191,6 +206,7 @@ The current conclusion is:
 6. Context provenance required by the exporter is missing from historical
    context sections.
 7. Snapshot creation is generally later than its evaluation cutoff.
+8. The Order Book capture flag is not a global provider-independent kill switch.
 
 ### Supported Interpretation
 
@@ -263,8 +279,11 @@ eligible.
 
 1. Apply an immediate human-approved storage-pressure response outside this
    audit, starting with independently verified Docker build-cache reclamation,
-   not PostgreSQL data deletion.
-2. Keep Order Book evidence capture disabled until filesystem headroom and
+   not PostgreSQL data deletion. Confirm cache ownership/need, target
+   filesystem, expected space recovery, and post-cleanup PostgreSQL/application
+   health before acting.
+2. Keep Kraken Order Book evidence capture disabled, and separately verify the
+   cTrader local-observation capture path, until filesystem headroom and
    persistence health are safe.
 3. Repair provenance propagation and cutoff timing for new research snapshots.
 4. Use bounded replay on a small selected population to classify recoverability.
@@ -280,7 +299,9 @@ research blocker without weakening deterministic evidence rules.
 More collection should not resume as an unbounded default until all of the
 following are true:
 
-- at least 10% filesystem headroom is available and sustained;
+- an approved filesystem headroom threshold is available and sustained; the
+  currently cited 10% value is a proposed operational policy, not an existing
+  ADR acceptance condition;
 - capture health reports the last successful durable persistence time;
 - OHLC context sections preserve `fetchedAt` and cutoff semantics;
 - a representative new snapshot passes export eligibility;
@@ -290,8 +311,10 @@ following are true:
 
 ## Recommended Next Actions
 
-1. Human decision: authorize a narrowly scoped Docker build-cache cleanup if
-   those artifacts are not needed for active work. This audit did not execute it.
+1. Human decision: authorize a narrowly scoped Docker build-cache cleanup only
+   after confirming cache ownership/need, target filesystem, expected space
+   recovery, and post-cleanup PostgreSQL/application health. This audit did not
+   execute it.
 2. Implement and test provenance propagation and cutoff-safe snapshot creation;
    do not backfill or mutate frozen snapshots without an explicit decision.
 3. Run a bounded, read-only replay classification against selected sealed
@@ -300,8 +323,9 @@ following are true:
 4. Define whether promoted replay artifacts are sufficient for frozen research
    reproducibility. This is the remaining policy decision before raw evidence
    retirement.
-5. Keep the current Order Book population untouched until dependency backfill,
-   replay validation, and retention dry-run evidence are complete.
+5. Keep the current Order Book population untouched until provider/origin
+   classification, dependency backfill, replay validation, and retention
+   dry-run evidence are complete.
 
 ## Validation Record
 

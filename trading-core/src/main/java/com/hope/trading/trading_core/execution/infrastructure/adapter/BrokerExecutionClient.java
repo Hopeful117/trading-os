@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.List;
+import java.time.Instant;
 
 @FeignClient(name="broker-service",contextId="execution-broker-client",
         configuration = BrokerServiceFeignConfiguration.class)
@@ -17,7 +18,9 @@ public interface BrokerExecutionClient {
     record BrokerRequest(UUID executionIntentId,UUID executionAttemptId,String idempotencyKey,
                          UUID brokerAccountId,String instrument,String side,String orderType,
                            BigDecimal quantity,BigDecimal limitPrice,BigDecimal stopLossPrice,
-                           List<BigDecimal> takeProfitPrices, BigDecimal referencePrice){}
+                            List<BigDecimal> takeProfitPrices, BigDecimal referencePrice,
+                            String marketTradingStatus, Boolean marketTradable,
+                            Instant marketStateUpdatedAt){}
     record ReconcileRequest(UUID executionIntentId,UUID executionAttemptId,String idempotencyKey,
                             UUID brokerAccountId){}
     record BrokerResponse(String outcome,String externalOrderId,String correlationId,

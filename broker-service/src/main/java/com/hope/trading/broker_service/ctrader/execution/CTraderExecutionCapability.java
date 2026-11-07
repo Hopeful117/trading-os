@@ -65,6 +65,9 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
         try {
             if (!enabled()) throw new CTraderSafetyException("cTrader execution is disabled by safety policy");
             requireSupportedProtectionConfiguration(request);
+            if (!freshTradabilityEvidence(request)) {
+                throw new CTraderAuthenticationException("CTRADER_MARKET_TRADABILITY_UNKNOWN");
+            }
             BrokerConnection connection = requireExecutionConnection(request.brokerAccountId());
             try (PlainSecret secret = secrets.read(new CredentialReference(connection.activeCredentialReference()))) {
                 CTraderToken token = CTraderTokenCodec.decode(secret.copyValue());
@@ -141,6 +144,15 @@ public final class CTraderExecutionCapability implements ExecutionCapability, Re
                 && "FTMO_FREE".equalsIgnoreCase(properties.accountProgram())
                 && properties.environment() != null
                 && properties.environment().equalsIgnoreCase(connection.providerEnvironment());
+    }
+
+    private boolean freshTradabilityEvidence(ExecutionRequest request) {
+        Instant now = clock.instant();
+        return "OPEN".equalsIgnoreCase(request.marketTradingStatus())
+                && Boolean.TRUE.equals(request.marketTradable())
+                && request.marketStateUpdatedAt() != null
+                && !request.marketStateUpdatedAt().isAfter(now)
+                && !request.marketStateUpdatedAt().isBefore(now.minusSeconds(30));
     }
 
     private void requireToken(CTraderToken token) {

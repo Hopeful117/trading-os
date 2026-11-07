@@ -56,6 +56,9 @@ class ManualTradePlanOrchestrationServiceTest {
         when(market.getProductType()).thenReturn(com.hope.trading.trading_core.shared.domain.model.InstrumentProductType.SPOT);
         when(market.getMarketState()).thenReturn(marketState);
         when(marketState.isTradable()).thenReturn(true);
+        when(marketState.getTradingStatus()).thenReturn(
+                com.hope.trading.trading_core.market_data.helper.TradingStatus.OPEN);
+        when(marketState.getLastUpdated()).thenReturn(Instant.parse("2026-09-20T11:59:45Z"));
         when(markets.findAll()).thenReturn(List.of(market));
         when(marketIntelligence.createManual(eq("key-1"), any()))
                 .thenReturn(mock(MarketIntelligenceTradePlanningClient.PlanTransport.class));
@@ -73,6 +76,27 @@ class ManualTradePlanOrchestrationServiceTest {
                                 && value.context().tradingAccountId().equals(accountId)
                                 && value.notional().compareTo(BigDecimal.valueOf(200)) == 0
                                 && value.expiresAt().equals(Instant.parse("2026-09-20T13:00:00Z"))));
+    }
+
+    @Test
+    void rejectsUnknownMarketStatusEvenWhenAQuoteCouldBeFresh() {
+        MarketResponse market = markets.findAll().getFirst();
+        when(market.getMarketState().getTradingStatus())
+                .thenReturn(com.hope.trading.trading_core.market_data.helper.TradingStatus.UNKNOWN);
+
+        assertThatThrownBy(() -> service.create(actorId, request(null, "MARKET"), "key-1"))
+                .isInstanceOf(ManualTradePlanException.class)
+                .extracting("code").isEqualTo("MARKET_NOT_TRADABLE");
+    }
+
+    @Test
+    void rejectsStaleOpenMarketStatus() {
+        MarketResponse market = markets.findAll().getFirst();
+        when(market.getMarketState().getLastUpdated()).thenReturn(Instant.parse("2026-09-20T11:59:29Z"));
+
+        assertThatThrownBy(() -> service.create(actorId, request(null, "MARKET"), "key-1"))
+                .isInstanceOf(ManualTradePlanException.class)
+                .extracting("code").isEqualTo("MARKET_NOT_TRADABLE");
     }
 
     @Test

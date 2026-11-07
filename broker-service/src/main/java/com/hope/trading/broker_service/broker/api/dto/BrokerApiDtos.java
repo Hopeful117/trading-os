@@ -5,6 +5,7 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.List;
+import java.time.Instant;
 
 public final class BrokerApiDtos {private BrokerApiDtos(){}
     public record ExecutionApiRequest(@NotNull UUID executionIntentId,@NotNull UUID executionAttemptId,
@@ -12,14 +13,23 @@ public final class BrokerApiDtos {private BrokerApiDtos(){}
          @NotBlank @Size(max=40) String instrument,@NotNull Side side,@NotNull OrderType orderType,
          @NotNull @DecimalMin(value="0",inclusive=false) BigDecimal quantity,@DecimalMin(value="0",inclusive=false) BigDecimal limitPrice,
           @DecimalMin(value="0",inclusive=false) BigDecimal stopLossPrice, List<BigDecimal> takeProfitPrices,
-          @DecimalMin(value="0",inclusive=false) BigDecimal referencePrice){
+           @DecimalMin(value="0",inclusive=false) BigDecimal referencePrice,
+            String marketTradingStatus, Boolean marketTradable, @PastOrPresent Instant marketStateUpdatedAt){
         public ExecutionApiRequest(UUID executionIntentId, UUID executionAttemptId, String idempotencyKey,
                 UUID brokerAccountId, String instrument, Side side, OrderType orderType,
                 BigDecimal quantity, BigDecimal limitPrice) {
             this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId,
-                    instrument, side, orderType, quantity, limitPrice, null, List.of(), null);
+                    instrument, side, orderType, quantity, limitPrice, null, List.of(), null, null, null, null);
         }
-        public ExecutionRequest toModel(){return new ExecutionRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId,instrument,side,orderType,quantity,limitPrice,stopLossPrice,takeProfitPrices,referencePrice);}}
+        public ExecutionApiRequest(UUID executionIntentId, UUID executionAttemptId, String idempotencyKey,
+                UUID brokerAccountId, String instrument, Side side, OrderType orderType,
+                BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopLossPrice,
+                List<BigDecimal> takeProfitPrices, BigDecimal referencePrice) {
+            this(executionIntentId, executionAttemptId, idempotencyKey, brokerAccountId, instrument, side,
+                    orderType, quantity, limitPrice, stopLossPrice, takeProfitPrices, referencePrice,
+                    null, null, null);
+        }
+        public ExecutionRequest toModel(){return new ExecutionRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId,instrument,side,orderType,quantity,limitPrice,stopLossPrice,takeProfitPrices,referencePrice,marketTradingStatus,marketTradable,marketStateUpdatedAt);}}
     public record ReconcileApiRequest(@NotNull UUID executionIntentId,@NotNull UUID executionAttemptId,
         @NotBlank @Size(max=200) String idempotencyKey,@NotNull UUID brokerAccountId){public ReconciliationRequest toModel(){return new ReconciliationRequest(executionIntentId,executionAttemptId,idempotencyKey,brokerAccountId);}}
     public record BrokerApiResponse(String outcome,String externalOrderId,String correlationId,String status,String reasonCode){
