@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+import json
+import threading
+from http.client import HTTPConnection
+
+import pytest
+
+from app.bridge import BridgeHandler, BridgeState
+
+
+@pytest.fixture
+def bridge_server():
+    from http.server import ThreadingHTTPServer
+
+    handler = type("TestBridgeHandler", (BridgeHandler,), {})
+    handler.state = BridgeState()
+    handler.allowed_origins = {"http://localhost:4200"}
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server
+    server.shutdown()
+    thread.join()
+
+
+def request(server, method, path, payload=None):
+    connection = HTTPConnection("127.0.0.1", server.server_port)
+    body = json.dumps(payload).encode() if payload is not None else None
+    headers = {"Origin": "http://localhost:4200"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        headers["Content-Length"] = str(len(body))
+    connection.request(method, path, body=body, headers=headers)
+    response = connection.getresponse()
+    content = response.read()
+    connection.close()
+    return response.status, json.loads(content) if content else None
+
+
+def test_challenge_is_single_use(bridge_server, monkeypatch):
+    monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
+        "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: "token"})()}
+    )())
+    status, payload = request(bridge_server, "GET", "/v1/challenge")
+    assert status == 200
+
+    connect_payload = {"challenge": payload["challenge"], "credential": "opaque-credential"}
+    assert request(bridge_server, "POST", "/v1/connect", connect_payload)[0] == 204
+    assert request(bridge_server, "POST", "/v1/connect", connect_payload)[0] == 400
+
+
+def test_bridge_rejects_untrusted_origin(bridge_server):
+    from http.client import HTTPConnection
+
+    connection = HTTPConnection("127.0.0.1", bridge_server.server_port)
+    connection.request("GET", "/v1/challenge", headers={"Origin": "https://evil.example"})
+    response = connection.getresponse()
+    assert response.status == 403

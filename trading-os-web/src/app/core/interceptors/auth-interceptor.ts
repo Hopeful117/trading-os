@@ -3,12 +3,17 @@ import { TokenService } from '../services/token';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const tokenService = inject(TokenService);
   const router = inject(Router);
 
-  if (req.url.includes('/login') || req.url.includes('/register')) {
+  if (
+    req.url.includes('/login') ||
+    req.url.includes('/register') ||
+    req.url.startsWith(environment.mcpBridgeUrl)
+  ) {
     return next(req);
   }
 

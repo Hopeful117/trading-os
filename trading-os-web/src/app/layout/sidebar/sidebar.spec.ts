@@ -50,6 +50,7 @@ describe('Sidebar', () => {
       'Positions',
       'Trade History',
       'Accounts',
+      'Agents',
       'Challenges',
     ]);
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
@@ -63,6 +64,7 @@ describe('Sidebar', () => {
       '/positions',
       '/analytics',
       '/accounts',
+      '/agents',
       '/challenges',
     ]);
   });

@@ -1,0 +1,148 @@
+<header class="page-header">
+  <div>
+    <p class="eyebrow">MCP access</p>
+    <h1>Agents</h1>
+    <p class="intro">
+      Configurez des agents externes avec un accès explicite et read-only à vos comptes.
+    </p>
+  </div>
+</header>
+
+<section class="panel setup-panel" aria-labelledby="create-agent-title">
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">Human-controlled provisioning</p>
+      <h2 id="create-agent-title">Créer un agent</h2>
+    </div>
+    <span class="security-note">Aucune exécution de trade</span>
+  </div>
+
+  <form [formGroup]="form" (ngSubmit)="createAgent()" autocomplete="off">
+    <label>
+      Nom d’affichage
+      <input formControlName="displayName" maxlength="80" placeholder="Mon agent de recherche" />
+    </label>
+    <label>
+      Type
+      <select formControlName="agentType">
+        <option value="OPENCODE">OpenCode</option>
+        <option value="OTHER">Autre</option>
+      </select>
+    </label>
+    <label>
+      Compte broker autorisé
+      <select formControlName="brokerAccountId">
+        <option value="">Sélectionner un compte</option>
+        @for (account of brokerAccounts(); track account.id) {
+          <option [value]="account.id">{{ account.displayName }} · {{ account.provider }}</option>
+        }
+      </select>
+    </label>
+    <fieldset>
+      <legend>Permissions read-only</legend>
+      <label class="checkbox-label"
+        ><input type="checkbox" formControlName="accountsRead" /> Lire les comptes</label
+      >
+      <label class="checkbox-label"
+        ><input type="checkbox" formControlName="positionsRead" /> Lire les positions</label
+      >
+    </fieldset>
+    <button type="submit" [disabled]="busy() || loading()">
+      {{ busy() ? 'Connexion…' : 'Créer et connecter à OpenCode' }}
+    </button>
+  </form>
+
+  @if (feedback(); as message) {
+    <p class="feedback" [class.error]="message.kind === 'error'" role="status">
+      {{ message.message }}
+    </p>
+  }
+</section>
+
+<section class="panel" aria-labelledby="configured-agents-title">
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">Explicit grants</p>
+      <h2 id="configured-agents-title">Agents configurés</h2>
+    </div>
+    <button type="button" class="secondary-button" (click)="reload()" [disabled]="busy()">
+      Actualiser
+    </button>
+  </div>
+
+  @if (loading()) {
+    <p>Chargement des agents…</p>
+  } @else if (agents().length === 0) {
+    <p class="empty-state">Aucun agent configuré.</p>
+  } @else {
+    <div class="agent-list">
+      @for (agent of agents(); track agent.id) {
+        <article class="agent-card">
+          <div class="agent-main">
+            <div>
+              <p class="eyebrow">{{ agent.agentType }}</p>
+              <h3>{{ agent.displayName }}</h3>
+              <p class="muted">{{ agent.id }}</p>
+            </div>
+            <span class="status" [class.revoked]="agent.status === 'REVOKED'">{{
+              agent.status
+            }}</span>
+          </div>
+          <div class="grant-summary">
+            <strong>Grants</strong>
+            @if (grants()[agent.id]; as agentGrants) {
+              <span>{{ permissions(agentGrants) || 'Aucun grant actif' }}</span>
+              @for (grant of agentGrants; track grant.id) {
+                <div class="grant-row">
+                  <span>{{ grant.permission }} · {{ accountLabel(grant.resourceId) }}</span>
+                  @if (grant.status === 'ACTIVE') {
+                    <button
+                      type="button"
+                      class="link-button"
+                      (click)="revokeGrant(agent.id, grant.id)"
+                      [disabled]="busy()"
+                    >
+                      Révoquer
+                    </button>
+                  }
+                </div>
+              }
+            } @else {
+              <span>Chargement…</span>
+            }
+          </div>
+          <div class="agent-actions">
+            @if (agent.status !== 'REVOKED') {
+              @if (agent.status === 'ACTIVE' && agent.agentType === 'OPENCODE') {
+                <button
+                  type="button"
+                  class="secondary-button"
+                  (click)="connectAgent(agent)"
+                  [disabled]="busy()"
+                >
+                  Connecter à OpenCode
+                </button>
+              }
+              <button
+                type="button"
+                class="secondary-button"
+                (click)="toggleStatus(agent)"
+                [disabled]="busy()"
+              >
+                {{ agent.status === 'ACTIVE' ? 'Suspendre' : 'Activer' }}
+              </button>
+              <button
+                type="button"
+                class="danger-button"
+                (click)="revokeAgent(agent)"
+                [disabled]="busy()"
+              >
+                Révoquer l’agent
+              </button>
+            }
+          </div>
+        </article>
+      }
+    </div>
+  }
+</section>
