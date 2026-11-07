@@ -7,11 +7,15 @@ export interface MarketResponse {
 
   symbol: string;
 
+  providerSymbol?: string | null;
+
   baseAsset: string;
 
   quoteAsset: string;
 
   productType?: MarketProductType | null;
+
+  identityResolved?: boolean;
 
   marketState: {
     tradingStatus: string;

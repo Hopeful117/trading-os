@@ -143,10 +143,10 @@ class TradePlanningEngineTest {
     }
 
     @Test
-    void manualFlowRejectsDifferentExpirationWithTheSameIdempotencyKey() {
+    void manualFlowReplaysWhenOnlyServerDerivedExpirationDiffers() {
         var environment = TradePlanTestFixtures.environment();
         ManualTradePlanningRequest request = manualRequest(environment);
-        environment.service().createManual(request, "expiration-key");
+        TradePlanningResult first = environment.service().createManual(request, "expiration-key");
 
         ManualTradePlanningRequest changed = new ManualTradePlanningRequest(
                 request.planningContextId(), request.contextVersion(), request.actorId(),
@@ -156,10 +156,10 @@ class TradePlanningEngineTest {
                  request.confirmationConditions(), request.invalidationConditions(), request.managementRules(),
                  request.instrumentProvider(), request.instrumentProductType());
 
-        var secondError = catchThrowable(() -> environment.service().createManual(changed, "expiration-key"));
-        assertThat(secondError)
-                .isInstanceOf(TradePlanIdempotencyException.class)
-                .hasMessageContaining("already bound");
+        var replay = environment.service().createManual(changed, "expiration-key");
+        assertThat(replay).isInstanceOfSatisfying(TradePlanningResult.Success.class, success ->
+                assertThat(success.plan().id()).isEqualTo(
+                        ((TradePlanningResult.Success) first).plan().id()));
     }
 
     @Test

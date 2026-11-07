@@ -7,6 +7,8 @@ OUTPUT_FILE="${1:-artifacts/paper-runtime-proof.json}"
 EXECUTE_PAPER="${EXECUTE_PAPER:-false}"
 PAPER_OUTCOME="${PAPER_OUTCOME:-TRADE_PLAN}"
 REFRESH_MARKETS="${REFRESH_MARKETS:-false}"
+MARKET_DATA_BASE_URL="${MARKET_DATA_BASE_URL:-}"
+MARKET_DATA_SERVICE_TOKEN="${MARKET_DATA_SERVICE_TOKEN:-}"
 STRICT_PAPER_ENTRY="${STRICT_PAPER_ENTRY:-false}"
 ALLOW_PAPER_SHORT="${ALLOW_PAPER_SHORT:-false}"
 SCAN_MAX_ATTEMPTS="${SCAN_MAX_ATTEMPTS:-180}"
@@ -51,8 +53,12 @@ if [[ -z "$TOKEN" ]]; then
     exit 1
 fi
 if [[ "$REFRESH_MARKETS" == "true" ]]; then
-    request market_sync -X POST "$BASE_URL/api/v1/markets/synchronize" \
-        -H "Authorization: Bearer $TOKEN"
+    if [[ -z "$MARKET_DATA_BASE_URL" || -z "$MARKET_DATA_SERVICE_TOKEN" ]]; then
+        printf 'Market synchronization requires MARKET_DATA_BASE_URL and a pre-issued MARKET_DATA_SERVICE_TOKEN; user JWTs are not authorized for this service operation\n' >&2
+        exit 1
+    fi
+    request market_sync -X POST "$MARKET_DATA_BASE_URL/api/v1/markets/synchronize" \
+        -H "X-Service-Authorization: Bearer $MARKET_DATA_SERVICE_TOKEN"
     MARKET_SYNC_STATUS="$(status_of market_sync)"
     if [[ ! "$MARKET_SYNC_STATUS" =~ ^2[0-9][0-9]$ ]]; then
         printf 'Market synchronization failed (%s): %s\n' "$MARKET_SYNC_STATUS" \
@@ -120,10 +126,24 @@ for attempt in $(seq 1 "$SCAN_MAX_ATTEMPTS"); do
         -H "Authorization: Bearer $TOKEN"
     SCAN_STATE="$(jq -r '.status // .state // .phase // empty' "$TMP_DIR/scan_state.body")"
     case "$SCAN_STATE" in
-        COMPLETED|SUCCEEDED|FAILED|REJECTED|CANCELLED) break ;;
+        COMPLETED|COMPLETED_NO_WORK|SUCCEEDED|FAILED|REJECTED|CANCELLED) break ;;
     esac
     sleep 2
 done
+if [[ "$SCAN_STATE" == "COMPLETED_NO_WORK" ]]; then
+    mkdir -p "$(dirname "$OUTPUT_FILE")"
+    jq -n \
+        --arg generatedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+        --arg baseUrl "$BASE_URL" \
+        --arg username "$USERNAME" \
+        --arg accountId "$ACCOUNT_ID" \
+        --arg brokerAccountId "$BROKER_ACCOUNT_ID" \
+        --arg scanId "$SCAN_ID" \
+        '{generatedAt: $generatedAt, baseUrl: $baseUrl, username: $username, paper: {brokerAccountId: $brokerAccountId, accountId: $accountId}, scan: {status: "completed_no_work", id: $scanId}, outcome: "NO_TRADE"}' \
+        > "$OUTPUT_FILE"
+    jq . "$OUTPUT_FILE"
+    exit 0
+fi
 if [[ "$SCAN_STATE" != "COMPLETED" && "$SCAN_STATE" != "SUCCEEDED" ]]; then
     printf 'Scan did not complete successfully after %s attempts: state=%s\n' \
         "$SCAN_MAX_ATTEMPTS" "$SCAN_STATE" >&2

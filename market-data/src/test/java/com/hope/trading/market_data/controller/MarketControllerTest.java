@@ -80,6 +80,26 @@ class MarketControllerTest {
     }
 
     @Test
+    void duplicateDisplaySymbolsWithDifferentProviderIdsAreNotResolvedForExecution() throws Exception {
+        Market first = market();
+        first.setProviderSymbol("7");
+        first.setProductType(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
+        Market second = market();
+        second.setMarketId(UUID.randomUUID());
+        second.setProviderSymbol("8");
+        second.setProductType(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
+        when(marketService.findAll()).thenReturn(List.of(first, second));
+
+        mockMvc.perform(get("/api/v1/markets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].providerSymbol").value("7"))
+                .andExpect(jsonPath("$[0].identityResolved").value(false))
+                .andExpect(jsonPath("$[0].marketState.tradable").value(false))
+                .andExpect(jsonPath("$[1].providerSymbol").value("8"))
+                .andExpect(jsonPath("$[1].identityResolved").value(false));
+    }
+
+    @Test
     void unknownMarketFailsExplicitly() {
         when(marketService.findById(marketId)).thenReturn(Optional.empty());
 

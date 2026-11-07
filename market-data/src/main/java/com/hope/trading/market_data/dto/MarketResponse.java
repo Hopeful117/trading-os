@@ -20,11 +20,15 @@ public class MarketResponse {
 
     private String symbol;
 
+    private String providerSymbol;
+
     private String baseAsset;
 
     private String quoteAsset;
 
     private InstrumentProductType productType;
+
+    private boolean identityResolved;
 
     private String quantityUnit;
 

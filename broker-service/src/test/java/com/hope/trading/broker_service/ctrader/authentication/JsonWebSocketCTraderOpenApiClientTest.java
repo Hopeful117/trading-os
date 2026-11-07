@@ -227,6 +227,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
             assertThat(deal.realizedPnl()).isEqualByComparingTo("0.2");
         });
         assertThat(observation.startedAt()).isEqualTo(started);
+        assertThat(observation.providerObservedAt()).isEqualTo(started);
         assertThat(observation.accountFacts().accountType().value()).isEqualTo("HEDGED");
         assertThat(observation.accountFacts().totalMarginCalculationType().value()).isEqualTo("MAX");
         assertThat(observation.accountFacts().managerBonus().value()).isEqualByComparingTo("0");

@@ -74,8 +74,13 @@ export class Markets {
 
   readonly productTypeLabel = marketProductTypeLabel;
 
-  openMarket(marketId: string): void {
-    void this.router.navigate(['/markets', marketId]);
+  openMarket(market: string | { marketId: string; identityResolved?: boolean }): void {
+    if (typeof market === 'string') {
+      void this.router.navigate(['/markets', market]);
+      return;
+    }
+    if (market.identityResolved !== true) return;
+    void this.router.navigate(['/markets', market.marketId]);
   }
 
   applyFilter(filter: MarketFilter): void {

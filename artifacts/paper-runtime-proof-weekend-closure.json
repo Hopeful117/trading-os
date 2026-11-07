@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-11-07T14:56:45Z",
+  "baseUrl": "http://localhost:17080",
+  "username": "runtime_paper_1794063404_23513",
+  "paper": {
+    "brokerAccountId": "c213c96e-be5b-4365-8705-072ec01ecc5d",
+    "accountId": "a2186ce0-dbb7-4d2e-a1f9-891afa6f50a4"
+  },
+  "scan": {
+    "status": "completed_no_work",
+    "id": "e6911cb6-2bf7-4c32-ac8d-aedb8f3a845f"
+  },
+  "outcome": "NO_TRADE"
+}

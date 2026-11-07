@@ -28,12 +28,35 @@ response during this run, and no incomplete snapshot was treated as synchronized
 The missing provider facts remain an explicit blocker rather than being filled
 from local or experimental data.
 
+The cTrader market-state defect observed during validation was corrected locally.
+The resolver now closes Forex symbols on Saturday when the latest provider
+observation is from a prior UTC date, including when provider metadata claims an
+open interval. The rule does not apply to non-Forex instruments and does not
+override a provider observation received on the current date.
+
+After rebuilding and restarting only Market Data, a read-only ticker
+subscription for the existing GBP/USD catalogue record produced
+`CLOSED`, `tradable=false`, and `closureReason=WEEKEND`. No cTrader write
+operation was performed.
+
 ## Simulated Execution
 
 The existing provider-neutral paper execution and validation boundaries passed
 their targeted tests, including execution guards, paper lifecycle, finalization,
 mode boundaries and synchronization persistence. No simulated scenario was
 connected to the real FTMO account.
+
+The isolated runtime PAPER proof was executed against a newly created PAPER
+account with the cTrader provider reference and GBP/USD explicitly selected.
+The scan completed as `COMPLETED_NO_WORK` and produced `NO_TRADE` in
+`artifacts/paper-runtime-proof-weekend-closure.json`. This is a valid fail-closed
+result, but it does not prove the positive execution branch because no admissible
+opportunity was available.
+
+The positive runtime Trade Plan path remains blocked: the scanner did not produce
+an admissible opportunity, and the manual plan path rejected stale market data
+with `MARKET_NOT_TRADABLE`. The provider-neutral positive PAPER lifecycle is
+covered by targeted deterministic integration tests.
 
 ## Angular Validation
 
@@ -50,6 +73,9 @@ these were not changed because they are unrelated to the validation Story.
 - The authenticated synchronization request did not return a bounded result in
   this runtime session. This needs separate diagnosis before claiming full
   Trading Core propagation.
+- The cTrader catalogue could retain `OPEN` for GBP/USD during the weekend when
+  its last provider observation was from Friday. The local resolver correction
+  now derives a conservative Saturday Forex closure.
 
 ## Remaining Blockers
 
@@ -61,6 +87,8 @@ these were not changed because they are unrelated to the validation Story.
 
 - Trading Core synchronization evidence is incomplete because the application
   request did not return a bounded result during this run.
+- Positive runtime PAPER execution is unavailable until a fresh, admissible
+  opportunity and valuation are available.
 
 ### Financial
 
@@ -91,6 +119,10 @@ Determine why the cTrader provider response omits equity and margin facts for
 external account `49411967`, then rerun the same read-only validation and Trading
 Core synchronization path. Do not derive or admit replacement financial values.
 
+After that, rerun the positive isolated PAPER branch during a fresh market-data
+window to produce an opportunity and verify execution/reconciliation through the
+runtime API path.
+
 ## Validation Commands
 
 - `mvn test` in `broker-service`: 355 tests passed.
@@ -98,3 +130,6 @@ Core synchronization path. Do not derive or admit replacement financial values.
 - `npm run test:ci` in `trading-os-web`: 56 files, 562 tests passed.
 - `npm run build` in `trading-os-web`: passed with existing warnings.
 - `git diff --check`: passed before this report was added.
+- Targeted Market Data cTrader/runtime tests: 92 tests passed.
+- Market Data package: passed with `./mvnw -DskipTests package`.
+- Isolated cTrader GBP/USD PAPER scan: completed with `NO_TRADE`; no provider mutation.

@@ -150,6 +150,63 @@ class CTraderMarketStateResolverTest {
                 .getTradingStatus()).isEqualTo(TradingStatus.CLOSED);
     }
 
+    @Test
+    void derivesWeekendClosureForForexWhenTheProviderScheduleIsMissing() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-07T13:01:00Z"), ZoneOffset.UTC));
+
+        var state = resolver.resolve(symbol("UTC", List.of(), List.of()),
+                Instant.parse("2026-11-06T21:55:00Z"));
+
+        assertThat(state.getTradingStatus()).isEqualTo(TradingStatus.CLOSED);
+        assertThat(state.getClosureReason()).isEqualTo(MarketClosureReason.WEEKEND);
+    }
+
+    @Test
+    void closesForexOnSaturdayEvenWhenProviderScheduleClaimsItIsOpen() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-07T13:01:00Z"), ZoneOffset.UTC));
+
+        var state = resolver.resolve(symbol("UTC", List.of(
+                new CTraderOpenApiClient.CTraderInterval(0, 7 * 86_400L)), List.of()));
+
+        assertThat(state.getTradingStatus()).isEqualTo(TradingStatus.CLOSED);
+        assertThat(state.getClosureReason()).isEqualTo(MarketClosureReason.WEEKEND);
+    }
+
+    @Test
+    void doesNotDeriveWeekendClosureForNonForexSymbols() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-07T13:01:00Z"), ZoneOffset.UTC));
+        var symbol = new CTraderOpenApiClient.CTraderSymbol(42, "BTCUSD", 2, 1, 2, 1,
+                "ENABLED", null, List.of(), List.of());
+
+        assertThat(resolver.resolve(symbol, Instant.parse("2026-11-06T21:55:00Z"))
+                .getTradingStatus()).isEqualTo(TradingStatus.UNKNOWN);
+    }
+
+    @Test
+    void doesNotDeriveWeekendClosureWhenTheLastProviderEventIsToday() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-07T13:01:00Z"), ZoneOffset.UTC));
+
+        assertThat(resolver.resolve(symbol("UTC", List.of(), List.of()),
+                Instant.parse("2026-11-07T12:59:00Z")).getTradingStatus())
+                .isEqualTo(TradingStatus.UNKNOWN);
+    }
+
+    @Test
+    void derivesWeekendClosureFromCanonicalSymbolWhenProviderMetadataIsUnavailable() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-07T13:01:00Z"), ZoneOffset.UTC));
+
+        var state = resolver.resolveWeekendFallback("EUR/USD",
+                Instant.parse("2026-11-06T21:55:00Z"));
+
+        assertThat(state.getTradingStatus()).isEqualTo(TradingStatus.CLOSED);
+        assertThat(state.getClosureReason()).isEqualTo(MarketClosureReason.WEEKEND);
+    }
+
     private CTraderOpenApiClient.CTraderSymbol symbol(String zone,
                                                        List<CTraderOpenApiClient.CTraderInterval> schedule,
                                                        List<CTraderOpenApiClient.CTraderHoliday> holidays) {

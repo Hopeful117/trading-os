@@ -94,13 +94,13 @@ public final class TradeabilityCalculator {
                 || !(section.payload() instanceof OrderBookContext orderBook)) {
             target.add(missing("LIQUIDITY_UNAVAILABLE", "MARKET_DATA", "ORDER_BOOK",
                     section == null ? MarketThesisAvailability.UNAVAILABLE : MarketThesisAvailability.UNKNOWN,
-                    cutoff, cutoff, "Order-book liquidity evidence is unavailable", true));
+                    cutoff, cutoff, "Order-book liquidity evidence is unavailable", false));
             return;
         }
         if (section.status() == ContextSectionStatus.STALE) {
             target.add(missing("LIQUIDITY_STALE", "MARKET_DATA", "ORDER_BOOK",
                     MarketThesisAvailability.STALE, cutoff, cutoff,
-                    "Order-book liquidity evidence is stale", true));
+                    "Order-book liquidity evidence is stale", false));
             return;
         }
         if (orderBook.status() != OrderBookContext.ReplayStatus.AVAILABLE
@@ -109,13 +109,13 @@ public final class TradeabilityCalculator {
                 || orderBook.latestKnownAt().isAfter(cutoff)) {
             target.add(missing("LIQUIDITY_CUTOFF_INCOMPATIBLE", "MARKET_DATA", "ORDER_BOOK",
                     MarketThesisAvailability.UNKNOWN, cutoff, cutoff,
-                    "Order-book evidence is invalid or outside the evaluation cutoff", true));
+                    "Order-book evidence is invalid or outside the evaluation cutoff", false));
             return;
         }
         if (orderBook.bids().isEmpty() || orderBook.asks().isEmpty()) {
             target.add(missing("LIQUIDITY_INSUFFICIENT", "MARKET_DATA", "ORDER_BOOK",
                     MarketThesisAvailability.UNKNOWN, orderBook.latestOccurredAt(), cutoff,
-                    "The order book has no normalized levels on both sides; sufficiency cannot be established", true));
+                    "The order book has no normalized levels on both sides; sufficiency cannot be established", false));
             return;
         }
         target.add(new TradeabilityAssessment.Evidence(
