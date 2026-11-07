@@ -26,7 +26,8 @@ final class CTraderMarketStateResolver {
         if (mode == null || mode.isBlank()) return unknown(observedAt);
         if (!enabled(mode)) return closed(MarketClosureReason.HALTED, observedAt);
         if (symbol.scheduleTimeZone() == null || symbol.scheduleTimeZone().isBlank()
-                || symbol.schedule().stream().noneMatch(this::validInterval)) {
+                || symbol.schedule().isEmpty()
+                || symbol.schedule().stream().anyMatch(interval -> !validInterval(interval))) {
             return unknown(observedAt);
         }
 
@@ -37,7 +38,10 @@ final class CTraderMarketStateResolver {
             return unknown(observedAt);
         }
         ZonedDateTime local = observedAt.atZone(zone);
-        if (holiday(symbol, local)) return closed(MarketClosureReason.OUTSIDE_TRADING_HOURS, observedAt);
+        if (symbol.holidays().stream().anyMatch(holiday -> !validHoliday(symbol, holiday))) {
+            return unknown(observedAt);
+        }
+        if (holiday(symbol, observedAt)) return closed(MarketClosureReason.OUTSIDE_TRADING_HOURS, observedAt);
         long second = weekSecond(local);
         boolean open = symbol.schedule().stream().filter(this::validInterval)
                 .anyMatch(interval -> interval.startSecond() <= second && second < interval.endSecond());
@@ -46,9 +50,11 @@ final class CTraderMarketStateResolver {
                 : closed(MarketClosureReason.OUTSIDE_TRADING_HOURS, observedAt);
     }
 
-    private boolean holiday(CTraderOpenApiClient.CTraderSymbol symbol, ZonedDateTime local) {
+    private boolean holiday(CTraderOpenApiClient.CTraderSymbol symbol, Instant observedAt) {
         for (CTraderOpenApiClient.CTraderHoliday holiday : symbol.holidays()) {
             if (holiday.holidayDateEpochMillis() < 0) continue;
+            ZoneId holidayZone = holidayZone(symbol, holiday);
+            ZonedDateTime local = observedAt.atZone(holidayZone);
             LocalDate holidayDate = LocalDate.ofEpochDay(holiday.holidayDateEpochMillis() / 86_400_000L);
             if ((!holiday.recurring() && !holidayDate.equals(local.toLocalDate()))
                     || (holiday.recurring() && (holidayDate.getMonth() != local.getMonth()
@@ -61,7 +67,33 @@ final class CTraderMarketStateResolver {
         return false;
     }
 
+    private boolean validHolidayZone(CTraderOpenApiClient.CTraderSymbol symbol,
+                                     CTraderOpenApiClient.CTraderHoliday holiday) {
+        try {
+            holidayZone(symbol, holiday);
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private boolean validHoliday(CTraderOpenApiClient.CTraderSymbol symbol,
+                                 CTraderOpenApiClient.CTraderHoliday holiday) {
+        return validHolidayZone(symbol, holiday)
+                && (holiday.startSecond() == null || holiday.startSecond() >= 0)
+                && (holiday.endSecond() == null || holiday.endSecond() <= 86_400)
+                && (holiday.startSecond() == null || holiday.endSecond() == null
+                || holiday.startSecond() < holiday.endSecond());
+    }
+
+    private ZoneId holidayZone(CTraderOpenApiClient.CTraderSymbol symbol,
+                               CTraderOpenApiClient.CTraderHoliday holiday) {
+        return ZoneId.of(holiday.scheduleTimeZone() == null
+                ? symbol.scheduleTimeZone() : holiday.scheduleTimeZone());
+    }
+
     private long weekSecond(ZonedDateTime local) {
+        // ProtoOAInterval defines both bounds as seconds from Sunday 00:00.
         DayOfWeek day = local.getDayOfWeek();
         long dayOffset = day == DayOfWeek.SUNDAY ? 0 : day.getValue();
         return dayOffset * 86_400L + local.toLocalTime().toSecondOfDay();

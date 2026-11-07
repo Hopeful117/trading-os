@@ -4,6 +4,7 @@ import com.hope.trading.market_data.brokerclient.MarketDataStreamProvider;
 import com.hope.trading.market_data.ctrader.authentication.CTraderMarketDataProperties;
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.helper.MarketStateBuilder;
+import com.hope.trading.market_data.helper.TradingStatus;
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketStreamRequest;
 import com.hope.trading.market_data.model.MarketStreamType;
@@ -39,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Set;
 import java.util.HashMap;
 import java.util.Comparator;
+import java.util.UUID;
 
 @Component
 @ConditionalOnProperty(name = "ctrader.market-data.enabled", havingValue = "true")
@@ -171,6 +173,7 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
         if (current != null) current.close();
         forming.clear();
         invalidateDepthBooks();
+        markUnavailable();
         return Mono.empty();
     }
 
@@ -591,12 +594,18 @@ public class CTraderDataStreamProvider implements MarketDataStreamProvider {
     /** Marks provider silence as unavailable without asserting a local trading schedule. */
     public synchronized void refreshFreshness(Duration silenceAfter) {
         Instant boundary = clock.instant().minus(silenceAfter);
-        desired.values().forEach(active -> {
-            refreshMarketStateFromBroker(active.market());
-            Instant last = lastProviderEvents.get(key(active.market(), active.request()));
-            if (last == null || last.isBefore(boundary)) {
-                active.market().setMarketState(marketStateBuilder.buildUnknownState());
-                tickerPublisher.persistMarketState(active.market());
+        Map<UUID, List<ActiveSubscription>> subscriptionsByMarket = desired.values().stream()
+                .collect(java.util.stream.Collectors.groupingBy(active -> active.market().getMarketId()));
+        subscriptionsByMarket.values().forEach(subscriptions -> {
+            Market market = subscriptions.getFirst().market();
+            refreshMarketStateFromBroker(market);
+            boolean fresh = subscriptions.stream().anyMatch(active -> {
+                Instant last = lastProviderEvents.get(key(active.market(), active.request()));
+                return last != null && !last.isBefore(boundary);
+            });
+            if (!fresh && market.getMarketState().getTradingStatus() == TradingStatus.OPEN) {
+                market.setMarketState(marketStateBuilder.buildUnknownState());
+                tickerPublisher.persistMarketState(market);
             }
         });
     }

@@ -52,6 +52,24 @@ class CTraderMarketDataTest {
     }
 
     @Test
+    void resolvesClosedStateFromBrokerScheduleDuringCatalogueMapping() {
+        CTraderMarketData provider = new CTraderMarketData(new FakeClient() {
+            @Override public List<CTraderSymbol> symbols() {
+                return List.of(new CTraderSymbol(42, "EURUSD", 5, 100_000, 10_000_000_000L, 100_000,
+                        "ENABLED", "UTC", List.of(new CTraderInterval(
+                                86_400 + 9 * 3_600, 86_400 + 17 * 3_600)), List.of()));
+            }
+        }, properties(), new MarketStateBuilder(), Clock.fixed(
+                Instant.parse("2026-10-25T12:00:00Z"), ZoneOffset.UTC));
+
+        var state = provider.getMarkets().getFirst().getMarketState();
+
+        assertThat(state.getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.CLOSED);
+        assertThat(state.isTradable()).isFalse();
+    }
+
+    @Test
     void derivesQuantityPrecisionFromAllCanonicalQuantityConstraints() {
         CTraderMarketData provider = new CTraderMarketData(new FakeClient() {
             @Override public List<CTraderSymbol> symbols() {

@@ -84,7 +84,7 @@ class CTraderDataStreamProviderTest {
         Fixture fixture = new Fixture();
         fixture.client.symbol = new CTraderOpenApiClient.CTraderSymbol(42, "EURUSD", 5, 1, 2, 1,
                 "ENABLED", "UTC", List.of(new CTraderOpenApiClient.CTraderInterval(
-                86_400 + 9 * 3_600, 86_400 + 17 * 3_600)), List.of());
+                        0, 86_399)), List.of());
         fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
 
         fixture.provider.refreshFreshness(java.time.Duration.ZERO);
@@ -92,6 +92,40 @@ class CTraderDataStreamProviderTest {
         assertThat(fixture.market.getMarketState().getTradingStatus())
                 .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.UNKNOWN);
         verify(fixture.tickerPublisher, org.mockito.Mockito.atLeastOnce()).persistMarketState(fixture.market);
+    }
+
+    @Test
+    void keepsClosedStateWhenProviderIsSilentOutsideBrokerSession() {
+        Fixture fixture = new Fixture();
+        fixture.client.symbol = new CTraderOpenApiClient.CTraderSymbol(42, "EURUSD", 5, 1, 2, 1,
+                "ENABLED", "UTC", List.of(new CTraderOpenApiClient.CTraderInterval(
+                        86_400 + 9 * 3_600, 86_400 + 17 * 3_600)), List.of());
+        fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
+
+        fixture.provider.refreshFreshness(java.time.Duration.ZERO);
+
+        assertThat(fixture.market.getMarketState().getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.CLOSED);
+        assertThat(fixture.market.getMarketState().isTradable()).isFalse();
+    }
+
+    @Test
+    void keepsMarketFreshWhenAnySubscriptionReceivesData() {
+        Fixture fixture = new Fixture();
+        MarketStreamRequest ticker = new MarketStreamRequest(MarketStreamType.TICKER, null);
+        MarketStreamRequest ohlc = new MarketStreamRequest(MarketStreamType.OHLC,
+                new MarketStreamParameters(1, null));
+        fixture.client.symbol = new CTraderOpenApiClient.CTraderSymbol(42, "EURUSD", 5, 1, 2, 1,
+                "ENABLED", "UTC", List.of(new CTraderOpenApiClient.CTraderInterval(0, 86_399)), List.of());
+        fixture.provider.subscribe(List.of(fixture.market), ticker).block();
+        fixture.provider.subscribe(List.of(fixture.market), ohlc).block();
+        fixture.emit(new CTraderOpenApiClient.CTraderLiveTrendbarEvent(42, "M1",
+                new CTraderOpenApiClient.CTraderTrendbar(RECEIVED.getEpochSecond(), 1, 3, 123450L, 2, 100), RECEIVED));
+
+        fixture.provider.refreshFreshness(java.time.Duration.ZERO);
+
+        assertThat(fixture.market.getMarketState().getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.OPEN);
     }
 
     @Test
@@ -598,6 +632,9 @@ class CTraderDataStreamProviderTest {
 
         verify(fixture.evidenceCapture).invalidate(new OrderBookKey(fixture.market.getMarketId(), 2));
         assertThat(fixture.client.current.closed).isTrue();
+        assertThat(fixture.market.getMarketState().getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.UNKNOWN);
+        verify(fixture.tickerPublisher, org.mockito.Mockito.atLeastOnce()).persistMarketState(fixture.market);
     }
 
     private CTraderOpenApiClient.CTraderLiveTrendbarEvent bar(long timestamp, long low, Instant occurredAt) {

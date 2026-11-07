@@ -24,6 +24,20 @@ class CTraderMarketStateResolverTest {
     }
 
     @Test
+    void usesSundayAsTheScheduleWeekOriginAndTreatsEndAsExclusive() {
+        var openAtStart = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-08T00:00:00Z"), ZoneOffset.UTC));
+        var closedAtEnd = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-08T00:00:01Z"), ZoneOffset.UTC));
+        var schedule = List.of(new CTraderOpenApiClient.CTraderInterval(0, 1));
+
+        assertThat(openAtStart.resolve(symbol("UTC", schedule, List.of())).getTradingStatus())
+                .isEqualTo(TradingStatus.OPEN);
+        assertThat(closedAtEnd.resolve(symbol("UTC", schedule, List.of())).getTradingStatus())
+                .isEqualTo(TradingStatus.CLOSED);
+    }
+
+    @Test
     void closesBeforeSessionAndHandlesSessionCrossingMidnight() {
         var before = new CTraderMarketStateResolver(Clock.fixed(
                 Instant.parse("2026-11-09T08:59:59Z"), ZoneOffset.UTC));
@@ -50,6 +64,77 @@ class CTraderMarketStateResolverTest {
 
         assertThat(state.getTradingStatus()).isEqualTo(TradingStatus.CLOSED);
         assertThat(state.getClosureReason()).isEqualTo(MarketClosureReason.OUTSIDE_TRADING_HOURS);
+    }
+
+    @Test
+    void evaluatesHolidayInTheHolidayPublishedTimezone() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-10T00:30:00Z"), ZoneOffset.UTC));
+        var holiday = new CTraderOpenApiClient.CTraderHoliday(
+                Instant.parse("2026-11-09T00:00:00Z").toEpochMilli(), false, null, null,
+                "America/New_York");
+
+        var state = resolver.resolve(symbol("UTC", List.of(new CTraderOpenApiClient.CTraderInterval(
+                0, 7 * 86_400L)), List.of(holiday)));
+
+        assertThat(state.getTradingStatus()).isEqualTo(TradingStatus.CLOSED);
+        assertThat(state.getClosureReason()).isEqualTo(MarketClosureReason.OUTSIDE_TRADING_HOURS);
+    }
+
+    @Test
+    void treatsInvalidHolidayTimezoneAsUnknown() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+        var holiday = new CTraderOpenApiClient.CTraderHoliday(
+                Instant.parse("2026-11-09T00:00:00Z").toEpochMilli(), false, null, null,
+                "invalid/broker-timezone");
+
+        assertThat(resolver.resolve(symbol("UTC", List.of(new CTraderOpenApiClient.CTraderInterval(
+                0, 7 * 86_400L)), List.of(holiday))).getTradingStatus())
+                .isEqualTo(TradingStatus.UNKNOWN);
+    }
+
+    @Test
+    void treatsInvalidHolidayIntervalAsUnknown() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+        var holiday = new CTraderOpenApiClient.CTraderHoliday(
+                Instant.parse("2026-11-09T00:00:00Z").toEpochMilli(), false, 20_000L, 10_000L, "UTC");
+
+        assertThat(resolver.resolve(symbol("UTC", List.of(new CTraderOpenApiClient.CTraderInterval(
+                0, 7 * 86_400L)), List.of(holiday))).getTradingStatus())
+                .isEqualTo(TradingStatus.UNKNOWN);
+    }
+
+    @Test
+    void treatsInvalidScheduleTimezoneAsUnknown() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+
+        assertThat(resolver.resolve(symbol("invalid/broker-timezone", List.of(
+                new CTraderOpenApiClient.CTraderInterval(0, 7 * 86_400L)), List.of()))
+                .getTradingStatus()).isEqualTo(TradingStatus.UNKNOWN);
+    }
+
+    @Test
+    void treatsMalformedScheduleIntervalAsUnknown() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+
+        assertThat(resolver.resolve(symbol("UTC", List.of(
+                new CTraderOpenApiClient.CTraderInterval(20_000L, 10_000L)), List.of()))
+                .getTradingStatus()).isEqualTo(TradingStatus.UNKNOWN);
+    }
+
+    @Test
+    void treatsScheduleWithAnyMalformedIntervalAsUnknown() {
+        var resolver = new CTraderMarketStateResolver(Clock.fixed(
+                Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+
+        assertThat(resolver.resolve(symbol("UTC", List.of(
+                new CTraderOpenApiClient.CTraderInterval(0, 86_399),
+                new CTraderOpenApiClient.CTraderInterval(20_000L, 10_000L)), List.of()))
+                .getTradingStatus()).isEqualTo(TradingStatus.UNKNOWN);
     }
 
     @Test
