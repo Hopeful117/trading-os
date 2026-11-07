@@ -38,7 +38,8 @@ public class ServiceJwtAuthenticationFilter extends OncePerRequestFilter {
                 response.sendError(403, "Service is not authorized for this endpoint");
                 return;
             }
-            BrokerPrincipal principal = new BrokerPrincipal(service.actorId(), service.serviceName(), "ROLE_SERVICE");
+            BrokerPrincipal principal = new BrokerPrincipal(service.actorId(), service.serviceName(), "ROLE_SERVICE",
+                    service.delegatedAgentId());
             var authentication = new UsernamePasswordAuthenticationToken(principal, null,
                     List.of(new SimpleGrantedAuthority("ROLE_SERVICE")));
             org.springframework.security.core.context.SecurityContextHolder.getContext()

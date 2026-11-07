@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.config;
 
 import com.hope.trading.trading_core.dto.UserDto;
+import com.hope.trading.trading_core.security.AgentPrincipal;
 import com.hope.trading.trading_core.security.ServiceJwtService;
 import feign.RequestInterceptor;
 import org.springframework.context.annotation.Bean;
@@ -22,19 +23,31 @@ public class BrokerServiceFeignConfiguration {
     public RequestInterceptor brokerServiceAuthenticationInterceptor() {
         return template -> {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            UUID actorId = delegatedActor(template);
-            if (actorId == null && authentication != null && authentication.getPrincipal() instanceof UserDto user) {
+            UUID actorId = null;
+            if (authentication != null && authentication.getPrincipal() instanceof UserDto user) {
                 actorId = user.getUserId();
+            } else if (authentication != null && authentication.getPrincipal() instanceof AgentPrincipal agent) {
+                actorId = agent.ownerUserId();
             }
+            if (actorId == null) {
+                actorId = internalDelegatedActor(template);
+            }
+            AgentPrincipal delegatedAgent = authentication != null
+                    && authentication.getPrincipal() instanceof AgentPrincipal agent ? agent : null;
             template.header("X-Service-Authorization",
-                    "Bearer " + serviceJwtService.issue(BROKER_AUDIENCE, actorId));
+                    "Bearer " + serviceJwtService.issue(BROKER_AUDIENCE, actorId, delegatedAgent));
         };
     }
 
-    private UUID delegatedActor(feign.RequestTemplate template) {
-        var values = template.headers().get("X-Delegated-Actor");
+    private UUID internalDelegatedActor(feign.RequestTemplate template) {
+        var values = template.headers().get("X-Internal-Delegated-Actor");
         if (values == null || values.isEmpty()) return null;
         String value = values.iterator().next();
-        return value == null || value.isBlank() ? null : UUID.fromString(value);
+        if (value == null || value.isBlank()) return null;
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 }

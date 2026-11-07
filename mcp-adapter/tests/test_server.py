@@ -48,6 +48,10 @@ async def test_server_exposes_exactly_the_read_only_tools(fake_client):
         "get_active_scan",
         "get_market_thesis",
         "get_opportunities",
+        "list_authorized_accounts",
+        "get_authorized_account",
+        "get_authorized_account_status",
+        "get_authorized_positions",
         "start_market_research",
         "get_research_status",
         "get_research_report",
@@ -73,6 +77,19 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         await client.call_tool(
             "get_opportunities",
             {"instrument": "BTC/USD", "active_only": True, "limit": 10},
+        )
+        await client.call_tool("list_authorized_accounts", {})
+        await client.call_tool(
+            "get_authorized_account",
+            {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
+        )
+        await client.call_tool(
+            "get_authorized_account_status",
+            {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
+        )
+        await client.call_tool(
+            "get_authorized_positions",
+            {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
         )
         await client.call_tool(
             "start_market_research",
@@ -100,6 +117,10 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         "/api/v1/intelligence/scans/00000000-0000-0000-0000-000000000002",
         "/api/v1/intelligence/market-theses/latest",
         "/api/v1/opportunities",
+        "/api/v1/agent/broker-accounts",
+        "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004",
+        "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/read-only-status",
+        "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/positions",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003/report",
     ]
@@ -239,7 +260,7 @@ async def test_active_scan_http_ownership_denial_is_sanitized(monkeypatch, statu
         def __exit__(self, *args):
             return False
 
-    monkeypatch.setenv("TRADING_OS_JWT", "test-token")
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL", "test-credential")
     monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: Stream())
 
     async with Client(server.mcp, raise_exceptions=False) as client:
@@ -269,6 +290,10 @@ async def test_server_starts_over_stdio():
         "get_active_scan",
         "get_market_thesis",
         "get_opportunities",
+        "list_authorized_accounts",
+        "get_authorized_account",
+        "get_authorized_account_status",
+        "get_authorized_positions",
         "start_market_research",
         "get_research_status",
         "get_research_report",

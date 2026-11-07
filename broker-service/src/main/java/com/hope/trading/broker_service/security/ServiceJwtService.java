@@ -43,8 +43,14 @@ public class ServiceJwtService {
                 if (!trusted.getKey().equals(claims.getSubject())
                         || !claims.getAudience().contains(audience)) continue;
                 String actor = claims.get("actor_id", String.class);
+                String delegatedAgent = claims.get("delegated_agent_id", String.class);
+                String delegatedCredential = claims.get("delegated_credential_id", String.class);
+                Integer delegatedVersion = claims.get("delegated_credential_version", Integer.class);
                 return new ServicePrincipal(trusted.getKey(), audience,
-                        actor == null ? null : UUID.fromString(actor));
+                        actor == null ? null : UUID.fromString(actor),
+                        delegatedAgent == null ? null : UUID.fromString(delegatedAgent),
+                        delegatedCredential == null ? null : UUID.fromString(delegatedCredential),
+                        delegatedVersion);
             } catch (RuntimeException ignored) {
                 // A failed trusted-key candidate is expected; try the remaining trusted keys.
             }

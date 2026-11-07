@@ -34,7 +34,7 @@ class BrokerAccountReadOnlyStatusServiceTest {
                 Map.of("USD", BigDecimal.TEN), List.of(), Instant.now(), null, List.of(), List.of(),
                 "INCOMPLETE", "FRESH", Instant.now(), Instant.now(),
                 List.of("EQUITY_UNAVAILABLE", "FREE_MARGIN_UNAVAILABLE"));
-        when(snapshots.getAccountSnapshot(OWNER_ID, ACCOUNT_ID)).thenReturn(snapshot);
+        when(snapshots.getAccountSnapshot(ACCOUNT_ID)).thenReturn(snapshot);
 
         var result = service.status(OWNER_ID, ACCOUNT_ID);
 

@@ -11,14 +11,29 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 public class AgentAccessPolicyFilter extends OncePerRequestFilter {
+    private static final String AGENT_ACCOUNTS = "/api/v1/agent/broker-accounts";
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof AgentPrincipal) {
-            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Agent access is not enabled for this operation");
-            return;
+            if (!isAllowedAgentRoute(request)) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "Agent access is not enabled for this operation");
+                return;
+            }
         }
         chain.doFilter(request, response);
+    }
+
+    private boolean isAllowedAgentRoute(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (!path.equals(AGENT_ACCOUNTS) && !path.startsWith(AGENT_ACCOUNTS + "/")) {
+            return false;
+        }
+        return switch (request.getMethod()) {
+            case "GET" -> true;
+            default -> false;
+        };
     }
 }

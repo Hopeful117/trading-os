@@ -61,6 +61,36 @@ class ServiceJwtServiceTest {
         assertThat(principal.actorId()).isNull();
     }
 
+    @Test
+    void preservesSignedDelegatedAgentContext() {
+        var properties = properties();
+        var service = new ServiceJwtService(properties);
+        var owner = UUID.randomUUID();
+        var agent = UUID.randomUUID();
+        var credential = UUID.randomUUID();
+        var token = Jwts.builder()
+                .issuer("trading-core")
+                .subject("trading-core")
+                .audience().add("broker-service").and()
+                .claim("type", "service")
+                .claim("actor_id", owner.toString())
+                .claim("delegated_agent_id", agent.toString())
+                .claim("delegated_credential_id", credential.toString())
+                .claim("delegated_credential_version", 3)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .id(UUID.randomUUID().toString())
+                .signWith(Keys.hmacShaKeyFor(Base64.getDecoder().decode(SECRET)))
+                .compact();
+
+        var principal = service.validate(token, "broker-service");
+
+        assertThat(principal.actorId()).isEqualTo(owner);
+        assertThat(principal.delegatedAgentId()).isEqualTo(agent);
+        assertThat(principal.delegatedCredentialId()).isEqualTo(credential);
+        assertThat(principal.delegatedCredentialVersion()).isEqualTo(3);
+    }
+
     private ServiceJwtProperties properties() {
         var properties = new ServiceJwtProperties();
         properties.setEnabled(true);

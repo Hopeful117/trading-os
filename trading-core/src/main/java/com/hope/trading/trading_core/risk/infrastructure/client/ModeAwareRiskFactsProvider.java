@@ -86,9 +86,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 BrokerAccountSnapshotV2Dto authoritative = null;
                 try {
                     UUID actorId = account.getUser() == null ? null : account.getUser().getUserId();
-                    authoritative = actorId == null
-                            ? authoritativeSnapshots.getLatestAccountSnapshot(sourceId)
-                            : authoritativeSnapshots.getLatestAccountSnapshot(actorId, sourceId);
+                    authoritative = authoritativeSnapshots.getLatestAccountSnapshot(sourceId);
                 } catch (RetryableException | feign.FeignException.NotFound ignored) {
                     throw new IllegalStateException("Authoritative broker snapshot is unavailable", ignored);
                 }

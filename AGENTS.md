@@ -246,6 +246,26 @@ Operational commands, local ports, validation scripts, Python environments and
 MCP limitations are documented in `TOOLS.md`. Tooling must not bypass Gateway
 authentication, deterministic risk, human approval or the broker boundary.
 
+The MCP Adapter authenticates as an explicitly provisioned agent, never as a
+human user. It exchanges `TRADING_OS_AGENT_CREDENTIAL` for a short-lived agent
+token through the public Gateway and keeps that token only in process memory.
+Agent access is default-deny and requires an active, unexpired `AgentGrant` for
+the exact permission and resource. Agent principals may use only explicitly
+allow-listed read contracts. The current account boundary is
+`/api/v1/agent/broker-accounts/**` for granted account metadata, read-only
+status and broker-account-scoped positions. Synchronization remains disabled
+for agents until its approval semantics are represented explicitly. Agents
+cannot execute trades, manage positions, access broker
+credentials, administer agents or grants, or call internal service endpoints.
+
+When Trading Core calls Broker Service for an agent-originated request, the
+delegated owner identity must be derived from the validated server-side
+`AgentPrincipal`, and the signed service JWT carries the delegated agent and
+credential context for downstream audit. Client-controlled `X-Delegated-Actor`
+or equivalent headers must never establish authority. Broker Service must
+validate the service JWT, trusted caller, audience and owner scope before
+serving the request.
+
 ---
 
 ## Target Decision Pipeline
