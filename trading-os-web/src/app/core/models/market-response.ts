@@ -1,4 +1,4 @@
-export type MarketProductType = 'SPOT' | 'LINEAR_PERPETUAL';
+export type MarketProductType = 'SPOT' | 'LINEAR_PERPETUAL' | 'CFD';
 
 export interface MarketResponse {
   marketId: string;
@@ -35,6 +35,8 @@ export function marketProductTypeLabel(productType: MarketProductType | null | u
       return 'Spot';
     case 'LINEAR_PERPETUAL':
       return 'Futures';
+    case 'CFD':
+      return 'CFD';
     default:
       return 'Unknown';
   }

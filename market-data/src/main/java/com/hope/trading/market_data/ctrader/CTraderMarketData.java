@@ -38,6 +38,7 @@ public class CTraderMarketData implements MarketDataProvider {
     private final CTraderOpenApiClient client;
     private final CTraderMarketDataProperties properties;
     private final MarketStateBuilder marketStateBuilder;
+    private final CTraderMarketStateResolver marketStateResolver;
     private final Clock clock;
 
     public CTraderMarketData(CTraderOpenApiClient client, CTraderMarketDataProperties properties,
@@ -45,6 +46,7 @@ public class CTraderMarketData implements MarketDataProvider {
         this.client = client;
         this.properties = properties;
         this.marketStateBuilder = marketStateBuilder;
+        this.marketStateResolver = new CTraderMarketStateResolver(clock);
         this.clock = clock;
     }
 
@@ -122,7 +124,7 @@ public class CTraderMarketData implements MarketDataProvider {
                 .contractSourceVersion(contractSourceVersion(symbol.name(), type))
                 .contractObservedAt(contractObservedAt(symbol.name(), type))
                 // Symbol metadata alone is not proof that an order is executable now.
-                .marketState(marketStateBuilder.buildUnknownState())
+                .marketState(marketStateResolver.resolve(symbol))
                 .marketConstraints(MarketConstraints.builder()
                         // cTrader volumes are expressed in centi-units.
                         .minimumOrderSize(canonicalQuantity(symbol.minVolume()))
