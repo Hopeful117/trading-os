@@ -8,6 +8,11 @@ import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.repository.*;
 import com.hope.trading.trading_core.execution.domain.service.ExecutionLifecycleService;
 import com.hope.trading.trading_core.execution.domain.valueobject.*;
+import com.hope.trading.trading_core.market_data.dto.MarketResponse;
+import com.hope.trading.trading_core.market_data.dto.MarketState;
+import com.hope.trading.trading_core.market_data.helper.MarketProvider;
+import com.hope.trading.trading_core.market_data.helper.TradingStatus;
+import com.hope.trading.trading_core.market_data.service.MarketService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -40,7 +45,32 @@ class BrokerSubmissionStepRegressionTest {
     @Mock
     private ExecutionLifecycleService lifecycle;
 
+    @Mock
+    private MarketService markets;
+
     private BrokerSubmissionStep step;
+
+    @Test
+    void rejectsMarketAfterApprovalWhenCTraderStatusClosed() {
+        ExecutionIntent intent = intent(ExecutionStatus.VALIDATED);
+        ExecutionAttempt attempt = ExecutionAttempt.create(
+                new ExecutionAttemptId(uuid(150)), intent.id(), 1, NOW, UUID.randomUUID());
+        var ctx = approvedEntryContext(intent);
+        ctx.attempt(attempt);
+        ctx.t1EvaluationId(attempt.t1EvaluationId());
+        MarketResponse market = mock(MarketResponse.class);
+        when(market.getProvider()).thenReturn(MarketProvider.CTRADER);
+        when(market.getSymbol()).thenReturn("EURUSD");
+        when(market.getMarketState()).thenReturn(MarketState.builder()
+                .tradingStatus(TradingStatus.CLOSED).tradable(false).lastUpdated(NOW).build());
+        when(markets.findAll()).thenReturn(List.of(market));
+        step = new BrokerSubmissionStep(broker, intents, attempts, lifecycle, APPROVED_T1, markets, CLOCK);
+
+        assertThatThrownBy(() -> step.execute(ctx))
+                .isInstanceOf(com.hope.trading.trading_core.execution.domain.exception.InvalidExecutionStateException.class)
+                .hasMessageContaining("unknown, closed, or stale");
+        verifyNoInteractions(broker);
+    }
 
     @Test
     void executeCallsLifecycleStartAndSavesAttemptAndIntent() {

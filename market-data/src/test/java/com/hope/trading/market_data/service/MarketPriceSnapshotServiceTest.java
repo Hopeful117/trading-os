@@ -347,8 +347,8 @@ class MarketPriceSnapshotServiceTest {
                 List.of(marketId), Duration.ofSeconds(30), Duration.ofSeconds(1), "CONFIRM_OR_ACQUIRE"));
 
         assertThat(result.getFirst().status()).isEqualTo(MarketPriceSnapshotStatus.FRESH);
-        assertThat(result.getFirst().tradable()).isTrue();
-        assertThat(market.getMarketState().isTradable()).isTrue();
+        assertThat(result.getFirst().tradable()).isFalse();
+        assertThat(market.getMarketState().isTradable()).isFalse();
         assertThat(result.getFirst().bid()).isEqualByComparingTo("1.1000");
     }
 

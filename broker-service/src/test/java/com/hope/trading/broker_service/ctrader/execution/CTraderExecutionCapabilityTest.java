@@ -62,7 +62,7 @@ class CTraderExecutionCapabilityTest {
     }
 
     @Test
-    void submitsOnlyToAConnectedProviderConfirmedDemoWithTradePermission() {
+    void submitsWhenFreshOpenMarketTradabilityEvidenceIsPresent() {
         BrokerConnection connection = connected(true, false);
         when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connection));
         when(secrets.read(any(CredentialReference.class))).thenReturn(new PlainSecret(
@@ -76,16 +76,36 @@ class CTraderExecutionCapabilityTest {
         var result = capability().execute(new BrokerModels.ExecutionRequest(
                 UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
                 BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
-                BigDecimal.ONE, BigDecimal.valueOf(.99)));
+                BigDecimal.ONE, BigDecimal.valueOf(.99), "OPEN", true, NOW));
 
         assertInstanceOf(BrokerModels.Acknowledged.class, result);
     }
 
     @Test
-    void rejectsLiveAccountEvenWhenTradePermissionIsPresent() {
-        BrokerConnection connection = connected(true, true);
-        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connection));
+    void rejectsExecutionWhenMarketTradabilityIsUnknown() {
+        var result = capability().execute(new BrokerModels.ExecutionRequest(
+                UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
+                BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.valueOf(.99)));
 
+        assertThat(((BrokerModels.Rejected) result).reasonCode())
+                .isEqualTo("CTRADER_MARKET_TRADABILITY_UNKNOWN");
+    }
+
+    @Test
+    void rejectsExecutionWhenMarketStateEvidenceIsFromTheFuture() {
+        var result = capability().execute(new BrokerModels.ExecutionRequest(
+                UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
+                BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.valueOf(.99), "OPEN", true, NOW.plusSeconds(1)));
+
+        assertThat(((BrokerModels.Rejected) result).reasonCode())
+                .isEqualTo("CTRADER_MARKET_TRADABILITY_UNKNOWN");
+        verifyNoInteractions(connections, secrets, client);
+    }
+
+    @Test
+    void rejectsLiveAccountEvenWhenTradePermissionIsPresent() {
         var result = capability().execute(new BrokerModels.ExecutionRequest(
                 UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
                 BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
@@ -95,17 +115,7 @@ class CTraderExecutionCapabilityTest {
     }
 
     @Test
-    void acceptsProviderLiveFlagForExplicitFtmoFreeSimulatedProgram() {
-        BrokerConnection connection = connected(true, true);
-        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connection));
-        when(secrets.read(any(CredentialReference.class))).thenReturn(new PlainSecret(
-                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
-        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
-                new CTraderReadOnlyObservation("1001", "USD", BigDecimal.valueOf(50000),
-                        BigDecimal.valueOf(50000), BigDecimal.ZERO, BigDecimal.valueOf(50000),
-                        List.of(), List.of(), List.of(), NOW, NOW, NOW, true, List.of()));
-        when(client.submitOrder(any(), any())).thenReturn(new CTraderOpenApiClient.CTraderOrderResponse("order-1"));
-
+    void rejectsFtmoFreeExecutionUntilMarketTradabilityIsAuthoritative() {
         var result = new CTraderExecutionCapability(connections, secrets, client,
                 new CTraderProperties("client", "secret", "https://callback", "https://auth", "demo",
                         "FTMO_FREE", "https://token", "wss://demo.ctraderapi.com:5036", 600),
@@ -114,30 +124,20 @@ class CTraderExecutionCapabilityTest {
                 BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.valueOf(.99)));
 
-        assertInstanceOf(BrokerModels.Acknowledged.class, result);
+        assertThat(((BrokerModels.Rejected) result).reasonCode())
+                .isEqualTo("CTRADER_MARKET_TRADABILITY_UNKNOWN");
     }
 
     @Test
-    void propagatesReferencePriceForProtectedMarketExecution() {
-        BrokerConnection connection = connected(true, false);
-        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connection));
-        when(secrets.read(any(CredentialReference.class))).thenReturn(new PlainSecret(
-                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
-        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
-                new CTraderReadOnlyObservation("1001", "USD", BigDecimal.valueOf(50000),
-                        BigDecimal.valueOf(50000), BigDecimal.ZERO, BigDecimal.valueOf(50000),
-                        List.of(), List.of(), List.of(), NOW, NOW, NOW, true, List.of()));
-        when(client.submitOrder(any(), any())).thenReturn(new CTraderOpenApiClient.CTraderOrderResponse("order-1"));
-
+    void rejectsProtectedMarketExecutionWhenMarketTradabilityIsUnknown() {
         var result = capability().execute(new BrokerModels.ExecutionRequest(
                 UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT, "EURUSD",
                 BrokerModels.Side.BUY, BrokerModels.OrderType.MARKET, BigDecimal.ONE, null,
                 BigDecimal.valueOf(.99), List.of(BigDecimal.valueOf(1.02)), BigDecimal.ONE));
 
-        assertInstanceOf(BrokerModels.Acknowledged.class, result);
-        var captor = org.mockito.ArgumentCaptor.forClass(CTraderOpenApiClient.CTraderOrderRequest.class);
-        verify(client).submitOrder(any(), captor.capture());
-        assertThat(captor.getValue().referencePrice()).isEqualByComparingTo("1");
+        assertThat(((BrokerModels.Rejected) result).reasonCode())
+                .isEqualTo("CTRADER_MARKET_TRADABILITY_UNKNOWN");
+        verifyNoInteractions(connections, secrets, client);
     }
 
     @Test

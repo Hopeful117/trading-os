@@ -44,9 +44,23 @@ class ResearchApplicationServiceTest {
             new ObjectMapper().registerModule(new JavaTimeModule()), clock);
 
     @Test
-    void rejectsNonPairScope() {
+    void rejectsSingleMarketScopeForOnDemandAnalysis() {
+        assertThatThrownBy(() -> service.start(actor, "single-market-key",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket), "Analyze BTC", "STANDARD")))
+                .isInstanceOf(ResearchException.class)
+                .hasMessageContaining("Exactly two distinct market IDs");
+    }
+
+    @Test
+    void rejectsEmptyOrOversizedMarketScope() {
         assertThatThrownBy(() -> service.start(actor, "key",
-                new ResearchApplicationService.ResearchRequest(List.of(firstMarket), "compare", "STANDARD")))
+                new ResearchApplicationService.ResearchRequest(List.of(), "compare", "STANDARD")))
+                .isInstanceOf(ResearchException.class)
+                .hasMessageContaining("Exactly two distinct market IDs");
+        assertThatThrownBy(() -> service.start(actor, "key-2",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket, secondMarket, UUID.randomUUID()), "compare", "STANDARD")))
                 .isInstanceOf(ResearchException.class)
                 .hasMessageContaining("Exactly two distinct market IDs");
     }

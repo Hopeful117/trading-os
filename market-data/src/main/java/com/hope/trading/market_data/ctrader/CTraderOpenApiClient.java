@@ -17,7 +17,21 @@ public interface CTraderOpenApiClient {
         throw new UnsupportedOperationException("cTrader live streams are unavailable");
     }
 
-    record CTraderSymbol(long id, String name, int digits, long minVolume, long maxVolume, long stepVolume) { }
+    record CTraderSymbol(long id, String name, int digits, long minVolume, long maxVolume, long stepVolume,
+                         String tradingMode, String scheduleTimeZone, List<CTraderInterval> schedule,
+                         List<CTraderHoliday> holidays) {
+        public CTraderSymbol {
+            schedule = List.copyOf(schedule == null ? List.of() : schedule);
+            holidays = List.copyOf(holidays == null ? List.of() : holidays);
+        }
+
+        public CTraderSymbol(long id, String name, int digits, long minVolume, long maxVolume, long stepVolume) {
+            this(id, name, digits, minVolume, maxVolume, stepVolume, null, null, List.of(), List.of());
+        }
+    }
+    record CTraderInterval(long startSecond, long endSecond) { }
+    record CTraderHoliday(long holidayDateEpochMillis, boolean recurring, Long startSecond, Long endSecond,
+                          String scheduleTimeZone) { }
     record CTraderTrendbar(long timestamp, long open, long high, long low, long close, long volume) { }
     record CTraderTrendbarPage(List<CTraderTrendbar> trendbars, boolean hasMore) {
         public CTraderTrendbarPage {

@@ -7,6 +7,7 @@ import com.hope.trading.trading_core.tradeplanning.infrastructure.MarketIntellig
 import com.hope.trading.trading_core.market_data.service.MarketService;
 import feign.FeignException;
 import java.time.Clock;
+import java.time.Duration;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public final class ManualTradePlanOrchestrationService {
+    private static final Duration MARKET_STATE_MAX_AGE = Duration.ofSeconds(30);
     private final AccountRepository accounts;
     private final TradePlanningProfileService profiles;
     private final MarketService markets;
@@ -51,7 +53,7 @@ public final class ManualTradePlanOrchestrationService {
                 .findFirst()
                 .orElseThrow(() -> failure(HttpStatus.NOT_FOUND,
                         "MARKET_NOT_FOUND", "Market does not exist"));
-        if (market.getMarketState() == null || !market.getMarketState().isTradable()) {
+        if (!isCurrentlyTradable(market.getMarketState())) {
             throw failure(HttpStatus.UNPROCESSABLE_ENTITY,
                     "MARKET_NOT_TRADABLE", "Market is not currently tradable");
         }
@@ -135,6 +137,14 @@ public final class ManualTradePlanOrchestrationService {
                         preferences.stopStrategy().name(), preferences.stopDistancePercent(),
                         preferences.targetStrategy().name(), preferences.targetRiskMultiple(),
                         preferences.horizon().name(), preferences.validity()));
+    }
+
+    private boolean isCurrentlyTradable(com.hope.trading.trading_core.market_data.dto.MarketState state) {
+        return state != null
+                && state.isTradable()
+                && state.getTradingStatus() == com.hope.trading.trading_core.market_data.helper.TradingStatus.OPEN
+                && state.getLastUpdated() != null
+                && !state.getLastUpdated().isBefore(clock.instant().minus(MARKET_STATE_MAX_AGE));
     }
 
     private ManualTradePlanException failure(HttpStatus status, String code, String message) {

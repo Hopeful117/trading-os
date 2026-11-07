@@ -7,6 +7,15 @@ import java.time.Instant;
 
 @Component
 public class MarketStateBuilder {
+    public MarketState buildUnknownState() {
+        return MarketState.builder()
+                .tradingStatus(TradingStatus.UNKNOWN)
+                .tradable(false)
+                .closureReason(MarketClosureReason.UNKNOW)
+                .lastUpdated(Instant.now())
+                .build();
+    }
+
     public MarketState buildInitialState(MarketAvailability availability) {
 
         if (availability.equals(MarketAvailability.AVAILABLE)) {

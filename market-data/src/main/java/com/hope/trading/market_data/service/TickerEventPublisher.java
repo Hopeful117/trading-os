@@ -2,9 +2,7 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.model.TickerEvent;
 import com.hope.trading.market_data.model.Market;
-import com.hope.trading.market_data.model.MarketState;
 import com.hope.trading.market_data.model.PriceObservation;
-import com.hope.trading.market_data.helper.TradingStatus;
 import com.hope.trading.market_data.repository.MarketRepository;
 import com.hope.trading.market_data.repository.PriceObservationRepository;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +58,12 @@ public class TickerEventPublisher {
         store(event);
     }
 
+    public void persistMarketState(Market market) {
+        if (market != null && market.getMarketId() != null && market.getMarketState() != null) {
+            marketRepository.save(market);
+        }
+    }
+
     private void persistObservation(TickerEvent event) {
         if (event.marketId() == null || event.provider() == null || event.occurredAt() == null) {
             log.warn("Ignoring persistence for incomplete ticker event symbol={}", event.symbol());
@@ -69,14 +73,6 @@ public class TickerEventPublisher {
         if (market == null) {
             log.warn("Ignoring ticker observation for unknown marketId={}", event.marketId());
             return;
-        }
-        if (event.bid() != null && event.ask() != null && event.occurredAt() != null) {
-            market.setMarketState(MarketState.builder()
-                    .tradingStatus(TradingStatus.OPEN)
-                    .tradable(true)
-                    .lastUpdated(Instant.now(clock))
-                    .build());
-            marketRepository.save(market);
         }
         priceObservationRepository.save(new PriceObservation(
                 UUID.randomUUID(), event.marketId(), event.provider(), event.symbol(),

@@ -67,15 +67,67 @@ class CTraderDataStreamProviderTest {
     }
 
     @Test
-    void marksTheSubscribedMarketTradableWhenACompleteSpotArrives() {
+    void keepsTradabilityUnknownWhenACompleteSpotArrives() {
         Fixture fixture = new Fixture();
-        fixture.market.setMarketState(new MarketStateBuilder().buildInitialState(
-                com.hope.trading.market_data.helper.MarketAvailability.UNAVAILABLE));
+        fixture.market.setMarketState(new MarketStateBuilder().buildUnknownState());
         fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
 
         fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 123450L, 123550L, RECEIVED));
 
-        assertThat(fixture.market.getMarketState().isTradable()).isTrue();
+        assertThat(fixture.market.getMarketState().isTradable()).isFalse();
+        assertThat(fixture.market.getMarketState().getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.UNKNOWN);
+    }
+
+    @Test
+    void providerSilenceInvalidatesStateEvenWhenSymbolMetadataIsCached() {
+        Fixture fixture = new Fixture();
+        fixture.client.symbol = new CTraderOpenApiClient.CTraderSymbol(42, "EURUSD", 5, 1, 2, 1,
+                "ENABLED", "UTC", List.of(new CTraderOpenApiClient.CTraderInterval(
+                86_400 + 9 * 3_600, 86_400 + 17 * 3_600)), List.of());
+        fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
+
+        fixture.provider.refreshFreshness(java.time.Duration.ZERO);
+
+        assertThat(fixture.market.getMarketState().getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.UNKNOWN);
+        verify(fixture.tickerPublisher, org.mockito.Mockito.atLeastOnce()).persistMarketState(fixture.market);
+    }
+
+    @Test
+    void keepsClosedForexClosedWhenFreshQuotesArrive() {
+        Fixture fixture = new Fixture();
+        fixture.client.symbol = new CTraderOpenApiClient.CTraderSymbol(42, "EURUSD", 5, 1, 2, 1,
+                "ENABLED", "UTC", List.of(new CTraderOpenApiClient.CTraderInterval(
+                86_400 + 9 * 3_600, 86_400 + 17 * 3_600)), List.of());
+        fixture.market.setMarketState(com.hope.trading.market_data.model.MarketState.builder()
+                .tradingStatus(com.hope.trading.market_data.helper.TradingStatus.CLOSED)
+                .tradable(false)
+                .closureReason(com.hope.trading.market_data.helper.MarketClosureReason.WEEKEND)
+                .lastUpdated(RECEIVED).build());
+        fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
+
+        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 123450L, 123550L, RECEIVED));
+
+        assertThat(fixture.market.getMarketState().isTradable()).isFalse();
+        assertThat(fixture.market.getMarketState().getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.CLOSED);
+        assertThat(fixture.market.getMarketState().getClosureReason())
+                .isEqualTo(com.hope.trading.market_data.helper.MarketClosureReason.OUTSIDE_TRADING_HOURS);
+    }
+
+    @Test
+    void keepsCryptoUnknownWhenFreshQuotesArriveWithoutAuthoritativeStatus() {
+        Fixture fixture = new Fixture();
+        fixture.market.setSymbol("BTC/USD");
+        fixture.market.setMarketState(new MarketStateBuilder().buildUnknownState());
+        fixture.provider.subscribe(List.of(fixture.market), new MarketStreamRequest(MarketStreamType.TICKER, null)).block();
+
+        fixture.emit(new CTraderOpenApiClient.CTraderSpotEvent(42, 123450L, 123550L, RECEIVED));
+
+        assertThat(fixture.market.getMarketState().isTradable()).isFalse();
+        assertThat(fixture.market.getMarketState().getTradingStatus())
+                .isEqualTo(com.hope.trading.market_data.helper.TradingStatus.UNKNOWN);
     }
 
     @Test
@@ -622,8 +674,12 @@ class CTraderDataStreamProviderTest {
         private boolean failSpotSubscription;
         private boolean failSpotUnsubscription;
         private boolean failTrendbarSubscription;
+        private CTraderSymbol symbol;
         @Override public List<CTraderSymbol> symbols() { return List.of(); }
-        @Override public CTraderSymbol symbol(long symbolId) { throw new UnsupportedOperationException(); }
+        @Override public CTraderSymbol symbol(long symbolId) {
+            if (symbol != null) return symbol;
+            throw new UnsupportedOperationException();
+        }
         @Override public List<CTraderTrendbar> trendbars(long symbolId, String period, Instant from, Instant to, int count) { return List.of(); }
         @Override public CTraderStream openStream(Consumer<CTraderStreamEvent> events, Runnable termination) {
             if (failOpenStreamCount > 0) {

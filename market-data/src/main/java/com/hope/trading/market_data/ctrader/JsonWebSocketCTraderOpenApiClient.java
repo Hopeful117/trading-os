@@ -312,10 +312,31 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         if (!node.isObject() || id <= 0 || name.isBlank()) {
             throw new IllegalStateException("cTrader symbol metadata is incomplete");
         }
+        List<CTraderInterval> schedule = new ArrayList<>();
+        for (JsonNode interval : node.path("schedule")) {
+            schedule.add(new CTraderInterval(interval.path("startSecond").asLong(-1),
+                    interval.path("endSecond").asLong(-1)));
+        }
+        List<CTraderHoliday> holidays = new ArrayList<>();
+        for (JsonNode holiday : node.path("holiday")) {
+            holidays.add(new CTraderHoliday(holiday.path("holidayDate").asLong(-1),
+                    holiday.path("isRecurring").asBoolean(false),
+                    optionalLong(holiday, "startSecond"), optionalLong(holiday, "endSecond"),
+                    textOrNull(holiday, "scheduleTimeZone")));
+        }
         return new CTraderSymbol(id, name, node.path("digits").asInt(fallback == null ? 0 : fallback.digits()),
                 node.path("minVolume").asLong(fallback == null ? 0 : fallback.minVolume()),
                 node.path("maxVolume").asLong(fallback == null ? 0 : fallback.maxVolume()),
-                node.path("stepVolume").asLong(fallback == null ? 0 : fallback.stepVolume()));
+                node.path("stepVolume").asLong(fallback == null ? 0 : fallback.stepVolume()),
+                textOrNull(node, "tradingMode"), textOrNull(node, "scheduleTimeZone"), schedule, holidays);
+    }
+
+    private Long optionalLong(JsonNode node, String field) {
+        return node.has(field) ? node.path(field).asLong() : null;
+    }
+
+    private String textOrNull(JsonNode node, String field) {
+        return node.has(field) && !node.path(field).isNull() ? node.path(field).asText() : null;
     }
 
     private CTraderSymbol symbol(Session session, CTraderSymbol fallback) {

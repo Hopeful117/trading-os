@@ -8,7 +8,7 @@ class TradingStatusTest {
 
     @Test
     void allEnumValuesAreAccessible() {
-        assertThat(TradingStatus.values()).hasSize(3);
+        assertThat(TradingStatus.values()).hasSize(4);
         assertThat(TradingStatus.valueOf("OPEN")).isEqualTo(TradingStatus.OPEN);
         assertThat(TradingStatus.valueOf("CLOSED")).isEqualTo(TradingStatus.CLOSED);
         assertThat(TradingStatus.valueOf("HALTED")).isEqualTo(TradingStatus.HALTED);

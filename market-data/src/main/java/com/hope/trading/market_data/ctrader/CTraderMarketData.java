@@ -122,7 +122,7 @@ public class CTraderMarketData implements MarketDataProvider {
                 .contractSourceVersion(contractSourceVersion(symbol.name(), type))
                 .contractObservedAt(contractObservedAt(symbol.name(), type))
                 // Symbol metadata alone is not proof that an order is executable now.
-                .marketState(marketStateBuilder.buildInitialState(MarketAvailability.UNAVAILABLE))
+                .marketState(marketStateBuilder.buildUnknownState())
                 .marketConstraints(MarketConstraints.builder()
                         // cTrader volumes are expressed in centi-units.
                         .minimumOrderSize(canonicalQuantity(symbol.minVolume()))

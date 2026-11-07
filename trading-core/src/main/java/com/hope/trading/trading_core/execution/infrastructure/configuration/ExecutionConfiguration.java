@@ -93,11 +93,13 @@ public class ExecutionConfiguration {
              ExecutionTimeRiskRevalidationService t1Revalidation,
               ExecutionFinalizationStep executionFinalizationStep,
               com.hope.trading.trading_core.challenge.application.ChallengeExecutionAdmissionService challengeAdmission,
-              T1ApprovalVerifier t1ApprovalVerifier){
+             T1ApprovalVerifier t1ApprovalVerifier,
+              com.hope.trading.trading_core.market_data.service.MarketService marketService,
+             com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository accounts){
         return new ExecuteTradeService(intents,new ExecutionValidationStep(validation,lifecycle),
                 new IdempotencyVerificationStep(idempotency),
                 new ExecutionAttemptCreationStep(attempts,ids),
-                 new BrokerSubmissionStep(broker,intents,attempts,lifecycle,t1ApprovalVerifier),
+                   new BrokerSubmissionStep(broker,intents,attempts,lifecycle,t1ApprovalVerifier,marketService,accounts,clock),
                 new BrokerResponseProcessingStep(ids),
                  executionFinalizationStep,events,clock, t1Revalidation, challengeAdmission);
      }

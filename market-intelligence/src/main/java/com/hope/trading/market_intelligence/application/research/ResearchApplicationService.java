@@ -41,6 +41,7 @@ import java.time.Duration;
 @Service
 public class ResearchApplicationService {
     private static final Logger log = LoggerFactory.getLogger(ResearchApplicationService.class);
+    private static final int MIN_MARKETS = 2;
     private static final int MAX_MARKETS = 2;
     private static final int MAX_OBJECTIVE_LENGTH = 500;
     private static final Set<String> DEPTHS = Set.of("STANDARD", "DEEP");
@@ -564,9 +565,11 @@ public class ResearchApplicationService {
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 200) {
             throw new ResearchException("INVALID_IDEMPOTENCY_KEY", "A bounded Idempotency-Key is required", 400);
         }
-        if (request == null || request.marketIds() == null || request.marketIds().size() != MAX_MARKETS
+        if (request == null || request.marketIds() == null
+                || request.marketIds().size() < MIN_MARKETS || request.marketIds().size() > MAX_MARKETS
                 || new HashSet<>(request.marketIds()).size() != request.marketIds().size()) {
-            throw new ResearchException("INVALID_MARKET_SCOPE", "Exactly two distinct market IDs are required", 400);
+            throw new ResearchException("INVALID_MARKET_SCOPE",
+                    "Exactly two distinct market IDs are required", 400);
         }
         if (request.objective() == null || request.objective().isBlank()
                 || request.objective().length() > MAX_OBJECTIVE_LENGTH) {
