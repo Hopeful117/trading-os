@@ -27,6 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.ACCOUNT_AUTH_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.ACCOUNT_LIST_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.APPLICATION_AUTH_RESPONSE;
+import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.SYMBOL_BY_ID_RESPONSE;
+import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.SYMBOL_LIST_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_SPOTS_RESPONSE;
 import static com.hope.trading.ctrader.openapi.protocol.CTraderPayloadTypes.UNSUBSCRIBE_DEPTH_QUOTES_RESPONSE;
@@ -37,6 +39,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -93,6 +96,8 @@ class JsonWebSocketCTraderOpenApiClientTest {
                 case 2100 -> APPLICATION_AUTH_RESPONSE;
                 case 2149 -> ACCOUNT_LIST_RESPONSE;
                 case 2102 -> ACCOUNT_AUTH_RESPONSE;
+                case 2114 -> SYMBOL_LIST_RESPONSE;
+                case 2116 -> SYMBOL_BY_ID_RESPONSE;
                     case 2129 -> UNSUBSCRIBE_SPOTS_RESPONSE;
                     case 2158 -> UNSUBSCRIBE_DEPTH_QUOTES_RESPONSE;
                 case 2136 -> UNSUBSCRIBE_LIVE_TRENDBAR_RESPONSE;
@@ -106,6 +111,10 @@ class JsonWebSocketCTraderOpenApiClientTest {
             }
             String payload = responseType == ACCOUNT_LIST_RESPONSE
                     ? "{\"ctidTraderAccount\":[{\"ctidTraderAccountId\":42,\"isLive\":false}]}"
+                    : responseType == SYMBOL_LIST_RESPONSE
+                    ? "{\"symbol\":[{\"symbolId\":42,\"symbolName\":\"EURUSD\",\"digits\":5}]}"
+                    : responseType == SYMBOL_BY_ID_RESPONSE
+                    ? "{\"symbol\":[{\"symbolId\":42,\"symbolName\":\"EURUSD\",\"digits\":5,\"minVolume\":1000,\"maxVolume\":100000000,\"stepVolume\":1000,\"tradingMode\":\"ENABLED\",\"scheduleTimeZone\":\"UTC\",\"schedule\":[{\"startSecond\":0,\"endSecond\":86399}]}]}"
                     : "{}";
             listener.get().onText(socket, "{\"payloadType\":" + responseType
                     + ",\"clientMsgId\":\"" + request.path("clientMsgId").asText()
@@ -119,6 +128,13 @@ class JsonWebSocketCTraderOpenApiClientTest {
                     webSocketListener.onOpen(socket);
                     return CompletableFuture.completedFuture(socket);
                 });
+        CTraderOpenApiClient.CTraderSymbol listedSymbol = client.symbols().getFirst();
+        assertThat(listedSymbol.minVolume()).isEqualTo(1000);
+        assertThat(listedSymbol.maxVolume()).isEqualTo(100000000);
+        assertThat(listedSymbol.stepVolume()).isEqualTo(1000);
+        assertThat(listedSymbol.scheduleTimeZone()).isEqualTo("UTC");
+        assertThat(listedSymbol.schedule()).containsExactly(new CTraderOpenApiClient.CTraderInterval(0, 86399));
+
         CountDownLatch eventReceived = new CountDownLatch(2);
         List<CTraderOpenApiClient.CTraderStreamEvent> events = new ArrayList<>();
 
@@ -126,6 +142,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
             events.add(event);
             eventReceived.countDown();
         }, () -> { });
+        assertThat(stream.symbol(42).name()).isEqualTo("EURUSD");
         listener.get().onText(socket, "{\"payloadType\":2131,\"payload\":{\"symbolId\":42,\"timestamp\":1000,\"bid\":123,\"ask\":124}}", true);
         listener.get().onText(socket, "{\"payloadType\":2155,\"payload\":{\"symbolId\":42,\"newQuotes\":[{\"id\":7,\"bid\":123450,\"size\":100}],\"deletedQuotes\":[]}}", true);
         stream.unsubscribeSpots(42);
@@ -148,7 +165,7 @@ class JsonWebSocketCTraderOpenApiClientTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("cTrader provider rejected the request: ERR_UNSUBSCRIBE (rejected)");
         stream.close();
-        verify(socket).sendClose(anyInt(), eq("done"));
+        verify(socket, times(2)).sendClose(anyInt(), eq("done"));
     }
 
     @Test

@@ -17,10 +17,12 @@ public final class ManualTradePlanFingerprintFactory {
     }
 
     public String fingerprint(ManualTradePlanningRequest request) {
+        // Expiration is derived from the current profile validity, so it must not
+        // make a replay with the same logical request look like a new request.
         Payload payload = new Payload(request.actorId(), request.tradingAccountId(),
                 request.instrument(), request.direction(), request.entry(),
                 request.stopLoss(), request.takeProfits(), request.positionSizing(),
-                request.referencePrice(), request.expiresAt(), request.expirationPolicy(),
+                request.referencePrice(), request.expirationPolicy(),
                 request.thesis(), new TreeSet<>(request.confirmationConditions()),
                 new TreeSet<>(request.invalidationConditions()), new TreeSet<>(request.managementRules()));
         try {
@@ -43,7 +45,7 @@ public final class ManualTradePlanFingerprintFactory {
 
     private record Payload(UUID actorId, UUID tradingAccountId, String instrument,
                            Object direction, Object entry, Object stopLoss, Object takeProfits,
-                           Object positionSizing, Object referencePrice, Object expiresAt,
+                           Object positionSizing, Object referencePrice,
                            String expirationPolicy,
                            String thesis, TreeSet<String> confirmations,
                            TreeSet<String> invalidations, TreeSet<String> management) { }

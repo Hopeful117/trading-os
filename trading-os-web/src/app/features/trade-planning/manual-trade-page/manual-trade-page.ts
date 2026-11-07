@@ -59,7 +59,9 @@ export class ManualTradePage {
             value.account.tradePlanningProfileId !== undefined,
         )
         .map(({ account, brokerAccount }) => ({ ...account, brokerAccount })),
-      markets: markets.filter((market) => market.marketState.tradable),
+      markets: markets.filter(
+        (market) => market.identityResolved === true && market.marketState.tradable,
+      ),
     })),
     map((view) => view as ManualTradeView),
     catchError((error: unknown) =>

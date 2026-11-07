@@ -22,6 +22,7 @@
         <tr>
           <th>Symbol</th>
           <th>Provider</th>
+          <th>Provider ID</th>
           <th>Product</th>
           <th>Base</th>
           <th>Quote</th>
@@ -35,9 +36,11 @@
             @for (market of markets; track market.marketId) {
               <tr
                 class="market-row"
+                [class.unresolved]="!market.identityResolved"
                 tabindex="0"
-                (click)="openMarket(market.marketId)"
-                (keydown.enter)="openMarket(market.marketId)"
+                [attr.aria-disabled]="!market.identityResolved"
+                (click)="openMarket(market)"
+                (keydown.enter)="openMarket(market)"
               >
                 <td class="symbol">
                   {{ market.symbol }}
@@ -46,6 +49,8 @@
                 <td>
                   {{ market.provider }}
                 </td>
+
+                <td>{{ market.providerSymbol || 'UNRESOLVED' }}</td>
 
                 <td>
                   <span

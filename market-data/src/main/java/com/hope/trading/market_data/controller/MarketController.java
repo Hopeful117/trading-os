@@ -12,7 +12,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/markets")
@@ -28,12 +31,22 @@ public class MarketController {
 
     @GetMapping
     public ResponseEntity <List<MarketResponse>> findAll() {
+        List<Market> markets = marketService.findAll();
+        Map<String, Set<String>> providerSymbolsByIdentity = markets.stream()
+                .collect(Collectors.groupingBy(this::identityKey,
+                        Collectors.mapping(Market::getProviderSymbol, Collectors.toSet())));
+        return ResponseEntity.ok(markets.stream()
+                .map(market -> marketMapper.toDto(market,
+                        providerSymbolsByIdentity.get(identityKey(market)).size() == 1
+                                && market.getProviderSymbol() != null
+                                && !market.getProviderSymbol().isBlank()))
+                .toList());
+    }
 
-        return ResponseEntity.ok( marketService.findAll()
-                .stream()
-                .map(marketMapper::toDto)
-                .toList()
-        );
+    private String identityKey(Market market) {
+        return String.valueOf(market.getProvider()) + "|"
+                + String.valueOf(market.getSymbol()) + "|"
+                + String.valueOf(market.getProductType());
     }
 
 

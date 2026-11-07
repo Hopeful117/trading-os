@@ -342,6 +342,13 @@ export class Accounts {
     return accounts.some((account) => account.brokerAccountId === brokerAccount.id);
   }
 
+  isPaperTradingAccount(account: Account, brokerAccounts: BrokerAccount[]): boolean {
+    return (
+      brokerAccounts.find((broker) => broker.id === account.brokerAccountId)?.executionMode ===
+      'PAPER'
+    );
+  }
+
   canRecover(account: BrokerAccount): boolean {
     return (
       account.executionMode === 'LIVE' &&

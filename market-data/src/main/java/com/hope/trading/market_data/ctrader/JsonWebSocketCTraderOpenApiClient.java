@@ -80,7 +80,9 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             for (JsonNode node : response.path("symbol")) {
                 listed.add(mapSymbol(node));
             }
-            List<CTraderSymbol> incomplete = listed.stream().filter(symbol -> symbol.digits() <= 0).toList();
+            List<CTraderSymbol> incomplete = listed.stream()
+                    .filter(JsonWebSocketCTraderOpenApiClient::requiresDetailedMetadata)
+                    .toList();
             if (incomplete.isEmpty()) return List.copyOf(listed);
 
             ObjectNode payload = accountPayload();
@@ -331,6 +333,16 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 textOrNull(node, "tradingMode"), textOrNull(node, "scheduleTimeZone"), schedule, holidays);
     }
 
+    private static boolean requiresDetailedMetadata(CTraderSymbol symbol) {
+        return symbol.digits() <= 0
+                || symbol.minVolume() <= 0
+                || symbol.maxVolume() <= 0
+                || symbol.stepVolume() <= 0
+                || symbol.tradingMode() == null
+                || symbol.scheduleTimeZone() == null
+                || symbol.schedule().isEmpty();
+    }
+
     private Long optionalLong(JsonNode node, String field) {
         return node.has(field) ? node.path(field).asLong() : null;
     }
@@ -475,6 +487,11 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     String raw = messages.poll(remainingMillis, TimeUnit.MILLISECONDS);
                     if (raw == null) continue;
                     JsonNode response = objectMapper.readTree(raw);
+                    if (response.path("payloadType").asInt() == ACCOUNT_DISCONNECT_EVENT) {
+                        long accountId = response.path("payload").path("ctidTraderAccountId").asLong(0);
+                        throw new IllegalStateException("cTrader account session disconnected"
+                                + (accountId > 0 ? " accountId=" + accountId : ""));
+                    }
                     if (clientMessageId.equals(response.path("clientMsgId").asText())
                             && response.path("payloadType").asInt() == responseType) {
                         if (response.path("errorCode").isTextual()
@@ -532,6 +549,11 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         private final long accountId;
 
         private Stream(Session session, long accountId) { this.session = session; this.accountId = accountId; }
+
+        @Override public CTraderSymbol symbol(long symbolId) {
+            return JsonWebSocketCTraderOpenApiClient.this.symbol(session,
+                    new CTraderSymbol(symbolId, "", 0, 0, 0, 0));
+        }
 
         @Override public void subscribeSpots(long symbolId) {
             subscribeSpots(List.of(symbolId));

@@ -45,6 +45,7 @@ const markets = [
     marketId: 'market-1',
     provider: 'KRAKEN',
     symbol: 'BTC/USD',
+    identityResolved: true,
     baseAsset: 'BTC',
     quoteAsset: 'USD',
     marketState: { tradingStatus: 'OPEN', tradable: true, closureReason: '', lastUpdated: '' },

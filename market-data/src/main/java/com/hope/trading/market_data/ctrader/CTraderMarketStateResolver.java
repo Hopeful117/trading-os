@@ -10,10 +10,15 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Set;
 
 /** Resolves scheduled symbol eligibility without treating a quote as execution evidence. */
 final class CTraderMarketStateResolver {
     private static final long SECONDS_PER_WEEK = 7 * 24 * 60 * 60L;
+    private static final Set<String> FIAT_CODES = Set.of(
+            "AUD", "CAD", "CHF", "CNH", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF",
+            "ILS", "JPY", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
+            "TRY", "USD", "ZAR");
     private final Clock clock;
 
     CTraderMarketStateResolver(Clock clock) {
@@ -21,13 +26,23 @@ final class CTraderMarketStateResolver {
     }
 
     MarketState resolve(CTraderOpenApiClient.CTraderSymbol symbol) {
+        return resolve(symbol, null);
+    }
+
+    MarketState resolve(CTraderOpenApiClient.CTraderSymbol symbol, Instant lastProviderEventAt) {
         Instant observedAt = clock.instant();
         String mode = symbol.tradingMode();
         if (mode == null || mode.isBlank()) return unknown(observedAt);
         if (!enabled(mode)) return closed(MarketClosureReason.HALTED, observedAt);
+        if (forexSaturday(symbol.name(), lastProviderEventAt, observedAt)) {
+            return closed(MarketClosureReason.WEEKEND, observedAt);
+        }
         if (symbol.scheduleTimeZone() == null || symbol.scheduleTimeZone().isBlank()
                 || symbol.schedule().isEmpty()
                 || symbol.schedule().stream().anyMatch(interval -> !validInterval(interval))) {
+            if (weekendEvidence(symbol.name(), lastProviderEventAt, observedAt)) {
+                return closed(MarketClosureReason.WEEKEND, observedAt);
+            }
             return unknown(observedAt);
         }
 
@@ -48,6 +63,13 @@ final class CTraderMarketStateResolver {
         return open ? MarketState.builder().tradingStatus(TradingStatus.OPEN).tradable(true)
                 .lastUpdated(observedAt).build()
                 : closed(MarketClosureReason.OUTSIDE_TRADING_HOURS, observedAt);
+    }
+
+    MarketState resolveWeekendFallback(String symbolName, Instant lastProviderObservationAt) {
+        Instant observedAt = clock.instant();
+        return weekendEvidence(symbolName, lastProviderObservationAt, observedAt)
+                ? closed(MarketClosureReason.WEEKEND, observedAt)
+                : unknown(observedAt);
     }
 
     private boolean holiday(CTraderOpenApiClient.CTraderSymbol symbol, Instant observedAt) {
@@ -106,6 +128,31 @@ final class CTraderMarketStateResolver {
 
     private boolean enabled(String mode) {
         return "0".equals(mode) || "ENABLED".equalsIgnoreCase(mode);
+    }
+
+    private boolean weekendEvidence(String symbolName,
+                                    Instant lastProviderEventAt, Instant observedAt) {
+        if (!isForex(symbolName)) return false;
+        DayOfWeek day = observedAt.atZone(ZoneId.of("UTC")).getDayOfWeek();
+        if (day != DayOfWeek.SATURDAY && day != DayOfWeek.SUNDAY) return false;
+        return lastProviderEventAt != null
+                && lastProviderEventAt.atZone(ZoneId.of("UTC")).toLocalDate()
+                .isBefore(observedAt.atZone(ZoneId.of("UTC")).toLocalDate());
+    }
+
+    private boolean forexSaturday(String symbolName, Instant lastProviderEventAt, Instant observedAt) {
+        return isForex(symbolName)
+                && observedAt.atZone(ZoneId.of("UTC")).getDayOfWeek() == DayOfWeek.SATURDAY
+                && (lastProviderEventAt == null
+                || lastProviderEventAt.atZone(ZoneId.of("UTC")).toLocalDate()
+                .isBefore(observedAt.atZone(ZoneId.of("UTC")).toLocalDate()));
+    }
+
+    private boolean isForex(String symbolName) {
+        String normalized = symbolName == null ? "" : symbolName.replace("/", "");
+        return normalized.matches("[A-Z]{6}")
+                && FIAT_CODES.contains(normalized.substring(0, 3))
+                && FIAT_CODES.contains(normalized.substring(3));
     }
 
     private MarketState unknown(Instant observedAt) {

@@ -2,6 +2,7 @@ package com.hope.trading.market_data.helper;
 
 import com.hope.trading.market_data.model.Market;
 import com.hope.trading.market_data.model.MarketConstraints;
+import com.hope.trading.market_data.model.MarketState;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -34,5 +35,27 @@ class MarketMapperFinancialContractTest {
         assertThat(response.getContractMultiplier()).isEqualByComparingTo("1");
         assertThat(response.getContractSourceId()).isEqualTo("market-data:eurusd");
         assertThat(response.getContractSourceVersion()).isEqualTo(3L);
+    }
+
+    @Test
+    void marksIncompleteIdentityAsNonTradableWithoutChangingTheStoredMarket() {
+        Market market = Market.builder()
+                .provider(MarketProvider.CTRADER)
+                .symbol("EUR/USD")
+                .productType(null)
+                .providerSymbol(null)
+                .marketState(MarketState.builder()
+                        .tradingStatus(TradingStatus.OPEN)
+                        .tradable(true)
+                        .lastUpdated(Instant.parse("2026-11-07T12:00:00Z"))
+                        .build())
+                .build();
+
+        var response = new MarketMapper().toDto(market);
+
+        assertThat(response.isIdentityResolved()).isFalse();
+        assertThat(response.getMarketState().isTradable()).isFalse();
+        assertThat(response.getMarketState().getTradingStatus()).isEqualTo(TradingStatus.UNKNOWN);
+        assertThat(market.getMarketState().isTradable()).isTrue();
     }
 }

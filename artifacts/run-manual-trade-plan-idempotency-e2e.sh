@@ -46,7 +46,7 @@ PROFILE_VERSION="$(jq -r '.[0].semanticVersion' "$TMP_DIR/eligible.body")"
 
 request broker_account -X POST "$BASE_URL/api/v1/broker-accounts" \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-    --data "{\"provider\":\"KRAKEN\",\"displayName\":\"Manual idempotency E2E\",\"executionMode\":\"PAPER\",\"initialCapital\":10000,\"riskProfile\":{\"profileId\":\"$PROFILE_ID\",\"semanticVersion\":\"$PROFILE_VERSION\"}}"
+    --data "{\"provider\":\"7f6f5f8e-3d42-4a0d-9e11-4d8f2a7c6b01\",\"displayName\":\"Manual idempotency E2E\",\"executionMode\":\"PAPER\",\"initialCapital\":10000,\"riskProfile\":{\"profileId\":\"$PROFILE_ID\",\"semanticVersion\":\"$PROFILE_VERSION\"}}"
 require_status broker_account '^2[0-9][0-9]$'
 BROKER_ACCOUNT_ID="$(jq -r '.id' "$TMP_DIR/broker_account.body")"
 
@@ -57,8 +57,28 @@ ACCOUNT_ID="$(jq -r --arg broker "$BROKER_ACCOUNT_ID" '.[] | select(.brokerAccou
 
 request markets -X GET "$BASE_URL/api/v1/markets" -H "Authorization: Bearer $TOKEN"
 require_status markets '^2[0-9][0-9]$'
-MARKET_ID="$(jq -r 'map(select(.marketState.isTradable == true or .tradable == true))[0].marketId // map(select(.marketId != null))[0].marketId // empty' "$TMP_DIR/markets.body")"
+MARKET_ID="$(jq -r 'map(select(.identityResolved == true and .marketState.tradable == true and .marketState.tradingStatus == "OPEN"))[0].marketId // empty' "$TMP_DIR/markets.body")"
 [[ -n "$MARKET_ID" && "$MARKET_ID" != "null" ]] || { printf 'No market was available\n' >&2; exit 1; }
+
+request ticker_subscription -X POST "$BASE_URL/api/v1/markets/$MARKET_ID/subscriptions" \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    --data '{"type":"TICKER","parameters":null}'
+require_status ticker_subscription '^204$'
+
+MARKET_READY=false
+for attempt in $(seq 1 30); do
+    request market_ready -X GET "$BASE_URL/api/v1/markets/$MARKET_ID" \
+        -H "Authorization: Bearer $TOKEN"
+    if [[ "$(jq -r '.identityResolved == true and .marketState.tradingStatus == "OPEN" and .marketState.tradable == true' "$TMP_DIR/market_ready.body")" == "true" ]]; then
+        MARKET_READY=true
+        break
+    fi
+    sleep 2
+done
+[[ "$MARKET_READY" == "true" ]] || {
+    printf 'Market did not become tradable after ticker subscription: %s\n' "$(body_of market_ready)" >&2
+    exit 1
+}
 
 request market -X GET "$BASE_URL/api/v1/markets/$MARKET_ID" -H "Authorization: Bearer $TOKEN"
 require_status market '^2[0-9][0-9]$'

@@ -61,6 +61,10 @@ public interface CTraderOpenApiClient {
     sealed interface CTraderStreamEvent permits CTraderSpotEvent, CTraderDepthEvent, CTraderLiveTrendbarEvent { }
 
     interface CTraderStream extends AutoCloseable {
+        default CTraderSymbol symbol(long symbolId) {
+            throw new UnsupportedOperationException("cTrader stream symbol metadata is unavailable");
+        }
+
         void subscribeSpots(long symbolId);
 
         default void subscribeSpots(List<Long> symbolIds) {

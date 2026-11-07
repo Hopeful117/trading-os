@@ -423,7 +423,7 @@ public final class MarketThesisComposer {
                 "Current OHLC Momentum confirmation is required"));
         boolean tradeabilityClear = tradeability != null && tradeability.assessment() != null
                 && tradeability.assessment().evidence().stream().noneMatch(value ->
-                value.role() == TradeabilityAssessment.Role.MISSING
+                (value.role() == TradeabilityAssessment.Role.MISSING && value.required())
                         || value.role() == TradeabilityAssessment.Role.WEAKENING
                         || value.role() == TradeabilityAssessment.Role.BLOCKING);
         confirmations.add(new MarketThesisCondition(

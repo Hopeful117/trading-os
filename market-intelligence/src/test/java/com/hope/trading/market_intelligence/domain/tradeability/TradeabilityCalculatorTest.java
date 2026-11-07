@@ -42,6 +42,16 @@ class TradeabilityCalculatorTest {
     }
 
     @Test
+    void missingOrderBookIsOptionalForTradeabilityAssessment() {
+        TradeabilityAssessment result = calculator.calculate(
+                MARKET_ID, "EUR/USD", CUTOFF, null, null, null, null);
+
+        assertThat(result.evidence()).anyMatch(value -> value.code().equals("LIQUIDITY_UNAVAILABLE")
+                && !value.required()
+                && value.role() == TradeabilityAssessment.Role.MISSING);
+    }
+
+    @Test
     void highImpactApplicableScheduledEventBlocksWithinPreEventWindow() {
         NewsEventContext event = new NewsEventContext(
                 UUID.randomUUID(), "calendar", "provider", "event-1", "ECB decision",
@@ -180,7 +190,7 @@ class TradeabilityCalculatorTest {
     }
 
     @Test
-    void emptyOrderBookIsExplicitlyInsufficient() {
+    void emptyOrderBookIsExplicitlyInsufficientWithoutMakingItRequired() {
         OrderBookContext orderBook = new OrderBookContext(
                 MARKET_ID, 1, OrderBookContext.ReplayStatus.AVAILABLE, UUID.randomUUID(), CUTOFF,
                 CUTOFF, CUTOFF, null, null, "provider", "EUR/USD", "v1", "fingerprint",
@@ -190,7 +200,7 @@ class TradeabilityCalculatorTest {
                 MARKET_ID, "EUR/USD", CUTOFF, null, section(orderBook), null, null);
 
         assertThat(result.evidence()).anyMatch(value -> value.code().equals("LIQUIDITY_INSUFFICIENT")
-                && value.required());
+                && !value.required());
     }
 
     private ContextSection section(com.hope.trading.market_intelligence.domain.ContextPayload payload) {

@@ -376,6 +376,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                                                            java.time.Instant from, java.time.Instant to) {
         Instant started = Instant.now();
         try (Session session = new Session(externalAccountId,
+                System.nanoTime() + MAX_READ_ONLY_OBSERVATION_DURATION.toNanos(),
                 requestMetadata("ACCOUNT_SNAPSHOT", "SYNCHRONIZATION", "REQUIRED"))) {
             validateEnvironment();
             authenticateApplication(session);
@@ -786,7 +787,9 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         // from local balance plus an unrealized-PnL observation.
         BigDecimal equity = money(traderNode.path("equity"), moneyDigits);
         if (!pnlComplete) reasons.add("UNREALIZED_PNL_UNAVAILABLE");
-         Instant providerObservedAt = latestProviderTimestamp(trader, reconcile, deals, started, reasons);
+         // Historical position/order/deal timestamps describe the returned records,
+         // not the freshness of this successfully completed account observation.
+         Instant providerObservedAt = started;
         if (rawPositions.availability() == CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT) {
             reasons.add("RESPONSE_FIELD_UNAVAILABLE:position");
         }

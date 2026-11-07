@@ -226,6 +226,22 @@ requires a new decision and stops implementation.
 No correction may enable execution, bypass safety controls, weaken identity
 matching, substitute an account, or turn an unavailable fact into a value.
 
+### Approved Market-Closure Evidence Derivation
+
+When cTrader does not provide a usable symbol schedule, the market-data adapter
+may derive a conservative weekend closure only when all of these facts hold:
+
+- the provider symbol is an FX pair composed of two known fiat currency codes;
+- the current UTC day is Saturday or Sunday;
+- the last provider observation occurred before the current UTC date;
+- no usable cTrader schedule or holiday evidence is available.
+
+The derived state is `CLOSED` with `MarketClosureReason.WEEKEND`. This rule does
+not apply to crypto, metals, indices, equities or other non-FX symbols. A provider
+observation received locally on the current day must not be treated as evidence
+from an earlier provider timestamp. When the evidence is insufficient, the state
+remains `UNKNOWN` and the market remains non-tradable.
+
 ## 11. Validation Commands
 
 Run the exact applicable checks and report each result:

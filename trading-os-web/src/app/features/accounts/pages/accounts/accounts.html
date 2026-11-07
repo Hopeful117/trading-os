@@ -353,24 +353,26 @@
   </p>
 }
 <div class="accounts-container">
-  @for (account of accounts | async; track account.accountId) {
-    <div>
-      <app-account-card [account]="account"> </app-account-card>
-      @if (account.brokerAccountId) {
-        <button
-          type="button"
-          class="secondary-button"
-          data-testid="operational-synchronize-button"
-          [disabled]="operationalSyncingAccountId() !== null"
-          (click)="synchronizeOperationalAccount(account)"
-        >
-          {{
-            operationalSyncingAccountId() === account.brokerAccountId
-              ? 'Synchronisation…'
-              : 'Synchroniser le compte'
-          }}
-        </button>
-      }
-    </div>
+  @if (accountState | async; as state) {
+    @for (account of state.accounts; track account.accountId) {
+      <div>
+        <app-account-card [account]="account"> </app-account-card>
+        @if (account.brokerAccountId && !isPaperTradingAccount(account, state.brokerAccounts)) {
+          <button
+            type="button"
+            class="secondary-button"
+            data-testid="operational-synchronize-button"
+            [disabled]="operationalSyncingAccountId() !== null"
+            (click)="synchronizeOperationalAccount(account)"
+          >
+            {{
+              operationalSyncingAccountId() === account.brokerAccountId
+                ? 'Synchronisation…'
+                : 'Synchroniser le compte'
+            }}
+          </button>
+        }
+      </div>
+    }
   }
 </div>
