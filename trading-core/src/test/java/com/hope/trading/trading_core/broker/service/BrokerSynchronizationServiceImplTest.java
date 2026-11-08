@@ -30,6 +30,8 @@ import com.hope.trading.trading_core.service.TradingCalculatorServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -63,6 +65,7 @@ class BrokerSynchronizationServiceImplTest {
     private final AccountMapper accountMapper = new AccountMapper();
     private final InstrumentFinancialContractResolver financialContracts = mock(InstrumentFinancialContractResolver.class);
     private final LiveCfdReconciliationService liveCfdReconciliation = mock(LiveCfdReconciliationService.class);
+    private final PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
 
     private BrokerSynchronizationServiceImpl service;
 
@@ -72,10 +75,12 @@ class BrokerSynchronizationServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        when(transactionManager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
         service = new BrokerSynchronizationServiceImpl(
                 userRepository, accountRepository, tradeRepository,
                 new TradingCalculatorServiceImpl(), brokerApiClient, brokerAccountSnapshotV2Client,
-                accountMapper, brokerAccountRepository, financialContracts, liveCfdReconciliation);
+                accountMapper, brokerAccountRepository, financialContracts, liveCfdReconciliation,
+                transactionManager);
 
         user = new User();
         user.setUserId(userId);

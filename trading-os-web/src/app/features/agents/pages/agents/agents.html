@@ -59,6 +59,60 @@
   }
 </section>
 
+<section class="panel" aria-labelledby="operation-requests-title">
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">Human approval</p>
+      <h2 id="operation-requests-title">Demandes d’opération</h2>
+    </div>
+    <span class="security-note">L’approbation ne lance pas la synchronisation</span>
+  </div>
+
+  @if (operationRequests().length === 0) {
+    <p class="empty-state">Aucune demande en attente.</p>
+  } @else {
+    <div class="operation-list">
+      @for (request of operationRequests(); track request.id) {
+        <article class="operation-card">
+          <div>
+            <p class="eyebrow">{{ request.operationType }}</p>
+            <h3>{{ accountLabel(request.resourceId) }}</h3>
+            <p class="muted">
+              Agent {{ request.agentId }} · expire le {{ request.expiresAt | date: 'short' }}
+            </p>
+          </div>
+          <span class="status" [class.revoked]="request.status === 'REJECTED'">
+            {{ request.status }}
+          </span>
+          @if (request.status === 'PENDING_APPROVAL') {
+            <div class="agent-actions">
+              <button
+                type="button"
+                class="secondary-button"
+                (click)="approveOperation(request)"
+                [disabled]="busy()"
+              >
+                Approuver
+              </button>
+              <button
+                type="button"
+                class="danger-button"
+                (click)="rejectOperation(request)"
+                [disabled]="busy()"
+              >
+                Rejeter
+              </button>
+            </div>
+          }
+          @if (request.outcome) {
+            <p class="muted">Résultat: {{ request.outcome }}</p>
+          }
+        </article>
+      }
+    </div>
+  }
+</section>
+
 <section class="panel" aria-labelledby="configured-agents-title">
   <div class="panel-heading">
     <div>

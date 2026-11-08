@@ -97,6 +97,36 @@ def get_authorized_positions(
 
 
 @mcp.tool()
+def request_account_synchronization(
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
+) -> str:
+    """Create a pending, human-approval-required account synchronization request."""
+    return client_from_environment().post(
+        "/api/v1/agent/operation-requests",
+        {"operationType": "ACCOUNT_SYNCHRONIZATION", "resourceType": "BROKER_ACCOUNT", "resourceId": str(broker_account_id)},
+        f"account-sync-request:{broker_account_id}",
+    )
+
+
+@mcp.tool()
+def get_agent_operation_status(
+    request_id: Annotated[UUID, Field(description="Agent operation request UUID.")],
+) -> str:
+    """Read the status of an operation requested by this agent."""
+    return client_from_environment().get(f"/api/v1/agent/operation-requests/{request_id}")
+
+
+@mcp.tool()
+def execute_approved_agent_operation(
+    request_id: Annotated[UUID, Field(description="Approved agent operation request UUID.")],
+) -> str:
+    """Execute one approved operation; POST failures are never retried."""
+    return client_from_environment().post(
+        f"/api/v1/agent/operation-requests/{request_id}/execute", {}, f"agent-operation-execute:{request_id}"
+    )
+
+
+@mcp.tool()
 def start_market_research(
     market_ids: Annotated[list[UUID], Field(min_length=2, max_length=2, description="Exactly two canonical market UUIDs.")],
     objective: Annotated[str, Field(min_length=1, max_length=500, description="Bounded research objective.")],

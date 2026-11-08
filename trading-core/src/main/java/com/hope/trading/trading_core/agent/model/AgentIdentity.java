@@ -116,6 +116,10 @@ public class AgentIdentity {
         return updatedAt;
     }
 
+    public long version() {
+        return version;
+    }
+
     private void requireMutable(Instant now) {
         if (now == null) {
             throw new IllegalArgumentException("now is required");

@@ -18,6 +18,9 @@ describe('Agents', () => {
     activate: ReturnType<typeof vi.fn>;
     revoke: ReturnType<typeof vi.fn>;
     revokeGrant: ReturnType<typeof vi.fn>;
+    operationRequests: ReturnType<typeof vi.fn>;
+    approveOperation: ReturnType<typeof vi.fn>;
+    rejectOperation: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -32,6 +35,9 @@ describe('Agents', () => {
       activate: vi.fn(),
       revoke: vi.fn(),
       revokeGrant: vi.fn(),
+      operationRequests: vi.fn(() => of([])),
+      approveOperation: vi.fn(),
+      rejectOperation: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -105,5 +111,19 @@ describe('Agents', () => {
 
     expect(agentService.connectToOpenCode).toHaveBeenCalledWith('agent-1');
     expect(fixture.nativeElement.textContent).not.toContain('credential');
+  });
+
+  it('approves and rejects pending operation requests through the human workflow', () => {
+    const request = { id: 'operation-1', status: 'PENDING_APPROVAL' } as never;
+    agentService.approveOperation.mockReturnValue(of(request));
+    agentService.rejectOperation.mockReturnValue(of(request));
+
+    component.approveOperation(request);
+    expect(agentService.approveOperation).toHaveBeenCalledWith('operation-1');
+    expect(component.feedback()?.message).toContain('approuvée');
+
+    component.rejectOperation(request);
+    expect(agentService.rejectOperation).toHaveBeenCalledWith('operation-1');
+    expect(component.feedback()?.message).toContain('rejetée');
   });
 });

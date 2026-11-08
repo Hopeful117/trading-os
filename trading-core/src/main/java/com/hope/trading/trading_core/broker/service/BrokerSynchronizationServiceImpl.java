@@ -28,7 +28,9 @@ import com.hope.trading.trading_core.service.TradingCalculatorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -53,6 +55,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
     private final BrokerAccountRepository brokerAccountRepository;
     private final InstrumentFinancialContractResolver financialContracts;
     private final LiveCfdReconciliationService liveCfdReconciliation;
+    private final PlatformTransactionManager transactionManager;
 
     @Override
     @Transactional
@@ -76,7 +79,6 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
     }
 
     @Override
-    @Transactional
     public BrokerAccountSynchronizationResult synchronize(UUID ownerId, UUID brokerAccountId) {
         if (ownerId == null || brokerAccountId == null) {
             throw new IllegalArgumentException("ownerId and brokerAccountId are required");
@@ -87,7 +89,6 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         if (account.getUser() == null || !ownerId.equals(account.getUser().getUserId())) {
             throw new EntityNotFoundException("Account mapping not found");
         }
-
         var brokerAccount = brokerAccountRepository.findByIdAndOwnerId(brokerAccountId, ownerId)
                 .orElseThrow(() -> new EntityNotFoundException("Broker account mapping not found"));
         if (brokerAccount.executionMode() != com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode.LIVE) {
@@ -106,6 +107,18 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         log.info("broker_account_synchronization_snapshot_completed brokerAccountId={} durationMs={} completeness={} freshness={}",
                 brokerAccountId, elapsedMillis(startedAt), snapshot == null ? null : snapshot.completeness(),
                 snapshot == null ? null : snapshot.freshness());
+        return new TransactionTemplate(transactionManager).execute(status ->
+                persistSynchronization(ownerId, brokerAccountId, brokerAccount, snapshot));
+    }
+
+    private BrokerAccountSynchronizationResult persistSynchronization(UUID ownerId, UUID brokerAccountId,
+                                                                       com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount brokerAccount,
+                                                                       BrokerAccountSnapshotV2Dto snapshot) {
+        Account account = accountRepository.findByBrokerAccountId(brokerAccountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account mapping not found"));
+        if (account.getUser() == null || !ownerId.equals(account.getUser().getUserId())) {
+            throw new EntityNotFoundException("Account mapping not found");
+        }
         validateSnapshot(brokerAccount.providerRegistrationReference(), brokerAccountId, snapshot);
         if (!"FRESH".equals(snapshot.freshness())) {
             throw new BrokerAccountSnapshotIncompleteException(snapshot.completeness(), snapshot.freshness(),
@@ -120,7 +133,6 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                 && !brokerAccount.externalAccountId().equals(snapshot.externalAccountId())) {
             throw new IllegalStateException("External broker account identity mismatch");
         }
-
         if (snapshot.balances() != null && !snapshot.balances().isEmpty()) {
             replaceBalances(account, snapshot.balances());
         }
@@ -136,8 +148,6 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
                 ? null : snapshot.account().derivedEquityFact());
         account.setMarketDataTimestamp(snapshot.observedAt());
         if (hasAuthoritativeEquity(snapshot)) {
-            // LIVE equity is provider-authoritative. Do not rebuild it from the
-            // locally synchronized balances and trade state.
             account.setEquity(snapshot.account().equity());
             if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {
                 account.setPeakEquity(account.getEquity());

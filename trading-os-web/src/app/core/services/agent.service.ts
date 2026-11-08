@@ -9,6 +9,7 @@ import {
   AgentGrant,
   AgentPermission,
   AgentType,
+  AgentOperationRequest,
 } from '../models/agent.model';
 
 @Injectable({ providedIn: 'root' })
@@ -74,5 +75,25 @@ export class AgentService {
 
   revokeGrant(agentId: string, grantId: string): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/${agentId}/grants/${grantId}/revoke`, {});
+  }
+
+  operationRequests(): Observable<AgentOperationRequest[]> {
+    return this.http.get<AgentOperationRequest[]>(
+      `${environment.gatewayUrl}v1/agent/operation-requests`,
+    );
+  }
+
+  approveOperation(id: string): Observable<AgentOperationRequest> {
+    return this.http.post<AgentOperationRequest>(
+      `${environment.gatewayUrl}v1/agent/operation-requests/${id}/approve`,
+      {},
+    );
+  }
+
+  rejectOperation(id: string): Observable<AgentOperationRequest> {
+    return this.http.post<AgentOperationRequest>(
+      `${environment.gatewayUrl}v1/agent/operation-requests/${id}/reject`,
+      {},
+    );
   }
 }
