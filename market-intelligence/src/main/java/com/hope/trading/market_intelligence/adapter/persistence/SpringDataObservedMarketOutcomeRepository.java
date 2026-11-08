@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.Collection;
+import org.springframework.data.domain.Pageable;
 
 interface SpringDataObservedMarketOutcomeRepository
         extends JpaRepository<JpaObservedMarketOutcomeEntity, UUID> {
@@ -19,4 +20,11 @@ interface SpringDataObservedMarketOutcomeRepository
 
     List<JpaObservedMarketOutcomeEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThan(
             Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive);
+
+    List<JpaObservedMarketOutcomeEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanOrderByEvaluationCutoffAsc(
+            Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive, Pageable pageable);
+
+    long countByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndStatus(
+            Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
+            com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus status);
 }

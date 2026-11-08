@@ -14,6 +14,14 @@ public interface FeatureSnapshotRepository {
     List<FeatureSnapshot> findByPopulation(Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
                                            String featureProjectionVersion, String evidencePolicy);
 
+    List<FeatureSnapshot> findByPopulation(Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
+                                           String featureProjectionVersion, String evidencePolicy, int limit);
+
+    List<FeatureSnapshot> findByMarkets(Set<UUID> marketIds, String featureProjectionVersion, String evidencePolicy);
+
+    long countByMarketsAfter(Set<UUID> marketIds, Instant cutoffExclusive, String featureProjectionVersion,
+                             String evidencePolicy);
+
     Optional<FeatureSnapshot> findLatestByMarket(UUID marketId, Instant endCutoffExclusive,
                                                   String featureProjectionVersion, String evidencePolicy);
 

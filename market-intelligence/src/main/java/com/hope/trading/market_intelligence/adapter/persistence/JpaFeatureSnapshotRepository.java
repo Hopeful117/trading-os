@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
 import java.util.Set;
 
 @Repository
@@ -57,6 +58,30 @@ public class JpaFeatureSnapshotRepository implements FeatureSnapshotRepository {
                 .stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public List<FeatureSnapshot> findByMarkets(Set<UUID> marketIds, String featureProjectionVersion, String evidencePolicy) {
+        return repository.findByMarketIdInAndProjectionVersionAndEvidencePolicy(
+                        marketIds, featureProjectionVersion, evidencePolicy).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<FeatureSnapshot> findByPopulation(Set<UUID> marketIds, Instant startCutoffInclusive,
+                                                   Instant endCutoffExclusive, String featureProjectionVersion,
+                                                   String evidencePolicy, int limit) {
+        return repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicy(
+                        marketIds, startCutoffInclusive, endCutoffExclusive, featureProjectionVersion, evidencePolicy,
+                        PageRequest.of(0, limit)).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public long countByMarketsAfter(Set<UUID> marketIds, Instant cutoffInclusive,
+                                    String featureProjectionVersion, String evidencePolicy) {
+        return repository.countByMarketIdInAndEvaluationCutoffGreaterThanAndProjectionVersionAndEvidencePolicy(
+                marketIds, cutoffInclusive, featureProjectionVersion, evidencePolicy);
     }
 
     @Override

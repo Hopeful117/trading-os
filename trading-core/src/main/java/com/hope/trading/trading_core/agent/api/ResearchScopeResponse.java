@@ -9,9 +9,24 @@ import java.util.UUID;
 
 public record ResearchScopeResponse(UUID id, UUID ownerUserId, Set<UUID> marketIds,
                                     ResearchScopeStatus status, Instant createdAt,
-                                    Instant expiresAt, Instant revokedAt, long scopeVersion) {
+                                    Instant expiresAt, Instant revokedAt, long scopeVersion,
+                                    HistoricalResearchConstraintsResponse historicalConstraints) {
+    public record HistoricalResearchConstraintsResponse(
+            Instant earliestCutoff,
+            Instant latestCutoff,
+            Long maxObservations,
+            Long maxExportRows,
+            Long maxExportBytes,
+            Long maxExecutionDurationSeconds,
+            Set<String> allowedDatasetProfiles
+    ) { }
+
     public static ResearchScopeResponse from(ResearchScope value) {
         return new ResearchScopeResponse(value.id(), value.ownerUserId(), value.marketIds(), value.status(),
-                value.createdAt(), value.expiresAt(), value.revokedAt(), value.scopeVersion());
+                value.createdAt(), value.expiresAt(), value.revokedAt(), value.scopeVersion(),
+                value.historicalConstraints().map(constraints -> new HistoricalResearchConstraintsResponse(
+                        constraints.earliestCutoff(), constraints.latestCutoff(), constraints.maxObservations(),
+                        constraints.maxExportRows(), constraints.maxExportBytes(),
+                        constraints.maxExecutionDurationSeconds(), constraints.allowedDatasetProfiles())).orElse(null));
     }
 }

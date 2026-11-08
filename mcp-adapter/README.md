@@ -24,6 +24,9 @@ Specialized research tools:
 - `start_market_research`
 - `get_research_status`
 - `get_research_report`
+- `inspect_historical_research_readiness`
+- `request_historical_dataset_export`
+- `get_historical_dataset_export_status`
 
 `get_active_scan` reads an already-created, Gateway-authorized active-scan
 projection. It does not start, cancel or modify a scan.
@@ -35,6 +38,26 @@ deterministic evidence assembly, lifecycle persistence and report generation.
 The client must supply a stable `idempotency_key` and reuse it for retries.
 Poll the returned research ID with `get_research_status`, then retrieve the
 persisted report with `get_research_report`.
+
+`inspect_historical_research_readiness` returns bounded deterministic evidence,
+provenance, cutoff and population diagnostics for an explicitly granted
+historical research scope. It does not return arbitrary historical rows.
+
+`request_historical_dataset_export` submits a bounded, idempotent export request
+using the existing Java dataset contract. The dataset is written to the
+server-controlled Market Intelligence export boundary; MCP returns only the
+job identifier and lifecycle metadata. Use
+`get_historical_dataset_export_status` to retrieve authorized status, checksum,
+dataset version and validation metadata. No absolute filesystem path or dataset
+rows are returned.
+
+Before using the historical tools, an authorized human administrator must use
+the existing Trading OS agent-management flow to create an owner-scoped
+two-market research scope with explicit historical limits, then create separate
+active grants for `research:inspect` and, when required, `research:export` on
+that exact scope. Existing agents are not granted these permissions
+automatically. Do not edit database permissions or place credentials in MCP
+configuration.
 
 The account tools call the dedicated `/api/v1/agent/**` Trading Core boundary.
 Trading Core filters account collections before building the response and

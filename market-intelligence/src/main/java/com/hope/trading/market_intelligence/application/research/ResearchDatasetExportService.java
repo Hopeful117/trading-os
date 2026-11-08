@@ -48,20 +48,42 @@ public class ResearchDatasetExportService {
     @Transactional(readOnly = true)
     public ExportResult export(ResearchPopulationSpec population, Path outputDirectory,
                                BooleanSupplier publicationAllowed) {
+        return export(population, outputDirectory, Long.MAX_VALUE, publicationAllowed);
+    }
+
+    @Transactional(readOnly = true)
+    public ExportResult export(ResearchPopulationSpec population, Path outputDirectory,
+                               long maxBytes, BooleanSupplier publicationAllowed) {
+        return export(population, outputDirectory, 100_000, maxBytes, publicationAllowed);
+    }
+
+    @Transactional(readOnly = true)
+    public ExportResult export(ResearchPopulationSpec population, Path outputDirectory,
+                               long maxRows, long maxBytes, BooleanSupplier publicationAllowed) {
         Objects.requireNonNull(population, "population");
         Objects.requireNonNull(publicationAllowed, "publication guard");
-        var domainSnapshots = snapshots.findByPopulation(
-                population.marketIds(),
-                population.startCutoffInclusive(), population.endCutoffExclusive(),
-                population.featureProjectionVersion(), population.featureEvidencePolicy().name());
+        if (population.selectedFeatureSnapshotFingerprints().size() > maxRows) {
+            throw new IllegalStateException("Research dataset row limit exceeded");
+        }
+        var domainSnapshots = population.selectedFeatureSnapshotFingerprints().values().stream()
+                .map(fingerprint -> snapshots.findByFingerprint(fingerprint)
+                        .orElseThrow(() -> new IllegalStateException("selected feature snapshot is missing")))
+                .toList();
         var selectedOutcomes = population.selectedOutcomeFingerprints().entrySet().stream()
                 .map(entry -> resolveSelectedOutcome(population, entry.getKey(), entry.getValue()))
                 .toList();
         DatasetBuildResult dataset = builder.build(population, domainSnapshots, selectedOutcomes,
-                evidenceKnownAt(domainSnapshots), true);
-        exporter.export(dataset, outputDirectory, publicationAllowed);
+                evidenceKnownAt(domainSnapshots), true, (int) Math.min(maxRows, Integer.MAX_VALUE), publicationAllowed);
+        if (dataset.manifest().sampleCount() > maxRows) {
+            throw new IllegalStateException("Research dataset row limit exceeded");
+        }
+        exporter.export(dataset, outputDirectory, Math.min(maxBytes, 100L * 1024L * 1024L), publicationAllowed);
         return new ExportResult(dataset.manifest().sampleCount(), dataset.manifest().eligibleCount(),
                 dataset.manifest().excludedCount());
+    }
+
+    public void validatePublishedBundle(Path outputDirectory, ResearchPopulationSpec population) {
+        exporter.validatePublishedBundle(outputDirectory, population);
     }
 
     private Map<String, Instant> evidenceKnownAt(

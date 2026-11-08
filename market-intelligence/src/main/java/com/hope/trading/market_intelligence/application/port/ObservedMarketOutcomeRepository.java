@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.application.port;
 
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeIdentity;
+import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,6 +26,12 @@ public interface ObservedMarketOutcomeRepository {
 
     List<ObservedMarketOutcome> findByMarketsAndCutoffRange(
             Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive);
+
+    List<ObservedMarketOutcome> findByMarketsAndCutoffRange(
+            Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive, int limit);
+
+    long countByMarketsAndCutoffRangeAndStatus(Set<UUID> marketIds, Instant startCutoffInclusive,
+                                               Instant endCutoffExclusive, ObservedMarketOutcomeStatus status);
 
     ObservedMarketOutcome saveIfAbsent(ObservedMarketOutcome outcome);
 

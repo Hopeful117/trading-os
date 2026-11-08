@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.domain.research.DatasetManifest;
 import com.hope.trading.market_intelligence.domain.research.ResearchFeatureSnapshotKey;
 import com.hope.trading.market_intelligence.domain.research.ResearchOutcomeKey;
+import com.hope.trading.market_intelligence.domain.research.ResearchPopulationSpec;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 
 import java.io.IOException;
@@ -45,6 +46,11 @@ public final class ResearchDatasetBundleExporter {
     }
 
     public void export(DatasetBuildResult dataset, Path outputDirectory, BooleanSupplier publicationAllowed) {
+        export(dataset, outputDirectory, TEMPORARY_OUTPUT_BUDGET_BYTES, publicationAllowed);
+    }
+
+    public void export(DatasetBuildResult dataset, Path outputDirectory, long maxBytes,
+                       BooleanSupplier publicationAllowed) {
         Objects.requireNonNull(dataset, "dataset");
         Objects.requireNonNull(outputDirectory, "output directory");
         Objects.requireNonNull(publicationAllowed, "publication guard");
@@ -56,7 +62,7 @@ public final class ResearchDatasetBundleExporter {
         try {
             Files.createDirectories(parent);
             Path temporary = Files.createTempDirectory(parent, outputDirectory.getFileName() + ".tmp-");
-            exportTemporary(dataset, outputDirectory, temporary, publicationAllowed);
+            exportTemporary(dataset, outputDirectory, temporary, maxBytes, publicationAllowed);
         } catch (IOException exception) {
             throw new IllegalStateException("Cannot export research dataset bundle", exception);
         }
@@ -93,6 +99,37 @@ public final class ResearchDatasetBundleExporter {
         }
     }
 
+    public void validatePublishedBundle(Path outputDirectory, ResearchPopulationSpec expectedPopulation) {
+        Path manifestPath = outputDirectory.resolve(MANIFEST_FILE);
+        Path samplesPath = outputDirectory.resolve(SAMPLES_FILE);
+        if (!Files.isDirectory(outputDirectory, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(manifestPath, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(samplesPath, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(outputDirectory.resolve(README_FILE), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalStateException("Published research dataset bundle is incomplete");
+        }
+        try {
+            var manifest = mapper.readTree(Files.readString(manifestPath, StandardCharsets.UTF_8));
+            if (!EXPORT_SCHEMA_VERSION.equals(manifest.path("exportSchemaVersion").asText())
+                    || !sha256(Files.readAllBytes(samplesPath)).equals(manifest.path("samplesSha256").asText())) {
+                throw new IllegalStateException("Published research dataset contract is invalid");
+            }
+            var population = manifest.path("population");
+            for (var fingerprint : expectedPopulation.selectedFeatureSnapshotFingerprints().values()) {
+                if (!containsSelection(population.path("selectedFeatureSnapshotFingerprints"), "snapshotFingerprint", fingerprint)) {
+                    throw new IllegalStateException("Published research dataset feature lineage is invalid");
+                }
+            }
+            for (var fingerprint : expectedPopulation.selectedOutcomeFingerprints().values()) {
+                if (!containsSelection(population.path("selectedOutcomeFingerprints"), "outcomeFingerprint", fingerprint)) {
+                    throw new IllegalStateException("Published research dataset outcome lineage is invalid");
+                }
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Cannot validate published research dataset bundle", exception);
+        }
+    }
+
     private boolean containsSelection(com.fasterxml.jackson.databind.JsonNode selections,
                                       String field, String expected) {
         if (!selections.isArray() || expected == null) return false;
@@ -103,19 +140,19 @@ public final class ResearchDatasetBundleExporter {
     }
 
     private void exportTemporary(DatasetBuildResult dataset, Path outputDirectory, Path temporary,
-                                 BooleanSupplier publicationAllowed)
+                                 long maxBytes, BooleanSupplier publicationAllowed)
             throws IOException {
         try {
-            String samples = samplesExporter.export(dataset);
-            String manifest = manifest(dataset.manifest(), sha256(samples.getBytes(StandardCharsets.UTF_8)));
+            Path samplesPath = temporary.resolve(SAMPLES_FILE);
+            var samples = samplesExporter.exportTo(samplesPath, dataset, maxBytes, publicationAllowed);
+            String manifest = manifest(dataset.manifest(), samples.checksum());
             String readme = readme(dataset.manifest());
-            long outputBytes = samples.getBytes(StandardCharsets.UTF_8).length
+            long outputBytes = samples.bytes()
                     + manifest.getBytes(StandardCharsets.UTF_8).length
                     + readme.getBytes(StandardCharsets.UTF_8).length;
-            if (outputBytes > TEMPORARY_OUTPUT_BUDGET_BYTES) {
-                throw new IllegalStateException("Temporary research dataset output exceeds 100 MiB budget");
+            if (outputBytes > maxBytes) {
+                throw new IllegalStateException("Research dataset output exceeds configured byte limit");
             }
-            write(temporary.resolve(SAMPLES_FILE), samples);
             write(temporary.resolve(MANIFEST_FILE), manifest);
             write(temporary.resolve(README_FILE), readme);
             if (!publicationAllowed.getAsBoolean()) {

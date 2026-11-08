@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
+import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus;
 
 @Repository
 public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcomeRepository {
@@ -77,6 +79,26 @@ public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcome
                         marketIds, startCutoffInclusive, endCutoffExclusive).stream()
                 .map(JpaObservedMarketOutcomeEntity::toDomain)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ObservedMarketOutcome> findByMarketsAndCutoffRange(
+            Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive, int limit) {
+        if (marketIds.isEmpty()) return List.of();
+        return repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanOrderByEvaluationCutoffAsc(
+                        marketIds, startCutoffInclusive, endCutoffExclusive, PageRequest.of(0, limit)).stream()
+                .map(JpaObservedMarketOutcomeEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countByMarketsAndCutoffRangeAndStatus(Set<UUID> marketIds, Instant startCutoffInclusive,
+                                                      Instant endCutoffExclusive, ObservedMarketOutcomeStatus status) {
+        if (marketIds.isEmpty()) return 0;
+        return repository.countByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndStatus(
+                marketIds, startCutoffInclusive, endCutoffExclusive, status);
     }
 
     @Override

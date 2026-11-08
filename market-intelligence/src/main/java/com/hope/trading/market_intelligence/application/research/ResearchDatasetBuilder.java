@@ -11,6 +11,7 @@ import com.hope.trading.market_intelligence.application.feature.FeatureProjectio
 import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -47,6 +48,19 @@ public final class ResearchDatasetBuilder {
             Map<String, Instant> featureEvidenceKnownAtBySnapshotFingerprint,
             boolean requireTemporalEvidence
     ) {
+        return build(population, snapshots, outcomes, featureEvidenceKnownAtBySnapshotFingerprint,
+                requireTemporalEvidence, Integer.MAX_VALUE, () -> true);
+    }
+
+    public DatasetBuildResult build(
+            ResearchPopulationSpec population,
+            List<FeatureSnapshot> snapshots,
+            List<ObservedMarketOutcome> outcomes,
+            Map<String, Instant> featureEvidenceKnownAtBySnapshotFingerprint,
+            boolean requireTemporalEvidence,
+            int maxSamples,
+            BooleanSupplier withinLimits
+    ) {
         Objects.requireNonNull(population, "population");
         var schema = FeatureProjectionV1.schema();
         if (!schema.version().equals(population.featureProjectionVersion())) {
@@ -77,6 +91,7 @@ public final class ResearchDatasetBuilder {
         for (var selection : population.selectedFeatureSnapshotFingerprints().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey(Comparator.comparing(ResearchFeatureSnapshotKey::marketId)
                         .thenComparing(ResearchFeatureSnapshotKey::evaluationCutoff))).toList()) {
+            if (!withinLimits.getAsBoolean()) throw new IllegalStateException("Research dataset export limit exceeded");
             FeatureSnapshot snapshot = snapshotsByFingerprint.get(selection.getValue());
             if (snapshot == null) {
                 throw new IllegalArgumentException("selected feature snapshot fingerprint is missing: " + selection.getValue());
@@ -90,7 +105,10 @@ public final class ResearchDatasetBuilder {
                 throw new IllegalArgumentException("selected feature snapshot identity does not match population key: " + key);
             }
             for (var horizon : population.horizons().stream()
-                    .sorted(Comparator.comparing(com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon::value)).toList()) {
+                 .sorted(Comparator.comparing(com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon::value)).toList()) {
+                if (samples.size() >= maxSamples || !withinLimits.getAsBoolean()) {
+                    throw new IllegalStateException("Research dataset export limit exceeded");
+                }
                 samples.add(buildSample(population, snapshot, horizon, outcomesByKey, schema,
                         featureEvidenceKnownAtBySnapshotFingerprint, requireTemporalEvidence));
             }
