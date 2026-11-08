@@ -71,4 +71,13 @@ class JpaResearchExecutionEntity {
 
     @Column(name = "report", columnDefinition = "TEXT")
     String report;
+
+    @Column(name = "attempt_count", nullable = false)
+    int attemptCount;
+
+    @Column(name = "current_stage", nullable = false, length = 64)
+    String currentStage;
+
+    @Column(name = "last_progress_at", nullable = false)
+    Instant lastProgressAt;
 }

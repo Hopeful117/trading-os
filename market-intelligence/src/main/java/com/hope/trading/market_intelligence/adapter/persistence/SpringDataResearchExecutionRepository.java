@@ -21,7 +21,20 @@ interface SpringDataResearchExecutionRepository extends JpaRepository<JpaResearc
     Optional<JpaResearchExecutionEntity> findForUpdate(@Param("researchId") UUID researchId);
 
     @Modifying
-    @Query("update JpaResearchExecutionEntity value set value.status = 'RUNNING', value.updatedAt = :now "
+    @Query("update JpaResearchExecutionEntity value set value.status = 'RUNNING', value.updatedAt = :now, "
+            + "value.attemptCount = value.attemptCount + 1, value.currentStage = 'DETERMINISTIC_ANALYSIS', "
+            + "value.lastProgressAt = :now "
             + "where value.researchId = :researchId and value.status = 'REQUESTED'")
     int claimRequested(@Param("researchId") UUID researchId, @Param("now") java.time.Instant now);
+
+    @Modifying
+    @Query("update JpaResearchExecutionEntity value set value.status = 'REQUESTED', value.updatedAt = :now, "
+            + "value.currentStage = 'REQUEUED', value.lastProgressAt = :now "
+            + "where value.researchId = :researchId and value.status = 'RUNNING' "
+            + "and value.attemptCount = :attemptCount and value.updatedAt = :observedUpdatedAt "
+            + "and value.updatedAt < :staleBefore")
+    int requeueStale(@Param("researchId") UUID researchId, @Param("attemptCount") int attemptCount,
+                     @Param("observedUpdatedAt") java.time.Instant observedUpdatedAt,
+                     @Param("staleBefore") java.time.Instant staleBefore,
+                     @Param("now") java.time.Instant now);
 }

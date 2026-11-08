@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.application.port.ResearchExecutionRepository;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
+import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStage;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +51,9 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
         entity.completedAt = value.completedAt();
         entity.failureCode = value.failureCode();
         entity.report = value.report() == null ? null : write(value.report());
+        entity.attemptCount = value.attemptCount();
+        entity.currentStage = value.currentStage().name();
+        entity.lastProgressAt = value.lastProgressAt();
         try {
             repository.saveAndFlush(entity);
             return value;
@@ -82,13 +86,27 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
     @Override
     @Transactional
     public boolean saveIfStatus(ResearchExecution value, ResearchExecutionStatus expectedStatus) {
+        return saveIfStatusAndAttempt(value, expectedStatus, value.attemptCount());
+    }
+
+    @Override
+    @Transactional
+    public boolean saveIfStatusAndAttempt(ResearchExecution value, ResearchExecutionStatus expectedStatus,
+                                          int expectedAttempt) {
         JpaResearchExecutionEntity entity = repository.findForUpdate(value.researchId()).orElse(null);
-        if (entity == null || !expectedStatus.name().equals(entity.status)) {
+        if (entity == null || !expectedStatus.name().equals(entity.status)
+                || entity.attemptCount != expectedAttempt || value.attemptCount() != expectedAttempt) {
             return false;
         }
         copy(value, entity);
         repository.saveAndFlush(entity);
         return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean requeueIfStale(ResearchExecution value, java.time.Instant staleBefore, java.time.Instant now) {
+        return repository.requeueStale(value.researchId(), value.attemptCount(), value.updatedAt(), staleBefore, now) == 1;
     }
 
     @Override
@@ -100,14 +118,15 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
     }
 
     private ResearchExecution domain(JpaResearchExecutionEntity entity) {
-        return ResearchExecution.restoreWithProvenance(
+        return ResearchExecution.restoreWithObservability(
                 entity.researchId, entity.actorId, entity.researchScopeId, entity.ownerUserId,
                 entity.initiatingAgentId, entity.credentialId, entity.grantId, entity.grantVersion,
                 entity.credentialVersion, entity.idempotencyKey, entity.requestFingerprint,
                 read(entity.marketIds, new TypeReference<>() {}), entity.objective, entity.depth,
                 ResearchExecutionStatus.valueOf(entity.status), entity.requestedAt, entity.updatedAt,
                 entity.completedAt, entity.failureCode,
-                entity.report == null ? null : read(entity.report, JsonNode.class));
+                entity.report == null ? null : read(entity.report, JsonNode.class), entity.attemptCount,
+                ResearchExecutionStage.valueOf(entity.currentStage), entity.lastProgressAt);
     }
 
     private void copy(ResearchExecution value, JpaResearchExecutionEntity entity) {
@@ -131,6 +150,9 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
         entity.completedAt = value.completedAt();
         entity.failureCode = value.failureCode();
         entity.report = value.report() == null ? null : write(value.report());
+        entity.attemptCount = value.attemptCount();
+        entity.currentStage = value.currentStage().name();
+        entity.lastProgressAt = value.lastProgressAt();
     }
 
     private String write(Object value) {

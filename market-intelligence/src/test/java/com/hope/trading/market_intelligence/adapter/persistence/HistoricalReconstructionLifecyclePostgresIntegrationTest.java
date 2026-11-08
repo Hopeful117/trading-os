@@ -16,6 +16,10 @@ import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome
 import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 import com.hope.trading.market_intelligence.domain.research.HistoricalReconstructionLifecycle;
 import com.hope.trading.market_intelligence.domain.research.HistoricalReconstructionLifecycleStatus;
+import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
+import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStage;
+import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
+import com.hope.trading.market_intelligence.application.port.ResearchExecutionRepository;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -70,10 +74,65 @@ class HistoricalReconstructionLifecyclePostgresIntegrationTest {
 
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                String.class)).isEqualTo("22");
+                String.class)).isEqualTo("23");
         assertThat(jdbc.queryForObject(
                 "select count(*) from information_schema.tables where table_name = 'historical_reconstruction_lifecycles'",
                 Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void researchObservabilityFieldsRoundTripFromV19ThroughCurrentMigrations() throws Exception {
+        context = startContext(true);
+        ResearchExecutionRepository repository = context.getBean(ResearchExecutionRepository.class);
+        ResearchExecution requested = ResearchExecution.requested(
+                UUID.randomUUID(), UUID.randomUUID(), "research-observability-key", "fingerprint",
+                List.of(UUID.randomUUID(), UUID.randomUUID()), "compare", "STANDARD", NOW);
+        ResearchExecution checkpointed = requested.running(NOW.plusSeconds(1))
+                .checkpoint(new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode()
+                        .put("completedMarkets", 1), NOW.plusSeconds(2));
+
+        repository.save(checkpointed);
+
+        ResearchExecution restored = repository.findById(checkpointed.researchId()).orElseThrow();
+        assertThat(restored.attemptCount()).isEqualTo(1);
+        assertThat(restored.currentStage()).isEqualTo(ResearchExecutionStage.CHECKPOINTED);
+        assertThat(restored.lastProgressAt()).isEqualTo(NOW.plusSeconds(2));
+        assertThat(restored.report()).isNotNull();
+    }
+
+    @Test
+    void postgresRejectsStaleWorkerTransitionsAfterReclaim() throws Exception {
+        context = startContext(true);
+        ResearchExecutionRepository repository = context.getBean(ResearchExecutionRepository.class);
+        ResearchExecution requested = ResearchExecution.requested(
+                UUID.randomUUID(), UUID.randomUUID(), "research-concurrency-key", "fingerprint",
+                List.of(UUID.randomUUID(), UUID.randomUUID()), "compare", "STANDARD", NOW);
+        repository.save(requested);
+        ResearchExecution firstAttempt = repository.claimRequested(
+                requested.researchId(), NOW.plusSeconds(1)).orElseThrow();
+        ResearchExecution checkpointed = firstAttempt.checkpoint(
+                new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode()
+                        .put("completedMarkets", 1), NOW.plusSeconds(2));
+        assertThat(repository.saveIfStatusAndAttempt(checkpointed, ResearchExecutionStatus.RUNNING,
+                firstAttempt.attemptCount())).isTrue();
+        assertThat(repository.requeueIfStale(checkpointed, NOW.plusSeconds(3), NOW.plusSeconds(4))).isTrue();
+        ResearchExecution secondAttempt = repository.claimRequested(
+                requested.researchId(), NOW.plusSeconds(5)).orElseThrow();
+
+        assertThat(repository.saveIfStatusAndAttempt(
+                firstAttempt.checkpoint(null, NOW.plusSeconds(6)), ResearchExecutionStatus.RUNNING,
+                firstAttempt.attemptCount())).isFalse();
+        assertThat(repository.saveIfStatusAndAttempt(
+                firstAttempt.fail("STALE", NOW.plusSeconds(7)), ResearchExecutionStatus.RUNNING,
+                firstAttempt.attemptCount())).isFalse();
+        assertThat(repository.saveIfStatusAndAttempt(
+                firstAttempt.complete(null, NOW.plusSeconds(8)), ResearchExecutionStatus.RUNNING,
+                firstAttempt.attemptCount())).isFalse();
+
+        ResearchExecution restored = repository.findById(secondAttempt.researchId()).orElseThrow();
+        assertThat(restored.status()).isEqualTo(ResearchExecutionStatus.RUNNING);
+        assertThat(restored.attemptCount()).isEqualTo(2);
+        assertThat(restored.report()).isEqualTo(checkpointed.report());
     }
 
     @Test

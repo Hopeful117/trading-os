@@ -17,6 +17,8 @@ import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
+import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStage;
+import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 import com.hope.trading.market_intelligence.domain.research.ResearchReport;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -152,39 +154,63 @@ public class ResearchApplicationService {
         if (execution == null) {
             return;
         }
+        int workerAttempt = execution.attemptCount();
         try {
             ResearchReport report = buildReport(
                     new ResearchRequest(execution.marketIds(), execution.objective(), execution.depth()),
-                    execution.researchId(), partial -> executions.saveIfStatus(
-                            execution.checkpoint(mapper.valueToTree(partial), clock.instant()),
-                            com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING));
+                    execution.researchId(), workerAttempt,
+                    partial -> checkpoint(execution.researchId(), workerAttempt, partial));
             JsonNode reportJson = mapper.valueToTree(report);
+            ResearchExecution current = executions.findById(execution.researchId()).orElse(execution);
             ResearchExecution terminal = report.markets().stream().allMatch(
                     value -> "COMPLETE".equals(value.status()))
-                    ? execution.complete(reportJson, clock.instant())
-                    : execution.partial(reportJson, clock.instant());
-            executions.saveIfStatus(terminal,
-                    com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING);
+                    ? current.complete(reportJson, clock.instant())
+                    : current.partial(reportJson, clock.instant());
+            boolean persisted = executions.saveIfStatusAndAttempt(terminal, ResearchExecutionStatus.RUNNING,
+                    workerAttempt);
+            if (persisted) {
+                log.info("Research execution completed researchId={} status={} attempt={} stage={}",
+                        terminal.researchId(), terminal.status(), terminal.attemptCount(), terminal.currentStage());
+            } else {
+                log.info("Research execution transition discarded researchId={} attempt={} reason=STALE_WORKER",
+                        execution.researchId(), workerAttempt);
+            }
         } catch (ResearchException exception) {
-            executions.saveIfStatus(execution.fail(exception.code(), clock.instant()),
-                    com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING);
+            ResearchExecution current = executions.findById(execution.researchId()).orElse(execution);
+            ResearchExecution failed = current.fail(exception.code(), clock.instant());
+            boolean persisted = executions.saveIfStatusAndAttempt(failed, ResearchExecutionStatus.RUNNING,
+                    workerAttempt);
+            if (persisted) {
+                log.warn("Research execution failed researchId={} category={} code={}",
+                        failed.researchId(), failureCategory(exception.code()), exception.code());
+            } else {
+                log.info("Research execution failure discarded researchId={} attempt={} reason=STALE_WORKER",
+                        execution.researchId(), workerAttempt);
+            }
         } catch (RuntimeException exception) {
-            log.warn("Research execution failed researchId={} errorType={} message={}",
-                    execution.researchId(), exception.getClass().getSimpleName(), exception.getMessage());
-            executions.saveIfStatus(execution.fail("RESEARCH_EXECUTION_FAILED", clock.instant()),
-                    com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING);
+            log.warn("Research execution failed researchId={} errorType={}",
+                    execution.researchId(), exception.getClass().getSimpleName());
+            ResearchExecution current = executions.findById(execution.researchId()).orElse(execution);
+            ResearchExecution failed = current.fail("RESEARCH_EXECUTION_FAILED", clock.instant());
+            boolean persisted = executions.saveIfStatusAndAttempt(failed, ResearchExecutionStatus.RUNNING,
+                    workerAttempt);
+            if (persisted) {
+                log.warn("Research execution failed researchId={} category=INTERNAL_FAILURE", failed.researchId());
+            } else {
+                log.info("Research execution failure discarded researchId={} attempt={} reason=STALE_WORKER",
+                        execution.researchId(), workerAttempt);
+            }
         }
     }
 
     public void dispatchPending() {
-        executions.findByStatus(com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.REQUESTED)
+        executions.findByStatus(ResearchExecutionStatus.REQUESTED)
                 .forEach(value -> enqueue(value.researchId()));
         Instant cutoff = clock.instant().minus(Duration.ofMinutes(5));
-        executions.findByStatus(com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING)
+        executions.findByStatus(ResearchExecutionStatus.RUNNING)
                 .stream().filter(value -> value.updatedAt().isBefore(cutoff))
                 .forEach(value -> {
-                    if (executions.saveIfStatus(value.requeue(clock.instant()),
-                            com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus.RUNNING)) {
+                    if (executions.requeueIfStale(value, cutoff, clock.instant())) {
                         enqueue(value.researchId());
                     }
                 });
@@ -196,6 +222,33 @@ public class ResearchApplicationService {
         } catch (RejectedExecutionException rejected) {
             log.warn("Research execution queue is full researchId={}", researchId);
         }
+    }
+
+    private void checkpoint(UUID researchId, int workerAttempt, ResearchReport partial) {
+        executions.findById(researchId).ifPresent(current -> {
+            if (current.status() == ResearchExecutionStatus.RUNNING) {
+                executions.saveIfStatusAndAttempt(current.checkpoint(mapper.valueToTree(partial), clock.instant()),
+                        ResearchExecutionStatus.RUNNING, workerAttempt);
+            }
+        });
+    }
+
+    private void progress(UUID researchId, int workerAttempt, ResearchExecutionStage stage) {
+        executions.findById(researchId).ifPresent(current -> {
+            if (current.status() == ResearchExecutionStatus.RUNNING) {
+                executions.saveIfStatusAndAttempt(current.progress(stage, clock.instant()),
+                        ResearchExecutionStatus.RUNNING, workerAttempt);
+            }
+        });
+    }
+
+    private String failureCategory(String code) {
+        if (code == null) return "EXECUTION_FAILURE";
+        if (code.contains("AUTH") || code.contains("SCOPE") || code.contains("FORBIDDEN")) {
+            return "AUTHORIZATION_FAILURE";
+        }
+        if (code.contains("MARKET") || code.contains("ANALYSIS")) return "UPSTREAM_ANALYSIS_FAILURE";
+        return "EXECUTION_FAILURE";
     }
 
     @Transactional(readOnly = true)
@@ -219,7 +272,7 @@ public class ResearchApplicationService {
         return execution;
     }
 
-    private ResearchReport buildReport(ResearchRequest request, UUID researchId,
+    private ResearchReport buildReport(ResearchRequest request, UUID researchId, int workerAttempt,
                                        Consumer<ResearchReport> checkpoint) {
         List<ResearchReport.MarketResearchResult> results = new ArrayList<>();
         List<ResearchReport.AdaptiveCapabilityRecord> requestedCapabilities = new ArrayList<>();
@@ -230,6 +283,7 @@ public class ResearchApplicationService {
         boolean initialAiUsed = false;
         boolean finalAiUsed = false;
         for (UUID marketId : request.marketIds()) {
+            progress(researchId, workerAttempt, ResearchExecutionStage.DETERMINISTIC_ANALYSIS);
             MarketResponse market;
             try {
                 market = marketData.findMarket(marketId);
@@ -302,6 +356,7 @@ public class ResearchApplicationService {
                 marketDiagnostics.add("MARKET_THESIS_MISSING");
                 aiStatus = "NOT_REQUESTED";
             } else if (ai != null && ai.getIfAvailable() != null && !initialAiUsed) {
+                progress(researchId, workerAttempt, ResearchExecutionStage.AI_INTERPRETATION);
                 HttpAiAnalysisCapability aiCapability = ai.getIfAvailable();
                 initialAiUsed = true;
                 try {
@@ -347,6 +402,7 @@ public class ResearchApplicationService {
                             marketDiagnostics.add(rejection);
                         } else {
                             followUpUsed = true;
+                            progress(researchId, workerAttempt, ResearchExecutionStage.ADAPTIVE_FOLLOW_UP);
                             followUpId = UUID.randomUUID();
                             try {
                                 followUp = analysis.analyze(followUpId,
@@ -377,6 +433,7 @@ public class ResearchApplicationService {
                     if (!finalAiUsed && requested != null && followUpId != null && followUp != null
                             && !interpreted.findings().isEmpty()) {
                         finalAiUsed = true;
+                        progress(researchId, workerAttempt, ResearchExecutionStage.FINAL_SYNTHESIS);
                         AiSynthesisContext synthesisContext = synthesisContext(
                                 request, marketId, thesis.orElseThrow(), interpreted, requested,
                                 followUpId, followUp);
