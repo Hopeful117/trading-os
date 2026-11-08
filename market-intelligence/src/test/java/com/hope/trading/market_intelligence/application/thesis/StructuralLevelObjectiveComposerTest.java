@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.thesis;
 
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
+import com.hope.trading.market_intelligence.domain.thesis.ThesisTimestampPrecision;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

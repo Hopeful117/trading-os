@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.thesis;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesisEvidence;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesisEvidenceRole;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesisAvailability;
+import com.hope.trading.market_intelligence.domain.thesis.ThesisTimestampPrecision;
 import com.hope.trading.market_intelligence.domain.trendcontext.*;
 
 import java.math.BigDecimal;
