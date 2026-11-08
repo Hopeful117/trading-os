@@ -128,6 +128,7 @@ def execute_approved_agent_operation(
 
 @mcp.tool()
 def start_market_research(
+    scope_id: Annotated[UUID, Field(description="Explicit Trading OS research-scope UUID.")],
     market_ids: Annotated[list[UUID], Field(min_length=2, max_length=2, description="Exactly two canonical market UUIDs.")],
     objective: Annotated[str, Field(min_length=1, max_length=500, description="Bounded research objective.")],
     depth: Annotated[Literal["STANDARD", "DEEP"], Field(description="Research depth budget.")] = "STANDARD",
@@ -140,7 +141,7 @@ def start_market_research(
         raise ValueError("idempotency_key is required and must be reused for retries")
     return client_from_environment().post(
         "/api/v1/intelligence/research",
-        {"marketIds": [str(value) for value in market_ids], "objective": objective, "depth": depth},
+        {"scopeId": str(scope_id), "marketIds": [str(value) for value in market_ids], "objective": objective, "depth": depth},
         idempotency_key,
     )
 

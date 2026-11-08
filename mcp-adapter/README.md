@@ -28,8 +28,9 @@ Specialized research tools:
 `get_active_scan` reads an already-created, Gateway-authorized active-scan
 projection. It does not start, cancel or modify a scan.
 
-`start_market_research` submits an explicit two-market research request to the
-public Gateway. The Java Market Intelligence workflow owns authorization,
+`start_market_research` submits an explicit research-scope and two-market request
+to the public Gateway. A human owner creates and grants the exact scope before
+the agent call. The Java Market Intelligence workflow owns authorization,
 deterministic evidence assembly, lifecycle persistence and report generation.
 The client must supply a stable `idempotency_key` and reuse it for retries.
 Poll the returned research ID with `get_research_status`, then retrieve the

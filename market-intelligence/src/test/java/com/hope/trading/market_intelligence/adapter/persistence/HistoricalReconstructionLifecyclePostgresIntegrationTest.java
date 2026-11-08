@@ -64,13 +64,13 @@ class HistoricalReconstructionLifecyclePostgresIntegrationTest {
     }
 
     @Test
-    void migrationFromV19AppliesV20AndCreatesLifecycleTable() throws Exception {
+    void migrationFromV19AppliesCurrentMigrationsAndCreatesLifecycleTable() throws Exception {
         context = startContext(true);
         JdbcTemplate jdbc = context.getBean(JdbcTemplate.class);
 
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                String.class)).isEqualTo("20");
+                String.class)).isEqualTo("22");
         assertThat(jdbc.queryForObject(
                 "select count(*) from information_schema.tables where table_name = 'historical_reconstruction_lifecycles'",
                 Integer.class)).isEqualTo(1);

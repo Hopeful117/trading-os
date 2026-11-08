@@ -100,8 +100,17 @@ public class ResearchApplicationService {
     }
 
     public ResearchExecution start(UUID actorId, String idempotencyKey, ResearchRequest request) {
+        return start(actorId, null, idempotencyKey, request);
+    }
+
+    public ResearchExecution start(UUID actorId, UUID researchScopeId, String idempotencyKey, ResearchRequest request) {
+        return start(actorId, researchScopeId, idempotencyKey, null, request);
+    }
+
+    public ResearchExecution start(UUID actorId, UUID researchScopeId, String idempotencyKey,
+                                   ResearchProvenance provenance, ResearchRequest request) {
         validate(actorId, idempotencyKey, request);
-        String fingerprint = fingerprint(actorId, request);
+        String fingerprint = fingerprint(actorId, researchScopeId, request);
         Optional<ResearchExecution> existing = executions.findByActorIdAndIdempotencyKey(
                 actorId, idempotencyKey);
         if (existing.isPresent()) {
@@ -113,8 +122,13 @@ public class ResearchApplicationService {
         }
 
         Instant now = clock.instant();
-        ResearchExecution execution = ResearchExecution.requested(
-                UUID.randomUUID(), actorId, idempotencyKey, fingerprint,
+        ResearchProvenance effectiveProvenance = provenance == null
+                ? new ResearchProvenance(actorId, null, null, null, null, null) : provenance;
+        ResearchExecution execution = ResearchExecution.requestedWithProvenance(
+                UUID.randomUUID(), actorId, researchScopeId, effectiveProvenance.ownerUserId(),
+                effectiveProvenance.initiatingAgentId(), effectiveProvenance.credentialId(),
+                effectiveProvenance.grantId(), effectiveProvenance.grantVersion(),
+                effectiveProvenance.credentialVersion(), idempotencyKey, fingerprint,
                 request.marketIds(), request.objective(), request.depth(), now);
         try {
             execution = executions.save(execution);
@@ -189,6 +203,17 @@ public class ResearchApplicationService {
         ResearchExecution execution = executions.findById(researchId)
                 .orElseThrow(() -> notFound(researchId));
         if (!execution.actorId().equals(actorId)) {
+            throw notFound(researchId);
+        }
+        return execution;
+    }
+
+    @Transactional(readOnly = true)
+    public ResearchExecution findOwnedByOwner(UUID ownerUserId, UUID researchId) {
+        ResearchExecution execution = executions.findById(researchId)
+                .orElseThrow(() -> notFound(researchId));
+        if (!ownerUserId.equals(execution.ownerUserId())
+                && !(execution.ownerUserId() == null && ownerUserId.equals(execution.actorId()))) {
             throw notFound(researchId);
         }
         return execution;
@@ -584,8 +609,8 @@ public class ResearchApplicationService {
         return value == null || value.isBlank();
     }
 
-    private String fingerprint(UUID actorId, ResearchRequest request) {
-        String value = actorId + "|" + request.marketIds() + "|" + request.objective() + "|" + request.depth();
+    private String fingerprint(UUID actorId, UUID researchScopeId, ResearchRequest request) {
+        String value = actorId + "|" + researchScopeId + "|" + request.marketIds() + "|" + request.objective() + "|" + request.depth();
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8));
@@ -609,4 +634,7 @@ public class ResearchApplicationService {
             depth = depth == null ? "STANDARD" : depth.trim().toUpperCase(Locale.ROOT);
         }
     }
+
+    public record ResearchProvenance(UUID ownerUserId, UUID initiatingAgentId, UUID credentialId,
+                                     UUID grantId, Long grantVersion, Integer credentialVersion) { }
 }

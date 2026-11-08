@@ -10,7 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(assignableTypes = AgentController.class)
+@RestControllerAdvice(assignableTypes = {AgentController.class, ResearchScopeController.class})
 public class AgentExceptionHandler {
     @ExceptionHandler(AgentNotFoundException.class)
     ResponseEntity<ProblemDetail> notFound(AgentNotFoundException exception) {

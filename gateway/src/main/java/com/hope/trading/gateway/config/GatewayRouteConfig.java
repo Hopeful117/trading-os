@@ -59,6 +59,10 @@ public class GatewayRouteConfig {
                         .path("/api/v1/agents", "/api/v1/agents/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))
                 )
+                .route("research-scopes", r -> r
+                        .path("/api/v1/research-scopes", "/api/v1/research-scopes/**")
+                        .uri(uriFor.apply("trading-core", "lb://trading-core"))
+                )
                 .route("agent-business-read", r -> r
                         .path("/api/v1/agent/**")
                         .uri(uriFor.apply("trading-core", "lb://trading-core"))

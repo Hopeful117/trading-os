@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record ResearchExecutionRequest(
+        UUID scopeId,
         @NotNull @Size(min = 2, max = 2) List<UUID> marketIds,
         @NotBlank @Size(max = 500) String objective,
         @NotBlank @Size(max = 32) String depth

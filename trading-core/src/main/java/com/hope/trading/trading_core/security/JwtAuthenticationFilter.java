@@ -39,6 +39,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String path = request.getRequestURI();
 
+            if (path.startsWith("/internal/")) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             boolean isPublic = PUBLIC_ENDPOINTS.stream()
                     .anyMatch(path::equalsIgnoreCase);
 

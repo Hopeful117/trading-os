@@ -136,7 +136,6 @@ public class AgentController {
         grants.revoke(principal(authentication).getUserId(), agentId, grantId, correlationId);
         return ResponseEntity.noContent().build();
     }
-
     private UserDto principal(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()
                 || !(authentication.getPrincipal() instanceof UserDto user)

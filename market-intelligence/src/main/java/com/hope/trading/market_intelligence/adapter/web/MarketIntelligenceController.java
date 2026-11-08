@@ -12,15 +12,19 @@ import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 import com.hope.trading.market_intelligence.security.MiUserPrincipal;
+import com.hope.trading.market_intelligence.security.MiAgentPrincipal;
+import com.hope.trading.market_intelligence.adapter.tradingcore.ResearchAuthorizationClient;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import feign.FeignException;
 
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/v1/intelligence")
@@ -31,6 +35,7 @@ public class MarketIntelligenceController {
     private final com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches;
     private final TrendContextReadService trendContextReads;
     private final ResearchApplicationService research;
+    private final ResearchAuthorizationClient researchAuthorization;
 
     public MarketIntelligenceController(
             AnalysisExecutionService executions,
@@ -38,7 +43,7 @@ public class MarketIntelligenceController {
             ActiveScanApplicationService scans,
             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches
     ) {
-        this(executions, activeScanScopeResolution, scans, matches, null, null);
+        this(executions, activeScanScopeResolution, scans, matches, null, null, null);
     }
 
     public MarketIntelligenceController(
@@ -48,7 +53,7 @@ public class MarketIntelligenceController {
             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches,
             TrendContextReadService trendContextReads
     ) {
-        this(executions, activeScanScopeResolution, scans, matches, trendContextReads, null);
+        this(executions, activeScanScopeResolution, scans, matches, trendContextReads, null, null);
     }
 
     @Autowired
@@ -58,7 +63,8 @@ public class MarketIntelligenceController {
             ActiveScanApplicationService scans,
             com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches,
             TrendContextReadService trendContextReads,
-            ResearchApplicationService research
+            ResearchApplicationService research,
+            ResearchAuthorizationClient researchAuthorization
     ) {
         this.executions = executions;
         this.activeScanScopeResolution = activeScanScopeResolution;
@@ -66,6 +72,17 @@ public class MarketIntelligenceController {
         this.matches = matches;
         this.trendContextReads = trendContextReads;
         this.research = research;
+        this.researchAuthorization = researchAuthorization;
+    }
+
+    public MarketIntelligenceController(
+            AnalysisExecutionService executions,
+            ActiveScanScopeResolutionService activeScanScopeResolution,
+            ActiveScanApplicationService scans,
+            com.hope.trading.market_intelligence.strategy.application.StrategyMatchRepository matches,
+            TrendContextReadService trendContextReads,
+            ResearchApplicationService research) {
+        this(executions, activeScanScopeResolution, scans, matches, trendContextReads, research, null);
     }
 
     @PostMapping("/analyses")
@@ -104,8 +121,10 @@ public class MarketIntelligenceController {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             Authentication authentication,
             @Valid @RequestBody ResearchExecutionRequest request) {
+        ResearchAuthorizationClient.AuthorizationResponse authorization = authorizeAgent(authentication, request.scopeId(), request.marketIds());
         ResearchExecutionResponse response = ResearchExecutionResponse.from(
-                research.start(actorId(authentication), idempotencyKey,
+                research.start(researchActorId(authentication), researchScope(authentication, request), idempotencyKey,
+                        provenance(authentication, authorization),
                         new ResearchApplicationService.ResearchRequest(
                                 request.marketIds(), request.objective(), request.depth())));
         return ResponseEntity.accepted()
@@ -116,14 +135,16 @@ public class MarketIntelligenceController {
     @GetMapping("/research/{researchId}")
     public ResponseEntity<ResearchExecutionResponse> findResearch(
             Authentication authentication, @PathVariable UUID researchId) {
-        return ResponseEntity.ok(ResearchExecutionResponse.from(
-                research.findOwned(actorId(authentication), researchId)));
+        var execution = findOwnedResearch(authentication, researchId);
+        authorizeAgent(authentication, execution.researchScopeId(), execution.marketIds());
+        return ResponseEntity.ok(ResearchExecutionResponse.from(execution));
     }
 
     @GetMapping("/research/{researchId}/report")
     public ResponseEntity<?> findResearchReport(
             Authentication authentication, @PathVariable UUID researchId) {
-        var execution = research.findOwned(actorId(authentication), researchId);
+        var execution = findOwnedResearch(authentication, researchId);
+        authorizeAgent(authentication, execution.researchScopeId(), execution.marketIds());
         if (execution.report() == null) {
             return ResponseEntity.accepted().body(ResearchExecutionResponse.from(execution));
         }
@@ -245,6 +266,74 @@ public class MarketIntelligenceController {
             );
         }
         return principal.userId();
+    }
+
+    private UUID researchActorId(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal agent) {
+            return agent.agentId();
+        }
+        return actorId(authentication);
+    }
+
+    private com.hope.trading.market_intelligence.domain.research.ResearchExecution findOwnedResearch(
+            Authentication authentication, UUID researchId) {
+        if (authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal agent) {
+            return research.findOwned(agent.agentId(), researchId);
+        }
+        return research.findOwnedByOwner(actorId(authentication), researchId);
+    }
+
+    private UUID researchScope(Authentication authentication, ResearchExecutionRequest request) {
+        if (authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal) {
+            if (request.scopeId() == null) {
+                throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                        "RESEARCH_SCOPE_REQUIRED", "An explicit research scope is required", 400);
+            }
+            return request.scopeId();
+        }
+        return null;
+    }
+
+    private ResearchAuthorizationClient.AuthorizationResponse authorizeAgent(Authentication authentication, UUID scopeId, List<UUID> marketIds) {
+        if (authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal agent) {
+            ResearchAuthorizationClient.AuthorizationResponse response = callAuthorization(
+                    new ResearchAuthorizationClient.AuthorizationRequest(agent.agentId(), agent.credentialId(),
+                            agent.credentialVersion(), scopeId,
+                            Set.copyOf(marketIds), null));
+            if (response == null || !response.allowed()) {
+                throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                        "RESEARCH_NOT_AUTHORIZED", "Research scope is not authorized", 403);
+            }
+            return response;
+        }
+        return null;
+    }
+
+    private ResearchAuthorizationClient.AuthorizationResponse callAuthorization(
+            ResearchAuthorizationClient.AuthorizationRequest request) {
+        try {
+            return researchAuthorization.authorize(request);
+        } catch (FeignException.Unauthorized exception) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "AUTHORIZATION_UNAVAILABLE", "Research authorization is unavailable", 401);
+        } catch (FeignException.Forbidden exception) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "RESEARCH_NOT_AUTHORIZED", "Research scope is not authorized", 403);
+        } catch (FeignException exception) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "AUTHORIZATION_UNAVAILABLE", "Research authorization is unavailable", 503);
+        }
+    }
+
+    private ResearchApplicationService.ResearchProvenance provenance(
+            Authentication authentication, ResearchAuthorizationClient.AuthorizationResponse authorization) {
+        if (!(authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal agent)
+                || authorization == null) {
+            return null;
+        }
+        return new ResearchApplicationService.ResearchProvenance(
+                authorization.ownerUserId(), agent.agentId(), agent.credentialId(),
+                authorization.grantId(), authorization.grantVersion(), agent.credentialVersion());
     }
 
     private com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest scopeRequest(

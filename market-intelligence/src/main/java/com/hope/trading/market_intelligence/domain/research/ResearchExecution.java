@@ -10,6 +10,13 @@ import java.util.UUID;
 public final class ResearchExecution {
     private final UUID researchId;
     private final UUID actorId;
+    private final UUID researchScopeId;
+    private final UUID ownerUserId;
+    private final UUID initiatingAgentId;
+    private final UUID credentialId;
+    private final UUID grantId;
+    private final Long grantVersion;
+    private final Integer credentialVersion;
     private final String idempotencyKey;
     private final String requestFingerprint;
     private final List<UUID> marketIds;
@@ -23,12 +30,21 @@ public final class ResearchExecution {
     private final JsonNode report;
 
     private ResearchExecution(
-            UUID researchId, UUID actorId, String idempotencyKey, String requestFingerprint,
+            UUID researchId, UUID actorId, UUID researchScopeId, UUID ownerUserId, UUID initiatingAgentId,
+            UUID credentialId, UUID grantId, Long grantVersion, Integer credentialVersion,
+            String idempotencyKey, String requestFingerprint,
             List<UUID> marketIds, String objective, String depth, ResearchExecutionStatus status,
             Instant requestedAt, Instant updatedAt, Instant completedAt, String failureCode,
             JsonNode report) {
         this.researchId = Objects.requireNonNull(researchId);
         this.actorId = Objects.requireNonNull(actorId);
+        this.researchScopeId = researchScopeId;
+        this.ownerUserId = ownerUserId;
+        this.initiatingAgentId = initiatingAgentId;
+        this.credentialId = credentialId;
+        this.grantId = grantId;
+        this.grantVersion = grantVersion;
+        this.credentialVersion = credentialVersion;
         this.idempotencyKey = required(idempotencyKey, "idempotencyKey");
         this.requestFingerprint = required(requestFingerprint, "requestFingerprint");
         this.marketIds = List.copyOf(marketIds);
@@ -45,7 +61,15 @@ public final class ResearchExecution {
     public static ResearchExecution requested(
             UUID researchId, UUID actorId, String idempotencyKey, String requestFingerprint,
             List<UUID> marketIds, String objective, String depth, Instant now) {
-        return new ResearchExecution(researchId, actorId, idempotencyKey, requestFingerprint,
+        return requested(researchId, actorId, null, idempotencyKey, requestFingerprint,
+                marketIds, objective, depth, now);
+    }
+
+    public static ResearchExecution requested(
+            UUID researchId, UUID actorId, UUID researchScopeId, String idempotencyKey,
+            String requestFingerprint, List<UUID> marketIds, String objective, String depth, Instant now) {
+        return new ResearchExecution(researchId, actorId, researchScopeId, null, null, null, null, null, null,
+                idempotencyKey, requestFingerprint,
                 marketIds, objective, depth, ResearchExecutionStatus.REQUESTED, now, now,
                 null, null, null);
     }
@@ -83,14 +107,46 @@ public final class ResearchExecution {
             List<UUID> marketIds, String objective, String depth, ResearchExecutionStatus status,
             Instant requestedAt, Instant updatedAt, Instant completedAt, String failureCode,
             JsonNode report) {
-        return new ResearchExecution(researchId, actorId, idempotencyKey, requestFingerprint,
+        return new ResearchExecution(researchId, actorId, null, null, null, null, null, null, null,
+                idempotencyKey, requestFingerprint,
                 marketIds, objective, depth, status, requestedAt, updatedAt, completedAt,
                 failureCode, report);
     }
 
+    public static ResearchExecution restore(
+            UUID researchId, UUID actorId, UUID researchScopeId, String idempotencyKey, String requestFingerprint,
+            List<UUID> marketIds, String objective, String depth, ResearchExecutionStatus status,
+            Instant requestedAt, Instant updatedAt, Instant completedAt, String failureCode, JsonNode report) {
+        return new ResearchExecution(researchId, actorId, researchScopeId, null, null, null, null, null, null,
+                idempotencyKey, requestFingerprint,
+                marketIds, objective, depth, status, requestedAt, updatedAt, completedAt, failureCode, report);
+    }
+
+    public static ResearchExecution requestedWithProvenance(
+            UUID researchId, UUID actorId, UUID researchScopeId, UUID ownerUserId, UUID initiatingAgentId,
+            UUID credentialId, UUID grantId, Long grantVersion, Integer credentialVersion,
+            String idempotencyKey, String requestFingerprint, List<UUID> marketIds,
+            String objective, String depth, Instant now) {
+        return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
+                credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
+                marketIds, objective, depth, ResearchExecutionStatus.REQUESTED, now, now, null, null, null);
+    }
+
+    public static ResearchExecution restoreWithProvenance(
+            UUID researchId, UUID actorId, UUID researchScopeId, UUID ownerUserId, UUID initiatingAgentId,
+            UUID credentialId, UUID grantId, Long grantVersion, Integer credentialVersion,
+            String idempotencyKey, String requestFingerprint, List<UUID> marketIds, String objective,
+            String depth, ResearchExecutionStatus status, Instant requestedAt, Instant updatedAt,
+            Instant completedAt, String failureCode, JsonNode report) {
+        return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
+                credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
+                marketIds, objective, depth, status, requestedAt, updatedAt, completedAt, failureCode, report);
+    }
+
     private ResearchExecution copy(ResearchExecutionStatus nextStatus, Instant nextUpdatedAt,
                                    Instant nextCompletedAt, String nextFailureCode, JsonNode nextReport) {
-        return new ResearchExecution(researchId, actorId, idempotencyKey, requestFingerprint,
+        return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
+                credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
                 marketIds, objective, depth, nextStatus, requestedAt, nextUpdatedAt,
                 nextCompletedAt, nextFailureCode, nextReport);
     }
@@ -103,6 +159,13 @@ public final class ResearchExecution {
 
     public UUID researchId() { return researchId; }
     public UUID actorId() { return actorId; }
+    public UUID researchScopeId() { return researchScopeId; }
+    public UUID ownerUserId() { return ownerUserId; }
+    public UUID initiatingAgentId() { return initiatingAgentId; }
+    public UUID credentialId() { return credentialId; }
+    public UUID grantId() { return grantId; }
+    public Long grantVersion() { return grantVersion; }
+    public Integer credentialVersion() { return credentialVersion; }
     public String idempotencyKey() { return idempotencyKey; }
     public String requestFingerprint() { return requestFingerprint; }
     public List<UUID> marketIds() { return marketIds; }
