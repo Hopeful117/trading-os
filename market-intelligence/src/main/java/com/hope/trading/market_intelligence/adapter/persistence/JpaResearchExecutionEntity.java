@@ -18,6 +18,27 @@ class JpaResearchExecutionEntity {
     @Column(name = "actor_id", nullable = false)
     UUID actorId;
 
+    @Column(name = "research_scope_id")
+    UUID researchScopeId;
+
+    @Column(name = "owner_user_id")
+    UUID ownerUserId;
+
+    @Column(name = "initiating_agent_id")
+    UUID initiatingAgentId;
+
+    @Column(name = "credential_id")
+    UUID credentialId;
+
+    @Column(name = "grant_id")
+    UUID grantId;
+
+    @Column(name = "grant_version")
+    Long grantVersion;
+
+    @Column(name = "credential_version")
+    Integer credentialVersion;
+
     @Column(name = "idempotency_key", nullable = false, length = 200)
     String idempotencyKey;
 

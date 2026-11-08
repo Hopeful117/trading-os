@@ -10,12 +10,13 @@ import com.hope.trading.trading_core.agent.model.AgentResourceType;
 import com.hope.trading.trading_core.agent.model.AgentStatus;
 import com.hope.trading.trading_core.agent.repository.AgentGrantRepository;
 import com.hope.trading.trading_core.agent.repository.AgentIdentityRepository;
+import com.hope.trading.trading_core.agent.repository.ResearchScopeRepository;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -23,14 +24,34 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class AgentGrantService {
     private final AgentIdentityRepository agents;
     private final AgentGrantRepository grants;
     private final BrokerAccountRepository brokerAccounts;
     private final MarketDataClient markets;
+    private final ResearchScopeRepository researchScopes;
     private final AgentAuthorizationAuditEventRepository auditEvents;
     private final Clock clock;
+
+    public AgentGrantService(AgentIdentityRepository agents, AgentGrantRepository grants,
+                             BrokerAccountRepository brokerAccounts, MarketDataClient markets,
+                             AgentAuthorizationAuditEventRepository auditEvents, Clock clock) {
+        this(agents, grants, brokerAccounts, markets, null, auditEvents, clock);
+    }
+
+    @Autowired
+    public AgentGrantService(AgentIdentityRepository agents, AgentGrantRepository grants,
+                             BrokerAccountRepository brokerAccounts, MarketDataClient markets,
+                             ResearchScopeRepository researchScopes,
+                             AgentAuthorizationAuditEventRepository auditEvents, Clock clock) {
+        this.agents = agents;
+        this.grants = grants;
+        this.brokerAccounts = brokerAccounts;
+        this.markets = markets;
+        this.researchScopes = researchScopes;
+        this.auditEvents = auditEvents;
+        this.clock = clock;
+    }
 
     @Transactional
     public AgentGrantResponse create(UUID ownerUserId, UUID agentId, AgentGrantRequest request, String correlationId) {
@@ -104,7 +125,10 @@ public class AgentGrantService {
             }
         }
         if (request.resourceType() == AgentResourceType.RESEARCH_SCOPE) {
-            throw invalid("UNSUPPORTED_RESOURCE_SCOPE", "Research scopes are not yet user-owned Trading Core resources");
+            if (researchScopes == null
+                    || researchScopes.findByIdAndOwnerUserId(request.resourceId(), ownerUserId).isEmpty()) {
+                throw new AgentNotFoundException();
+            }
         }
     }
 

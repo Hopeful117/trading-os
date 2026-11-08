@@ -15,8 +15,12 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({MiJwtProperties.class, MiServiceJwtProperties.class})
+@EnableConfigurationProperties({MiJwtProperties.class, MiServiceJwtProperties.class, MiAgentJwtProperties.class})
 public class MiSecurityConfiguration {
+    @Bean
+    MiAgentJwtAuthenticationFilter miAgentJwtAuthenticationFilter(MiAgentJwtProperties properties) {
+        return new MiAgentJwtAuthenticationFilter(properties);
+    }
     @Bean
     MiServiceJwtAuthenticationFilter miServiceJwtAuthenticationFilter(
             MiServiceJwtService serviceJwt, MiServiceJwtProperties properties) {
@@ -26,6 +30,7 @@ public class MiSecurityConfiguration {
     @Bean
         SecurityFilterChain securityFilterChain(
             HttpSecurity http, MiJwtAuthenticationFilter jwtAuthenticationFilter,
+            MiAgentJwtAuthenticationFilter agentJwtAuthenticationFilter,
             MiServiceJwtAuthenticationFilter serviceJwtAuthenticationFilter)
             {
         // All authenticated requests use Authorization: Bearer JWT; no browser session cookie is accepted.
@@ -46,8 +51,12 @@ public class MiSecurityConfiguration {
                         .requestMatchers("/api/v1/intelligence/**", "/api/v1/opportunities/**")
                         .authenticated()
                         .anyRequest().denyAll())
-                .addFilterBefore(jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class)
+                 .addFilterBefore(jwtAuthenticationFilter,
+                         UsernamePasswordAuthenticationFilter.class)
+                 .addFilterBefore(agentJwtAuthenticationFilter,
+                         MiJwtAuthenticationFilter.class)
+                 .addFilterAfter(new MiAgentAccessPolicyFilter(),
+                         MiAgentJwtAuthenticationFilter.class)
                 .addFilterBefore(serviceJwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class);
         try {

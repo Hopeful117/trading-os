@@ -32,6 +32,13 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
         JpaResearchExecutionEntity entity = new JpaResearchExecutionEntity();
         entity.researchId = value.researchId();
         entity.actorId = value.actorId();
+        entity.researchScopeId = value.researchScopeId();
+        entity.ownerUserId = value.ownerUserId();
+        entity.initiatingAgentId = value.initiatingAgentId();
+        entity.credentialId = value.credentialId();
+        entity.grantId = value.grantId();
+        entity.grantVersion = value.grantVersion();
+        entity.credentialVersion = value.credentialVersion();
         entity.idempotencyKey = value.idempotencyKey();
         entity.requestFingerprint = value.requestFingerprint();
         entity.marketIds = write(value.marketIds());
@@ -93,8 +100,10 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
     }
 
     private ResearchExecution domain(JpaResearchExecutionEntity entity) {
-        return ResearchExecution.restore(
-                entity.researchId, entity.actorId, entity.idempotencyKey, entity.requestFingerprint,
+        return ResearchExecution.restoreWithProvenance(
+                entity.researchId, entity.actorId, entity.researchScopeId, entity.ownerUserId,
+                entity.initiatingAgentId, entity.credentialId, entity.grantId, entity.grantVersion,
+                entity.credentialVersion, entity.idempotencyKey, entity.requestFingerprint,
                 read(entity.marketIds, new TypeReference<>() {}), entity.objective, entity.depth,
                 ResearchExecutionStatus.valueOf(entity.status), entity.requestedAt, entity.updatedAt,
                 entity.completedAt, entity.failureCode,
@@ -104,6 +113,13 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
     private void copy(ResearchExecution value, JpaResearchExecutionEntity entity) {
         entity.researchId = value.researchId();
         entity.actorId = value.actorId();
+        entity.researchScopeId = value.researchScopeId();
+        entity.ownerUserId = value.ownerUserId();
+        entity.initiatingAgentId = value.initiatingAgentId();
+        entity.credentialId = value.credentialId();
+        entity.grantId = value.grantId();
+        entity.grantVersion = value.grantVersion();
+        entity.credentialVersion = value.credentialVersion();
         entity.idempotencyKey = value.idempotencyKey();
         entity.requestFingerprint = value.requestFingerprint();
         entity.marketIds = write(value.marketIds());
