@@ -35,4 +35,61 @@ describe('AgentService', () => {
     });
     connectRequest.flush(null);
   });
+
+  it('uses the gateway contracts for agent lifecycle, grants, and operation approval', () => {
+    service.list().subscribe();
+    let request = http.expectOne('/api/v1/agents');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+
+    service.create('Research assistant', 'OPENCODE').subscribe();
+    request = http.expectOne('/api/v1/agents');
+    expect(request.request.body).toEqual({
+      displayName: 'Research assistant',
+      agentType: 'OPENCODE',
+    });
+    request.flush({ id: 'agent-1' });
+
+    service.suspend('agent-1').subscribe();
+    request = http.expectOne('/api/v1/agents/agent-1/suspend');
+    expect(request.request.method).toBe('POST');
+    request.flush(null);
+
+    service.activate('agent-1').subscribe();
+    request = http.expectOne('/api/v1/agents/agent-1/activate');
+    request.flush(null);
+
+    service.revoke('agent-1').subscribe();
+    request = http.expectOne('/api/v1/agents/agent-1/revoke');
+    request.flush(null);
+
+    service.listGrants('agent-1').subscribe();
+    request = http.expectOne('/api/v1/agents/agent-1/grants');
+    request.flush([]);
+
+    service.createGrant('agent-1', 'accounts:read', 'broker-1').subscribe();
+    request = http.expectOne('/api/v1/agents/agent-1/grants');
+    expect(request.request.body).toEqual({
+      permission: 'accounts:read',
+      resourceType: 'BROKER_ACCOUNT',
+      resourceId: 'broker-1',
+    });
+    request.flush({ id: 'grant-1' });
+
+    service.revokeGrant('agent-1', 'grant-1').subscribe();
+    request = http.expectOne('/api/v1/agents/agent-1/grants/grant-1/revoke');
+    request.flush(null);
+
+    service.operationRequests().subscribe();
+    request = http.expectOne('/api/v1/agent/operation-requests');
+    request.flush([]);
+
+    service.approveOperation('operation-1').subscribe();
+    request = http.expectOne('/api/v1/agent/operation-requests/operation-1/approve');
+    request.flush({ id: 'operation-1' });
+
+    service.rejectOperation('operation-2').subscribe();
+    request = http.expectOne('/api/v1/agent/operation-requests/operation-2/reject');
+    request.flush({ id: 'operation-2' });
+  });
 });
