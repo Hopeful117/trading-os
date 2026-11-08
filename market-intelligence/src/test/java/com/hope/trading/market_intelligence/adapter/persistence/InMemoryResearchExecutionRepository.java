@@ -40,11 +40,32 @@ public class InMemoryResearchExecutionRepository implements ResearchExecutionRep
     @Override
     public synchronized boolean saveIfStatus(
             ResearchExecution execution, ResearchExecutionStatus expectedStatus) {
+        return saveIfStatusAndAttempt(execution, expectedStatus, execution.attemptCount());
+    }
+
+    @Override
+    public synchronized boolean saveIfStatusAndAttempt(
+            ResearchExecution execution, ResearchExecutionStatus expectedStatus, int expectedAttempt) {
         ResearchExecution current = values.get(execution.researchId());
-        if (current == null || current.status() != expectedStatus) {
+        if (current == null || current.status() != expectedStatus || current.attemptCount() != expectedAttempt
+                || execution.attemptCount() != expectedAttempt) {
             return false;
         }
         values.put(execution.researchId(), execution);
+        return true;
+    }
+
+    @Override
+    public synchronized boolean requeueIfStale(ResearchExecution execution,
+                                               java.time.Instant staleBefore, java.time.Instant now) {
+        ResearchExecution current = values.get(execution.researchId());
+        if (current == null || current.status() != ResearchExecutionStatus.RUNNING
+                || current.attemptCount() != execution.attemptCount()
+                || !current.updatedAt().equals(execution.updatedAt())
+                || !current.updatedAt().isBefore(staleBefore)) {
+            return false;
+        }
+        values.put(execution.researchId(), current.requeue(now));
         return true;
     }
 

@@ -109,6 +109,7 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         await client.call_tool(
             "start_market_research",
             {
+                "scope_id": "00000000-0000-0000-0000-000000000006",
                 "market_ids": [
                     "00000000-0000-0000-0000-000000000001",
                     "00000000-0000-0000-0000-000000000002",
@@ -144,6 +145,7 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
     assert fake_client.post_calls[0][0] == "/api/v1/agent/operation-requests"
     assert fake_client.post_calls[1][0].endswith("/execute")
     assert fake_client.post_calls[2][0] == "/api/v1/intelligence/research"
+    assert fake_client.post_calls[2][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
     assert fake_client.post_calls[2][2] == "research-btc-eth-1"
 
 

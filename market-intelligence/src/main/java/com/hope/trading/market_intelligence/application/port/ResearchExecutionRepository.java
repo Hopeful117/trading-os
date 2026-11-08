@@ -19,6 +19,11 @@ public interface ResearchExecutionRepository {
 
     boolean saveIfStatus(ResearchExecution execution, ResearchExecutionStatus expectedStatus);
 
+    boolean saveIfStatusAndAttempt(ResearchExecution execution, ResearchExecutionStatus expectedStatus,
+                                   int expectedAttempt);
+
+    boolean requeueIfStale(ResearchExecution execution, Instant staleBefore, Instant now);
+
     default Optional<ResearchExecution> claimRequested(UUID researchId, Instant now) {
         return findById(researchId)
                 .filter(value -> value.status() == ResearchExecutionStatus.REQUESTED)
