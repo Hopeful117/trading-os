@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from research_dataset.validator import VALID_EXCLUSION_REASONS, validate_bundle
+from research_dataset.validator import VALID_EXCLUSION_REASONS, _quality_summary, validate_bundle
 from research_dataset.__main__ import main
 
 
@@ -22,6 +22,110 @@ class ValidatorTest(unittest.TestCase):
         fixture = Path(__file__).parent / "fixtures" / "java-generated"
         result = validate_bundle(fixture)
         self.assertTrue(result.valid, result.diagnostics)
+
+    def test_quality_summary_is_deterministic_and_explicit(self):
+        fixture = Path(__file__).parent / "fixtures" / "java-generated"
+        first = validate_bundle(fixture)
+        second = validate_bundle(fixture)
+
+        self.assertEqual(first.summary["quality"], second.summary["quality"])
+        quality = first.summary["quality"]
+        self.assertEqual(quality["validationStatus"], "VALID")
+        self.assertEqual(quality["observationCount"], 1)
+        self.assertEqual(quality["coverage"]["earliestEvaluationCutoff"], "2026-10-15T10:00:00Z")
+        self.assertEqual(quality["coverage"]["latestEvaluationCutoff"], "2026-10-15T10:00:00Z")
+        self.assertEqual(quality["expectedCadence"]["status"], "NOT_DETERMINABLE")
+        self.assertEqual(quality["effectiveSampleSize"]["status"], "APPROXIMATE")
+        self.assertEqual(quality["effectiveSampleSize"]["approxNonOverlappingWindowsByHorizon"], {"PT1H": 1})
+        self.assertEqual(quality["fingerprints"]["datasetFingerprint"],
+                         "8eefc33c7614134c56b8d8cb236197e54011826ef9ac9f83bfb258f48e0eb260")
+
+    def test_invalid_bundle_quality_preserves_validation_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = Path(__file__).parent / "fixtures" / "java-generated"
+            for name in ("dataset-manifest.json", "samples.jsonl"):
+                (root / name).write_bytes((fixture / name).read_bytes())
+            manifest = json.loads((root / "dataset-manifest.json").read_text())
+            manifest["samplesSha256"] = "0" * 64
+            (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = validate_bundle(root)
+
+            self.assertFalse(result.valid)
+            self.assertEqual(result.summary["quality"]["validationStatus"], "INVALID")
+            self.assertEqual(result.summary["quality"]["fingerprints"]["samplesSha256"], "0" * 64)
+
+    def test_early_invalid_bundle_paths_emit_quality_summary(self):
+        fixture = Path(__file__).parent / "fixtures" / "java-generated"
+        manifest_bytes = (fixture / "dataset-manifest.json").read_bytes()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "dataset-manifest.json").write_text("not-json", encoding="utf-8")
+            result = validate_bundle(root)
+            self.assertFalse(result.valid)
+            self.assertEqual(result.summary["quality"]["validationStatus"], "INVALID")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "dataset-manifest.json").write_bytes(manifest_bytes)
+            result = validate_bundle(root)
+            self.assertFalse(result.valid)
+            self.assertEqual(result.summary["quality"]["validationStatus"], "INVALID")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "dataset-manifest.json").write_bytes(manifest_bytes)
+            (root / "samples.jsonl").write_bytes(b"\xff\xfe")
+            result = validate_bundle(root)
+            self.assertFalse(result.valid)
+            self.assertEqual(result.summary["quality"]["validationStatus"], "INVALID")
+
+    def test_quality_reports_observed_gaps_and_horizon_windows(self):
+        manifest = {"datasetFingerprint": "dataset", "samplesSha256": "samples"}
+        rows = [
+            {"status": "ELIGIBLE", "marketId": "market-a", "evaluationCutoff": "2026-10-15T10:00:00Z",
+             "horizon": "PT1H", "features": {}, "featureProvenance": [], "lineage":
+             {"executionOrigin": "HISTORICAL_RECONSTRUCTION"}, "outcome": {"status": "AVAILABLE"}},
+            {"status": "ELIGIBLE", "marketId": "market-b", "evaluationCutoff": "2026-10-15T12:00:00Z",
+             "horizon": "PT2H", "features": {}, "featureProvenance": [], "lineage": {},
+             "outcome": {"status": "AVAILABLE"}},
+        ]
+
+        quality = _quality_summary(manifest, rows, [], {}, {"AVAILABLE": 2})
+
+        self.assertEqual(quality["coverage"]["durationSeconds"], 7200.0)
+        self.assertEqual(quality["gaps"]["positiveGapCount"], 1)
+        self.assertEqual(quality["effectiveSampleSize"]["approxNonOverlappingWindowsByHorizon"],
+                         {"PT1H": 1, "PT2H": 1})
+        self.assertEqual(quality["provenance"]["historicalReconstructionRows"], 1)
+
+    def test_quality_separates_outcome_statuses_from_violations(self):
+        rows = [{"status": "ELIGIBLE", "outcome": {"status": "AVAILABLE"}}]
+        diagnostics = [{"code": "outcome.incomplete_provenance"}]
+
+        quality = _quality_summary({}, rows, diagnostics, {}, {"AVAILABLE": 1})
+
+        outcome = quality["outcomeCompleteness"]
+        self.assertEqual(outcome["availableStatusCount"], 1)
+        self.assertEqual(outcome["incompleteStatusCount"], 0)
+        self.assertEqual(outcome["incompleteProvenanceViolations"], 1)
+
+    def test_quality_handles_empty_and_declared_multi_market_bundles(self):
+        empty = _quality_summary({"population": {"marketIds": []}}, [], [], {}, {})
+        self.assertEqual(empty["coverage"]["status"], "NOT_DETERMINABLE")
+        self.assertEqual(empty["marketIdentityConsistency"]["status"], "NOT_DETERMINABLE")
+
+        rows = [
+            {"marketId": "market-a", "evaluationCutoff": "2026-10-15T10:00:00Z"},
+            {"marketId": "market-b", "evaluationCutoff": "2026-10-15T11:00:00Z"},
+        ]
+        multi_market = _quality_summary(
+            {"population": {"marketIds": ["market-a", "market-b"]}}, rows, [], {}, {}
+        )
+        self.assertEqual(multi_market["marketIdentityConsistency"]["status"], "CHECKED")
+        self.assertEqual(multi_market["marketIdentityConsistency"]["observedMarketCount"], 2)
 
     def test_cli_exit_codes(self):
         fixture = Path(__file__).parent / "fixtures" / "java-generated"
@@ -63,6 +167,10 @@ class ValidatorTest(unittest.TestCase):
             result = validate_bundle(root)
             codes = {item["code"] for item in result.diagnostics}
             self.assertTrue({"lineage.invalid_provenance", "outcome.incomplete_provenance"} <= codes)
+            outcome = result.summary["quality"]["outcomeCompleteness"]
+            self.assertEqual(outcome["availableStatusCount"], 1)
+            self.assertEqual(outcome["incompleteStatusCount"], 0)
+            self.assertEqual(outcome["incompleteProvenanceViolations"], 1)
 
     def test_rejects_zero_duration(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -287,6 +395,7 @@ class ValidatorTest(unittest.TestCase):
             result = validate_bundle(root)
             codes = {item["code"] for item in result.diagnostics}
             self.assertTrue({"outcome.invalid_status", "outcome.invalid_timestamp", "values.invalid_decimal"} <= codes)
+            self.assertGreaterEqual(result.summary["quality"]["invalidTimestamps"], 1)
 
     def test_rejects_invalid_timestamp_status_and_decimal(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -361,6 +470,7 @@ class ValidatorTest(unittest.TestCase):
             (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
             result = validate_bundle(root)
             self.assertIn("samples.duplicate_identity", {item["code"] for item in result.diagnostics})
+            self.assertEqual(result.summary["quality"]["duplicateChecks"]["timestampDuplicates"], 1)
 
 
 if __name__ == "__main__":

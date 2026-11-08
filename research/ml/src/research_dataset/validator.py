@@ -81,7 +81,7 @@ def validate_bundle(bundle: str | Path) -> ValidationResult:
     samples_path = root / "samples.jsonl"
     manifest = _read_json(manifest_path, diagnostics, "manifest.invalid_json")
     if not isinstance(manifest, dict):
-        return _result(diagnostics)
+        return _result(diagnostics, _summary({}, [], diagnostics))
     _unknown_fields(manifest, MANIFEST_FIELDS, "manifest", diagnostics)
     _validate_manifest_scalars(manifest, diagnostics)
     if manifest.get("exportSchemaVersion") != "research-dataset-bundle-v1":
@@ -89,7 +89,7 @@ def validate_bundle(bundle: str | Path) -> ValidationResult:
 
     if not samples_path.is_file():
         _add(diagnostics, "samples.missing", "samples.jsonl is missing")
-        return _result(diagnostics)
+        return _result(diagnostics, _summary(manifest, [], diagnostics))
     sample_bytes = samples_path.read_bytes()
     actual_sha = hashlib.sha256(sample_bytes).hexdigest()
     if manifest.get("samplesSha256") != actual_sha:
@@ -114,7 +114,7 @@ def validate_bundle(bundle: str | Path) -> ValidationResult:
         sample_lines = sample_bytes.decode("utf-8").splitlines()
     except UnicodeDecodeError:
         _add(diagnostics, "samples.invalid_encoding", "samples.jsonl must be UTF-8")
-        return _result(diagnostics)
+        return _result(diagnostics, _summary(manifest, [], diagnostics))
     sample_ids: set[Any] = set()
     sample_fingerprints: set[Any] = set()
     sample_identities: set[tuple[Any, Any, Any, Any]] = set()
@@ -178,7 +178,7 @@ def validate_bundle(bundle: str | Path) -> ValidationResult:
         expected_material = _dataset_material(manifest, population, rows)
         if sorted(material) != sorted(expected_material):
             _add(diagnostics, "manifest.material_mismatch", "dataset fingerprint material does not match bundle semantics")
-    return _result(diagnostics, _summary(manifest, rows))
+    return _result(diagnostics, _summary(manifest, rows, diagnostics))
 
 
 def _validate_row(row: dict[str, Any], line: int, population: dict[str, Any],
@@ -792,7 +792,8 @@ def _add(diagnostics: list[dict[str, Any]], code: str, message: str, line: int |
     diagnostics.append(diagnostic)
 
 
-def _summary(manifest: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _summary(manifest: dict[str, Any], rows: list[dict[str, Any]],
+             diagnostics: list[dict[str, Any]]) -> dict[str, Any]:
     exclusions: dict[str, int] = {}
     missingness: dict[str, int] = {}
     outcomes: dict[str, int] = {}
@@ -809,7 +810,7 @@ def _summary(manifest: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, 
             outcomes[outcome_status] = outcomes.get(outcome_status, 0) + 1
     eligible = sum(row.get("status") == "ELIGIBLE" for row in rows)
     excluded = sum(row.get("status") == "EXCLUDED" for row in rows)
-    return {
+    summary = {
         "sampleCount": len(rows),
         "eligibleCount": eligible,
         "excludedCount": excluded,
@@ -822,6 +823,179 @@ def _summary(manifest: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, 
         "featureMissingness": dict(sorted(missingness.items())),
         "manifestDatasetFingerprint": manifest.get("datasetFingerprint"),
     }
+    summary["quality"] = _quality_summary(manifest, rows, diagnostics, missingness, outcomes)
+    return summary
+
+
+def _quality_summary(manifest: dict[str, Any], rows: list[dict[str, Any]],
+                     diagnostics: list[dict[str, Any]], missingness: dict[str, int],
+                     outcomes: dict[str, int]) -> dict[str, Any]:
+    codes = _diagnostic_counts(diagnostics)
+    cutoffs = sorted({parsed for row in rows
+                      for parsed in [_safe_parse_time(row.get("evaluationCutoff"))]
+                      if parsed is not None})
+    coverage = {
+        "earliestEvaluationCutoff": _format_time(cutoffs[0]) if cutoffs else None,
+        "latestEvaluationCutoff": _format_time(cutoffs[-1]) if cutoffs else None,
+        "durationSeconds": (cutoffs[-1] - cutoffs[0]).total_seconds() if len(cutoffs) > 1 else 0.0,
+        "status": "MEASURED" if cutoffs else "NOT_DETERMINABLE",
+    }
+    gaps = _cutoff_gaps(cutoffs)
+    eligible_rows = [row for row in rows if row.get("status") == "ELIGIBLE"]
+    effective_windows = {
+        horizon: _non_overlapping_cutoffs(
+            sorted({parsed for row in eligible_rows if row.get("horizon") == horizon
+                    for parsed in [_safe_parse_time(row.get("evaluationCutoff"))]
+                    if parsed is not None}),
+            _duration_seconds(horizon),
+        )
+        for horizon in sorted({row.get("horizon") for row in eligible_rows
+                               if isinstance(row.get("horizon"), str)})
+    }
+    feature_provenance = sum(len(row.get("featureProvenance") or []) for row in rows
+                             if isinstance(row.get("featureProvenance"), list))
+    historical_rows = sum(
+        (row.get("lineage") or {}).get("executionOrigin") == "HISTORICAL_RECONSTRUCTION"
+        for row in rows if isinstance(row.get("lineage"), dict)
+    )
+    effective_sample_status = "APPROXIMATE" if any(value > 0 for value in effective_windows.values()) \
+        else "NOT_DETERMINABLE"
+    return {
+        "validationStatus": "INVALID" if diagnostics else "VALID",
+        "observationCount": len(rows),
+        "coverage": coverage,
+        "gaps": gaps,
+        "expectedObservationCount": {
+            "status": "NOT_DETERMINABLE",
+            "actual": len(rows),
+            "reason": "The bundle does not declare a physical evidence cadence",
+        },
+        "expectedCadence": {
+            "status": "NOT_DETERMINABLE",
+            "reason": "ONE_PER_FEATURE_SNAPSHOT does not define physical evidence cadence",
+        },
+        "duplicateChecks": {
+            "sampleIdDuplicates": codes.get("samples.duplicate_id", 0),
+            "sampleFingerprintDuplicates": codes.get("samples.duplicate_fingerprint", 0),
+            "semanticIdentityDuplicates": codes.get("samples.duplicate_identity", 0),
+            "timestampDuplicates": _duplicate_timestamp_count(rows),
+        },
+        "staleObservations": {
+            "status": "NOT_DETERMINABLE",
+            "count": 0,
+            "reason": "The bundle does not declare a freshness policy",
+        },
+        "invalidTimestamps": codes.get("samples.invalid_cutoff", 0)
+        + codes.get("evidence.invalid_feature_known_at", 0)
+        + codes.get("evidence.invalid_known_at", 0)
+        + codes.get("outcome.invalid_timestamp", 0)
+        + codes.get("manifest.invalid_population_timestamp", 0),
+        "marketIdentityConsistency": _market_identity_quality(manifest, rows, codes),
+        "featureCompleteness": {
+            "missingness": dict(sorted(missingness.items())),
+            "invalidRows": codes.get("lineage.invalid_provenance", 0),
+            "disallowedMissingness": codes.get("features.disallowed_missingness", 0),
+            "provenanceEntries": feature_provenance,
+        },
+        "outcomeCompleteness": {
+            "statuses": dict(sorted(outcomes.items())),
+            "availableStatusCount": outcomes.get("AVAILABLE", 0),
+            "pendingStatusCount": outcomes.get("PENDING", 0),
+            "incompleteStatusCount": outcomes.get("INCOMPLETE", 0),
+            "unavailableStatusCount": outcomes.get("UNAVAILABLE", 0),
+            "missingOutcomeViolations": codes.get("outcome.missing_excluded", 0),
+            "incompleteProvenanceViolations": codes.get("outcome.incomplete_provenance", 0),
+            "maturityViolations": codes.get("outcome.maturity_mismatch", 0)
+                                  + codes.get("outcome.computed_before_maturity", 0),
+        },
+        "provenance": {
+            "knownAtViolations": codes.get("evidence.future_known_at", 0)
+                                 + codes.get("evidence.feature_known_at_after_cutoff", 0),
+            "invalidEntries": codes.get("lineage.invalid_provenance", 0),
+            "historicalReconstructionRows": historical_rows,
+            "historicalLineageMissing": codes.get("lineage.missing_reconstruction_field", 0),
+        },
+        "effectiveSampleSize": {
+            "approxNonOverlappingWindowsByHorizon": effective_windows,
+            "status": effective_sample_status,
+            "warning": "Non-overlapping windows are not statistically independent samples",
+        },
+        "fingerprints": {
+            "datasetFingerprint": manifest.get("datasetFingerprint"),
+            "samplesSha256": manifest.get("samplesSha256"),
+        },
+    }
+
+
+def _market_identity_quality(manifest: dict[str, Any], rows: list[dict[str, Any]],
+                             codes: dict[str, int]) -> dict[str, Any]:
+    population = manifest.get("population")
+    declared_markets = population.get("marketIds", []) if isinstance(population, dict) else []
+    declared = {value for value in declared_markets
+                if isinstance(value, str)}
+    observed = {row.get("marketId") for row in rows if isinstance(row.get("marketId"), str)}
+    return {
+        "status": "CHECKED" if declared else "NOT_DETERMINABLE",
+        "declaredMarketCount": len(declared),
+        "observedMarketCount": len(observed),
+        "outsidePopulationRows": codes.get("samples.market_outside_population", 0),
+    }
+
+
+def _diagnostic_counts(diagnostics: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for diagnostic in diagnostics:
+        code = diagnostic.get("code")
+        if isinstance(code, str):
+            counts[code] = counts.get(code, 0) + 1
+    return counts
+
+
+def _duplicate_timestamp_count(rows: list[dict[str, Any]]) -> int:
+    keys = [
+        (row.get("marketId"), row.get("evaluationCutoff"), row.get("horizon"))
+        for row in rows
+        if all(row.get(field) is not None for field in ("marketId", "evaluationCutoff", "horizon"))
+    ]
+    return max(0, len(keys) - len(set(keys)))
+
+
+def _safe_parse_time(value: Any) -> datetime | None:
+    try:
+        return _parse_time(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_time(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _cutoff_gaps(cutoffs: list[datetime]) -> dict[str, Any]:
+    intervals = [(right - left).total_seconds() for left, right in zip(cutoffs, cutoffs[1:])]
+    return {
+        "observedIntervalCount": len(intervals),
+        "positiveGapCount": sum(value > 0 for value in intervals),
+        "largestObservedGapSeconds": max(intervals, default=0.0),
+        "status": "OBSERVED_ONLY" if intervals else "NOT_DETERMINABLE",
+        "warning": "Observed cutoff gaps are not proof of missing provider candles",
+    }
+
+
+def _non_overlapping_cutoffs(cutoffs: list[datetime | None], horizon_seconds: Decimal | None) -> int:
+    if horizon_seconds is None or horizon_seconds <= 0:
+        return 0
+    ordered = [value for value in cutoffs if value is not None]
+    count = 0
+    last: datetime | None = None
+    horizon = timedelta(seconds=float(horizon_seconds))
+    for cutoff in ordered:
+        if last is None or cutoff >= last + horizon:
+            count += 1
+            last = cutoff
+    return count
 
 
 def _result(diagnostics: list[dict[str, Any]], summary: dict[str, Any] | None = None) -> ValidationResult:

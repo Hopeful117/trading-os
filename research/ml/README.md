@@ -14,6 +14,15 @@ Validation is fail-closed. It checks the bundle schema, sample-file checksum,
 dataset fingerprint material, sample fingerprints, feature missingness, strict
 evidence policy, and outcome completeness.
 
+The `diagnose` command also returns a deterministic `summary.quality` report.
+It includes observed sample and cutoff coverage, outcome and feature
+completeness, duplicate diagnostics, provenance violations, fingerprints and
+approximate non-overlapping windows by horizon. Physical evidence cadence is
+reported as `NOT_DETERMINABLE` when the bundle only declares
+`ONE_PER_FEATURE_SNAPSHOT`; observed cutoff gaps must not be interpreted as
+proof of missing provider candles. Approximate windows are not statistically
+independent sample counts.
+
 ## Java Export
 
 The Market Intelligence service exposes a controlled export runner. Provide a
