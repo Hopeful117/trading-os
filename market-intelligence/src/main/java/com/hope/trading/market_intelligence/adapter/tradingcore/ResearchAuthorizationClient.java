@@ -14,7 +14,17 @@ public interface ResearchAuthorizationClient {
     AuthorizationResponse authorize(@RequestBody AuthorizationRequest request);
 
     record AuthorizationRequest(UUID agentId, UUID credentialId, Integer credentialVersion,
-                                UUID scopeId, Set<UUID> marketIds, String correlationId) { }
+                                UUID scopeId, Set<UUID> marketIds, String correlationId,
+                                String permission, java.time.Instant startCutoff,
+                                java.time.Instant endCutoff, String datasetProfile,
+                                long observations, long exportRows, long exportBytes,
+                                long durationSeconds) {
+        public AuthorizationRequest(UUID agentId, UUID credentialId, Integer credentialVersion,
+                                    UUID scopeId, Set<UUID> marketIds, String correlationId) {
+            this(agentId, credentialId, credentialVersion, scopeId, marketIds, correlationId,
+                    "research:run", null, null, null, 0, 0, 0, 0);
+        }
+    }
     record AuthorizationResponse(boolean allowed, String denialReason, UUID grantId,
                                  Long grantVersion, Long agentVersion, UUID ownerUserId,
                                  UUID credentialId, Integer credentialVersion, UUID agentId) { }

@@ -92,21 +92,53 @@ public class AgentAuthorizationService {
     @Transactional
     public Decision authorizeResearch(UUID agentId, UUID credentialId, Integer credentialVersion,
                                       UUID scopeId, Set<UUID> marketIds, String correlationId) {
-        Decision base = authorize(agentId, AgentPermission.RESEARCH_RUN, AgentResourceType.RESEARCH_SCOPE,
+        return authorizeResearch(agentId, credentialId, credentialVersion, AgentPermission.RESEARCH_RUN,
+                scopeId, marketIds, null, null, null, 0, 0, 0, 0, correlationId);
+    }
+
+    @Transactional
+    public Decision authorizeHistoricalResearch(UUID agentId, UUID credentialId, Integer credentialVersion,
+                                                AgentPermission permission, UUID scopeId, Set<UUID> marketIds,
+                                                Instant startCutoff, Instant endCutoff, String datasetProfile,
+                                                long observations, long exportRows, long exportBytes,
+                                                long durationSeconds, String correlationId) {
+        if (permission != AgentPermission.RESEARCH_INSPECT && permission != AgentPermission.RESEARCH_EXPORT) {
+            return deny(agentId, permission, scopeId, correlationId, "INCOMPATIBLE_PERMISSION");
+        }
+        return authorizeResearch(agentId, credentialId, credentialVersion, permission, scopeId, marketIds,
+                startCutoff, endCutoff, datasetProfile, observations, exportRows, exportBytes,
+                durationSeconds, correlationId);
+    }
+
+    private Decision authorizeResearch(UUID agentId, UUID credentialId, Integer credentialVersion,
+                                       AgentPermission permission, UUID scopeId, Set<UUID> marketIds,
+                                       Instant startCutoff, Instant endCutoff, String datasetProfile,
+                                       long observations, long exportRows, long exportBytes,
+                                       long durationSeconds, String correlationId) {
+        Decision base = authorize(agentId, permission, AgentResourceType.RESEARCH_SCOPE,
                 scopeId, correlationId);
         if (!base.allowed()) return base;
         if (credentials == null || credentialId == null || credentialVersion == null
                 || credentials.findByIdAndAgentId(credentialId, agentId)
                 .filter(value -> value.credentialVersion() == credentialVersion)
                 .filter(value -> value.isActiveAt(clock.instant())).isEmpty()) {
-            return deny(agentId, scopeId, correlationId, "INVALID_AGENT_CREDENTIAL");
+            return deny(agentId, permission, scopeId, correlationId, "INVALID_AGENT_CREDENTIAL");
         }
         var agent = agents.findById(agentId).orElse(null);
         var scope = researchScopes.findById(scopeId).orElse(null);
         if (agent == null || scope == null || !scope.ownerUserId().equals(agent.ownerUserId())
                 || !scope.effectiveAt(clock.instant()) || marketIds == null
-                || marketIds.size() != 2 || !scope.marketIds().containsAll(marketIds)) {
-            return deny(agentId, scopeId, correlationId, "RESEARCH_MARKET_OUT_OF_SCOPE");
+                || marketIds.isEmpty() || marketIds.size() > 2 || !scope.marketIds().containsAll(marketIds)) {
+            return deny(agentId, permission, scopeId, correlationId, "RESEARCH_MARKET_OUT_OF_SCOPE");
+        }
+        if (permission != AgentPermission.RESEARCH_RUN) {
+            var constraints = scope.historicalConstraints().orElse(null);
+            if (constraints == null || startCutoff == null || endCutoff == null
+                    || !startCutoff.isBefore(endCutoff)
+                    || !constraints.permits(startCutoff, endCutoff, datasetProfile,
+                    observations, exportRows, exportBytes, durationSeconds)) {
+                return deny(agentId, permission, scopeId, correlationId, "HISTORICAL_SCOPE_CONSTRAINT_VIOLATION");
+            }
         }
         return new Decision(true, null, base.grantId(), base.grantVersion(), base.agentVersion(),
                 agent.ownerUserId(), credentialId, credentialVersion);
@@ -136,9 +168,9 @@ public class AgentAuthorizationService {
         }
     }
 
-    private Decision deny(UUID agentId, UUID scopeId, String correlationId, String reason) {
+    private Decision deny(UUID agentId, AgentPermission permission, UUID scopeId, String correlationId, String reason) {
         Instant now = clock.instant();
-        recordAudit(agentId, AgentPermission.RESEARCH_RUN, AgentResourceType.RESEARCH_SCOPE, scopeId,
+        recordAudit(agentId, permission, AgentResourceType.RESEARCH_SCOPE, scopeId,
                 "DENIED", reason, correlationId, now);
         return new Decision(false, reason);
     }

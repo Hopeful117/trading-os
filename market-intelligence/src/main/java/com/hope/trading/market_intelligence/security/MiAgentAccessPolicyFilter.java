@@ -27,11 +27,17 @@ public class MiAgentAccessPolicyFilter extends OncePerRequestFilter {
         if ("POST".equals(request.getMethod()) && "/api/v1/intelligence/research".equals(path)) {
             return true;
         }
-        if (!"GET".equals(request.getMethod()) || !path.startsWith("/api/v1/intelligence/research/")) {
+        String prefix = "/api/v1/intelligence/research/";
+        if (!path.startsWith(prefix)) {
             return false;
         }
-        String suffix = path.substring("/api/v1/intelligence/research/".length());
-        return suffix.matches("[0-9a-fA-F-]{36}")
-                || suffix.matches("[0-9a-fA-F-]{36}/report");
+        String uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}";
+        String suffix = path.substring(prefix.length());
+        if ("POST".equals(request.getMethod())) {
+            return suffix.matches(uuid + "/(readiness|exports)");
+        }
+        return "GET".equals(request.getMethod())
+                && (suffix.matches(uuid) || suffix.matches(uuid + "/report")
+                || suffix.matches("exports/" + uuid));
     }
 }

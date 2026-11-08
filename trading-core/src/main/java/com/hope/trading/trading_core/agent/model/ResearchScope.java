@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import jakarta.persistence.FetchType;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -47,10 +48,38 @@ public class ResearchScope {
     @Column(name = "scope_version", nullable = false)
     private long scopeVersion;
 
+    @Column(name = "historical_earliest_cutoff")
+    private Instant historicalEarliestCutoff;
+
+    @Column(name = "historical_latest_cutoff")
+    private Instant historicalLatestCutoff;
+
+    @Column(name = "historical_max_observations")
+    private Long historicalMaxObservations;
+
+    @Column(name = "historical_max_export_rows")
+    private Long historicalMaxExportRows;
+
+    @Column(name = "historical_max_export_bytes")
+    private Long historicalMaxExportBytes;
+
+    @Column(name = "historical_max_duration_seconds")
+    private Long historicalMaxDurationSeconds;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "research_scope_dataset_profile", joinColumns = @JoinColumn(name = "scope_id"))
+    @Column(name = "dataset_profile", nullable = false)
+    private Set<String> historicalDatasetProfiles = new HashSet<>();
+
     protected ResearchScope() {
     }
 
     private ResearchScope(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt) {
+        this(ownerUserId, marketIds, now, expiresAt, null);
+    }
+
+    private ResearchScope(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt,
+                          HistoricalResearchConstraints historicalConstraints) {
         if (ownerUserId == null || marketIds == null || marketIds.size() != 2 || now == null
                 || (expiresAt != null && !expiresAt.isAfter(now))) {
             throw new IllegalArgumentException("owner, exactly two markets and valid timestamps are required");
@@ -61,10 +90,27 @@ public class ResearchScope {
         this.status = ResearchScopeStatus.ACTIVE;
         this.createdAt = now;
         this.expiresAt = expiresAt;
+        apply(historicalConstraints);
     }
 
     public static ResearchScope create(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt) {
         return new ResearchScope(ownerUserId, marketIds, now, expiresAt);
+    }
+
+    public static ResearchScope create(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt,
+                                       HistoricalResearchConstraints historicalConstraints) {
+        return new ResearchScope(ownerUserId, marketIds, now, expiresAt, historicalConstraints);
+    }
+
+    private void apply(HistoricalResearchConstraints constraints) {
+        if (constraints == null) return;
+        historicalEarliestCutoff = constraints.earliestCutoff();
+        historicalLatestCutoff = constraints.latestCutoff();
+        historicalMaxObservations = constraints.maxObservations();
+        historicalMaxExportRows = constraints.maxExportRows();
+        historicalMaxExportBytes = constraints.maxExportBytes();
+        historicalMaxDurationSeconds = constraints.maxExecutionDurationSeconds();
+        historicalDatasetProfiles = new HashSet<>(constraints.allowedDatasetProfiles());
     }
 
     public void revoke(Instant now) {
@@ -94,4 +140,13 @@ public class ResearchScope {
     public Instant expiresAt() { return expiresAt; }
     public Instant revokedAt() { return revokedAt; }
     public long scopeVersion() { return scopeVersion; }
+    public java.util.Optional<HistoricalResearchConstraints> historicalConstraints() {
+        if (historicalEarliestCutoff == null && historicalLatestCutoff == null
+                && historicalMaxObservations == null && historicalMaxExportRows == null
+                && historicalMaxExportBytes == null && historicalMaxDurationSeconds == null
+                && historicalDatasetProfiles.isEmpty()) return java.util.Optional.empty();
+        return java.util.Optional.of(new HistoricalResearchConstraints(historicalEarliestCutoff,
+                historicalLatestCutoff, historicalMaxObservations, historicalMaxExportRows,
+                historicalMaxExportBytes, historicalMaxDurationSeconds, historicalDatasetProfiles));
+    }
 }

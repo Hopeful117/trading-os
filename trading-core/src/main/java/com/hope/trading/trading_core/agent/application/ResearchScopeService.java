@@ -2,6 +2,7 @@ package com.hope.trading.trading_core.agent.application;
 
 import com.hope.trading.trading_core.agent.api.ResearchScopeRequest;
 import com.hope.trading.trading_core.agent.model.ResearchScope;
+import com.hope.trading.trading_core.agent.model.HistoricalResearchConstraints;
 import com.hope.trading.trading_core.agent.repository.ResearchScopeRepository;
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
 import lombok.RequiredArgsConstructor;
@@ -38,7 +39,14 @@ public class ResearchScopeService {
                 throw new AgentNotFoundException();
             }
         });
-        return scopes.save(ResearchScope.create(ownerUserId, request.marketIds(), now, request.expiresAt()));
+        HistoricalResearchConstraints historical = request.historicalConstraints() == null ? null
+                : new HistoricalResearchConstraints(
+                request.historicalConstraints().earliestCutoff(), request.historicalConstraints().latestCutoff(),
+                request.historicalConstraints().maxObservations(), request.historicalConstraints().maxExportRows(),
+                request.historicalConstraints().maxExportBytes(),
+                request.historicalConstraints().maxExecutionDurationSeconds(),
+                request.historicalConstraints().allowedDatasetProfiles());
+        return scopes.save(ResearchScope.create(ownerUserId, request.marketIds(), now, request.expiresAt(), historical));
     }
 
     @Transactional(readOnly = true)

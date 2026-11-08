@@ -8,5 +8,9 @@ import java.util.Set;
 import java.util.UUID;
 
 public record ResearchScopeRequest(@NotEmpty @Size(min = 2, max = 2) Set<UUID> marketIds,
-                                   Instant expiresAt) {
+                                   Instant expiresAt,
+                                   HistoricalResearchConstraintsRequest historicalConstraints) {
+    public ResearchScopeRequest(Set<UUID> marketIds, Instant expiresAt) {
+        this(marketIds, expiresAt, null);
+    }
 }

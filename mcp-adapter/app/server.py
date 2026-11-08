@@ -162,6 +162,61 @@ def get_research_report(
     return client_from_environment().get(f"/api/v1/intelligence/research/{research_id}/report")
 
 
+@mcp.tool()
+def inspect_historical_research_readiness(
+    scope_id: Annotated[UUID, Field(description="Explicit Trading OS historical research-scope UUID.")],
+    market_ids: Annotated[list[UUID], Field(min_length=1, max_length=2, description="One or two canonical market UUIDs within the scope.")],
+    cutoff_start: Annotated[str, Field(min_length=1, max_length=40, description="Inclusive UTC ISO-8601 evaluation cutoff.")],
+    cutoff_end: Annotated[str, Field(min_length=1, max_length=40, description="Exclusive UTC ISO-8601 evaluation cutoff.")],
+    dataset_profile: Annotated[str, Field(min_length=1, max_length=128, description="Bounded dataset profile/version.")],
+    max_observations: Annotated[int, Field(ge=1, le=100_000, description="Maximum observations to inspect.")] = 10_000,
+) -> str:
+    """Inspect deterministic historical readiness through the public Gateway."""
+    if len(market_ids) not in {1, 2} or len(set(market_ids)) != len(market_ids):
+        raise ValueError("market_ids must contain one or two distinct UUIDs")
+    return client_from_environment().post(
+        f"/api/v1/intelligence/research/{scope_id}/readiness",
+        {
+            "marketIds": [str(value) for value in market_ids],
+            "cutoffStart": cutoff_start,
+            "cutoffEnd": cutoff_end,
+            "datasetProfile": dataset_profile,
+            "maxObservations": max_observations,
+        },
+        f"research-readiness:{scope_id}:{cutoff_start}:{cutoff_end}:{dataset_profile}",
+    )
+
+
+@mcp.tool()
+def request_historical_dataset_export(
+    scope_id: Annotated[UUID, Field(description="Explicit Trading OS historical research-scope UUID.")],
+    population: Annotated[dict[str, object], Field(description="Validated ResearchPopulationSpec JSON object.")],
+    max_rows: Annotated[int, Field(ge=1, le=100_000, description="Maximum exported rows.")] = 100_000,
+    max_bytes: Annotated[int, Field(ge=1, le=100 * 1024 * 1024, description="Maximum exported bytes.")] = 100 * 1024 * 1024,
+    max_duration_seconds: Annotated[int, Field(ge=1, le=3600, description="Maximum export duration in seconds.")] = 900,
+    idempotency_key: Annotated[str, Field(min_length=1, max_length=200, description="Stable key reused for retries.")] = "",
+) -> str:
+    """Request a bounded offline dataset export; the dataset is not returned by MCP."""
+    if not idempotency_key.strip():
+        raise ValueError("idempotency_key is required and must be reused for retries")
+    if not isinstance(population, dict) or len(population) > 32:
+        raise ValueError("population must be a bounded object")
+    return client_from_environment().post(
+        f"/api/v1/intelligence/research/{scope_id}/exports",
+        {"population": population, "maxRows": max_rows, "maxBytes": max_bytes,
+         "maxDurationSeconds": max_duration_seconds},
+        idempotency_key,
+    )
+
+
+@mcp.tool()
+def get_historical_dataset_export_status(
+    export_id: Annotated[UUID, Field(description="Historical dataset export job UUID.")],
+) -> str:
+    """Read authorized export lifecycle and artifact metadata without filesystem paths or dataset rows."""
+    return client_from_environment().get(f"/api/v1/intelligence/research/exports/{export_id}")
+
+
 def main() -> None:
     mcp.run()
 

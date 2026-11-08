@@ -14,6 +14,8 @@ final class AgentGrantCompatibility {
             AgentPermission.MARKETS_READ, Set.of(AgentResourceType.MARKET),
             AgentPermission.RISK_READ, Set.of(AgentResourceType.BROKER_ACCOUNT),
             AgentPermission.RESEARCH_RUN, Set.of(AgentResourceType.RESEARCH_SCOPE),
+            AgentPermission.RESEARCH_INSPECT, Set.of(AgentResourceType.RESEARCH_SCOPE),
+            AgentPermission.RESEARCH_EXPORT, Set.of(AgentResourceType.RESEARCH_SCOPE),
             AgentPermission.PLANS_CREATE, Set.of(AgentResourceType.BROKER_ACCOUNT));
 
     private AgentGrantCompatibility() {

@@ -56,10 +56,15 @@ class GatewayMarketIntelligenceRouteTest {
     @Test
     void publicResearchLifecycleRoutesToMarketIntelligence() {
         UUID researchId = UUID.randomUUID();
+        UUID scopeId = UUID.randomUUID();
+        UUID exportId = UUID.randomUUID();
         for (var request : List.of(
                 new Object[] {HttpMethod.POST, "/api/v1/intelligence/research"},
                 new Object[] {HttpMethod.GET, "/api/v1/intelligence/research/" + researchId},
-                new Object[] {HttpMethod.GET, "/api/v1/intelligence/research/" + researchId + "/report"})) {
+                new Object[] {HttpMethod.GET, "/api/v1/intelligence/research/" + researchId + "/report"},
+                new Object[] {HttpMethod.POST, "/api/v1/intelligence/research/" + scopeId + "/readiness"},
+                new Object[] {HttpMethod.POST, "/api/v1/intelligence/research/" + scopeId + "/exports"},
+                new Object[] {HttpMethod.GET, "/api/v1/intelligence/research/exports/" + exportId})) {
             Route route = matchedRoute((HttpMethod) request[0], (String) request[1]);
             assertThat(route.getId()).isEqualTo("market-intelligence");
             assertThat(route.getUri()).isEqualTo(URI.create("lb://market-intelligence"));

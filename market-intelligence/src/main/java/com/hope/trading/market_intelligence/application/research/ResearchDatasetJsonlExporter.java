@@ -7,6 +7,14 @@ import com.hope.trading.market_intelligence.domain.research.ResearchSample;
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionRepository;
 
 import java.util.*;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.function.BooleanSupplier;
 
 public final class ResearchDatasetJsonlExporter {
     private static final String STATUS = "status";
@@ -23,11 +31,51 @@ public final class ResearchDatasetJsonlExporter {
     }
 
     public String export(DatasetBuildResult dataset) {
-        Objects.requireNonNull(dataset, "dataset");
-        return dataset.samples().stream().map(sample -> line(dataset, sample))
-                .collect(java.util.stream.Collectors.joining("\n"))
-                + (dataset.samples().isEmpty() ? "" : "\n");
+        return export(dataset, () -> true);
     }
+
+    public String export(DatasetBuildResult dataset, BooleanSupplier publicationAllowed) {
+        Objects.requireNonNull(dataset, "dataset");
+        Objects.requireNonNull(publicationAllowed, "publication guard");
+        StringBuilder output = new StringBuilder();
+        for (var sample : dataset.samples()) {
+            if (!publicationAllowed.getAsBoolean()) {
+                throw new IllegalStateException("Research dataset export limit exceeded");
+            }
+            output.append(line(dataset, sample)).append('\n');
+        }
+        return output.toString();
+    }
+
+    public ExportFile exportTo(Path path, DatasetBuildResult dataset, long maxBytes,
+                               BooleanSupplier publicationAllowed) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(dataset, "dataset");
+        Objects.requireNonNull(publicationAllowed, "publication guard");
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            long bytes = 0;
+            Files.createDirectories(path.toAbsolutePath().getParent());
+            try (OutputStream output = new java.security.DigestOutputStream(Files.newOutputStream(path), digest)) {
+                for (var sample : dataset.samples()) {
+                    if (!publicationAllowed.getAsBoolean()) {
+                        throw new IllegalStateException("Research dataset export limit exceeded");
+                    }
+                    byte[] line = (line(dataset, sample) + "\n").getBytes(StandardCharsets.UTF_8);
+                    if (bytes + line.length > maxBytes) {
+                        throw new IllegalStateException("Research dataset output exceeds configured byte limit");
+                    }
+                    output.write(line);
+                    bytes += line.length;
+                }
+            }
+            return new ExportFile(bytes, HexFormat.of().formatHex(digest.digest()));
+        } catch (IOException | NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("Cannot stream research dataset samples", exception);
+        }
+    }
+
+    public record ExportFile(long bytes, String checksum) { }
 
     private String line(DatasetBuildResult dataset, ResearchSample sample) {
         FeatureSchema schema = dataset.manifest().featureSchema();

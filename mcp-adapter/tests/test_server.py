@@ -55,6 +55,9 @@ async def test_server_exposes_bounded_tools(fake_client):
         "start_market_research",
         "get_research_status",
         "get_research_report",
+        "inspect_historical_research_readiness",
+        "request_historical_dataset_export",
+        "get_historical_dataset_export_status",
         "request_account_synchronization",
         "get_agent_operation_status",
         "execute_approved_agent_operation",
@@ -127,6 +130,28 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
             "get_research_report",
             {"research_id": "00000000-0000-0000-0000-000000000003"},
         )
+        await client.call_tool(
+            "inspect_historical_research_readiness",
+            {
+                "scope_id": "00000000-0000-0000-0000-000000000006",
+                "market_ids": ["00000000-0000-0000-0000-000000000001"],
+                "cutoff_start": "2026-01-01T00:00:00Z",
+                "cutoff_end": "2026-01-02T00:00:00Z",
+                "dataset_profile": "feature-projection-v1",
+            },
+        )
+        await client.call_tool(
+            "request_historical_dataset_export",
+            {
+                "scope_id": "00000000-0000-0000-0000-000000000006",
+                "population": {"marketIds": ["00000000-0000-0000-0000-000000000001"]},
+                "idempotency_key": "export-1",
+            },
+        )
+        await client.call_tool(
+            "get_historical_dataset_export_status",
+            {"export_id": "00000000-0000-0000-0000-000000000007"},
+        )
 
     assert [path for path, _ in fake_client.calls] == [
         "/api/v1/markets",
@@ -140,6 +165,7 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         "/api/v1/agent/operation-requests/00000000-0000-0000-0000-000000000005",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003/report",
+        "/api/v1/intelligence/research/exports/00000000-0000-0000-0000-000000000007",
     ]
     assert fake_client.calls[3][1]["size"] == 10
     assert fake_client.post_calls[0][0] == "/api/v1/agent/operation-requests"
@@ -147,6 +173,9 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
     assert fake_client.post_calls[2][0] == "/api/v1/intelligence/research"
     assert fake_client.post_calls[2][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
     assert fake_client.post_calls[2][2] == "research-btc-eth-1"
+    assert fake_client.post_calls[3][0].endswith("/readiness")
+    assert fake_client.post_calls[4][0].endswith("/exports")
+    assert fake_client.post_calls[4][2] == "export-1"
 
 
 @pytest.mark.asyncio
@@ -317,6 +346,9 @@ async def test_server_starts_over_stdio():
         "start_market_research",
         "get_research_status",
         "get_research_report",
+        "inspect_historical_research_readiness",
+        "request_historical_dataset_export",
+        "get_historical_dataset_export_status",
         "request_account_synchronization",
         "get_agent_operation_status",
         "execute_approved_agent_operation",

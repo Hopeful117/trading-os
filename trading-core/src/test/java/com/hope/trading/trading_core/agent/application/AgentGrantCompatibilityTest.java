@@ -25,6 +25,16 @@ class AgentGrantCompatibilityTest {
     }
 
     @Test
+    void historicalResearchPermissionsRequireResearchScope() {
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.RESEARCH_INSPECT,
+                AgentResourceType.RESEARCH_SCOPE)).isTrue();
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.RESEARCH_EXPORT,
+                AgentResourceType.RESEARCH_SCOPE)).isTrue();
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.RESEARCH_EXPORT,
+                AgentResourceType.BROKER_ACCOUNT)).isFalse();
+    }
+
+    @Test
     void usesStablePermissionIdentifiersAtTheJsonBoundary() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
 
