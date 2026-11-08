@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MarketThesisDomainTest {
@@ -35,5 +36,39 @@ class MarketThesisDomainTest {
                 MarketThesisAvailability.NOT_IMPLEMENTED, null,
                 "MARKET_INTELLIGENCE", "MOMENTUM", null,
                 "Momentum is not implemented", NOW, null);
+    }
+
+    @Test
+    void subMicrosecondEvidenceCutoffDriftIsEquivalentToPersistedThesisCutoff() {
+        MarketThesisEvidence evidence = new MarketThesisEvidence(
+                UUID.randomUUID(), MarketThesisEvidenceRole.MISSING,
+                MarketThesisAvailability.UNKNOWN, null,
+                "MARKET_INTELLIGENCE", "MOMENTUM", null,
+                "Momentum is not implemented", NOW, null,
+                null, "BTC/EUR", null, "composer/v1", NOW.plusNanos(999), false);
+
+        MarketThesis thesis = assertDoesNotThrow(() -> new MarketThesis(
+                UUID.randomUUID(), UUID.randomUUID(), 1, UUID.randomUUID(), "BTC/EUR",
+                MarketThesisState.NO_TRADE, null, List.of(evidence), List.of(),
+                NOW, NOW, NOW, null, null, "composer/v1", "a".repeat(64), null));
+
+        org.assertj.core.api.Assertions.assertThat(thesis.sourceCutoff()).isEqualTo(NOW);
+        org.assertj.core.api.Assertions.assertThat(thesis.evidence().getFirst().sourceCutoff())
+                .isEqualTo(NOW);
+    }
+
+    @Test
+    void evidenceCutoffAfterPersistedThesisCutoffIsRejectedAtMicrosecondPrecision() {
+        MarketThesisEvidence evidence = new MarketThesisEvidence(
+                UUID.randomUUID(), MarketThesisEvidenceRole.MISSING,
+                MarketThesisAvailability.UNKNOWN, null,
+                "MARKET_INTELLIGENCE", "MOMENTUM", null,
+                "Momentum is not implemented", NOW, null,
+                null, "BTC/EUR", null, "composer/v1", NOW.plusNanos(1_000), false);
+
+        assertThrows(IllegalArgumentException.class, () -> new MarketThesis(
+                UUID.randomUUID(), UUID.randomUUID(), 1, UUID.randomUUID(), "BTC/EUR",
+                MarketThesisState.NO_TRADE, null, List.of(evidence), List.of(),
+                NOW, NOW, NOW, null, null, "composer/v1", "a".repeat(64), null));
     }
 }

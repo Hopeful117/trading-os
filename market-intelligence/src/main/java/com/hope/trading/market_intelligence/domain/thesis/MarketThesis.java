@@ -43,15 +43,19 @@ public final class MarketThesis {
             throw new IllegalArgumentException("CANDIDATE requires a scenario");
         }
         this.scenario = scenario;
-        this.evidence = List.copyOf(Objects.requireNonNull(evidence, "evidence"));
+        Instant normalizedSourceCutoff = ThesisTimestampPrecision.normalize(
+                Objects.requireNonNull(sourceCutoff, "sourceCutoff"));
+        this.evidence = Objects.requireNonNull(evidence, "evidence").stream()
+                .map(MarketThesis::normalizeEvidence)
+                .toList();
         if (this.evidence.isEmpty()) throw new IllegalArgumentException("Evidence is required");
         if (this.evidence.stream().anyMatch(value -> value.sourceCutoff() != null
-                && value.sourceCutoff().isAfter(sourceCutoff))) {
+                && value.sourceCutoff().isAfter(normalizedSourceCutoff))) {
             throw new IllegalArgumentException("Evidence source cutoff cannot exceed thesis source cutoff");
         }
         this.reasons = List.copyOf(Objects.requireNonNull(reasons, "reasons"));
         this.evaluatedAt = Objects.requireNonNull(evaluatedAt, "evaluatedAt");
-        this.sourceCutoff = Objects.requireNonNull(sourceCutoff, "sourceCutoff");
+        this.sourceCutoff = normalizedSourceCutoff;
         this.validFrom = Objects.requireNonNull(validFrom, "validFrom");
         if (validUntil != null && validUntil.isBefore(validFrom)) {
             throw new IllegalArgumentException("validUntil cannot precede validFrom");
@@ -64,6 +68,19 @@ public final class MarketThesis {
         if (hasBlockingContradiction() && state == MarketThesisState.CANDIDATE) {
             throw new IllegalArgumentException("Blocking contradiction cannot produce CANDIDATE");
         }
+    }
+
+    private static MarketThesisEvidence normalizeEvidence(MarketThesisEvidence value) {
+        Objects.requireNonNull(value, "evidence entry");
+        Instant sourceCutoff = value.sourceCutoff() == null ? null
+                : ThesisTimestampPrecision.normalize(value.sourceCutoff());
+        if (sourceCutoff == null || sourceCutoff.equals(value.sourceCutoff())) return value;
+        return new MarketThesisEvidence(
+                value.evidenceId(), value.role(), value.availability(), value.severity(),
+                value.source(), value.reference(), value.timeframe(), value.explanation(),
+                value.observedAt(), value.validUntil(), value.provider(),
+                value.instrument(), value.sourceFingerprint(), value.ruleVersion(),
+                sourceCutoff, value.required());
     }
 
     public boolean hasBlockingContradiction() {

@@ -11,6 +11,7 @@ import com.hope.trading.market_intelligence.domain.trendcontext.*;
 import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityAssessment;
 import com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesisState;
+import com.hope.trading.market_intelligence.domain.thesis.ThesisTimestampPrecision;
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
