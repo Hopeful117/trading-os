@@ -32,9 +32,6 @@ CREATE TABLE agent_operation_request (
 );
 CREATE INDEX idx_agent_operation_owner_created ON agent_operation_request(owner_user_id, created_at DESC);
 CREATE INDEX idx_agent_operation_agent_created ON agent_operation_request(agent_id, created_at DESC);
-CREATE UNIQUE INDEX uk_agent_operation_active_request
-    ON agent_operation_request(owner_user_id, operation_type, resource_type, resource_id)
-    WHERE status IN ('PENDING_APPROVAL', 'APPROVED', 'EXECUTING');
 ALTER TABLE agent_operation_request
     ADD CONSTRAINT ck_agent_operation_lifecycle_fields CHECK (
         (status = 'EXECUTING' AND executed_at IS NOT NULL)
@@ -57,5 +54,3 @@ CREATE TABLE agent_operation_audit_event (
     occurred_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 CREATE INDEX idx_agent_operation_audit_request_time ON agent_operation_audit_event(request_id, occurred_at DESC);
-CREATE INDEX idx_agent_operation_executing_recovery ON agent_operation_request(status, executed_at)
-    WHERE status = 'EXECUTING';

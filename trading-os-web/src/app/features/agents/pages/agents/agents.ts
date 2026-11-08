@@ -4,7 +4,13 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { forkJoin, of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { BrokerAccount } from '../../../../core/models/broker-account.model';
-import { Agent, AgentGrant, AgentOperationRequest, AgentPermission, AgentType } from '../../../../core/models/agent.model';
+import {
+  Agent,
+  AgentGrant,
+  AgentOperationRequest,
+  AgentPermission,
+  AgentType,
+} from '../../../../core/models/agent.model';
 import { AgentService } from '../../../../core/services/agent.service';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 

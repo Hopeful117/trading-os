@@ -78,14 +78,22 @@ export class AgentService {
   }
 
   operationRequests(): Observable<AgentOperationRequest[]> {
-    return this.http.get<AgentOperationRequest[]>(`${environment.gatewayUrl}v1/agent/operation-requests`);
+    return this.http.get<AgentOperationRequest[]>(
+      `${environment.gatewayUrl}v1/agent/operation-requests`,
+    );
   }
 
   approveOperation(id: string): Observable<AgentOperationRequest> {
-    return this.http.post<AgentOperationRequest>(`${environment.gatewayUrl}v1/agent/operation-requests/${id}/approve`, {});
+    return this.http.post<AgentOperationRequest>(
+      `${environment.gatewayUrl}v1/agent/operation-requests/${id}/approve`,
+      {},
+    );
   }
 
   rejectOperation(id: string): Observable<AgentOperationRequest> {
-    return this.http.post<AgentOperationRequest>(`${environment.gatewayUrl}v1/agent/operation-requests/${id}/reject`, {});
+    return this.http.post<AgentOperationRequest>(
+      `${environment.gatewayUrl}v1/agent/operation-requests/${id}/reject`,
+      {},
+    );
   }
 }
