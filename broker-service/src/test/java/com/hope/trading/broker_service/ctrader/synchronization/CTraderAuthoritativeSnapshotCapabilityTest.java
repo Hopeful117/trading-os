@@ -80,11 +80,11 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
                                  CTraderReadOnlyObservation.ProviderField.present("HEDGED"),
                                  CTraderReadOnlyObservation.ProviderField.present("MAX"),
                                  CTraderReadOnlyObservation.ProviderField.present("1"),
-                                 CTraderReadOnlyObservation.ProviderField.present(2),
-                                 CTraderReadOnlyObservation.ProviderField.present(10000L),
-                                 CTraderReadOnlyObservation.ProviderField.absent(),
-                                 CTraderReadOnlyObservation.ProviderField.absent(),
-                                 CTraderReadOnlyObservation.ProviderField.absent()),
+                                  CTraderReadOnlyObservation.ProviderField.present(2),
+                                  CTraderReadOnlyObservation.ProviderField.present(10000L),
+                                  CTraderReadOnlyObservation.ProviderField.present(BigDecimal.ZERO),
+                                  CTraderReadOnlyObservation.ProviderField.present(BigDecimal.ZERO),
+                                  CTraderReadOnlyObservation.ProviderField.present(BigDecimal.ZERO)),
                          CTraderReadOnlyObservation.CollectionState.available(List.of(
                                  new CTraderReadOnlyObservation.Position("EUR/USD", new BigDecimal("2"),
                                          new BigDecimal("1.1"), now, "position-1", new BigDecimal("5"),
@@ -111,6 +111,9 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
         assertThat(snapshot.account().marginCalculationModel()).isEqualTo(MarginCalculationModel.MAX);
         assertThat(snapshot.account().monetaryScale()).isEqualTo(2);
         assertThat(snapshot.account().leverage()).isEqualByComparingTo("100");
+        assertThat(snapshot.account().bonusFacts().managerBonus()).isZero();
+        assertThat(snapshot.account().bonusFacts().ibBonus()).isZero();
+        assertThat(snapshot.account().bonusFacts().nonWithdrawableBonus()).isZero();
         assertThat(snapshot.positionAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY);
         assertThat(snapshot.orderAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
         assertThat(snapshot.pnlAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_NON_EMPTY);
@@ -122,7 +125,10 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
             assertThat(pnl.monetaryScale()).isEqualTo(2);
         });
         assertThat(snapshot.unavailabilityReasons()).isEmpty();
-        assertThat(snapshot.account().equityFact().provenance()).isEqualTo(EquityProvenance.UNAVAILABLE);
+        assertThat(snapshot.account().equityFact().provenance()).isEqualTo(EquityProvenance.BROKER_REPORTED);
+        assertThat(snapshot.account().equityFact().availability()).isEqualTo(EquityAvailability.AVAILABLE);
+        assertThat(snapshot.account().equityFact().value()).isEqualByComparingTo("1010");
+        assertThat(snapshot.account().equityFact().source()).isEqualTo("CTRADER_TRADER_ACCOUNT");
         assertThat(snapshot.account().derivedEquityFact()).satisfies(derived -> {
             assertThat(derived.value()).isEqualByComparingTo("1008");
             assertThat(derived.provenance()).isEqualTo("BROKER_DERIVED");
@@ -188,9 +194,51 @@ class CTraderAuthoritativeSnapshotCapabilityTest {
 
         assertThat(snapshot.completeness()).isEqualTo(SnapshotCompleteness.COMPLETE);
         assertThat(snapshot.unavailabilityReasons()).isEmpty();
+        assertThat(snapshot.account().equityFact().availability()).isEqualTo(EquityAvailability.AVAILABLE);
+        assertThat(snapshot.account().equityFact().provenance()).isEqualTo(EquityProvenance.BROKER_DERIVED);
         assertThat(snapshot.positionAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
         assertThat(snapshot.orderAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
         assertThat(snapshot.pnlAvailability()).isEqualTo(SnapshotCollectionAvailability.AVAILABLE_EMPTY);
+    }
+
+    @Test
+    void emptyAccountCanUseValidatedBalanceAsEquity() {
+        UUID accountId = UUID.randomUUID();
+        UUID credential = UUID.randomUUID();
+        BrokerConnection connection = BrokerConnection.create(accountId, UUID.randomUUID(),
+                BrokerProviderId.CTRADER, now);
+        connection.authenticate(credential, now);
+        connection.bindExternalAccount("9001", "demo", now);
+        when(connections.findByBrokerAccountId(accountId)).thenReturn(Optional.of(connection));
+        when(secrets.read(new CredentialReference(credential))).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", now.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(
+                new CTraderReadOnlyObservation("9001", "USD", new BigDecimal("1000"), null,
+                        null, null, List.of(), List.of(), List.of(), now, now, now, true, List.of(),
+                        new CTraderReadOnlyObservation.AccountFacts(
+                                CTraderReadOnlyObservation.ProviderField.absent(),
+                                CTraderReadOnlyObservation.ProviderField.absent(),
+                                CTraderReadOnlyObservation.ProviderField.present("1"),
+                                CTraderReadOnlyObservation.ProviderField.present(2),
+                                CTraderReadOnlyObservation.ProviderField.absent(),
+                                CTraderReadOnlyObservation.ProviderField.present(BigDecimal.ZERO),
+                                CTraderReadOnlyObservation.ProviderField.present(BigDecimal.ZERO),
+                                CTraderReadOnlyObservation.ProviderField.present(BigDecimal.ZERO),
+                                CTraderReadOnlyObservation.ProviderField.present(7L)),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()),
+                        CTraderReadOnlyObservation.CollectionState.available(List.of()), true));
+
+         var snapshot = capability.snapshot(accountId);
+
+         assertThat(snapshot.account().equity()).isEqualByComparingTo("1000");
+         assertThat(snapshot.completeness()).isEqualTo(SnapshotCompleteness.INCOMPLETE);
+         assertThat(snapshot.unavailabilityReasons()).contains("USED_MARGIN_UNAVAILABLE", "FREE_MARGIN_UNAVAILABLE");
+         assertThat(snapshot.account().equityFact().provenance()).isEqualTo(EquityProvenance.BROKER_DERIVED);
+        assertThat(snapshot.account().equityFact().availability()).isEqualTo(EquityAvailability.AVAILABLE);
+        assertThat(snapshot.account().derivedEquityFact().validationStatus()).isEqualTo("VALIDATED");
+        assertThat(snapshot.account().derivedEquityFact().calculationVersion())
+                .isEqualTo("CTRADER_EMPTY_ACCOUNT_EQUITY_V1");
     }
 
     @Test

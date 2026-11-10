@@ -27,6 +27,13 @@ public interface OrderBookRetentionClient {
     @PostMapping("/internal/v1/order-book/retention/artifacts/canonical")
     void promoteCanonical(@RequestBody CanonicalPromotionRequest request);
 
+    @PostMapping("/internal/v1/order-book/retention/source-retirement/{operationId}/source-retired")
+    SourceRetirementAcknowledgement acknowledgeSourceRetirement(
+            @PathVariable UUID operationId, @RequestBody SourceRetirementAcknowledgementRequest request);
+
+    @GetMapping("/internal/v1/order-book/retention/source-retirement/{operationId}")
+    SourceRetirementAcknowledgement sourceRetirementAcknowledgement(@PathVariable UUID operationId);
+
     record DependencyRequest(String dependencyKey, String consumerType, String consumerIdentity,
                              UUID artifactId, UUID sequenceId, UUID segmentId, String reason) {
         public DependencyRequest(String dependencyKey, String consumerType, String consumerIdentity,
@@ -48,5 +55,12 @@ public interface OrderBookRetentionClient {
 
     record CanonicalPromotionRequest(java.util.UUID marketId, int depth, java.time.Instant cutoff,
                                      String semanticIdentity, String promotionReason) {
+    }
+
+    record SourceRetirementAcknowledgementRequest(String dependencyFingerprint, String actor, String reason) {
+    }
+
+    record SourceRetirementAcknowledgement(UUID operationId, String dependencyFingerprint, String state,
+                                           String reason) {
     }
 }

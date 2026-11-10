@@ -12,11 +12,13 @@ public record BrokerAccountFactsV2Dto(String valuationAsset, BigDecimal balance,
                                       Integer monetaryScale,
                                       BigDecimal leverage,
                                       EquityFactDto equityFact,
-                                      DerivedEquityFactDto derivedEquityFact) {
+                                      DerivedEquityFactDto derivedEquityFact,
+                                      BonusFactsDto bonusFacts) {
     public BrokerAccountFactsV2Dto {
         positionModel = positionModel == null ? AccountPositionModel.UNKNOWN : positionModel;
         marginCalculationModel = marginCalculationModel == null ? MarginCalculationModel.UNKNOWN : marginCalculationModel;
         equityFact = equityFact == null ? EquityFactDto.unavailable("EQUITY_PROVENANCE_UNAVAILABLE") : equityFact;
+        bonusFacts = bonusFacts == null ? BonusFactsDto.empty() : bonusFacts;
     }
 
     public BrokerAccountFactsV2Dto(String valuationAsset, BigDecimal balance,
@@ -24,7 +26,7 @@ public record BrokerAccountFactsV2Dto(String valuationAsset, BigDecimal balance,
                                    BigDecimal freeMargin) {
         this(valuationAsset, balance, equity, usedMargin, freeMargin,
                 AccountPositionModel.UNKNOWN, MarginCalculationModel.UNKNOWN, null, null,
-                EquityFactDto.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null);
+                EquityFactDto.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null, BonusFactsDto.empty());
     }
 
     public BrokerAccountFactsV2Dto(String valuationAsset, BigDecimal balance,
@@ -34,7 +36,18 @@ public record BrokerAccountFactsV2Dto(String valuationAsset, BigDecimal balance,
                                    Integer monetaryScale, BigDecimal leverage) {
         this(valuationAsset, balance, equity, usedMargin, freeMargin, positionModel,
                 marginCalculationModel, monetaryScale, leverage,
-                EquityFactDto.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null);
+                EquityFactDto.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null, BonusFactsDto.empty());
+    }
+
+    public BrokerAccountFactsV2Dto(String valuationAsset, BigDecimal balance,
+                                   BigDecimal equity, BigDecimal usedMargin,
+                                   BigDecimal freeMargin, AccountPositionModel positionModel,
+                                   MarginCalculationModel marginCalculationModel,
+                                   Integer monetaryScale, BigDecimal leverage,
+                                   EquityFactDto equityFact, DerivedEquityFactDto derivedEquityFact) {
+        this(valuationAsset, balance, equity, usedMargin, freeMargin, positionModel,
+                marginCalculationModel, monetaryScale, leverage, equityFact, derivedEquityFact,
+                BonusFactsDto.empty());
     }
 
     public record EquityFactDto(BigDecimal value, String currency, String provenance,
@@ -81,6 +94,13 @@ public record BrokerAccountFactsV2Dto(String valuationAsset, BigDecimal balance,
                 throw new IllegalArgumentException("derived equity diagnostic is incomplete");
             }
             reasons = List.copyOf(reasons == null ? List.of() : reasons);
+        }
+    }
+
+    public record BonusFactsDto(BigDecimal managerBonus, BigDecimal ibBonus,
+                                BigDecimal nonWithdrawableBonus) {
+        public static BonusFactsDto empty() {
+            return new BonusFactsDto(null, null, null);
         }
     }
 }

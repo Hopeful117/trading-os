@@ -90,6 +90,26 @@ export interface RiskDecisionResponse {
   metrics?: Record<string, number>;
 }
 
+export interface TradePlanApprovalResponse {
+  challengeId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'INVALIDATED';
+  tradingAccountId: string;
+  tradePlanId: string;
+  tradePlanVersion: number;
+  riskEvaluationId: string;
+  expiresAt: string;
+  parameterDigest: string;
+  plan: TradePlanResponse;
+  risk: {
+    evaluationId: string;
+    status: string;
+    decision: string;
+    approved: boolean;
+    evaluatedAt: string | null;
+  };
+  reason: string | null;
+}
+
 export interface TradeScenarioProjection {
   tradePlanId: string;
   tradePlanVersion: number;

@@ -13,6 +13,7 @@ public record CTraderExecutionInstrumentContract(
         long maxVolume,
         long stepVolume,
         Long lotSize,
+        Long maxExposure,
         Long stopLossDistance,
         Long takeProfitDistance,
         String distanceSetIn) {
@@ -33,12 +34,22 @@ public record CTraderExecutionInstrumentContract(
         if (lotSize != null && lotSize <= 0) {
             throw new IllegalArgumentException("CTRADER_INVALID_LOT_SIZE");
         }
+        if (maxExposure != null && maxExposure <= 0) {
+            throw new IllegalArgumentException("CTRADER_INVALID_MAX_EXPOSURE");
+        }
         if (stopLossDistance != null && stopLossDistance < 0) {
             throw new IllegalArgumentException("CTRADER_INVALID_STOP_DISTANCE");
         }
         if (takeProfitDistance != null && takeProfitDistance < 0) {
             throw new IllegalArgumentException("CTRADER_INVALID_TAKE_PROFIT_DISTANCE");
         }
+    }
+
+    public CTraderExecutionInstrumentContract(long symbolId, String symbolName, int digits, int pipPosition,
+                                              long minVolume, long maxVolume, long stepVolume, Long lotSize,
+                                              Long stopLossDistance, Long takeProfitDistance, String distanceSetIn) {
+        this(symbolId, symbolName, digits, pipPosition, minVolume, maxVolume, stepVolume, lotSize, null,
+                stopLossDistance, takeProfitDistance, distanceSetIn);
     }
 
     public long providerVolume(BigDecimal quantity) {

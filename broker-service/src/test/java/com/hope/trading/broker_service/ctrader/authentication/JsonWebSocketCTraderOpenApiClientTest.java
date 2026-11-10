@@ -502,14 +502,13 @@ class JsonWebSocketCTraderOpenApiClientTest {
     }
 
     @Test
-    void resolvesOnlyOneExactProviderSymbol() throws Exception {
+    void resolvesOneExactOrSeparatorNormalizedProviderSymbol() throws Exception {
         assertThat(client.selectListedSymbol(mapper.readTree(
                 "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"}]}"), "eurusd")
                 .path("symbolId").asLong()).isEqualTo(1);
-        assertThatThrownBy(() -> client.selectListedSymbol(mapper.readTree(
-                "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"}]}"), "EUR/USD"))
-                .isInstanceOf(CTraderAuthenticationException.class)
-                .hasMessage("CTRADER_UNKNOWN_INSTRUMENT");
+        assertThat(client.selectListedSymbol(mapper.readTree(
+                "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"}]}"), "EUR/USD")
+                .path("symbolId").asLong()).isEqualTo(1);
         assertThatThrownBy(() -> client.selectListedSymbol(mapper.readTree(
                 "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"},{\"symbolId\":2,\"symbolName\":\"EURUSD\"}]}"), "EURUSD"))
                 .isInstanceOf(CTraderAuthenticationException.class)

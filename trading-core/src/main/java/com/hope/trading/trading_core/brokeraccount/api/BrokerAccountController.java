@@ -57,6 +57,7 @@ public class BrokerAccountController {
         return ResponseEntity.ok(readOnlyStatusService.status(principal(authentication).getUserId(), accountId));
     }
 
+
     @PostMapping("/{accountId}/disconnect")
     public ResponseEntity<BrokerAccountResponse> disconnect(@PathVariable UUID accountId,
                                                             Authentication authentication) {

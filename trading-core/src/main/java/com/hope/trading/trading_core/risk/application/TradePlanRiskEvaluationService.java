@@ -293,7 +293,9 @@ public class TradePlanRiskEvaluationService {
         Optional<Money> accountStartingBalance = Optional.ofNullable(startingBalance)
                 .map(value -> new Money(positiveOrZero(value, "BROKER_STARTING_BALANCE_INVALID")
                         .multiply(accountRate), currency));
-        ClosedPnl dailyClosed = closedPnl(brokerSnapshot, currency, riskDay);
+        ClosedPnl dailyClosed = requirements.closedDeals()
+                ? closedPnl(brokerSnapshot, currency, riskDay)
+                : new ClosedPnl(Optional.empty(), List.of());
         Optional<BigDecimal> dailyClosedPnl = dailyClosed.amount();
 
         List<PositionSnapshot> positions = positions(brokerSnapshot.positions(), current, currency, accountRate,
@@ -521,8 +523,9 @@ public class TradePlanRiskEvaluationService {
             String reason = structuralFailure == null ? "BROKER_RISK_INTERVAL_INVALID" : structuralFailure;
             throw unavailable(reason);
         }
-        if (snapshot.closedTrades().stream().anyMatch(t -> t == null || t.closedAt() == null
-                || !riskDay.contains(t.closedAt()) || t.closedAt().isAfter(snapshot.observedAt()))
+        if (requirements.closedDeals() && snapshot.closedTrades().stream().anyMatch(t -> t == null
+                || t.closedAt() == null || !riskDay.contains(t.closedAt())
+                || t.closedAt().isAfter(snapshot.observedAt()))
                 || snapshot.ledgerEntries().stream().anyMatch(e -> e == null || e.occurredAt() == null
                 || !riskDay.contains(e.occurredAt()) || e.occurredAt().isAfter(snapshot.observedAt()))) {
             throw unavailable("BROKER_RISK_INTERVAL_INVALID");
@@ -580,7 +583,7 @@ public class TradePlanRiskEvaluationService {
         return reconstructStartBalances(RiskFactsProvider.fromBroker(snapshot), day);
     }
 
-    private ClosedPnl closedPnl(RiskFactsProvider.Snapshot snapshot, String currency, RiskDay riskDay) {
+    ClosedPnl closedPnl(RiskFactsProvider.Snapshot snapshot, String currency, RiskDay riskDay) {
         if (snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.UNAVAILABLE_OR_ABSENT
                 || snapshot.dealAvailability() == RiskFactsProvider.DealAvailability.TRUNCATED) {
             return new ClosedPnl(Optional.empty(), List.of());
@@ -641,7 +644,7 @@ public class TradePlanRiskEvaluationService {
                         valuation.sourceVersion(), currency);
                 result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                         projection.marketValue(), projection.lossAtStop(),
-                        new Money(position.margin().multiply(marginConversionRate), currency),
+                         position.margin() == null ? null : new Money(position.margin().multiply(marginConversionRate), currency),
                         position.protectionStatus()));
                 continue;
             }
@@ -658,7 +661,8 @@ public class TradePlanRiskEvaluationService {
             }
             result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                     new Money(position.signedQuantity().abs().multiply(price.value()), currency),
-                    new Money(loss, currency), new Money(position.margin().multiply(marginConversionRate), currency),
+                     new Money(loss, currency), position.margin() == null ? null
+                             : new Money(position.margin().multiply(marginConversionRate), currency),
                     position.protectionStatus()));
         }
         return List.copyOf(result);
@@ -762,5 +766,5 @@ public class TradePlanRiskEvaluationService {
         private final String code;
         private ContextUnavailable(String code) { super(code); this.code = code; }
     }
-    private record ClosedPnl(Optional<BigDecimal> amount, List<String> marketPayloads) { }
+    static record ClosedPnl(Optional<BigDecimal> amount, List<String> marketPayloads) { }
 }

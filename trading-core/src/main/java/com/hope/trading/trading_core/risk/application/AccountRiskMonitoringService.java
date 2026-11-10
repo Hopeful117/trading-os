@@ -180,7 +180,7 @@ public class AccountRiskMonitoringService {
             }
             result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                     new Money(position.marketValue(), currency), java.util.Optional.empty(),
-                    new Money(nonNegative(position.margin()), currency),
+                     position.margin() == null ? null : new Money(nonNegative(position.margin()), currency),
                     position.protectionStatus() == null
                             ? com.hope.trading.risk.domain.RiskTypes.ProtectionStatus.UNKNOWN
                             : position.protectionStatus()));

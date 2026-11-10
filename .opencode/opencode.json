@@ -7,7 +7,8 @@
       "cwd": "mcp-adapter",
       "environment": {
         "TRADING_OS_GATEWAY_URL": "http://127.0.0.1:17080",
-        "TRADING_OS_MCP_BRIDGE_PORT": "17891"
+        "TRADING_OS_MCP_BRIDGE_PORT": "17891",
+        "TRADING_OS_MCP_BRIDGE_ALLOWED_ORIGINS": "http://localhost:17085,http://127.0.0.1:17085,http://localhost:4200,http://127.0.0.1:4200"
       }
     }
   }

@@ -349,6 +349,10 @@ class TradePlanRiskEvaluationServiceTest {
                 new BigDecimal("2"), new BigDecimal("100"), now.minusSeconds(60));
         when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(List.of(), List.of(trade)));
 
+        service.closedPnl(RiskFactsProvider.fromBroker(brokerSnapshot(List.of(), List.of(trade))),
+                "USD", new RiskDay(java.time.LocalDate.parse("2026-08-01"),
+                        now.minusSeconds(43200), now.plusSeconds(43200)));
+
         Response response = service.evaluate(command("key", 3));
 
         assertThat(response.status()).isEqualTo("COMPLETED");
@@ -372,11 +376,15 @@ class TradePlanRiskEvaluationServiceTest {
             return valuation(invocation);
         }).when(market).value(any(), any(), any(), any(), any());
 
+        assertThatThrownBy(() -> service.closedPnl(
+                RiskFactsProvider.fromBroker(brokerSnapshot(List.of(), List.of(trade))), "USD",
+                new RiskDay(java.time.LocalDate.parse("2026-08-01"),
+                        now.minusSeconds(43200), now.plusSeconds(43200))))
+                .hasMessage("CLOSED_TRADE_CONVERSION_UNAVAILABLE");
+
         Response response = service.evaluate(command("key", 3));
 
-        assertThat(response.status()).isEqualTo("CONTEXT_UNAVAILABLE");
-        assertThat(response.reasons()).extracting(RiskEvaluationModels.Reason::code)
-                .containsExactly("CLOSED_TRADE_CONVERSION_UNAVAILABLE");
+        assertThat(response.status()).isEqualTo("COMPLETED");
     }
 
     @Test
@@ -557,6 +565,45 @@ class TradePlanRiskEvaluationServiceTest {
         assertThat(response.status()).isEqualTo("COMPLETED");
         verify(acknowledgmentDelivery, never()).deliver(any());
         verify(plans, never()).acknowledge(any(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void incompleteClosedTradeFieldsDoNotBlockWhenNoRuleConsumesClosedDeals() {
+        availableContext(List.of());
+        when(broker.load(any(), any(), any())).thenReturn(brokerSnapshot(List.of(), List.of(
+                new BrokerRiskFactsPort.ClosedTrade("trade-1", "EUR/USD", "USD", null, null, null))));
+
+        Response response = service.evaluate(command("key", 3));
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.reasons()).isEmpty();
+    }
+
+    @Test
+    void mandatoryClosedTradeCalculationStillRejectsMissingFees() {
+        RiskFactsProvider.Snapshot snapshot = new RiskFactsProvider.Snapshot(
+                brokerAccountId, 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
+                new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"),
+                        new BigDecimal("100"), new BigDecimal("10000")), List.of(),
+                List.of(new RiskFactsProvider.ClosedTrade("trade-1", "EUR/USD", "USD", null,
+                        new BigDecimal("10"), now)), List.of(), "{}",
+                RiskFactsProvider.DealAvailability.AVAILABLE_NON_EMPTY);
+
+        assertThatThrownBy(() -> service.closedPnl(snapshot, "USD", new RiskDay(
+                java.time.LocalDate.parse("2026-08-01"), now.minusSeconds(43200), now.plusSeconds(43200))))
+                .hasMessage("CLOSED_TRADE_FACT_INCOMPLETE");
+    }
+
+    @Test
+    void verifiedEmptyClosedTradeHistoryProducesZeroAggregate() {
+        RiskFactsProvider.Snapshot snapshot = new RiskFactsProvider.Snapshot(
+                brokerAccountId, 11, now, true, List.of(), Map.of("USD", new BigDecimal("10000")),
+                new RiskFactsProvider.Account("USD", new BigDecimal("10000"), new BigDecimal("10000"),
+                        new BigDecimal("100"), new BigDecimal("10000")), List.of(), List.of(), List.of(), "{}");
+
+        assertThat(service.closedPnl(snapshot, "USD", new RiskDay(
+                java.time.LocalDate.parse("2026-08-01"), now.minusSeconds(43200), now.plusSeconds(43200)))
+                .amount()).contains(BigDecimal.ZERO);
     }
 
     @Test

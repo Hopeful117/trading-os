@@ -7,16 +7,19 @@ import java.util.Map;
 import java.util.Set;
 
 final class AgentGrantCompatibility {
-    private static final Map<AgentPermission, Set<AgentResourceType>> SUPPORTED = Map.of(
-            AgentPermission.ACCOUNTS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT),
-            AgentPermission.ACCOUNTS_SYNC, Set.of(AgentResourceType.BROKER_ACCOUNT),
-            AgentPermission.POSITIONS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT),
-            AgentPermission.MARKETS_READ, Set.of(AgentResourceType.MARKET),
-            AgentPermission.RISK_READ, Set.of(AgentResourceType.BROKER_ACCOUNT),
-            AgentPermission.RESEARCH_RUN, Set.of(AgentResourceType.RESEARCH_SCOPE),
-            AgentPermission.RESEARCH_INSPECT, Set.of(AgentResourceType.RESEARCH_SCOPE),
-            AgentPermission.RESEARCH_EXPORT, Set.of(AgentResourceType.RESEARCH_SCOPE),
-            AgentPermission.PLANS_CREATE, Set.of(AgentResourceType.BROKER_ACCOUNT));
+    private static final Map<AgentPermission, Set<AgentResourceType>> SUPPORTED = Map.ofEntries(
+            Map.entry(AgentPermission.ACCOUNTS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.ACCOUNTS_SYNC, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.POSITIONS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.MARKETS_READ, Set.of(AgentResourceType.MARKET)),
+            Map.entry(AgentPermission.RISK_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.RESEARCH_RUN, Set.of(AgentResourceType.RESEARCH_SCOPE)),
+            Map.entry(AgentPermission.RESEARCH_INSPECT, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.RESEARCH_EXPORT, Set.of(AgentResourceType.RESEARCH_SCOPE)),
+            Map.entry(AgentPermission.PLANS_CREATE, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.TRADE_PLAN_APPROVAL_REQUEST, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.TRADE_PLAN_RISK_EVALUATE, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+            Map.entry(AgentPermission.TRADE_PLAN_APPROVAL_STATUS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)));
 
     private AgentGrantCompatibility() {
     }

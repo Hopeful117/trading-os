@@ -67,7 +67,7 @@ describe('AgentService', () => {
     request = http.expectOne('/api/v1/agents/agent-1/grants');
     request.flush([]);
 
-    service.createGrant('agent-1', 'accounts:read', 'broker-1').subscribe();
+    service.createGrant('agent-1', 'accounts:read', 'BROKER_ACCOUNT', 'broker-1').subscribe();
     request = http.expectOne('/api/v1/agents/agent-1/grants');
     expect(request.request.body).toEqual({
       permission: 'accounts:read',
@@ -75,6 +75,17 @@ describe('AgentService', () => {
       resourceId: 'broker-1',
     });
     request.flush({ id: 'grant-1' });
+
+    service.listResearchScopes().subscribe();
+    request = http.expectOne('/api/v1/research-scopes');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+
+    service.createResearchScope('broker-1').subscribe();
+    request = http.expectOne('/api/v1/research-scopes');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ brokerAccountId: 'broker-1' });
+    request.flush({ id: 'scope-1' });
 
     service.revokeGrant('agent-1', 'grant-1').subscribe();
     request = http.expectOne('/api/v1/agents/agent-1/grants/grant-1/revoke');

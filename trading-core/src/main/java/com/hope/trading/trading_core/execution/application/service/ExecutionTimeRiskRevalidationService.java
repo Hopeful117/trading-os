@@ -630,7 +630,7 @@ public class ExecutionTimeRiskRevalidationService {
                         valuation.sourceVersion(), currency);
                 result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                         projection.marketValue(), projection.lossAtStop(),
-                        new Money(position.margin().multiply(marginConversionRate), currency),
+                         position.margin() == null ? null : new Money(position.margin().multiply(marginConversionRate), currency),
                         position.protectionStatus()));
                 continue;
             }
@@ -645,7 +645,8 @@ public class ExecutionTimeRiskRevalidationService {
             }
             result.add(new PositionSnapshot(position.positionId(), position.instrument(), position.signedQuantity(),
                     new Money(position.signedQuantity().abs().multiply(price.value()), currency),
-                    new Money(loss, currency), new Money(position.margin().multiply(marginConversionRate), currency),
+                     new Money(loss, currency), position.margin() == null ? null
+                             : new Money(position.margin().multiply(marginConversionRate), currency),
                     position.protectionStatus()));
         }
         return List.copyOf(result);

@@ -5,6 +5,10 @@ import com.hope.trading.risk.policy.RuleConfiguration;
 import com.hope.trading.risk.domain.RiskRuleIds;
 import java.time.Instant;
 
+/**
+ * Limits projected aggregate notional allocation relative to observed equity.
+ * This is not a stop-loss, margin-utilization, or leverage calculation.
+ */
 public final class MaximumExposureRule implements RiskRule {
     public static final String ID = RiskRuleIds.MAX_EXPOSURE;
     @Override public String id() { return ID; }

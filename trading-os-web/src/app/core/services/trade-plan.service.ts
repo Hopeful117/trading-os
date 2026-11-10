@@ -8,6 +8,7 @@ import {
   RiskDecisionResponse,
   TradeScenarioProjection,
   TradePlanResponse,
+  TradePlanApprovalResponse,
 } from '../models/trade-plan.model';
 
 @Injectable({
@@ -89,6 +90,22 @@ export class TradePlanService {
   getProjection(planId: string, version: number): Observable<TradeScenarioProjection> {
     return this.http.get<TradeScenarioProjection>(
       `${environment.gatewayUrl}v1/trade-plans/${planId}/versions/${version}/projection`,
+    );
+  }
+
+  getApproval(challengeId: string): Observable<TradePlanApprovalResponse> {
+    return this.http.get<TradePlanApprovalResponse>(
+      `${environment.gatewayUrl}v1/trade-plan-approvals/${challengeId}`,
+    );
+  }
+
+  decideApproval(
+    challengeId: string,
+    decision: 'approve' | 'reject',
+  ): Observable<TradePlanApprovalResponse> {
+    return this.http.post<TradePlanApprovalResponse>(
+      `${environment.gatewayUrl}v1/trade-plan-approvals/${challengeId}/${decision}`,
+      {},
     );
   }
 }

@@ -40,7 +40,8 @@ public record OrderBookReplayResult(
     public enum ReplayStatus {
         AVAILABLE,
         INVALID,
-        UNAVAILABLE
+        UNAVAILABLE,
+        SOURCE_RETIRED
     }
 
     public static OrderBookReplayResult unavailable(UUID marketId, int depth, Instant cutoff, String reason) {
@@ -51,6 +52,11 @@ public record OrderBookReplayResult(
     public static OrderBookReplayResult invalid(UUID marketId, int depth, Instant cutoff, UUID sequenceId,
                                                 String reason) {
         return new OrderBookReplayResult(ReplayStatus.INVALID, marketId, depth, sequenceId, cutoff,
+                null, null, null, null, null, null, null, null, null, null, List.of(), List.of(), reason);
+    }
+
+    public static OrderBookReplayResult sourceRetired(UUID marketId, int depth, Instant cutoff, String reason) {
+        return new OrderBookReplayResult(ReplayStatus.SOURCE_RETIRED, marketId, depth, null, cutoff,
                 null, null, null, null, null, null, null, null, null, null, List.of(), List.of(), reason);
     }
 }

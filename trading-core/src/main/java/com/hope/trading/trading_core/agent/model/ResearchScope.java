@@ -26,6 +26,9 @@ public class ResearchScope {
     @Column(name = "owner_user_id", nullable = false, updatable = false)
     private UUID ownerUserId;
 
+    @Column(name = "broker_account_id")
+    private UUID brokerAccountId;
+
     @ElementCollection
     @CollectionTable(name = "research_scope_market", joinColumns = @JoinColumn(name = "scope_id"))
     @Column(name = "market_id", nullable = false)
@@ -74,18 +77,15 @@ public class ResearchScope {
     protected ResearchScope() {
     }
 
-    private ResearchScope(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt) {
-        this(ownerUserId, marketIds, now, expiresAt, null);
-    }
-
-    private ResearchScope(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt,
+    private ResearchScope(UUID ownerUserId, UUID brokerAccountId, Set<UUID> marketIds, Instant now, Instant expiresAt,
                           HistoricalResearchConstraints historicalConstraints) {
-        if (ownerUserId == null || marketIds == null || marketIds.size() != 2 || now == null
+        if (ownerUserId == null || marketIds == null || marketIds.isEmpty() || now == null
                 || (expiresAt != null && !expiresAt.isAfter(now))) {
-            throw new IllegalArgumentException("owner, exactly two markets and valid timestamps are required");
+            throw new IllegalArgumentException("owner, markets and valid timestamps are required");
         }
         this.id = UUID.randomUUID();
         this.ownerUserId = ownerUserId;
+        this.brokerAccountId = brokerAccountId;
         this.marketIds = new HashSet<>(marketIds);
         this.status = ResearchScopeStatus.ACTIVE;
         this.createdAt = now;
@@ -94,12 +94,21 @@ public class ResearchScope {
     }
 
     public static ResearchScope create(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt) {
-        return new ResearchScope(ownerUserId, marketIds, now, expiresAt);
+        return new ResearchScope(ownerUserId, null, marketIds, now, expiresAt, null);
     }
 
     public static ResearchScope create(UUID ownerUserId, Set<UUID> marketIds, Instant now, Instant expiresAt,
                                        HistoricalResearchConstraints historicalConstraints) {
-        return new ResearchScope(ownerUserId, marketIds, now, expiresAt, historicalConstraints);
+        return new ResearchScope(ownerUserId, null, marketIds, now, expiresAt, historicalConstraints);
+    }
+
+    public static ResearchScope create(UUID ownerUserId, UUID brokerAccountId, Set<UUID> marketIds,
+                                       Instant now, Instant expiresAt,
+                                       HistoricalResearchConstraints historicalConstraints) {
+        if (brokerAccountId == null) {
+            throw new IllegalArgumentException("broker account is required for new research scopes");
+        }
+        return new ResearchScope(ownerUserId, brokerAccountId, marketIds, now, expiresAt, historicalConstraints);
     }
 
     private void apply(HistoricalResearchConstraints constraints) {
@@ -134,6 +143,7 @@ public class ResearchScope {
 
     public UUID id() { return id; }
     public UUID ownerUserId() { return ownerUserId; }
+    public UUID brokerAccountId() { return brokerAccountId; }
     public Set<UUID> marketIds() { return Set.copyOf(marketIds); }
     public ResearchScopeStatus status() { return status; }
     public Instant createdAt() { return createdAt; }

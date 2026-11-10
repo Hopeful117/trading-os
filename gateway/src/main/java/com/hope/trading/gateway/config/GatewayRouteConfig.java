@@ -101,9 +101,13 @@ public class GatewayRouteConfig {
                                 "/api/v1/broker-accounts/*/ctrader/authorization",
                                 "/api/v1/broker-accounts/*/ctrader/authorization/**"
                         )
+                          .uri(uriFor.apply("broker-service", "lb://broker-service"))
+                  )
+                 .route("ctrader-read-only-validation", r -> r
+                         .path("/api/v1/broker-accounts/*/ctrader/validation")
                          .uri(uriFor.apply("broker-service", "lb://broker-service"))
                  )
-                .route("ctrader-market-data-authorization", r -> r
+                 .route("ctrader-market-data-authorization", r -> r
                         .path(
                                 "/api/v1/ctrader/authorization",
                                 "/api/v1/ctrader/authorization/**"

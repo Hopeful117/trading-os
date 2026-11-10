@@ -1,20 +1,34 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, Observable, of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { BrokerAccount } from '../../../../core/models/broker-account.model';
 import {
   Agent,
   AgentGrant,
   AgentOperationRequest,
+  AgentOperationStatus,
   AgentPermission,
   AgentType,
+  ResearchScope,
 } from '../../../../core/models/agent.model';
 import { AgentService } from '../../../../core/services/agent.service';
 import { BrokerAccountService } from '../../../../core/services/broker-account.service';
 
 type Feedback = { kind: 'success' | 'error'; message: string } | null;
+type OperationStatusFilter = AgentOperationStatus | 'ALL';
+
+const OPERATION_STATUSES: AgentOperationStatus[] = [
+  'PENDING_APPROVAL',
+  'APPROVED',
+  'EXECUTING',
+  'SUCCEEDED',
+  'FAILED',
+  'OUTCOME_UNKNOWN',
+  'REJECTED',
+  'EXPIRED',
+];
 
 @Component({
   selector: 'app-agents',
@@ -29,7 +43,16 @@ export class Agents {
   readonly agents = signal<Agent[]>([]);
   readonly grants = signal<Record<string, AgentGrant[]>>({});
   readonly brokerAccounts = signal<BrokerAccount[]>([]);
+  readonly researchScopes = signal<ResearchScope[]>([]);
   readonly operationRequests = signal<AgentOperationRequest[]>([]);
+  readonly operationStatusFilter = signal<OperationStatusFilter>('ALL');
+  readonly operationStatuses = OPERATION_STATUSES;
+  readonly filteredOperationRequests = computed(() => {
+    const filter = this.operationStatusFilter();
+    return filter === 'ALL'
+      ? this.operationRequests()
+      : this.operationRequests().filter((request) => request.status === filter);
+  });
   readonly loading = signal(true);
   readonly busy = signal(false);
   readonly feedback = signal<Feedback>(null);
@@ -40,9 +63,18 @@ export class Agents {
       validators: [Validators.required, Validators.maxLength(80)],
     }),
     agentType: new FormControl<AgentType>('OPENCODE', { nonNullable: true }),
-    brokerAccountId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    brokerAccountId: new FormControl('', { nonNullable: true }),
     accountsRead: new FormControl(true, { nonNullable: true }),
     positionsRead: new FormControl(true, { nonNullable: true }),
+    researchInspect: new FormControl(false, { nonNullable: true }),
+    researchExport: new FormControl(false, { nonNullable: true }),
+    tradePlanRiskEvaluate: new FormControl(false, { nonNullable: true }),
+    tradePlanApprovalStatusRead: new FormControl(false, { nonNullable: true }),
+  });
+
+  readonly grantForm = new FormGroup({
+    agentId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    permission: new FormControl<AgentPermission>('research:inspect', { nonNullable: true }),
   });
 
   constructor() {
@@ -54,12 +86,15 @@ export class Agents {
     forkJoin({
       agents: this.agentService.list(),
       brokerAccounts: this.brokerAccountService.list(),
+      researchScopes: this.agentService.listResearchScopes(),
       operationRequests: this.agentService.operationRequests(),
     }).subscribe({
-      next: ({ agents, brokerAccounts, operationRequests }) => {
+      next: ({ agents, brokerAccounts, researchScopes, operationRequests }) => {
         this.agents.set(agents);
         this.brokerAccounts.set(brokerAccounts);
+        this.researchScopes.set(researchScopes);
         this.operationRequests.set(operationRequests);
+        this.setDefaultOperationStatusFilter(operationRequests);
         this.loadGrants(agents);
         this.loading.set(false);
       },
@@ -73,8 +108,13 @@ export class Agents {
     });
   }
 
+  setDefaultOperationStatusFilter(requests: AgentOperationRequest[]): void {
+    const pendingRequest = requests.find((request) => request.status === 'PENDING_APPROVAL');
+    this.operationStatusFilter.set(pendingRequest?.status ?? 'ALL');
+  }
+
   createAgent(): void {
-    if (this.busy() || this.form.invalid) {
+    if (this.busy() || this.form.controls.displayName.invalid) {
       this.form.markAllAsTouched();
       return;
     }
@@ -83,11 +123,25 @@ export class Agents {
     const permissions: AgentPermission[] = [
       ...(value.accountsRead ? ['accounts:read' as const] : []),
       ...(value.positionsRead ? ['positions:read' as const] : []),
+      ...(value.researchInspect ? ['research:inspect' as const] : []),
+      ...(value.researchExport ? ['research:export' as const] : []),
+      ...(value.tradePlanRiskEvaluate ? ['trade-plan-risk:evaluate' as const] : []),
+      ...(value.tradePlanApprovalStatusRead ? ['trade-plan-approval:status:read' as const] : []),
     ];
     if (permissions.length === 0) {
       this.feedback.set({
         kind: 'error',
-        message: 'Sélectionnez au moins une permission read-only.',
+        message: 'Sélectionnez au moins une permission.',
+      });
+      return;
+    }
+    const needsResearchScope = permissions.includes('research:export');
+
+    if (permissions.length > 0 && !value.brokerAccountId) {
+      this.form.controls.brokerAccountId.markAsTouched();
+      this.feedback.set({
+        kind: 'error',
+        message: 'Sélectionnez un compte broker lié à cet agent.',
       });
       return;
     }
@@ -98,14 +152,24 @@ export class Agents {
       .create(value.displayName.trim(), value.agentType)
       .pipe(
         switchMap((agent) =>
-          forkJoin({
-            agent: of(agent),
-            grants: forkJoin(
-              permissions.map((permission) =>
-                this.agentService.createGrant(agent.id, permission, value.brokerAccountId),
-              ),
+          this.ensureResearchScope(value.brokerAccountId, needsResearchScope).pipe(
+            switchMap((scope) =>
+              forkJoin({
+                agent: of(agent),
+                grants: forkJoin(
+                  permissions.map((permission) => {
+                    const resourceType = this.resourceTypeFor(permission);
+                    return this.agentService.createGrant(
+                      agent.id,
+                      permission,
+                      resourceType,
+                      resourceType === 'RESEARCH_SCOPE' ? scope!.id : value.brokerAccountId,
+                    );
+                  }),
+                ),
+              }),
             ),
-          }),
+          ),
         ),
       )
       .subscribe({
@@ -116,6 +180,10 @@ export class Agents {
             brokerAccountId: value.brokerAccountId,
             accountsRead: true,
             positionsRead: true,
+            researchInspect: false,
+            researchExport: false,
+            tradePlanRiskEvaluate: false,
+            tradePlanApprovalStatusRead: false,
           });
           this.agentService.connectToOpenCode(agent.id).subscribe({
             next: () => {
@@ -189,6 +257,50 @@ export class Agents {
     });
   }
 
+  addGrant(): void {
+    if (this.busy() || this.grantForm.invalid) {
+      this.grantForm.markAllAsTouched();
+      return;
+    }
+    const value = this.grantForm.getRawValue();
+    const resourceType = this.resourceTypeFor(value.permission);
+    const brokerAccountId = this.linkedBrokerAccountId(value.agentId);
+    if (!brokerAccountId) {
+      this.feedback.set({
+        kind: 'error',
+        message: 'Aucun compte broker n’est lié à cet agent.',
+      });
+      return;
+    }
+    this.busy.set(true);
+    this.feedback.set(null);
+    this.ensureResearchScope(brokerAccountId, resourceType === 'RESEARCH_SCOPE')
+      .pipe(
+        switchMap((scope) =>
+          this.agentService.createGrant(
+            agentIdOrThrow(value.agentId),
+            value.permission,
+            resourceType,
+            resourceType === 'RESEARCH_SCOPE' ? scope!.id : brokerAccountId,
+          ),
+        ),
+      )
+      .subscribe({
+        next: () => {
+          this.grantForm.reset({
+            agentId: value.agentId,
+            permission: 'research:inspect',
+          });
+          this.finishAction('Permission ajoutée à l’agent.');
+        },
+        error: () => this.failAction('L’ajout de la permission a échoué.'),
+      });
+  }
+
+  resourceTypeFor(permission: AgentPermission): 'BROKER_ACCOUNT' | 'RESEARCH_SCOPE' {
+    return permission === 'research:export' ? 'RESEARCH_SCOPE' : 'BROKER_ACCOUNT';
+  }
+
   approveOperation(request: AgentOperationRequest): void {
     if (this.busy() || request.status !== 'PENDING_APPROVAL') return;
     this.busy.set(true);
@@ -212,11 +324,23 @@ export class Agents {
     return account ? `${account.displayName} · ${account.provider}` : accountId;
   }
 
+  grantLabel(grant: AgentGrant): string {
+    if (grant.resourceType === 'RESEARCH_SCOPE') {
+      const scope = this.researchScopes().find((item) => item.id === grant.resourceId);
+      return `${grant.permission} · univers de ${this.accountLabel(scope?.brokerAccountId ?? grant.resourceId)}`;
+    }
+    return `${grant.permission} · ${this.accountLabel(grant.resourceId)}`;
+  }
+
   permissions(grants: AgentGrant[]): string {
     return grants
       .filter((grant) => grant.status === 'ACTIVE')
       .map((grant) => grant.permission)
       .join(', ');
+  }
+
+  activeGrants(grants: AgentGrant[]): AgentGrant[] {
+    return grants.filter((grant) => grant.status === 'ACTIVE');
   }
 
   private loadGrants(agents: Agent[]): void {
@@ -244,4 +368,35 @@ export class Agents {
     this.busy.set(false);
     this.feedback.set({ kind: 'error', message });
   }
+
+  private linkedBrokerAccountId(agentId: string): string | null {
+    return (
+      this.grants()[agentId]?.find(
+        (grant) =>
+          grant.status === 'ACTIVE' &&
+          (grant.permission === 'accounts:read' || grant.permission === 'positions:read') &&
+          grant.resourceType === 'BROKER_ACCOUNT',
+      )?.resourceId ?? null
+    );
+  }
+
+  private ensureResearchScope(
+    brokerAccountId: string,
+    required: boolean,
+  ): Observable<ResearchScope | null> {
+    if (!required) {
+      return of(null);
+    }
+    const existing = this.researchScopes().find(
+      (scope) => scope.status === 'ACTIVE' && scope.brokerAccountId === brokerAccountId,
+    );
+    return existing ? of(existing) : this.agentService.createResearchScope(brokerAccountId);
+  }
+}
+
+function agentIdOrThrow(agentId: string): string {
+  if (!agentId) {
+    throw new Error('An agent is required');
+  }
+  return agentId;
 }

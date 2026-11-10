@@ -14,12 +14,14 @@ import com.hope.trading.market_data.model.OrderBookEvidenceSegmentStatus;
 import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import com.hope.trading.market_data.model.OrderBookLevel;
 import com.hope.trading.market_data.model.OrderBookReplayResult;
+import com.hope.trading.market_data.model.HistoricalEvidenceRetirementScope;
 import com.hope.trading.market_data.service.OrderBookEvidenceFingerprint;
 import com.hope.trading.market_data.service.OrderBookEvidenceRepository;
 import com.hope.trading.market_data.service.OrderBookEvidenceSegmentBackfillService;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
 import com.hope.trading.market_data.service.OrderBookRetentionRepository;
 import com.hope.trading.market_data.service.OrderBookReplayService;
+import com.hope.trading.market_data.service.OrderBookSourceRetirementRepository;
 import com.hope.trading.market_data.config.OrderBookRetentionProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -97,6 +99,8 @@ class OrderBookRetentionPersistenceTest {
     private OrderBookRetentionRepository retentionRepository;
     @Autowired
     private OrderBookReplayService replayService;
+    @Autowired
+    private OrderBookSourceRetirementRepository sourceRetirementRepository;
     @Autowired
     private OrderBookRetentionProperties retentionProperties;
     @Autowired
@@ -203,6 +207,54 @@ class OrderBookRetentionPersistenceTest {
                 "late-protection", "TEST", "sample", null, sequenceId, "late protection"))
                 .hasRootCauseInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("without retained evidence");
+    }
+
+    @Test
+    void sourceRetirementPreflightAcceptsEligibleProtectedReplayDependency() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
+        retentionService.promote(replayService.replay(marketId, 25, KNOWN_AT),
+                "research:source-retirement-eligible", "test source retirement");
+
+        var preflight = sourceRetirementRepository.preflight(scope(marketId));
+
+        assertThat(preflight.dependencyCount()).isEqualTo(1);
+        assertThat(preflight.eligibleDependencyCount()).isEqualTo(1);
+        assertThat(preflight.unknownDependencyCount()).isZero();
+        assertThat(preflight.contradictoryDependencyCount()).isZero();
+        assertThat(preflight.holdCount()).isZero();
+        assertThat(preflight.passed()).isTrue();
+    }
+
+    @Test
+    void sourceRetirementPreflightRejectsUnknownDependencyType() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
+        retentionService.protectDependency("unknown-source-retirement-type", "UNKNOWN", "test",
+                null, sequenceId, "unknown dependency type");
+
+        var preflight = sourceRetirementRepository.preflight(scope(marketId));
+
+        assertThat(preflight.unknownDependencyCount()).isEqualTo(1);
+        assertThat(preflight.passed()).isFalse();
+    }
+
+    @Test
+    void sourceRetirementPreflightRejectsActiveHold() {
+        UUID marketId = markets.saveAndFlush(market()).getMarketId();
+        UUID sequenceId = UUID.randomUUID();
+        evidenceRepository.append(evidence(marketId, sequenceId));
+        evidenceRepository.sealActiveSequences(marketId, 25, KNOWN_AT.plusSeconds(1));
+        retentionService.addHold("source-retirement-hold", null, sequenceId, "active test hold");
+
+        var preflight = sourceRetirementRepository.preflight(scope(marketId));
+
+        assertThat(preflight.holdCount()).isEqualTo(1);
+        assertThat(preflight.passed()).isFalse();
     }
 
     @Test
@@ -903,6 +955,10 @@ class OrderBookRetentionPersistenceTest {
 
     private OrderBookLevel level(String price, String quantity) {
         return new OrderBookLevel(new BigDecimal(price), new BigDecimal(quantity));
+    }
+
+    private HistoricalEvidenceRetirementScope scope(UUID marketId) {
+        return new HistoricalEvidenceRetirementScope(MarketProvider.KRAKEN, "PF_XBTUSD", marketId, 25);
     }
 
     private String aggregateFingerprint(String fingerprint) {

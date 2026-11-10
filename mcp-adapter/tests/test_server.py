@@ -52,6 +52,10 @@ async def test_server_exposes_bounded_tools(fake_client):
         "get_authorized_account",
         "get_authorized_account_status",
         "get_authorized_positions",
+        "get_authorized_trade_plan",
+        "evaluate_authorized_trade_plan_risk",
+        "request_trade_plan_approval",
+        "get_trade_plan_approval_status",
         "start_market_research",
         "get_research_status",
         "get_research_report",
@@ -98,6 +102,26 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
             {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
         )
         await client.call_tool(
+            "get_authorized_trade_plan",
+            {"broker_account_id": "00000000-0000-0000-0000-000000000004",
+             "trade_plan_id": "00000000-0000-0000-0000-000000000007", "trade_plan_version": 1},
+        )
+        await client.call_tool(
+            "evaluate_authorized_trade_plan_risk",
+            {"trade_plan_id": "00000000-0000-0000-0000-000000000007", "trade_plan_version": 1,
+             "idempotency_key": "evaluation-key-1"},
+        )
+        fake_client.response = '{"challengeId":"00000000-0000-0000-0000-000000000009"}'
+        await client.call_tool(
+            "request_trade_plan_approval",
+            {"trade_plan_id": "00000000-0000-0000-0000-000000000007", "trade_plan_version": 1,
+             "risk_evaluation_id": "00000000-0000-0000-0000-000000000008"},
+        )
+        await client.call_tool(
+            "get_trade_plan_approval_status",
+            {"challenge_id": "00000000-0000-0000-0000-000000000009"},
+        )
+        await client.call_tool(
             "request_account_synchronization",
             {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
         )
@@ -133,7 +157,7 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         await client.call_tool(
             "inspect_historical_research_readiness",
             {
-                "scope_id": "00000000-0000-0000-0000-000000000006",
+                "broker_account_id": "00000000-0000-0000-0000-000000000004",
                 "market_ids": ["00000000-0000-0000-0000-000000000001"],
                 "cutoff_start": "2026-01-01T00:00:00Z",
                 "cutoff_end": "2026-01-02T00:00:00Z",
@@ -162,20 +186,25 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/read-only-status",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/positions",
+        "/api/v1/agent/trade-plans/00000000-0000-0000-0000-000000000007/versions/1",
+        "/api/v1/agent/trade-plan-approvals/00000000-0000-0000-0000-000000000009",
         "/api/v1/agent/operation-requests/00000000-0000-0000-0000-000000000005",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003/report",
         "/api/v1/intelligence/research/exports/00000000-0000-0000-0000-000000000007",
     ]
     assert fake_client.calls[3][1]["size"] == 10
-    assert fake_client.post_calls[0][0] == "/api/v1/agent/operation-requests"
-    assert fake_client.post_calls[1][0].endswith("/execute")
-    assert fake_client.post_calls[2][0] == "/api/v1/intelligence/research"
-    assert fake_client.post_calls[2][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
-    assert fake_client.post_calls[2][2] == "research-btc-eth-1"
-    assert fake_client.post_calls[3][0].endswith("/readiness")
-    assert fake_client.post_calls[4][0].endswith("/exports")
-    assert fake_client.post_calls[4][2] == "export-1"
+    assert fake_client.post_calls[0][0].endswith("/versions/1")
+    assert fake_client.post_calls[1][0] == "/api/v1/agent/trade-plan-approvals"
+    assert fake_client.post_calls[2][0] == "/api/v1/agent/operation-requests"
+    assert fake_client.post_calls[3][0].endswith("/execute")
+    assert fake_client.post_calls[4][0] == "/api/v1/intelligence/research"
+    assert fake_client.post_calls[4][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
+    assert fake_client.post_calls[4][2] == "research-btc-eth-1"
+    assert fake_client.post_calls[5][0] == "/api/v1/intelligence/research/readiness"
+    assert fake_client.post_calls[5][1]["brokerAccountId"] == "00000000-0000-0000-0000-000000000004"
+    assert fake_client.post_calls[6][0].endswith("/exports")
+    assert fake_client.post_calls[6][2] == "export-1"
 
 
 @pytest.mark.asyncio
@@ -342,7 +371,11 @@ async def test_server_starts_over_stdio():
         "list_authorized_accounts",
         "get_authorized_account",
         "get_authorized_account_status",
-        "get_authorized_positions",
+            "get_authorized_positions",
+        "get_authorized_trade_plan",
+        "evaluate_authorized_trade_plan_risk",
+            "request_trade_plan_approval",
+            "get_trade_plan_approval_status",
         "start_market_research",
         "get_research_status",
         "get_research_report",

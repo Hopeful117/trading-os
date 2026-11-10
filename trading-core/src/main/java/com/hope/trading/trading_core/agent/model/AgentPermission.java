@@ -14,7 +14,10 @@ public enum AgentPermission {
     RESEARCH_RUN("research:run"),
     RESEARCH_INSPECT("research:inspect"),
     RESEARCH_EXPORT("research:export"),
-    PLANS_CREATE("plans:create");
+    PLANS_CREATE("plans:create"),
+    TRADE_PLAN_RISK_EVALUATE("trade-plan-risk:evaluate"),
+    TRADE_PLAN_APPROVAL_REQUEST("trade-plan-approval:request"),
+    TRADE_PLAN_APPROVAL_STATUS_READ("trade-plan-approval:status:read");
 
     private final String value;
 

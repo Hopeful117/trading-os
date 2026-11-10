@@ -1,6 +1,7 @@
 package com.hope.trading.trading_core.market_data.service;
 
 import com.hope.trading.trading_core.market_data.apiClient.MarketDataClient;
+import com.hope.trading.trading_core.market_data.dto.MarketConstraints;
 import com.hope.trading.trading_core.market_data.dto.MarketResponse;
 import com.hope.trading.trading_core.shared.domain.model.InstrumentProductType;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,40 @@ class InstrumentFinancialContractResolverTest {
         assertThat(contract.productType()).isEqualTo(InstrumentProductType.CFD);
         assertThat(contract.contractMultiplier()).isEqualByComparingTo("1");
         assertThat(contract.provenance().sourceVersion()).isEqualTo(3L);
+    }
+
+    @Test
+    void resolvesCfdWhenASeparateSpotMarketUsesTheSameCanonicalSymbol() {
+        MarketResponse cfd = MarketResponse.builder()
+                .marketId(UUID.randomUUID()).symbol("EUR/USD").productType(InstrumentProductType.CFD)
+                .baseAsset("EUR").quoteAsset("USD").quantityUnit("UNDERLYING_UNITS")
+                .contractMultiplier(BigDecimal.ONE).contractSourceId("market-data-contract:EUR/USD")
+                .contractSourceVersion(1L).contractObservedAt(Instant.parse("2026-10-31T12:00:00Z"))
+                .marketConstraints(MarketConstraints.builder().minimumOrderSize(new BigDecimal("0.01"))
+                        .orderStepSize(new BigDecimal("0.01")).quantityPrecision(2).pricePrecision(5).build())
+                .build();
+        MarketResponse spot = MarketResponse.builder()
+                .marketId(UUID.randomUUID()).symbol("EUR/USD").productType(InstrumentProductType.SPOT)
+                .baseAsset("EUR").quoteAsset("USD").build();
+        when(marketData.findAll()).thenReturn(List.of(cfd, spot));
+
+        var contract = resolver.resolveIfCfd("EUR/USD");
+
+        assertThat(contract).isNotNull();
+        assertThat(contract.productType()).isEqualTo(InstrumentProductType.CFD);
+        assertThat(contract.contractMultiplier()).isEqualByComparingTo(BigDecimal.ONE);
+    }
+
+    @Test
+    void rejectsMultipleCfdMarketsEvenWhenSpotMarketAlsoExists() {
+        MarketResponse first = MarketResponse.builder().symbol("EUR/USD").productType(InstrumentProductType.CFD).build();
+        MarketResponse second = MarketResponse.builder().symbol("EUR/USD").productType(InstrumentProductType.CFD).build();
+        MarketResponse spot = MarketResponse.builder().symbol("EUR/USD").productType(InstrumentProductType.SPOT).build();
+        when(marketData.findAll()).thenReturn(List.of(first, second, spot));
+
+        assertThatThrownBy(() -> resolver.resolveIfCfd("EUR/USD"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("financial contract market identity is ambiguous");
     }
 
     @Test

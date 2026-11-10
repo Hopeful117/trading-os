@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -91,12 +92,103 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
             Map<Long, CTraderSymbol> fallbackById = new HashMap<>();
             listed.forEach(symbol -> fallbackById.put(symbol.id(), symbol));
             Map<Long, CTraderSymbol> detailedById = new HashMap<>();
-            for (JsonNode node : session.request(SYMBOL_BY_ID_REQUEST, SYMBOL_BY_ID_RESPONSE, payload).path("symbol")) {
+            JsonNode detailsResponse = session.request(SYMBOL_BY_ID_REQUEST, SYMBOL_BY_ID_RESPONSE, payload);
+            for (JsonNode node : detailsResponse.path("symbol")) {
                 CTraderSymbol detail = mapSymbol(node, fallbackById.get(node.path("symbolId").asLong()));
                 detailedById.put(detail.id(), detail);
             }
+            if (properties.symbolDiagnosticsEnabled()) {
+                diagnoseSymbolByIdResponse(detailsResponse, properties.symbolDiagnosticsAccountId(),
+                        properties.symbolDiagnosticsSymbolId(), fallbackById).ifPresent(this::logSymbolDiagnostic);
+            }
             return listed.stream().map(symbol -> detailedById.getOrDefault(symbol.id(), symbol)).toList();
         });
+    }
+
+    Optional<SymbolByIdDiagnostic> diagnoseSymbolByIdResponse(JsonNode response, long accountId,
+                                                              long requestedSymbolId,
+                                                              Map<Long, CTraderSymbol> fallbacks) {
+        if (accountId != properties.symbolDiagnosticsAccountId()
+                || requestedSymbolId != properties.symbolDiagnosticsSymbolId()) return Optional.empty();
+
+        JsonNode symbol = response.path("symbol");
+        if (symbol.isArray()) {
+            JsonNode matched = null;
+            for (JsonNode candidate : symbol) {
+                if (candidate.path("symbolId").asLong(0) == requestedSymbolId) {
+                    matched = candidate;
+                    break;
+                }
+            }
+            symbol = matched;
+        }
+        if (symbol == null || !symbol.isObject() || symbol.path("symbolId").asLong(0) != requestedSymbolId) {
+            return Optional.of(new SymbolByIdDiagnostic(accountId, requestedSymbolId, false, List.of(), 0, 0));
+        }
+
+        CTraderSymbol mapped = mapSymbol(symbol, fallbacks.get(requestedSymbolId));
+        List<SymbolFieldDiagnostic> fields = new ArrayList<>();
+        fields.add(symbolField("digits", symbol, "digits", mapped.digits(), mapped.digits() > 0));
+        fields.add(symbolField("minVolume", symbol, "minVolume", mapped.minVolume(), mapped.minVolume() > 0));
+        fields.add(symbolField("maxVolume", symbol, "maxVolume", mapped.maxVolume(), mapped.maxVolume() > 0));
+        fields.add(symbolField("stepVolume", symbol, "stepVolume", mapped.stepVolume(), mapped.stepVolume() > 0));
+        fields.add(symbolField("tradingMode", symbol, "tradingMode", mapped.tradingMode(), mapped.tradingMode() != null));
+        fields.add(symbolField("scheduleTimeZone", symbol, "scheduleTimeZone", mapped.scheduleTimeZone(), mapped.scheduleTimeZone() != null));
+        JsonNode schedule = symbol.get("schedule");
+        long validIntervals = mapped.schedule().stream().filter(interval -> interval.startSecond() >= 0
+                && interval.endSecond() >= 0).count();
+        fields.add(new SymbolFieldDiagnostic("schedule", presence(schedule), jsonType(schedule),
+                schedule == null || schedule.isNull() ? "ABSENT" : "count:" + schedule.size(),
+                "count:" + mapped.schedule().size(), schedule != null && schedule.isArray()
+                        && validIntervals == schedule.size() && !mapped.schedule().isEmpty()));
+        return Optional.of(new SymbolByIdDiagnostic(accountId, requestedSymbolId, true, fields,
+                schedule == null || !schedule.isArray() ? 0 : schedule.size(), (int) validIntervals));
+    }
+
+    private SymbolFieldDiagnostic symbolField(String field, JsonNode symbol, String jsonField,
+                                              Object mappedValue, boolean accepted) {
+        JsonNode value = symbol.get(jsonField);
+        return new SymbolFieldDiagnostic(field, presence(value), jsonType(value), safeValue(value),
+                mappedValue == null ? "ABSENT" : mappedValue.toString(), accepted);
+    }
+
+    private void logSymbolDiagnostic(SymbolByIdDiagnostic diagnostic) {
+        if (!diagnostic.symbolPresent()) {
+            log.info("CTRADER_SYMBOL_BY_ID_DIAGNOSTIC accountId={} symbolId={} symbolPresence=ABSENT",
+                    diagnostic.accountId(), diagnostic.symbolId());
+            return;
+        }
+        for (SymbolFieldDiagnostic field : diagnostic.fields()) {
+            log.info("CTRADER_SYMBOL_BY_ID_DIAGNOSTIC accountId={} symbolId={} field={} "
+                            + "jsonPath=$.symbol[*].{} presence={} jsonType={} value={} mapped={} accepted={}",
+                    diagnostic.accountId(), diagnostic.symbolId(), field.name(), field.name(), field.presence(),
+                    field.jsonType(), field.rawValue(), field.mappedValue(), field.accepted());
+        }
+    }
+
+    private String presence(JsonNode value) {
+        return value == null ? "ABSENT" : value.isNull() ? "NULL" : "PRESENT";
+    }
+
+    private String jsonType(JsonNode value) {
+        return value == null || value.isNull() ? "NONE" : value.getNodeType().name();
+    }
+
+    private String safeValue(JsonNode value) {
+        if (value == null || value.isNull()) return "ABSENT";
+        if (value.isTextual() || value.isNumber() || value.isBoolean()) return value.asText();
+        return "STRUCTURED";
+    }
+
+    record SymbolByIdDiagnostic(long accountId, long symbolId, boolean symbolPresent,
+                                List<SymbolFieldDiagnostic> fields, int scheduleCount, int validScheduleCount) {
+        SymbolByIdDiagnostic {
+            fields = List.copyOf(fields);
+        }
+    }
+
+    record SymbolFieldDiagnostic(String name, String presence, String jsonType, String rawValue,
+                                 String mappedValue, boolean accepted) {
     }
 
     @Override

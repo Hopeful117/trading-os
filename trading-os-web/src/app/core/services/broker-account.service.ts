@@ -9,6 +9,7 @@ import {
   CTraderAuthorization,
   CTraderMarketDataAuthorizationState,
   CTraderMarketDataAuthorization,
+  CTraderReadOnlyValidation,
   BrokerAccountReadOnlyStatus,
   CTRADER_PROVIDER_REGISTRATION_REFERENCE,
   KRAKEN_PROVIDER_REGISTRATION_REFERENCE,
@@ -28,6 +29,16 @@ export class BrokerAccountService {
   getReadOnlyStatus(brokerAccountId: string): Observable<BrokerAccountReadOnlyStatus> {
     return this.http.get<BrokerAccountReadOnlyStatus>(
       `${this.baseUrl}/${brokerAccountId}/read-only-status`,
+    );
+  }
+
+  validateCTraderInstrument(
+    brokerAccountId: string,
+    instrument: string,
+  ): Observable<CTraderReadOnlyValidation> {
+    return this.http.get<CTraderReadOnlyValidation>(
+      `${this.baseUrl}/${brokerAccountId}/ctrader/validation`,
+      { params: { instrument } },
     );
   }
 

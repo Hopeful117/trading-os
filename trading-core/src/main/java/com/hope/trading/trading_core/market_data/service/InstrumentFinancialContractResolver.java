@@ -32,9 +32,7 @@ public class InstrumentFinancialContractResolver {
     }
 
     public Optional<InstrumentFinancialContract> resolveForInstrument(String instrument) {
-        return uniqueMarket(instrument)
-                .map(market -> market.getProductType() == InstrumentProductType.CFD
-                        ? mapper.fromMarket(market) : null);
+        return uniqueCfdMarket(instrument).map(mapper::fromMarket);
     }
 
     private java.util.Optional<MarketResponse> uniqueMarket(String instrument) {
@@ -47,5 +45,30 @@ public class InstrumentFinancialContractResolver {
                     throw new IllegalStateException("financial contract market identity is ambiguous");
                 })
                 .or(() -> { throw new IllegalStateException("financial contract market is unavailable"); });
+    }
+
+    private Optional<MarketResponse> uniqueCfdMarket(String instrument) {
+        if (instrument == null || instrument.isBlank()) {
+            throw new IllegalArgumentException("instrument is required");
+        }
+        var matches = marketData.findAll().stream()
+                .filter(market -> market != null && instrument.equalsIgnoreCase(market.getSymbol()))
+                .toList();
+        var cfdMatches = matches.stream()
+                .filter(market -> market.getProductType() == InstrumentProductType.CFD)
+                .toList();
+        if (cfdMatches.size() > 1) {
+            throw new IllegalStateException("financial contract market identity is ambiguous");
+        }
+        if (cfdMatches.size() == 1) {
+            return Optional.of(cfdMatches.getFirst());
+        }
+        if (matches.size() == 1) {
+            return Optional.empty();
+        }
+        if (matches.isEmpty()) {
+            throw new IllegalStateException("financial contract market is unavailable");
+        }
+        throw new IllegalStateException("financial contract market identity is ambiguous");
     }
 }

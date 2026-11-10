@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.time.Instant;
 
 @Component
 @Slf4j
@@ -114,15 +115,26 @@ public class CTraderMarketData implements MarketDataProvider {
         if (canonical == null || canonical.isBlank()) return Optional.empty();
         String[] assets = canonical.split("/", 2);
         if (assets.length != 2 || assets[0].isBlank() || assets[1].isBlank()) return Optional.empty();
-        return productType(symbol.name()).map(type -> Market.builder()
+        var reference = contractReference(symbol.name());
+        if (reference.isPresent() && !canonical.equals(reference.get().canonicalInstrument())) {
+            log.warn("CTRADER_MARKET_REJECTED_CONTRACT_REFERENCE providerSymbol={} reason=canonical_mapping_mismatch",
+                    symbol.name());
+            return Optional.empty();
+        }
+        return productType(symbol.name(), reference.orElse(null)).map(type -> Market.builder()
                 .provider(MarketProvider.CTRADER).symbol(canonical)
                 .providerSymbol(Long.toString(symbol.id())).baseAsset(assets[0]).quoteAsset(assets[1])
                 .productType(type)
-                .quantityUnit(hasCompleteContract(symbol.name(), type) ? "UNDERLYING_UNITS" : null)
-                .contractMultiplier(persistedContractMultiplier(symbol.name(), type))
-                .contractSourceId(contractSourceId(canonical, symbol.name(), type))
-                .contractSourceVersion(contractSourceVersion(symbol.name(), type))
-                .contractObservedAt(contractObservedAt(symbol.name(), type))
+                .quantityUnit(reference.map(CTraderMarketDataProperties.ContractReference::quantityUnit)
+                        .orElse(null))
+                .contractMultiplier(reference.map(CTraderMarketDataProperties.ContractReference::contractMultiplier)
+                        .orElse(null))
+                .contractSourceId(reference.map(CTraderMarketDataProperties.ContractReference::sourceId)
+                        .orElse(null))
+                .contractSourceVersion(reference.map(CTraderMarketDataProperties.ContractReference::sourceVersion)
+                        .orElse(null))
+                .contractObservedAt(reference.map(CTraderMarketDataProperties.ContractReference::effectiveFrom)
+                        .orElse(null))
                 // Symbol metadata alone is not proof that an order is executable now.
                 .marketState(marketStateResolver.resolve(symbol))
                 .marketConstraints(MarketConstraints.builder()
@@ -138,46 +150,6 @@ public class CTraderMarketData implements MarketDataProvider {
                 .pricePrecision(symbol.digits()).build()).build());
     }
 
-    private BigDecimal contractMultiplier(String providerSymbol, InstrumentProductType productType) {
-        if (productType != InstrumentProductType.CFD) return null;
-        String configured = properties.symbolContractMultipliers().get(providerSymbol);
-        if (configured == null || configured.isBlank()) return null;
-        BigDecimal multiplier = new BigDecimal(configured.trim());
-        if (multiplier.signum() <= 0) throw new IllegalStateException("Invalid CFD contract multiplier for " + providerSymbol);
-        return multiplier;
-    }
-
-    private boolean hasCompleteContract(String providerSymbol, InstrumentProductType productType) {
-        if (productType != InstrumentProductType.CFD) return false;
-        return contractMultiplier(providerSymbol, productType) != null
-                && properties.symbolContractSourceVersions().get(providerSymbol) != null
-                && !properties.symbolContractSourceVersions().get(providerSymbol).isBlank();
-    }
-
-    private BigDecimal persistedContractMultiplier(String providerSymbol, InstrumentProductType productType) {
-        return hasCompleteContract(providerSymbol, productType)
-                ? contractMultiplier(providerSymbol, productType) : null;
-    }
-
-    private String contractSourceId(String canonicalSymbol, String providerSymbol,
-                                    InstrumentProductType productType) {
-        return hasCompleteContract(providerSymbol, productType)
-                ? "market-data-contract:" + canonicalSymbol : null;
-    }
-
-    private Long contractSourceVersion(String providerSymbol, InstrumentProductType productType) {
-        if (!hasCompleteContract(providerSymbol, productType)) return null;
-        String configured = properties.symbolContractSourceVersions().get(providerSymbol);
-        if (configured == null || configured.isBlank()) return null;
-        long version = Long.parseLong(configured.trim());
-        if (version < 1) throw new IllegalStateException("Invalid CFD contract source version for " + providerSymbol);
-        return version;
-    }
-
-    private Instant contractObservedAt(String providerSymbol, InstrumentProductType productType) {
-        return hasCompleteContract(providerSymbol, productType) ? clock.instant() : null;
-    }
-
     private BigDecimal canonicalQuantity(long providerVolume) {
         if (providerVolume <= 0) throw new IllegalStateException("Invalid cTrader volume constraint");
         return BigDecimal.valueOf(providerVolume).movePointLeft(2);
@@ -191,7 +163,17 @@ public class CTraderMarketData implements MarketDataProvider {
         return precision;
     }
 
-    private Optional<InstrumentProductType> productType(String providerSymbol) {
+    private Optional<InstrumentProductType> productType(String providerSymbol,
+                                                         CTraderMarketDataProperties.ContractReference reference) {
+        if (reference != null) {
+            try {
+                return Optional.of(InstrumentProductType.valueOf(reference.productType().trim().toUpperCase()));
+            } catch (IllegalArgumentException exception) {
+                log.warn("CTRADER_MARKET_REJECTED_CONTRACT_REFERENCE providerSymbol={} reason=invalid_product_type",
+                        providerSymbol);
+                return Optional.empty();
+            }
+        }
         String configured = properties.symbolProductTypes().get(providerSymbol);
         if (configured == null) {
             log.warn("CTRADER_MARKET_REJECTED_UNCLASSIFIED providerSymbol={} reason=missing_product_type_mapping",
@@ -209,6 +191,28 @@ public class CTraderMarketData implements MarketDataProvider {
             throw new IllegalStateException("Invalid cTrader product type for provider symbol "
                     + providerSymbol, exception);
         }
+    }
+
+    private Optional<CTraderMarketDataProperties.ContractReference> contractReference(String providerSymbol) {
+        Instant now = clock.instant();
+        var matches = properties.contractReferences().stream()
+                .filter(reference -> reference != null
+                        && reference.accountExternalId() == properties.externalAccountId()
+                        && reference.environment() == properties.environment()
+                        && providerSymbol.equals(reference.providerSymbol())
+                        && reference.acceptedAt(now))
+                .sorted(java.util.Comparator.comparing(
+                        CTraderMarketDataProperties.ContractReference::effectiveFrom,
+                        java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())).reversed())
+                .toList();
+        if (matches.isEmpty()) return Optional.empty();
+        var selected = matches.getFirst();
+        if (matches.stream().skip(1).anyMatch(reference ->
+                java.util.Objects.equals(reference.effectiveFrom(), selected.effectiveFrom())
+                        && !reference.equals(selected))) {
+            throw new IllegalStateException("Contradictory cTrader contract references for " + providerSymbol);
+        }
+        return Optional.of(selected);
     }
 
     private OhlcEvent toEvent(Market market, OhlcInterval interval, CTraderOpenApiClient.CTraderSymbol symbol,

@@ -21,7 +21,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +31,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
@@ -59,7 +59,6 @@ class PaperCfdEntryProvenanceAtomicityIntegrationTest {
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private TradeExecutionProvenanceStore provenance;
     @MockitoBean private MarketDataClient marketData;
-    @MockitoBean private Clock clock;
     @MockitoBean(name = "marketValuationClient") private MarketValuationClient marketValuation;
 
     private UUID tradeId;

@@ -16,7 +16,7 @@ public interface AgentOperationRequestRepository extends JpaRepository<AgentOper
                                                                          com.hope.trading.trading_core.agent.operation.model.AgentOperationType operationType,
                                                                          Collection<AgentOperationStatus> statuses);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query(value = "update agent_operation_request r set status = 'EXECUTING', executed_at = :now "
             + "where r.id = :id and r.agent_id = :agentId and r.status = 'APPROVED' and r.expires_at > :now "

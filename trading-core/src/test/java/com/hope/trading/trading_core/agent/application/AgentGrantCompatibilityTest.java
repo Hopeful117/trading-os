@@ -25,9 +25,19 @@ class AgentGrantCompatibilityTest {
     }
 
     @Test
-    void historicalResearchPermissionsRequireResearchScope() {
+    void tradePlanRiskEvaluationRequiresBrokerAccountScope() {
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.TRADE_PLAN_RISK_EVALUATE,
+                AgentResourceType.BROKER_ACCOUNT)).isTrue();
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.TRADE_PLAN_RISK_EVALUATE,
+                AgentResourceType.MARKET)).isFalse();
+    }
+
+    @Test
+    void historicalResearchPermissionsUseTheirDeclaredResourceScopes() {
         assertThat(AgentGrantCompatibility.supports(AgentPermission.RESEARCH_INSPECT,
-                AgentResourceType.RESEARCH_SCOPE)).isTrue();
+                AgentResourceType.BROKER_ACCOUNT)).isTrue();
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.RESEARCH_INSPECT,
+                AgentResourceType.RESEARCH_SCOPE)).isFalse();
         assertThat(AgentGrantCompatibility.supports(AgentPermission.RESEARCH_EXPORT,
                 AgentResourceType.RESEARCH_SCOPE)).isTrue();
         assertThat(AgentGrantCompatibility.supports(AgentPermission.RESEARCH_EXPORT,

@@ -120,6 +120,29 @@ class BrokerServiceFeignConfigurationTest {
         assertThat(claims.getAudience()).containsExactly("market-intelligence");
     }
 
+    @Test
+    void marketIntelligenceDelegatesValidatedAgentOwner() {
+        ServiceJwtProperties properties = properties();
+        properties.setAudienceSecrets(java.util.Map.of("market-intelligence",
+                Base64.getEncoder().encodeToString(new byte[32])));
+        UUID owner = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        var interceptor = new MarketIntelligenceFeignConfiguration(new ServiceJwtService(properties))
+                .marketIntelligenceAuthenticationInterceptor();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        new AgentPrincipal(UUID.randomUUID(), owner, UUID.randomUUID(), 1, "token-id"), null));
+        RequestTemplate template = new RequestTemplate();
+
+        interceptor.apply(template);
+
+        String token = template.headers().get("X-Service-Authorization").iterator().next().substring(7);
+        var claims = Jwts.parser().verifyWith(Keys.hmacShaKeyFor(Decoders.BASE64.decode(
+                        properties.getAudienceSecrets().get("market-intelligence"))))
+                .build().parseSignedClaims(token).getPayload();
+        assertThat(claims.get("actor_id", String.class)).isEqualTo(owner.toString());
+        assertThat(claims.get("delegated_agent_id", String.class)).isNotBlank();
+    }
+
     private ServiceJwtProperties properties() {
         ServiceJwtProperties properties = new ServiceJwtProperties();
         properties.setEnabled(true);

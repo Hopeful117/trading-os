@@ -8,16 +8,16 @@ import java.util.Optional;
 
 public record ProjectedPosition(
         String instrument, BigDecimal signedQuantity, Money exposure,
-        Optional<Money> lossAtStop, Money margin, ProtectionStatus protectionStatus
+        Optional<Money> lossAtStop, Optional<Money> margin, ProtectionStatus protectionStatus
 ) {
     public ProjectedPosition(String instrument, BigDecimal signedQuantity, Money exposure,
                              Money lossAtStop, Money margin) {
-        this(instrument, signedQuantity, exposure, Optional.ofNullable(lossAtStop), margin,
+        this(instrument, signedQuantity, exposure, Optional.ofNullable(lossAtStop), Optional.ofNullable(margin),
                 ProtectionStatus.PROTECTED);
     }
     public ProjectedPosition(String instrument, BigDecimal signedQuantity, Money exposure,
                              Money lossAtStop, Money margin, ProtectionStatus protectionStatus) {
-        this(instrument, signedQuantity, exposure, Optional.ofNullable(lossAtStop), margin, protectionStatus);
+        this(instrument, signedQuantity, exposure, Optional.ofNullable(lossAtStop), Optional.ofNullable(margin), protectionStatus);
     }
     public ProjectedPosition {
         instrument = Objects.requireNonNull(instrument).trim().toUpperCase();

@@ -250,11 +250,12 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                     listed.path("symbolName").asText(),
                     details.path("digits").asInt(listed.path("digits").asInt(0)),
                     details.path("pipPosition").asInt(listed.path("pipPosition").asInt(0)),
-                    details.path("minVolume").asLong(0),
-                    details.path("maxVolume").asLong(0),
-                    details.path("stepVolume").asLong(0),
-                    optionalPositiveLong(details, "lotSize"),
-                    optionalNonNegativeLong(details, "slDistance"),
+                     details.path("minVolume").asLong(0),
+                     details.path("maxVolume").asLong(0),
+                     details.path("stepVolume").asLong(0),
+                     optionalPositiveLong(details, "lotSize"),
+                     optionalPositiveLong(details, "maxExposure"),
+                     optionalNonNegativeLong(details, "slDistance"),
                     optionalNonNegativeLong(details, "tpDistance"),
                     details.path("distanceSetIn").isTextual() ? details.path("distanceSetIn").asText() : null);
         } catch (IllegalArgumentException exception) {
@@ -287,9 +288,21 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
                 matches.add(symbol);
             }
         }
+        if (matches.isEmpty()) {
+            String normalizedInstrument = normalizeSymbol(instrument);
+            for (JsonNode symbol : response.path("symbol")) {
+                if (normalizedInstrument.equals(normalizeSymbol(symbol.path("symbolName").asText()))) {
+                    matches.add(symbol);
+                }
+            }
+        }
         if (matches.isEmpty()) throw new CTraderAuthenticationException("CTRADER_UNKNOWN_INSTRUMENT");
         if (matches.size() > 1) throw new CTraderAuthenticationException("CTRADER_AMBIGUOUS_INSTRUMENT");
         return matches.getFirst();
+    }
+
+    private String normalizeSymbol(String symbol) {
+        return symbol == null ? "" : symbol.replace("/", "").trim().toUpperCase(java.util.Locale.ROOT);
     }
 
     private JsonNode findAuthorizedAccount(JsonNode response, String externalAccountId) {

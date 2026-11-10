@@ -61,4 +61,53 @@ class CTraderReadOnlyValidationControllerTest {
         verify(client).readInstrumentMetadata(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.eq("49289512"), org.mockito.ArgumentMatchers.eq("EURUSD"));
     }
+
+    @Test
+    void exposesCombinedValidationOnlyThroughTheAuthenticatedOwnerFacade() {
+        var connections = mock(BrokerConnectionRepository.class);
+        var secrets = mock(SecretReader.class);
+        var client = mock(CTraderOpenApiClient.class);
+        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID();
+        var principal = new BrokerPrincipal(ownerId, "user", "USER");
+        var credential = UUID.randomUUID();
+        var connection = BrokerConnection.create(accountId, ownerId, BrokerProviderId.CTRADER, Instant.now());
+        connection.connected(credential, Set.of(), "49289512", "", Instant.now());
+        connection.bindExternalAccount("49289512", "demo", Instant.now());
+        when(connections.findByBrokerAccountIdAndOwnerId(accountId, ownerId)).thenReturn(Optional.of(connection));
+        when(secrets.read(org.mockito.ArgumentMatchers.any())).thenReturn(new PlainSecret(
+                com.hope.trading.broker_service.ctrader.authentication.CTraderTokenCodec.encode(
+                        new CTraderToken("access", "refresh", Instant.now().plusSeconds(300)))));
+        var contract = new com.hope.trading.broker_service.ctrader.execution.CTraderExecutionInstrumentContract(
+                1, "EURUSD", 5, 4, 100_000, 10_000_000_000L, 100_000,
+                10_000_000L, 25_000_000L, 0L, 0L, "POINTS");
+        var metadata = new CTraderInstrumentMetadata(
+                new CTraderInstrumentMetadata.CTraderAccountFacts("49289512", false, null,
+                        "USD", null, null, null, null, null, null, 2, null),
+                new CTraderInstrumentMetadata.CTraderSymbolFacts(1, "EURUSD", null, null,
+                        null, null, 5, 4, 10_000_000L, 100_000L, 10_000_000_000L,
+                        100_000L, null, null, null, null, null, null, null, null,
+                        null, null, 0L, 0L, "POINTS"));
+        when(client.readExecutionInstrumentContract(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("49289512"), org.mockito.ArgumentMatchers.eq("EURUSD")))
+                .thenReturn(contract);
+        when(client.readInstrumentMetadata(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("49289512"), org.mockito.ArgumentMatchers.eq("EURUSD")))
+                .thenReturn(metadata);
+        var service = new CTraderReadOnlyValidationService(connections, secrets, client,
+                new CTraderProperties("client", "secret", "redirect", "auth", "demo", "token",
+                        "wss://demo.ctraderapi.com:5035", 60), Clock.systemUTC());
+
+        var controller = new CTraderReadOnlyValidationApiController(service);
+
+        var response = controller.validation(accountId, "EURUSD", principal);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody().contract()).isSameAs(contract);
+        assertThat(response.getBody().metadata()).isSameAs(metadata);
+        verify(client).readExecutionInstrumentContract(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("49289512"), org.mockito.ArgumentMatchers.eq("EURUSD"));
+        verify(client).readInstrumentMetadata(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("49289512"), org.mockito.ArgumentMatchers.eq("EURUSD"));
+    }
 }

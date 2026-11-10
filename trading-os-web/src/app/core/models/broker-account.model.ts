@@ -34,6 +34,26 @@ export interface BrokerAccountReadOnlyStatus {
   snapshot: BrokerAccountSnapshot | null;
 }
 
+export interface CTraderExecutionInstrumentContract {
+  symbolId: number;
+  symbolName: string;
+  digits: number;
+  pipPosition: number;
+  minVolume: number;
+  maxVolume: number;
+  stepVolume: number;
+  lotSize: number | null;
+  maxExposure: number | null;
+  stopLossDistance: number | null;
+  takeProfitDistance: number | null;
+  distanceSetIn: string | null;
+}
+
+export interface CTraderReadOnlyValidation {
+  contract: CTraderExecutionInstrumentContract;
+  metadata: Record<string, unknown>;
+}
+
 export interface BrokerAccountSnapshot {
   brokerAccountId: string;
   providerRegistrationReference: string;

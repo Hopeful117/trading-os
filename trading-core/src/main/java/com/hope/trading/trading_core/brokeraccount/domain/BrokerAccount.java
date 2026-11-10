@@ -49,6 +49,7 @@ public class BrokerAccount {
     @Column(nullable = false, updatable = false)
     private ExecutionMode executionMode;
 
+
     protected BrokerAccount() {
     }
 
@@ -94,6 +95,11 @@ public class BrokerAccount {
         this.credentialReference = reference.value();
         this.externalAccountId = externalAccountId;
         this.lastValidatedAt = validatedAt;
+    }
+
+    public void markSynchronized(Instant synchronizedAt) {
+        this.lastSynchronizedAt = Objects.requireNonNull(synchronizedAt, "synchronizedAt is required");
+        this.updatedAt = synchronizedAt;
     }
 
     public void markInvalidCredentials(Instant now) {
@@ -177,6 +183,7 @@ public class BrokerAccount {
     public ExecutionMode executionMode() {
         return executionMode;
     }
+
 
 
 }

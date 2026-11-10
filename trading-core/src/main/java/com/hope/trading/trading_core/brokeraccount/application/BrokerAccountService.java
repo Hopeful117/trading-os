@@ -203,6 +203,7 @@ public class BrokerAccountService {
         return repository.findAllByOwnerIdOrderByCreatedAtDesc(ownerId).stream().map(this::map).toList();
     }
 
+
     public BrokerAccountResponse disconnect(UUID ownerId, UUID accountId) {
         BrokerAccount account = requireOwned(ownerId, accountId);
         account.disconnect(clock.instant());

@@ -4,5 +4,6 @@ public enum OrderBookDependencyState {
     PROTECTED,
     PROMOTED,
     RELEASED,
-    HOLD
+    HOLD,
+    SOURCE_RETIRED
 }

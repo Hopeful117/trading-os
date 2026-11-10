@@ -8,8 +8,9 @@ import pytest
 from app.client import AgentTokenProvider, StaticTokenProvider, TradingOsClient, client_from_environment
 
 
-def test_client_requires_agent_credential(monkeypatch):
+def test_client_requires_agent_credential(monkeypatch, tmp_path):
     monkeypatch.delenv("TRADING_OS_AGENT_CREDENTIAL", raising=False)
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(tmp_path / "missing"))
 
     with pytest.raises(RuntimeError, match="TRADING_OS_AGENT_CREDENTIAL is required"):
         client_from_environment()

@@ -61,6 +61,13 @@ form {
   gap: 1rem;
   align-items: end;
 }
+.grant-form {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 0.6rem;
+  background: rgba(2, 6, 23, 0.35);
+}
 label,
 legend {
   color: #cbd5e1;
@@ -160,6 +167,10 @@ button:disabled {
 .operation-list {
   display: grid;
   gap: 0.75rem;
+}
+.operation-filter {
+  max-width: 24rem;
+  margin-bottom: 1rem;
 }
 .operation-card {
   display: grid;

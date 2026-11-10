@@ -272,6 +272,42 @@
                   : 'Actualiser le statut lecture seule'
               }}
             </button>
+            <button
+              type="button"
+              class="secondary-button"
+              data-testid="ctrader-instrument-validation-button"
+              [disabled]="instrumentValidationLoading()"
+              (click)="validateCTraderInstrument(brokerAccount)"
+            >
+              {{
+                instrumentValidationLoading() &&
+                instrumentValidationAccountId() === brokerAccount.id
+                  ? 'Validation…'
+                  : 'Valider EURUSD'
+              }}
+            </button>
+            @if (instrumentValidationAccountId() === brokerAccount.id) {
+              @if (instrumentValidationError()) {
+                <p
+                  class="connection-message error"
+                  data-testid="ctrader-instrument-validation-error"
+                  role="alert"
+                >
+                  Le contrat EURUSD n’a pas pu être récupéré.
+                </p>
+              } @else if (instrumentValidation(); as validation) {
+                <p
+                  class="connection-message"
+                  data-testid="ctrader-instrument-validation-result"
+                  role="status"
+                >
+                  EURUSD · min {{ validation.contract.minVolume / 100 }} · max
+                  {{ validation.contract.maxVolume / 100 }} · pas
+                  {{ validation.contract.stepVolume / 100 }} · max exposure
+                  {{ validation.contract.maxExposure ?? 'indisponible' }}
+                </p>
+              }
+            }
             @if (readOnlyStatusAccountId() === brokerAccount.id) {
               @if (readOnlyStatusError()) {
                 <p

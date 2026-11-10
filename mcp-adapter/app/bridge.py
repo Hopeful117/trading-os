@@ -14,6 +14,7 @@ from app.client import (
     GatewayClientError,
     clear_runtime_credential,
     client_from_environment,
+    persist_runtime_credential,
     set_runtime_credential,
 )
 from app.server import mcp
@@ -45,6 +46,11 @@ class BridgeState:
         except GatewayClientError:
             clear_runtime_credential()
             raise
+        try:
+            persist_runtime_credential(credential)
+        except OSError as error:
+            clear_runtime_credential()
+            raise GatewayClientError("MCP credential handoff failed") from error
         with self._lock:
             self._connected = True
 

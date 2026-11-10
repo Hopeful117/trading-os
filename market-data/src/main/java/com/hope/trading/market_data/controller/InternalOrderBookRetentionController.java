@@ -8,9 +8,13 @@ import com.hope.trading.market_data.model.OrderBookReplayResult;
 import com.hope.trading.market_data.service.OrderBookRetentionService;
 import com.hope.trading.market_data.service.OrderBookStorageHealthService;
 import com.hope.trading.market_data.service.OrderBookEvidenceSegmentBackfillService;
+import com.hope.trading.market_data.service.OrderBookSourceRetirementService;
+import com.hope.trading.market_data.model.HistoricalEvidenceRetirementScope;
+import com.hope.trading.market_data.model.HistoricalEvidenceRetirementOperationalState;
 import com.hope.trading.market_data.config.OrderBookRetentionProperties;
-import lombok.RequiredArgsConstructor;
+import com.hope.trading.market_data.security.ServicePrincipal;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,18 +22,39 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.UUID;
 import java.time.Instant;
 
 @RestController
 @RequestMapping("/internal/v1/order-book/retention")
-@RequiredArgsConstructor
 public class InternalOrderBookRetentionController {
     private final OrderBookRetentionService retentionService;
     private final OrderBookStorageHealthService storageHealthService;
     private final OrderBookEvidenceSegmentBackfillService backfillService;
     private final OrderBookRetentionProperties retentionProperties;
+    private final OrderBookSourceRetirementService sourceRetirementService;
+
+    @Autowired
+    public InternalOrderBookRetentionController(OrderBookRetentionService retentionService,
+                                                OrderBookStorageHealthService storageHealthService,
+                                                OrderBookEvidenceSegmentBackfillService backfillService,
+                                                OrderBookRetentionProperties retentionProperties) {
+        this(retentionService, storageHealthService, backfillService, retentionProperties, null);
+    }
+
+    public InternalOrderBookRetentionController(OrderBookRetentionService retentionService,
+                                                OrderBookStorageHealthService storageHealthService,
+                                                OrderBookEvidenceSegmentBackfillService backfillService,
+                                                OrderBookRetentionProperties retentionProperties,
+                                                OrderBookSourceRetirementService sourceRetirementService) {
+        this.retentionService = retentionService;
+        this.storageHealthService = storageHealthService;
+        this.backfillService = backfillService;
+        this.retentionProperties = retentionProperties;
+        this.sourceRetirementService = sourceRetirementService;
+    }
 
     @GetMapping("/health")
     public ResponseEntity<OrderBookStorageHealthService.StorageHealth> health() {
@@ -60,6 +85,62 @@ public class InternalOrderBookRetentionController {
     @PostMapping("/retire")
     public ResponseEntity<Integer> retire(@RequestBody RetirementRequest request) {
         return ResponseEntity.ok(retentionService.retire(request.dryRunFingerprint(), request.candidate()));
+    }
+
+    @PostMapping("/source-retirement/prepare")
+    public ResponseEntity<OrderBookSourceRetirementService.OperationView> prepareSourceRetirement(
+            @RequestBody SourceRetirementPrepareRequest request) {
+        return ResponseEntity.ok(sourceRetirementService.prepare(
+                new OrderBookSourceRetirementService.PrepareRequest(request.scope(),
+                        request.approvalReference(), request.actor())));
+    }
+
+    @PostMapping("/source-retirement/{operationId}/source-retired")
+    public ResponseEntity<SourceRetirementAcknowledgementResponse> markSourceRetired(
+            @PathVariable UUID operationId, @RequestBody SourceRetiredRequest request,
+            Authentication authentication) {
+        requireMarketIntelligenceAcknowledgement(authentication);
+        ServicePrincipal principal = (ServicePrincipal) authentication.getPrincipal();
+        return ResponseEntity.ok(sourceRetirementAcknowledgement(sourceRetirementService.sourceRetired(operationId,
+                request.dependencyFingerprint(), principal.serviceName(), request.reason())));
+    }
+
+    private void requireMarketIntelligenceAcknowledgement(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof ServicePrincipal principal)
+                || !"market-intelligence".equals(principal.serviceName())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "market-intelligence acknowledgement is required");
+        }
+    }
+
+    @GetMapping("/source-retirement/{operationId}")
+    public ResponseEntity<SourceRetirementAcknowledgementResponse> sourceRetirement(
+            @PathVariable UUID operationId) {
+        return ResponseEntity.ok(sourceRetirementAcknowledgement(sourceRetirementService.get(operationId)));
+    }
+
+    private SourceRetirementAcknowledgementResponse sourceRetirementAcknowledgement(
+            OrderBookSourceRetirementService.OperationView operation) {
+        return new SourceRetirementAcknowledgementResponse(operation.operationId(),
+                operation.dependencyFingerprint(), operation.businessState().name(),
+                operation.failureReason() == null ? "source retirement acknowledged" : operation.failureReason());
+    }
+
+    @PostMapping("/source-retirement/{operationId}/operational-transition")
+    public ResponseEntity<OrderBookSourceRetirementService.OperationView> transitionOperational(
+            @PathVariable UUID operationId, @RequestBody OperationalTransitionRequest request,
+            Authentication authentication) {
+        ServicePrincipal principal = requireServicePrincipal(authentication);
+        return ResponseEntity.ok(sourceRetirementService.transitionOperational(operationId, request.state(),
+                principal.serviceName(), request.reason(), request.externalReference()));
+    }
+
+    private ServicePrincipal requireServicePrincipal(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof ServicePrincipal principal)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "authenticated service principal is required");
+        }
+        return principal;
     }
 
     @PostMapping("/artifacts")
@@ -132,6 +213,21 @@ public class InternalOrderBookRetentionController {
     }
 
     public record BackfillRejectedResponse(String message) {
+    }
+
+    public record SourceRetirementPrepareRequest(HistoricalEvidenceRetirementScope scope,
+                                                 String approvalReference, String actor) {
+    }
+
+    public record SourceRetiredRequest(String dependencyFingerprint, String reason) {
+    }
+
+    public record SourceRetirementAcknowledgementResponse(UUID operationId, String dependencyFingerprint,
+                                                           String state, String reason) {
+    }
+
+    public record OperationalTransitionRequest(HistoricalEvidenceRetirementOperationalState state,
+                                               String reason, String externalReference) {
     }
 
     public record PromotionRequest(OrderBookReplayResult replay, String semanticIdentity,

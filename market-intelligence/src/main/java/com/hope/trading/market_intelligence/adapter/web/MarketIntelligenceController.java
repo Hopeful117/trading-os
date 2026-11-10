@@ -298,8 +298,7 @@ public class MarketIntelligenceController {
         if (authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal agent) {
             ResearchAuthorizationClient.AuthorizationResponse response = callAuthorization(
                     new ResearchAuthorizationClient.AuthorizationRequest(agent.agentId(), agent.credentialId(),
-                            agent.credentialVersion(), scopeId,
-                            Set.copyOf(marketIds), null));
+                            agent.credentialVersion(), scopeId, Set.copyOf(marketIds), null));
             if (response == null || !response.allowed()) {
                 throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
                         "RESEARCH_NOT_AUTHORIZED", "Research scope is not authorized", 403);

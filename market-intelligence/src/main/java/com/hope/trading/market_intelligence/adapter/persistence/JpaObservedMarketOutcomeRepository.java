@@ -98,7 +98,7 @@ public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcome
                                                       Instant endCutoffExclusive, ObservedMarketOutcomeStatus status) {
         if (marketIds.isEmpty()) return 0;
         return repository.countByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndStatus(
-                marketIds, startCutoffInclusive, endCutoffExclusive, status);
+                marketIds, startCutoffInclusive, endCutoffExclusive, status.name());
     }
 
     @Override

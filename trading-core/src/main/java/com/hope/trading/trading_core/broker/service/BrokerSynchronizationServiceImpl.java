@@ -147,6 +147,7 @@ public class BrokerSynchronizationServiceImpl implements BrokerSynchronizationSe
         applyDerivedEquityMetadata(account, snapshot.account() == null
                 ? null : snapshot.account().derivedEquityFact());
         account.setMarketDataTimestamp(snapshot.observedAt());
+        brokerAccount.markSynchronized(snapshot.completedAt());
         if (hasAuthoritativeEquity(snapshot)) {
             account.setEquity(snapshot.account().equity());
             if (account.getEquity().compareTo(account.getPeakEquity()) > 0) {

@@ -37,6 +37,10 @@ public class InternalResearchAuthorizationController {
         AgentAuthorizationService.Decision decision = permission == AgentPermission.RESEARCH_RUN
                 ? authorization.authorizeResearch(request.agentId(), request.credentialId(), request.credentialVersion(),
                 request.scopeId(), request.marketIds(), request.correlationId())
+                : permission == AgentPermission.RESEARCH_INSPECT && request.brokerAccountId() != null
+                ? authorization.authorizeHistoricalResearchForBrokerAccount(request.agentId(), request.credentialId(),
+                request.credentialVersion(), request.brokerAccountId(), request.marketIds(), request.startCutoff(),
+                request.endCutoff(), request.datasetProfile(), request.observations(), request.correlationId())
                 : authorization.authorizeHistoricalResearch(request.agentId(), request.credentialId(),
                 request.credentialVersion(), permission, request.scopeId(), request.marketIds(),
                 request.startCutoff(), request.endCutoff(), request.datasetProfile(), request.observations(),
@@ -50,14 +54,14 @@ public class InternalResearchAuthorizationController {
     }
 
     public record AuthorizationRequest(UUID agentId, UUID credentialId, Integer credentialVersion,
-                                       UUID scopeId, Set<UUID> marketIds, String correlationId,
+                                       UUID scopeId, UUID brokerAccountId, Set<UUID> marketIds, String correlationId,
                                        String permission, java.time.Instant startCutoff,
                                        java.time.Instant endCutoff, String datasetProfile,
                                        long observations, long exportRows, long exportBytes,
                                        long durationSeconds) {
         public AuthorizationRequest(UUID agentId, UUID credentialId, Integer credentialVersion,
-                                    UUID scopeId, Set<UUID> marketIds, String correlationId) {
-            this(agentId, credentialId, credentialVersion, scopeId, marketIds, correlationId,
+                                     UUID scopeId, Set<UUID> marketIds, String correlationId) {
+            this(agentId, credentialId, credentialVersion, scopeId, null, marketIds, correlationId,
                     AgentPermission.RESEARCH_RUN.value(), null, null, null, 0, 0, 0, 0);
         }
     }

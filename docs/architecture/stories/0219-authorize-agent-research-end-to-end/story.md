@@ -20,8 +20,10 @@ execution authority or report advisory semantics.
 
 - Reuse the existing agent credential exchange, short-lived agent JWT and
   `AgentPrincipal` model.
-- Define and enforce an exact, validated research resource scope for
-  `research:run`.
+- Define and enforce a validated research resource scope for `research:run`.
+- Bind each new research scope to an owner-owned broker account; the broker
+  provider defines the universe and its catalogue markets are resolved
+  server-side.
 - Preserve human research access and `ResearchApplicationService` lifecycle,
   idempotency, budgets and persistence.
 - Allow authorized agent start, status and report retrieval through public
@@ -49,6 +51,8 @@ execution authority or report advisory semantics.
 - A matching active, unexpired `research:run` grant is required before start.
 - The grant target is an exact validated resource, never a wildcard or owner-wide
   implicit scope.
+- A research scope cannot include a market outside the broker provider's market
+  catalogue; the account's provider is the universe identity.
 - Status and report reads verify the same agent, owner, scope and grant policy.
 - Human principals retain the existing ownership path.
 - Agent principals cannot satisfy human-only management or service-only routes.
@@ -74,6 +78,9 @@ a substitute for a research scope.
 ## Acceptance Criteria
 
 - [ ] Existing agent authentication and token validation are reused.
+- [ ] Research scopes reference an owner-owned broker account.
+- [ ] The selected broker account identifies the research universe.
+- [ ] Scope markets are resolved server-side from that broker's market catalogue.
 - [ ] An active exact research grant is required for agent research start.
 - [ ] Human research start/status/report behavior remains functional.
 - [ ] Agent ownership and resource scope are checked on start, status and report.
