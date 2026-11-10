@@ -61,4 +61,15 @@ describe('AccountService', () => {
     expect(req.request.responseType).toBe('text');
     req.flush('Synchronization completed');
   });
+
+  it('synchronizeAccount sends POST to the broker account endpoint', () => {
+    service.synchronizeAccount('broker/account-1').subscribe();
+
+    const req = httpMock.expectOne(
+      `${environment.gatewayUrl}v2/accounts/broker%2Faccount-1/synchronize`,
+    );
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    req.flush({ status: 'COMPLETED' });
+  });
 });
