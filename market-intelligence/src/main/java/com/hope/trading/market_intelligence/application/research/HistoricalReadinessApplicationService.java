@@ -4,8 +4,6 @@ import com.hope.trading.market_intelligence.adapter.tradingcore.ResearchAuthoriz
 import com.hope.trading.market_intelligence.security.MiAgentPrincipal;
 import org.springframework.stereotype.Service;
 
-import java.util.UUID;
-
 @Service
 public class HistoricalReadinessApplicationService {
     private final ResearchAuthorizationClient authorization;
@@ -17,10 +15,11 @@ public class HistoricalReadinessApplicationService {
         this.readiness = readiness;
     }
 
-    public HistoricalReadinessResponse inspect(MiAgentPrincipal agent, UUID scopeId,
-                                               HistoricalReadinessRequest request, String correlationId) {
+    public HistoricalReadinessResponse inspect(MiAgentPrincipal agent, HistoricalReadinessRequest request,
+                                               String correlationId) {
         var decision = authorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
-                agent.agentId(), agent.credentialId(), agent.credentialVersion(), scopeId, request.marketIds(),
+                agent.agentId(), agent.credentialId(), agent.credentialVersion(), null, request.brokerAccountId(),
+                request.marketIds(),
                 correlationId, "research:inspect", request.cutoffStart(), request.cutoffEnd(),
                 request.datasetProfile(), request.maxObservations(), 0, 0, 0));
         if (decision == null || !decision.allowed()) {

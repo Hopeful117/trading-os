@@ -45,6 +45,54 @@ import static org.mockito.Mockito.when;
 
 class JsonWebSocketCTraderOpenApiClientTest {
     @Test
+    void symbolDiagnosticsAreGatedByConfiguredAccountAndSymbol() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonWebSocketCTraderOpenApiClient client = diagnosticClient(mapper);
+        var response = mapper.readTree("{\"ctidTraderAccountId\":49411967,\"symbol\":[{\"symbolId\":41,\"symbolName\":\"XAUUSD\"}]} ");
+
+        assertThat(client.diagnoseSymbolByIdResponse(response, 49411966, 41, Map.of())).isEmpty();
+        assertThat(client.diagnoseSymbolByIdResponse(response, 49411967, 40, Map.of())).isEmpty();
+        assertThat(client.diagnoseSymbolByIdResponse(response, 49411967, 41, Map.of()))
+                .get().extracting(JsonWebSocketCTraderOpenApiClient.SymbolByIdDiagnostic::symbolPresent)
+                .isEqualTo(true);
+    }
+
+    @Test
+    void symbolDiagnosticsDistinguishAbsentNullZeroAndNestedScheduleFields() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonWebSocketCTraderOpenApiClient client = diagnosticClient(mapper);
+        var response = mapper.readTree("""
+                {"ctidTraderAccountId":49411967,"accessToken":"must-not-appear",
+                 "symbol":[{"symbolId":41,"symbolName":"XAUUSD","digits":0,"minVolume":null,"maxVolume":1000,
+                 "stepVolume":0,"tradingMode":null,"scheduleTimeZone":"UTC",
+                 "schedule":[{"startSecond":0}]}]}
+                """);
+
+        var diagnostic = client.diagnoseSymbolByIdResponse(response, 49411967, 41, Map.of()).orElseThrow();
+        var fields = diagnostic.fields().stream().collect(java.util.stream.Collectors.toMap(
+                JsonWebSocketCTraderOpenApiClient.SymbolFieldDiagnostic::name, field -> field));
+
+        assertThat(fields.get("digits").presence()).isEqualTo("PRESENT");
+        assertThat(fields.get("digits").rawValue()).isEqualTo("0");
+        assertThat(fields.get("minVolume").presence()).isEqualTo("NULL");
+        assertThat(fields.get("stepVolume").presence()).isEqualTo("PRESENT");
+        assertThat(fields.get("stepVolume").rawValue()).isEqualTo("0");
+        assertThat(fields.get("tradingMode").presence()).isEqualTo("NULL");
+        assertThat(fields.get("scheduleTimeZone").mappedValue()).isEqualTo("UTC");
+        assertThat(fields.get("schedule").rawValue()).isEqualTo("count:1");
+        assertThat(fields.get("schedule").accepted()).isFalse();
+        assertThat(diagnostic.fields().toString()).doesNotContain("must-not-appear");
+    }
+
+    private JsonWebSocketCTraderOpenApiClient diagnosticClient(ObjectMapper mapper) {
+        return new JsonWebSocketCTraderOpenApiClient(new CTraderMarketDataProperties(
+                CTraderEnvironment.DEMO, "client", "secret", null, null, null, "wss://fixture",
+                Duration.ofSeconds(1), Duration.ofMinutes(10), Map.of(), Map.of(), Map.of(), Map.of(),
+                8, 720, true, 49411967L, 41L), mock(CTraderTokenLifecycleService.class), mapper,
+                null);
+    }
+
+    @Test
     void buildsSpotSubscriptionWithRepeatedSymbolAndTimestamp() {
         var payload = JsonWebSocketCTraderOpenApiClient.spotSubscriptionPayload(
                 new ObjectMapper(), 49289512L, 42L);

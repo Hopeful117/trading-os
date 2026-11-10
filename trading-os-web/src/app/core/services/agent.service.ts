@@ -10,6 +10,7 @@ import {
   AgentPermission,
   AgentType,
   AgentOperationRequest,
+  ResearchScope,
 } from '../models/agent.model';
 
 @Injectable({ providedIn: 'root' })
@@ -64,12 +65,23 @@ export class AgentService {
   createGrant(
     agentId: string,
     permission: AgentPermission,
+    resourceType: 'BROKER_ACCOUNT' | 'RESEARCH_SCOPE',
     resourceId: string,
   ): Observable<AgentGrant> {
     return this.http.post<AgentGrant>(`${this.baseUrl}/${agentId}/grants`, {
       permission,
-      resourceType: 'BROKER_ACCOUNT',
+      resourceType,
       resourceId,
+    });
+  }
+
+  listResearchScopes(): Observable<ResearchScope[]> {
+    return this.http.get<ResearchScope[]>(`${environment.gatewayUrl}v1/research-scopes`);
+  }
+
+  createResearchScope(brokerAccountId: string): Observable<ResearchScope> {
+    return this.http.post<ResearchScope>(`${environment.gatewayUrl}v1/research-scopes`, {
+      brokerAccountId,
     });
   }
 

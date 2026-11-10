@@ -26,5 +26,5 @@ interface SpringDataObservedMarketOutcomeRepository
 
     long countByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndStatus(
             Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
-            com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcomeStatus status);
+            String status);
 }

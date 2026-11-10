@@ -13,15 +13,15 @@ public interface ResearchAuthorizationClient {
     @PostMapping("/internal/v1/agent/research/authorize")
     AuthorizationResponse authorize(@RequestBody AuthorizationRequest request);
 
-    record AuthorizationRequest(UUID agentId, UUID credentialId, Integer credentialVersion,
-                                UUID scopeId, Set<UUID> marketIds, String correlationId,
+        record AuthorizationRequest(UUID agentId, UUID credentialId, Integer credentialVersion,
+                                 UUID scopeId, UUID brokerAccountId, Set<UUID> marketIds, String correlationId,
                                 String permission, java.time.Instant startCutoff,
                                 java.time.Instant endCutoff, String datasetProfile,
                                 long observations, long exportRows, long exportBytes,
                                 long durationSeconds) {
         public AuthorizationRequest(UUID agentId, UUID credentialId, Integer credentialVersion,
-                                    UUID scopeId, Set<UUID> marketIds, String correlationId) {
-            this(agentId, credentialId, credentialVersion, scopeId, marketIds, correlationId,
+                                     UUID scopeId, Set<UUID> marketIds, String correlationId) {
+            this(agentId, credentialId, credentialVersion, scopeId, null, marketIds, correlationId,
                     "research:run", null, null, null, 0, 0, 0, 0);
         }
     }

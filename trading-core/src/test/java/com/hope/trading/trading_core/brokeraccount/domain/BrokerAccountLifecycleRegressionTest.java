@@ -92,6 +92,17 @@ class BrokerAccountLifecycleRegressionTest {
     }
 
     @Test
+    void synchronizationRecordsProviderCompletionTimestamp() {
+        BrokerAccount account = BrokerAccount.create(OWNER, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Test", NOW);
+        Instant completedAt = NOW.plusSeconds(30);
+
+        account.markSynchronized(completedAt);
+
+        assertEquals(completedAt, account.lastSynchronizedAt());
+        assertEquals(completedAt, account.updatedAt());
+    }
+
+    @Test
     void validTransitionPendingValidationToInvalidCredentials() {
         BrokerAccount account = BrokerAccount.create(OWNER, BrokerProvider.KRAKEN, ExecutionMode.LIVE, "Test", NOW);
         account.markPendingValidation(NOW);

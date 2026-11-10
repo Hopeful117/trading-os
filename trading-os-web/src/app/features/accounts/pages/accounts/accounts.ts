@@ -21,6 +21,7 @@ import { BrokerAccountService } from '../../../../core/services/broker-account.s
 import {
   BrokerAccount,
   BrokerAccountReadOnlyStatus,
+  CTraderReadOnlyValidation,
   BrokerProvider,
   CTraderAuthorization,
   CTraderMarketDataAuthorizationState,
@@ -65,6 +66,10 @@ export class Accounts {
   readonly readOnlyStatus = signal<BrokerAccountReadOnlyStatus | null>(null);
   readonly readOnlyStatusLoading = signal(false);
   readonly readOnlyStatusError = signal(false);
+  readonly instrumentValidationAccountId = signal<string | null>(null);
+  readonly instrumentValidation = signal<CTraderReadOnlyValidation | null>(null);
+  readonly instrumentValidationLoading = signal(false);
+  readonly instrumentValidationError = signal(false);
   readonly cTraderAuthorization = signal<CTraderAuthorization | null>(null);
   readonly cTraderFlowAccountId = signal<string | null>(null);
   readonly cTraderMarketDataUrl = signal<string | null>(null);
@@ -400,13 +405,40 @@ export class Accounts {
     });
   }
 
+  validateCTraderInstrument(account: BrokerAccount): void {
+    if (
+      this.instrumentValidationLoading() ||
+      account.connectionStatus !== 'CONNECTED' ||
+      !this.isCTraderAccount(account)
+    ) {
+      return;
+    }
+
+    this.instrumentValidationAccountId.set(account.id);
+    this.instrumentValidation.set(null);
+    this.instrumentValidationError.set(false);
+    this.instrumentValidationLoading.set(true);
+    this.brokerAccountService.validateCTraderInstrument(account.id, 'EURUSD').subscribe({
+      next: (validation) => {
+        this.instrumentValidation.set(validation);
+        this.instrumentValidationLoading.set(false);
+      },
+      error: () => {
+        this.instrumentValidation.set(null);
+        this.instrumentValidationError.set(true);
+        this.instrumentValidationLoading.set(false);
+      },
+    });
+  }
+
   lifecycleBusy(): boolean {
     return (
       this.connecting() ||
       this.revokingAccountId() !== null ||
       this.disconnectingAccountId() !== null ||
       this.provisioningAccountId() !== null ||
-      this.readOnlyStatusLoading()
+      this.readOnlyStatusLoading() ||
+      this.instrumentValidationLoading()
     );
   }
 

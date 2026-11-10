@@ -7,6 +7,7 @@ from http.client import HTTPConnection
 import pytest
 
 from app.bridge import BridgeHandler, BridgeState
+from app.client import load_runtime_credential
 
 
 @pytest.fixture
@@ -57,3 +58,22 @@ def test_bridge_rejects_untrusted_origin(bridge_server):
     connection.request("GET", "/v1/challenge", headers={"Origin": "https://evil.example"})
     response = connection.getresponse()
     assert response.status == 403
+
+
+def test_successful_pairing_persists_credential_for_fresh_process(bridge_server, monkeypatch, tmp_path):
+    credential_file = tmp_path / "mcp-agent-credential"
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+    monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
+        "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: "token"})()}
+    )())
+    status, payload = request(bridge_server, "GET", "/v1/challenge")
+    assert status == 200
+
+    assert request(
+        bridge_server,
+        "POST",
+        "/v1/connect",
+        {"challenge": payload["challenge"], "credential": "opaque-credential"},
+    )[0] == 204
+    assert load_runtime_credential() == "opaque-credential"
+    assert credential_file.stat().st_mode & 0o777 == 0o600

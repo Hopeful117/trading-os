@@ -30,16 +30,27 @@ public class OrderBookRetentionService {
     private final OrderBookReplayService replayService;
     private final OrderBookRetentionProperties properties;
     private final Clock clock;
+    private final OrderBookSourceRetirementRepository sourceRetirementRepository;
 
     public OrderBookRetentionService(OrderBookRetentionRepository repository,
                                      OrderBookEvidenceRepository evidenceRepository,
                                      OrderBookReplayService replayService,
                                      OrderBookRetentionProperties properties, Clock clock) {
+        this(repository, evidenceRepository, replayService, properties, clock, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public OrderBookRetentionService(OrderBookRetentionRepository repository,
+                                     OrderBookEvidenceRepository evidenceRepository,
+                                     OrderBookReplayService replayService,
+                                     OrderBookRetentionProperties properties, Clock clock,
+                                     OrderBookSourceRetirementRepository sourceRetirementRepository) {
         this.repository = repository;
         this.evidenceRepository = evidenceRepository;
         this.replayService = replayService;
         this.properties = properties;
         this.clock = clock;
+        this.sourceRetirementRepository = sourceRetirementRepository;
     }
 
     @Transactional
@@ -53,6 +64,11 @@ public class OrderBookRetentionService {
                                            String promotionReason) {
         if (replay == null || replay.status() != OrderBookReplayResult.ReplayStatus.AVAILABLE) {
             throw new IllegalArgumentException("only an available replay can be promoted");
+        }
+        if (sourceRetirementRepository != null
+                && sourceRetirementRepository.isSourceRetired(replay.provider(), replay.providerSymbol(),
+                replay.marketId(), replay.depth())) {
+            throw new IllegalStateException("cannot promote a replay from a retired source");
         }
         if (semanticIdentity == null || semanticIdentity.isBlank()
                 || promotionReason == null || promotionReason.isBlank()) {
@@ -118,6 +134,9 @@ public class OrderBookRetentionService {
             return false;
         }
         return repository.findArtifact(semanticIdentity)
+                .filter(artifact -> sourceRetirementRepository == null
+                        || !sourceRetirementRepository.isSourceRetired(artifact.provider(), artifact.providerSymbol(),
+                        artifact.marketId(), artifact.depth()))
                 .filter(repository::matchesArtifactFingerprint)
                 .isPresent();
     }

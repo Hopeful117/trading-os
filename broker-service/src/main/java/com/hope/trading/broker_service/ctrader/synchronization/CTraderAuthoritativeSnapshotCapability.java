@@ -92,20 +92,35 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
 
     private BrokerAccountSnapshotV2 map(UUID brokerAccountId, CTraderReadOnlyObservation observation, Instant now) {
         CTraderReadOnlyObservation.AccountFacts providerFacts = observation.accountFacts();
-        var derived = CTraderDerivedEquityExperiment.evaluate(observation, now,
+        Instant capturedAt = observation.completedAt();
+        var derived = CTraderDerivedEquityExperiment.evaluate(observation, capturedAt,
                 MAX_OBSERVATION_AGE, Duration.ofSeconds(30));
         DerivedEquityFact derivedEquityFact = derived.candidateEquity() == null ? null
                 : new DerivedEquityFact(derived.candidateEquity(), derived.valuationAsset(), "BROKER_DERIVED",
                 derived.calculationVersion(), derived.hypothesis().name(), derived.consistencyStatus().name(),
                 derived.validationStatus().name(), derived.providerObservedAt(), derived.completedAt(),
                 derived.diagnostics());
+        EquityFact equityFact = providerEquityFact(observation, providerFacts, capturedAt);
+        if (equityFact.availability() == EquityAvailability.UNAVAILABLE) {
+            equityFact = emptyAccountDerivedEquityFact(observation, providerFacts, capturedAt);
+            if (equityFact.availability() == EquityAvailability.AVAILABLE) {
+                derivedEquityFact = new DerivedEquityFact(equityFact.value(), equityFact.currency(),
+                        equityFact.provenance().name(), "CTRADER_EMPTY_ACCOUNT_EQUITY_V1",
+                        "BALANCE_WHEN_NO_OPEN_POSITIONS", "CONSISTENT_WITH_OBSERVATIONS", "VALIDATED",
+                        equityFact.observedAt(), equityFact.capturedAt(), List.of());
+            }
+        }
+        BigDecimal accountEquity = equityFact.availability() == EquityAvailability.AVAILABLE
+                ? equityFact.value() : observation.equity();
         AccountFacts account = new AccountFacts(observation.valuationAsset(), observation.balance(),
-                observation.equity(), observation.usedMargin(), observation.freeMargin(),
+                accountEquity, observation.usedMargin(), observation.freeMargin(),
                 accountPositionModel(providerFacts.accountType()),
                 marginCalculationModel(providerFacts.totalMarginCalculationType()),
                 providerFacts.moneyDigits().present() ? providerFacts.moneyDigits().value() : null,
                 leverage(providerFacts.leverageInCents()),
-                EquityFact.unavailable("EQUITY_PROVIDER_SOURCE_UNVALIDATED"), derivedEquityFact);
+                equityFact, derivedEquityFact, new BonusFacts(
+                        value(providerFacts.managerBonus()), value(providerFacts.ibBonus()),
+                        value(providerFacts.nonWithdrawableBonus())));
         List<PositionSnapshot> positions = observation.positions().stream()
                 .map(position -> new PositionSnapshot(position.instrument(), position.signedQuantity(),
                         position.entryPrice(), position.observedAt(), position.providerReference(),
@@ -130,7 +145,10 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                 ? SnapshotFreshness.STALE : SnapshotFreshness.FRESH;
         boolean accountFactsComplete = observation.valuationAsset() != null
                  && !observation.valuationAsset().isBlank()
-                 && observation.balance() != null;
+                 && observation.balance() != null
+                 && equityFact.availability() == EquityAvailability.AVAILABLE
+                 && observation.usedMargin() != null
+                 && observation.freeMargin() != null;
         boolean pnlFactsComplete = observation.pnlComplete()
                 && observation.pnlSet().availability() != CTraderReadOnlyObservation.CollectionAvailability.UNAVAILABLE_OR_ABSENT;
         SnapshotCompleteness completeness = observation.complete() && accountFactsComplete && pnlFactsComplete
@@ -138,9 +156,10 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                 ? SnapshotCompleteness.COMPLETE : SnapshotCompleteness.INCOMPLETE;
         List<String> reasons = completeness == SnapshotCompleteness.COMPLETE
                 ? observation.reasons() : appendReasons(observation, freshness);
-        if (observation.equity() == null || observation.usedMargin() == null || observation.freeMargin() == null) {
+        if (equityFact.availability() == EquityAvailability.UNAVAILABLE
+                || observation.usedMargin() == null || observation.freeMargin() == null) {
             java.util.ArrayList<String> incompleteReasons = new java.util.ArrayList<>(reasons);
-            if (observation.equity() == null) incompleteReasons.add("EQUITY_UNAVAILABLE");
+            if (equityFact.availability() == EquityAvailability.UNAVAILABLE) incompleteReasons.add("EQUITY_UNAVAILABLE");
             if (observation.usedMargin() == null) incompleteReasons.add("USED_MARGIN_UNAVAILABLE");
             if (observation.freeMargin() == null) incompleteReasons.add("FREE_MARGIN_UNAVAILABLE");
             reasons = List.copyOf(new java.util.LinkedHashSet<>(incompleteReasons));
@@ -159,6 +178,63 @@ public final class CTraderAuthoritativeSnapshotCapability implements Authoritati
                  collectionAvailability(observation.pnlSet().availability()),
                  collectionAvailability(observation.dealSet().availability()), observation.pnlComplete(), completeness, freshness,
                  observation.startedAt(), observation.completedAt(), reasons);
+    }
+
+    private EquityFact providerEquityFact(CTraderReadOnlyObservation observation,
+                                          CTraderReadOnlyObservation.AccountFacts providerFacts,
+                                          Instant capturedAt) {
+        boolean usable = observation.equity() != null
+                && observation.equity().signum() >= 0
+                && observation.valuationAsset() != null
+                && !observation.valuationAsset().isBlank()
+                && providerFacts.depositAssetId().present()
+                && providerFacts.moneyDigits().present()
+                && observation.providerObservedAt() != null
+                && !observation.providerObservedAt().isAfter(capturedAt)
+                && !observation.providerObservedAt().isBefore(capturedAt.minus(MAX_OBSERVATION_AGE));
+        if (!usable) return EquityFact.unavailable("EQUITY_PROVIDER_SOURCE_UNVALIDATED");
+        return new EquityFact(observation.equity(), observation.valuationAsset(), EquityProvenance.BROKER_REPORTED,
+                EquityAvailability.AVAILABLE, observation.providerObservedAt(), capturedAt, true, true, true,
+                "CTRADER_TRADER_ACCOUNT", "TRADER_RESPONSE_EQUITY", List.of());
+    }
+
+    private EquityFact emptyAccountDerivedEquityFact(CTraderReadOnlyObservation observation,
+                                                     CTraderReadOnlyObservation.AccountFacts providerFacts,
+                                                     Instant capturedAt) {
+        List<String> rejectionReasons = new java.util.ArrayList<>();
+        boolean noOpenPositions = observation.positionSet().availability()
+                == CTraderReadOnlyObservation.CollectionAvailability.AVAILABLE_EMPTY
+                && observation.positionSet().values().isEmpty();
+        boolean noPositionPnl = observation.pnlSet().availability()
+                == CTraderReadOnlyObservation.CollectionAvailability.AVAILABLE_EMPTY
+                && observation.pnlSet().values().isEmpty();
+        boolean inactiveBonuses = inactiveBonus(providerFacts.managerBonus())
+                && inactiveBonus(providerFacts.ibBonus())
+                && inactiveBonus(providerFacts.nonWithdrawableBonus());
+        if (!observation.complete()) rejectionReasons.add("EMPTY_ACCOUNT_OBSERVATION_INCOMPLETE");
+        if (!observation.pnlComplete()) rejectionReasons.add("EMPTY_ACCOUNT_PNL_INCOMPLETE");
+        if (!noOpenPositions) rejectionReasons.add("EMPTY_ACCOUNT_POSITIONS_NOT_EMPTY");
+        if (!noPositionPnl) rejectionReasons.add("EMPTY_ACCOUNT_POSITION_PNL_NOT_EMPTY");
+        if (!inactiveBonuses) rejectionReasons.add("EMPTY_ACCOUNT_BONUS_ACTIVE");
+        if (observation.balance() == null || observation.balance().signum() < 0) {
+            rejectionReasons.add("EMPTY_ACCOUNT_BALANCE_INVALID");
+        }
+        if (observation.valuationAsset() == null || observation.valuationAsset().isBlank()) {
+            rejectionReasons.add("EMPTY_ACCOUNT_VALUATION_ASSET_INVALID");
+        }
+        if (observation.providerObservedAt() == null
+                || observation.providerObservedAt().isAfter(capturedAt)
+                || observation.providerObservedAt().isBefore(capturedAt.minus(MAX_OBSERVATION_AGE))) {
+            rejectionReasons.add("EMPTY_ACCOUNT_OBSERVATION_TIMESTAMP_INVALID");
+        }
+        if (!rejectionReasons.isEmpty()) return EquityFact.unavailable(rejectionReasons);
+        return new EquityFact(observation.balance(), observation.valuationAsset(), EquityProvenance.BROKER_DERIVED,
+                EquityAvailability.AVAILABLE, observation.providerObservedAt(), capturedAt, true, true, true,
+                "CTRADER_EMPTY_ACCOUNT", "BALANCE_WHEN_NO_OPEN_POSITIONS", List.of());
+    }
+
+    private boolean inactiveBonus(CTraderReadOnlyObservation.ProviderField<BigDecimal> bonus) {
+        return !bonus.present() || bonus.value().signum() == 0;
     }
 
     private BigDecimal value(CTraderReadOnlyObservation.ProviderField<BigDecimal> field) {

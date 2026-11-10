@@ -213,8 +213,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                  || snapshot.completedAt().toEpochMilli() < 1
                  || snapshot.completedAt().isBefore(clock.instant().minus(maxAge))
                  || !"FRESH".equals(snapshot.freshness())
-                || snapshot.balances() == null || snapshot.positions() == null
-                || snapshot.deals() == null || snapshot.positionPnls() == null) {
+                 || snapshot.balances() == null) {
             return false;
         }
         if (requirements == null) return "COMPLETE".equals(snapshot.completeness());
@@ -230,6 +229,7 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
                 && snapshot.positionAvailability() == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT) {
             return false;
         }
+        if (requirements.positions() && snapshot.positions() == null) return false;
         if (requirements.closedDeals()
                 && (snapshot.dealAvailability() == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.UNAVAILABLE_OR_ABSENT
                 || snapshot.dealAvailability() == com.hope.trading.trading_core.broker.dto.SnapshotCollectionAvailability.TRUNCATED)) {
@@ -272,7 +272,8 @@ public final class ModeAwareRiskFactsProvider implements RiskFactsProvider {
         if (reason.startsWith("DEAL_")) return !requirements.closedDeals();
         if (reason.startsWith("ORDER_") || reason.equals("RESPONSE_FIELD_UNAVAILABLE:order")) return true;
         if (reason.equals("RESPONSE_FIELD_UNAVAILABLE:position")) return !requirements.positions();
-        if (reason.startsWith("POSITION_MARGIN_UNAVAILABLE")) return !requirements.positions();
+        if (reason.startsWith("POSITION_MARGIN_UNAVAILABLE")) return true;
+        if (reason.startsWith("POSITION_PNL_UNAVAILABLE") || reason.startsWith("UNREALIZED_PNL")) return true;
         if (reason.startsWith("POSITION_")) return !requirements.positions();
         return false;
     }

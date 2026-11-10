@@ -92,6 +92,24 @@ class MetricAndProjectionTest {
         assertMoney(projected.margin().orElseThrow(), "400.0000000000000000000000000000000");
     }
 
+    @Test void netsExistingOppositePositionsButKeepsTheirStoredExposureAdditive() {
+        var projected = engine.project(account, portfolio(
+                position("EURUSD", "10", "1000", "100", "200"),
+                position("EURUSD", "-4", "400", "40", "80")), null);
+
+        assertPosition(projected, "6", "1400");
+        assertMoney(projected.exposure(), "1400");
+    }
+
+    @Test void sumsExposureAcrossInstruments() {
+        var projected = engine.project(account, portfolio(
+                position("EURUSD", "10", "1000", "100", "200"),
+                position("GBPUSD", "5", "750", "75", "150")), null);
+
+        assertEquals(2, projected.portfolioState().positions().size());
+        assertMoney(projected.exposure(), "1750");
+    }
+
     @Test void calculatesAllRatiosBeforeRulesRun() {
         var observed = new ObservedMetricsCalculator().calculate(account);
         var trade = trade(TradeDirection.LONG, "10", "2000", "100", "200");
@@ -147,9 +165,15 @@ class MetricAndProjectionTest {
     }
     private PortfolioSnapshot portfolio(String quantity, String exposure,
                                         String loss, String margin) {
-        return new PortfolioSnapshot(UUID.randomUUID(), 1, NOW, List.of(
-                new PositionSnapshot(UUID.randomUUID(), "EURUSD",
-                    new BigDecimal(quantity), usd(exposure), usd(loss), usd(margin))));
+        return portfolio(position("EURUSD", quantity, exposure, loss, margin));
+    }
+    private PortfolioSnapshot portfolio(PositionSnapshot... positions) {
+        return new PortfolioSnapshot(UUID.randomUUID(), 1, NOW, List.of(positions));
+    }
+    private PositionSnapshot position(String instrument, String quantity, String exposure,
+                                      String loss, String margin) {
+        return new PositionSnapshot(UUID.randomUUID(), instrument,
+                new BigDecimal(quantity), usd(exposure), usd(loss), usd(margin));
     }
     private ProposedTrade trade(TradeDirection direction, String quantity,
                                 String notional, String loss, String margin) {

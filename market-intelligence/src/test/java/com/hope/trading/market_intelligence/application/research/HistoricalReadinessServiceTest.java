@@ -31,7 +31,7 @@ class HistoricalReadinessServiceTest {
 
         var result = new HistoricalReadinessService(snapshots, outcomes, executions,
                 Clock.fixed(NOW, ZoneOffset.UTC)).inspect(new HistoricalReadinessRequest(
-                Set.of(MARKET), NOW.minusSeconds(3600), NOW, "profile-v1", 100), "corr-1");
+                UUID.randomUUID(), Set.of(MARKET), NOW.minusSeconds(3600), NOW, "profile-v1", 100), "corr-1");
 
         assertThat(result.verdict()).isEqualTo(HistoricalReadinessVerdict.INSUFFICIENT);
         assertThat(result.blockers()).contains("NO_FEATURE_SNAPSHOTS");

@@ -30,19 +30,28 @@ public class OrderBookReplayService {
     private final OrderBookEvidenceRepository repository;
     private final OrderBookRetentionRepository retentionRepository;
     private final OrderBookReplayProperties properties;
+    private final OrderBookSourceRetirementRepository sourceRetirementRepository;
 
     public OrderBookReplayService(OrderBookEvidenceRepository repository,
                                   OrderBookRetentionRepository retentionRepository) {
-        this(repository, retentionRepository, new OrderBookReplayProperties());
+        this(repository, retentionRepository, new OrderBookReplayProperties(), null);
+    }
+
+    public OrderBookReplayService(OrderBookEvidenceRepository repository,
+                                  OrderBookRetentionRepository retentionRepository,
+                                  OrderBookReplayProperties properties) {
+        this(repository, retentionRepository, properties, null);
     }
 
     @Autowired
     public OrderBookReplayService(OrderBookEvidenceRepository repository,
                                   OrderBookRetentionRepository retentionRepository,
-                                  OrderBookReplayProperties properties) {
+                                  OrderBookReplayProperties properties,
+                                  OrderBookSourceRetirementRepository sourceRetirementRepository) {
         this.repository = repository;
         this.retentionRepository = retentionRepository;
         this.properties = properties;
+        this.sourceRetirementRepository = sourceRetirementRepository;
     }
 
     // Artifact eligibility uses FOR SHARE so invalidation cannot commit mid-replay.
@@ -59,7 +68,10 @@ public class OrderBookReplayService {
         if (semanticIdentity != null && !semanticIdentity.isBlank()) {
             var artifactReplay = retentionRepository.findArtifact(semanticIdentity)
                     .filter(value -> matchesRequest(value, marketId, depth, cutoff))
-                     .filter(value -> repository.isCurrentEligibleSequence(
+                    .filter(value -> sourceRetirementRepository == null
+                            || !sourceRetirementRepository.isSourceRetired(value.provider(), value.providerSymbol(),
+                            value.marketId(), value.depth()))
+                    .filter(value -> repository.isCurrentEligibleSequence(
                              value.sequenceId(), marketId, depth, cutoff))
                      .filter(retentionRepository::matchesArtifactFingerprint)
                      .map(this::fromArtifact);
@@ -77,6 +89,12 @@ public class OrderBookReplayService {
                     marketId, depth, result.status(), 0, repositoryDurationMs,
                     elapsedMillis(startedAt) - repositoryDurationMs, elapsedMillis(startedAt));
             return result;
+        }
+        if (sourceRetirementRepository != null
+                && sourceRetirementRepository.isSourceRetired(startingPoint.provider().name(),
+                startingPoint.providerSymbol(), marketId, depth)) {
+            return OrderBookReplayResult.sourceRetired(marketId, depth, cutoff,
+                    "historical source was explicitly retired for the selected provider scope");
         }
 
         ReplayAccumulator accumulator = new ReplayAccumulator(startingPoint, properties.getMaximumEvidenceCount());

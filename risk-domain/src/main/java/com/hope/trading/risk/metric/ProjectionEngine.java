@@ -10,7 +10,12 @@ import com.hope.trading.risk.snapshot.PositionSnapshot;
 import java.math.*;
 import java.util.*;
 
-/** Deterministically projects the net portfolio after applying one trade delta. */
+/**
+ * Deterministically projects the portfolio after applying one trade delta.
+ * Quantities are signed and netted per instrument; stored exposure values are
+ * additive, while an opposite proposed trade proportionally reduces the
+ * existing instrument projection.
+ */
 public final class ProjectionEngine {
     public ProjectedMetrics project(AccountSnapshot account, PortfolioSnapshot portfolio,
                                     ProposedTrade trade) {
@@ -33,13 +38,17 @@ public final class ProjectionEngine {
                 .flatMap(starting -> projectedEquity == null ? Optional.empty() : Optional.of(
                         new Money(starting.amount().subtract(projectedEquity)
                                 .max(BigDecimal.ZERO), currency)));
-        Money currentPositionMargin = portfolio.positions().stream()
+        Optional<Money> currentPositionMargin = portfolio.positions().stream()
                 .map(PositionSnapshot::marginUsed)
-                .reduce(Money.zero(currency), Money::add);
-        Money projectedPositionMargin =
-                sum(projectedPositions, currency, ProjectedPosition::margin);
-        Optional<Money> margin = account.usedMargin()
-                .map(value -> value.subtract(currentPositionMargin).add(projectedPositionMargin));
+                .reduce(Optional.of(Money.zero(currency)),
+                        (left, right) -> left.flatMap(l -> right.map(r -> l.add(r))));
+        Optional<Money> projectedPositionMargin = projectedPositions.stream()
+                .map(ProjectedPosition::margin)
+                .reduce(Optional.of(Money.zero(currency)),
+                        (left, right) -> left.flatMap(l -> right.map(r -> l.add(r))));
+        Optional<Money> margin = account.usedMargin().flatMap(value -> currentPositionMargin
+                .flatMap(current -> projectedPositionMargin
+                        .map(projected -> value.subtract(current).add(projected))));
         return new ProjectedMetrics(exposure, projectedDrawdown, projectedTotalDrawdown, margin, heat,
                 new ProjectedPortfolioState(projectedPositions));
     }
@@ -49,11 +58,11 @@ public final class ProjectionEngine {
         for (PositionSnapshot position : portfolio.positions()) {
             requireCurrency(currency, position.marketValue());
             position.lossAtStop().ifPresent(loss -> requireCurrency(currency, loss));
-            requireCurrency(currency, position.marginUsed());
+            position.marginUsed().ifPresent(margin -> requireCurrency(currency, margin));
             result.merge(position.instrument(),
                     new PositionValues(position.signedQuantity(),
                             position.marketValue().amount(), position.lossAtStop().map(Money::amount),
-                            position.marginUsed().amount(), position.protectionStatus()), PositionValues::add);
+                            position.marginUsed().map(Money::amount), position.protectionStatus()), PositionValues::add);
         }
         return result;
     }
@@ -68,7 +77,7 @@ public final class ProjectionEngine {
         PositionValues current = positions.get(trade.instrument());
         PositionValues proposed = new PositionValues(signedDelta,
                 trade.notional().amount(), Optional.of(trade.expectedLossAtStop().amount()),
-                trade.marginRequired().amount(), ProtectionStatus.PROTECTED);
+                Optional.of(trade.marginRequired().amount()), ProtectionStatus.PROTECTED);
         if (current == null || current.quantity.signum() == signedDelta.signum()) {
             positions.merge(trade.instrument(), proposed, PositionValues::add);
             return;
@@ -106,12 +115,12 @@ public final class ProjectionEngine {
     }
 
     private record PositionValues(BigDecimal quantity, BigDecimal exposure,
-                                  Optional<BigDecimal> loss, BigDecimal margin,
+                                  Optional<BigDecimal> loss, Optional<BigDecimal> margin,
                                   ProtectionStatus protectionStatus) {
         PositionValues add(PositionValues other) {
             return new PositionValues(quantity.add(other.quantity),
                     exposure.add(other.exposure), addKnownLoss(loss, other.loss),
-                    margin.add(other.margin), mergeProtection(protectionStatus, other.protectionStatus));
+                    addKnownMargin(margin, other.margin), mergeProtection(protectionStatus, other.protectionStatus));
         }
         PositionValues scaleToQuantity(BigDecimal newQuantity,
                                        BigDecimal originalAbsoluteQuantity) {
@@ -121,19 +130,24 @@ public final class ProjectionEngine {
                             .multiply(newAbsolute, MathContext.DECIMAL128),
                     loss.map(value -> value.divide(originalAbsoluteQuantity, MathContext.DECIMAL128)
                             .multiply(newAbsolute, MathContext.DECIMAL128)),
-                    margin.divide(originalAbsoluteQuantity, MathContext.DECIMAL128)
-                            .multiply(newAbsolute, MathContext.DECIMAL128), protectionStatus);
+                    margin.map(value -> value.divide(originalAbsoluteQuantity, MathContext.DECIMAL128)
+                            .multiply(newAbsolute, MathContext.DECIMAL128)), protectionStatus);
         }
         ProjectedPosition toProjectedPosition(String instrument, String currency) {
             return new ProjectedPosition(instrument, quantity,
                     new Money(exposure, currency), loss.map(value -> new Money(value, currency)),
-                    new Money(margin, currency), protectionStatus);
+                    margin.map(value -> new Money(value, currency)), protectionStatus);
         }
 
         private static Optional<BigDecimal> addKnownLoss(Optional<BigDecimal> left,
                                                          Optional<BigDecimal> right) {
             if (left.isEmpty()) return right;
             if (right.isEmpty()) return left;
+            return Optional.of(left.get().add(right.get()));
+        }
+        private static Optional<BigDecimal> addKnownMargin(Optional<BigDecimal> left,
+                                                           Optional<BigDecimal> right) {
+            if (left.isEmpty() || right.isEmpty()) return Optional.empty();
             return Optional.of(left.get().add(right.get()));
         }
 

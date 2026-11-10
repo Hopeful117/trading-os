@@ -98,7 +98,7 @@ public class AgentAuthorizationService {
 
     @Transactional
     public Decision authorizeHistoricalResearch(UUID agentId, UUID credentialId, Integer credentialVersion,
-                                                AgentPermission permission, UUID scopeId, Set<UUID> marketIds,
+                                                 AgentPermission permission, UUID scopeId, Set<UUID> marketIds,
                                                 Instant startCutoff, Instant endCutoff, String datasetProfile,
                                                 long observations, long exportRows, long exportBytes,
                                                 long durationSeconds, String correlationId) {
@@ -108,6 +108,31 @@ public class AgentAuthorizationService {
         return authorizeResearch(agentId, credentialId, credentialVersion, permission, scopeId, marketIds,
                 startCutoff, endCutoff, datasetProfile, observations, exportRows, exportBytes,
                 durationSeconds, correlationId);
+    }
+
+    @Transactional
+    public Decision authorizeHistoricalResearchForBrokerAccount(UUID agentId, UUID credentialId,
+                                                                Integer credentialVersion, UUID brokerAccountId,
+                                                                Set<UUID> marketIds, Instant startCutoff,
+                                                                Instant endCutoff, String datasetProfile,
+                                                                long observations, String correlationId) {
+        Decision base = authorize(agentId, AgentPermission.RESEARCH_INSPECT,
+                AgentResourceType.BROKER_ACCOUNT, brokerAccountId, correlationId);
+        if (!base.allowed()) return base;
+        if (credentials == null || credentialId == null || credentialVersion == null
+                || credentials.findByIdAndAgentId(credentialId, agentId)
+                .filter(value -> value.credentialVersion() == credentialVersion)
+                .filter(value -> value.isActiveAt(clock.instant())).isEmpty()) {
+            return denyBrokerAccount(agentId, brokerAccountId, correlationId, "INVALID_AGENT_CREDENTIAL");
+        }
+        if (marketIds == null || marketIds.isEmpty() || marketIds.size() > 2
+                || marketIds.stream().anyMatch(value -> markets.findById(value) == null)
+                || startCutoff == null || endCutoff == null || !startCutoff.isBefore(endCutoff)
+                || datasetProfile == null || datasetProfile.isBlank() || observations <= 0) {
+            return denyBrokerAccount(agentId, brokerAccountId, correlationId, "RESEARCH_REQUEST_INVALID");
+        }
+        return new Decision(true, null, base.grantId(), base.grantVersion(), base.agentVersion(),
+                base.ownerUserId(), credentialId, credentialVersion);
     }
 
     private Decision authorizeResearch(UUID agentId, UUID credentialId, Integer credentialVersion,
@@ -126,9 +151,13 @@ public class AgentAuthorizationService {
         }
         var agent = agents.findById(agentId).orElse(null);
         var scope = researchScopes.findById(scopeId).orElse(null);
+        var brokerAccount = scope != null && scope.brokerAccountId() != null
+                ? brokerAccounts.findByIdAndOwnerId(scope.brokerAccountId(), agent == null ? null : agent.ownerUserId()).orElse(null)
+                : null;
         if (agent == null || scope == null || !scope.ownerUserId().equals(agent.ownerUserId())
                 || !scope.effectiveAt(clock.instant()) || marketIds == null
-                || marketIds.isEmpty() || marketIds.size() > 2 || !scope.marketIds().containsAll(marketIds)) {
+                || marketIds.isEmpty() || !scope.marketIds().containsAll(marketIds)
+                || (scope.brokerAccountId() != null && brokerAccount == null)) {
             return deny(agentId, permission, scopeId, correlationId, "RESEARCH_MARKET_OUT_OF_SCOPE");
         }
         if (permission != AgentPermission.RESEARCH_RUN) {
@@ -168,9 +197,16 @@ public class AgentAuthorizationService {
         }
     }
 
-    private Decision deny(UUID agentId, AgentPermission permission, UUID scopeId, String correlationId, String reason) {
+    private Decision deny(UUID agentId, AgentPermission permission, UUID resourceTypeId, String correlationId, String reason) {
         Instant now = clock.instant();
-        recordAudit(agentId, permission, AgentResourceType.RESEARCH_SCOPE, scopeId,
+        recordAudit(agentId, permission, AgentResourceType.RESEARCH_SCOPE, resourceTypeId,
+                "DENIED", reason, correlationId, now);
+        return new Decision(false, reason);
+    }
+
+    private Decision denyBrokerAccount(UUID agentId, UUID brokerAccountId, String correlationId, String reason) {
+        Instant now = clock.instant();
+        recordAudit(agentId, AgentPermission.RESEARCH_INSPECT, AgentResourceType.BROKER_ACCOUNT, brokerAccountId,
                 "DENIED", reason, correlationId, now);
         return new Decision(false, reason);
     }

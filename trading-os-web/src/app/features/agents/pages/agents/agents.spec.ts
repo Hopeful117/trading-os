@@ -14,6 +14,8 @@ describe('Agents', () => {
     connectToOpenCode: ReturnType<typeof vi.fn>;
     listGrants: ReturnType<typeof vi.fn>;
     createGrant: ReturnType<typeof vi.fn>;
+    listResearchScopes: ReturnType<typeof vi.fn>;
+    createResearchScope: ReturnType<typeof vi.fn>;
     suspend: ReturnType<typeof vi.fn>;
     activate: ReturnType<typeof vi.fn>;
     revoke: ReturnType<typeof vi.fn>;
@@ -31,6 +33,8 @@ describe('Agents', () => {
       connectToOpenCode: vi.fn(),
       listGrants: vi.fn(() => of([])),
       createGrant: vi.fn(),
+      listResearchScopes: vi.fn(() => of([])),
+      createResearchScope: vi.fn(),
       suspend: vi.fn(),
       activate: vi.fn(),
       revoke: vi.fn(),
@@ -58,12 +62,58 @@ describe('Agents', () => {
     expect(agentService.list).toHaveBeenCalledOnce();
   });
 
-  it('requires a broker account and a display name before provisioning', () => {
+  it('defaults the operation filter to the pending request status', () => {
+    const requests = [
+      {
+        id: 'operation-1',
+        operationType: 'ACCOUNT_SYNCHRONIZATION',
+        status: 'PENDING_APPROVAL',
+      },
+    ];
+    agentService.operationRequests.mockReturnValue(of(requests));
+
+    component.reload();
+
+    expect(component.operationStatusFilter()).toBe('PENDING_APPROVAL');
+    expect(component.filteredOperationRequests()).toEqual(requests);
+  });
+
+  it('exposes every operation status and can display all statuses', () => {
+    const requests = [
+      {
+        id: 'operation-1',
+        operationType: 'ACCOUNT_SYNCHRONIZATION',
+        status: 'PENDING_APPROVAL',
+      },
+      {
+        id: 'operation-2',
+        operationType: 'ACCOUNT_SYNCHRONIZATION',
+        status: 'REJECTED',
+      },
+    ];
+    agentService.operationRequests.mockReturnValue(of(requests));
+
+    component.reload();
+    component.operationStatusFilter.set('ALL');
+
+    expect(component.operationStatuses).toEqual([
+      'PENDING_APPROVAL',
+      'APPROVED',
+      'EXECUTING',
+      'SUCCEEDED',
+      'FAILED',
+      'OUTCOME_UNKNOWN',
+      'REJECTED',
+      'EXPIRED',
+    ]);
+    expect(component.filteredOperationRequests()).toEqual(requests);
+  });
+
+  it('requires a display name before provisioning', () => {
     component.createAgent();
 
     expect(agentService.create).not.toHaveBeenCalled();
     expect(component.form.controls.displayName.touched).toBe(true);
-    expect(component.form.controls.brokerAccountId.touched).toBe(true);
   });
 
   it('creates only the supported read-only grants for the selected broker account', () => {
@@ -73,12 +123,16 @@ describe('Agents', () => {
       brokerAccountId: 'broker-1',
       accountsRead: true,
       positionsRead: true,
+      researchInspect: false,
+      researchExport: false,
+      tradePlanRiskEvaluate: false,
+      tradePlanApprovalStatusRead: false,
     });
     const agent = { id: 'agent-1' };
     agentService.create.mockReturnValue(of(agent));
     agentService.connectToOpenCode.mockReturnValue(of(undefined));
-    agentService.createGrant.mockImplementation((_id, permission, resourceId) =>
-      of({ permission, resourceId }),
+    agentService.createGrant.mockImplementation((_id, permission, resourceType, resourceId) =>
+      of({ permission, resourceType, resourceId }),
     );
 
     component.createAgent();
@@ -88,12 +142,71 @@ describe('Agents', () => {
       1,
       'agent-1',
       'accounts:read',
+      'BROKER_ACCOUNT',
       'broker-1',
     );
     expect(agentService.createGrant).toHaveBeenNthCalledWith(
       2,
       'agent-1',
       'positions:read',
+      'BROKER_ACCOUNT',
+      'broker-1',
+    );
+  });
+
+  it('adds a research inspection grant to the linked broker account', () => {
+    agentService.createGrant.mockReturnValue(of({ id: 'grant-1' }));
+    component.grantForm.setValue({
+      agentId: 'agent-1',
+      permission: 'research:inspect',
+    });
+    component.grants.set({
+      'agent-1': [
+        {
+          permission: 'accounts:read',
+          resourceType: 'BROKER_ACCOUNT',
+          resourceId: 'broker-1',
+          status: 'ACTIVE',
+        } as never,
+      ],
+    });
+    component.researchScopes.set([
+      { id: 'scope-1', brokerAccountId: 'broker-1', status: 'ACTIVE' } as never,
+    ]);
+
+    component.addGrant();
+
+    expect(agentService.createGrant).toHaveBeenCalledWith(
+      'agent-1',
+      'research:inspect',
+      'BROKER_ACCOUNT',
+      'broker-1',
+    );
+  });
+
+  it('adds trade-plan permissions to the linked broker account', () => {
+    agentService.createGrant.mockReturnValue(of({ id: 'grant-1' }));
+    component.grantForm.setValue({
+      agentId: 'agent-1',
+      permission: 'trade-plan-risk:evaluate',
+    });
+    component.grants.set({
+      'agent-1': [
+        {
+          permission: 'accounts:read',
+          resourceType: 'BROKER_ACCOUNT',
+          resourceId: 'broker-1',
+          status: 'ACTIVE',
+        } as never,
+      ],
+    });
+
+    component.addGrant();
+
+    expect(agentService.createGrant).toHaveBeenCalledWith(
+      'agent-1',
+      'trade-plan-risk:evaluate',
+      'BROKER_ACCOUNT',
       'broker-1',
     );
   });

@@ -89,7 +89,8 @@ public record RiskFactRequirements(
             }
         }
         return new RiskFactRequirements(balance, equity, positions, startingBalance,
-                usedMargin, freeMargin, closedDeals, Set.of(EquityProvenance.BROKER_REPORTED), true,
+                usedMargin, freeMargin, closedDeals,
+                Set.of(EquityProvenance.BROKER_REPORTED, EquityProvenance.BROKER_DERIVED), true,
                 invariants);
     }
 }

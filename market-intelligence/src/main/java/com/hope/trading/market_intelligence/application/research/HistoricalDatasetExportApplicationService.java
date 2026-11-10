@@ -134,7 +134,7 @@ public class HistoricalDatasetExportApplicationService {
             HistoricalDatasetExportRequest request = readRequest(job.requestJson());
             ResearchPopulationSpec population = readPopulation(request.population());
             var decision = authorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
-                    job.agentId(), job.credentialId(), job.credentialVersion(), job.scopeId(), population.marketIds(),
+                    job.agentId(), job.credentialId(), job.credentialVersion(), job.scopeId(), null, population.marketIds(),
                     job.correlationId(), "research:export", population.startCutoffInclusive(),
                     population.endCutoffExclusive(), request.population().path("datasetProfile").asText("default"),
                     0, request.maxRows(), request.maxBytes(), request.maxDurationSeconds()));
@@ -174,7 +174,7 @@ public class HistoricalDatasetExportApplicationService {
             throw new HistoricalResearchException(400, "INVALID_POPULATION", "population market count is outside the supported scope");
         }
         var response = authorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
-                agent.agentId(), agent.credentialId(), agent.credentialVersion(), scopeId,
+                agent.agentId(), agent.credentialId(), agent.credentialVersion(), scopeId, null,
                 population.marketIds(), correlationId, permission, population.startCutoffInclusive(), population.endCutoffExclusive(),
                 request.population().path("datasetProfile").asText("default"), 0, request.maxRows(),
                 request.maxBytes(), request.maxDurationSeconds()));

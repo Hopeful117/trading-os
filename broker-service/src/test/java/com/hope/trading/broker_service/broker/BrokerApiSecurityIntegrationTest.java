@@ -59,6 +59,11 @@ class BrokerApiSecurityIntegrationTest {
                 .queryParam("instrument", "EURUSD"))
                 .andExpect(status().isUnauthorized());
     }
+    @Test void publicCtraderValidationRequiresUserJwt() throws Exception {
+        mvc.perform(get("/api/v1/broker-accounts/{id}/ctrader/validation", UUID.randomUUID())
+                .queryParam("instrument", "EURUSD"))
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test void historicalFeesAllowsAuthorizedServiceOnly() throws Exception {
         mvc.perform(get("/internal/v1/historical-fees/eligible")

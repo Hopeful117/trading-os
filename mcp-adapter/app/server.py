@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
+from urllib.parse import urlparse
 
 from mcp.server import MCPServer
 from pydantic import Field
@@ -97,6 +100,67 @@ def get_authorized_positions(
 
 
 @mcp.tool()
+def get_authorized_trade_plan(
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
+    trade_plan_id: Annotated[UUID, Field(description="Trade Plan UUID to inspect.")],
+    trade_plan_version: Annotated[int, Field(ge=1, description="Immutable Trade Plan version.")],
+) -> str:
+    """Read one Trade Plan within an explicitly authorized broker-account scope."""
+    return client_from_environment().get(
+        f"/api/v1/agent/trade-plans/{trade_plan_id}/versions/{trade_plan_version}",
+        {"accountId": str(broker_account_id)},
+    )
+
+
+@mcp.tool()
+def evaluate_authorized_trade_plan_risk(
+    trade_plan_id: Annotated[UUID, Field(description="Trade Plan UUID to evaluate.")],
+    trade_plan_version: Annotated[int, Field(ge=1, description="Immutable Trade Plan version.")],
+    idempotency_key: Annotated[str | None, Field(min_length=1, max_length=160,
+                                                  description="Unique key for a genuinely new evaluation; reuse it only when retrying the same request.")] = None,
+) -> str:
+    """Request deterministic pre-trade risk evaluation using this agent's account-scoped grant."""
+    key = idempotency_key or f"trade-plan-risk:{trade_plan_id}:{trade_plan_version}:{uuid4()}"
+    return client_from_environment().post(
+        f"/api/v1/agent/trade-plan-risk-evaluations/{trade_plan_id}/versions/{trade_plan_version}",
+        {}, key,
+    )
+
+
+@mcp.tool()
+def request_trade_plan_approval(
+    trade_plan_id: Annotated[UUID, Field(description="Trade Plan UUID to submit for human approval.")],
+    trade_plan_version: Annotated[int, Field(ge=1, description="Immutable Trade Plan version.")],
+    risk_evaluation_id: Annotated[UUID, Field(description="Approved pre-trade risk evaluation UUID.")],
+) -> str:
+    """Create a short-lived, single-use human approval challenge; this never executes a trade."""
+    response = client_from_environment().post(
+        "/api/v1/agent/trade-plan-approvals",
+        {"tradePlanId": str(trade_plan_id), "tradePlanVersion": trade_plan_version,
+         "riskEvaluationId": str(risk_evaluation_id)},
+        f"trade-plan-approval:{trade_plan_id}:{trade_plan_version}:{risk_evaluation_id}",
+    )
+    payload = json.loads(response)
+    challenge_id = payload.get("challengeId")
+    if not isinstance(challenge_id, str):
+        raise ValueError("Gateway returned an invalid approval challenge")
+    web_url = os.getenv("TRADING_OS_WEB_URL", "http://localhost:4200").rstrip("/")
+    parsed = urlparse(web_url)
+    if parsed.hostname not in {"127.0.0.1", "localhost", "::1"} and parsed.scheme != "https":
+        raise ValueError("TRADING_OS_WEB_URL must use HTTPS outside localhost")
+    payload["approvalUrl"] = f"{web_url}/trade-plan-approvals/{challenge_id}"
+    return json.dumps(payload)
+
+
+@mcp.tool()
+def get_trade_plan_approval_status(
+    challenge_id: Annotated[UUID, Field(description="Human approval challenge UUID.")],
+) -> str:
+    """Read the status of a human approval challenge; it does not approve or execute anything."""
+    return client_from_environment().get(f"/api/v1/agent/trade-plan-approvals/{challenge_id}")
+
+
+@mcp.tool()
 def request_account_synchronization(
     broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
 ) -> str:
@@ -164,8 +228,8 @@ def get_research_report(
 
 @mcp.tool()
 def inspect_historical_research_readiness(
-    scope_id: Annotated[UUID, Field(description="Explicit Trading OS historical research-scope UUID.")],
-    market_ids: Annotated[list[UUID], Field(min_length=1, max_length=2, description="One or two canonical market UUIDs within the scope.")],
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
+    market_ids: Annotated[list[UUID], Field(min_length=1, max_length=2, description="One or two canonical market UUIDs in the authorized account universe.")],
     cutoff_start: Annotated[str, Field(min_length=1, max_length=40, description="Inclusive UTC ISO-8601 evaluation cutoff.")],
     cutoff_end: Annotated[str, Field(min_length=1, max_length=40, description="Exclusive UTC ISO-8601 evaluation cutoff.")],
     dataset_profile: Annotated[str, Field(min_length=1, max_length=128, description="Bounded dataset profile/version.")],
@@ -175,15 +239,16 @@ def inspect_historical_research_readiness(
     if len(market_ids) not in {1, 2} or len(set(market_ids)) != len(market_ids):
         raise ValueError("market_ids must contain one or two distinct UUIDs")
     return client_from_environment().post(
-        f"/api/v1/intelligence/research/{scope_id}/readiness",
+        "/api/v1/intelligence/research/readiness",
         {
+            "brokerAccountId": str(broker_account_id),
             "marketIds": [str(value) for value in market_ids],
             "cutoffStart": cutoff_start,
             "cutoffEnd": cutoff_end,
             "datasetProfile": dataset_profile,
             "maxObservations": max_observations,
         },
-        f"research-readiness:{scope_id}:{cutoff_start}:{cutoff_end}:{dataset_profile}",
+        f"research-readiness:{broker_account_id}:{cutoff_start}:{cutoff_end}:{dataset_profile}",
     )
 
 

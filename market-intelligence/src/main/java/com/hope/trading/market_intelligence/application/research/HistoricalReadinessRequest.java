@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public record HistoricalReadinessRequest(
+        @NotNull UUID brokerAccountId,
         @NotNull Set<UUID> marketIds,
         @NotNull Instant cutoffStart,
         @NotNull Instant cutoffEnd,

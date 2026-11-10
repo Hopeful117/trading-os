@@ -10,6 +10,7 @@ import com.hope.trading.market_data.model.OrderBookEvidenceType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.sql.DataSource;
 import java.sql.Timestamp;
@@ -24,15 +25,24 @@ import java.util.function.Consumer;
 public class OrderBookEvidenceRepository {
     private final JdbcTemplate jdbc;
     private final DataSource dataSource;
+    private final OrderBookSourceRetirementRepository sourceRetirementRepository;
 
     public OrderBookEvidenceRepository(JdbcTemplate jdbc, DataSource dataSource) {
+        this(jdbc, dataSource, null);
+    }
+
+    @Autowired
+    public OrderBookEvidenceRepository(JdbcTemplate jdbc, DataSource dataSource,
+                                       OrderBookSourceRetirementRepository sourceRetirementRepository) {
         this.jdbc = jdbc;
         this.dataSource = dataSource;
+        this.sourceRetirementRepository = sourceRetirementRepository;
     }
 
     @Transactional
     public boolean append(OrderBookEvidence evidence) {
         requireTrustedEvidence(evidence);
+        rejectRetiredSource(evidence);
         ensureSequence(evidence);
         lockSequence(evidence.sequenceId());
         return insertEvidence(evidence);
@@ -41,6 +51,7 @@ public class OrderBookEvidenceRepository {
     @Transactional
     public boolean appendSnapshotAsNewSequence(OrderBookEvidence evidence, Instant supersededAt) {
         requireTrustedEvidence(evidence);
+        rejectRetiredSource(evidence);
         if (exists(evidence.contentFingerprint())) {
             return false;
         }
@@ -53,6 +64,14 @@ public class OrderBookEvidenceRepository {
                 "superseded by fresh provider snapshot", supersededAt);
         openSegment(evidence, supersededAt);
         return true;
+    }
+
+    private void rejectRetiredSource(OrderBookEvidence evidence) {
+        if (sourceRetirementRepository != null
+                && sourceRetirementRepository.isSourceRetired(evidence.provider().name(), evidence.providerSymbol(),
+                evidence.marketId(), evidence.depth())) {
+            throw new IllegalStateException("historical evidence source is retired for market/depth");
+        }
     }
 
     private boolean insertEvidence(OrderBookEvidence evidence) {

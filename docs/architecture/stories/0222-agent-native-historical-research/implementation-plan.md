@@ -10,9 +10,10 @@ production code changes until the human explicitly approves this plan.
 ## Objective
 
 Add the smallest end-to-end, Gateway-backed agent capability for scoped
-historical readiness inspection and bounded dataset export while preserving the
-existing two-market `research:run` workflow, deterministic dataset exporter,
-agent identity model and trading isolation.
+historical readiness inspection and bounded dataset export while binding
+research scopes to an owner-owned broker account. The account's provider is the
+universe identity and its catalogue markets are resolved server-side. Preserve
+the deterministic dataset exporter, agent identity model and trading isolation.
 
 ## Approved Scope Boundary
 
@@ -45,11 +46,16 @@ agent identity model and trading isolation.
 
 ## Design Decisions
 
-### 1. Scope compatibility
+### 1. Broker-account universe and scope compatibility
 
-Keep `ResearchScope.marketIds` as exactly two markets. Add a nullable,
-capability-specific historical constraint value to the same scope rather than
-creating a second scope aggregate or generic policy language.
+Use the existing broker account provider registration as the universe identity.
+Add `brokerAccountId` to `ResearchScope`; scope creation resolves all current
+catalogue markets belonging to that provider through Market Data. The request
+contains no market list and the frontend only selects the broker account.
+
+Existing legacy scopes are retained and remain readable during migration. New
+scope creation requires a broker account and no longer imposes an exactly-two
+market limit.
 
 The persisted constraint contains only bounded scalar/list values needed by this
 Story:
@@ -60,14 +66,13 @@ Story:
 - maximum export duration seconds;
 - allowed dataset profile/version values.
 
-Existing scopes remain valid with no historical constraint. Existing
-`research:run` creation and authorization continue to require exactly two
-markets and do not consume the new constraints unless a historical request is
-being authorized.
+Existing scopes remain valid with no historical constraint. New
+`research:run` and historical authorization requests validate requested markets
+against the scope's selected subset and the scope's broker-account ownership.
 
-The human-facing scope creation contract remains backward compatible by making
-the historical constraint optional. The operator must explicitly provide it to
-grant historical capabilities; no defaults widen existing grants.
+The human-facing scope creation contract keeps historical constraints optional.
+The operator must explicitly provide the broker account; no defaults widen
+existing grants.
 
 ### 2. Permission authorization
 

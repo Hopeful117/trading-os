@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,6 +37,7 @@ class CTraderMarketDataTest {
         assertThat(market.getProductType())
                 .isEqualTo(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
         assertThat(market.getMarketConstraints().minimumOrderSize()).isEqualByComparingTo("1000");
+        assertThat(market.getMarketConstraints().maximumOrderSize()).isEqualByComparingTo("100000000");
         assertThat(market.getMarketConstraints().orderStepSize()).isEqualByComparingTo("1000");
         assertThat(market.getMarketConstraints().quantityPrecision()).isZero();
         assertThat(market.getMarketState().isTradable()).isFalse();
@@ -199,12 +201,15 @@ class CTraderMarketDataTest {
     }
 
     @Test
-    void mapsCompleteConfiguredCfdFinancialContractMetadata() {
+    void mapsCompleteAcceptedCfdFinancialContractMetadata() {
         CTraderMarketDataProperties properties = new CTraderMarketDataProperties(
-                CTraderEnvironment.DEMO, "id", "secret", null, null, null,
+                CTraderEnvironment.LIVE, "id", "secret", null, null, null,
                 "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
-                Map.of("EURUSD", "EUR/USD"), Map.of("EURUSD", "CFD"),
-                Map.of("EURUSD", "1"), Map.of("EURUSD", "3"), 8, 720);
+                Map.of("EURUSD", "EUR/USD"), Map.of("EURUSD", "CFD"), Map.of(), Map.of(),
+                List.of(new CTraderMarketDataProperties.ContractReference("CTRADER", 49411967L,
+                        CTraderEnvironment.LIVE, "EURUSD", "EUR/USD", "CFD", "UNDERLYING_UNITS",
+                        BigDecimal.ONE, "ftmo-contracts", 3L, NOW.minusSeconds(3600), null, "ACCEPTED")),
+                49411967L, 8, 720, false, 49411967L, 41L);
         CTraderMarketData provider = new CTraderMarketData(new FakeClient(), properties,
                 new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
 
@@ -212,9 +217,9 @@ class CTraderMarketDataTest {
 
         assertThat(market.getQuantityUnit()).isEqualTo("UNDERLYING_UNITS");
         assertThat(market.getContractMultiplier()).isEqualByComparingTo("1");
-        assertThat(market.getContractSourceId()).isEqualTo("market-data-contract:EUR/USD");
+        assertThat(market.getContractSourceId()).isEqualTo("ftmo-contracts");
         assertThat(market.getContractSourceVersion()).isEqualTo(3L);
-        assertThat(market.getContractObservedAt()).isEqualTo(NOW);
+        assertThat(market.getContractObservedAt()).isEqualTo(NOW.minusSeconds(3600));
     }
 
     @Test
@@ -272,6 +277,75 @@ class CTraderMarketDataTest {
                 .hasMessageContaining("Ambiguous cTrader mapping");
     }
 
+    @Test
+    void resolvesOnlyAnAcceptedAccountAndEnvironmentScopedReference() {
+        var reference = reference("EURUSD", "EUR/USD", "ACCEPTED", BigDecimal.ONE,
+                49411967L, CTraderEnvironment.LIVE, "ftmo-contracts", 7L);
+        var provider = new CTraderMarketData(new FakeClient(), propertiesWithReference(reference),
+                new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+
+        var market = provider.getMarkets().getFirst();
+
+        assertThat(market.getSymbol()).isEqualTo("EUR/USD");
+        assertThat(market.getProductType()).isEqualTo(com.hope.trading.market_data.helper.InstrumentProductType.CFD);
+        assertThat(market.getQuantityUnit()).isEqualTo("UNDERLYING_UNITS");
+        assertThat(market.getContractMultiplier()).isEqualByComparingTo("1");
+        assertThat(market.getContractSourceId()).isEqualTo("ftmo-contracts");
+        assertThat(market.getContractSourceVersion()).isEqualTo(7L);
+    }
+
+    @Test
+    void doesNotReuseReferenceForAnotherAccountOrEnvironment() {
+        var reference = reference("EURUSD", "EUR/USD", "ACCEPTED", BigDecimal.ONE,
+                49411967L, CTraderEnvironment.LIVE, "ftmo-contracts", 7L);
+        var provider = new CTraderMarketData(new FakeClient(), propertiesWithReference(reference,
+                CTraderEnvironment.DEMO, 49411967L), new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+
+        var market = provider.getMarkets().getFirst();
+
+        assertThat(market.getContractMultiplier()).isNull();
+        assertThat(market.getQuantityUnit()).isNull();
+        assertThat(market.getContractSourceId()).isNull();
+    }
+
+    @Test
+    void rejectsUnreviewedInvalidAndMismatchedReferencesFailClosed() {
+        var unreviewed = reference("EURUSD", "EUR/USD", "DRAFT", BigDecimal.ONE,
+                49411967L, CTraderEnvironment.LIVE, "draft", 1L);
+        var invalid = reference("EURUSD", "EUR/USD", "ACCEPTED", BigDecimal.ZERO,
+                49411967L, CTraderEnvironment.LIVE, "invalid", 2L);
+        var mismatched = reference("GBPUSD", "GBP/USD", "ACCEPTED", BigDecimal.ONE,
+                49411967L, CTraderEnvironment.LIVE, "other", 3L);
+        var provider = new CTraderMarketData(new FakeClient(), propertiesWithReferences(
+                List.of(unreviewed, invalid, mismatched)), new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+
+        var market = provider.getMarkets().getFirst();
+
+        assertThat(market.getContractMultiplier()).isNull();
+        assertThat(market.getContractSourceId()).isNull();
+    }
+
+    @Test
+    void rejectsExpiredAndContradictoryReferences() {
+        var expired = new CTraderMarketDataProperties.ContractReference(
+                "CTRADER", 49411967L, CTraderEnvironment.LIVE, "EURUSD", "EUR/USD", "CFD",
+                "UNDERLYING_UNITS", BigDecimal.ONE, "expired", 1L,
+                NOW.minusSeconds(3600), NOW.minusSeconds(1), "ACCEPTED");
+        var provider = new CTraderMarketData(new FakeClient(), propertiesWithReferences(List.of(expired)),
+                new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+        assertThat(provider.getMarkets().getFirst().getContractMultiplier()).isNull();
+
+        var first = reference("EURUSD", "EUR/USD", "ACCEPTED", BigDecimal.ONE,
+                49411967L, CTraderEnvironment.LIVE, "one", 1L);
+        var second = reference("EURUSD", "EUR/USD", "ACCEPTED", BigDecimal.TEN,
+                49411967L, CTraderEnvironment.LIVE, "two", 2L);
+        var contradictory = new CTraderMarketData(new FakeClient(), propertiesWithReferences(List.of(first, second)),
+                new MarketStateBuilder(), Clock.fixed(NOW, ZoneOffset.UTC));
+        assertThatThrownBy(contradictory::getMarkets)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Contradictory");
+    }
+
     private CTraderMarketDataProperties properties() {
         return propertiesWithProductType("CFD");
     }
@@ -291,6 +365,36 @@ class CTraderMarketDataTest {
     private CTraderMarketDataProperties propertiesWithNoMappings() {
         return new CTraderMarketDataProperties(CTraderEnvironment.DEMO, "id", "secret", "wss://fixture",
                 java.time.Duration.ofSeconds(1), Map.of());
+    }
+
+    private CTraderMarketDataProperties propertiesWithReference(
+            CTraderMarketDataProperties.ContractReference reference) {
+        return propertiesWithReferences(List.of(reference));
+    }
+
+    private CTraderMarketDataProperties propertiesWithReference(
+            CTraderMarketDataProperties.ContractReference reference,
+            CTraderEnvironment environment, long accountExternalId) {
+        return new CTraderMarketDataProperties(environment, "id", "secret", null, null, null,
+                "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
+                Map.of("EURUSD", "EUR/USD"), Map.of("EURUSD", "CFD"), Map.of(), Map.of(),
+                List.of(reference), accountExternalId, 8, 720, false, accountExternalId, 41L);
+    }
+
+    private CTraderMarketDataProperties propertiesWithReferences(
+            List<CTraderMarketDataProperties.ContractReference> references) {
+        return new CTraderMarketDataProperties(CTraderEnvironment.LIVE, "id", "secret", null, null, null,
+                "wss://fixture", java.time.Duration.ofSeconds(1), java.time.Duration.ofMinutes(10),
+                Map.of("EURUSD", "EUR/USD"), Map.of("EURUSD", "CFD"), Map.of(), Map.of(), references,
+                49411967L, 8, 720, false, 49411967L, 41L);
+    }
+
+    private CTraderMarketDataProperties.ContractReference reference(
+            String providerSymbol, String canonical, String reviewStatus, BigDecimal multiplier,
+            long accountExternalId, CTraderEnvironment environment, String sourceId, long sourceVersion) {
+        return new CTraderMarketDataProperties.ContractReference("CTRADER", accountExternalId, environment,
+                providerSymbol, canonical, "CFD", "UNDERLYING_UNITS", multiplier, sourceId, sourceVersion,
+                NOW.minusSeconds(3600), null, reviewStatus);
     }
 
     private static class FakeClient implements CTraderOpenApiClient {

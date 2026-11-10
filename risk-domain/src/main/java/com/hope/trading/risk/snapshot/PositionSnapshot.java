@@ -9,18 +9,24 @@ import java.util.UUID;
 
 public record PositionSnapshot(
         UUID positionId, String instrument, BigDecimal signedQuantity,
-        Money marketValue, Optional<Money> lossAtStop, Money marginUsed, ProtectionStatus protectionStatus
+        Money marketValue, Optional<Money> lossAtStop, Optional<Money> marginUsed, ProtectionStatus protectionStatus
 ) {
     public PositionSnapshot(UUID positionId, String instrument, BigDecimal signedQuantity,
                             Money marketValue, Money lossAtStop, Money marginUsed) {
-        this(positionId, instrument, signedQuantity, marketValue, Optional.ofNullable(lossAtStop), marginUsed,
+        this(positionId, instrument, signedQuantity, marketValue, Optional.ofNullable(lossAtStop), Optional.ofNullable(marginUsed),
                 ProtectionStatus.PROTECTED);
+    }
+    public PositionSnapshot(UUID positionId, String instrument, BigDecimal signedQuantity,
+                            Money marketValue, Optional<Money> lossAtStop, Money marginUsed,
+                            ProtectionStatus protectionStatus) {
+        this(positionId, instrument, signedQuantity, marketValue, lossAtStop,
+                Optional.ofNullable(marginUsed), protectionStatus);
     }
     public PositionSnapshot(UUID positionId, String instrument, BigDecimal signedQuantity,
                             Money marketValue, Money lossAtStop, Money marginUsed,
                             ProtectionStatus protectionStatus) {
         this(positionId, instrument, signedQuantity, marketValue, Optional.ofNullable(lossAtStop),
-                marginUsed, protectionStatus);
+                Optional.ofNullable(marginUsed), protectionStatus);
     }
     public PositionSnapshot {
         Objects.requireNonNull(positionId);
@@ -32,6 +38,7 @@ public record PositionSnapshot(
             throw new IllegalArgumentException("Invalid position");
         }
         if (marketValue.amount().signum() < 0 || lossAtStop.map(Money::amount).orElse(java.math.BigDecimal.ZERO).signum() < 0
-                || marginUsed.amount().signum() < 0) throw new IllegalArgumentException("Negative position value");
+                || marginUsed.map(Money::amount).orElse(java.math.BigDecimal.ZERO).signum() < 0)
+            throw new IllegalArgumentException("Negative position value");
     }
 }

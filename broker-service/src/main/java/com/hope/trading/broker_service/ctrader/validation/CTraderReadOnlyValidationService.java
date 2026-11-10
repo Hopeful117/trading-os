@@ -54,6 +54,15 @@ public final class CTraderReadOnlyValidationService {
                         externalAccountId(ownerId, brokerAccountId), instrument));
     }
 
+    public CTraderReadOnlyValidation validation(UUID ownerId, UUID brokerAccountId, String instrument) {
+        return withToken(ownerId, brokerAccountId, token -> {
+            String externalAccountId = externalAccountId(ownerId, brokerAccountId);
+            var contract = client.readExecutionInstrumentContract(token, externalAccountId, instrument);
+            var metadata = client.readInstrumentMetadata(token, externalAccountId, instrument);
+            return new CTraderReadOnlyValidation(contract, metadata);
+        });
+    }
+
     private <T> T withToken(UUID ownerId, UUID brokerAccountId, TokenOperation<T> operation) {
         var connection = connections.findByBrokerAccountIdAndOwnerId(brokerAccountId, ownerId)
                 .orElseThrow(() -> new CTraderAuthenticationException("Broker account is not accessible"));

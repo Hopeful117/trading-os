@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
-public record ResearchScopeResponse(UUID id, UUID ownerUserId, Set<UUID> marketIds,
+public record ResearchScopeResponse(UUID id, UUID ownerUserId, UUID brokerAccountId, Set<UUID> marketIds,
                                     ResearchScopeStatus status, Instant createdAt,
                                     Instant expiresAt, Instant revokedAt, long scopeVersion,
                                     HistoricalResearchConstraintsResponse historicalConstraints) {
@@ -22,7 +22,7 @@ public record ResearchScopeResponse(UUID id, UUID ownerUserId, Set<UUID> marketI
     ) { }
 
     public static ResearchScopeResponse from(ResearchScope value) {
-        return new ResearchScopeResponse(value.id(), value.ownerUserId(), value.marketIds(), value.status(),
+        return new ResearchScopeResponse(value.id(), value.ownerUserId(), value.brokerAccountId(), value.marketIds(), value.status(),
                 value.createdAt(), value.expiresAt(), value.revokedAt(), value.scopeVersion(),
                 value.historicalConstraints().map(constraints -> new HistoricalResearchConstraintsResponse(
                         constraints.earliestCutoff(), constraints.latestCutoff(), constraints.maxObservations(),

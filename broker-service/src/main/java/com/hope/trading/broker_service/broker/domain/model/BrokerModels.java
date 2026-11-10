@@ -42,9 +42,13 @@ public final class BrokerModels {
         }
 
         public static EquityFact unavailable(String reason) {
+            return unavailable(reason == null || reason.isBlank() ? List.of("EQUITY_UNAVAILABLE") : List.of(reason));
+        }
+
+        public static EquityFact unavailable(List<String> reasons) {
             return new EquityFact(null, null, EquityProvenance.UNAVAILABLE, EquityAvailability.UNAVAILABLE,
                     null, null, false, false, false, "UNKNOWN", "UNAVAILABLE",
-                    reason == null || reason.isBlank() ? List.of("EQUITY_UNAVAILABLE") : List.of(reason));
+                    reasons == null || reasons.isEmpty() ? List.of("EQUITY_UNAVAILABLE") : reasons);
         }
     }
 
@@ -294,10 +298,11 @@ public final class BrokerModels {
                                 BigDecimal usedMargin, BigDecimal freeMargin,
                                 AccountPositionModel positionModel,
                                 MarginCalculationModel marginCalculationModel,
-                                Integer monetaryScale,
-                                BigDecimal leverage,
-                                EquityFact equityFact,
-                                DerivedEquityFact derivedEquityFact) {
+                                 Integer monetaryScale,
+                                 BigDecimal leverage,
+                                 EquityFact equityFact,
+                                 DerivedEquityFact derivedEquityFact,
+                                 BonusFacts bonusFacts) {
         public AccountFacts {
             valuationAsset = required(valuationAsset, "valuationAsset");
             Objects.requireNonNull(balance);
@@ -310,13 +315,14 @@ public final class BrokerModels {
                 throw new IllegalArgumentException("leverage must be positive");
             }
             equityFact = equityFact == null ? EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE") : equityFact;
+            bonusFacts = bonusFacts == null ? BonusFacts.empty() : bonusFacts;
         }
 
         public AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
                             BigDecimal usedMargin, BigDecimal freeMargin) {
             this(valuationAsset, balance, equity, usedMargin, freeMargin,
                     AccountPositionModel.UNKNOWN, MarginCalculationModel.UNKNOWN, null, null,
-                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null);
+                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null, BonusFacts.empty());
         }
 
         public AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
@@ -326,7 +332,23 @@ public final class BrokerModels {
                             Integer monetaryScale, BigDecimal leverage) {
             this(valuationAsset, balance, equity, usedMargin, freeMargin, positionModel,
                     marginCalculationModel, monetaryScale, leverage,
-                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null);
+                    EquityFact.unavailable("EQUITY_PROVENANCE_UNAVAILABLE"), null, BonusFacts.empty());
+        }
+
+        public AccountFacts(String valuationAsset, BigDecimal balance, BigDecimal equity,
+                            BigDecimal usedMargin, BigDecimal freeMargin,
+                            AccountPositionModel positionModel,
+                            MarginCalculationModel marginCalculationModel,
+                            Integer monetaryScale, BigDecimal leverage,
+                            EquityFact equityFact, DerivedEquityFact derivedEquityFact) {
+            this(valuationAsset, balance, equity, usedMargin, freeMargin, positionModel,
+                    marginCalculationModel, monetaryScale, leverage, equityFact, derivedEquityFact,
+                    BonusFacts.empty());
+        }
+    }
+    public record BonusFacts(BigDecimal managerBonus, BigDecimal ibBonus, BigDecimal nonWithdrawableBonus) {
+        public static BonusFacts empty() {
+            return new BonusFacts(null, null, null);
         }
     }
     public record DerivedEquityFact(BigDecimal value, String currency, String provenance,

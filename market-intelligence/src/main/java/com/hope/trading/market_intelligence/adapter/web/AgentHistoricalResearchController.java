@@ -32,9 +32,8 @@ public class AgentHistoricalResearchController {
         this.exports = exports;
     }
 
-    @PostMapping("/{scopeId}/readiness")
+    @PostMapping("/readiness")
     public ResponseEntity<HistoricalReadinessResponse> inspect(
-            @PathVariable UUID scopeId,
             @Valid @RequestBody HistoricalReadinessRequest request,
             Authentication authentication,
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
@@ -42,7 +41,7 @@ public class AgentHistoricalResearchController {
         if (!request.marketIds().isEmpty() && request.marketIds().size() > 2) {
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(readiness.inspect(agent(authentication), scopeId, request, correlationId));
+        return ResponseEntity.ok(readiness.inspect(agent(authentication), request, correlationId));
     }
 
     @PostMapping("/{scopeId}/exports")

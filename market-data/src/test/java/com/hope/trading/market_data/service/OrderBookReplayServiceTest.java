@@ -63,6 +63,22 @@ class OrderBookReplayServiceTest {
     }
 
     @Test
+    void refusesReplayWhenTheHistoricalSourceWasRetired() {
+        OrderBookEvidenceRepository repository = mock(OrderBookEvidenceRepository.class);
+        OrderBookSourceRetirementRepository sourceRetirement = mock(OrderBookSourceRetirementRepository.class);
+        stubReplay(repository, List.of(evidence(OrderBookEvidenceType.SNAPSHOT, 0, CUTOFF.minusSeconds(1),
+                List.of(level("100", "1")), List.of(level("101", "1")))));
+        when(sourceRetirement.isSourceRetired("KRAKEN", "PF_XBTUSD", MARKET_ID, 25)).thenReturn(true);
+
+        OrderBookReplayResult result = new OrderBookReplayService(repository,
+                mock(OrderBookRetentionRepository.class), new OrderBookReplayProperties(), sourceRetirement)
+                .replay(MARKET_ID, 25, CUTOFF);
+
+        assertThat(result.status()).isEqualTo(OrderBookReplayResult.ReplayStatus.SOURCE_RETIRED);
+        assertThat(result.reason()).contains("source was explicitly retired");
+    }
+
+    @Test
     void rejectsInvalidReplayArguments() {
         OrderBookReplayService service = service(mock(OrderBookEvidenceRepository.class));
 

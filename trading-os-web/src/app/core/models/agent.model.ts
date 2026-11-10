@@ -1,7 +1,14 @@
 export type AgentType = 'OPENCODE' | 'OTHER';
 export type AgentStatus = 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
-export type AgentPermission = 'accounts:read' | 'positions:read';
-export type AgentResourceType = 'BROKER_ACCOUNT';
+export type AgentPermission =
+  | 'accounts:read'
+  | 'accounts:sync'
+  | 'positions:read'
+  | 'research:inspect'
+  | 'research:export'
+  | 'trade-plan-risk:evaluate'
+  | 'trade-plan-approval:status:read';
+export type AgentResourceType = 'BROKER_ACCOUNT' | 'RESEARCH_SCOPE';
 export type AgentGrantStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
 export type AgentOperationStatus =
   | 'PENDING_APPROVAL'
@@ -46,6 +53,15 @@ export interface AgentGrant {
   revokedAt: string | null;
   revocationReason: string | null;
   grantVersion: number;
+}
+
+export interface ResearchScope {
+  id: string;
+  brokerAccountId: string | null;
+  marketIds: string[];
+  status: 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+  expiresAt: string | null;
+  scopeVersion: number;
 }
 
 export interface AgentOperationRequest {

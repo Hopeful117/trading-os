@@ -34,7 +34,7 @@ public class MiAgentAccessPolicyFilter extends OncePerRequestFilter {
         String uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}";
         String suffix = path.substring(prefix.length());
         if ("POST".equals(request.getMethod())) {
-            return suffix.matches(uuid + "/(readiness|exports)");
+            return "readiness".equals(suffix) || suffix.matches(uuid + "/exports");
         }
         return "GET".equals(request.getMethod())
                 && (suffix.matches(uuid) || suffix.matches(uuid + "/report")

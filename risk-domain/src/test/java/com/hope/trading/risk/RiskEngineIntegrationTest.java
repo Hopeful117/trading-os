@@ -66,6 +66,27 @@ class RiskEngineIntegrationTest {
         assertTrue(result.decision().isEmpty());
     }
 
+    @Test void missingMarginDoesNotBlockPositionRiskEvaluation() {
+        var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("10000"), null,
+                java.util.Optional.empty(), java.util.Optional.of(usd("10000")),
+                new DailyRiskBaseline(usd("10000"), NOW, "TEST", Map.of()), java.util.Optional.of(usd("0")));
+        var position = new PositionSnapshot(UUID.randomUUID(), "EURUSD", BigDecimal.ONE,
+                usd("1000"), java.util.Optional.of(usd("10")), (com.hope.trading.risk.domain.Money) null,
+                ProtectionStatus.PROTECTED);
+        var context = context(rules(rule(MaximumPositionRiskRule.ID, RuleCategory.POSITION,
+                RuleSeverity.BLOCKING, "0.50")), account,
+                new ProposedTrade(UUID.randomUUID(), 1, "EURUSD", TradeDirection.LONG,
+                        BigDecimal.ONE, usd("10"), usd("1"), usd("1")));
+        var withPosition = new com.hope.trading.risk.context.RiskEvaluationContextBuilder().build(
+                context.request(), context.trading(), account,
+                new PortfolioSnapshot(UUID.randomUUID(), 1, NOW, List.of(position)),
+                context.market(), context.ruleSetSnapshot());
+
+        var result = new DeterministicRiskEngine("28.1", registry, clock).evaluate(withPosition);
+
+        assertEquals(RuleStatus.PASS, result.ruleResults().getFirst().status());
+    }
+
     @Test void staticTotalDrawdownUsesStartingBalanceAndBreachIsInclusive() {
         var account = new AccountSnapshot(ACCOUNT_ID, 3, NOW, usd("50000"), usd("48500"),
                 usd("0"), java.util.Optional.of(usd("50000")),

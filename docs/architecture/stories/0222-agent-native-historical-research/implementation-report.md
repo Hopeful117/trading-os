@@ -1,5 +1,18 @@
 # Implementation Report - Story 0222
 
+## Amendment
+
+The approved design amendment binds research scopes to an owner-owned broker
+account. The account's provider is the universe identity and catalogue markets
+are resolved server-side. The former exactly-two-market invariant is removed
+for new scopes.
+
+## Amendment Implementation
+
+- Added `brokerAccountId` to new research-scope creation and responses.
+- Resolved scope markets from the selected broker provider's market catalogue.
+- Updated the Agents UI to select a broker account only.
+
 ## Outcome
 
 Implemented the agent-facing historical research inspection and bounded dataset

@@ -49,6 +49,6 @@ public final class RiskEvaluationContextBuilder {
         return portfolio.positions().stream().allMatch(p ->
                 currency.equals(p.marketValue().currency())
                         && p.lossAtStop().map(loss -> currency.equals(loss.currency())).orElse(true)
-                        && currency.equals(p.marginUsed().currency()));
+                        && p.marginUsed().map(margin -> currency.equals(margin.currency())).orElse(true));
     }
 }

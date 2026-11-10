@@ -2,9 +2,7 @@
   <div>
     <p class="eyebrow">MCP access</p>
     <h1>Agents</h1>
-    <p class="intro">
-      Configurez des agents externes avec un accès explicite et read-only à vos comptes.
-    </p>
+    <p class="intro">Configurez des agents externes avec des permissions explicites et limitées.</p>
   </div>
 </header>
 
@@ -30,7 +28,7 @@
       </select>
     </label>
     <label>
-      Compte broker autorisé
+      Compte broker partagé
       <select formControlName="brokerAccountId">
         <option value="">Sélectionner un compte</option>
         @for (account of brokerAccounts(); track account.id) {
@@ -39,14 +37,35 @@
       </select>
     </label>
     <fieldset>
-      <legend>Permissions read-only</legend>
+      <legend>Permissions</legend>
       <label class="checkbox-label"
         ><input type="checkbox" formControlName="accountsRead" /> Lire les comptes</label
       >
       <label class="checkbox-label"
         ><input type="checkbox" formControlName="positionsRead" /> Lire les positions</label
       >
+      <label class="checkbox-label"
+        ><input type="checkbox" formControlName="researchInspect" /> Inspecter la readiness
+        recherche</label
+      >
+      <label class="checkbox-label"
+        ><input type="checkbox" formControlName="researchExport" /> Exporter un dataset de
+        recherche</label
+      >
+      <label class="checkbox-label"
+        ><input type="checkbox" formControlName="tradePlanRiskEvaluate" /> Évaluer le risque
+        d’un trade plan</label
+      >
+      <label class="checkbox-label"
+        ><input type="checkbox" formControlName="tradePlanApprovalStatusRead" /> Lire le statut
+        d’approbation d’un trade plan</label
+      >
     </fieldset>
+    @if (form.controls.researchInspect.value || form.controls.researchExport.value) {
+      <p class="muted">
+        L’univers de recherche sera automatiquement déduit du compte broker lié à cet agent.
+      </p>
+    }
     <button type="submit" [disabled]="busy() || loading()">
       {{ busy() ? 'Connexion…' : 'Créer et connecter à OpenCode' }}
     </button>
@@ -68,11 +87,24 @@
     <span class="security-note">L’approbation ne lance pas la synchronisation</span>
   </div>
 
-  @if (operationRequests().length === 0) {
+  <label class="operation-filter">
+    Statut
+    <select
+      [value]="operationStatusFilter()"
+      (change)="operationStatusFilter.set($any($event.target).value)"
+    >
+      <option value="ALL">Tous les statuts</option>
+      @for (operationStatus of operationStatuses; track operationStatus) {
+        <option [value]="operationStatus">{{ operationStatus }}</option>
+      }
+    </select>
+  </label>
+
+  @if (filteredOperationRequests().length === 0) {
     <p class="empty-state">Aucune demande en attente.</p>
   } @else {
     <div class="operation-list">
-      @for (request of operationRequests(); track request.id) {
+      @for (request of filteredOperationRequests(); track request.id) {
         <article class="operation-card">
           <div>
             <p class="eyebrow">{{ request.operationType }}</p>
@@ -124,6 +156,34 @@
     </button>
   </div>
 
+  <form class="grant-form" [formGroup]="grantForm" (ngSubmit)="addGrant()" autocomplete="off">
+    <label>
+      Agent
+      <select formControlName="agentId">
+        <option value="">Sélectionner un agent</option>
+        @for (agent of agents(); track agent.id) {
+          <option [value]="agent.id">{{ agent.displayName }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      Permission
+      <select formControlName="permission">
+        <option value="accounts:read">Lire les comptes</option>
+        <option value="accounts:sync">Demander la synchronisation des comptes</option>
+        <option value="positions:read">Lire les positions</option>
+        <option value="research:inspect">Inspecter la readiness recherche</option>
+        <option value="research:export">Exporter un dataset de recherche</option>
+        <option value="trade-plan-risk:evaluate">Évaluer le risque d’un trade plan</option>
+        <option value="trade-plan-approval:status:read">
+          Lire le statut d’approbation d’un trade plan
+        </option>
+      </select>
+    </label>
+    <p class="muted">La ressource est déduite du compte broker lié à l’agent.</p>
+    <button type="submit" [disabled]="busy() || loading()">Ajouter la permission</button>
+  </form>
+
   @if (loading()) {
     <p>Chargement des agents…</p>
   } @else if (agents().length === 0) {
@@ -146,9 +206,9 @@
             <strong>Grants</strong>
             @if (grants()[agent.id]; as agentGrants) {
               <span>{{ permissions(agentGrants) || 'Aucun grant actif' }}</span>
-              @for (grant of agentGrants; track grant.id) {
+              @for (grant of activeGrants(agentGrants); track grant.id) {
                 <div class="grant-row">
-                  <span>{{ grant.permission }} · {{ accountLabel(grant.resourceId) }}</span>
+                  <span>{{ grantLabel(grant) }}</span>
                   @if (grant.status === 'ACTIVE') {
                     <button
                       type="button"

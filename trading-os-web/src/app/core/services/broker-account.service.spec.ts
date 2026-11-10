@@ -45,6 +45,17 @@ describe('BrokerAccountService', () => {
     });
   });
 
+  it('retrieves cTrader instrument validation through the authenticated API', () => {
+    service.validateCTraderInstrument('account-1', 'EURUSD').subscribe();
+
+    const req = http.expectOne({
+      method: 'GET',
+      url: '/api/v1/broker-accounts/account-1/ctrader/validation?instrument=EURUSD',
+    });
+    expect(req.request.body).toBeNull();
+    req.flush({ contract: {}, metadata: {} });
+  });
+
   it('retrieves the authenticated eligible risk profile catalog', () => {
     service.eligibleRiskProfiles().subscribe();
 

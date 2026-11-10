@@ -616,6 +616,33 @@ and `./scripts/quality-verify.sh`. Python projects and the isolated
 `ctrader-openapi-technical` module require targeted validation; see
 `TOOLS.md`.
 
+### Python Test Environment
+
+Python test dependencies are project-local. Do not invoke bare `pytest` or
+`python -m pytest` from the repository root: the PATH may resolve
+`/home/ludo/.local/bin/pytest`, whose `/bin/python3` interpreter does not have
+the project's test dependencies installed. The system may also have no
+`python` command at all.
+
+For the MCP Adapter, always run pytest through its virtual environment:
+
+```bash
+cd mcp-adapter
+python3 -m venv .venv                 # only when .venv is absent
+.venv/bin/pip install -e '.[test]'    # after creating or changing dependencies
+.venv/bin/python -m pytest
+```
+
+The equivalent root-directory command is:
+
+```bash
+mcp-adapter/.venv/bin/python -m pytest mcp-adapter/tests
+```
+
+Use the same pattern for `ai-engine` with `ai-engine/.venv/bin/python -m
+pytest`. If the project virtual environment is missing or its pytest import
+fails, install the declared test extra before reporting pytest as unavailable.
+
 Agents must never report a test as passing unless it was actually executed successfully.
 
 When validation cannot be executed, the report must state why.

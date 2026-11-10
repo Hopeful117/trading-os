@@ -116,7 +116,10 @@ The bridge listens only on `127.0.0.1:17891` and exposes a short-lived pairing
 challenge to the authenticated Trading OS web application. The Agents page
 issues the credential and sends it directly to the bridge; it is never rendered
 or copied by the user. The bridge validates the credential through the Gateway,
-keeps it only in process memory, and exposes the existing read-only MCP tools.
+stores the opaque credential in an owner-only file under `~/.config/trading-os`
+and exposes the existing read-only MCP tools. The file is only used to
+re-authenticate a fresh local bridge process; Gateway validation still applies
+on every request.
 
 For installations without the repository configuration, the equivalent local
 server registration is:
@@ -139,7 +142,9 @@ export TRADING_OS_MCP_BRIDGE_PORT=17891
 ```
 
 The MCP server is named `trading-os-research`. The adapter does not persist
-credentials, access tokens, research state or reports.
+access tokens, research state or reports. The opaque agent credential is
+persisted only in the owner-only local credential file so a fresh OpenCode
+bridge can recover the existing pairing.
 
 Do not place a real credential or token in repository configuration. Starting an
 active market scan is not exposed by this adapter. Execution, broker

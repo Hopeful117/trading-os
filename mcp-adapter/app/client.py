@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -162,13 +164,60 @@ _cached_configuration: tuple[str, str, float, int] | None = None
 
 
 def set_runtime_credential(credential: str) -> None:
-    """Replace the process-local credential received through the pairing bridge."""
+    """Replace the runtime credential received through the pairing bridge."""
     if not credential or len(credential) > 512:
         raise ValueError("credential is invalid")
     global _cached_client, _cached_configuration
     os.environ["TRADING_OS_AGENT_CREDENTIAL"] = credential
     _cached_client = None
     _cached_configuration = None
+
+
+def persist_runtime_credential(credential: str) -> None:
+    """Persist only the opaque agent credential for fresh local bridge processes."""
+    if not credential or len(credential) > 512:
+        raise ValueError("credential is invalid")
+    path = credential_store_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            descriptor = -1
+            stream.write(credential)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_name, path)
+        os.chmod(path, 0o600)
+    except BaseException:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def credential_store_path() -> pathlib.Path:
+    configured = os.environ.get("TRADING_OS_AGENT_CREDENTIAL_FILE")
+    return pathlib.Path(configured).expanduser() if configured else (
+        pathlib.Path.home() / ".config" / "trading-os" / "mcp-agent-credential"
+    )
+
+
+def load_runtime_credential() -> str | None:
+    path = credential_store_path()
+    try:
+        if path.stat().st_mode & 0o077:
+            raise RuntimeError("MCP credential store permissions are too broad")
+        value = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    if not value or len(value) > 512:
+        raise RuntimeError("MCP credential store is invalid")
+    return value
 
 
 def clear_runtime_credential() -> None:
@@ -181,7 +230,7 @@ def clear_runtime_credential() -> None:
 def client_from_environment() -> TradingOsClient:
     global _cached_client, _cached_configuration
     base_url = os.environ.get("TRADING_OS_GATEWAY_URL", "http://127.0.0.1:17080")
-    credential = os.environ.get("TRADING_OS_AGENT_CREDENTIAL")
+    credential = os.environ.get("TRADING_OS_AGENT_CREDENTIAL") or load_runtime_credential()
     if not credential:
         raise RuntimeError("TRADING_OS_AGENT_CREDENTIAL is required")
     timeout = float(os.environ.get("TRADING_OS_HTTP_TIMEOUT_SECONDS", "10"))

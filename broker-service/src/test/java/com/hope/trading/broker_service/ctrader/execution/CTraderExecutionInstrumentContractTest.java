@@ -26,6 +26,18 @@ class CTraderExecutionInstrumentContractTest {
     }
 
     @Test
+    void validatesCanonicalEurUsdQuantitiesAgainstProviderBoundaries() {
+        var contract = contract(100_000, 10_000_000_000L, 100_000);
+
+        assertThat(contract.providerVolume(new BigDecimal("1000"))).isEqualTo(100_000);
+        assertThat(contract.providerVolume(new BigDecimal("2000"))).isEqualTo(200_000);
+        assertThat(contract.providerVolume(new BigDecimal("10000"))).isEqualTo(1_000_000);
+        assertThat(contract.providerVolume(new BigDecimal("100000000"))).isEqualTo(10_000_000_000L);
+        assertThatThrownBy(() -> contract.providerVolume(new BigDecimal("1335")))
+                .hasMessage("CTRADER_INVALID_VOLUME_STEP");
+    }
+
+    @Test
     void rejectsInvalidQuantityWithoutRounding() {
         var contract = contract(100, 10_000, 100);
 
@@ -63,6 +75,24 @@ class CTraderExecutionInstrumentContractTest {
         assertThat(forex.providerVolume(new BigDecimal("1.00"))).isEqualTo(100);
         assertThat(cfd.providerVolume(new BigDecimal("10.00"))).isEqualTo(1_000);
         assertThat(cfd.providerVolume(new BigDecimal("15.00"))).isEqualTo(1_500);
+    }
+
+    @Test
+    void preservesOptionalProviderMaximumExposureWithoutConfusingItWithVolume() {
+        var contract = new CTraderExecutionInstrumentContract(1, "EURUSD", 5, 4,
+                100_000, 10_000_000_000L, 100_000, 10_000_000L,
+                25_000_000L, null, null, null);
+
+        assertThat(contract.maxExposure()).isEqualTo(25_000_000L);
+        assertThat(contract.providerVolume(new BigDecimal("1000"))).isEqualTo(100_000);
+    }
+
+    @Test
+    void rejectsNonPositiveProviderMaximumExposure() {
+        assertThatThrownBy(() -> new CTraderExecutionInstrumentContract(1, "EURUSD", 5, 4,
+                100_000, 10_000_000_000L, 100_000, 10_000_000L,
+                0L, null, null, null))
+                .hasMessage("CTRADER_INVALID_MAX_EXPOSURE");
     }
 
     @Test

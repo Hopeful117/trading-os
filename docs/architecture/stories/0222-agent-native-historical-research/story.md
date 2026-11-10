@@ -66,8 +66,9 @@ Agent credential
 ## In Scope
 
 - Add distinct `research:inspect` and `research:export` permissions.
-- Extend research scope constraints additively without breaking the exactly-two
-  market invariant for `research:run`.
+- Extend research scopes additively without preserving the obsolete exactly-two
+  market invariant: scopes reference a broker account, whose provider identifies
+  the research universe and whose catalogue markets are resolved server-side.
 - Add scoped historical readiness diagnostics with explicit `READY`,
   `INSUFFICIENT`, `BLOCKED` and `UNKNOWN` semantics.
 - Add bounded, idempotent export request/status lifecycle using the existing
@@ -121,7 +122,8 @@ authentication and ownership behavior remains unchanged.
 - [ ] Export requires a distinct `research:export` grant.
 - [ ] Owner, market, interval, cutoff, profile and resource limits are checked
       server-side.
-- [ ] Existing two-market `research:run` scopes and behavior remain compatible.
+- [ ] Existing scopes remain readable and auditable during migration; new scopes
+      select a broker account rather than a market list.
 - [ ] Readiness returns deterministic structured diagnostics and an explicit
       `READY`, `INSUFFICIENT`, `BLOCKED` or `UNKNOWN` verdict.
 - [ ] Unknown provenance is never promoted to eligible evidence.
