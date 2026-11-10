@@ -172,7 +172,7 @@ class PostgresFreshInstallMigrationTest {
                 .isEqualTo("public");
         assertThat(productionJdbc.queryForObject(
                 "select count(*) from public.flyway_schema_history where success = true",
-                 Integer.class)).isEqualTo(64);
+                 Integer.class)).isEqualTo(65);
         assertThat(productionJdbc.queryForObject(
                 "select to_regclass('public.risk_evaluation_t1')::text", String.class))
                 .isEqualTo("risk_evaluation_t1");
