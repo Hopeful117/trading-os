@@ -29,6 +29,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -196,6 +198,32 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         return withAuthenticatedSession(session -> {
             return symbol(session, new CTraderSymbol(symbolId, "", 0, 0, 0, 0));
         });
+    }
+
+    @Override
+    public Optional<CTraderSpotEvent> currentSpot(long symbolId) {
+        if (symbolId <= 0) throw new IllegalArgumentException("cTrader symbol id must be positive");
+        CompletableFuture<CTraderSpotEvent> spot = new CompletableFuture<>();
+        try (CTraderStream stream = openStream(event -> {
+            if (event instanceof CTraderSpotEvent candidate
+                    && candidate.symbolId() == symbolId
+                    && candidate.bid() != null
+                    && candidate.ask() != null) {
+                spot.complete(candidate);
+            }
+        }, () -> spot.completeExceptionally(new IllegalStateException("cTrader spot stream terminated")))) {
+            stream.subscribeSpots(symbolId);
+            try {
+                return Optional.of(spot.get(properties.requestTimeout().toMillis(), TimeUnit.MILLISECONDS));
+            } catch (TimeoutException exception) {
+                return Optional.empty();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                return Optional.empty();
+            } catch (ExecutionException exception) {
+                return Optional.empty();
+            }
+        }
     }
 
     @Override
@@ -413,9 +441,15 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
         }
         List<CTraderHoliday> holidays = new ArrayList<>();
         for (JsonNode holiday : node.path("holiday")) {
+            Long startSecond = optionalLong(holiday, "startSecond");
+            Long endSecond = optionalLong(holiday, "endSecond");
+            if (Long.valueOf(0).equals(startSecond) && Long.valueOf(0).equals(endSecond)) {
+                startSecond = null;
+                endSecond = null;
+            }
             holidays.add(new CTraderHoliday(holiday.path("holidayDate").asLong(-1),
                     holiday.path("isRecurring").asBoolean(false),
-                    optionalLong(holiday, "startSecond"), optionalLong(holiday, "endSecond"),
+                    startSecond, endSecond,
                     textOrNull(holiday, "scheduleTimeZone")));
         }
         return new CTraderSymbol(id, name, node.path("digits").asInt(fallback == null ? 0 : fallback.digits()),
@@ -436,7 +470,7 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     }
 
     private Long optionalLong(JsonNode node, String field) {
-        return node.has(field) ? node.path(field).asLong() : null;
+        return node.has(field) && !node.path(field).isNull() ? node.path(field).asLong() : null;
     }
 
     private String textOrNull(JsonNode node, String field) {
@@ -446,10 +480,20 @@ public class JsonWebSocketCTraderOpenApiClient implements CTraderOpenApiClient {
     private CTraderSymbol symbol(Session session, CTraderSymbol fallback) {
         ObjectNode payload = accountPayload();
         payload.putArray("symbolId").add(fallback.id());
-        JsonNode symbols = session.request(SYMBOL_BY_ID_REQUEST,
-                SYMBOL_BY_ID_RESPONSE, payload).path("symbol");
-        JsonNode symbol = symbols.isArray() ? symbols.path(0) : symbols;
-        return mapSymbol(symbol, fallback);
+        try {
+            JsonNode symbols = session.request(SYMBOL_BY_ID_REQUEST,
+                    SYMBOL_BY_ID_RESPONSE, payload).path("symbol");
+            JsonNode symbol = symbols.isArray() ? symbols.path(0) : symbols;
+            CTraderSymbol mapped = mapSymbol(symbol, fallback);
+            if (!requiresDetailedMetadata(mapped)) return mapped;
+        } catch (RuntimeException ignored) {
+            // Some cTrader sessions return an incomplete symbolById payload.
+        }
+        return symbols().stream()
+                .filter(candidate -> candidate.id() == fallback.id())
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "cTrader symbol metadata is unavailable for symbol " + fallback.id()));
     }
 
     private int periodValue(String period) {

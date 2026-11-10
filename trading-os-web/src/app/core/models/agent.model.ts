@@ -4,8 +4,10 @@ export type AgentPermission =
   | 'accounts:read'
   | 'accounts:sync'
   | 'positions:read'
+  | 'scans:run'
   | 'research:inspect'
   | 'research:export'
+  | 'plans:create'
   | 'trade-plan-risk:evaluate'
   | 'trade-plan-approval:status:read';
 export type AgentResourceType = 'BROKER_ACCOUNT' | 'RESEARCH_SCOPE';

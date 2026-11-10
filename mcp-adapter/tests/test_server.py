@@ -22,6 +22,8 @@ class FakeClient:
         self.calls.append((path, params))
         if self.error is not None:
             raise self.error
+        if path.endswith("/trading-account"):
+            return '{"accountId":"00000000-0000-0000-0000-000000000005"}'
         return self.response
 
     def post(self, path: str, payload: dict, idempotency_key: str) -> str:
@@ -46,8 +48,11 @@ async def test_server_exposes_bounded_tools(fake_client):
     assert {tool.name for tool in tools.tools} == {
         "list_markets",
         "get_active_scan",
+        "start_market_scan",
         "get_market_thesis",
         "get_opportunities",
+        "get_opportunity",
+        "create_trade_plan_from_opportunity",
         "list_authorized_accounts",
         "get_authorized_account",
         "get_authorized_account_status",
@@ -77,6 +82,15 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
             {"scan_id": "00000000-0000-0000-0000-000000000002"},
         )
         await client.call_tool(
+            "start_market_scan",
+            {
+                "broker_account_id": "00000000-0000-0000-0000-000000000004",
+                "objective": "Scan BTC",
+                "market_ids": ["00000000-0000-0000-0000-000000000001"],
+                "idempotency_key": "scan-btc-1",
+            },
+        )
+        await client.call_tool(
             "get_market_thesis",
             {
                 "market_id": "00000000-0000-0000-0000-000000000001",
@@ -87,6 +101,16 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         await client.call_tool(
             "get_opportunities",
             {"instrument": "BTC/USD", "active_only": True, "limit": 10},
+        )
+        await client.call_tool(
+            "get_opportunity",
+            {"opportunity_id": "00000000-0000-0000-0000-000000000010"},
+        )
+        await client.call_tool(
+            "create_trade_plan_from_opportunity",
+            {"broker_account_id": "00000000-0000-0000-0000-000000000004",
+             "opportunity_id": "00000000-0000-0000-0000-000000000010",
+             "opportunity_version": 1, "idempotency_key": "plan-opportunity-1"},
         )
         await client.call_tool("list_authorized_accounts", {})
         await client.call_tool(
@@ -179,10 +203,12 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
 
     assert [path for path, _ in fake_client.calls] == [
         "/api/v1/markets",
-        "/api/v1/intelligence/scans/00000000-0000-0000-0000-000000000002",
-        "/api/v1/intelligence/market-theses/latest",
-        "/api/v1/opportunities",
-        "/api/v1/agent/broker-accounts",
+            "/api/v1/intelligence/scans/00000000-0000-0000-0000-000000000002",
+            "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/trading-account",
+            "/api/v1/intelligence/market-theses/latest",
+            "/api/v1/opportunities",
+            "/api/v1/opportunities/00000000-0000-0000-0000-000000000010",
+            "/api/v1/agent/broker-accounts",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/read-only-status",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/positions",
@@ -193,18 +219,27 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003/report",
         "/api/v1/intelligence/research/exports/00000000-0000-0000-0000-000000000007",
     ]
-    assert fake_client.calls[3][1]["size"] == 10
-    assert fake_client.post_calls[0][0].endswith("/versions/1")
-    assert fake_client.post_calls[1][0] == "/api/v1/agent/trade-plan-approvals"
-    assert fake_client.post_calls[2][0] == "/api/v1/agent/operation-requests"
-    assert fake_client.post_calls[3][0].endswith("/execute")
-    assert fake_client.post_calls[4][0] == "/api/v1/intelligence/research"
-    assert fake_client.post_calls[4][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
-    assert fake_client.post_calls[4][2] == "research-btc-eth-1"
-    assert fake_client.post_calls[5][0] == "/api/v1/intelligence/research/readiness"
-    assert fake_client.post_calls[5][1]["brokerAccountId"] == "00000000-0000-0000-0000-000000000004"
-    assert fake_client.post_calls[6][0].endswith("/exports")
-    assert fake_client.post_calls[6][2] == "export-1"
+    assert fake_client.post_calls[1] == (
+        "/api/v1/agent/trade-plans/opportunities/00000000-0000-0000-0000-000000000010",
+        {"brokerAccountId": "00000000-0000-0000-0000-000000000004", "opportunityVersion": 1},
+        "plan-opportunity-1",
+    )
+    assert fake_client.calls[4][1]["size"] == 10
+    assert fake_client.post_calls[0][0] == "/api/v1/intelligence/scans"
+    assert fake_client.post_calls[0][1]["accountId"] == "00000000-0000-0000-0000-000000000005"
+    assert fake_client.post_calls[0][1]["brokerAccountId"] == "00000000-0000-0000-0000-000000000004"
+    assert fake_client.post_calls[0][2] == "scan-btc-1"
+    assert fake_client.post_calls[2][0].endswith("/versions/1")
+    assert fake_client.post_calls[3][0] == "/api/v1/agent/trade-plan-approvals"
+    assert fake_client.post_calls[4][0] == "/api/v1/agent/operation-requests"
+    assert fake_client.post_calls[5][0].endswith("/execute")
+    assert fake_client.post_calls[6][0] == "/api/v1/intelligence/research"
+    assert fake_client.post_calls[6][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
+    assert fake_client.post_calls[6][2] == "research-btc-eth-1"
+    assert fake_client.post_calls[7][0] == "/api/v1/intelligence/research/readiness"
+    assert fake_client.post_calls[7][1]["brokerAccountId"] == "00000000-0000-0000-0000-000000000004"
+    assert fake_client.post_calls[8][0].endswith("/exports")
+    assert fake_client.post_calls[8][2] == "export-1"
 
 
 @pytest.mark.asyncio
@@ -214,6 +249,23 @@ async def test_tool_schema_rejects_out_of_range_opportunity_limit(fake_client):
 
     assert result.is_error is True
     assert fake_client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_market_scan_requires_selected_markets(fake_client):
+    async with Client(server.mcp, raise_exceptions=True) as client:
+        result = await client.call_tool(
+            "start_market_scan",
+            {
+                "broker_account_id": "00000000-0000-0000-0000-000000000004",
+                "objective": "Scan",
+                "market_ids": [],
+                "idempotency_key": "scan-1",
+            },
+        )
+
+    assert result.is_error is True
+    assert fake_client.post_calls == []
 
 
 @pytest.mark.asyncio
@@ -366,8 +418,11 @@ async def test_server_starts_over_stdio():
     assert {tool.name for tool in tools.tools} == {
         "list_markets",
         "get_active_scan",
-        "get_market_thesis",
-        "get_opportunities",
+        "start_market_scan",
+            "get_market_thesis",
+            "get_opportunities",
+            "get_opportunity",
+            "create_trade_plan_from_opportunity",
         "list_authorized_accounts",
         "get_authorized_account",
         "get_authorized_account_status",

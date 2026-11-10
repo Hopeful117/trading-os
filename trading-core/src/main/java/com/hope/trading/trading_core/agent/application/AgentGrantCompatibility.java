@@ -14,6 +14,7 @@ final class AgentGrantCompatibility {
             Map.entry(AgentPermission.MARKETS_READ, Set.of(AgentResourceType.MARKET)),
             Map.entry(AgentPermission.RISK_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)),
             Map.entry(AgentPermission.RESEARCH_RUN, Set.of(AgentResourceType.RESEARCH_SCOPE)),
+            Map.entry(AgentPermission.SCANS_RUN, Set.of(AgentResourceType.BROKER_ACCOUNT)),
             Map.entry(AgentPermission.RESEARCH_INSPECT, Set.of(AgentResourceType.BROKER_ACCOUNT)),
             Map.entry(AgentPermission.RESEARCH_EXPORT, Set.of(AgentResourceType.RESEARCH_SCOPE)),
             Map.entry(AgentPermission.PLANS_CREATE, Set.of(AgentResourceType.BROKER_ACCOUNT)),

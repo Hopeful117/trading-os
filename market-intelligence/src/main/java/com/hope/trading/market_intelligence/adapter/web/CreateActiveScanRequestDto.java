@@ -9,11 +9,17 @@ import com.hope.trading.market_intelligence.domain.scope.MarketScopeMode;
 
 public record CreateActiveScanRequestDto(
         @NotNull UUID accountId,
+        UUID brokerAccountId,
         @Size(max = 500) String objective,
         List<UUID> requestedMarketIds,
         MarketScopeMode scopeMode
 ) {
     public CreateActiveScanRequestDto(UUID accountId, String objective, List<UUID> requestedMarketIds) {
-        this(accountId, objective, requestedMarketIds, null);
+        this(accountId, null, objective, requestedMarketIds, null);
+    }
+
+    public CreateActiveScanRequestDto(UUID accountId, String objective,
+                                      List<UUID> requestedMarketIds, MarketScopeMode scopeMode) {
+        this(accountId, null, objective, requestedMarketIds, scopeMode);
     }
 }

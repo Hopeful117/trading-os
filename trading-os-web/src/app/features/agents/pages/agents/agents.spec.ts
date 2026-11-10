@@ -123,8 +123,10 @@ describe('Agents', () => {
       brokerAccountId: 'broker-1',
       accountsRead: true,
       positionsRead: true,
+      scansRun: false,
       researchInspect: false,
       researchExport: false,
+      plansCreate: false,
       tradePlanRiskEvaluate: false,
       tradePlanApprovalStatusRead: false,
     });

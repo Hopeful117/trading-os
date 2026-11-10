@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import json
 import os
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
@@ -16,15 +17,47 @@ mcp = MCPServer("trading-os-research")
 
 
 @mcp.tool()
-def list_markets() -> str:
+def list_markets(
+    instrument: Annotated[str | None, Field(description="Optional canonical or provider instrument filter.")] = None,
+) -> str:
     """List canonical markets through the public Trading OS Gateway."""
-    return client_from_environment().get("/api/v1/markets")
+    return client_from_environment().get(
+        "/api/v1/markets", {"instrument": instrument} if instrument is not None else None
+    )
 
 
 @mcp.tool()
 def get_active_scan(scan_id: Annotated[UUID, Field(description="Trading OS active scan UUID.")]) -> str:
     """Read an authorized active-scan projection without starting or changing a scan."""
     return client_from_environment().get(f"/api/v1/intelligence/scans/{scan_id}")
+
+
+@mcp.tool()
+def start_market_scan(
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID used for scan context.")],
+    objective: Annotated[str, Field(min_length=1, max_length=500, description="Bounded scan objective.")],
+    market_ids: Annotated[list[UUID], Field(min_length=1, max_length=50, description="Explicit canonical market UUIDs to scan.")],
+    idempotency_key: Annotated[str, Field(min_length=1, max_length=200, description="Stable key reused only when retrying the same scan request.")],
+) -> str:
+    """Start an authorized Market Intelligence scan; this never creates a Trade Plan or executes an order."""
+    if len(set(market_ids)) != len(market_ids):
+        raise ValueError("market_ids must contain distinct UUIDs")
+    client = client_from_environment()
+    account = json.loads(client.get(f"/api/v1/agent/broker-accounts/{broker_account_id}/trading-account"))
+    trading_account_id = account.get("accountId")
+    if not isinstance(trading_account_id, str):
+        raise ValueError("Authorized broker account has no Trading OS account")
+    return client.post(
+        "/api/v1/intelligence/scans",
+        {
+            "accountId": trading_account_id,
+            "brokerAccountId": str(broker_account_id),
+            "objective": objective,
+            "requestedMarketIds": [str(value) for value in market_ids],
+            "scopeMode": "SELECTED",
+        },
+        idempotency_key,
+    )
 
 
 @mcp.tool()
@@ -62,6 +95,30 @@ def get_opportunities(
     }
     return client_from_environment().get(
         "/api/v1/opportunities", {key: value for key, value in params.items() if value is not None}
+    )
+
+
+@mcp.tool()
+def get_opportunity(
+    opportunity_id: Annotated[UUID, Field(description="Trading OS opportunity UUID.")],
+) -> str:
+    """Read one opportunity with its supporting thesis and evidence."""
+    return client_from_environment().get(f"/api/v1/opportunities/{opportunity_id}")
+
+
+@mcp.tool()
+def create_trade_plan_from_opportunity(
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
+    opportunity_id: Annotated[UUID, Field(description="Existing Trading OS opportunity UUID.")],
+    opportunity_version: Annotated[int, Field(ge=1, description="Immutable opportunity version.")],
+    idempotency_key: Annotated[str, Field(min_length=1, max_length=200,
+                                          description="Stable key reused only when retrying the same request.")],
+) -> str:
+    """Create a Trade Plan from an existing opportunity; Trading Core owns planning and risk preflight."""
+    return client_from_environment().post(
+        f"/api/v1/agent/trade-plans/opportunities/{opportunity_id}",
+        {"brokerAccountId": str(broker_account_id), "opportunityVersion": opportunity_version},
+        idempotency_key,
     )
 
 

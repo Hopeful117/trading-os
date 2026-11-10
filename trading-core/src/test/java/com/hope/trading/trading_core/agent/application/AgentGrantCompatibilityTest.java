@@ -45,6 +45,14 @@ class AgentGrantCompatibilityTest {
     }
 
     @Test
+    void marketScanPermissionRequiresBrokerAccountScope() {
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.SCANS_RUN,
+                AgentResourceType.BROKER_ACCOUNT)).isTrue();
+        assertThat(AgentGrantCompatibility.supports(AgentPermission.SCANS_RUN,
+                AgentResourceType.RESEARCH_SCOPE)).isFalse();
+    }
+
+    @Test
     void usesStablePermissionIdentifiersAtTheJsonBoundary() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
 

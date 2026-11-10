@@ -124,7 +124,7 @@ class ActiveScanApplicationServiceTest {
     }
 
     @Test
-    void activeExecutionUsesResolvedScopeCutoff() {
+    void activeExecutionUsesLiveCurrentEvidencePolicy() {
         UUID actorId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         UUID marketId = UUID.randomUUID();
@@ -145,7 +145,7 @@ class ActiveScanApplicationServiceTest {
         assertThat(dispatcher.request).isNotNull();
         assertThat(dispatcher.request.evaluationCutoff()).isEqualTo(resolvedCutoff);
         assertThat(dispatcher.request.evidencePolicy())
-                .isEqualTo(com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy.STRICT_OBSERVED);
+                .isEqualTo(com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy.LIVE_CURRENT);
     }
 
     @Test

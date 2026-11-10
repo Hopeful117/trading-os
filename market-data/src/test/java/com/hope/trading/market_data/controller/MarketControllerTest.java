@@ -80,6 +80,20 @@ class MarketControllerTest {
     }
 
     @Test
+    void catalogueCanBeFilteredByCanonicalInstrument() throws Exception {
+        Market matching = market();
+        Market other = market();
+        other.setMarketId(UUID.randomUUID());
+        other.setSymbol("ETH/EUR");
+        when(marketService.findAll()).thenReturn(List.of(matching, other));
+
+        mockMvc.perform(get("/api/v1/markets").param("instrument", "XBT/EUR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].symbol").value("XBT/EUR"))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+    }
+
+    @Test
     void duplicateDisplaySymbolsWithDifferentProviderIdsAreNotResolvedForExecution() throws Exception {
         Market first = market();
         first.setProviderSymbol("7");

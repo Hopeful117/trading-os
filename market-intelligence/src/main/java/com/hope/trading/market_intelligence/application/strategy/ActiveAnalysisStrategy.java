@@ -60,6 +60,7 @@ public class ActiveAnalysisStrategy implements AnalysisExecutionStrategy {
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY),
                         ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT),
                         ContextRequirement.optionalPublic(ContextSectionType.HISTORICAL_OHLC),
+                        ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT),
                              ContextRequirement.optionalPublic(ContextSectionType.ORDER_FLOW),
                              ContextRequirement.optionalPublic(ContextSectionType.ORDER_BOOK),
                         ContextRequirement.optionalPublic(ContextSectionType.NEWS)

@@ -33,7 +33,8 @@ public class MarketSnapshotContextContributor implements ContextContributor {
                         Duration.ofSeconds(30),
                         Duration.ofSeconds(18),
                         "CONFIRM_OR_ACQUIRE",
-                        request.evaluationCutoff()
+                        request.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                                ? null : request.evaluationCutoff()
                 )
         ).stream().findFirst().orElse(null);
         ContextRequirement requirement =

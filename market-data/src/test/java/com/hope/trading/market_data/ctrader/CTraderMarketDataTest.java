@@ -14,6 +14,7 @@ import java.time.ZoneOffset;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -51,6 +52,26 @@ class CTraderMarketDataTest {
             assertThat(event.closed()).isTrue();
             assertThat(event.providerSymbol()).isEqualTo("42");
         });
+    }
+
+    @Test
+    void acquiresCurrentSnapshotFromSpotEvent() {
+        FakeClient client = new FakeClient() {
+            @Override
+            public Optional<CTraderSpotEvent> currentSpot(long symbolId) {
+                return Optional.of(new CTraderSpotEvent(symbolId, 123450L, 123470L, NOW));
+            }
+        };
+        CTraderMarketData provider = new CTraderMarketData(client, properties(), new MarketStateBuilder(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        var market = provider.getMarkets().getFirst();
+        market.setMarketId(UUID.randomUUID());
+
+        var snapshot = provider.acquireCurrentSnapshot(market).orElseThrow();
+
+        assertThat(snapshot.bid()).isEqualByComparingTo("1.23450");
+        assertThat(snapshot.ask()).isEqualByComparingTo("1.23470");
+        assertThat(snapshot.providerSymbol()).isEqualTo("42");
     }
 
     @Test

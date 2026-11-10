@@ -12,6 +12,7 @@ Direct application tools:
 
 - `list_markets`
 - `get_active_scan`
+- `start_market_scan`
 - `get_market_thesis`
 - `get_opportunities`
 - `list_authorized_accounts`
@@ -28,8 +29,13 @@ Specialized research tools:
 - `request_historical_dataset_export`
 - `get_historical_dataset_export_status`
 
+`start_market_scan` starts an account-scoped Market Intelligence scan through the
+public Gateway using an explicit bounded list of canonical market IDs. It
+requires a stable `idempotency_key`, and never creates a Trade Plan or executes
+an order. Poll the returned scan ID with `get_active_scan`.
+
 `get_active_scan` reads an already-created, Gateway-authorized active-scan
-projection. It does not start, cancel or modify a scan.
+projection.
 
 `start_market_research` submits an explicit research-scope and two-market request
 to the public Gateway. A human owner creates and grants the exact scope before
@@ -147,7 +153,8 @@ persisted only in the owner-only local credential file so a fresh OpenCode
 bridge can recover the existing pairing.
 
 Do not place a real credential or token in repository configuration. Starting an
-active market scan is not exposed by this adapter. Execution, broker
+active market scan requires an explicit `scans:run` grant on the selected broker
+account. Execution, broker
 credentials, grant administration and internal service calls are not exposed.
 Remote MCP HTTP transport, MCP OAuth and external cTrader MCP servers are not
 implemented or authorized.

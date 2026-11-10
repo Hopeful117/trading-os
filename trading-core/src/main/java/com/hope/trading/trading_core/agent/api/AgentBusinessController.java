@@ -3,7 +3,9 @@ package com.hope.trading.trading_core.agent.api;
 import com.hope.trading.trading_core.agent.application.AgentAuthorizationService;
 import com.hope.trading.trading_core.agent.model.AgentPermission;
 import com.hope.trading.trading_core.agent.model.AgentResourceType;
+import com.hope.trading.trading_core.challenge.application.ChallengeReadinessService;
 import com.hope.trading.trading_core.broker.apiClient.BrokerAccountSnapshotV2Client;
+import com.hope.trading.trading_core.risk.infrastructure.client.BrokerCapabilityQueryService;
 import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.brokeraccount.api.BrokerAccountReadOnlyStatusResponse;
 import com.hope.trading.trading_core.brokeraccount.api.BrokerAccountResponse;
@@ -15,13 +17,17 @@ import com.hope.trading.trading_core.dashboard.integration.BrokerAccountFact;
 import com.hope.trading.trading_core.dashboard.integration.BrokerDashboardMapper;
 import com.hope.trading.trading_core.dashboard.model.OpenPositionDashboardView;
 import com.hope.trading.trading_core.dashboard.service.PositionQueryService;
+import com.hope.trading.trading_core.dto.AccountDto;
+import com.hope.trading.trading_core.helper.AccountMapper;
 import com.hope.trading.trading_core.model.Account;
 import com.hope.trading.trading_core.repository.AccountRepository;
 import com.hope.trading.trading_core.security.AgentPrincipal;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,7 +40,6 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/agent/broker-accounts")
-@RequiredArgsConstructor
 public class AgentBusinessController {
     private final BrokerAccountRepository brokerAccounts;
     private final AccountRepository accounts;
@@ -43,6 +48,41 @@ public class AgentBusinessController {
     private final PositionQueryService positions;
     private final BrokerAccountSnapshotV2Client broker;
     private final BrokerDashboardMapper brokerMapper;
+    private final AccountMapper accountMapper;
+    private final ChallengeReadinessService challengeReadiness;
+    private final BrokerCapabilityQueryService brokerCapabilityQueryService;
+
+    @Autowired
+    public AgentBusinessController(BrokerAccountRepository brokerAccounts, AccountRepository accounts,
+                                   AgentAuthorizationService authorization,
+                                   BrokerAccountReadOnlyStatusService readOnlyStatus,
+                                   PositionQueryService positions,
+                                   BrokerAccountSnapshotV2Client broker,
+                                   BrokerDashboardMapper brokerMapper,
+                                   AccountMapper accountMapper,
+                                   ChallengeReadinessService challengeReadiness,
+                                   BrokerCapabilityQueryService brokerCapabilityQueryService) {
+        this.brokerAccounts = brokerAccounts;
+        this.accounts = accounts;
+        this.authorization = authorization;
+        this.readOnlyStatus = readOnlyStatus;
+        this.positions = positions;
+        this.broker = broker;
+        this.brokerMapper = brokerMapper;
+        this.accountMapper = accountMapper;
+        this.challengeReadiness = challengeReadiness;
+        this.brokerCapabilityQueryService = brokerCapabilityQueryService;
+    }
+
+    public AgentBusinessController(BrokerAccountRepository brokerAccounts, AccountRepository accounts,
+                                   AgentAuthorizationService authorization,
+                                   BrokerAccountReadOnlyStatusService readOnlyStatus,
+                                   PositionQueryService positions,
+                                   BrokerAccountSnapshotV2Client broker,
+                                   BrokerDashboardMapper brokerMapper) {
+        this(brokerAccounts, accounts, authorization, readOnlyStatus, positions, broker, brokerMapper,
+                null, null, null);
+    }
 
     @GetMapping
     public ResponseEntity<List<BrokerAccountResponse>> list(
@@ -66,6 +106,45 @@ public class AgentBusinessController {
         BrokerAccount account = ownedAccount(agent.ownerUserId(), brokerAccountId);
         requireGrant(agent, AgentPermission.ACCOUNTS_READ, brokerAccountId, correlationId);
         return ResponseEntity.ok(map(account));
+    }
+
+    @GetMapping("/{brokerAccountId}/trading-account")
+    public ResponseEntity<AccountDto> tradingAccount(
+            @PathVariable UUID brokerAccountId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        AgentPrincipal agent = requireAgent(authentication);
+        requireGrant(agent, AgentPermission.ACCOUNTS_READ, brokerAccountId, correlationId);
+        Account account = ownedTradingAccount(agent.ownerUserId(), brokerAccountId);
+        return ResponseEntity.ok(accountMapper.toDto(account));
+    }
+
+    @GetMapping("/{brokerAccountId}/challenge-readiness")
+    public ResponseEntity<ChallengeReadinessService.ChallengeReadiness> challengeReadiness(
+            @PathVariable UUID brokerAccountId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        AgentPrincipal agent = requireAgent(authentication);
+        requireGrant(agent, AgentPermission.ACCOUNTS_READ, brokerAccountId, correlationId);
+        Account account = ownedTradingAccount(agent.ownerUserId(), brokerAccountId);
+        return ResponseEntity.ok(challengeReadiness.resolve(agent.ownerUserId(), account.getAccountId()));
+    }
+
+    @PostMapping("/{brokerAccountId}/market-capabilities")
+    public ResponseEntity<List<BrokerCapabilityQueryService.MarketCapability>> marketCapabilities(
+            @PathVariable UUID brokerAccountId,
+            @RequestBody AgentMarketCapabilityRequest request,
+            Authentication authentication,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        AgentPrincipal agent = requireAgent(authentication);
+        requireGrant(agent, AgentPermission.ACCOUNTS_READ, brokerAccountId, correlationId);
+        Account account = ownedTradingAccount(agent.ownerUserId(), brokerAccountId);
+        if (brokerCapabilityQueryService == null) {
+            return ResponseEntity.internalServerError().build();
+        }
+        var user = account.getUser();
+        return ResponseEntity.ok(brokerCapabilityQueryService.resolve(
+                account.getAccountId(), user.getUsername(), request == null ? List.of() : request.instruments()));
     }
 
     @GetMapping("/{brokerAccountId}/read-only-status")
@@ -139,6 +218,14 @@ public class AgentBusinessController {
         return brokerAccounts.findByIdAndOwnerId(brokerAccountId, ownerId)
                 .orElseThrow(AgentBusinessAuthorizationException::new);
     }
+
+    private Account ownedTradingAccount(UUID ownerId, UUID brokerAccountId) {
+        return accounts.findByBrokerAccountId(brokerAccountId)
+                .filter(value -> value.getUser() != null && ownerId.equals(value.getUser().getUserId()))
+                .orElseThrow(AgentBusinessAuthorizationException::new);
+    }
+
+    public record AgentMarketCapabilityRequest(List<String> instruments) { }
 
     private BrokerAccountResponse map(BrokerAccount account) {
         return new BrokerAccountResponse(account.id(), account.providerRegistrationReference(),

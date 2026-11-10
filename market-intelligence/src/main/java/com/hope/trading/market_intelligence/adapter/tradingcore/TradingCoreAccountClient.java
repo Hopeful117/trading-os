@@ -20,12 +20,22 @@ public interface TradingCoreAccountClient {
     @GetMapping("/api/v1/accounts/{accountId}")
     TradingCoreAccountResponse findOwnedAccount(@PathVariable UUID accountId);
 
+    @GetMapping("/api/v1/agent/broker-accounts/{brokerAccountId}/trading-account")
+    TradingCoreAccountResponse findAgentTradingAccount(@PathVariable UUID brokerAccountId);
+
     @PostMapping("/api/v1/accounts/{accountId}/market-capabilities")
     List<MarketCapabilityResponse> marketCapabilities(@PathVariable UUID accountId,
                                                       @RequestBody MarketCapabilityRequest request);
 
+    @PostMapping("/api/v1/agent/broker-accounts/{brokerAccountId}/market-capabilities")
+    List<MarketCapabilityResponse> agentMarketCapabilities(@PathVariable UUID brokerAccountId,
+                                                           @RequestBody MarketCapabilityRequest request);
+
     @GetMapping("/api/v1/accounts/{accountId}/challenge-readiness")
     ChallengeReadinessResponse challengeReadiness(@PathVariable UUID accountId);
+
+    @GetMapping("/api/v1/agent/broker-accounts/{brokerAccountId}/challenge-readiness")
+    ChallengeReadinessResponse agentChallengeReadiness(@PathVariable UUID brokerAccountId);
 
     record TradingCoreAccountResponse(
             UUID accountId,

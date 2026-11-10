@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record ActiveScanScopeResolutionRequest(
         UUID accountId,
+        UUID brokerAccountId,
         String objective,
         List<UUID> requestedMarketIds,
         MarketScopeMode scopeMode
@@ -17,8 +18,13 @@ public record ActiveScanScopeResolutionRequest(
     }
 
     public ActiveScanScopeResolutionRequest(UUID accountId, String objective, List<UUID> requestedMarketIds) {
-        this(accountId, objective, requestedMarketIds,
+        this(accountId, null, objective, requestedMarketIds,
                 requestedMarketIds != null && requestedMarketIds.stream().anyMatch(java.util.Objects::nonNull)
                         ? MarketScopeMode.SELECTED : null);
+    }
+
+    public ActiveScanScopeResolutionRequest(UUID accountId, String objective,
+                                            List<UUID> requestedMarketIds, MarketScopeMode scopeMode) {
+        this(accountId, null, objective, requestedMarketIds, scopeMode);
     }
 }
