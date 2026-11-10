@@ -141,11 +141,13 @@ public class AgentOperationService {
     @Transactional
     public int recoverStaleExecuting(Duration age) {
         int recovered = 0;
-        Instant cutoff = clock.instant().minus(age);
+        Instant now = clock.instant();
+        if (now == null) return 0;
+        Instant cutoff = now.minus(age);
         for (var request : requests.findStaleExecuting(cutoff)) {
-            request.unknown(clock.instant(), "RECOVERY_REQUIRED");
+            request.unknown(now, "RECOVERY_REQUIRED");
             requests.save(request);
-            safeEvent(request, "OUTCOME_UNKNOWN", request.outcome(), request.correlationId(), "SYSTEM", null, null, "RECOVERY_REQUIRED", clock.instant());
+            safeEvent(request, "OUTCOME_UNKNOWN", request.outcome(), request.correlationId(), "SYSTEM", null, null, "RECOVERY_REQUIRED", now);
             recovered++;
         }
         return recovered;

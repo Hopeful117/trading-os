@@ -51,7 +51,7 @@ class PostgresFreshInstallMigrationTest {
         flyway.migrate();
 
         assertSchemaContract();
-         assertMigrationHistory(64);
+        assertMigrationHistory(65);
         assertCfdProjectionSchema();
         assertDailyDrawdownBoundarySchema();
         assertTradeExecutionProvenanceConstraints();
@@ -59,7 +59,7 @@ class PostgresFreshInstallMigrationTest {
         assertMarginPolicySchema();
         assertThat(jdbc.queryForObject(
                 "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
-                 String.class)).isEqualTo("64");
+                 String.class)).isEqualTo("65");
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("accounts")).isTrue();
         assertThat(tableExists("execution_attempt")).isTrue();
@@ -221,7 +221,7 @@ class PostgresFreshInstallMigrationTest {
         current.migrate();
         current.migrate();
 
-             assertMigrationHistory(64);
+             assertMigrationHistory(65);
         assertDailyDrawdownBoundarySchema();
         assertBrokerPositionReconciliationSchema();
         assertMarginPolicySchema();
