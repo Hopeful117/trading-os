@@ -32,6 +32,7 @@ import com.hope.trading.trading_core.shared.domain.model.QuantityUnit;
 import com.hope.trading.trading_core.valuation.application.CfdValuationService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +51,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -101,7 +101,6 @@ class PaperCfdSettlementPersistenceHardeningIntegrationTest {
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private JdbcTemplate jdbc;
     @MockitoBean private MarketDataClient marketData;
-    @MockitoBean private Clock clock;
     @MockitoBean(name = "marketValuationClient") private MarketValuationClient marketValuation;
     @MockitoSpyBean private com.hope.trading.trading_core.execution.infrastructure.persistence.JpaTradeExecutionProvenanceStore productionProvenance;
 
@@ -610,8 +609,6 @@ class PaperCfdSettlementPersistenceHardeningIntegrationTest {
     }
 
     private void configureMark(String mark, String reportingCurrency) {
-        when(clock.instant()).thenReturn(NOW);
-        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
         MarketValuationPort.PriceUse use = new BigDecimal(mark).compareTo(new BigDecimal("1.10000")) >= 0
                 ? MarketValuationPort.PriceUse.CONSERVATIVE_SELL
                 : MarketValuationPort.PriceUse.CONSERVATIVE_BUY;
@@ -624,8 +621,6 @@ class PaperCfdSettlementPersistenceHardeningIntegrationTest {
     }
 
     private void configureCrossCurrencyMark(String mark, String quoteToReportingRate) {
-        when(clock.instant()).thenReturn(NOW);
-        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
         MarketValuationPort.Fact fact = new MarketValuationPort.Fact("INSTRUMENT", tradeId.toString(),
                 UUID.randomUUID(), null, MarketValuationPort.PriceUse.CONSERVATIVE_SELL,
                 new BigDecimal(mark).multiply(new BigDecimal(quoteToReportingRate)), new BigDecimal(mark),
