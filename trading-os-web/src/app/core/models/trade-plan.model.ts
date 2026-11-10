@@ -100,7 +100,13 @@ export interface TradePlanApprovalResponse {
   expiresAt: string;
   parameterDigest: string;
   plan: TradePlanResponse;
-  risk: { evaluationId: string; status: string; decision: string; approved: boolean; evaluatedAt: string | null };
+  risk: {
+    evaluationId: string;
+    status: string;
+    decision: string;
+    approved: boolean;
+    evaluatedAt: string | null;
+  };
   reason: string | null;
 }
 

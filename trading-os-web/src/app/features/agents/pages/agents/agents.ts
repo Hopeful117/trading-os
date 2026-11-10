@@ -126,9 +126,7 @@ export class Agents {
       ...(value.researchInspect ? ['research:inspect' as const] : []),
       ...(value.researchExport ? ['research:export' as const] : []),
       ...(value.tradePlanRiskEvaluate ? ['trade-plan-risk:evaluate' as const] : []),
-      ...(value.tradePlanApprovalStatusRead
-        ? ['trade-plan-approval:status:read' as const]
-        : []),
+      ...(value.tradePlanApprovalStatusRead ? ['trade-plan-approval:status:read' as const] : []),
     ];
     if (permissions.length === 0) {
       this.feedback.set({

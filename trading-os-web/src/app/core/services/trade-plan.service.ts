@@ -99,7 +99,10 @@ export class TradePlanService {
     );
   }
 
-  decideApproval(challengeId: string, decision: 'approve' | 'reject'): Observable<TradePlanApprovalResponse> {
+  decideApproval(
+    challengeId: string,
+    decision: 'approve' | 'reject',
+  ): Observable<TradePlanApprovalResponse> {
     return this.http.post<TradePlanApprovalResponse>(
       `${environment.gatewayUrl}v1/trade-plan-approvals/${challengeId}/${decision}`,
       {},

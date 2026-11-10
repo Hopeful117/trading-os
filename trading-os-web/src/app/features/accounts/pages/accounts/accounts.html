@@ -280,7 +280,8 @@
               (click)="validateCTraderInstrument(brokerAccount)"
             >
               {{
-                instrumentValidationLoading() && instrumentValidationAccountId() === brokerAccount.id
+                instrumentValidationLoading() &&
+                instrumentValidationAccountId() === brokerAccount.id
                   ? 'Validation…'
                   : 'Valider EURUSD'
               }}
