@@ -97,6 +97,22 @@ public class AgentAuthorizationService {
     }
 
     @Transactional
+    public Decision authorizeActiveScan(UUID agentId, UUID credentialId, Integer credentialVersion,
+                                        UUID brokerAccountId, String correlationId) {
+        Decision base = authorize(agentId, AgentPermission.SCANS_RUN,
+                AgentResourceType.BROKER_ACCOUNT, brokerAccountId, correlationId);
+        if (!base.allowed()) return base;
+        if (credentials == null || credentialId == null || credentialVersion == null
+                || credentials.findByIdAndAgentId(credentialId, agentId)
+                .filter(value -> value.credentialVersion() == credentialVersion)
+                .filter(value -> value.isActiveAt(clock.instant())).isEmpty()) {
+            return denyBrokerAccount(agentId, brokerAccountId, correlationId, "INVALID_AGENT_CREDENTIAL");
+        }
+        return new Decision(true, null, base.grantId(), base.grantVersion(), base.agentVersion(),
+                base.ownerUserId(), credentialId, credentialVersion);
+    }
+
+    @Transactional
     public Decision authorizeHistoricalResearch(UUID agentId, UUID credentialId, Integer credentialVersion,
                                                  AgentPermission permission, UUID scopeId, Set<UUID> marketIds,
                                                 Instant startCutoff, Instant endCutoff, String datasetProfile,

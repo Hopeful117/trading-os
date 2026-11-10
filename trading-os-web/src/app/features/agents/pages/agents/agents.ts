@@ -66,8 +66,10 @@ export class Agents {
     brokerAccountId: new FormControl('', { nonNullable: true }),
     accountsRead: new FormControl(true, { nonNullable: true }),
     positionsRead: new FormControl(true, { nonNullable: true }),
+    scansRun: new FormControl(false, { nonNullable: true }),
     researchInspect: new FormControl(false, { nonNullable: true }),
     researchExport: new FormControl(false, { nonNullable: true }),
+    plansCreate: new FormControl(false, { nonNullable: true }),
     tradePlanRiskEvaluate: new FormControl(false, { nonNullable: true }),
     tradePlanApprovalStatusRead: new FormControl(false, { nonNullable: true }),
   });
@@ -123,8 +125,10 @@ export class Agents {
     const permissions: AgentPermission[] = [
       ...(value.accountsRead ? ['accounts:read' as const] : []),
       ...(value.positionsRead ? ['positions:read' as const] : []),
+      ...(value.scansRun ? ['scans:run' as const] : []),
       ...(value.researchInspect ? ['research:inspect' as const] : []),
       ...(value.researchExport ? ['research:export' as const] : []),
+      ...(value.plansCreate ? ['plans:create' as const] : []),
       ...(value.tradePlanRiskEvaluate ? ['trade-plan-risk:evaluate' as const] : []),
       ...(value.tradePlanApprovalStatusRead ? ['trade-plan-approval:status:read' as const] : []),
     ];
@@ -180,8 +184,10 @@ export class Agents {
             brokerAccountId: value.brokerAccountId,
             accountsRead: true,
             positionsRead: true,
+            scansRun: false,
             researchInspect: false,
             researchExport: false,
+            plansCreate: false,
             tradePlanRiskEvaluate: false,
             tradePlanApprovalStatusRead: false,
           });

@@ -12,6 +12,7 @@ public enum AgentPermission {
     MARKETS_READ("markets:read"),
     RISK_READ("risk:read"),
     RESEARCH_RUN("research:run"),
+    SCANS_RUN("scans:run"),
     RESEARCH_INSPECT("research:inspect"),
     RESEARCH_EXPORT("research:export"),
     PLANS_CREATE("plans:create"),

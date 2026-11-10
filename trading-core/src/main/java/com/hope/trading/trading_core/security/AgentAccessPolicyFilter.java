@@ -44,7 +44,9 @@ public class AgentAccessPolicyFilter extends OncePerRequestFilter {
                     || path.matches(AGENT_PLANS + "/[^/]+/versions/[^/]+$");
             case "POST" -> path.equals(AGENT_OPERATIONS)
                     || path.matches(AGENT_OPERATIONS + "/[^/]+/execute$")
+                    || path.matches(AGENT_ACCOUNTS + "/[^/]+/market-capabilities$")
                      || path.equals(AGENT_APPROVALS)
+                     || path.matches(AGENT_PLANS + "/opportunities/[^/]+$")
                      || path.matches(AGENT_RISK + "/[^/]+/versions/[^/]+$");
             default -> false;
         };

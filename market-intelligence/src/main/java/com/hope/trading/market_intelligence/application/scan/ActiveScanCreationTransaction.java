@@ -67,6 +67,7 @@ public class ActiveScanCreationTransaction {
         ActiveScanScopeResolutionResult resolved = scopeResolution.resolve(
                 new ActiveScanScopeResolutionRequest(
                         command.accountId(),
+                        command.brokerAccountId(),
                         command.objective(),
                         command.requestedMarketIds(),
                         command.scopeMode()
@@ -123,7 +124,7 @@ public class ActiveScanCreationTransaction {
                             scan.scanId(),
                             scanMarketId,
                             now,
-                            EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                             EvidenceAcquisitionPolicy.LIVE_CURRENT
                     ),
                     childKeys.forMarket(scan.scanId(), decision.marketId()),
                     scan.scanId().toString(),

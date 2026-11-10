@@ -58,13 +58,18 @@ public class ActiveScanScopeResolutionService {
     }
 
     public ActiveScanScopeResolutionResult resolve(ActiveScanScopeResolutionRequest request) {
-        requireOwnedAccount(request.accountId());
+        TradingCoreAccountClient.TradingCoreAccountResponse account =
+                requireOwnedAccount(request.accountId(), request.brokerAccountId());
+        if (!account.accountId().equals(request.accountId())) {
+            throw ActiveScanScopeResolutionException.invalid(
+                    "Account ID does not match the authorized broker account");
+        }
         return applyStrictObservedGate(resolveMarkets(request, true, true, true));
     }
 
     public DecisionContextResolution resolveDecisionContext(UUID accountId) {
-        TradingCoreAccountClient.TradingCoreAccountResponse account = requireOwnedAccount(accountId);
-        TradingCoreAccountClient.ChallengeReadinessResponse readiness = readiness(accountId);
+        TradingCoreAccountClient.TradingCoreAccountResponse account = requireOwnedAccount(accountId, null);
+        TradingCoreAccountClient.ChallengeReadinessResponse readiness = readiness(accountId, null);
         ActiveScanScopeResolutionRequest request =
                 new ActiveScanScopeResolutionRequest(accountId, "", null, MarketScopeMode.ALL_ELIGIBLE);
         try {
@@ -89,7 +94,8 @@ public class ActiveScanScopeResolutionService {
             boolean enforceChallengeGate
     ) {
         MarketScopeMode mode = resolveScopeMode(request);
-        TradingCoreAccountClient.ChallengeReadinessResponse readiness = readiness(request.accountId());
+        TradingCoreAccountClient.ChallengeReadinessResponse readiness = readiness(
+                request.accountId(), request.brokerAccountId());
         if (readiness != null && !readiness.ready()) {
             if (!enforceChallengeGate) {
                 Instant resolvedAt = clock.instant();
@@ -130,7 +136,7 @@ public class ActiveScanScopeResolutionService {
             candidateIds = compatible;
         }
         CapabilityResolution capabilityResolution = applyBrokerCapabilities
-                ? resolveCapabilities(request.accountId(), candidateIds, catalogById)
+                ? resolveCapabilities(request.accountId(), request.brokerAccountId(), candidateIds, catalogById)
                 : new CapabilityResolution(Map.of(), null);
         if (mode == MarketScopeMode.ALL_ELIGIBLE && capabilityResolution.provider() != null) {
             String accountProvider = capabilityResolution.provider();
@@ -215,9 +221,11 @@ public class ActiveScanScopeResolutionService {
         return List.copyOf(result);
     }
 
-    private TradingCoreAccountClient.TradingCoreAccountResponse requireOwnedAccount(UUID accountId) {
+    private TradingCoreAccountClient.TradingCoreAccountResponse requireOwnedAccount(UUID accountId, UUID brokerAccountId) {
         try {
-            return accounts.findOwnedAccount(accountId);
+            return brokerAccountId == null
+                    ? accounts.findOwnedAccount(accountId)
+                    : accounts.findAgentTradingAccount(brokerAccountId);
         } catch (FeignException.NotFound exception) {
             throw ActiveScanScopeResolutionException.notFound(
                     "Account is not available for decision context resolution");
@@ -227,9 +235,11 @@ public class ActiveScanScopeResolutionService {
         }
     }
 
-    private TradingCoreAccountClient.ChallengeReadinessResponse readiness(UUID accountId) {
+    private TradingCoreAccountClient.ChallengeReadinessResponse readiness(UUID accountId, UUID brokerAccountId) {
         try {
-            return accounts.challengeReadiness(accountId);
+            return brokerAccountId == null
+                    ? accounts.challengeReadiness(accountId)
+                    : accounts.agentChallengeReadiness(brokerAccountId);
         } catch (RuntimeException exception) {
             throw ActiveScanScopeResolutionException.unavailable(
                     "Challenge readiness is unavailable for decision context resolution");
@@ -395,13 +405,16 @@ public class ActiveScanScopeResolutionService {
     }
 
     private CapabilityResolution resolveCapabilities(
-            UUID accountId, List<UUID> candidateIds, Map<UUID, MarketResponse> byId) {
+            UUID accountId, UUID brokerAccountId, List<UUID> candidateIds, Map<UUID, MarketResponse> byId) {
         List<String> instruments = candidateIds.stream().map(byId::get).filter(Objects::nonNull)
                 .map(MarketResponse::symbol).filter(Objects::nonNull).distinct().toList();
         if (instruments.isEmpty()) return new CapabilityResolution(Map.of(), null);
         try {
-            List<TradingCoreAccountClient.MarketCapabilityResponse> values = accounts.marketCapabilities(accountId,
-                            new TradingCoreAccountClient.MarketCapabilityRequest(instruments)).stream()
+            TradingCoreAccountClient.MarketCapabilityRequest request =
+                    new TradingCoreAccountClient.MarketCapabilityRequest(instruments);
+            List<TradingCoreAccountClient.MarketCapabilityResponse> values = (brokerAccountId == null
+                            ? accounts.marketCapabilities(accountId, request)
+                            : accounts.agentMarketCapabilities(brokerAccountId, request)).stream()
                     .filter(value -> value != null && value.instrument() != null)
                     .toList();
             Map<String, TradingCoreAccountClient.MarketCapabilityResponse> byCapability = values.stream()

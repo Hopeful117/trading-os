@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.thesis.MarketThesisQueryService;
+import com.hope.trading.market_intelligence.security.MiAgentPrincipal;
 import com.hope.trading.market_intelligence.security.MiUserPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -41,7 +42,8 @@ public class MarketThesisController {
     }
 
     private void requireActor(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof MiUserPrincipal)) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof MiUserPrincipal)
+                && !(authentication.getPrincipal() instanceof MiAgentPrincipal)) {
             throw new IllegalArgumentException("Authenticated actor context is required");
         }
     }

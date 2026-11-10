@@ -71,7 +71,23 @@ public class CTraderMarketData implements MarketDataProvider {
 
     @Override
     public Optional<TickerEvent> acquireCurrentSnapshot(Market market) {
-        return Optional.empty();
+        if (market == null || market.getProvider() != MarketProvider.CTRADER) {
+            throw new IllegalArgumentException("cTrader market is required");
+        }
+        if (market.getProviderSymbol() == null || !market.getProviderSymbol().matches("[1-9][0-9]*")) {
+            throw new IllegalArgumentException("cTrader provider symbol id is required");
+        }
+        long symbolId = Long.parseLong(market.getProviderSymbol());
+        return client.currentSpot(symbolId).map(spot -> {
+            Instant fetchedAt = clock.instant();
+            Instant occurredAt = spot.occurredAt() == null ? fetchedAt : spot.occurredAt();
+            return new TickerEvent(market.getMarketId(), MarketProvider.CTRADER, market.getSymbol(),
+                    CTraderPriceDecoder.decode(spot.bid(), market.getMarketConstraints().pricePrecision()),
+                    CTraderPriceDecoder.decode(spot.ask(), market.getMarketConstraints().pricePrecision()),
+                    null, null, occurredAt,
+                    new CTraderInstrumentIdentity(symbolId, market.getSymbol(), properties.environment().name()).provenance(),
+                    fetchedAt, Long.toString(symbolId));
+        });
     }
 
     @Override

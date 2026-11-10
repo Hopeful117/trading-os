@@ -177,7 +177,8 @@ public class MarketIntelligenceController {
             Authentication authentication,
             @Valid @RequestBody CreateActiveScanRequestDto request
     ) {
-        UUID actorId = actorId(authentication);
+        UUID actorId = scanActorId(authentication);
+        authorizeScanAgent(authentication, request.accountId(), request.brokerAccountId(), request.requestedMarketIds(), idempotencyKey);
         ActiveScanResponse scan = ActiveScanResponse.from(
                 scans.findOwnedProjection(
                         actorId,
@@ -185,6 +186,7 @@ public class MarketIntelligenceController {
                                 actorId,
                                 idempotencyKey,
                                 request.accountId(),
+                                request.brokerAccountId(),
                                 request.objective(),
                                 request.requestedMarketIds(),
                                 request.scopeMode()
@@ -200,7 +202,7 @@ public class MarketIntelligenceController {
             Authentication authentication,
             @RequestParam(defaultValue = "10") int limit
     ) {
-        UUID actorId = actorId(authentication);
+        UUID actorId = scanActorId(authentication);
         if (limit < 1 || limit > 100) {
             throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
                     "INVALID_LIMIT",
@@ -218,7 +220,7 @@ public class MarketIntelligenceController {
     ) {
         return ResponseEntity.ok(
                 ActiveScanResponse.from(
-                        scans.findOwnedProjection(actorId(authentication), scanId), matches)
+                        scans.findOwnedProjection(scanActorId(authentication), scanId), matches)
         );
     }
 
@@ -266,6 +268,41 @@ public class MarketIntelligenceController {
             );
         }
         return principal.userId();
+    }
+
+    private UUID scanActorId(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal agent) {
+            return agent.agentId();
+        }
+        return actorId(authentication);
+    }
+
+    private void authorizeScanAgent(Authentication authentication, UUID accountId, UUID brokerAccountId,
+                                    List<UUID> marketIds, String correlationId) {
+        if (!(authentication != null && authentication.getPrincipal() instanceof MiAgentPrincipal agent)) {
+            return;
+        }
+        if (brokerAccountId == null) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "SCAN_NOT_AUTHORIZED", "brokerAccountId is required for agent scans", 403);
+        }
+        ResearchAuthorizationClient.AuthorizationResponse response;
+        try {
+            response = researchAuthorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
+                    agent.agentId(), agent.credentialId(), agent.credentialVersion(), null, brokerAccountId,
+                    marketIds == null ? Set.of() : Set.copyOf(marketIds), correlationId,
+                    "scans:run", null, null, null, 0, 0, 0, 0));
+        } catch (FeignException.Unauthorized exception) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "AUTHORIZATION_UNAVAILABLE", "Scan authorization is unavailable", 401);
+        } catch (FeignException exception) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "SCAN_NOT_AUTHORIZED", "Scan is not authorized", 403);
+        }
+        if (response == null || !response.allowed()) {
+            throw new com.hope.trading.market_intelligence.application.scan.ActiveScanException(
+                    "SCAN_NOT_AUTHORIZED", "Scan is not authorized", 403);
+        }
     }
 
     private UUID researchActorId(Authentication authentication) {
@@ -339,9 +376,9 @@ public class MarketIntelligenceController {
             ActiveScanScopeResolutionRequestDto request) {
         if (request.scopeMode() == null) {
             return new com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest(
-                    request.accountId(), request.objective(), request.requestedMarketIds());
+                    request.accountId(), request.brokerAccountId(), request.objective(), request.requestedMarketIds(), null);
         }
         return new com.hope.trading.market_intelligence.domain.scope.ActiveScanScopeResolutionRequest(
-                request.accountId(), request.objective(), request.requestedMarketIds(), request.scopeMode());
+                request.accountId(), request.brokerAccountId(), request.objective(), request.requestedMarketIds(), request.scopeMode());
     }
 }

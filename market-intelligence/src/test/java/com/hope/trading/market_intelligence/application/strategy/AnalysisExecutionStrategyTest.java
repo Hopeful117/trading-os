@@ -46,6 +46,7 @@ class AnalysisExecutionStrategyTest {
                 .extracting(ContextRequirement::sectionType)
                 .contains(
                         ContextSectionType.HISTORICAL_OHLC,
+                        ContextSectionType.TREND_CONTEXT,
                         ContextSectionType.ORDER_FLOW,
                         ContextSectionType.NEWS
                 )

@@ -45,12 +45,18 @@
         ><input type="checkbox" formControlName="positionsRead" /> Lire les positions</label
       >
       <label class="checkbox-label"
+        ><input type="checkbox" formControlName="scansRun" /> Lancer une analyse de marché</label
+      >
+      <label class="checkbox-label"
         ><input type="checkbox" formControlName="researchInspect" /> Inspecter la readiness
         recherche</label
       >
       <label class="checkbox-label"
         ><input type="checkbox" formControlName="researchExport" /> Exporter un dataset de
         recherche</label
+      >
+      <label class="checkbox-label"
+        ><input type="checkbox" formControlName="plansCreate" /> Créer un trade plan</label
       >
       <label class="checkbox-label"
         ><input type="checkbox" formControlName="tradePlanRiskEvaluate" /> Évaluer le risque d’un
@@ -172,8 +178,10 @@
         <option value="accounts:read">Lire les comptes</option>
         <option value="accounts:sync">Demander la synchronisation des comptes</option>
         <option value="positions:read">Lire les positions</option>
+        <option value="scans:run">Lancer une analyse de marché</option>
         <option value="research:inspect">Inspecter la readiness recherche</option>
         <option value="research:export">Exporter un dataset de recherche</option>
+        <option value="plans:create">Créer un trade plan</option>
         <option value="trade-plan-risk:evaluate">Évaluer le risque d’un trade plan</option>
         <option value="trade-plan-approval:status:read">
           Lire le statut d’approbation d’un trade plan

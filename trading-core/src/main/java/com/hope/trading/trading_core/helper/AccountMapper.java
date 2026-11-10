@@ -16,6 +16,7 @@ public class AccountMapper {
 
 
         public AccountDto toDto(Account account) {
+            boolean snapshotIncomplete = snapshotIncomplete(account);
 
             return AccountDto.builder()
                     .accountId(account.getAccountId())
@@ -33,9 +34,11 @@ public class AccountMapper {
                             ? null : "ACCOUNT_SYNCHRONIZED")
                     .financialDataStatus(account.getBrokerSnapshotCompleteness() == null
                             ? null : ("COMPLETE".equals(account.getBrokerSnapshotCompleteness())
+                            && !snapshotIncomplete
                             ? "FINANCIAL_DATA_COMPLETE" : "FINANCIAL_DATA_PARTIAL"))
                     .riskEvidenceStatus(account.getBrokerSnapshotCompleteness() == null
                             ? null : ("COMPLETE".equals(account.getBrokerSnapshotCompleteness())
+                            && !snapshotIncomplete
                             ? "RISK_EVIDENCE_PENDING" : "RISK_EVIDENCE_INCOMPLETE"))
                     .tradingReadinessStatus("TRADING_NOT_AUTHORIZED")
                     .snapshotCompleteness(account.getBrokerSnapshotCompleteness())
@@ -54,9 +57,9 @@ public class AccountMapper {
                     .derivedEquityValidationStatus(account.getBrokerDerivedEquityValidationStatus())
                     .derivedEquityReasons(splitReasons(account.getBrokerDerivedEquityReasons()))
                     .diagnosticOnly(account.getBrokerSnapshotCompleteness() != null
-                            && !"COMPLETE".equals(account.getBrokerSnapshotCompleteness()))
+                            && snapshotIncomplete)
                     .riskEvidenceIncomplete(account.getBrokerSnapshotCompleteness() != null
-                            && !"COMPLETE".equals(account.getBrokerSnapshotCompleteness()))
+                            && snapshotIncomplete)
                     .tradingNotAuthorized(true)
                     .rulesId(
                             account.getRules() != null
@@ -79,9 +82,13 @@ public class AccountMapper {
 
         private java.math.BigDecimal exposedEquity(Account account) {
             String completeness = account.getBrokerSnapshotCompleteness();
-            return completeness == null || "COMPLETE".equals(completeness)
+            return completeness == null || ("COMPLETE".equals(completeness) && !snapshotIncomplete(account))
                     ? account.getEquity()
                     : null;
+        }
+
+        private boolean snapshotIncomplete(Account account) {
+            return !splitReasons(account.getBrokerSnapshotUnavailabilityReasons()).isEmpty();
         }
 
         private List<String> splitReasons(String value) {

@@ -104,7 +104,7 @@ class MarketSnapshotContextContributorTest {
     }
 
     @Test
-    void requestsMarketSnapshotAtEvaluationCutoff() {
+    void liveCurrentSnapshotDoesNotUseEvaluationCutoffAsHistoricalAsOf() {
         UUID marketId = UUID.randomUUID();
         Instant cutoff = Instant.parse("2026-08-01T12:00:00Z");
         when(marketDataClient.findPriceSnapshots(any())).thenReturn(List.of(
@@ -117,7 +117,7 @@ class MarketSnapshotContextContributorTest {
 
         ArgumentCaptor<MarketPriceSnapshotRequest> request = ArgumentCaptor.forClass(MarketPriceSnapshotRequest.class);
         verify(marketDataClient).findPriceSnapshots(request.capture());
-        assertThat(request.getValue().asOf()).isEqualTo(cutoff);
+        assertThat(request.getValue().asOf()).isNull();
     }
 
     private IntelligenceAnalysisRequest request(UUID marketId) {

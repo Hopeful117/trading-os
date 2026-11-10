@@ -30,8 +30,14 @@ public class MarketController {
 
 
     @GetMapping
-    public ResponseEntity <List<MarketResponse>> findAll() {
-        List<Market> markets = marketService.findAll();
+    public ResponseEntity <List<MarketResponse>> findAll(
+            @RequestParam(required = false) String instrument) {
+        List<Market> markets = marketService.findAll().stream()
+                .filter(market -> instrument == null
+                        || market.getSymbol().equalsIgnoreCase(instrument)
+                        || (market.getProviderSymbol() != null
+                        && market.getProviderSymbol().equalsIgnoreCase(instrument)))
+                .toList();
         Map<String, Set<String>> providerSymbolsByIdentity = markets.stream()
                 .collect(Collectors.groupingBy(this::identityKey,
                         Collectors.mapping(Market::getProviderSymbol, Collectors.toSet())));

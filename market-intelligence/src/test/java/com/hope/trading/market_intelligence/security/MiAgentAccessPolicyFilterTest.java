@@ -37,6 +37,41 @@ class MiAgentAccessPolicyFilterTest {
     }
 
     @Test
+    void allowsTraderFacingOpportunityAndThesisReads() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(agent(), "token"));
+        for (String path : new String[]{
+                "/api/v1/opportunities",
+                "/api/v1/opportunities/active",
+                "/api/v1/opportunities/00000000-0000-4000-8000-000000000001",
+                "/api/v1/intelligence/market-theses/latest",
+                "/api/v1/intelligence/market-theses/00000000-0000-4000-8000-000000000001/versions/1"}) {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            MockFilterChain chain = new MockFilterChain();
+            filter.doFilter(new MockHttpServletRequest("GET", path), response, chain);
+            assertThat(response.getStatus()).isNotEqualTo(403);
+            assertThat(chain.getRequest()).isNotNull();
+        }
+    }
+
+    @Test
+    void allowsAgentMarketScanRoutes() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(agent(), "token"));
+        for (String methodAndPath : new String[]{
+                "POST /api/v1/intelligence/scans",
+                "GET /api/v1/intelligence/scans",
+                "GET /api/v1/intelligence/scans/11111111-1111-4111-8111-111111111111"}) {
+            String[] parts = methodAndPath.split(" ", 2);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            MockFilterChain chain = new MockFilterChain();
+            filter.doFilter(new MockHttpServletRequest(parts[0], parts[1]), response, chain);
+            assertThat(response.getStatus()).isNotEqualTo(403);
+            assertThat(chain.getRequest()).isNotNull();
+        }
+    }
+
+    @Test
     void rejectsHistoricalAgentRoutesWithMalformedPath() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(agent(), "token"));

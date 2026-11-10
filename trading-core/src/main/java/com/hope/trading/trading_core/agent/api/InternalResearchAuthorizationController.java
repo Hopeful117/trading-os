@@ -37,6 +37,9 @@ public class InternalResearchAuthorizationController {
         AgentAuthorizationService.Decision decision = permission == AgentPermission.RESEARCH_RUN
                 ? authorization.authorizeResearch(request.agentId(), request.credentialId(), request.credentialVersion(),
                 request.scopeId(), request.marketIds(), request.correlationId())
+                : permission == AgentPermission.SCANS_RUN && request.brokerAccountId() != null
+                ? authorization.authorizeActiveScan(request.agentId(), request.credentialId(),
+                request.credentialVersion(), request.brokerAccountId(), request.correlationId())
                 : permission == AgentPermission.RESEARCH_INSPECT && request.brokerAccountId() != null
                 ? authorization.authorizeHistoricalResearchForBrokerAccount(request.agentId(), request.credentialId(),
                 request.credentialVersion(), request.brokerAccountId(), request.marketIds(), request.startCutoff(),

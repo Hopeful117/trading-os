@@ -2,11 +2,15 @@ package com.hope.trading.market_data.ctrader;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public interface CTraderOpenApiClient {
     List<CTraderSymbol> symbols();
     CTraderSymbol symbol(long symbolId);
+    default Optional<CTraderSpotEvent> currentSpot(long symbolId) {
+        return Optional.empty();
+    }
     List<CTraderTrendbar> trendbars(long symbolId, String period, Instant from, Instant to, int count);
 
     default CTraderTrendbarPage trendbarPage(long symbolId, String period, Instant from, Instant to, int count) {

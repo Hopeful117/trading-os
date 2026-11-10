@@ -8,6 +8,7 @@ public record CreateActiveScanCommand(
         UUID actorId,
         String idempotencyKey,
         UUID accountId,
+        UUID brokerAccountId,
         String objective,
         List<UUID> requestedMarketIds,
         MarketScopeMode scopeMode
@@ -21,8 +22,14 @@ public record CreateActiveScanCommand(
 
     public CreateActiveScanCommand(UUID actorId, String idempotencyKey, UUID accountId,
                                    String objective, List<UUID> requestedMarketIds) {
-        this(actorId, idempotencyKey, accountId, objective, requestedMarketIds,
+        this(actorId, idempotencyKey, accountId, null, objective, requestedMarketIds,
                 requestedMarketIds != null && requestedMarketIds.stream().anyMatch(java.util.Objects::nonNull)
                         ? MarketScopeMode.SELECTED : null);
+    }
+
+    public CreateActiveScanCommand(UUID actorId, String idempotencyKey, UUID accountId,
+                                   String objective, List<UUID> requestedMarketIds,
+                                   MarketScopeMode scopeMode) {
+        this(actorId, idempotencyKey, accountId, null, objective, requestedMarketIds, scopeMode);
     }
 }

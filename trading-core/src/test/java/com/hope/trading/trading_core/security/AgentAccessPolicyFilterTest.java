@@ -57,6 +57,36 @@ class AgentAccessPolicyFilterTest {
         SecurityContextHolder.clearContext();
     }
 
+    @Test
+    void allowsAgentMarketCapabilityQueries() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(agentAuthentication());
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/v1/agent/broker-accounts/" + UUID.randomUUID() + "/market-capabilities");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void allowsAgentTradePlanCreationFromAnOpportunity() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(agentAuthentication());
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/v1/agent/trade-plans/opportunities/" + UUID.randomUUID());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+        SecurityContextHolder.clearContext();
+    }
+
     private UsernamePasswordAuthenticationToken agentAuthentication() {
         return new UsernamePasswordAuthenticationToken(
                 new AgentPrincipal(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 1, "token"), null);

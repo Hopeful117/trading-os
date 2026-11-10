@@ -129,6 +129,26 @@ class AccountMapperTest {
     }
 
     @Test
+    void toDtoDoesNotExposeCompleteStatusWhenPersistedSnapshotHasUnavailabilityReasons() {
+        Account account = new Account();
+        account.setName("ftmo");
+        account.setBaseCurrency("USD");
+        account.setEquity(new BigDecimal("50098"));
+        account.setBrokerSnapshotCompleteness("COMPLETE");
+        account.setBrokerSnapshotFreshness("FRESH");
+        account.setBrokerSnapshotUnavailabilityReasons(
+                "EQUITY_UNAVAILABLE,USED_MARGIN_UNAVAILABLE,FREE_MARGIN_UNAVAILABLE");
+
+        AccountDto dto = mapper.toDto(account);
+
+        assertThat(dto.getFinancialDataStatus()).isEqualTo("FINANCIAL_DATA_PARTIAL");
+        assertThat(dto.getRiskEvidenceStatus()).isEqualTo("RISK_EVIDENCE_INCOMPLETE");
+        assertThat(dto.isDiagnosticOnly()).isTrue();
+        assertThat(dto.isRiskEvidenceIncomplete()).isTrue();
+        assertThat(dto.getEquity()).isNull();
+    }
+
+    @Test
     void toAccountBalanceConvertsMapEntriesToEntityList() {
         AccountBalanceDto balanceDto = AccountBalanceDto.builder()
                 .balances(Map.of(
