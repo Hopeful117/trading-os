@@ -20,7 +20,12 @@ public final class VolatilityCalculator {
     private static final BigDecimal EXPANSION_THRESHOLD = new BigDecimal("1.20");
 
     public VolatilityAssessment calculate(HistoricalOhlcContext history, Instant requestedCutoff,
-                                         String inputFingerprint) {
+                                          String inputFingerprint) {
+        return calculate(history, requestedCutoff, inputFingerprint, false);
+    }
+
+    public VolatilityAssessment calculate(HistoricalOhlcContext history, Instant requestedCutoff,
+                                          String inputFingerprint, boolean allowVerifiedClosureGaps) {
         Instant cutoff = requestedCutoff != null ? requestedCutoff : latestClose(history);
         String source = inputFingerprint == null ? "unknown" : inputFingerprint;
         if (history == null || history.candles() == null || history.candles().isEmpty()) {
@@ -47,7 +52,7 @@ public final class VolatilityCalculator {
                         VolatilityAssessment.Status.INVALID_INPUT, source,
                         "Historical OHLC candles have inconsistent durations");
             }
-            if (!eligible.get(i - 1).closeTime().equals(eligible.get(i).openTime())) {
+            if (!allowVerifiedClosureGaps && !eligible.get(i - 1).closeTime().equals(eligible.get(i).openTime())) {
                 return unavailable(history.marketId(), history.interval(), cutoff,
                         VolatilityAssessment.Status.INSUFFICIENT_DATA, source,
                         "Historical OHLC contains a temporal gap");

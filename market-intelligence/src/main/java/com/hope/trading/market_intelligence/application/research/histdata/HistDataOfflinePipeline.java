@@ -362,16 +362,22 @@ public final class HistDataOfflinePipeline {
                 dataset.manifest().excludedCount(), dataset.manifest().datasetFingerprint(), outputDirectory);
     }
 
-    private static ProducedArtifact analyze(ImportResult imported, AggregatedCandle reference,
-                                            List<AggregatedCandle> history, UUID executionId, String contextFingerprint) {
+    static ProducedArtifact analyze(ImportResult imported, AggregatedCandle reference,
+                                    List<AggregatedCandle> history, UUID executionId, String contextFingerprint) {
+        return analyze(imported, reference, history, executionId, contextFingerprint, "M15");
+    }
+
+    static ProducedArtifact analyze(ImportResult imported, AggregatedCandle reference,
+                                    List<AggregatedCandle> history, UUID executionId, String contextFingerprint,
+                                    String interval) {
         List<OhlcPoint> points = history.stream().map(value -> new OhlcPoint(value.openTime(), value.closeTime(),
                 value.open(), value.high(), value.low(), value.close(), null)).toList();
-        HistoricalOhlcContext context = new HistoricalOhlcContext(imported.marketId(), "M15", points);
+        HistoricalOhlcContext context = new HistoricalOhlcContext(imported.marketId(), interval, points);
         ArtifactIdentity identity = new ArtifactIdentity(ProductionArtifactTypes.OHLC_HISTORY.value(),
                 "histdata-offline-import", NORMALIZATION_VERSION);
         ArtifactFingerprint inputFingerprint = ArtifactFingerprint.ofInputs(List.of(
                 imported.sourceFile().getFileName().toString(), imported.symbol(), historyFingerprint(history)));
-        ArtifactScope scope = ArtifactScope.publicMarket(imported.marketId(), "M15", AnalysisExecutionMode.PASSIVE);
+        ArtifactScope scope = ArtifactScope.publicMarket(imported.marketId(), interval, AnalysisExecutionMode.PASSIVE);
         StoredArtifact input = new StoredArtifact(
                 new ArtifactCacheKey(identity, scope, ArtifactFingerprint.empty(), inputFingerprint), context,
                 ArtifactFreshness.validUntil(reference.closeTime(), reference.closeTime().plusSeconds(1), NORMALIZATION_VERSION),
