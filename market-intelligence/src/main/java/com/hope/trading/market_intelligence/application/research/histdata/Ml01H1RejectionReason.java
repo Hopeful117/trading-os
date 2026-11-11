@@ -1,0 +1,14 @@
+package com.hope.trading.market_intelligence.application.research.histdata;
+
+public enum Ml01H1RejectionReason {
+    MALFORMED_OBSERVATION,
+    CONFLICTING_DUPLICATE,
+    INVALID_OHLC,
+    CHRONOLOGY_ANOMALY,
+    MISSING_FIRST_MINUTE,
+    MISSING_LAST_MINUTE,
+    INSUFFICIENT_VALID_M1_COUNT,
+    UNEXPECTED_M1_COUNT,
+    CONTRADICTORY_EVIDENCE,
+    UNKNOWN_PROVENANCE
+}

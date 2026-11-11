@@ -15,6 +15,9 @@ import com.hope.trading.market_intelligence.domain.research.ResearchOutcomeKey;
 import com.hope.trading.market_intelligence.domain.research.ResearchPopulationSpec;
 import com.hope.trading.market_intelligence.domain.research.ResearchSamplingCadence;
 import com.hope.trading.market_intelligence.application.research.histdata.Ml01HistDataPreparation;
+import com.hope.trading.market_intelligence.application.research.histdata.Ml01ExploratoryH1AdmissibilityProfile;
+import com.hope.trading.market_intelligence.application.research.histdata.HistoricalClosureEvidenceAdapter;
+import com.hope.trading.market_intelligence.application.research.histdata.HistoricalClosureEvidenceSource;
 import com.hope.trading.market_intelligence.infrastructure.research.HistoricalDatasetExportJobEntity;
 import com.hope.trading.market_intelligence.infrastructure.research.HistoricalDatasetExportJobRepository;
 import com.hope.trading.market_intelligence.security.MiAgentPrincipal;
@@ -56,6 +59,7 @@ public class HistoricalDatasetExportApplicationService {
     private final Executor executor;
     private final Path outputRoot;
     private final Path ml01HistDataRoot;
+    private final HistoricalClosureEvidenceSource closureEvidenceSource;
 
     public HistoricalDatasetExportApplicationService(
             HistoricalDatasetExportJobRepository jobs,
@@ -65,7 +69,8 @@ public class HistoricalDatasetExportApplicationService {
             Clock clock,
             @Qualifier("researchExecutor") Executor executor,
             @Value("${research.dataset.agent-export-root:./var/research-agent-exports}") String outputRoot,
-            @Value("${research.ml01.histdata-root:./histData}") String ml01HistDataRoot) {
+            @Value("${research.ml01.histdata-root:./histData}") String ml01HistDataRoot,
+            HistoricalClosureEvidenceSource closureEvidenceSource) {
         this.jobs = jobs;
         this.authorization = authorization;
         this.exporter = exporter;
@@ -74,6 +79,7 @@ public class HistoricalDatasetExportApplicationService {
         this.executor = executor;
         this.outputRoot = Path.of(outputRoot).toAbsolutePath().normalize();
         this.ml01HistDataRoot = Path.of(ml01HistDataRoot).toAbsolutePath().normalize();
+        this.closureEvidenceSource = closureEvidenceSource;
     }
 
     @Transactional
@@ -163,8 +169,8 @@ public class HistoricalDatasetExportApplicationService {
             var started = clock.instant();
             int sampleCount;
             if (ml01 != null) {
-                var prepared = Ml01HistDataPreparation.prepare(ml01HistDataRoot, directory, ml01.partitions(),
-                        ml01.scope(), List.of());
+                var prepared = prepareMl01Export(ml01, directory);
+                Ml01HistDataPreparation.validatePublishedBundle(directory, ml01HistDataRoot);
                 sampleCount = prepared.rows();
             } else {
                 ResearchPopulationSpec population = readPopulation(request.population());
@@ -194,6 +200,18 @@ public class HistoricalDatasetExportApplicationService {
             job.fail(cleaned ? classify(failure) : "EXPORT_CLEANUP_FAILED", clock.instant());
             jobs.save(job);
         }
+    }
+
+    Ml01HistDataPreparation.PreparationResult prepareMl01Export(Ml01ExportSpec ml01, Path directory)
+            throws java.io.IOException {
+        List<Ml01HistDataPreparation.ClosureEvidence> evidence = closureEvidenceSource
+                .find(ml01.marketIds(), ml01.startCutoffInclusive(), ml01.endCutoffExclusive())
+                .stream()
+                .map(value -> HistoricalClosureEvidenceAdapter.toMl01(value, ml01.marketIds(),
+                        ml01.startCutoffInclusive(), ml01.endCutoffExclusive()))
+                .toList();
+        return Ml01HistDataPreparation.prepare(ml01HistDataRoot, directory, ml01.partitions(),
+                ml01.scope(), evidence);
     }
 
     private ResearchAuthorizationClient.AuthorizationResponse authorize(MiAgentPrincipal agent, UUID scopeId, String permission, ResearchPopulationSpec population,
@@ -237,17 +255,26 @@ public class HistoricalDatasetExportApplicationService {
         return response;
     }
 
-    private Ml01ExportSpec readMl01ExportSpec(JsonNode root) {
+    Ml01ExportSpec readMl01ExportSpec(JsonNode root) {
         if (!"ml01-h1-histdata-v1".equals(root.path("datasetProfile").asText())) return null;
         try {
             Set<UUID> markets = new HashSet<>();
             root.path("marketIds").forEach(value -> markets.add(UUID.fromString(value.asText())));
             if (markets.size() != 2) throw new IllegalArgumentException("ML-01 requires two markets");
             if (!"H1".equals(root.path("timeframe").asText())
-                    || !"feature-projection-v2".equals(root.path("featureProjectionVersion").asText())
-                    || !"STRICT_OBSERVED".equals(root.path("featureEvidencePolicy").asText())
-                    || !"histdata-september-2026-h1".equals(root.path("sourceProfile").asText())) {
-                throw new IllegalArgumentException("ML-01 feature and source contract mismatch");
+                    || !Ml01HistDataPreparation.RESEARCH_FEATURE_SCHEMA_VERSION
+                    .equals(root.path("researchFeatureSchemaVersion").asText())
+                    || !Ml01HistDataPreparation.RESEARCH_EXPORT_POLICY.equals(root.path("researchFeatureEvidencePolicy").asText())
+                    || !Ml01HistDataPreparation.SOURCE_PROFILE.equals(root.path("sourceProfile").asText())
+                    || !Ml01ExploratoryH1AdmissibilityProfile.V1.name().equals(root.path("admissibilityProfile").asText())
+                    || !Ml01ExploratoryH1AdmissibilityProfile.V1.version().equals(root.path("admissibilityPolicyVersion").asText())
+                    || !Ml01HistDataPreparation.OUTCOME_DEFINITION_VERSION.equals(root.path("outcomeDefinitionVersion").asText())
+                    || !Ml01HistDataPreparation.CONTINUITY_SCOPE.equals(root.path("continuityScope").asText())
+                    || !Ml01HistDataPreparation.SESSION_TRANSITION_STATUS.equals(root.path("sessionTransitionStatus").asText())
+                    || !Ml01HistDataPreparation.SOURCE_CHECKSUM_ALGORITHM.equals(root.path("sourceChecksumAlgorithm").asText())
+                    || !Ml01HistDataPreparation.SOURCE_CHECKSUM_SCOPE.equals(root.path("sourceChecksumScope").asText())
+                    || !Ml01HistDataPreparation.NORMALIZATION_VERSION.equals(root.path("normalizationVersion").asText())) {
+                throw new IllegalArgumentException("ML-01 research feature and source contract mismatch");
             }
             Set<Integer> horizons = new HashSet<>();
             root.path("horizons").forEach(value -> horizons.add(value.path("validH1Candles").asInt(-1)));
@@ -274,7 +301,7 @@ public class HistoricalDatasetExportApplicationService {
         }
     }
 
-    private record Ml01ExportSpec(Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
+    record Ml01ExportSpec(Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
                                   String datasetProfile, Ml01HistDataPreparation.PreparationScope scope,
                                   Ml01HistDataPreparation.PartitionConfiguration partitions) {
     }

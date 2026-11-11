@@ -1,23 +1,11 @@
 package com.hope.trading.market_intelligence.application.research.histdata;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hope.trading.market_intelligence.application.feature.FeatureProjectionV2;
-import com.hope.trading.market_intelligence.application.capability.ProductionArtifactTypes;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.HistoricalOhlcContext;
 import com.hope.trading.market_intelligence.domain.OhlcPoint;
 import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
-import com.hope.trading.market_intelligence.domain.artifact.ArtifactIdentity;
-import com.hope.trading.market_intelligence.domain.artifact.ArtifactProvenance;
-import com.hope.trading.market_intelligence.domain.artifact.ArtifactScope;
-import com.hope.trading.market_intelligence.domain.artifact.DeterministicMeasurements;
-import com.hope.trading.market_intelligence.domain.artifact.StoredArtifact;
-import com.hope.trading.market_intelligence.domain.capability.ProducedArtifact;
-import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
-import com.hope.trading.market_intelligence.domain.feature.FeatureMissingness;
-import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
-import com.hope.trading.market_intelligence.domain.feature.FeatureValue;
-import com.hope.trading.market_intelligence.domain.feature.NumericFeatureValue;
 import com.hope.trading.market_intelligence.domain.volatility.VolatilityAssessment;
 import com.hope.trading.market_intelligence.domain.volatility.VolatilityCalculator;
 
@@ -53,6 +41,13 @@ public final class Ml01HistDataPreparation {
             "ohlc.realized_volatility",
             "ohlc.volatility_compression_ratio",
             "ohlc.directional_efficiency");
+    public static final String RESEARCH_FEATURE_SCHEMA_VERSION = "ml01-research-features-v1";
+    public static final String RESEARCH_EXPORT_POLICY = "RESEARCH_ONLY";
+    public static final String SOURCE_CHECKSUM_ALGORITHM = "SHA-256";
+    public static final String SOURCE_CHECKSUM_SCOPE = "PER_FILE";
+    public static final String CONTINUITY_SCOPE = "CONTIGUOUS_ONLY";
+    public static final String SESSION_TRANSITION_STATUS = "DEFERRED_NOT_IMPLEMENTED";
+    public static final String NORMALIZATION_VERSION = "histdata-m1-normalization-v1";
     private static final MathContext MC = MathContext.DECIMAL128;
     private static final Duration UNAPPROVED = Duration.ZERO;
     private static final String CONTINUITY_POLICY_VERSION = "ml01-h1-continuity-v1";
@@ -98,15 +93,20 @@ public final class Ml01HistDataPreparation {
 
         List<Row> rows = new ArrayList<>();
         Map<String, Object> quality = new LinkedHashMap<>();
+        Ml01H1AdmissibilityEvaluator admissibilityEvaluator = new Ml01H1AdmissibilityEvaluator();
         for (var imported : imports) {
             List<HistDataOfflinePipeline.AggregatedCandle> candles =
                     HistDataOfflinePipeline.aggregate(imported, HistDataOfflinePipeline.Timeframe.H1,
                             HistDataOfflinePipeline.SOURCE_OFFSET);
-            List<HistDataOfflinePipeline.AggregatedCandle> complete = candles.stream()
-                    .filter(value -> value.state() == HistDataOfflinePipeline.AggregationState.COMPLETE)
-                    .toList();
-            quality.put(imported.symbol(), quality(imported, candles, complete, closureEvidence));
-            rows.addAll(rows(imported, complete, closureEvidence));
+            List<HistDataOfflinePipeline.AggregatedCandle> admissible = candles.stream()
+                    .filter(value -> {
+                        Ml01H1ResearchQualityState state = admissibilityEvaluator
+                                .evaluate(HistDataOfflinePipeline.qualityEvidence(imported, value)).state();
+                        return state == Ml01H1ResearchQualityState.FULL_OBSERVED
+                                || state == Ml01H1ResearchQualityState.PARTIAL_EXPLORATORY;
+                    }).toList();
+            quality.put(imported.symbol(), quality(imported, candles, admissible, closureEvidence));
+            rows.addAll(rows(imported, admissible, closureEvidence));
         }
         if (scope != null) {
             rows = new ArrayList<>(rows.stream().filter(value -> !value.cutoff().isBefore(scope.startCutoffInclusive())
@@ -115,15 +115,104 @@ public final class Ml01HistDataPreparation {
         rows.sort(Comparator.comparing(Row::instrument).thenComparing(Row::cutoff));
         rows = assignPartitions(rows, partitions);
 
-        String fingerprint = fingerprint(rows, partitions, closureEvidence);
+        Map<String, String> sourceChecksums = imports.stream().collect(Collectors.toMap(
+                value -> value.symbol(), value -> sourceChecksum(value.sourceFile()),
+                (left, right) -> left, LinkedHashMap::new));
+        String fingerprint = fingerprint(rows, partitions, closureEvidence, sourceChecksums);
         writeRows(outputDirectory.resolve("observations.jsonl"), rows);
-        writeJson(outputDirectory.resolve("dataset-manifest.json"), manifest(rows, imports, fingerprint, partitions));
+        writeJson(outputDirectory.resolve("dataset-manifest.json"), manifest(rows, imports, fingerprint, partitions,
+                sourceChecksums, scope, closureEvidence));
         writeJson(outputDirectory.resolve("quality-report.json"), qualityReport(rows, imports, quality));
         writeJson(outputDirectory.resolve("partition-manifest.json"), partitionReport(rows, partitions));
         writeJson(outputDirectory.resolve("readiness.json"), readiness(rows, imports, partitions));
-        writeJson(outputDirectory.resolve("source-metadata.json"), sourceMetadata(imports, fingerprint));
+        writeJson(outputDirectory.resolve("source-metadata.json"), sourceMetadata(imports, fingerprint, sourceChecksums));
         return new PreparationResult(outputDirectory, fingerprint, rows.size(),
                 (int) rows.stream().filter(Row::eligible).count(), readinessStatus(rows, imports, partitions));
+    }
+
+    public static void validatePublishedBundle(Path outputDirectory, Path sourceDirectory) throws IOException {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        var manifest = mapper.readTree(Files.readString(outputDirectory.resolve("dataset-manifest.json")));
+        require(manifest.path("timeframe").asText(), "H1");
+        require(manifest.path("researchFeatureSchemaVersion").asText(), RESEARCH_FEATURE_SCHEMA_VERSION);
+        require(manifest.path("researchFeatureEvidencePolicy").asText(), RESEARCH_EXPORT_POLICY);
+        require(manifest.path("admissibilityProfile").asText(), Ml01ExploratoryH1AdmissibilityProfile.V1.name());
+        require(manifest.path("admissibilityPolicyVersion").asText(), Ml01ExploratoryH1AdmissibilityProfile.V1.version());
+        require(manifest.path("outcomeDefinitionVersion").asText(), OUTCOME_DEFINITION_VERSION);
+        require(manifest.path("continuityScope").asText(), CONTINUITY_SCOPE);
+        require(manifest.path("sessionTransitionStatus").asText(), SESSION_TRANSITION_STATUS);
+        require(manifest.path("sourceChecksumAlgorithm").asText(), SOURCE_CHECKSUM_ALGORITHM);
+        require(manifest.path("sourceChecksumScope").asText(), SOURCE_CHECKSUM_SCOPE);
+        require(manifest.path("normalizationVersion").asText(), NORMALIZATION_VERSION);
+        if (manifest.path("startCutoffInclusive").isMissingNode()
+                || manifest.path("endCutoffExclusive").isMissingNode()) {
+            throw new IllegalStateException("ML-01 manifest cutoff contract is incomplete");
+        }
+        var metadata = mapper.readTree(Files.readString(outputDirectory.resolve("source-metadata.json")));
+        if (!manifest.path("sourceChecksums").equals(metadata.path("sourceChecksums"))) {
+            throw new IllegalStateException("ML-01 source checksum metadata mismatch");
+        }
+        for (var entry : List.of(
+                Map.entry("EUR/USD", "DAT_ASCII_EURUSD_M1_202609.csv"),
+                Map.entry("GBP/USD", "DAT_ASCII_GBPUSD_M1_202609.csv"))) {
+            if (!manifest.path("sourceChecksums").has(entry.getKey())) continue;
+            String actual = sourceChecksum(sourceDirectory.resolve(entry.getValue()));
+            if (!actual.equals(manifest.path("sourceChecksums").path(entry.getKey()).asText())) {
+                throw new IllegalStateException("ML-01 source checksum mismatch: " + entry.getKey());
+            }
+        }
+        List<String> rowFingerprints = new ArrayList<>();
+        for (String line : Files.readAllLines(outputDirectory.resolve("observations.jsonl"))) {
+            if (line.isBlank()) continue;
+            var row = mapper.readTree(line);
+            require(row.path("researchFeatureSchemaVersion").asText(), RESEARCH_FEATURE_SCHEMA_VERSION);
+            require(row.path("continuityScope").asText(), CONTINUITY_SCOPE);
+            require(row.path("sessionTransitionStatus").asText(), SESSION_TRANSITION_STATUS);
+            if (row.path("admissibilityDecision").isMissingNode()
+                    || row.path("rowFingerprint").asText().isBlank()) {
+                throw new IllegalStateException("ML-01 row provenance is incomplete");
+            }
+            String recordedRowFingerprint = row.path("rowFingerprint").asText();
+            ObjectNode rowMaterial = (ObjectNode) row.deepCopy();
+            rowMaterial.remove("rowFingerprint");
+            String actualRowFingerprint = ArtifactFingerprint.ofInputs(List.of(rowMaterial.toString())).value();
+            if (!recordedRowFingerprint.equals(actualRowFingerprint)) {
+                throw new IllegalStateException("ML-01 row fingerprint mismatch: " + recordedRowFingerprint
+                        + " != " + actualRowFingerprint);
+            }
+            rowFingerprints.add(recordedRowFingerprint);
+        }
+        if (rowFingerprints.size() != manifest.path("rowCount").asLong(-1)
+                || manifest.path("datasetFingerprint").asText().isBlank()) {
+            throw new IllegalStateException("ML-01 bundle row or fingerprint contract is invalid");
+        }
+        List<String> material = new ArrayList<>(List.of(DATASET_DEFINITION_VERSION, SOURCE_PROFILE,
+                RESEARCH_FEATURE_SCHEMA_VERSION, OUTCOME_DEFINITION_VERSION, FEATURES.toString(), HORIZONS.toString(),
+                CONTINUITY_POLICY_VERSION, Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
+                Ml01ExploratoryH1AdmissibilityProfile.V1.version(),
+                Integer.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.minimumValidM1Count()),
+                Boolean.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.firstMinuteRequired()),
+                Boolean.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.lastMinuteRequired()),
+                RESEARCH_EXPORT_POLICY, CONTINUITY_SCOPE, SESSION_TRANSITION_STATUS,
+                SOURCE_CHECKSUM_ALGORITHM, SOURCE_CHECKSUM_SCOPE, NORMALIZATION_VERSION));
+        manifest.path("sourceChecksums").fields().forEachRemaining(entry ->
+                material.add("sourceChecksum=" + entry.getKey() + "|" + entry.getValue().asText()));
+        manifest.path("closureEvidenceFingerprints").forEach(value -> material.add("closure=" + value.asText()));
+        material.add("partition=" + text(manifest, "trainEndExclusive") + "|"
+                + text(manifest, "validationEndExclusive") + "|" + text(manifest, "testEndExclusive") + "|"
+                + (manifest.path("embargo").isNull() ? "PT0S" : manifest.path("embargo").asText()));
+        rowFingerprints.forEach(value -> material.add("row=" + value));
+        if (!manifest.path("datasetFingerprint").asText().equals(ArtifactFingerprint.ofInputs(material).value())) {
+            throw new IllegalStateException("ML-01 dataset fingerprint mismatch");
+        }
+    }
+
+    private static String text(com.fasterxml.jackson.databind.JsonNode node, String field) {
+        return node.path(field).isNull() ? "null" : node.path(field).asText();
+    }
+
+    private static void require(String actual, String expected) {
+        if (!expected.equals(actual)) throw new IllegalStateException("ML-01 contract mismatch: " + expected);
     }
 
     public record PartitionConfiguration(Instant trainEndExclusive, Instant validationEndExclusive,
@@ -170,14 +259,18 @@ public final class Ml01HistDataPreparation {
         }
     }
 
-    public record ClosureEvidence(String instrument, Instant closureStart, Instant closureEnd,
+    public record ClosureEvidence(UUID evidenceId, UUID marketId, String instrument, String interval,
+                                  String venue, String closureType, String reason,
+                                  Instant closureStart, Instant closureEnd,
                                   Instant knownAt, Instant effectiveFrom, Instant effectiveTo,
-                                  String venue, String sourceId, String sourceVersion,
-                                  String fingerprint) {
+                                  String sourceId, String sourceVersion, String fingerprint) {
         public ClosureEvidence {
-            if (instrument == null || instrument.isBlank() || closureStart == null || closureEnd == null
+            if (evidenceId == null || instrument == null || instrument.isBlank()
+                    || interval == null || interval.isBlank()
+                    || venue == null || venue.isBlank() || closureStart == null || closureEnd == null
+                    || closureType == null || closureType.isBlank() || reason == null || reason.isBlank()
                     || knownAt == null || effectiveFrom == null || effectiveTo == null
-                    || venue == null || venue.isBlank() || sourceId == null || sourceId.isBlank()
+                    || sourceId == null || sourceId.isBlank()
                     || sourceVersion == null || sourceVersion.isBlank()
                     || fingerprint == null || fingerprint.isBlank()) {
                 throw new IllegalArgumentException("complete closure evidence is required");
@@ -191,8 +284,9 @@ public final class Ml01HistDataPreparation {
         public ClosureEvidence(String instrument, Instant closureStart, Instant closureEnd,
                                Instant knownAt, String sourceId, String sourceVersion,
                                String fingerprint) {
-            this(instrument, closureStart, closureEnd, knownAt, Instant.MIN, Instant.MAX,
-                    "HISTDATA", sourceId, sourceVersion, fingerprint);
+            this(UUID.nameUUIDFromBytes(fingerprint.getBytes(StandardCharsets.UTF_8)), null, instrument, "H1",
+                    "HISTDATA", "HOLIDAY", "legacy synthetic evidence", closureStart, closureEnd, knownAt,
+                    Instant.MIN, Instant.MAX, sourceId, sourceVersion, fingerprint);
         }
     }
 
@@ -208,7 +302,9 @@ public final class Ml01HistDataPreparation {
                               String reason) {
     }
 
-    private record Row(String instrument, UUID marketId, Instant cutoff, FeatureSnapshot snapshot,
+    private record Row(String instrument, UUID marketId, Instant cutoff,
+                       ResearchFeatureProjection snapshot,
+                       Ml01H1AdmissibilityDecision admissibilityDecision,
                        Map<Integer, FutureOutcome> outcomes, boolean eligible, String exclusionReason,
                        String partition, String partitionExclusion) {
     }
@@ -216,7 +312,15 @@ public final class Ml01HistDataPreparation {
     private record FutureOutcome(int horizon, String status, Instant futureStart, Instant futureEnd,
                                  BigDecimal realizedVolatility, BigDecimal directionalEfficiency,
                                  BigDecimal absoluteFutureNetReturn, List<String> transitionClassifications,
-                                 String reason, String fingerprint) {
+                                  String reason, String fingerprint) {
+    }
+
+    private record ResearchFeatureProjection(String schemaVersion, String fingerprint,
+                                             Map<String, ResearchFeatureValue> values,
+                                             Map<String, Object> provenance) {
+    }
+
+    private record ResearchFeatureValue(String status, BigDecimal value) {
     }
 
     private static List<Row> rows(HistDataOfflinePipeline.ImportResult imported,
@@ -225,16 +329,17 @@ public final class Ml01HistDataPreparation {
         List<Row> rows = new ArrayList<>();
         for (int index = 0; index < candles.size(); index++) {
             var reference = candles.get(index);
+            Ml01H1AdmissibilityDecision admissibilityDecision = new Ml01H1AdmissibilityEvaluator()
+                    .evaluate(HistDataOfflinePipeline.qualityEvidence(imported, reference));
             List<HistDataOfflinePipeline.AggregatedCandle> history = acceptedHistory(
-                    candles.subList(0, index + 1), imported.symbol(), reference.closeTime(), closureEvidence);
+                    candles.subList(0, index + 1), imported.marketId(), imported.symbol(), reference.closeTime(), closureEvidence);
             UUID executionId = stableId("ml01:execution:" + imported.symbol() + ":" + reference.openTime());
             String contextFingerprint = ArtifactFingerprint.ofInputs(List.of(
                     SOURCE_PROFILE, imported.symbol(), HistDataOfflinePipeline.SOURCE_SEMANTICS,
                     HistDataOfflinePipeline.PRICE_SIDE, reference.closeTime().toString(),
                     historyFingerprint(history))).value();
-            ProducedArtifact analysis = directAnalysis(imported, reference, history, executionId, contextFingerprint,
-                    closureEvidence);
-            FeatureSnapshot snapshot = snapshot(imported, reference, analysis, executionId, contextFingerprint);
+            ResearchFeatureProjection snapshot = directAnalysis(imported, reference, history, executionId,
+                    contextFingerprint, closureEvidence, admissibilityDecision.state());
             Map<Integer, FutureOutcome> outcomes = new LinkedHashMap<>();
             for (int horizon : HORIZONS) {
                 outcomes.put(horizon, outcome(imported, candles, index, reference, horizon, closureEvidence));
@@ -244,33 +349,19 @@ public final class Ml01HistDataPreparation {
                 exclusion = outcomes.values().stream().filter(value -> !"AVAILABLE".equals(value.status()))
                         .map(FutureOutcome::reason).findFirst().orElse(null);
             }
-            rows.add(new Row(imported.symbol(), imported.marketId(), reference.closeTime(), snapshot, outcomes,
+            rows.add(new Row(imported.symbol(), imported.marketId(), reference.closeTime(), snapshot,
+                    admissibilityDecision, outcomes,
                     exclusion == null, exclusion, null, null));
         }
         return rows;
     }
 
-    private static FeatureSnapshot snapshot(HistDataOfflinePipeline.ImportResult imported,
-                                            HistDataOfflinePipeline.AggregatedCandle reference,
-                                            ProducedArtifact analysis, UUID executionId,
-                                            String contextFingerprint) {
-        if (analysis == null) {
-            throw new IllegalStateException("H1 analysis did not produce an artifact");
-        }
-        var projection = com.hope.trading.market_intelligence.application.feature.FeatureProjectionV2.project(
-                executionId, imported.marketId(), reference.closeTime(), EvidenceAcquisitionPolicy.STRICT_OBSERVED,
-                contextFingerprint, List.of(analysis), List.of(), List.of(), Instant.parse("2026-10-02T00:00:00Z"));
-        return new FeatureSnapshot(stableId("ml01:snapshot:" + imported.symbol() + ":" + reference.openTime()),
-                executionId, imported.marketId(), reference.closeTime(), EvidenceAcquisitionPolicy.STRICT_OBSERVED,
-                FeatureProjectionV2.VERSION, contextFingerprint, projection.values(), projection.groups(),
-                projection.provenance(), projection.fingerprint(), Instant.parse("2026-10-02T00:00:00Z"));
-    }
-
-    private static ProducedArtifact directAnalysis(HistDataOfflinePipeline.ImportResult imported,
-                                                   HistDataOfflinePipeline.AggregatedCandle reference,
-                                                   List<HistDataOfflinePipeline.AggregatedCandle> history,
-                                                   UUID executionId, String contextFingerprint,
-                                                   List<ClosureEvidence> closureEvidence) {
+    private static ResearchFeatureProjection directAnalysis(HistDataOfflinePipeline.ImportResult imported,
+                                                            HistDataOfflinePipeline.AggregatedCandle reference,
+                                                            List<HistDataOfflinePipeline.AggregatedCandle> history,
+                                                            UUID executionId, String contextFingerprint,
+                                                            List<ClosureEvidence> closureEvidence,
+                                                            Ml01H1ResearchQualityState qualityState) {
         List<OhlcPoint> points = history.stream().map(value -> new OhlcPoint(value.openTime(), value.closeTime(),
                 value.open(), value.high(), value.low(), value.close(), null)).toList();
         HistoricalOhlcContext context = new HistoricalOhlcContext(imported.marketId(), "H1", points);
@@ -278,7 +369,7 @@ public final class Ml01HistDataPreparation {
                 imported.sourceFile().getFileName().toString(), imported.symbol(), historyFingerprint(history))).value();
             VolatilityAssessment volatility = new VolatilityCalculator().calculate(
                     context, reference.closeTime(), inputFingerprint, history.size() > 1
-                            && hasVerifiedClosure(history, imported.symbol(), closureEvidence));
+                            && hasVerifiedClosure(history, imported.marketId(), imported.symbol(), closureEvidence));
         Map<String, BigDecimal> values = new LinkedHashMap<>();
         if (volatility.status() == VolatilityAssessment.Status.AVAILABLE) {
             values.put("atr", volatility.atr());
@@ -287,23 +378,28 @@ public final class Ml01HistDataPreparation {
             values.put("volatilityCompressionRatio", volatility.compressionRatio());
             values.put("directionalEfficiency", volatility.directionalEfficiency());
         }
-        DeterministicMeasurements measurements = new DeterministicMeasurements(
-                "ML-01 H1 volatility measurements", volatility.reason(), values, reference.closeTime());
-        ArtifactIdentity identity = new ArtifactIdentity("ml01-h1-volatility", "ml01-histdata", OUTCOME_DEFINITION_VERSION);
-        StoredArtifact artifact = new StoredArtifact(
-                new com.hope.trading.market_intelligence.domain.artifact.ArtifactCacheKey(
-                        identity, ArtifactScope.publicMarket(imported.marketId(), "H1",
-                        com.hope.trading.market_intelligence.domain.AnalysisExecutionMode.PASSIVE),
-                        ArtifactFingerprint.empty(), ArtifactFingerprint.ofInputs(List.of(inputFingerprint))),
-                measurements,
-                com.hope.trading.market_intelligence.domain.artifact.ArtifactFreshness.validUntil(
-                        reference.closeTime(), reference.closeTime().plusSeconds(1), OUTCOME_DEFINITION_VERSION),
-                new ArtifactProvenance("ml01-histdata", OUTCOME_DEFINITION_VERSION, executionId,
-                        reference.closeTime(), java.util.Set.of(), java.util.Set.of(), contextFingerprint,
-                        inputFingerprint).withEvidenceContext(EvidenceAcquisitionPolicy.STRICT_OBSERVED,
-                        points.size(), reference.closeTime()),
-                AnalysisResultQuality.COMPLETE, ProductionArtifactTypes.V1);
-        return new ProducedArtifact(ProductionArtifactTypes.OHLC_RANGE_ANALYSIS, ProductionArtifactTypes.V1, artifact);
+        Map<String, ResearchFeatureValue> featureValues = new LinkedHashMap<>();
+        featureValues.put("ohlc.normalized_atr", featureValue(volatility, values.get("normalizedAtr")));
+        featureValues.put("ohlc.realized_volatility", featureValue(volatility, values.get("realizedVolatility")));
+        featureValues.put("ohlc.volatility_compression_ratio", featureValue(volatility, values.get("volatilityCompressionRatio")));
+        featureValues.put("ohlc.directional_efficiency", featureValue(volatility, values.get("directionalEfficiency")));
+        String fingerprint = ArtifactFingerprint.ofInputs(List.of(RESEARCH_FEATURE_SCHEMA_VERSION,
+                contextFingerprint, inputFingerprint, volatility.status().name(), String.valueOf(values))).value();
+        Map<String, Object> provenance = new LinkedHashMap<>();
+        provenance.put("executionId", executionId);
+        provenance.put("contextFingerprint", contextFingerprint);
+        provenance.put("inputFingerprint", inputFingerprint);
+        provenance.put("evidencePolicy", qualityState == Ml01H1ResearchQualityState.FULL_OBSERVED
+                ? EvidenceAcquisitionPolicy.STRICT_OBSERVED.name() : "RESEARCH_EXPLORATORY");
+        provenance.put("observationCount", points.size());
+        provenance.put("cutoff", reference.closeTime());
+        provenance.put("status", volatility.status());
+        provenance.put("reason", volatility.reason());
+        return new ResearchFeatureProjection(RESEARCH_FEATURE_SCHEMA_VERSION, fingerprint, featureValues, provenance);
+    }
+
+    private static ResearchFeatureValue featureValue(VolatilityAssessment assessment, BigDecimal value) {
+        return new ResearchFeatureValue(assessment.status().name(), value);
     }
 
     private static FutureOutcome outcome(HistDataOfflinePipeline.ImportResult imported,
@@ -317,11 +413,13 @@ public final class Ml01HistDataPreparation {
         var previous = reference;
         List<String> classifications = new ArrayList<>();
         for (var candle : future) {
-            Transition transition = transition(previous, candle, imported.symbol(), reference.closeTime(), closureEvidence);
+            Transition transition = transition(previous, candle, imported.marketId(), imported.symbol(),
+                    reference.closeTime(), closureEvidence);
             classifications.add(transition.classification().name());
             if (transition.classification() == TransitionClassification.UNEXPLAINED_GAP
                     || transition.classification() == TransitionClassification.UNKNOWN_CLOSURE_EVIDENCE
-                    || transition.classification() == TransitionClassification.INVALID_OBSERVATION) {
+                    || transition.classification() == TransitionClassification.INVALID_OBSERVATION
+                    || transition.classification() == TransitionClassification.VERIFIED_CLOSURE) {
                 return unavailable(horizon, transition.classification().name(), transition.reason());
             }
             previous = candle;
@@ -356,32 +454,32 @@ public final class Ml01HistDataPreparation {
                 List.of(), reason + ":" + detail, null);
     }
 
-    private static boolean featureAvailable(FeatureSnapshot snapshot) {
-        Map<String, FeatureValue> values = snapshot.values().stream()
-                .collect(Collectors.toMap(FeatureValue::name, value -> value));
-        return FEATURES.stream().allMatch(name -> values.get(name) instanceof NumericFeatureValue numeric
-                && numeric.status() == FeatureMissingness.PRESENT && numeric.value() != null);
+    private static boolean featureAvailable(ResearchFeatureProjection snapshot) {
+        return FEATURES.stream().allMatch(name -> snapshot.values().get(name) != null
+                && snapshot.values().get(name).value() != null
+                && "AVAILABLE".equals(snapshot.values().get(name).status()));
     }
 
     private static List<HistDataOfflinePipeline.AggregatedCandle> acceptedHistory(
-            List<HistDataOfflinePipeline.AggregatedCandle> candles, String instrument, Instant cutoff,
+            List<HistDataOfflinePipeline.AggregatedCandle> candles, UUID marketId, String instrument, Instant cutoff,
             List<ClosureEvidence> closureEvidence) {
         if (candles.isEmpty()) return List.of();
         int start = candles.size() - 1;
         for (int index = candles.size() - 2; index >= 0; index--) {
-            Transition transition = transition(candles.get(index), candles.get(index + 1), instrument, cutoff, closureEvidence);
+            Transition transition = transition(candles.get(index), candles.get(index + 1), marketId, instrument, cutoff, closureEvidence);
             if (transition.classification() == TransitionClassification.UNEXPLAINED_GAP
                     || transition.classification() == TransitionClassification.UNKNOWN_CLOSURE_EVIDENCE
-                    || transition.classification() == TransitionClassification.INVALID_OBSERVATION) break;
+                    || transition.classification() == TransitionClassification.INVALID_OBSERVATION
+                    || transition.classification() == TransitionClassification.VERIFIED_CLOSURE) break;
             start = index;
         }
         return candles.subList(start, candles.size());
     }
 
     private static boolean hasVerifiedClosure(List<HistDataOfflinePipeline.AggregatedCandle> candles,
-                                              String instrument, List<ClosureEvidence> closureEvidence) {
+                                               UUID marketId, String instrument, List<ClosureEvidence> closureEvidence) {
         for (int index = 1; index < candles.size(); index++) {
-            if (transition(candles.get(index - 1), candles.get(index), instrument,
+            if (transition(candles.get(index - 1), candles.get(index), marketId, instrument,
                     candles.getLast().closeTime(), closureEvidence).classification()
                     == TransitionClassification.VERIFIED_CLOSURE) return true;
         }
@@ -390,7 +488,7 @@ public final class Ml01HistDataPreparation {
 
     private static Transition transition(HistDataOfflinePipeline.AggregatedCandle previous,
                                          HistDataOfflinePipeline.AggregatedCandle next,
-                                         String instrument, Instant cutoff,
+                                         UUID marketId, String instrument, Instant cutoff,
                                          List<ClosureEvidence> closureEvidence) {
         if (previous.state() != HistDataOfflinePipeline.AggregationState.COMPLETE
                 || next.state() != HistDataOfflinePipeline.AggregationState.COMPLETE) {
@@ -406,7 +504,9 @@ public final class Ml01HistDataPreparation {
         }
         List<ClosureEvidence> applicable = (closureEvidence == null ? List.<ClosureEvidence>of() : closureEvidence)
                 .stream()
-                .filter(value -> value.instrument().equals(instrument)
+                .filter(value -> (value.marketId() == null || value.marketId().equals(marketId))
+                        && value.instrument().equals(instrument)
+                        && "H1".equals(value.interval())
                         && value.closureStart().compareTo(previous.closeTime()) <= 0
                         && value.closureEnd().compareTo(next.openTime()) >= 0
                         && !value.effectiveFrom().isAfter(previous.closeTime())
@@ -425,7 +525,7 @@ public final class Ml01HistDataPreparation {
     static TransitionClassification classifyTransition(HistDataOfflinePipeline.AggregatedCandle previous,
                                                        HistDataOfflinePipeline.AggregatedCandle next,
                                                        Instant cutoff, List<ClosureEvidence> closureEvidence) {
-        return transition(previous, next, previous.symbol(), cutoff, closureEvidence).classification();
+        return transition(previous, next, previous.marketId(), previous.symbol(), cutoff, closureEvidence).classification();
     }
 
     private static Map<String, Object> quality(HistDataOfflinePipeline.ImportResult imported,
@@ -443,14 +543,17 @@ public final class Ml01HistDataPreparation {
         result.put("missingM1Slots", imported.missingM1Slots());
         result.put("h1CandleCounts", all.stream().collect(Collectors.groupingBy(
                 value -> value.state().name(), LinkedHashMap::new, Collectors.counting())));
-        result.put("completeH1Candles", complete.size());
+        result.put("admissibleH1Candles", complete.size());
         result.put("verifiedClosureEvidence", closureEvidence != null && !closureEvidence.isEmpty());
         result.put("continuityPolicyVersion", CONTINUITY_POLICY_VERSION);
         result.put("closureEvidenceFingerprints", closureEvidence == null ? List.of()
                 : closureEvidence.stream().map(ClosureEvidence::fingerprint).sorted().toList());
+        result.put("closureEvidenceSources", closureEvidence == null ? List.of()
+                : closureEvidence.stream().map(value -> value.sourceId() + "@" + value.sourceVersion()
+                        + "|" + value.venue()).sorted().toList());
         Map<String, Long> transitionCounts = new LinkedHashMap<>();
         for (int index = 1; index < complete.size(); index++) {
-            String classification = transition(complete.get(index - 1), complete.get(index), imported.symbol(),
+            String classification = transition(complete.get(index - 1), complete.get(index), imported.marketId(), imported.symbol(),
                     complete.get(index).closeTime(), closureEvidence).classification().name();
             transitionCounts.merge(classification, 1L, Long::sum);
         }
@@ -461,15 +564,35 @@ public final class Ml01HistDataPreparation {
 
     private static Map<String, Object> manifest(List<Row> rows,
                                                 List<HistDataOfflinePipeline.ImportResult> imports,
-                                                String fingerprint, PartitionConfiguration partitions) {
+                                                 String fingerprint, PartitionConfiguration partitions,
+                                                 Map<String, String> sourceChecksums,
+                                                 PreparationScope scope,
+                                                 List<ClosureEvidence> closureEvidence) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("datasetDefinitionVersion", DATASET_DEFINITION_VERSION);
+        result.put("datasetProfile", DATASET_DEFINITION_VERSION);
         result.put("sourceProfile", SOURCE_PROFILE);
         result.put("provider", HistDataOfflinePipeline.SOURCE_PROVIDER);
         result.put("timeframe", "H1");
         result.put("markets", imports.stream().map(HistDataOfflinePipeline.ImportResult::symbol).toList());
         result.put("marketIds", imports.stream().map(value -> value.marketId().toString()).toList());
-        result.put("featureProjectionVersion", FeatureProjectionV2.VERSION);
+        result.put("startCutoffInclusive", scope == null ? rows.stream().map(Row::cutoff).min(Instant::compareTo).orElse(null)
+                : scope.startCutoffInclusive());
+        result.put("endCutoffExclusive", scope == null ? rows.stream().map(Row::cutoff).max(Instant::compareTo)
+                .map(value -> value.plusSeconds(3600)).orElse(null) : scope.endCutoffExclusive());
+        result.put("researchFeatureSchemaVersion", RESEARCH_FEATURE_SCHEMA_VERSION);
+        result.put("researchFeatureEvidencePolicy", RESEARCH_EXPORT_POLICY);
+        result.put("admissibilityProfile", Ml01ExploratoryH1AdmissibilityProfile.V1.name());
+        result.put("admissibilityPolicyVersion", Ml01ExploratoryH1AdmissibilityProfile.V1.version());
+        result.put("continuityScope", CONTINUITY_SCOPE);
+        result.put("sessionTransitionStatus", SESSION_TRANSITION_STATUS);
+        result.put("sourceChecksumAlgorithm", SOURCE_CHECKSUM_ALGORITHM);
+        result.put("sourceChecksumScope", SOURCE_CHECKSUM_SCOPE);
+        result.put("sourceChecksums", sourceChecksums);
+        result.put("normalizationVersion", NORMALIZATION_VERSION);
+        result.put("continuityPolicyVersion", CONTINUITY_POLICY_VERSION);
+        result.put("closureEvidenceFingerprints", closureEvidence == null ? List.of()
+                : closureEvidence.stream().map(ClosureEvidence::fingerprint).sorted().toList());
         result.put("features", FEATURES);
         result.put("outcomeDefinitionVersion", OUTCOME_DEFINITION_VERSION);
         result.put("horizons", HORIZONS.stream().map(value -> Map.of("validH1Candles", value)).toList());
@@ -479,6 +602,10 @@ public final class Ml01HistDataPreparation {
         result.put("exclusionCounts", rows.stream().filter(value -> !value.eligible())
                 .collect(Collectors.groupingBy(Row::exclusionReason, LinkedHashMap::new, Collectors.counting())));
         result.put("partitionParametersProvided", partitions.isComplete());
+        result.put("trainEndExclusive", partitions.trainEndExclusive());
+        result.put("validationEndExclusive", partitions.validationEndExclusive());
+        result.put("testEndExclusive", partitions.testEndExclusive());
+        result.put("embargo", partitions.isComplete() ? partitions.embargo().toString() : null);
         result.put("datasetFingerprint", fingerprint);
         result.put("fingerprintMaterialVersion", "ml01-h1-fingerprint-v1");
         result.put("generatedAt", Instant.now().toString());
@@ -491,6 +618,9 @@ public final class Ml01HistDataPreparation {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rowsByInstrument", rows.stream().collect(Collectors.groupingBy(Row::instrument, LinkedHashMap::new, Collectors.counting())));
         result.put("eligibleByInstrument", rows.stream().filter(Row::eligible).collect(Collectors.groupingBy(Row::instrument, LinkedHashMap::new, Collectors.counting())));
+        result.put("qualityStateCounts", rows.stream().collect(Collectors.groupingBy(
+                value -> value.admissibilityDecision().state().name(), LinkedHashMap::new, Collectors.counting())));
+        result.put("partialRowsAreResearchOnly", true);
         result.put("outcomeAvailabilityByHorizon", HORIZONS.stream().collect(Collectors.toMap(
                 horizon -> Integer.toString(horizon), horizon -> rows.stream().filter(value ->
                         "AVAILABLE".equals(value.outcomes().get(horizon).status())).count(),
@@ -555,22 +685,39 @@ public final class Ml01HistDataPreparation {
     }
 
     private static Map<String, Object> sourceMetadata(List<HistDataOfflinePipeline.ImportResult> imports,
-                                                      String fingerprint) {
+                                                      String fingerprint,
+                                                      Map<String, String> sourceChecksums) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("provider", HistDataOfflinePipeline.SOURCE_PROVIDER);
         result.put("sourceProfile", SOURCE_PROFILE);
         result.put("sourceSemantics", HistDataOfflinePipeline.SOURCE_SEMANTICS);
         result.put("sourceTimezone", "EST / UTC-05:00, fixed offset, no daylight saving adjustment");
         result.put("sourceFiles", imports.stream().map(value -> value.sourceFile().getFileName().toString()).toList());
+        result.put("sourceFingerprints", imports.stream().collect(Collectors.toMap(
+                HistDataOfflinePipeline.ImportResult::symbol, Ml01HistDataPreparation::sourceFingerprint,
+                (left, right) -> left, LinkedHashMap::new)));
+        result.put("sourceChecksumAlgorithm", SOURCE_CHECKSUM_ALGORITHM);
+        result.put("sourceChecksumScope", SOURCE_CHECKSUM_SCOPE);
+        result.put("sourceChecksums", sourceChecksums);
+        result.put("normalizationVersion", NORMALIZATION_VERSION);
         result.put("datasetFingerprint", fingerprint);
         return result;
     }
 
     private static String fingerprint(List<Row> rows, PartitionConfiguration partitions,
-                                      List<ClosureEvidence> closureEvidence) {
+                                      List<ClosureEvidence> closureEvidence,
+                                      Map<String, String> sourceChecksums) {
         List<String> material = new ArrayList<>(List.of(DATASET_DEFINITION_VERSION, SOURCE_PROFILE,
-                FeatureProjectionV2.VERSION, OUTCOME_DEFINITION_VERSION, FEATURES.toString(), HORIZONS.toString(),
-                CONTINUITY_POLICY_VERSION));
+                RESEARCH_FEATURE_SCHEMA_VERSION, OUTCOME_DEFINITION_VERSION, FEATURES.toString(), HORIZONS.toString(),
+                CONTINUITY_POLICY_VERSION, Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
+                Ml01ExploratoryH1AdmissibilityProfile.V1.version(),
+                Integer.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.minimumValidM1Count()),
+                Boolean.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.firstMinuteRequired()),
+                Boolean.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.lastMinuteRequired()),
+                RESEARCH_EXPORT_POLICY, CONTINUITY_SCOPE, SESSION_TRANSITION_STATUS,
+                SOURCE_CHECKSUM_ALGORITHM, SOURCE_CHECKSUM_SCOPE, NORMALIZATION_VERSION));
+        sourceChecksums.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> material.add("sourceChecksum=" + entry.getKey() + "|" + entry.getValue()));
         if (closureEvidence != null) {
             closureEvidence.stream().map(ClosureEvidence::fingerprint).sorted()
                     .forEach(value -> material.add("closure=" + value));
@@ -578,9 +725,7 @@ public final class Ml01HistDataPreparation {
         material.add("partition=" + partitions.trainEndExclusive() + "|" + partitions.validationEndExclusive()
                 + "|" + partitions.testEndExclusive() + "|" + partitions.effectiveEmbargo());
         rows.forEach(row -> {
-            material.add(row.instrument() + "|" + row.cutoff() + "|" + row.snapshot().fingerprint());
-            row.outcomes().values().forEach(outcome -> material.add(outcome.horizon() + "|" + outcome.status()
-                    + "|" + outcome.fingerprint()));
+            material.add("row=" + rowFingerprint(row));
         });
         return ArtifactFingerprint.ofInputs(material).value();
     }
@@ -598,17 +743,26 @@ public final class Ml01HistDataPreparation {
 
     private static Map<String, Object> rowDocument(Row row) {
         Map<String, Object> result = new LinkedHashMap<>();
+        result.putAll(rowMaterial(row));
+        result.put("rowFingerprint", rowFingerprint(row));
+        return result;
+    }
+
+    private static Map<String, Object> rowMaterial(Row row) {
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("instrument", row.instrument());
         result.put("marketId", row.marketId());
         result.put("evaluationCutoff", row.cutoff());
         result.put("timeframe", "H1");
-        result.put("featureProjectionVersion", row.snapshot().featureProjectionVersion());
-        result.put("featureSnapshotFingerprint", row.snapshot().fingerprint());
+        result.put("researchFeatureSchemaVersion", row.snapshot().schemaVersion());
+        result.put("researchFeatureFingerprint", row.snapshot().fingerprint());
         result.put("featureProvenance", row.snapshot().provenance());
+        result.put("admissibilityDecision", row.admissibilityDecision());
+        result.put("continuityScope", CONTINUITY_SCOPE);
+        result.put("sessionTransitionStatus", SESSION_TRANSITION_STATUS);
         Map<String, Object> features = new LinkedHashMap<>();
         for (String name : FEATURES) {
-            FeatureValue value = row.snapshot().values().stream().filter(item -> item.name().equals(name)).findFirst().orElseThrow();
-            NumericFeatureValue numeric = (NumericFeatureValue) value;
+            ResearchFeatureValue numeric = row.snapshot().values().get(name);
             Map<String, Object> feature = new LinkedHashMap<>();
             feature.put("status", numeric.status());
             feature.put("value", numeric.value());
@@ -620,10 +774,17 @@ public final class Ml01HistDataPreparation {
         result.put("exclusionReason", row.exclusionReason());
         result.put("partition", row.partition());
         result.put("partitionExclusion", row.partitionExclusion());
-        result.put("rowFingerprint", ArtifactFingerprint.ofInputs(List.of(row.instrument(), row.cutoff().toString(),
-                row.snapshot().fingerprint(), row.outcomes().toString(), String.valueOf(row.eligible()),
-                String.valueOf(row.exclusionReason()))).value());
         return result;
+    }
+
+    private static String rowFingerprint(Row row) {
+        try {
+            ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+            String serialized = mapper.writeValueAsString(rowMaterial(row));
+            return ArtifactFingerprint.ofInputs(List.of(mapper.readTree(serialized).toString())).value();
+        } catch (IOException exception) {
+            throw new IllegalStateException("unable to fingerprint ML-01 row", exception);
+        }
     }
 
     private static List<Row> assignPartitions(List<Row> rows, PartitionConfiguration configuration) {
@@ -633,7 +794,8 @@ public final class Ml01HistDataPreparation {
             if (row.cutoff().isBefore(configuration.trainEndExclusive())) partition = "TRAIN";
             else if (row.cutoff().isBefore(configuration.validationEndExclusive())) partition = "VALIDATION";
             else if (row.cutoff().isBefore(configuration.testEndExclusive())) partition = "TEST";
-            else return new Row(row.instrument(), row.marketId(), row.cutoff(), row.snapshot(), row.outcomes(),
+            else return new Row(row.instrument(), row.marketId(), row.cutoff(), row.snapshot(),
+                    row.admissibilityDecision(), row.outcomes(),
                     row.eligible(), row.exclusionReason(), "OUT_OF_RANGE", "OUTSIDE_PARTITION_BOUNDS");
 
             String exclusion = null;
@@ -650,7 +812,8 @@ public final class Ml01HistDataPreparation {
                     && row.cutoff().isBefore(configuration.validationEndExclusive().plus(configuration.embargo()))) {
                 exclusion = "EMBARGO_AFTER_VALIDATION";
             }
-            return new Row(row.instrument(), row.marketId(), row.cutoff(), row.snapshot(), row.outcomes(),
+            return new Row(row.instrument(), row.marketId(), row.cutoff(), row.snapshot(),
+                    row.admissibilityDecision(), row.outcomes(),
                     row.eligible(), row.exclusionReason(), partition, exclusion);
         }).toList();
     }
@@ -673,6 +836,20 @@ public final class Ml01HistDataPreparation {
     private static String historyFingerprint(List<HistDataOfflinePipeline.AggregatedCandle> candles) {
         return ArtifactFingerprint.ofInputs(candles.stream().map(value -> value.sourceOpenTime() + "|"
                 + value.open() + "|" + value.high() + "|" + value.low() + "|" + value.close()).toList()).value();
+    }
+
+    private static String sourceFingerprint(HistDataOfflinePipeline.ImportResult imported) {
+        return HistDataOfflinePipeline.sourceFingerprint(imported);
+    }
+
+    private static String sourceChecksum(Path sourceFile) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance(SOURCE_CHECKSUM_ALGORITHM)
+                            .digest(Files.readAllBytes(sourceFile)));
+        } catch (IOException | java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("unable to checksum source file: " + sourceFile, exception);
+        }
     }
 
     private static UUID marketId(String symbol) {
