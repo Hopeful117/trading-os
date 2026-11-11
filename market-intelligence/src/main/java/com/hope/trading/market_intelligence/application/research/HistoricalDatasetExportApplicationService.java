@@ -14,6 +14,7 @@ import com.hope.trading.market_intelligence.domain.research.ResearchFeatureSnaps
 import com.hope.trading.market_intelligence.domain.research.ResearchOutcomeKey;
 import com.hope.trading.market_intelligence.domain.research.ResearchPopulationSpec;
 import com.hope.trading.market_intelligence.domain.research.ResearchSamplingCadence;
+import com.hope.trading.market_intelligence.application.research.histdata.Ml01HistDataPreparation;
 import com.hope.trading.market_intelligence.infrastructure.research.HistoricalDatasetExportJobEntity;
 import com.hope.trading.market_intelligence.infrastructure.research.HistoricalDatasetExportJobRepository;
 import com.hope.trading.market_intelligence.security.MiAgentPrincipal;
@@ -54,6 +55,7 @@ public class HistoricalDatasetExportApplicationService {
     private final Clock clock;
     private final Executor executor;
     private final Path outputRoot;
+    private final Path ml01HistDataRoot;
 
     public HistoricalDatasetExportApplicationService(
             HistoricalDatasetExportJobRepository jobs,
@@ -62,7 +64,8 @@ public class HistoricalDatasetExportApplicationService {
             ObjectMapper mapper,
             Clock clock,
             @Qualifier("researchExecutor") Executor executor,
-            @Value("${research.dataset.agent-export-root:./var/research-agent-exports}") String outputRoot) {
+            @Value("${research.dataset.agent-export-root:./var/research-agent-exports}") String outputRoot,
+            @Value("${research.ml01.histdata-root:./histData}") String ml01HistDataRoot) {
         this.jobs = jobs;
         this.authorization = authorization;
         this.exporter = exporter;
@@ -70,6 +73,7 @@ public class HistoricalDatasetExportApplicationService {
         this.clock = clock;
         this.executor = executor;
         this.outputRoot = Path.of(outputRoot).toAbsolutePath().normalize();
+        this.ml01HistDataRoot = Path.of(ml01HistDataRoot).toAbsolutePath().normalize();
     }
 
     @Transactional
@@ -84,8 +88,10 @@ public class HistoricalDatasetExportApplicationService {
         if (serialize(request.population()).length() > 1_000_000) {
             throw new HistoricalResearchException(400, "INVALID_POPULATION", "population specification is too large");
         }
-        ResearchPopulationSpec population = readPopulation(request.population());
-        var decision = authorize(agent, scopeId, "research:export", population, request, correlationId);
+        Ml01ExportSpec ml01 = readMl01ExportSpec(request.population());
+        var decision = ml01 == null
+                ? authorize(agent, scopeId, "research:export", readPopulation(request.population()), request, correlationId)
+                : authorize(agent, scopeId, "research:export", ml01, request, correlationId);
         String fingerprint = fingerprint(scopeId, agent, decision, request);
         var existing = jobs.findByAgentIdAndIdempotencyKey(agent.agentId(), idempotencyKey).orElse(null);
         if (existing != null) {
@@ -118,7 +124,12 @@ public class HistoricalDatasetExportApplicationService {
         var job = jobs.findByIdAndAgentId(id, agent.agentId()).orElseThrow(() ->
                 new HistoricalResearchException(404, "EXPORT_NOT_FOUND", "export job not found"));
         HistoricalDatasetExportRequest request = readRequest(job.requestJson());
-        authorize(agent, job.scopeId(), "research:export", readPopulation(request.population()), request, correlationId);
+        Ml01ExportSpec ml01 = readMl01ExportSpec(request.population());
+        if (ml01 == null) {
+            authorize(agent, job.scopeId(), "research:export", readPopulation(request.population()), request, correlationId);
+        } else {
+            authorize(agent, job.scopeId(), "research:export", ml01, request, correlationId);
+        }
         return response(job);
     }
 
@@ -132,20 +143,36 @@ public class HistoricalDatasetExportApplicationService {
         job.running(now); jobs.save(job);
         try {
             HistoricalDatasetExportRequest request = readRequest(job.requestJson());
-            ResearchPopulationSpec population = readPopulation(request.population());
-            var decision = authorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
-                    job.agentId(), job.credentialId(), job.credentialVersion(), job.scopeId(), null, population.marketIds(),
-                    job.correlationId(), "research:export", population.startCutoffInclusive(),
-                    population.endCutoffExclusive(), request.population().path("datasetProfile").asText("default"),
-                    0, request.maxRows(), request.maxBytes(), request.maxDurationSeconds()));
+            Ml01ExportSpec ml01 = readMl01ExportSpec(request.population());
+            var decision = ml01 == null
+                    ? authorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
+                    job.agentId(), job.credentialId(), job.credentialVersion(), job.scopeId(), null,
+                    readPopulation(request.population()).marketIds(), job.correlationId(), "research:export",
+                    readPopulation(request.population()).startCutoffInclusive(),
+                    readPopulation(request.population()).endCutoffExclusive(), request.population().path("datasetProfile").asText("default"),
+                    0, request.maxRows(), request.maxBytes(), request.maxDurationSeconds()))
+                    : authorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
+                    job.agentId(), job.credentialId(), job.credentialVersion(), job.scopeId(), null, ml01.marketIds(),
+                    job.correlationId(), "research:export", ml01.startCutoffInclusive(), ml01.endCutoffExclusive(),
+                    ml01.datasetProfile(), 0, request.maxRows(), request.maxBytes(), request.maxDurationSeconds()));
             if (decision == null || !decision.allowed()) {
                 job.expire(clock.instant()); jobs.save(job); return;
             }
             Path directory = outputRoot.resolve(job.id().toString()).normalize();
             if (!directory.startsWith(outputRoot)) throw new IllegalStateException("UNSAFE_OUTPUT_PATH");
             var started = clock.instant();
-            var result = exporter.export(population, directory, request.maxRows(), request.maxBytes(),
-                    () -> clock.instant().isBefore(job.expiresAt()));
+            int sampleCount;
+            if (ml01 != null) {
+                var prepared = Ml01HistDataPreparation.prepare(ml01HistDataRoot, directory, ml01.partitions(),
+                        ml01.scope(), List.of());
+                sampleCount = prepared.rows();
+            } else {
+                ResearchPopulationSpec population = readPopulation(request.population());
+                var result = exporter.export(population, directory, request.maxRows(), request.maxBytes(),
+                        () -> clock.instant().isBefore(job.expiresAt()));
+                exporter.validatePublishedBundle(directory, population);
+                sampleCount = result.sampleCount();
+            }
             long bytes;
             try (var paths = Files.walk(directory)) {
                 bytes = paths.filter(Files::isRegularFile).mapToLong(path -> {
@@ -155,11 +182,12 @@ public class HistoricalDatasetExportApplicationService {
             if (Duration.between(started, clock.instant()).toSeconds() > request.maxDurationSeconds()) {
                 throw new IllegalStateException("EXPORT_DURATION_LIMIT");
             }
-            if (result.sampleCount() > request.maxRows()) throw new IllegalStateException("EXPORT_ROW_LIMIT");
+            if (sampleCount > request.maxRows()) throw new IllegalStateException("EXPORT_ROW_LIMIT");
             if (bytes > request.maxBytes()) throw new IllegalStateException("EXPORT_SIZE_LIMIT");
-            exporter.validatePublishedBundle(directory, population);
-            String checksum = sha256(Files.readAllBytes(directory.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE)));
-            job.success(job.id().toString(), checksum, bytes, result.sampleCount(), clock.instant());
+            Path manifest = directory.resolve(ResearchDatasetBundleExporter.MANIFEST_FILE);
+            if (!Files.exists(manifest)) manifest = directory.resolve("dataset-manifest.json");
+            String checksum = sha256(Files.readAllBytes(manifest));
+            job.success(job.id().toString(), checksum, bytes, sampleCount, clock.instant());
             jobs.save(job);
         } catch (Exception failure) {
             boolean cleaned = deleteOutput(directoryFor(id));
@@ -173,15 +201,82 @@ public class HistoricalDatasetExportApplicationService {
         if (population.marketIds().isEmpty() || population.marketIds().size() > 2) {
             throw new HistoricalResearchException(400, "INVALID_POPULATION", "population market count is outside the supported scope");
         }
+        return authorize(agent, scopeId, permission, population.marketIds(), population.startCutoffInclusive(),
+                population.endCutoffExclusive(), request, correlationId);
+    }
+
+    private ResearchAuthorizationClient.AuthorizationResponse authorize(MiAgentPrincipal agent, UUID scopeId,
+                                                                         String permission, Ml01ExportSpec population,
+                                                                         HistoricalDatasetExportRequest request,
+                                                                         String correlationId) {
+        return authorize(agent, scopeId, permission, population.marketIds(), population.startCutoffInclusive(),
+                population.endCutoffExclusive(), request, correlationId, population.datasetProfile());
+    }
+
+    private ResearchAuthorizationClient.AuthorizationResponse authorize(MiAgentPrincipal agent, UUID scopeId,
+                                                                         String permission, Set<UUID> marketIds,
+                                                                         Instant start, Instant end,
+                                                                         HistoricalDatasetExportRequest request,
+                                                                         String correlationId) {
+        return authorize(agent, scopeId, permission, marketIds, start, end, request, correlationId,
+                request.population().path("datasetProfile").asText("default"));
+    }
+
+    private ResearchAuthorizationClient.AuthorizationResponse authorize(MiAgentPrincipal agent, UUID scopeId,
+                                                                         String permission, Set<UUID> marketIds,
+                                                                         Instant start, Instant end,
+                                                                         HistoricalDatasetExportRequest request,
+                                                                         String correlationId, String datasetProfile) {
         var response = authorization.authorize(new ResearchAuthorizationClient.AuthorizationRequest(
                 agent.agentId(), agent.credentialId(), agent.credentialVersion(), scopeId, null,
-                population.marketIds(), correlationId, permission, population.startCutoffInclusive(), population.endCutoffExclusive(),
-                request.population().path("datasetProfile").asText("default"), 0, request.maxRows(),
+                marketIds, correlationId, permission, start, end, datasetProfile, 0, request.maxRows(),
                 request.maxBytes(), request.maxDurationSeconds()));
         if (response == null || !response.allowed()) {
             throw new HistoricalResearchException(403, "RESEARCH_NOT_AUTHORIZED", "research export is not authorized");
         }
         return response;
+    }
+
+    private Ml01ExportSpec readMl01ExportSpec(JsonNode root) {
+        if (!"ml01-h1-histdata-v1".equals(root.path("datasetProfile").asText())) return null;
+        try {
+            Set<UUID> markets = new HashSet<>();
+            root.path("marketIds").forEach(value -> markets.add(UUID.fromString(value.asText())));
+            if (markets.size() != 2) throw new IllegalArgumentException("ML-01 requires two markets");
+            if (!"H1".equals(root.path("timeframe").asText())
+                    || !"feature-projection-v2".equals(root.path("featureProjectionVersion").asText())
+                    || !"STRICT_OBSERVED".equals(root.path("featureEvidencePolicy").asText())
+                    || !"histdata-september-2026-h1".equals(root.path("sourceProfile").asText())) {
+                throw new IllegalArgumentException("ML-01 feature and source contract mismatch");
+            }
+            Set<Integer> horizons = new HashSet<>();
+            root.path("horizons").forEach(value -> horizons.add(value.path("validH1Candles").asInt(-1)));
+            if (!horizons.equals(Set.of(4, 12, 24))) {
+                throw new IllegalArgumentException("ML-01 valid H1 horizons are required");
+            }
+            Instant start = Instant.parse(root.path("startCutoffInclusive").asText());
+            Instant end = Instant.parse(root.path("endCutoffExclusive").asText());
+            String train = root.path("trainEndExclusive").isMissingNode() ? null : root.path("trainEndExclusive").asText(null);
+            String validation = root.path("validationEndExclusive").isMissingNode() ? null : root.path("validationEndExclusive").asText(null);
+            String test = root.path("testEndExclusive").isMissingNode() ? null : root.path("testEndExclusive").asText(null);
+            String embargo = root.path("embargo").isMissingNode() ? null : root.path("embargo").asText(null);
+            if (train == null && validation == null && test == null && embargo == null) {
+                return new Ml01ExportSpec(markets, start, end, root.path("datasetProfile").asText(),
+                        new Ml01HistDataPreparation.PreparationScope(markets, start, end),
+                        Ml01HistDataPreparation.PartitionConfiguration.requiresApproval());
+            }
+            return new Ml01ExportSpec(markets, start, end, root.path("datasetProfile").asText(),
+                    new Ml01HistDataPreparation.PreparationScope(markets, start, end),
+                    new Ml01HistDataPreparation.PartitionConfiguration(Instant.parse(train), Instant.parse(validation),
+                            Instant.parse(test), Duration.parse(embargo)));
+        } catch (Exception exception) {
+            throw new HistoricalResearchException(400, "INVALID_ML01_POPULATION", "invalid ML-01.1 population specification");
+        }
+    }
+
+    private record Ml01ExportSpec(Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive,
+                                  String datasetProfile, Ml01HistDataPreparation.PreparationScope scope,
+                                  Ml01HistDataPreparation.PartitionConfiguration partitions) {
     }
 
     private void dispatchAfterCommit(UUID id) {

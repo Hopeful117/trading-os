@@ -2,10 +2,14 @@ package com.hope.trading.market_data.service;
 
 import com.hope.trading.market_data.helper.MarketProvider;
 import com.hope.trading.market_data.model.HistoricalOhlcContinuityReport;
+import com.hope.trading.market_data.model.HistoricalClosureEvidence;
+import com.hope.trading.market_data.model.HistoricalContinuityPolicy;
 import com.hope.trading.market_data.model.HistoricalOhlcEvidence;
 import com.hope.trading.market_data.model.HistoricalOhlcEvidenceOrigin;
+import com.hope.trading.market_data.model.HistoricalOhlcTransition;
 import com.hope.trading.market_data.model.HistoricalOhlcGapClassification;
 import com.hope.trading.market_data.model.OhlcInterval;
+import com.hope.trading.market_data.model.HistoricalTransitionClassification;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -86,6 +90,64 @@ class HistoricalOhlcContinuityValidatorTest {
                 HistoricalOhlcContinuityValidator.unknownAvailability()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Continuity range exceeds");
+    }
+
+    @Test
+    void classifiesScopedClosureWithoutCompressingTheElapsedTransition() {
+        HistoricalOhlcEvidence previous = evidence("10:00", true);
+        HistoricalOhlcEvidence next = evidence("10:30", true);
+        HistoricalContinuityPolicy policy = new HistoricalContinuityPolicy(
+                "test-v1", MARKET_ID, "EUR/USD", "test-venue", OhlcInterval.FIFTEEN_MINUTES,
+                Instant.parse("2026-10-15T12:00:00Z"), true);
+        HistoricalClosureEvidence closure = new HistoricalClosureEvidence(
+                UUID.randomUUID(), MARKET_ID, "EUR/USD", OhlcInterval.FIFTEEN_MINUTES, "test-venue",
+                "HOLIDAY", "test closure", Instant.parse("2026-10-15T10:15:00Z"),
+                Instant.parse("2026-10-15T10:30:00Z"), "calendar", "v1",
+                Instant.parse("2026-10-15T00:00:00Z"), Instant.parse("2026-10-16T00:00:00Z"),
+                Instant.parse("2026-10-15T09:00:00Z"), "closure-fingerprint");
+
+        HistoricalOhlcTransition result = HistoricalOhlcTransitionAssessor.assess(
+                previous, next, policy, List.of(closure));
+
+        assertThat(result.classification()).isEqualTo(HistoricalTransitionClassification.VERIFIED_CLOSURE);
+        assertThat(result.actualElapsedDuration()).isEqualTo(java.time.Duration.ofMinutes(15));
+        assertThat(result.closureEvidence()).isEqualTo(closure);
+    }
+
+    @Test
+    void rejectsClosureEvidenceKnownAfterTheContinuityCutoff() {
+        HistoricalContinuityPolicy policy = new HistoricalContinuityPolicy(
+                "test-v1", MARKET_ID, "EUR/USD", "test-venue", OhlcInterval.FIFTEEN_MINUTES,
+                Instant.parse("2026-10-15T09:00:00Z"), true);
+        HistoricalClosureEvidence closure = new HistoricalClosureEvidence(
+                UUID.randomUUID(), MARKET_ID, "EUR/USD", OhlcInterval.FIFTEEN_MINUTES, "test-venue",
+                "HOLIDAY", "test closure", Instant.parse("2026-10-15T10:15:00Z"),
+                Instant.parse("2026-10-15T10:30:00Z"), "calendar", "v1",
+                Instant.parse("2026-10-15T00:00:00Z"), Instant.parse("2026-10-16T00:00:00Z"),
+                Instant.parse("2026-10-15T10:00:00Z"), "closure-fingerprint");
+
+        HistoricalOhlcTransition result = HistoricalOhlcTransitionAssessor.assess(
+                evidence("10:00", true), evidence("10:30", true), policy, List.of(closure));
+
+        assertThat(result.classification()).isEqualTo(HistoricalTransitionClassification.UNKNOWN_CLOSURE_EVIDENCE);
+    }
+
+    @Test
+    void rejectsClosureEvidenceFromAnotherVenue() {
+        HistoricalContinuityPolicy policy = new HistoricalContinuityPolicy(
+                "test-v1", MARKET_ID, "EUR/USD", "test-venue", OhlcInterval.FIFTEEN_MINUTES,
+                Instant.parse("2026-10-15T12:00:00Z"), true);
+        HistoricalClosureEvidence closure = new HistoricalClosureEvidence(
+                UUID.randomUUID(), MARKET_ID, "EUR/USD", OhlcInterval.FIFTEEN_MINUTES, "other-venue",
+                "HOLIDAY", "test closure", Instant.parse("2026-10-15T10:15:00Z"),
+                Instant.parse("2026-10-15T10:30:00Z"), "calendar", "v1",
+                Instant.parse("2026-10-15T00:00:00Z"), Instant.parse("2026-10-16T00:00:00Z"),
+                Instant.parse("2026-10-15T09:00:00Z"), "closure-fingerprint");
+
+        HistoricalOhlcTransition result = HistoricalOhlcTransitionAssessor.assess(
+                evidence("10:00", true), evidence("10:30", true), policy, List.of(closure));
+
+        assertThat(result.classification()).isEqualTo(HistoricalTransitionClassification.UNKNOWN_CLOSURE_EVIDENCE);
     }
 
     private HistoricalOhlcContinuityReport assess(HistoricalOhlcEvidence... evidence) {

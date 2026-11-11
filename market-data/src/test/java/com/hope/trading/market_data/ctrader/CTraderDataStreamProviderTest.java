@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -540,6 +541,7 @@ class CTraderDataStreamProviderTest {
 
         fixture.terminate();
         fixture.awaitStreamCount(2);
+        fixture.awaitTrendbarSubscription("42:M1");
 
         assertThat(fixture.client.current.spotSubscriptions).containsExactly(42L);
         assertThat(fixture.client.current.trendbarSubscriptions).containsExactly("42:M1");
@@ -692,6 +694,13 @@ class CTraderDataStreamProviderTest {
             }
             assertThat(client.current.spotSubscriptions).contains(symbolId);
         }
+        private void awaitTrendbarSubscription(String subscription) throws InterruptedException {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (!client.current.trendbarSubscriptions.contains(subscription) && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
+            assertThat(client.current.trendbarSubscriptions).contains(subscription);
+        }
         private Market market(String symbol, long providerSymbol) {
             return Market.builder().marketId(UUID.randomUUID()).provider(MarketProvider.CTRADER)
                     .symbol(symbol).providerSymbol(Long.toString(providerSymbol)).baseAsset(symbol.substring(0, 3))
@@ -702,8 +711,8 @@ class CTraderDataStreamProviderTest {
 
     private static final class FakeClient implements CTraderOpenApiClient {
         private Consumer<CTraderStreamEvent> events;
-        private FakeStream current;
-        private final List<FakeStream> streams = new ArrayList<>();
+        private volatile FakeStream current;
+        private final List<FakeStream> streams = new CopyOnWriteArrayList<>();
         private CountDownLatch spotStarted;
         private CountDownLatch allowSpot;
         private int failOpenStreamCount;
@@ -734,13 +743,13 @@ class CTraderDataStreamProviderTest {
         private final FakeClient client;
         private final Consumer<CTraderOpenApiClient.CTraderStreamEvent> events;
         private final Runnable termination;
-        private final List<Long> spotSubscriptions = new ArrayList<>();
-        private final List<List<Long>> spotSubscriptionBatches = new ArrayList<>();
-        private final List<Long> unsubscribedSpots = new ArrayList<>();
-        private final List<String> trendbarSubscriptions = new ArrayList<>();
-        private final List<String> unsubscribedTrendbars = new ArrayList<>();
-        private final List<Long> depthSubscriptions = new ArrayList<>();
-        private final List<Long> unsubscribedDepths = new ArrayList<>();
+        private final List<Long> spotSubscriptions = new CopyOnWriteArrayList<>();
+        private final List<List<Long>> spotSubscriptionBatches = new CopyOnWriteArrayList<>();
+        private final List<Long> unsubscribedSpots = new CopyOnWriteArrayList<>();
+        private final List<String> trendbarSubscriptions = new CopyOnWriteArrayList<>();
+        private final List<String> unsubscribedTrendbars = new CopyOnWriteArrayList<>();
+        private final List<Long> depthSubscriptions = new CopyOnWriteArrayList<>();
+        private final List<Long> unsubscribedDepths = new CopyOnWriteArrayList<>();
         private boolean closed;
         private FakeStream(FakeClient client, Consumer<CTraderOpenApiClient.CTraderStreamEvent> events,
                            Runnable termination) {
