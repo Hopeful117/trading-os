@@ -21,6 +21,7 @@ class MiAgentAccessPolicyFilterTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(agent(), "token"));
         for (String path : new String[]{
+                "/api/v1/intelligence/research/readiness",
                 "/api/v1/intelligence/research/" + scopeId + "/readiness",
                 "/api/v1/intelligence/research/" + scopeId + "/exports",
                 "/api/v1/intelligence/research/exports/" + scopeId}) {

@@ -439,7 +439,7 @@ class ResearchDatasetBuilderTest {
     void rejectsUnsupportedFeatureProjectionVersion() {
         FeatureSnapshot snapshot = snapshot("snapshot-unsupported-version");
         ResearchPopulationSpec population = new ResearchPopulationSpec("population-v1", Set.of(), T0.minusSeconds(1),
-                T0.plusSeconds(1), "feature-projection-v2", EvidenceAcquisitionPolicy.STRICT_OBSERVED,
+                T0.plusSeconds(1), "feature-projection-v3", EvidenceAcquisitionPolicy.STRICT_OBSERVED,
                  "market-outcome-v1", Set.of(OutcomeHorizon.oneHour()), ResearchSamplingCadence.ONE_PER_FEATURE_SNAPSHOT,
                  Set.of(FeatureMissingness.INSUFFICIENT_DATA), Map.of(), ResearchFeatureRequirements.q1(), Map.of());
 

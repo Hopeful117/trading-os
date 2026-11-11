@@ -72,9 +72,9 @@ public class JpaFeatureSnapshotRepository implements FeatureSnapshotRepository {
     public List<FeatureSnapshot> findByPopulation(Set<UUID> marketIds, Instant startCutoffInclusive,
                                                    Instant endCutoffExclusive, String featureProjectionVersion,
                                                    String evidencePolicy, int limit) {
-        return repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicy(
-                        marketIds, startCutoffInclusive, endCutoffExclusive, featureProjectionVersion, evidencePolicy,
-                        PageRequest.of(0, limit)).stream().map(this::toDomain).toList();
+        return repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndProjectionVersionAndEvidencePolicyOrderByEvaluationCutoffAscMarketIdAscSnapshotIdAsc(
+                marketIds, startCutoffInclusive, endCutoffExclusive, featureProjectionVersion, evidencePolicy,
+                PageRequest.of(0, limit)).stream().map(this::toDomain).toList();
     }
 
     @Override

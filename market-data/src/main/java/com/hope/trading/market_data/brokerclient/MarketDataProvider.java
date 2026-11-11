@@ -10,6 +10,7 @@ import com.hope.trading.market_data.model.TickerEvent;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 public interface MarketDataProvider {
     List<Market> getMarkets();
@@ -29,6 +30,16 @@ public interface MarketDataProvider {
     ) {
         List<OhlcEvent> events = findOhlcHistory(market, interval, limit);
         return new MarketHistorySnapshot(events, events, MarketActivityCalculationBasis.VWAP);
+    }
+
+    default List<OhlcEvent> findOhlcHistoryRange(
+            Market market,
+            OhlcInterval interval,
+            Instant fromInclusive,
+            Instant toExclusive,
+            int limit
+    ) {
+        throw new UnsupportedOperationException("Bounded OHLC range acquisition is unavailable for " + getName());
     }
 
 }

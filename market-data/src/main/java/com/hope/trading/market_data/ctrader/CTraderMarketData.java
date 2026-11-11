@@ -126,6 +126,22 @@ public class CTraderMarketData implements MarketDataProvider {
                 MarketActivityCalculationBasis.CLOSE_PRICE_FALLBACK);
     }
 
+    @Override
+    public List<OhlcEvent> findOhlcHistoryRange(Market market, OhlcInterval interval,
+                                                Instant fromInclusive, Instant toExclusive, int limit) {
+        validate(market, interval, limit);
+        if (fromInclusive == null || toExclusive == null || !fromInclusive.isBefore(toExclusive)) {
+            throw new IllegalArgumentException("cTrader OHLC range must be ordered");
+        }
+        long symbolId = Long.parseLong(market.getProviderSymbol());
+        CTraderOpenApiClient.CTraderSymbol symbol = new CTraderOpenApiClient.CTraderSymbol(
+                symbolId, market.getSymbol(), market.getMarketConstraints().pricePrecision(), 0, 0, 0);
+        return client.trendbars(symbolId, period(interval), fromInclusive, toExclusive, limit).stream()
+                .map(bar -> toEvent(market, interval, symbol, bar, toExclusive))
+                .sorted(Comparator.comparing(OhlcEvent::openTime))
+                .toList();
+    }
+
     private Optional<Market> toMarket(CTraderOpenApiClient.CTraderSymbol symbol) {
         String canonical = properties.symbolMappings().get(symbol.name());
         if (canonical == null || canonical.isBlank()) return Optional.empty();

@@ -21,7 +21,7 @@ interface SpringDataObservedMarketOutcomeRepository
     List<JpaObservedMarketOutcomeEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThan(
             Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive);
 
-    List<JpaObservedMarketOutcomeEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanOrderByEvaluationCutoffAsc(
+    List<JpaObservedMarketOutcomeEntity> findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanOrderByEvaluationCutoffAscMarketIdAscOutcomeIdAsc(
             Collection<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive, Pageable pageable);
 
     long countByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanAndStatus(
