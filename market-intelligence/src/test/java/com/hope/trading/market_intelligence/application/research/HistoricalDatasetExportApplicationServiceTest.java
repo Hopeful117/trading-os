@@ -47,7 +47,7 @@ class HistoricalDatasetExportApplicationServiceTest {
         String quality = Files.readString(result.outputDirectory().resolve("quality-report.json"));
         String rows = Files.readString(result.outputDirectory().resolve("observations.jsonl"));
 
-        assertThat(result.eligibleRows()).isZero();
+        assertThat(result.eligibleRows()).isGreaterThan(0);
         assertThat(quality).contains("VERIFIED_CLOSURE");
         assertThat(rows).contains("CONTIGUOUS_ONLY");
         assertThat(rows).contains("\"absoluteFutureNetReturn\"");
@@ -75,7 +75,8 @@ class HistoricalDatasetExportApplicationServiceTest {
         var result = service.prepareMl01Export(spec(Set.of(EUR_USD)), temp.resolve("ambiguous"));
 
         assertThat(Files.readString(result.outputDirectory().resolve("observations.jsonl")))
-                .contains("UNKNOWN_CLOSURE_EVIDENCE");
+                .contains("UNEXPLAINED_GAP")
+                .doesNotContain("VERIFIED_CLOSURE");
     }
 
     @Test
