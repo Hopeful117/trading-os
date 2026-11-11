@@ -2,13 +2,15 @@
 
 ## Review Scope
 
-Reviewed the complete uncommitted diff for Story 0227, including the evaluator,
+Reviewed the Story 0227 implementation based on the committed baseline
+`480339c4` and the current working-tree changes, including the evaluator,
 HistData preparation integration, export regressions, deterministic tests and
 Story documentation artifacts.
 
 ## Findings
 
-No blocking or high-severity findings identified.
+The independent review identified four major findings and one minor stale
+documentation claim. All findings were corrected in the current working tree.
 
 The implementation keeps the responsibility boundary explicit:
 
@@ -17,6 +19,10 @@ The implementation keeps the responsibility boundary explicit:
 - `ASSUMED_SESSION_TRANSITION` is not emitted as `VERIFIED_CLOSURE`;
 - unexplained strict gaps remain fail-closed in quality diagnostics;
 - policy metadata participates in bundle and row fingerprint validation;
+- unknown and contradictory interior quality evidence fails closed;
+- partial exploratory history cannot be presented as strict feature evidence;
+- all continuity policy parameters are fingerprinted and bundle-validated;
+- unsupported closure types cannot become verified closure evidence;
 - no broker, MCP, production API or AI execution authority is introduced.
 
 ## Test And Validation Review
@@ -26,7 +32,10 @@ The implementation keeps the responsibility boundary explicit:
 - Preparation integration coverage exercises a Friday-to-Sunday session gap and
   verifies separation of assumed research strata from strict gap diagnostics.
 - Existing HistData, admissibility and export regression tests pass.
-- Full `market-intelligence` `mvn -q verify` passes.
+- Regression tests cover unknown interior quality, partial-history provenance,
+  unsupported closure types and continuity-policy tampering.
+- Full `market-intelligence` `mvn -q test` completed successfully in the current
+  workflow.
 - `git diff --check` passes.
 
 ## Residual Risks
@@ -38,5 +47,5 @@ The implementation keeps the responsibility boundary explicit:
 
 ## Review Outcome
 
-Implementation is ready for human validation. No code-review change is required
-before that validation.
+Implementation is ready for human validation. The working tree still contains
+unrelated untracked ML-01.1 reports, which remain untouched.

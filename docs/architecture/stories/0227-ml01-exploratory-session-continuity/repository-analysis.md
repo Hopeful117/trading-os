@@ -15,19 +15,21 @@ implementation scope or a later workflow stage.
   Story artifacts are therefore authoritative for current state.
 - The Obsidian vault was not consulted; no personal-note context is required to
   determine this local Java implementation boundary.
-- The worktree contains existing uncommitted Story 0227 implementation changes.
-  They are preserved and are reviewed as the current candidate implementation;
-  no commit, push, merge or branch cleanup has been performed.
+- The Story 0227 implementation is present in `HEAD` (`480339c4`) on branch
+  `story/0227-ml01-exploratory-session-continuity`. The current worktree also
+  contains unrelated untracked ML-01.1 reports; they are preserved and excluded
+  from this Story. No commit, push, merge or branch cleanup was performed during
+  the review and correction workflow.
 
 ## Repository State
 
-- Branch: `main`
-- Base branch state: synchronized with `origin/main` before the Story 0227 work
-  was resumed.
-- Current modified implementation files:
+- Branch: `story/0227-ml01-exploratory-session-continuity`
+- Base branch state: the Story 0227 candidate is recorded in `HEAD` and the
+  branch tracks its origin branch.
+- Story 0227 implementation files reviewed:
   - `market-intelligence/src/main/java/com/hope/trading/market_intelligence/application/research/histdata/Ml01HistDataPreparation.java`
   - `market-intelligence/src/main/java/com/hope/trading/market_intelligence/application/research/histdata/Ml01ExploratorySessionContinuityEvaluator.java`
-- Current modified or added tests:
+- Story 0227 tests reviewed:
   - `market-intelligence/src/test/java/com/hope/trading/market_intelligence/application/research/histdata/Ml01HistDataPreparationTest.java`
   - `market-intelligence/src/test/java/com/hope/trading/market_intelligence/application/research/histdata/Ml01ExploratorySessionContinuityEvaluatorTest.java`
   - `market-intelligence/src/test/java/com/hope/trading/market_intelligence/application/research/HistoricalDatasetExportApplicationServiceTest.java`
@@ -64,7 +66,7 @@ research-only session continuity layer.
 
 ## Current Implementation Evidence
 
-The worktree already contains a focused implementation candidate:
+The committed candidate contains a focused implementation:
 
 - `Ml01ExploratorySessionContinuityEvaluator` defines the policy ID, source
   offset, 49-hour maximum gap, one-transition limit and classifications.
@@ -111,9 +113,9 @@ production API, MCP permission, model-training path or broker capability.
 
 ## Risks
 
-- The Story 0227 implementation is already present as uncommitted work, so the
-  plan must distinguish candidate implementation from formally approved Story
-  scope.
+- The Story 0227 implementation is already present in `HEAD`, so validation and
+  corrections must distinguish the committed candidate from the current review
+  changes and preserve unrelated untracked reports.
 - A weekend assumption must never be serialized or interpreted as
   `VERIFIED_CLOSURE`.
 - Future-window transition counting must remain bounded to valid admissible H1

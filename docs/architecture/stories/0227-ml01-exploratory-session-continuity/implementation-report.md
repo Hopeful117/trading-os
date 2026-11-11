@@ -79,9 +79,41 @@ diagnostic warnings.
 - This is offline research behavior only; it does not validate a real provider
   session calendar.
 - Scientific partition approval and ML readiness remain deferred.
-- The current worktree remains uncommitted on `main` for human review.
+- The candidate implementation is already present in `HEAD` (`480339c4`) on
+  `story/0227-ml01-exploratory-session-continuity`. No commit, push, merge or
+  branch cleanup was performed during this validation.
 - DevLog lifecycle/context operations were unavailable in this tool environment;
   repository and accepted ADR/Story evidence were used instead.
+
+## Validation Reconciliation
+
+- Focused Story regression suite: passed during this workflow.
+- Full `market-intelligence` `mvn -q test`: completed successfully during this
+  workflow. Existing H2/Flyway, Mockito, discovery and concurrency diagnostic
+  warnings were emitted; no Maven test failure was reported.
+- `git diff --check`: passed.
+- The implementation and Story documentation changes remain uncommitted for
+  human review.
+
+## Independent Review Corrections
+
+- Interior session buckets now fail closed unless they are explicit
+  `SESSION_UNCERTAIN` empty buckets with only the bounded missing-minute reasons;
+  unknown, contradictory and invalid quality evidence is rejected.
+- Feature provenance is `RESEARCH_EXPLORATORY` whenever any candle in the
+  selected history is `PARTIAL_EXPLORATORY`.
+- Source offset, nominal closure bounds, reopening bound and transition limit
+  are included in the dataset fingerprint and verified during bundle validation.
+- Closure evidence is limited to scheduled, recurring-scheduled, holiday and
+  exceptional market closure types; unsupported types are rejected or classified
+  as unknown evidence.
+- Repository Analysis now records the actual Story branch and committed
+  implementation state.
+- Added regression tests for unknown interior quality, partial-history
+  provenance, unsupported closure types, adapter validation and policy-parameter
+  tampering.
+
+The validation commands were rerun after these corrections and passed.
 
 ## Vault Outcome
 

@@ -3,14 +3,14 @@
 ## Objective
 
 Complete and validate the bounded, research-only HistData session continuity
-policy described by Story 0227, using the existing uncommitted candidate
-implementation as the starting point. The implementation must preserve strict
+policy described by Story 0227, using the existing candidate implementation at
+`HEAD` as the starting point. The implementation must preserve strict
 Market Data evidence while allowing one explicitly classified exploratory
 weekend-session transition in an ML-01 feature-plus-outcome window.
 
 ## Current Candidate
 
-The worktree already contains the following candidate changes:
+The current `HEAD` commit (`480339c4`) contains the following candidate changes:
 
 - `Ml01ExploratorySessionContinuityEvaluator` with the named policy and bounded
   transition rules;
@@ -19,6 +19,11 @@ The worktree already contains the following candidate changes:
 - row, quality-report, manifest and fingerprint provenance;
 - evaluator and preparation tests;
 - export regression-test updates.
+
+The current worktree is clean with respect to Story 0227 implementation files;
+it contains two unrelated untracked ML-01.1 reports that must remain untouched.
+The implementation phase must therefore inspect the committed candidate and
+make only narrowly justified corrections within the approved Story scope.
 
 The plan treats these changes as candidate implementation to verify and correct
 within the approved Story scope. No unrelated worktree changes will be
