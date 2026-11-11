@@ -65,6 +65,12 @@ class Ml01ExploratorySessionContinuityEvaluatorTest {
                 .isEqualTo(Ml01ExploratorySessionContinuityEvaluator.Classification.UNEXPLAINED_GAP);
         assertThat(EVALUATOR.evaluate(invalid, 1, invalid.size() - 2).classification())
                 .isEqualTo(Ml01ExploratorySessionContinuityEvaluator.Classification.INVALID_OBSERVATION);
+
+        var unknown = weekendWindow(LocalDateTime.of(2026, 9, 4, 16, 0), 17);
+        unknown.set(2, observation(candle("2026-09-05T00:00:00Z", "2026-09-05T01:00:00Z",
+                        HistDataOfflinePipeline.AggregationState.SESSION_UNCERTAIN, 0), unknownDecision()));
+        assertThat(EVALUATOR.evaluate(unknown, 1, unknown.size() - 2).classification())
+                .isEqualTo(Ml01ExploratorySessionContinuityEvaluator.Classification.INVALID_OBSERVATION);
     }
 
     @Test
@@ -145,5 +151,15 @@ class Ml01ExploratorySessionContinuityEvaluatorTest {
                 LocalDateTime.of(2026, 9, 5, 0, 0), Instant.parse("2026-09-05T06:00:00Z"), 60, 0,
                 List.of(), false, false, 60, false, false, false, false,
                 HistDataOfflinePipeline.AggregationState.SESSION_UNCERTAIN, List.of("UNEXPLAINED_GAP"));
+    }
+
+    private static Ml01H1AdmissibilityDecision unknownDecision() {
+        return new Ml01H1AdmissibilityDecision("ML01_HISTDATA_EXPLORATORY_V1", "v1",
+                Ml01H1ResearchQualityState.UNKNOWN_QUALITY,
+                List.of(Ml01H1RejectionReason.UNKNOWN_PROVENANCE),
+                Ml01H1RejectionReason.UNKNOWN_PROVENANCE.name(), "EUR/USD", "test", "fingerprint",
+                LocalDateTime.of(2026, 9, 5, 0, 0), Instant.parse("2026-09-05T06:00:00Z"), 60, 0,
+                List.of(), false, false, 60, false, false, false, false,
+                HistDataOfflinePipeline.AggregationState.SESSION_UNCERTAIN, List.of("UNKNOWN_QUALITY"));
     }
 }

@@ -49,6 +49,8 @@ public final class Ml01HistDataPreparation {
     public static final String CONTINUITY_SCOPE = "EXPLICIT_RESEARCH_STRATA";
     public static final String SESSION_TRANSITION_STATUS = "IMPLEMENTED_RESEARCH_ONLY";
     public static final String NORMALIZATION_VERSION = "histdata-m1-normalization-v1";
+    private static final Set<String> SUPPORTED_CLOSURE_TYPES = Set.of(
+            "SCHEDULED", "SCHEDULED_RECURRING", "HOLIDAY", "EXCEPTIONAL");
     private static final MathContext MC = MathContext.DECIMAL128;
     private static final Duration UNAPPROVED = Duration.ZERO;
     public static final String CONTINUITY_POLICY_VERSION = Ml01ExploratorySessionContinuityEvaluator.POLICY_VERSION;
@@ -143,6 +145,18 @@ public final class Ml01HistDataPreparation {
         require(manifest.path("normalizationVersion").asText(), NORMALIZATION_VERSION);
         require(manifest.path("continuityPolicyId").asText(), Ml01ExploratorySessionContinuityEvaluator.POLICY_ID);
         require(manifest.path("continuityPolicyVersion").asText(), CONTINUITY_POLICY_VERSION);
+        require(manifest.path("continuityPolicyParameters").path("sourceTimezone").asText(),
+                Ml01ExploratorySessionContinuityEvaluator.SOURCE_OFFSET.toString());
+        require(manifest.path("continuityPolicyParameters").path("nominalClosure").asText(),
+                "FRIDAY_17_TO_SUNDAY_17_SOURCE_LOCAL");
+        require(manifest.path("continuityPolicyParameters").path("latestPermittedReopening").asText(),
+                "SUNDAY_18_SOURCE_LOCAL");
+        require(manifest.path("continuityPolicyParameters").path("maximumGap").asText(),
+                Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString());
+        if (manifest.path("continuityPolicyParameters").path("maximumTransitions").asInt(-1)
+                != Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS) {
+            throw new IllegalStateException("ML-01 continuity transition limit mismatch");
+        }
         if (manifest.path("startCutoffInclusive").isMissingNode()
                 || manifest.path("endCutoffExclusive").isMissingNode()) {
             throw new IllegalStateException("ML-01 manifest cutoff contract is incomplete");
@@ -187,8 +201,10 @@ public final class Ml01HistDataPreparation {
         }
         List<String> material = new ArrayList<>(List.of(DATASET_DEFINITION_VERSION, SOURCE_PROFILE,
                 RESEARCH_FEATURE_SCHEMA_VERSION, OUTCOME_DEFINITION_VERSION, FEATURES.toString(), HORIZONS.toString(),
-                CONTINUITY_POLICY_VERSION, Ml01ExploratorySessionContinuityEvaluator.POLICY_ID,
-                Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
+                 CONTINUITY_POLICY_VERSION, Ml01ExploratorySessionContinuityEvaluator.POLICY_ID,
+                 Ml01ExploratorySessionContinuityEvaluator.SOURCE_OFFSET.toString(),
+                 "FRIDAY_17_TO_SUNDAY_17_SOURCE_LOCAL", "SUNDAY_18_SOURCE_LOCAL",
+                 Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
                 Integer.toString(Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS),
                 Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
                 Ml01ExploratoryH1AdmissibilityProfile.V1.version(),
@@ -357,7 +373,10 @@ public final class Ml01HistDataPreparation {
                     HistDataOfflinePipeline.PRICE_SIDE, reference.closeTime().toString(),
                     historyFingerprint(history))).value();
             ResearchFeatureProjection snapshot = directAnalysis(imported, reference, history, executionId,
-                    contextFingerprint, closureEvidence, admissibilityDecision.state());
+                    contextFingerprint, closureEvidence, admissibilityDecision.state(),
+                    history.stream().anyMatch(value -> series.observations().stream()
+                            .anyMatch(observation -> observation.candle().equals(value)
+                                    && observation.admissibility().state() == Ml01H1ResearchQualityState.PARTIAL_EXPLORATORY)));
             Map<Integer, FutureOutcome> outcomes = new LinkedHashMap<>();
             for (int horizon : HORIZONS) {
                 outcomes.put(horizon, outcome(series, candidatePosition, reference, horizon));
@@ -419,7 +438,8 @@ public final class Ml01HistDataPreparation {
                                                             List<HistDataOfflinePipeline.AggregatedCandle> history,
                                                             UUID executionId, String contextFingerprint,
                                                             List<ClosureEvidence> closureEvidence,
-                                                            Ml01H1ResearchQualityState qualityState) {
+                                                            Ml01H1ResearchQualityState qualityState,
+                                                            boolean historyContainsPartialExploratory) {
         List<OhlcPoint> points = history.stream().map(value -> new OhlcPoint(value.openTime(), value.closeTime(),
                 value.open(), value.high(), value.low(), value.close(), null)).toList();
         HistoricalOhlcContext context = new HistoricalOhlcContext(imported.marketId(), "H1", points);
@@ -448,6 +468,7 @@ public final class Ml01HistDataPreparation {
         provenance.put("contextFingerprint", contextFingerprint);
         provenance.put("inputFingerprint", inputFingerprint);
         provenance.put("evidencePolicy", qualityState == Ml01H1ResearchQualityState.FULL_OBSERVED
+                && !historyContainsPartialExploratory
                 ? EvidenceAcquisitionPolicy.STRICT_OBSERVED.name() : "RESEARCH_EXPLORATORY");
         provenance.put("observationCount", points.size());
         provenance.put("cutoff", reference.closeTime());
@@ -646,7 +667,7 @@ public final class Ml01HistDataPreparation {
                         && !value.effectiveTo().isBefore(next.openTime())
                         && !value.knownAt().isAfter(cutoff))
                 .toList();
-        if (applicable.size() == 1) {
+        if (applicable.size() == 1 && SUPPORTED_CLOSURE_TYPES.contains(applicable.getFirst().closureType().toUpperCase())) {
             return new Transition(TransitionClassification.VERIFIED_CLOSURE, applicable.getFirst(),
                     "scoped closure evidence covers the transition");
         }
@@ -682,7 +703,7 @@ public final class Ml01HistDataPreparation {
         result.put("continuityPolicyId", Ml01ExploratorySessionContinuityEvaluator.POLICY_ID);
         result.put("continuityPolicyParameters", Map.of(
                 "provider", HistDataOfflinePipeline.SOURCE_PROVIDER,
-                "sourceTimezone", HistDataOfflinePipeline.SOURCE_SEMANTICS,
+                "sourceTimezone", Ml01ExploratorySessionContinuityEvaluator.SOURCE_OFFSET.toString(),
                 "nominalClosure", "FRIDAY_17_TO_SUNDAY_17_SOURCE_LOCAL",
                 "latestPermittedReopening", "SUNDAY_18_SOURCE_LOCAL",
                 "maximumGap", Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
@@ -734,6 +755,7 @@ public final class Ml01HistDataPreparation {
         result.put("normalizationVersion", NORMALIZATION_VERSION);
         result.put("continuityPolicyId", Ml01ExploratorySessionContinuityEvaluator.POLICY_ID);
         result.put("continuityPolicyVersion", CONTINUITY_POLICY_VERSION);
+        result.put("continuityPolicyParameters", continuityPolicyParameters());
         result.put("continuityStrata", rows.stream().map(Row::continuityStratum).distinct().sorted().toList());
         result.put("closureEvidenceFingerprints", closureEvidence == null ? List.of()
                 : closureEvidence.stream().map(ClosureEvidence::fingerprint).sorted().toList());
@@ -853,8 +875,10 @@ public final class Ml01HistDataPreparation {
                                       Map<String, String> sourceChecksums) {
         List<String> material = new ArrayList<>(List.of(DATASET_DEFINITION_VERSION, SOURCE_PROFILE,
                 RESEARCH_FEATURE_SCHEMA_VERSION, OUTCOME_DEFINITION_VERSION, FEATURES.toString(), HORIZONS.toString(),
-                CONTINUITY_POLICY_VERSION, Ml01ExploratorySessionContinuityEvaluator.POLICY_ID,
-                Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
+                 CONTINUITY_POLICY_VERSION, Ml01ExploratorySessionContinuityEvaluator.POLICY_ID,
+                 Ml01ExploratorySessionContinuityEvaluator.SOURCE_OFFSET.toString(),
+                 "FRIDAY_17_TO_SUNDAY_17_SOURCE_LOCAL", "SUNDAY_18_SOURCE_LOCAL",
+                 Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
                 Integer.toString(Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS),
                 Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
                 Ml01ExploratoryH1AdmissibilityProfile.V1.version(),
@@ -875,6 +899,17 @@ public final class Ml01HistDataPreparation {
             material.add("row=" + rowFingerprint(row));
         });
         return ArtifactFingerprint.ofInputs(material).value();
+    }
+
+    private static Map<String, Object> continuityPolicyParameters() {
+        return Map.of(
+                "provider", HistDataOfflinePipeline.SOURCE_PROVIDER,
+                "sourceTimezone", Ml01ExploratorySessionContinuityEvaluator.SOURCE_OFFSET.toString(),
+                "nominalClosure", "FRIDAY_17_TO_SUNDAY_17_SOURCE_LOCAL",
+                "latestPermittedReopening", "SUNDAY_18_SOURCE_LOCAL",
+                "maximumGap", Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
+                "maximumTransitions", Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS,
+                "usage", "RETROSPECTIVE_EXPLORATORY_ONLY");
     }
 
     private static void writeRows(Path path, List<Row> rows) throws IOException {

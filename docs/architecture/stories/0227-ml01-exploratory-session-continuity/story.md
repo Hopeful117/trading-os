@@ -4,7 +4,7 @@
 
 **ID:** `0227`
 **Title:** ML-01 Exploratory Session Continuity
-**Status:** Repository Analysis pending human approval
+**Status:** Review
 **Priority:** P1 - Research Trustworthiness
 **Related ADRs:** `ADR-092`, `ADR-093`, `ADR-094`, `ADR-095`
 **Predecessor:** `Story 0226` - ML-01 Exploratory H1 Admissibility Evaluator

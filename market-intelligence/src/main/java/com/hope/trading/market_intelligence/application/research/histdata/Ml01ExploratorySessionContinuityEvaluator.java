@@ -103,14 +103,11 @@ public final class Ml01ExploratorySessionContinuityEvaluator {
                 return rejected(Classification.UNEXPLAINED_GAP, previousIndex, nextIndex,
                         "observed activity exists inside the nominal closure");
             }
-            if (candle.state() == HistDataOfflinePipeline.AggregationState.INVALID
-                    || candle.state() == HistDataOfflinePipeline.AggregationState.INCOMPLETE
-                    && !openLocal.isBefore(nominalStart) && openLocal.isBefore(latestReopening)
-                    && !interior.admissibility().rejectionReasons().isEmpty()
-                    && interior.admissibility().rejectionReasons().stream()
-                    .anyMatch(reason -> reason != Ml01H1RejectionReason.INSUFFICIENT_VALID_M1_COUNT)) {
+            if (!permittedEmptySessionObservation(interior, nominalStart, latestReopening)) {
                 return rejected(Classification.INVALID_OBSERVATION, previousIndex, nextIndex,
-                        "invalid or incompatible observation exists inside the assumed closure");
+                        "unknown, invalid or incompatible observation exists inside the assumed closure: state="
+                                + interior.admissibility().state() + ", reasons="
+                                + interior.admissibility().rejectionReasons());
             }
             if (openLocal.isBefore(nominalStart) || openLocal.isAfter(latestReopening)) {
                 return rejected(Classification.UNEXPLAINED_GAP, previousIndex, nextIndex,
@@ -120,6 +117,20 @@ public final class Ml01ExploratorySessionContinuityEvaluator {
         return new Transition(Classification.ASSUMED_SESSION_TRANSITION, previousIndex, nextIndex,
                 nominalStart, nominalEnd, latestReopening, elapsed,
                 "bounded retrospective weekend assumption");
+    }
+
+    private boolean permittedEmptySessionObservation(Observation observation,
+                                                     LocalDateTime nominalStart,
+                                                     LocalDateTime latestReopening) {
+        LocalDateTime openLocal = observation.candle().openTime().atOffset(SOURCE_OFFSET).toLocalDateTime();
+        if (openLocal.isBefore(nominalStart) || openLocal.isAfter(latestReopening)) return false;
+        if (observation.candle().state() != HistDataOfflinePipeline.AggregationState.SESSION_UNCERTAIN) return false;
+        if (observation.admissibility().state() != Ml01H1ResearchQualityState.REJECTED) return false;
+        return !observation.admissibility().rejectionReasons().isEmpty()
+                && observation.admissibility().rejectionReasons().stream()
+                .allMatch(reason -> reason == Ml01H1RejectionReason.INSUFFICIENT_VALID_M1_COUNT
+                        || reason == Ml01H1RejectionReason.MISSING_FIRST_MINUTE
+                        || reason == Ml01H1RejectionReason.MISSING_LAST_MINUTE);
     }
 
     public boolean permits(List<Transition> transitions) {

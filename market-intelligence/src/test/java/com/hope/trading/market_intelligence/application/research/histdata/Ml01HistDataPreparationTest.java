@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class Ml01HistDataPreparationTest {
     private static final DateTimeFormatter SOURCE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd HHmmss");
@@ -108,6 +109,7 @@ class Ml01HistDataPreparationTest {
         String rows = Files.readString(output.resolve("observations.jsonl"));
         assertThat(rows).contains("PARTIAL_EXPLORATORY")
                 .contains("RESEARCH_EXPLORATORY")
+                .contains("\"evidencePolicy\":\"RESEARCH_EXPLORATORY\"")
                 .contains("STRICT_OBSERVED");
     }
 
@@ -163,6 +165,36 @@ class Ml01HistDataPreparationTest {
         assertThat(Ml01HistDataPreparation.classifyTransition(previous, next,
                 Instant.parse("2026-09-01T13:00:00Z"), List.of(closure)))
                 .isEqualTo(Ml01HistDataPreparation.TransitionClassification.INVALID_OBSERVATION);
+    }
+
+    @Test
+    void rejectsUnsupportedClosureTypeAsUnknownEvidence() {
+        var previous = candle("2026-09-01T10:00:00Z", "2026-09-01T11:00:00Z");
+        var next = candle("2026-09-01T12:00:00Z", "2026-09-01T13:00:00Z");
+        var unsupported = new Ml01HistDataPreparation.ClosureEvidence(
+                UUID.randomUUID(), previous.marketId(), previous.symbol(), "H1", "HISTDATA",
+                "PROVIDER_UNAVAILABLE", "provider interruption", previous.closeTime(), next.openTime(),
+                Instant.parse("2026-09-01T09:00:00Z"), Instant.parse("2026-09-01T00:00:00Z"),
+                Instant.parse("2026-09-02T00:00:00Z"), "calendar", "v1", "unsupported");
+
+        assertThat(Ml01HistDataPreparation.classifyTransition(previous, next,
+                Instant.parse("2026-09-01T14:00:00Z"), List.of(unsupported)))
+                .isEqualTo(Ml01HistDataPreparation.TransitionClassification.UNKNOWN_CLOSURE_EVIDENCE);
+    }
+
+    @Test
+    void publishedBundleValidationRejectsTamperedContinuityPolicyParameters(@TempDir Path temp) throws Exception {
+        Path input = writeSources(temp, 72);
+        Path output = temp.resolve("ml01-policy-tamper");
+        Ml01HistDataPreparation.prepare(input, output,
+                Ml01HistDataPreparation.PartitionConfiguration.requiresApproval());
+        Path manifest = output.resolve("dataset-manifest.json");
+        Files.writeString(manifest, Files.readString(manifest).replace("\"sourceTimezone\" : \"-05:00\"",
+                "\"sourceTimezone\" : \"+00:00\""));
+
+        assertThatThrownBy(() -> Ml01HistDataPreparation.validatePublishedBundle(output, input))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("-05:00");
     }
 
     @Test
