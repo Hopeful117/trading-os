@@ -45,6 +45,9 @@ build/
 **/.venv/
 **/*.egg-info/
 
+### Local tooling dependencies ###
+/tools/dukascopy/node_modules/
+
 ### Local browser artifacts ###
 .playwright-mcp/
 *.png

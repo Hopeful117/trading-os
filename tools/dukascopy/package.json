@@ -1,0 +1,11 @@
+{
+  "name": "trading-os-dukascopy-acquisition",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dukascopy-node": "1.51.1"
+  }
+}
