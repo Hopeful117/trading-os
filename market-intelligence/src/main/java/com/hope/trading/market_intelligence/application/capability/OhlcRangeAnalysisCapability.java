@@ -6,6 +6,8 @@ import com.hope.trading.market_intelligence.domain.capability.*;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisResultQuality;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.hope.trading.market_intelligence.domain.volatility.VolatilityAssessment;
+import com.hope.trading.market_intelligence.domain.volatility.VolatilityCalculator;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -20,6 +22,7 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
     public static final String CAPABILITY_ID = "ohlc-range-analysis";
     public static final String CAPABILITY_VERSION = "1.1.0";
     private final OhlcTemporalCalculator calculator;
+    private final VolatilityCalculator volatilityCalculator;
 
     @Autowired
     public OhlcRangeAnalysisCapability() {
@@ -28,6 +31,7 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
 
     OhlcRangeAnalysisCapability(OhlcTemporalCalculator calculator) {
         this.calculator = calculator;
+        this.volatilityCalculator = new VolatilityCalculator();
     }
 
     @Override
@@ -48,7 +52,12 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
                         new ProducedContribution.MetricContribution("range"),
                         new ProducedContribution.MetricContribution("rangePercentage"),
                         new ProducedContribution.MetricContribution("priceChange"),
-                        new ProducedContribution.MetricContribution("simpleReturn")),
+                        new ProducedContribution.MetricContribution("simpleReturn"),
+                        new ProducedContribution.MetricContribution("atr"),
+                        new ProducedContribution.MetricContribution("normalizedAtr"),
+                        new ProducedContribution.MetricContribution("realizedVolatility"),
+                        new ProducedContribution.MetricContribution("volatilityCompressionRatio"),
+                        new ProducedContribution.MetricContribution("directionalEfficiency")),
                 java.time.Duration.ofSeconds(1), null);
     }
 
@@ -57,13 +66,15 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
         StoredArtifact input = context.resolvedArtifacts().values().stream()
                 .flatMap(List::stream).findFirst().orElseThrow();
         HistoricalOhlcContext history = (HistoricalOhlcContext) input.content();
-        OhlcTemporalAnalysis analysis = calculator.calculate(history, null);
+        OhlcTemporalAnalysis analysis = calculator.calculate(history, context.evaluationCutoff());
         if (analysis.status() != DeterministicAnalysisStatus.AVAILABLE) {
             return CapabilityResult.noOpportunity(List.of(analysis.status().name()),
                     analysis.status() == DeterministicAnalysisStatus.INSUFFICIENT_DATA
                             ? CapabilityCompleteness.PARTIAL : CapabilityCompleteness.DEGRADED);
         }
         Map<String, BigDecimal> measurements = measurements(analysis);
+        addVolatility(measurements, volatilityCalculator.calculate(history, context.evaluationCutoff(),
+                input.key().inputFingerprint().value()));
         Instant observedAt = analysis.evidenceEnd();
         boolean partial = analysis.simpleReturnStatus() != DeterministicAnalysisStatus.AVAILABLE;
         ArtifactIdentity identity = new ArtifactIdentity(
@@ -131,6 +142,8 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
             return CapabilityAnalysisResult.empty("OHLC input is " + analysis.status());
         }
         Map<String, BigDecimal> measurements = measurements(analysis);
+        addVolatility(measurements, volatilityCalculator.calculate(history,
+                context.evaluationCutoff().orElse(null), ArtifactFingerprint.empty().value()));
         Instant generatedAt = analysis.evidenceEnd();
 
         return new CapabilityAnalysisResult(
@@ -165,6 +178,15 @@ public class OhlcRangeAnalysisCapability implements DeterministicAnalysisCapabil
         if (analysis.simpleReturn() != null) {
             measurements.put("simpleReturn", analysis.simpleReturn());
         }
-        return Map.copyOf(measurements);
+        return measurements;
+    }
+
+    private void addVolatility(Map<String, BigDecimal> measurements, VolatilityAssessment volatility) {
+        if (volatility.status() != VolatilityAssessment.Status.AVAILABLE) return;
+        measurements.put("atr", volatility.atr());
+        measurements.put("normalizedAtr", volatility.normalizedAtr());
+        measurements.put("realizedVolatility", volatility.realizedVolatility());
+        measurements.put("volatilityCompressionRatio", volatility.compressionRatio());
+        measurements.put("directionalEfficiency", volatility.directionalEfficiency());
     }
 }

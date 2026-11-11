@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.Instant;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -68,6 +69,22 @@ public class MarketHistoryService {
                 interval,
                 limit
         );
+    }
+
+    public List<OhlcEvent> findOhlcHistoryRange(UUID marketId, OhlcInterval interval,
+                                                Instant fromInclusive, Instant toExclusive, int limit) {
+        validateRequest(interval, limit);
+        if (marketId == null || fromInclusive == null || toExclusive == null
+                || !fromInclusive.isBefore(toExclusive)) {
+            throw new IllegalArgumentException("market, interval and ordered range are required");
+        }
+        Market market = marketRepository.findById(marketId)
+                .orElseThrow(() -> new EntityNotFoundException("Market not found: " + marketId));
+        MarketDataProvider provider = providers.get(market.getProvider());
+        if (provider == null) {
+            throw new UnsupportedOperationException("No market data provider registered for " + market.getProvider());
+        }
+        return provider.findOhlcHistoryRange(market, interval, fromInclusive, toExclusive, limit);
     }
 
     private void validateRequest(

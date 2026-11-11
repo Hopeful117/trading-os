@@ -39,10 +39,14 @@ public class FeatureSnapshotProjectionService {
     }
 
     public FeatureSnapshot project(UUID analysisExecutionId) {
-        return project(analysisExecutionId, null);
+        return project(analysisExecutionId, null, FeatureProjectionV1.VERSION);
     }
 
     public FeatureSnapshot project(UUID analysisExecutionId, UUID reconstructionLeaseId) {
+        return project(analysisExecutionId, reconstructionLeaseId, FeatureProjectionV1.VERSION);
+    }
+
+    public FeatureSnapshot project(UUID analysisExecutionId, UUID reconstructionLeaseId, String projectionVersion) {
         AnalysisExecution execution = executions.findById(analysisExecutionId)
                 .orElseThrow(() -> new IllegalArgumentException("Analysis execution not found: " + analysisExecutionId));
         if (execution.provenance().evidencePolicy() != EvidenceAcquisitionPolicy.STRICT_OBSERVED) {
@@ -66,10 +70,17 @@ public class FeatureSnapshotProjectionService {
         if (execution.provenance().executionOrigin() == ExecutionOrigin.HISTORICAL_RECONSTRUCTION) {
             HistoricalStructureArtifactValidator.requireAvailable(structures, cutoff);
         }
-        FeatureProjectionV1.ProjectionResult projection = FeatureProjectionV1.project(
-                analysisExecutionId, execution.provenance().marketId(), cutoff,
-                execution.provenance().evidencePolicy(), contextFingerprint,
-                ohlc, structures, trend, clock.instant());
+        FeatureProjectionV1.ProjectionResult projection = switch (projectionVersion) {
+            case FeatureProjectionV1.VERSION -> FeatureProjectionV1.project(
+                    analysisExecutionId, execution.provenance().marketId(), cutoff,
+                    execution.provenance().evidencePolicy(), contextFingerprint,
+                    ohlc, structures, trend, clock.instant());
+            case FeatureProjectionV2.VERSION -> FeatureProjectionV2.project(
+                    analysisExecutionId, execution.provenance().marketId(), cutoff,
+                    execution.provenance().evidencePolicy(), contextFingerprint,
+                    ohlc, structures, trend, clock.instant());
+            default -> throw new IllegalArgumentException("Unsupported feature projection version: " + projectionVersion);
+        };
         FeatureSnapshot snapshot = new FeatureSnapshot(
                 UUID.randomUUID(), analysisExecutionId, execution.provenance().marketId(), cutoff,
                 execution.provenance().evidencePolicy(), projection.schema().version(), contextFingerprint,

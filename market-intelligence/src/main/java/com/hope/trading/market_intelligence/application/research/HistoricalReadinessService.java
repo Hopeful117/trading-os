@@ -52,6 +52,8 @@ public class HistoricalReadinessService {
         List<FeatureSnapshot> values = snapshots.findByPopulation(request.marketIds(), request.cutoffStart(),
                 request.cutoffEnd(), PROJECTION_VERSION, EvidenceAcquisitionPolicy.STRICT_OBSERVED.name(),
                 observationLimit);
+        boolean observationLimitExceeded = values.size() > request.maxObservations();
+        if (observationLimitExceeded) values = values.subList(0, Math.toIntExact(request.maxObservations()));
         int outcomeLimit = Math.toIntExact(request.maxObservations() + 1);
         List<ObservedMarketOutcome> observed = outcomes.findByMarketsAndCutoffRange(request.marketIds(),
                 request.cutoffStart(), request.cutoffEnd(), outcomeLimit);
@@ -68,7 +70,7 @@ public class HistoricalReadinessService {
         String provenance = provenanceStatus(values);
         List<String> blockers = new java.util.ArrayList<>();
         if (values.isEmpty()) blockers.add("NO_FEATURE_SNAPSHOTS");
-        if (values.size() > request.maxObservations()) blockers.add("OBSERVATION_LIMIT_EXCEEDED");
+        if (observationLimitExceeded) blockers.add("OBSERVATION_LIMIT_EXCEEDED");
         if (outcomeLimitExceeded) blockers.add("OUTCOME_LIMIT_EXCEEDED");
         if (postCutoff > 0) blockers.add("POST_CUTOFF_EVIDENCE");
         if ("UNKNOWN".equals(provenance)) blockers.add("PROVENANCE_UNKNOWN");

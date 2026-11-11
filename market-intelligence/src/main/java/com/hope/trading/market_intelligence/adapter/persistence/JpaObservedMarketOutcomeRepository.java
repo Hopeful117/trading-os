@@ -86,7 +86,7 @@ public class JpaObservedMarketOutcomeRepository implements ObservedMarketOutcome
     public List<ObservedMarketOutcome> findByMarketsAndCutoffRange(
             Set<UUID> marketIds, Instant startCutoffInclusive, Instant endCutoffExclusive, int limit) {
         if (marketIds.isEmpty()) return List.of();
-        return repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanOrderByEvaluationCutoffAsc(
+        return repository.findByMarketIdInAndEvaluationCutoffGreaterThanEqualAndEvaluationCutoffLessThanOrderByEvaluationCutoffAscMarketIdAscOutcomeIdAsc(
                         marketIds, startCutoffInclusive, endCutoffExclusive, PageRequest.of(0, limit)).stream()
                 .map(JpaObservedMarketOutcomeEntity::toDomain)
                 .toList();

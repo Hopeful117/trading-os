@@ -7,6 +7,7 @@ import com.hope.trading.market_intelligence.domain.feature.FeatureSnapshot;
 import com.hope.trading.market_intelligence.domain.outcome.ObservedMarketOutcome;
 import com.hope.trading.market_intelligence.domain.research.*;
 import com.hope.trading.market_intelligence.application.feature.FeatureProjectionV1;
+import com.hope.trading.market_intelligence.application.feature.FeatureProjectionV2;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -62,11 +63,7 @@ public final class ResearchDatasetBuilder {
             BooleanSupplier withinLimits
     ) {
         Objects.requireNonNull(population, "population");
-        var schema = FeatureProjectionV1.schema();
-        if (!schema.version().equals(population.featureProjectionVersion())) {
-            throw new IllegalArgumentException("unsupported feature projection version: "
-                    + population.featureProjectionVersion());
-        }
+        var schema = schemaFor(population.featureProjectionVersion());
         validateFeatureRequirements(population, schema);
         Set<ObservedMarketOutcome> uniqueOutcomes = new HashSet<>();
         for (ObservedMarketOutcome outcome : outcomes) {
@@ -229,6 +226,14 @@ public final class ResearchDatasetBuilder {
                 .ifPresent(value -> {
                     throw new IllegalArgumentException("unsupported required feature: " + value);
                 });
+    }
+
+    private com.hope.trading.market_intelligence.domain.feature.FeatureSchema schemaFor(String version) {
+        return switch (version) {
+            case FeatureProjectionV1.VERSION -> FeatureProjectionV1.schema();
+            case FeatureProjectionV2.VERSION -> FeatureProjectionV2.schema();
+            default -> throw new IllegalArgumentException("unsupported feature projection version: " + version);
+        };
     }
 
     private List<String> datasetMaterial(ResearchPopulationSpec population, List<ResearchSample> samples,

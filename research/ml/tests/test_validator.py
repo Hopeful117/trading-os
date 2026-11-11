@@ -6,7 +6,9 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from research_dataset.validator import VALID_EXCLUSION_REASONS, _quality_summary, validate_bundle
+from research_dataset.validator import (SUPPORTED_FEATURE_VERSIONS, VALID_EXCLUSION_REASONS,
+                                        _dataset_material, _fingerprint, _quality_summary,
+                                        _sample_id, _sample_material, validate_bundle)
 from research_dataset.__main__ import main
 
 
@@ -18,9 +20,47 @@ class ValidatorTest(unittest.TestCase):
     def test_accepts_temporal_evidence_unavailable_exclusion_reason(self):
         self.assertIn("FEATURE_EVIDENCE_UNAVAILABLE", VALID_EXCLUSION_REASONS)
 
+    def test_supports_feature_projection_v2(self):
+        self.assertIn("feature-projection-v1", SUPPORTED_FEATURE_VERSIONS)
+        self.assertIn("feature-projection-v2", SUPPORTED_FEATURE_VERSIONS)
+
     def test_accepts_committed_java_generated_fixture(self):
         fixture = Path(__file__).parent / "fixtures" / "java-generated"
         result = validate_bundle(fixture)
+        self.assertTrue(result.valid, result.diagnostics)
+
+    def test_accepts_complete_feature_projection_v2_bundle(self):
+        fixture = Path(__file__).parent / "fixtures" / "java-generated"
+        manifest = json.loads((fixture / "dataset-manifest.json").read_text(encoding="utf-8"))
+        row = json.loads((fixture / "samples.jsonl").read_text(encoding="utf-8"))
+        volatility_features = [
+            "ohlc.atr", "ohlc.normalized_atr", "ohlc.realized_volatility",
+            "ohlc.volatility_compression_ratio", "ohlc.directional_efficiency",
+        ]
+        schema = manifest["featureSchema"]
+        for index, name in enumerate(volatility_features, start=len(schema["definitions"])):
+            definition = dict(schema["definitions"][0])
+            definition.update({"name": name, "order": index, "sourceSemantic": name})
+            schema["definitions"].append(definition)
+            row["features"][name] = {"type": "NUMERIC", "status": "PRESENT", "value": 1.0}
+        manifest["population"]["featureProjectionVersion"] = "feature-projection-v2"
+        manifest["population"]["featureRequirements"]["requiredFeatureNames"] = volatility_features
+        manifest["featureSchema"]["version"] = "feature-projection-v2"
+        row["featureProjectionVersion"] = "feature-projection-v2"
+        row["lineage"]["sampleFingerprintMaterial"] = _sample_material(row)
+        row["lineage"]["sampleFingerprint"] = _fingerprint(row["lineage"]["sampleFingerprintMaterial"])
+        row["sampleId"] = _sample_id(row["lineage"]["sampleFingerprint"])
+        samples = (json.dumps(row, separators=(",", ":")) + "\n").encode("utf-8")
+        manifest["fingerprintMaterial"] = _dataset_material(manifest, manifest["population"], [row])
+        manifest["datasetFingerprint"] = _fingerprint(manifest["fingerprintMaterial"])
+        manifest["samplesSha256"] = hashlib.sha256(samples).hexdigest()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (root / "samples.jsonl").write_bytes(samples)
+            result = validate_bundle(root)
+
         self.assertTrue(result.valid, result.diagnostics)
 
     def test_quality_summary_is_deterministic_and_explicit(self):

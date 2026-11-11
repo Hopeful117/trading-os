@@ -47,6 +47,10 @@ public class MiAgentAccessPolicyFilter extends OncePerRequestFilter {
             return false;
         }
         String suffix = path.substring(prefix.length());
+        if ("POST".equals(request.getMethod())
+                && suffix.equals("readiness")) {
+            return true;
+        }
         if ("POST".equals(request.getMethod())) {
             return suffix.matches(uuid + "/readiness") || suffix.matches(uuid + "/exports");
         }

@@ -57,7 +57,7 @@ PROVENANCE_FIELDS = {
     "sourceArtifactContractVersion",
 }
 SUPPORTED_DATASET_VERSIONS = {"research-dataset-v1"}
-SUPPORTED_FEATURE_VERSIONS = {"feature-projection-v1"}
+SUPPORTED_FEATURE_VERSIONS = {"feature-projection-v1", "feature-projection-v2"}
 SUPPORTED_OUTCOME_VERSIONS = {"market-outcome-v1"}
 
 
