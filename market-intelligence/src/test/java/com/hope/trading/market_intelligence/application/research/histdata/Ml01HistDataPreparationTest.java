@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.application.research.histdata;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -52,10 +53,27 @@ class Ml01HistDataPreparationTest {
                 .contains("researchFeatureEvidencePolicy")
                 .contains("sourceChecksumAlgorithm")
                 .contains("CONTIGUOUS_ONLY")
-                .contains("DEFERRED_NOT_IMPLEMENTED");
+                .contains("IMPLEMENTED_RESEARCH_ONLY");
         assertThat(Files.readString(output.resolve("source-metadata.json")))
                 .contains("sourceChecksums")
                 .contains("SHA-256");
+    }
+
+    @Test
+    void excludesRowsWhenAnyRequiredOutcomeWindowIsUnavailable(@TempDir Path temp) throws Exception {
+        Path input = writeSources(temp, 72);
+        Path output = temp.resolve("ml01-outcome-eligibility");
+
+        Ml01HistDataPreparation.prepare(input, output,
+                Ml01HistDataPreparation.PartitionConfiguration.requiresApproval());
+
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        for (String line : Files.readAllLines(output.resolve("observations.jsonl"))) {
+            var row = mapper.readTree(line);
+            if (!row.path("eligible").asBoolean()) continue;
+            row.path("outcomes").elements().forEachRemaining(outcome ->
+                    assertThat(outcome.path("status").asText()).isEqualTo("AVAILABLE"));
+        }
     }
 
     @Test
@@ -110,6 +128,30 @@ class Ml01HistDataPreparationTest {
     }
 
     @Test
+    void emitsAssumedSessionStratumWithoutChangingStrictGapProvenance(@TempDir Path temp) throws Exception {
+        Path input = writeSourcesAcrossWeekend(temp);
+        Path output = temp.resolve("ml01-weekend");
+
+        Ml01HistDataPreparation.prepare(input, output,
+                Ml01HistDataPreparation.PartitionConfiguration.requiresApproval());
+
+        String rows = Files.readString(output.resolve("observations.jsonl"));
+        String manifest = Files.readString(output.resolve("dataset-manifest.json"));
+        String quality = Files.readString(output.resolve("quality-report.json"));
+        assertThat(rows).contains("ASSUMED_SESSION_TRANSITION")
+                .contains("ML01_HISTDATA_WEEKEND_SESSION_ASSUMPTION_V1")
+                .contains("featureTransitionProvenance")
+                .contains("nominalClosureStart")
+                .contains("actualElapsed")
+                .doesNotContain("VERIFIED_CLOSURE");
+        assertThat(quality).contains("UNEXPLAINED_GAP")
+                .contains("unexplainedGapsFailClosed");
+        assertThat(manifest).contains("ASSUMED_SESSION_TRANSITION")
+                .contains("continuityPolicyVersion");
+        assertThat(quality).contains("maximumTransitions");
+    }
+
+    @Test
     void rejectsChronologicallyInvertedTransitionBeforeClosureMatching() {
         var previous = candle("2026-09-01T12:00:00Z", "2026-09-01T13:00:00Z");
         var next = candle("2026-09-01T11:00:00Z", "2026-09-01T12:00:00Z");
@@ -153,6 +195,26 @@ class Ml01HistDataPreparationTest {
                 if (minute == missingMinute) continue;
                 LocalDateTime timestamp = start.plusMinutes(minute);
                 double base = 1.100000 + minute * 0.000001;
+                content.append(SOURCE_FORMAT.format(timestamp)).append(';')
+                        .append(String.format(java.util.Locale.ROOT, "%.6f", base)).append(';')
+                        .append(String.format(java.util.Locale.ROOT, "%.6f", base + 0.000100)).append(';')
+                        .append(String.format(java.util.Locale.ROOT, "%.6f", base - 0.000100)).append(';')
+                        .append(String.format(java.util.Locale.ROOT, "%.6f", base + 0.000050)).append(";0\n");
+            }
+            Files.writeString(directory.resolve("DAT_ASCII_" + symbol + "_M1_202609.csv"), content);
+        }
+        return directory;
+    }
+
+    private static Path writeSourcesAcrossWeekend(Path directory) throws Exception {
+        for (String symbol : List.of("EURUSD", "GBPUSD")) {
+            StringBuilder content = new StringBuilder();
+            LocalDateTime start = LocalDateTime.of(2026, 9, 2, 0, 0);
+            LocalDateTime end = LocalDateTime.of(2026, 9, 7, 0, 0);
+            for (LocalDateTime timestamp = start; timestamp.isBefore(end); timestamp = timestamp.plusMinutes(1)) {
+                if (!timestamp.isBefore(LocalDateTime.of(2026, 9, 4, 17, 0))
+                        && timestamp.isBefore(LocalDateTime.of(2026, 9, 6, 17, 0))) continue;
+                double base = 1.100000 + java.time.Duration.between(start, timestamp).toMinutes() * 0.000001;
                 content.append(SOURCE_FORMAT.format(timestamp)).append(';')
                         .append(String.format(java.util.Locale.ROOT, "%.6f", base)).append(';')
                         .append(String.format(java.util.Locale.ROOT, "%.6f", base + 0.000100)).append(';')

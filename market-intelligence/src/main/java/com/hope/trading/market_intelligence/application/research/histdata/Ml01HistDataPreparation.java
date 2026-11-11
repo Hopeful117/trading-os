@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -41,16 +42,16 @@ public final class Ml01HistDataPreparation {
             "ohlc.realized_volatility",
             "ohlc.volatility_compression_ratio",
             "ohlc.directional_efficiency");
-    public static final String RESEARCH_FEATURE_SCHEMA_VERSION = "ml01-research-features-v1";
+    public static final String RESEARCH_FEATURE_SCHEMA_VERSION = "ml01-research-features-v2";
     public static final String RESEARCH_EXPORT_POLICY = "RESEARCH_ONLY";
     public static final String SOURCE_CHECKSUM_ALGORITHM = "SHA-256";
     public static final String SOURCE_CHECKSUM_SCOPE = "PER_FILE";
-    public static final String CONTINUITY_SCOPE = "CONTIGUOUS_ONLY";
-    public static final String SESSION_TRANSITION_STATUS = "DEFERRED_NOT_IMPLEMENTED";
+    public static final String CONTINUITY_SCOPE = "EXPLICIT_RESEARCH_STRATA";
+    public static final String SESSION_TRANSITION_STATUS = "IMPLEMENTED_RESEARCH_ONLY";
     public static final String NORMALIZATION_VERSION = "histdata-m1-normalization-v1";
     private static final MathContext MC = MathContext.DECIMAL128;
     private static final Duration UNAPPROVED = Duration.ZERO;
-    private static final String CONTINUITY_POLICY_VERSION = "ml01-h1-continuity-v1";
+    public static final String CONTINUITY_POLICY_VERSION = Ml01ExploratorySessionContinuityEvaluator.POLICY_VERSION;
 
     private Ml01HistDataPreparation() {
     }
@@ -99,14 +100,10 @@ public final class Ml01HistDataPreparation {
                     HistDataOfflinePipeline.aggregate(imported, HistDataOfflinePipeline.Timeframe.H1,
                             HistDataOfflinePipeline.SOURCE_OFFSET);
             List<HistDataOfflinePipeline.AggregatedCandle> admissible = candles.stream()
-                    .filter(value -> {
-                        Ml01H1ResearchQualityState state = admissibilityEvaluator
-                                .evaluate(HistDataOfflinePipeline.qualityEvidence(imported, value)).state();
-                        return state == Ml01H1ResearchQualityState.FULL_OBSERVED
-                                || state == Ml01H1ResearchQualityState.PARTIAL_EXPLORATORY;
-                    }).toList();
+                    .filter(value -> admissibilityEvaluator
+                            .evaluate(HistDataOfflinePipeline.qualityEvidence(imported, value)).eligible()).toList();
             quality.put(imported.symbol(), quality(imported, candles, admissible, closureEvidence));
-            rows.addAll(rows(imported, admissible, closureEvidence));
+            rows.addAll(rows(imported, candles, closureEvidence));
         }
         if (scope != null) {
             rows = new ArrayList<>(rows.stream().filter(value -> !value.cutoff().isBefore(scope.startCutoffInclusive())
@@ -144,6 +141,8 @@ public final class Ml01HistDataPreparation {
         require(manifest.path("sourceChecksumAlgorithm").asText(), SOURCE_CHECKSUM_ALGORITHM);
         require(manifest.path("sourceChecksumScope").asText(), SOURCE_CHECKSUM_SCOPE);
         require(manifest.path("normalizationVersion").asText(), NORMALIZATION_VERSION);
+        require(manifest.path("continuityPolicyId").asText(), Ml01ExploratorySessionContinuityEvaluator.POLICY_ID);
+        require(manifest.path("continuityPolicyVersion").asText(), CONTINUITY_POLICY_VERSION);
         if (manifest.path("startCutoffInclusive").isMissingNode()
                 || manifest.path("endCutoffExclusive").isMissingNode()) {
             throw new IllegalStateException("ML-01 manifest cutoff contract is incomplete");
@@ -188,7 +187,10 @@ public final class Ml01HistDataPreparation {
         }
         List<String> material = new ArrayList<>(List.of(DATASET_DEFINITION_VERSION, SOURCE_PROFILE,
                 RESEARCH_FEATURE_SCHEMA_VERSION, OUTCOME_DEFINITION_VERSION, FEATURES.toString(), HORIZONS.toString(),
-                CONTINUITY_POLICY_VERSION, Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
+                CONTINUITY_POLICY_VERSION, Ml01ExploratorySessionContinuityEvaluator.POLICY_ID,
+                Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
+                Integer.toString(Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS),
+                Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
                 Ml01ExploratoryH1AdmissibilityProfile.V1.version(),
                 Integer.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.minimumValidM1Count()),
                 Boolean.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.firstMinuteRequired()),
@@ -306,13 +308,24 @@ public final class Ml01HistDataPreparation {
                        ResearchFeatureProjection snapshot,
                        Ml01H1AdmissibilityDecision admissibilityDecision,
                        Map<Integer, FutureOutcome> outcomes, boolean eligible, String exclusionReason,
+                       int featureTransitionCount, String continuityStratum,
+                       Duration featureElapsedDuration, List<TransitionProvenance> featureTransitionProvenance,
                        String partition, String partitionExclusion) {
     }
 
     private record FutureOutcome(int horizon, String status, Instant futureStart, Instant futureEnd,
                                  BigDecimal realizedVolatility, BigDecimal directionalEfficiency,
                                  BigDecimal absoluteFutureNetReturn, List<String> transitionClassifications,
-                                  String reason, String fingerprint) {
+                                 List<TransitionProvenance> transitionProvenance,
+                                   int featureTransitionCount, int futureTransitionCount,
+                                   int combinedTransitionCount, String continuityStratum,
+                                   Duration actualElapsedDuration, String reason, String fingerprint) {
+    }
+
+    private record TransitionProvenance(String classification, int previousIndex, int nextIndex,
+                                        LocalDateTime nominalClosureStart, LocalDateTime nominalClosureEnd,
+                                        LocalDateTime latestPermittedReopening, Duration actualElapsed,
+                                        String reason) {
     }
 
     private record ResearchFeatureProjection(String schemaVersion, String fingerprint,
@@ -323,16 +336,21 @@ public final class Ml01HistDataPreparation {
     private record ResearchFeatureValue(String status, BigDecimal value) {
     }
 
+    private record ContinuitySeries(List<Ml01ExploratorySessionContinuityEvaluator.Observation> observations,
+                                    List<Integer> candidateIndexes,
+                                    List<Ml01ExploratorySessionContinuityEvaluator.Transition> transitions) {
+    }
+
     private static List<Row> rows(HistDataOfflinePipeline.ImportResult imported,
                                   List<HistDataOfflinePipeline.AggregatedCandle> candles,
                                   List<ClosureEvidence> closureEvidence) {
         List<Row> rows = new ArrayList<>();
-        for (int index = 0; index < candles.size(); index++) {
+        ContinuitySeries series = continuitySeries(imported, candles, closureEvidence);
+        for (int candidatePosition = 0; candidatePosition < series.candidateIndexes().size(); candidatePosition++) {
+            int index = series.candidateIndexes().get(candidatePosition);
             var reference = candles.get(index);
-            Ml01H1AdmissibilityDecision admissibilityDecision = new Ml01H1AdmissibilityEvaluator()
-                    .evaluate(HistDataOfflinePipeline.qualityEvidence(imported, reference));
-            List<HistDataOfflinePipeline.AggregatedCandle> history = acceptedHistory(
-                    candles.subList(0, index + 1), imported.marketId(), imported.symbol(), reference.closeTime(), closureEvidence);
+            var admissibilityDecision = series.observations().get(index).admissibility();
+            List<HistDataOfflinePipeline.AggregatedCandle> history = acceptedHistory(series, candidatePosition);
             UUID executionId = stableId("ml01:execution:" + imported.symbol() + ":" + reference.openTime());
             String contextFingerprint = ArtifactFingerprint.ofInputs(List.of(
                     SOURCE_PROFILE, imported.symbol(), HistDataOfflinePipeline.SOURCE_SEMANTICS,
@@ -342,18 +360,58 @@ public final class Ml01HistDataPreparation {
                     contextFingerprint, closureEvidence, admissibilityDecision.state());
             Map<Integer, FutureOutcome> outcomes = new LinkedHashMap<>();
             for (int horizon : HORIZONS) {
-                outcomes.put(horizon, outcome(imported, candles, index, reference, horizon, closureEvidence));
+                outcomes.put(horizon, outcome(series, candidatePosition, reference, horizon));
             }
             String exclusion = featureAvailable(snapshot) ? null : "FEATURE_NOT_PRESENT";
             if (exclusion == null) {
-                exclusion = outcomes.values().stream().filter(value -> !"AVAILABLE".equals(value.status()))
-                        .map(FutureOutcome::reason).findFirst().orElse(null);
+                exclusion = outcomes.values().stream()
+                        .filter(value -> !"AVAILABLE".equals(value.status()))
+                        .map(FutureOutcome::reason)
+                        .findFirst()
+                        .orElse(null);
             }
+            int featureTransitions = featureTransitionCount(series, candidatePosition);
+            String stratum = stratum(featureTransitions);
+            Duration featureElapsed = Duration.between(history.getFirst().openTime(), reference.closeTime());
+            List<TransitionProvenance> featureTransitionProvenance = featureTransitionProvenance(series, candidatePosition);
             rows.add(new Row(imported.symbol(), imported.marketId(), reference.closeTime(), snapshot,
                     admissibilityDecision, outcomes,
-                    exclusion == null, exclusion, null, null));
+                    exclusion == null, exclusion, featureTransitions, stratum, featureElapsed,
+                    featureTransitionProvenance, null, null));
         }
         return rows;
+    }
+
+    private static ContinuitySeries continuitySeries(HistDataOfflinePipeline.ImportResult imported,
+                                                     List<HistDataOfflinePipeline.AggregatedCandle> candles,
+                                                     List<ClosureEvidence> closureEvidence) {
+        Ml01H1AdmissibilityEvaluator evaluator = new Ml01H1AdmissibilityEvaluator();
+        List<Ml01ExploratorySessionContinuityEvaluator.Observation> observations = candles.stream()
+                .map(candle -> new Ml01ExploratorySessionContinuityEvaluator.Observation(candle,
+                        evaluator.evaluate(HistDataOfflinePipeline.qualityEvidence(imported, candle))))
+                .toList();
+        List<Integer> candidates = new ArrayList<>();
+        for (int index = 0; index < observations.size(); index++) {
+            if (observations.get(index).eligible()) candidates.add(index);
+        }
+        List<Ml01ExploratorySessionContinuityEvaluator.Transition> transitions = new ArrayList<>();
+        Ml01ExploratorySessionContinuityEvaluator continuity = new Ml01ExploratorySessionContinuityEvaluator();
+        for (int index = 1; index < candidates.size(); index++) {
+            int previous = candidates.get(index - 1);
+            int next = candidates.get(index);
+            var evaluated = continuity.evaluate(observations, previous, next);
+            var strict = transition(candles.get(previous), candles.get(next), imported.marketId(), imported.symbol(),
+                    candles.get(previous).closeTime(), closureEvidence);
+            if (strict.classification() == TransitionClassification.VERIFIED_CLOSURE) {
+                evaluated = new Ml01ExploratorySessionContinuityEvaluator.Transition(
+                        Ml01ExploratorySessionContinuityEvaluator.Classification.VERIFIED_CLOSURE,
+                        previous, next, null, null, null,
+                        Duration.between(candles.get(previous).closeTime(), candles.get(next).openTime()),
+                        strict.reason());
+            }
+            transitions.add(evaluated);
+        }
+        return new ContinuitySeries(observations, List.copyOf(candidates), List.copyOf(transitions));
     }
 
     private static ResearchFeatureProjection directAnalysis(HistDataOfflinePipeline.ImportResult imported,
@@ -402,27 +460,40 @@ public final class Ml01HistDataPreparation {
         return new ResearchFeatureValue(assessment.status().name(), value);
     }
 
-    private static FutureOutcome outcome(HistDataOfflinePipeline.ImportResult imported,
-                                         List<HistDataOfflinePipeline.AggregatedCandle> candles, int index,
-                                         HistDataOfflinePipeline.AggregatedCandle reference, int horizon,
-                                         List<ClosureEvidence> closureEvidence) {
-        if (index + horizon >= candles.size()) {
-            return unavailable(horizon, "INCOMPLETE_FORWARD_WINDOW", "future window is unavailable");
+    private static FutureOutcome outcome(ContinuitySeries series, int candidatePosition,
+                                         HistDataOfflinePipeline.AggregatedCandle reference, int horizon) {
+        int endPosition = candidatePosition + horizon;
+        int featureTransitions = featureTransitionCount(series, candidatePosition);
+        if (endPosition >= series.candidateIndexes().size()) {
+            return unavailable(horizon, featureTransitions, 0, featureTransitions,
+                    stratum(featureTransitions), Duration.ZERO, List.of(), List.of(),
+                    "INCOMPLETE_FORWARD_WINDOW", "future window is unavailable");
         }
-        List<HistDataOfflinePipeline.AggregatedCandle> future = candles.subList(index + 1, index + horizon + 1);
-        var previous = reference;
+        List<HistDataOfflinePipeline.AggregatedCandle> future = new ArrayList<>();
+        for (int position = candidatePosition + 1; position <= endPosition; position++) {
+            future.add(series.observations().get(series.candidateIndexes().get(position)).candle());
+        }
         List<String> classifications = new ArrayList<>();
-        for (var candle : future) {
-            Transition transition = transition(previous, candle, imported.marketId(), imported.symbol(),
-                    reference.closeTime(), closureEvidence);
+        List<TransitionProvenance> provenance = new ArrayList<>();
+        int futureTransitions = 0;
+        String rejection = null;
+        for (int position = candidatePosition; position < endPosition; position++) {
+            var transition = series.transitions().get(position);
             classifications.add(transition.classification().name());
-            if (transition.classification() == TransitionClassification.UNEXPLAINED_GAP
-                    || transition.classification() == TransitionClassification.UNKNOWN_CLOSURE_EVIDENCE
-                    || transition.classification() == TransitionClassification.INVALID_OBSERVATION
-                    || transition.classification() == TransitionClassification.VERIFIED_CLOSURE) {
-                return unavailable(horizon, transition.classification().name(), transition.reason());
-            }
-            previous = candle;
+            provenance.add(transitionProvenance(transition));
+            if (transition.assumed()) futureTransitions++;
+            if (transition.classification() != Ml01ExploratorySessionContinuityEvaluator.Classification.CONTIGUOUS
+                    && transition.classification() != Ml01ExploratorySessionContinuityEvaluator.Classification.VERIFIED_CLOSURE
+                    && transition.classification() != Ml01ExploratorySessionContinuityEvaluator.Classification.ASSUMED_SESSION_TRANSITION
+                    && rejection == null) rejection = transition.classification().name() + ":" + transition.reason();
+        }
+        int combinedTransitions = featureTransitions + futureTransitions;
+        Duration elapsed = Duration.between(reference.closeTime(), future.getLast().closeTime());
+        String stratum = stratum(combinedTransitions);
+        if (rejection != null || combinedTransitions > Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS) {
+            return unavailable(horizon, featureTransitions, futureTransitions, combinedTransitions, stratum, elapsed,
+                    classifications, provenance,
+                    rejection == null ? "MULTIPLE_ASSUMED_SESSION_TRANSITIONS" : rejection, "continuity window rejected");
         }
         List<BigDecimal> closes = new ArrayList<>();
         closes.add(reference.close());
@@ -442,22 +513,84 @@ public final class Ml01HistDataPreparation {
         Instant start = future.getFirst().openTime();
         Instant end = future.getLast().closeTime();
         String fingerprint = ArtifactFingerprint.ofInputs(List.of(OUTCOME_DEFINITION_VERSION,
-                imported.symbol(), reference.closeTime().toString(), Integer.toString(horizon),
+                reference.symbol(), reference.closeTime().toString(), Integer.toString(horizon),
                 start.toString(), end.toString(), closes.stream().map(BigDecimal::toPlainString).toList().toString())).value();
         return new FutureOutcome(horizon, "AVAILABLE", start, end,
                  sumSquares.divide(BigDecimal.valueOf(horizon), MC).sqrt(MC), efficiency, absoluteReturn,
-                 classifications, null, fingerprint);
+                 classifications, provenance, featureTransitions, futureTransitions, combinedTransitions, stratum, elapsed,
+                 null, fingerprint);
     }
 
-    private static FutureOutcome unavailable(int horizon, String reason, String detail) {
+    private static FutureOutcome unavailable(int horizon, int featureTransitions, int futureTransitions,
+                                             int combinedTransitions, String stratum, Duration elapsed,
+                                             List<String> classifications, List<TransitionProvenance> provenance,
+                                             String reason, String detail) {
         return new FutureOutcome(horizon, "UNAVAILABLE", null, null, null, null, null,
-                List.of(), reason + ":" + detail, null);
+                classifications, provenance, featureTransitions, futureTransitions, combinedTransitions, stratum, elapsed,
+                reason + ":" + detail, null);
+    }
+
+    private static int featureTransitionCount(ContinuitySeries series, int candidatePosition) {
+        int start = featureStart(series, candidatePosition);
+        int count = 0;
+        for (int position = start; position < candidatePosition; position++) {
+            if (series.transitions().get(position).assumed()) count++;
+        }
+        return count;
+    }
+
+    private static int featureStart(ContinuitySeries series, int candidatePosition) {
+        int start = candidatePosition;
+        while (start > 0) {
+            var transition = series.transitions().get(start - 1);
+            if (transition.classification() != Ml01ExploratorySessionContinuityEvaluator.Classification.CONTIGUOUS
+                    && transition.classification() != Ml01ExploratorySessionContinuityEvaluator.Classification.ASSUMED_SESSION_TRANSITION) break;
+            start--;
+            if (candidatePosition - start >= 32) break;
+        }
+        return start;
+    }
+
+    private static List<TransitionProvenance> featureTransitionProvenance(ContinuitySeries series,
+                                                                           int candidatePosition) {
+        int start = featureStart(series, candidatePosition);
+        return series.transitions().subList(start, candidatePosition).stream()
+                .map(Ml01HistDataPreparation::transitionProvenance).toList();
+    }
+
+    private static TransitionProvenance transitionProvenance(
+            Ml01ExploratorySessionContinuityEvaluator.Transition transition) {
+        return new TransitionProvenance(transition.classification().name(), transition.previousIndex(),
+                transition.nextIndex(), transition.nominalClosureStart(), transition.nominalClosureEnd(),
+                transition.latestPermittedReopening(), transition.actualElapsed(), transition.reason());
+    }
+
+    private static String stratum(int transitionCount) {
+        return transitionCount == 0 ? "CONTIGUOUS_ONLY" : "ASSUMED_SESSION_TRANSITION";
     }
 
     private static boolean featureAvailable(ResearchFeatureProjection snapshot) {
         return FEATURES.stream().allMatch(name -> snapshot.values().get(name) != null
                 && snapshot.values().get(name).value() != null
                 && "AVAILABLE".equals(snapshot.values().get(name).status()));
+    }
+
+    private static List<HistDataOfflinePipeline.AggregatedCandle> acceptedHistory(ContinuitySeries series,
+                                                                                    int candidatePosition) {
+        int start = candidatePosition;
+        while (candidatePosition - start < 32 && start > 0) {
+            var transition = series.transitions().get(start - 1);
+            if (transition.classification() != Ml01ExploratorySessionContinuityEvaluator.Classification.CONTIGUOUS
+                    && transition.classification() != Ml01ExploratorySessionContinuityEvaluator.Classification.ASSUMED_SESSION_TRANSITION) {
+                break;
+            }
+            start--;
+        }
+        List<HistDataOfflinePipeline.AggregatedCandle> history = new ArrayList<>();
+        for (int position = start; position <= candidatePosition; position++) {
+            history.add(series.observations().get(series.candidateIndexes().get(position)).candle());
+        }
+        return history;
     }
 
     private static List<HistDataOfflinePipeline.AggregatedCandle> acceptedHistory(
@@ -546,6 +679,15 @@ public final class Ml01HistDataPreparation {
         result.put("admissibleH1Candles", complete.size());
         result.put("verifiedClosureEvidence", closureEvidence != null && !closureEvidence.isEmpty());
         result.put("continuityPolicyVersion", CONTINUITY_POLICY_VERSION);
+        result.put("continuityPolicyId", Ml01ExploratorySessionContinuityEvaluator.POLICY_ID);
+        result.put("continuityPolicyParameters", Map.of(
+                "provider", HistDataOfflinePipeline.SOURCE_PROVIDER,
+                "sourceTimezone", HistDataOfflinePipeline.SOURCE_SEMANTICS,
+                "nominalClosure", "FRIDAY_17_TO_SUNDAY_17_SOURCE_LOCAL",
+                "latestPermittedReopening", "SUNDAY_18_SOURCE_LOCAL",
+                "maximumGap", Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
+                "maximumTransitions", Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS,
+                "usage", "RETROSPECTIVE_EXPLORATORY_ONLY"));
         result.put("closureEvidenceFingerprints", closureEvidence == null ? List.of()
                 : closureEvidence.stream().map(ClosureEvidence::fingerprint).sorted().toList());
         result.put("closureEvidenceSources", closureEvidence == null ? List.of()
@@ -590,7 +732,9 @@ public final class Ml01HistDataPreparation {
         result.put("sourceChecksumScope", SOURCE_CHECKSUM_SCOPE);
         result.put("sourceChecksums", sourceChecksums);
         result.put("normalizationVersion", NORMALIZATION_VERSION);
+        result.put("continuityPolicyId", Ml01ExploratorySessionContinuityEvaluator.POLICY_ID);
         result.put("continuityPolicyVersion", CONTINUITY_POLICY_VERSION);
+        result.put("continuityStrata", rows.stream().map(Row::continuityStratum).distinct().sorted().toList());
         result.put("closureEvidenceFingerprints", closureEvidence == null ? List.of()
                 : closureEvidence.stream().map(ClosureEvidence::fingerprint).sorted().toList());
         result.put("features", FEATURES);
@@ -709,7 +853,10 @@ public final class Ml01HistDataPreparation {
                                       Map<String, String> sourceChecksums) {
         List<String> material = new ArrayList<>(List.of(DATASET_DEFINITION_VERSION, SOURCE_PROFILE,
                 RESEARCH_FEATURE_SCHEMA_VERSION, OUTCOME_DEFINITION_VERSION, FEATURES.toString(), HORIZONS.toString(),
-                CONTINUITY_POLICY_VERSION, Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
+                CONTINUITY_POLICY_VERSION, Ml01ExploratorySessionContinuityEvaluator.POLICY_ID,
+                Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_GAP.toString(),
+                Integer.toString(Ml01ExploratorySessionContinuityEvaluator.MAXIMUM_TRANSITIONS),
+                Ml01ExploratoryH1AdmissibilityProfile.V1.name(),
                 Ml01ExploratoryH1AdmissibilityProfile.V1.version(),
                 Integer.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.minimumValidM1Count()),
                 Boolean.toString(Ml01ExploratoryH1AdmissibilityProfile.V1.firstMinuteRequired()),
@@ -760,6 +907,12 @@ public final class Ml01HistDataPreparation {
         result.put("admissibilityDecision", row.admissibilityDecision());
         result.put("continuityScope", CONTINUITY_SCOPE);
         result.put("sessionTransitionStatus", SESSION_TRANSITION_STATUS);
+        result.put("continuityPolicyId", Ml01ExploratorySessionContinuityEvaluator.POLICY_ID);
+        result.put("continuityPolicyVersion", CONTINUITY_POLICY_VERSION);
+        result.put("featureTransitionCount", row.featureTransitionCount());
+        result.put("continuityStratum", row.continuityStratum());
+        result.put("featureElapsedDuration", row.featureElapsedDuration());
+        result.put("featureTransitionProvenance", row.featureTransitionProvenance());
         Map<String, Object> features = new LinkedHashMap<>();
         for (String name : FEATURES) {
             ResearchFeatureValue numeric = row.snapshot().values().get(name);
@@ -796,7 +949,9 @@ public final class Ml01HistDataPreparation {
             else if (row.cutoff().isBefore(configuration.testEndExclusive())) partition = "TEST";
             else return new Row(row.instrument(), row.marketId(), row.cutoff(), row.snapshot(),
                     row.admissibilityDecision(), row.outcomes(),
-                    row.eligible(), row.exclusionReason(), "OUT_OF_RANGE", "OUTSIDE_PARTITION_BOUNDS");
+                    row.eligible(), row.exclusionReason(), row.featureTransitionCount(), row.continuityStratum(),
+                    row.featureElapsedDuration(), row.featureTransitionProvenance(),
+                    "OUT_OF_RANGE", "OUTSIDE_PARTITION_BOUNDS");
 
             String exclusion = null;
             Instant protectedBoundary = "TRAIN".equals(partition) ? configuration.trainEndExclusive()
@@ -814,7 +969,8 @@ public final class Ml01HistDataPreparation {
             }
             return new Row(row.instrument(), row.marketId(), row.cutoff(), row.snapshot(),
                     row.admissibilityDecision(), row.outcomes(),
-                    row.eligible(), row.exclusionReason(), partition, exclusion);
+                    row.eligible(), row.exclusionReason(), row.featureTransitionCount(), row.continuityStratum(),
+                    row.featureElapsedDuration(), row.featureTransitionProvenance(), partition, exclusion);
         }).toList();
     }
 
