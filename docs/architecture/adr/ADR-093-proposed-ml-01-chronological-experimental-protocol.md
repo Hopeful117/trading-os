@@ -153,6 +153,16 @@ elapsed time as a valid-candle count. Every exclusion, closure and gap must be
 counted and fingerprinted in the quality report. Numerical defaults remain
 subject to scientific approval.
 
+ADR-095 is a narrowly scoped companion decision for a separate, research-only
+exploratory population. ADR-093 remains the baseline ML-01 scientific protocol:
+its feature definitions, outcome definitions, observation-count horizons,
+chronological leakage safeguards and non-operational objective are unchanged.
+The strict and exploratory datasets are not interchangeable. ADR-095 may add
+derived exploratory admissibility and session-assumption metadata, but it must
+not rewrite strict Market Data states or continuity classifications. ADR-094
+remains authoritative for strict historical continuity and verified closure
+evidence.
+
 ## Chronological Partitions and Purging
 
 Both instruments SHALL use common chronological boundaries. The implementation

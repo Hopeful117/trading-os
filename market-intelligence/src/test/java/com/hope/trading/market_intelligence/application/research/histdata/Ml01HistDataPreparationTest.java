@@ -28,6 +28,7 @@ class Ml01HistDataPreparationTest {
 
         var result = Ml01HistDataPreparation.prepare(input, output,
                 Ml01HistDataPreparation.PartitionConfiguration.requiresApproval());
+        Ml01HistDataPreparation.validatePublishedBundle(output, input);
 
         assertThat(result.rows()).isEqualTo(144);
         assertThat(result.eligibleRows()).isGreaterThan(0);
@@ -40,9 +41,21 @@ class Ml01HistDataPreparationTest {
                 .contains("ohlc.realized_volatility")
                 .contains("ohlc.volatility_compression_ratio")
                 .contains("ohlc.directional_efficiency")
+                .contains("admissibilityDecision")
+                .contains("MI_LOCAL_HISTDATA:")
+                .doesNotContain("featureSnapshot");
+        assertThat(rows).contains("sourceCloseTime")
                 .contains("\"horizon\":4")
                 .contains("\"horizon\":12")
                 .contains("\"horizon\":24");
+        assertThat(Files.readString(output.resolve("dataset-manifest.json")))
+                .contains("researchFeatureEvidencePolicy")
+                .contains("sourceChecksumAlgorithm")
+                .contains("CONTIGUOUS_ONLY")
+                .contains("DEFERRED_NOT_IMPLEMENTED");
+        assertThat(Files.readString(output.resolve("source-metadata.json")))
+                .contains("sourceChecksums")
+                .contains("SHA-256");
     }
 
     @Test
@@ -64,6 +77,20 @@ class Ml01HistDataPreparationTest {
         assertThat(report).contains("FORWARD_WINDOW_CROSSES_PARTITION_BOUNDARY")
                 .contains("EMBARGO_AFTER_TRAIN")
                 .contains("PERMITTED_AND_REPORTED_AS_STATISTICAL_DEPENDENCE");
+    }
+
+    @Test
+    void retainsPartialRowsWithExplicitExploratoryProvenance(@TempDir Path temp) throws Exception {
+        Path input = writeSourcesWithMissingMinute(temp, 72, 10);
+        Path output = temp.resolve("ml01-partial");
+
+        Ml01HistDataPreparation.prepare(input, output,
+                Ml01HistDataPreparation.PartitionConfiguration.requiresApproval());
+
+        String rows = Files.readString(output.resolve("observations.jsonl"));
+        assertThat(rows).contains("PARTIAL_EXPLORATORY")
+                .contains("RESEARCH_EXPLORATORY")
+                .contains("STRICT_OBSERVED");
     }
 
     @Test
@@ -115,10 +142,15 @@ class Ml01HistDataPreparationTest {
     }
 
     private static Path writeSources(Path directory, int hours) throws Exception {
+        return writeSourcesWithMissingMinute(directory, hours, -1);
+    }
+
+    private static Path writeSourcesWithMissingMinute(Path directory, int hours, int missingMinute) throws Exception {
         for (String symbol : List.of("EURUSD", "GBPUSD")) {
             StringBuilder content = new StringBuilder();
             LocalDateTime start = LocalDateTime.of(2026, 9, 1, 0, 0);
             for (int minute = 0; minute < hours * 60; minute++) {
+                if (minute == missingMinute) continue;
                 LocalDateTime timestamp = start.plusMinutes(minute);
                 double base = 1.100000 + minute * 0.000001;
                 content.append(SOURCE_FORMAT.format(timestamp)).append(';')
