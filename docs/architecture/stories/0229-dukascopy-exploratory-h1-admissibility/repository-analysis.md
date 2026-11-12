@@ -348,7 +348,7 @@ The next workflow gate is explicit human approval of this Repository Analysis.
 - `docs/architecture/adr/ADR-093-proposed-ml-01-chronological-experimental-protocol.md`
 - `docs/architecture/adr/ADR-094-market-data-continuity-and-verified-closure-evidence-policy.md`
 - `docs/architecture/adr/ADR-095-proposed-ml-01-exploratory-research-admissibility-protocol.md`
-- `docs/architecture/adr/ADR-096-proposed-dukascopy-exploratory-h1-admissibility-and-continuity-policy.md`
+- `docs/architecture/adr/ADR-096-dukascopy-exploratory-h1-admissibility-and-continuity-policy.md`
 - `docs/architecture/reports/ml-01.1-dukascopy-12-month-dataset-readiness-2026-11-12.md`
 - `docs/architecture/reports/ml-01.1-dukascopy-gap-continuity-sensitivity-2026-11-12.md`
 - `market-intelligence/src/main/java/com/hope/trading/market_intelligence/application/research/histdata/DukascopyOfflinePipeline.java`

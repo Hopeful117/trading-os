@@ -1,4 +1,4 @@
-# ADR-096 - Proposed Dukascopy Exploratory H1 Admissibility and Continuity Policy
+# ADR-096 - Dukascopy Exploratory H1 Admissibility and Continuity Policy
 
 | | |
 |---|---|
@@ -6,7 +6,7 @@
 | **Date** | 2026-11-12 |
 | **Decision Type** | Provider-scoped offline exploratory ML-01 historical admissibility |
 | **Related ADRs** | ADR-092, ADR-093, ADR-094, ADR-095 |
-| **Related Story** | Story 0228 - Dukascopy Historical Forex Acquisition And Dataset Assembly |
+| **Related Stories** | Story 0228 - Dukascopy Historical Forex Acquisition; Story 0229 - Dukascopy Exploratory H1 Admissibility |
 
 ## 1. Context
 
@@ -31,9 +31,10 @@ dataset while deliberately keeping provider acquisition separate from
 scientific eligibility. The acquisition contract and current Java reader do
 not establish a Dukascopy-specific H1 admissibility policy.
 
-This ADR prepares such a provider-scoped research policy. It does not change
-accepted ADRs, authorize implementation, authorize dataset publication as
-scientifically valid, or authorize ML-01.2.
+This ADR records the accepted provider-scoped research policy. It authorizes the
+deterministic offline implementation and bounded exploratory bundle generation
+needed for scientific validation. It does not authorize dataset publication as
+scientifically valid, approved chronological partitions, or ML-01.2/KMeans.
 
 ## 2. Problem Statement
 
@@ -57,6 +58,7 @@ The policy must distinguish:
 
 The evidence comes from the completed read-only ML-01.1 Dukascopy experiments:
 
+- `docs/architecture/reports/ml-01.1-dukascopy-prepared-dataset-scientific-validation-2026-11-12.md`;
 - `docs/architecture/reports/ml-01.1-dukascopy-12-month-dataset-readiness-2026-11-12.md`;
 - `docs/architecture/reports/ml-01.1-dukascopy-gap-continuity-sensitivity-2026-11-12.md`.
 
@@ -110,7 +112,7 @@ hypothesis, not causal bias proof or a safe-imputation result.
 
 ## 4. Decision Drivers
 
-The proposed policy is driven by:
+The accepted policy is driven by:
 
 - preservation of ADR-094 fail-closed continuity semantics;
 - deterministic reconstruction from observed UTC M1 records;
@@ -137,13 +139,13 @@ meaningful sensitivity and validation experiment while retaining endpoint
 requirements and strict unknown-gap rejection. Its scientific acceptability
 remains unresolved until the validation requirements in Section 11 are met.
 
-## 6. Proposed Decision
+## 6. Decision
 
-This ADR proposes the provider-scoped profile:
+This ADR records the provider-scoped profile:
 
 ```text
 Policy ID: ML01_DUKASCOPY_EXPLORATORY_V1
-Status: APPROVED POLICY DIRECTION; IMPLEMENTATION PENDING
+Status: ACCEPTED POLICY; IMPLEMENTED FOR OFFLINE SCIENTIFIC VALIDATION
 Provider: Dukascopy
 Source resolution: M1
 Research resolution: H1
@@ -160,10 +162,24 @@ Assumed session transitions: NOT PERMITTED
 Usage: OFFLINE EXPLORATORY ML-01 RESEARCH ONLY
 ```
 
-The proposed profile does not approve 55/60 as scientifically safe. It defines
-the candidate policy to be implemented and validated only after human approval.
-Until approval, the profile is documentation only and no Dukascopy rows are
-eligible under it.
+The accepted profile defines deterministic research admissibility; it does not
+claim that partial H1 candles are scientifically safe for modeling. The
+implementation may generate bounded diagnostic bundles under this profile.
+Rows with all required features and outcomes are reported as
+`jointAvailable`; `jointEligible` remains false until the separate scientific
+approval gates below are recorded.
+
+### 6.1 Authorization gates
+
+1. Human acceptance of this provider-scoped admissibility policy: recorded.
+2. Authorization to implement the deterministic research pipeline: recorded
+   through Story 0229 approval and merge.
+3. Authorization to generate bounded exploratory research bundles for this
+   validation experiment: recorded by the current experiment request.
+4. Scientific approval of chronological partition dates, purge, embargo and
+   minimum effective sample sizes: not recorded.
+5. Authorization for ML-01.2, KMeans, clustering or model fitting: not
+   recorded and explicitly out of scope.
 
 The strict 60/60 population remains the integrity baseline. The 59/60
 population remains a conservative comparison baseline. Any future experiment
