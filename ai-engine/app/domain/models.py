@@ -37,6 +37,15 @@ class ResultQuality(StrEnum):
     DEGRADED = "DEGRADED"
 
 
+class ProvenanceClassification(StrEnum):
+    EXTERNAL_MODEL = "EXTERNAL_MODEL"
+    INTERNAL_DETERMINISTIC = "INTERNAL_DETERMINISTIC"
+    FALLBACK = "FALLBACK"
+    MOCK = "MOCK"
+    NOT_INVOKED = "NOT_INVOKED"
+    UNKNOWN = "UNKNOWN"
+
+
 class SuggestedDecision(StrEnum):
     WAIT = "WAIT"
     MONITOR = "MONITOR"
@@ -244,6 +253,20 @@ class InterpretationDraft(StrictModel):
     reconciliations: list[HypothesisReconciliation] = Field(default_factory=list, max_length=64)
 
 
+class AiProvenance(StrictModel):
+    execution_id: UUID
+    provider: str | None = None
+    model: str | None = None
+    classification: ProvenanceClassification
+    shadow_mode: bool
+    invocation_at: datetime
+    completion_at: datetime | None = None
+    provider_correlation_id: str | None = Field(default=None, max_length=200)
+    fallback: bool = False
+    failure_reason: str | None = Field(default=None, max_length=200)
+    contract_version: str = Field(min_length=1, max_length=64)
+
+
 class InterpretationResult(StrictModel):
     execution_id: UUID
     status: ExecutionStatus
@@ -255,6 +278,7 @@ class InterpretationResult(StrictModel):
     model: str | None = None
     accepted_at: datetime
     completed_at: datetime | None = None
+    provenance: AiProvenance | None = None
 
     @model_validator(mode="after")
     def result_matches_status(self) -> "InterpretationResult":

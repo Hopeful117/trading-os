@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from app.application.ports import LLMProvider
 from app.config import Settings
 from app.infrastructure.providers.chatgpt import ChatGptOAuthProvider
@@ -13,11 +15,30 @@ class FallbackLLMProvider:
         self._fallback = fallback
         self.name = primary.name
         self.model = primary.model
+        self._state = threading.local()
+
+    @property
+    def provenance_classification(self):
+        return "FALLBACK" if getattr(self._state, "used", False) else getattr(
+            self._primary, "provenance_classification", "UNKNOWN"
+        )
+
+    @property
+    def fallback_used(self):
+        return getattr(self._state, "used", False)
+
+    @property
+    def fallback_reason(self):
+        return getattr(self._state, "reason", None)
 
     def interpret(self, request):
+        self._state.used = False
+        self._state.reason = None
         try:
             return self._primary.interpret(request)
-        except (RuntimeError, ValueError):
+        except (RuntimeError, ValueError) as error:
+            self._state.used = True
+            self._state.reason = type(error).__name__
             return self._fallback.interpret(request)
 
 

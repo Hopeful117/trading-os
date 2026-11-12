@@ -8,7 +8,14 @@ from threading import Event, Lock
 from uuid import UUID
 
 from app.application.service import InterpretationService
-from app.domain.models import ExecutionStatus, InterpretationRequest, InterpretationResult, ProgressResponse
+from app.domain.models import (
+    AiProvenance,
+    ExecutionStatus,
+    InterpretationRequest,
+    InterpretationResult,
+    ProgressResponse,
+    ProvenanceClassification,
+)
 
 
 def now() -> datetime:
@@ -28,12 +35,14 @@ class ExecutionRecord:
 
 
 class ExecutionStore:
-    def __init__(self, service: InterpretationService, max_evidence: int = 256) -> None:
+    def __init__(self, service: InterpretationService, max_evidence: int = 256,
+                 shadow_mode: bool = True) -> None:
         self._service = service
         self._records: dict[UUID, ExecutionRecord] = {}
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ai-engine")
         self._lock = Lock()
         self._max_evidence = max_evidence
+        self._shadow_mode = shadow_mode
 
     def submit(self, request: InterpretationRequest) -> ExecutionRecord:
         with self._lock:
@@ -75,6 +84,7 @@ class ExecutionStore:
                 model=self._service.provider.model,
                 accepted_at=record.accepted_at,
                 completed_at=now(),
+                provenance=self._provenance(record, completed_at=None),
             )
         except Exception as error:  # provider boundaries must fail explicitly
             error_type = "CANCELLED" if str(error) == "CANCELLED" else type(error).__name__
@@ -88,11 +98,35 @@ class ExecutionStore:
                 model=self._service.provider.model,
                 accepted_at=record.accepted_at,
                 completed_at=now(),
+                provenance=self._provenance(record, failure_reason=error_type),
             )
         with self._lock:
             record.result = result
             record.status = result.status
             record.updated_at = result.completed_at or now()
+
+    def _provenance(self, record: ExecutionRecord, completed_at: datetime | None = None,
+                    failure_reason: str | None = None) -> AiProvenance:
+        provider = self._service.provider
+        classification = getattr(provider, "provenance_classification", "UNKNOWN")
+        if failure_reason is not None:
+            classification = ProvenanceClassification.UNKNOWN
+        fallback = bool(getattr(provider, "fallback_used", False))
+        if fallback and failure_reason is None:
+            classification = ProvenanceClassification.FALLBACK
+        invocation_at = record.accepted_at
+        return AiProvenance(
+            execution_id=record.request.execution_id,
+            provider=getattr(provider, "name", None),
+            model=getattr(provider, "model", None),
+            classification=classification,
+            shadow_mode=self._shadow_mode,
+            invocation_at=invocation_at,
+            completion_at=completed_at or now(),
+            fallback=fallback,
+            failure_reason=failure_reason or getattr(provider, "fallback_reason", None),
+            contract_version="ai-engine-result-v1",
+        )
 
     def progress(self, execution_id: UUID) -> ProgressResponse | None:
         with self._lock:

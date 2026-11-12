@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.application.capability;
 import com.hope.trading.market_intelligence.domain.IntelligenceFinding;
 import com.hope.trading.market_intelligence.application.port.RequestedAnalysis;
 import com.hope.trading.market_intelligence.application.port.AiHypothesisReconciliation;
+import com.hope.trading.market_intelligence.application.port.AiProvenance;
 
 import java.util.List;
 
@@ -10,15 +11,22 @@ public record CapabilityAnalysisResult(
         List<IntelligenceFinding> findings,
         List<String> warnings,
         RequestedAnalysis requestedAnalysis,
-        List<AiHypothesisReconciliation> reconciliations
+        List<AiHypothesisReconciliation> reconciliations,
+        AiProvenance provenance
 ) {
     public CapabilityAnalysisResult(List<IntelligenceFinding> findings, List<String> warnings) {
-        this(findings, warnings, null, List.of());
+        this(findings, warnings, null, List.of(), null);
     }
 
     public CapabilityAnalysisResult(List<IntelligenceFinding> findings, List<String> warnings,
                                     RequestedAnalysis requestedAnalysis) {
-        this(findings, warnings, requestedAnalysis, List.of());
+        this(findings, warnings, requestedAnalysis, List.of(), null);
+    }
+
+    public CapabilityAnalysisResult(List<IntelligenceFinding> findings, List<String> warnings,
+                                    RequestedAnalysis requestedAnalysis,
+                                    List<AiHypothesisReconciliation> reconciliations) {
+        this(findings, warnings, requestedAnalysis, reconciliations, null);
     }
 
     public CapabilityAnalysisResult {

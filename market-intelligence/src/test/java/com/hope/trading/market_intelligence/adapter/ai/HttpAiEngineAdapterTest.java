@@ -26,7 +26,9 @@ class HttpAiEngineAdapterTest {
                         List.of("Missing range data"), List.of("Confirm reclaim"),
                         List.of("Invalidate below level"), List.of("Limited history"),
                         "REVIEW_CANDIDATE"),
-                null, null, "mock", "fixture", acceptedAt, acceptedAt));
+                 null, null, "mock", "fixture", acceptedAt, acceptedAt,
+                 new AiProvenanceWire(executionId.toString(), "mock", "fixture", "MOCK", true,
+                         acceptedAt, acceptedAt, null, false, null, "ai-engine-result-v1")));
 
         var result = new HttpAiEngineAdapter(client, 256_000, 1_500)
                 .result(new com.hope.trading.market_intelligence.application.port.AiExecutionReference(
@@ -34,6 +36,8 @@ class HttpAiEngineAdapterTest {
                 .orElseThrow();
 
         assertThat(result.acceptedAt()).isEqualTo(acceptedAt);
+        assertThat(result.provenance().classification()).isEqualTo("MOCK");
+        assertThat(result.provenance().executionId()).isEqualTo(executionId.toString());
         assertThat(result.result().findings()).hasSize(9);
         assertThat(result.result().findings())
                 .extracting(value -> value.type())

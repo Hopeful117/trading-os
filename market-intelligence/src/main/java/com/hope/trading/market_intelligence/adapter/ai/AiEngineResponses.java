@@ -21,7 +21,29 @@ record AiEngineResultResponse(
         String provider,
         String model,
         Instant acceptedAt,
-        Instant completedAt
+        Instant completedAt,
+        AiProvenanceWire provenance
+) {
+    AiEngineResultResponse(UUID executionId, String status, String quality, InterpretationWire result,
+                           String errorType, String errorMessage, String provider, String model,
+                           Instant acceptedAt, Instant completedAt) {
+        this(executionId, status, quality, result, errorType, errorMessage, provider, model,
+                acceptedAt, completedAt, null);
+    }
+}
+
+record AiProvenanceWire(
+        String executionId,
+        String provider,
+        String model,
+        String classification,
+        boolean shadowMode,
+        Instant invocationAt,
+        Instant completionAt,
+        String providerCorrelationId,
+        boolean fallback,
+        String failureReason,
+        String contractVersion
 ) {
 }
 

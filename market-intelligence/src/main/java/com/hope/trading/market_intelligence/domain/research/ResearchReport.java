@@ -57,11 +57,19 @@ public record ResearchReport(
             String instrument,
             String productType,
             String status,
-            UUID thesisId,
-            Long thesisVersion,
-            JsonNode deterministicAnalysis,
-            String freshness,
-            JsonNode provenance,
+                UUID thesisId,
+                Long thesisVersion,
+                JsonNode deterministicAnalysis,
+                String freshness,
+                String thesisFreshness,
+                String evidenceFreshness,
+                Instant thesisEvaluatedAt,
+                Instant thesisValidFrom,
+                Instant thesisValidUntil,
+                Instant evidenceEvaluationCutoff,
+                Instant evidenceSourceOccurredAt,
+                Instant evidenceFetchedAt,
+                JsonNode provenance,
             List<JsonNode> supportingEvidence,
             List<JsonNode> contradictingEvidence,
             List<JsonNode> missingEvidence,
@@ -69,9 +77,11 @@ public record ResearchReport(
             String aiStatus,
             JsonNode aiInterpretation,
             List<String> diagnostics,
-            JsonNode finalAiInterpretation,
-            List<HypothesisReconciliation> reconciliations,
-            JsonNode followUpEvidence
+                JsonNode finalAiInterpretation,
+                List<HypothesisReconciliation> reconciliations,
+                JsonNode followUpEvidence,
+                JsonNode aiProvenance,
+                JsonNode finalAiProvenance
     ) {
         public MarketResearchResult {
             supportingEvidence = supportingEvidence == null ? List.of() : List.copyOf(supportingEvidence);
@@ -90,9 +100,24 @@ public record ResearchReport(
                 List<String> invalidationConditions, String aiStatus, JsonNode aiInterpretation,
                 List<String> diagnostics) {
             this(marketId, provider, instrument, productType, status, thesisId, thesisVersion,
-                    deterministicAnalysis, freshness, provenance, supportingEvidence,
+                    deterministicAnalysis, freshness, freshness, "UNKNOWN", null, null, null, null, null, null, provenance, supportingEvidence,
                     contradictingEvidence, missingEvidence, invalidationConditions, aiStatus,
-                    aiInterpretation, diagnostics, null, List.of(), null);
+                    aiInterpretation, diagnostics, null, List.of(), null, null, null);
+        }
+
+        public MarketResearchResult(
+                UUID marketId, String provider, String instrument, String productType,
+                String status, UUID thesisId, Long thesisVersion, JsonNode deterministicAnalysis,
+                String freshness, JsonNode provenance, List<JsonNode> supportingEvidence,
+                List<JsonNode> contradictingEvidence, List<JsonNode> missingEvidence,
+                List<String> invalidationConditions, String aiStatus, JsonNode aiInterpretation,
+                List<String> diagnostics, JsonNode finalAiInterpretation,
+                List<HypothesisReconciliation> reconciliations, JsonNode followUpEvidence) {
+            this(marketId, provider, instrument, productType, status, thesisId, thesisVersion,
+                    deterministicAnalysis, freshness, freshness, "UNKNOWN", null, null, null, null, null, null,
+                    provenance, supportingEvidence, contradictingEvidence, missingEvidence,
+                    invalidationConditions, aiStatus, aiInterpretation, diagnostics,
+                    finalAiInterpretation, reconciliations, followUpEvidence, null, null);
         }
     }
 
