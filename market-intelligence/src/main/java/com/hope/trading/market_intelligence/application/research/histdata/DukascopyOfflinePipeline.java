@@ -4,6 +4,7 @@ import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -55,7 +56,7 @@ public final class DukascopyOfflinePipeline {
         }
     }
 
-    public record RejectedObservation(int lineNumber, String reason) {
+    public record RejectedObservation(int lineNumber, Instant timestamp, String reason, String contentFingerprint) {
     }
 
     public record ImportResult(
@@ -65,17 +66,31 @@ public final class DukascopyOfflinePipeline {
             List<M1Observation> observations,
             List<RejectedObservation> qualityEvents,
             Set<Instant> quarantinedTimestamps,
+            Set<Instant> malformedTimestamps,
+            Set<Instant> invalidTimestamps,
+            Set<Instant> chronologyAnomalyTimestamps,
+            Set<Instant> exactDuplicateTimestamps,
+            Map<Instant, Integer> exactDuplicateRowCounts,
+            Map<Instant, Integer> conflictingDuplicateRowCounts,
+            int unassignableMalformedRows,
             int malformedRows,
             int invalidRows,
             int exactDuplicateRows,
             int conflictingDuplicateRows,
             List<Gap> missingIntervals,
-            String sourceFingerprint
+            String sourceFingerprint,
+            String sourceFileChecksum
     ) {
         public ImportResult {
             observations = List.copyOf(observations);
             qualityEvents = List.copyOf(qualityEvents);
             quarantinedTimestamps = Set.copyOf(quarantinedTimestamps);
+            malformedTimestamps = Set.copyOf(malformedTimestamps);
+            invalidTimestamps = Set.copyOf(invalidTimestamps);
+            chronologyAnomalyTimestamps = Set.copyOf(chronologyAnomalyTimestamps);
+            exactDuplicateTimestamps = Set.copyOf(exactDuplicateTimestamps);
+            exactDuplicateRowCounts = Map.copyOf(exactDuplicateRowCounts);
+            conflictingDuplicateRowCounts = Map.copyOf(conflictingDuplicateRowCounts);
             missingIntervals = List.copyOf(missingIntervals);
         }
     }
@@ -99,8 +114,16 @@ public final class DukascopyOfflinePipeline {
 
         List<M1Observation> parsed = new ArrayList<>();
         List<RejectedObservation> events = new ArrayList<>();
+        Set<Instant> malformedTimestamps = new HashSet<>();
+        Set<Instant> invalidTimestamps = new HashSet<>();
+        Set<Instant> chronologyAnomalyTimestamps = new HashSet<>();
+        Set<Instant> exactDuplicateTimestamps = new HashSet<>();
+        Map<Instant, Integer> exactDuplicateRowCounts = new HashMap<>();
+        Map<Instant, Integer> conflictingDuplicateRowCounts = new HashMap<>();
         int malformed = 0;
+        int unassignableMalformed = 0;
         int invalid = 0;
+        Instant previousInputTimestamp = null;
         try (BufferedReader reader = Files.newBufferedReader(sourceFile, StandardCharsets.UTF_8)) {
             String header = reader.readLine();
             if (!HEADER.equals(header)) throw new IllegalArgumentException("invalid Dukascopy CSV header");
@@ -111,11 +134,20 @@ public final class DukascopyOfflinePipeline {
                 String[] fields = raw.split(",", -1);
                 if (fields.length != 6) {
                     malformed++;
-                    events.add(new RejectedObservation(lineNumber, "MALFORMED_FIELD_COUNT"));
+                    Instant timestamp = parseTimestamp(fields);
+                    if (timestamp != null) malformedTimestamps.add(timestamp);
+                    if (timestamp == null) unassignableMalformed++;
+                    events.add(new RejectedObservation(lineNumber, timestamp, "MALFORMED_FIELD_COUNT",
+                            ArtifactFingerprint.ofInputs(List.of(raw)).value()));
                     continue;
                 }
                 try {
                     Instant openTime = Instant.parse(fields[0]);
+                    if (previousInputTimestamp != null && openTime.isBefore(previousInputTimestamp)) {
+                        chronologyAnomalyTimestamps.add(previousInputTimestamp);
+                        chronologyAnomalyTimestamps.add(openTime);
+                    }
+                    previousInputTimestamp = openTime;
                     BigDecimal open = new BigDecimal(fields[1]);
                     BigDecimal high = new BigDecimal(fields[2]);
                     BigDecimal low = new BigDecimal(fields[3]);
@@ -128,11 +160,17 @@ public final class DukascopyOfflinePipeline {
                                 openTime.plusSeconds(60), open, high, low, close, volume));
                     } else {
                         invalid++;
-                        events.add(new RejectedObservation(lineNumber, "INVALID_TIMESTAMP_OR_OHLCV"));
+                        invalidTimestamps.add(openTime);
+                        events.add(new RejectedObservation(lineNumber, openTime, "INVALID_TIMESTAMP_OR_OHLCV",
+                                ArtifactFingerprint.ofInputs(List.of(raw)).value()));
                     }
                 } catch (RuntimeException exception) {
                     malformed++;
-                    events.add(new RejectedObservation(lineNumber, "MALFORMED_TIMESTAMP_OR_NUMBER"));
+                    Instant timestamp = parseTimestamp(fields);
+                    if (timestamp != null) malformedTimestamps.add(timestamp);
+                    if (timestamp == null) unassignableMalformed++;
+                    events.add(new RejectedObservation(lineNumber, timestamp, "MALFORMED_TIMESTAMP_OR_NUMBER",
+                            ArtifactFingerprint.ofInputs(List.of(raw)).value()));
                 }
             }
         }
@@ -149,18 +187,27 @@ public final class DukascopyOfflinePipeline {
                 eligible.add(values.getFirst());
             } else if (values.stream().allMatch(value -> sameValues(values.getFirst(), value))) {
                 exactDuplicates += values.size() - 1;
+                exactDuplicateTimestamps.add(entry.getKey());
+                exactDuplicateRowCounts.put(entry.getKey(), values.size() - 1);
                 eligible.add(values.getFirst());
             } else {
                 conflictingDuplicates += values.size();
                 quarantined.add(entry.getKey());
-                values.forEach(value -> events.add(new RejectedObservation(value.lineNumber(),
-                        "CONFLICTING_DUPLICATE_TIMESTAMP_QUARANTINED")));
+                conflictingDuplicateRowCounts.put(entry.getKey(), values.size());
+                values.forEach(value -> events.add(new RejectedObservation(value.lineNumber(), value.openTime(),
+                        "CONFLICTING_DUPLICATE_TIMESTAMP_QUARANTINED",
+                        ArtifactFingerprint.ofInputs(List.of(value.openTime().toString(), value.open().toString(),
+                                value.high().toString(), value.low().toString(), value.close().toString(),
+                                value.volume().toString())).value())));
             }
         }
         eligible.sort(Comparator.comparing(M1Observation::openTime));
         List<Gap> gaps = gaps(eligible);
-        return new ImportResult(marketId, symbol, sourceFile, eligible, events, quarantined, malformed, invalid,
-                exactDuplicates, conflictingDuplicates, gaps, sourceFingerprint(sourceFile, symbol, eligible, events));
+        return new ImportResult(marketId, symbol, sourceFile, eligible, events, quarantined,
+                malformedTimestamps, invalidTimestamps, chronologyAnomalyTimestamps, exactDuplicateTimestamps,
+                exactDuplicateRowCounts, conflictingDuplicateRowCounts, unassignableMalformed, malformed, invalid,
+                exactDuplicates, conflictingDuplicates, gaps,
+                sourceFingerprint(sourceFile, symbol, eligible, events), sha256(sourceFile));
     }
 
     public static AssemblyResult assemble(List<ImportResult> imports) {
@@ -175,7 +222,7 @@ public final class DukascopyOfflinePipeline {
         List<String> material = new ArrayList<>(List.of(SOURCE_PROVIDER, PRICE_SIDE, NORMALIZATION_VERSION));
         imports.stream().sorted(Comparator.comparing(ImportResult::symbol).thenComparing(value -> value.sourceFile().toString()))
                 .forEach(value -> {
-                    material.add(value.symbol() + "|" + value.sourceFingerprint());
+                    material.add(value.symbol() + "|" + value.sourceFingerprint() + "|" + value.sourceFileChecksum());
                     value.observations().forEach(observation -> material.add(observation.openTime().toString()));
                 });
         return new AssemblyResult(all, overlaps, ArtifactFingerprint.ofInputs(material).value());
@@ -212,7 +259,26 @@ public final class DukascopyOfflinePipeline {
                 sourceFile.getFileName().toString(), symbol));
         observations.forEach(value -> material.add(value.openTime() + "|" + value.open() + "|" + value.high()
                 + "|" + value.low() + "|" + value.close() + "|" + value.volume()));
-        events.stream().map(value -> value.lineNumber() + "|" + value.reason()).sorted().forEach(material::add);
+        events.stream().map(value -> value.lineNumber() + "|" + value.timestamp() + "|" + value.reason()
+                + "|" + value.contentFingerprint()).sorted().forEach(material::add);
         return ArtifactFingerprint.ofInputs(material).value();
+    }
+
+    private static String sha256(Path sourceFile) throws IOException {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(Files.readAllBytes(sourceFile)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is required", exception);
+        }
+    }
+
+    private static Instant parseTimestamp(String[] fields) {
+        if (fields.length == 0) return null;
+        try {
+            return Instant.parse(fields[0]);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 }
