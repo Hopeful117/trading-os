@@ -48,6 +48,28 @@ public final class DukascopyH1ResearchPipeline {
                 }
             }
         }
+        Map<Instant, List<DukascopyOfflinePipeline.M1Observation>> observationsByHour = observations.values().stream()
+                .collect(java.util.stream.Collectors.groupingBy(value -> value.openTime().truncatedTo(ChronoUnit.HOURS)));
+        Set<Instant> malformedTimestamps = imports.stream().flatMap(value -> value.malformedTimestamps().stream())
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Instant> invalidTimestamps = imports.stream().flatMap(value -> value.invalidTimestamps().stream())
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Instant> chronologyTimestamps = imports.stream()
+                .flatMap(value -> value.chronologyAnomalyTimestamps().stream()).collect(java.util.stream.Collectors.toSet());
+        Set<Instant> conflictingTimestamps = imports.stream()
+                .flatMap(value -> value.quarantinedTimestamps().stream()).collect(java.util.stream.Collectors.toSet());
+        Set<Instant> overlapHours = overlaps.stream().map(value -> value.truncatedTo(ChronoUnit.HOURS))
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Instant> malformedHours = hours(malformedTimestamps);
+        Set<Instant> invalidHours = hours(invalidTimestamps);
+        Set<Instant> chronologyHours = hours(chronologyTimestamps);
+        Set<Instant> conflictingHours = hours(conflictingTimestamps);
+        Map<Instant, Integer> exactDuplicateCounts = imports.stream()
+                .flatMap(value -> value.exactDuplicateRowCounts().entrySet().stream())
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Integer::sum));
+        Map<Instant, Integer> conflictingDuplicateCounts = imports.stream()
+                .flatMap(value -> value.conflictingDuplicateRowCounts().entrySet().stream())
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Integer::sum));
         String datasetFingerprint = DukascopyOfflinePipeline.assemble(imports).datasetFingerprint();
 
         List<DukascopyH1Bucket> result = new ArrayList<>();
@@ -55,9 +77,7 @@ public final class DukascopyH1ResearchPipeline {
              hour.isBefore(endExclusive); hour = hour.plus(1, ChronoUnit.HOURS)) {
             Instant bucketStart = hour;
             Instant close = bucketStart.plus(1, ChronoUnit.HOURS);
-            List<DukascopyOfflinePipeline.M1Observation> hourRows = observations.entrySet().stream()
-                    .filter(entry -> !entry.getKey().isBefore(bucketStart) && entry.getKey().isBefore(close))
-                    .map(Map.Entry::getValue)
+            List<DukascopyOfflinePipeline.M1Observation> hourRows = observationsByHour.getOrDefault(bucketStart, List.of()).stream()
                     .sorted(Comparator.comparing(DukascopyOfflinePipeline.M1Observation::openTime))
                     .toList();
             Set<Instant> timestamps = hourRows.stream()
@@ -76,16 +96,14 @@ public final class DukascopyH1ResearchPipeline {
                     maximumRun = Math.max(maximumRun, currentRun);
                 }
             }
-            boolean malformed = hasEvent(imports, bucketStart, close, true);
-            boolean invalid = hasEvent(imports, bucketStart, close, false);
-            boolean chronology = imports.stream().anyMatch(value -> value.chronologyAnomalyTimestamps().stream()
-                    .anyMatch(timestamp -> !timestamp.isBefore(bucketStart) && timestamp.isBefore(close)));
-            boolean conflict = imports.stream().anyMatch(value -> value.quarantinedTimestamps().stream()
-                    .anyMatch(timestamp -> !timestamp.isBefore(bucketStart) && timestamp.isBefore(close)));
-            boolean overlap = overlaps.stream().anyMatch(timestamp -> !timestamp.isBefore(bucketStart) && timestamp.isBefore(close));
+            boolean malformed = malformedHours.contains(bucketStart);
+            boolean invalid = invalidHours.contains(bucketStart);
+            boolean chronology = chronologyHours.contains(bucketStart);
+            boolean conflict = conflictingHours.contains(bucketStart);
+            boolean overlap = overlapHours.contains(bucketStart);
             boolean unknownIntegrity = imports.stream().anyMatch(value -> value.unassignableMalformedRows() > 0);
-            int exactDuplicates = countEvents(imports, bucketStart, close, true);
-            int conflictingDuplicates = countEvents(imports, bucketStart, close, false);
+            int exactDuplicates = countEvents(exactDuplicateCounts, bucketStart, close);
+            int conflictingDuplicates = countEvents(conflictingDuplicateCounts, bucketStart, close);
             DukascopyH1Bucket.StrictState state = hourRows.isEmpty()
                     ? DukascopyH1Bucket.StrictState.EMPTY
                     : malformed || invalid || chronology || conflict || overlap || unknownIntegrity
@@ -125,19 +143,14 @@ public final class DukascopyH1ResearchPipeline {
         return List.copyOf(result);
     }
 
-    private static boolean hasEvent(List<DukascopyOfflinePipeline.ImportResult> imports, Instant start, Instant end,
-                                    boolean malformed) {
-        return imports.stream().anyMatch(value -> {
-            Set<Instant> timestamps = malformed ? value.malformedTimestamps() : value.invalidTimestamps();
-            return timestamps.stream().anyMatch(timestamp -> !timestamp.isBefore(start) && timestamp.isBefore(end));
-        });
+    private static Set<Instant> hours(Set<Instant> timestamps) {
+        return timestamps.stream().map(value -> value.truncatedTo(ChronoUnit.HOURS))
+                .collect(java.util.stream.Collectors.toSet());
     }
 
-    private static int countEvents(List<DukascopyOfflinePipeline.ImportResult> imports, Instant start, Instant end,
-                                   boolean exact) {
-        return imports.stream().mapToInt(value -> (exact ? value.exactDuplicateRowCounts()
-                        : value.conflictingDuplicateRowCounts()).entrySet().stream()
+    private static int countEvents(Map<Instant, Integer> counts, Instant start, Instant end) {
+        return counts.entrySet().stream()
                 .filter(entry -> !entry.getKey().isBefore(start) && entry.getKey().isBefore(end))
-                .mapToInt(Map.Entry::getValue).sum()).sum();
+                .mapToInt(Map.Entry::getValue).sum();
     }
 }

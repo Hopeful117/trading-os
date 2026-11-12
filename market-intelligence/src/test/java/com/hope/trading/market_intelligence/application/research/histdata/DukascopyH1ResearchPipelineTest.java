@@ -137,6 +137,28 @@ class DukascopyH1ResearchPipelineTest {
         assertThat(result.qualityReport().get("profileSensitivity")).isNotNull();
     }
 
+    @Test
+    void outcomeFingerprintChangesWhenIntermediateForwardTrajectoryChanges(@TempDir Path temp) throws Exception {
+        Path firstSource = writeTrajectorySource(temp.resolve("first"), new double[]{1.1010, 1.0990, 1.1010, 1.1005});
+        Path secondSource = writeTrajectorySource(temp.resolve("second"), new double[]{1.0990, 1.1010, 1.0990, 1.1005});
+        Instant end = START.plusSeconds(60 * 3600L);
+        var first = Ml01DukascopyPreparation.prepare(java.util.List.of(
+                DukascopyOfflinePipeline.read(firstSource, MARKET_ID, "EUR/USD", START, end)), START, end);
+        var second = Ml01DukascopyPreparation.prepare(java.util.List.of(
+                DukascopyOfflinePipeline.read(secondSource, MARKET_ID, "EUR/USD", START, end)), START, end);
+        Instant anchor = START.plusSeconds(32 * 3600L);
+        var firstOutcome = first.rows().stream().filter(row -> row.bucket().openTime().equals(anchor))
+                .findFirst().orElseThrow().outcomes().get(4);
+        var secondOutcome = second.rows().stream().filter(row -> row.bucket().openTime().equals(anchor))
+                .findFirst().orElseThrow().outcomes().get(4);
+
+        assertThat(firstOutcome.realizedVolatility()).isNotEqualByComparingTo(secondOutcome.realizedVolatility());
+        assertThat(firstOutcome.directionalEfficiency()).isNotEqualByComparingTo(secondOutcome.directionalEfficiency());
+        assertThat(firstOutcome.fingerprint()).isNotEqualTo(secondOutcome.fingerprint());
+        assertThat(firstOutcome.futureEnd()).isNotNull();
+        assertThat(firstOutcome.futureEnd()).isEqualTo(firstOutcome.futureOpenTimes().getLast().plusSeconds(3600));
+    }
+
     private static Path writeSource(Path directory, int observed, boolean missingFirst, boolean missingLast)
             throws Exception {
         Path source = directory.resolve("eurusd.csv");
@@ -160,6 +182,22 @@ class DukascopyH1ResearchPipelineTest {
             for (int minute = 0; minute < 60; minute++) {
                 Instant timestamp = START.plusSeconds(hour * 3600L + minute * 60L);
                 content.append(timestamp).append(",1.1000,1.1010,1.0990,1.1005,1\n");
+            }
+        }
+        Files.writeString(source, content);
+        return source;
+    }
+
+    private static Path writeTrajectorySource(Path directory, double[] futureCloses) throws Exception {
+        Files.createDirectories(directory);
+        Path source = directory.resolve("eurusd-trajectory.csv");
+        StringBuilder content = new StringBuilder("timestamp,open,high,low,close,volume\n");
+        for (int hour = 0; hour < 60; hour++) {
+            double price = hour < 33 ? 1.1000 : futureCloses[Math.min(hour - 33, futureCloses.length - 1)];
+            for (int minute = 0; minute < 60; minute++) {
+                Instant timestamp = START.plusSeconds(hour * 3600L + minute * 60L);
+                content.append(timestamp).append(',').append(price).append(',').append(price + 0.0001)
+                        .append(',').append(price - 0.0001).append(',').append(price).append(",1\n");
             }
         }
         Files.writeString(source, content);

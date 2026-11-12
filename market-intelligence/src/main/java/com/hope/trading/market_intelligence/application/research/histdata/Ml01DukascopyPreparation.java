@@ -37,13 +37,19 @@ public final class Ml01DukascopyPreparation {
 
     public record Outcome(int horizon, String status, BigDecimal realizedVolatility,
                           BigDecimal directionalEfficiency, BigDecimal absoluteFutureNetReturn,
-                          String reason, String fingerprint) {
+                          String reason, String fingerprint, List<Instant> futureOpenTimes,
+                          Instant futureEnd) {
+        public Outcome {
+            futureOpenTimes = List.copyOf(futureOpenTimes);
+        }
     }
 
     public record Row(DukascopyH1Bucket bucket, Ml01DukascopyH1AdmissibilityDecision decision,
                       VolatilityAssessment features, Map<Integer, Outcome> outcomes,
                       boolean featureEligible, boolean jointAvailable, boolean jointEligible, String continuityStratum,
-                      String transitionProvenance, String exclusionReason,
+                       String transitionProvenance, Instant featureLookbackStart, Instant featureLookbackEnd,
+                       int featureWindowH1Count, int featureWindowPartialH1Count,
+                      String exclusionReason,
                       String rowFingerprint) {
         public Row {
             outcomes = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(outcomes));
@@ -60,8 +66,14 @@ public final class Ml01DukascopyPreparation {
 
     public static PreparationResult prepare(List<DukascopyOfflinePipeline.ImportResult> imports,
                                             Instant startInclusive, Instant endExclusive) {
+        return prepare(imports, startInclusive, endExclusive, Ml01DukascopyH1AdmissibilityProfile.V1);
+    }
+
+    public static PreparationResult prepare(List<DukascopyOfflinePipeline.ImportResult> imports,
+                                            Instant startInclusive, Instant endExclusive,
+                                            Ml01DukascopyH1AdmissibilityProfile profile) {
         List<DukascopyH1Bucket> buckets = DukascopyH1ResearchPipeline.aggregate(imports, startInclusive, endExclusive);
-        Ml01DukascopyH1AdmissibilityEvaluator evaluator = new Ml01DukascopyH1AdmissibilityEvaluator();
+        Ml01DukascopyH1AdmissibilityEvaluator evaluator = new Ml01DukascopyH1AdmissibilityEvaluator(profile);
         List<Ml01DukascopyH1AdmissibilityDecision> decisions = buckets.stream().map(evaluator::evaluate).toList();
         List<Row> rows = new ArrayList<>();
         for (int index = 0; index < buckets.size(); index++) {
@@ -89,10 +101,16 @@ public final class Ml01DukascopyPreparation {
                     + bucket.openTime() + (isContiguousTransition(buckets, decisions, index) ? ":CONTIGUOUS" : ":GAP_OR_REJECTED");
             String rowFingerprint = ArtifactFingerprint.ofInputs(List.of(POLICY_ID, POLICY_VERSION,
                     bucket.sourceFingerprint(), features.resultFingerprint(), outcomeMaterial(outcomes),
-                    continuity, transition,
-                    Boolean.toString(jointAvailable), Boolean.toString(jointEligible))).value();
+                    continuity, transition, Integer.toString(history.size()), Integer.toString((int) history.stream()
+                            .filter(value -> value.strictState() == DukascopyH1Bucket.StrictState.PARTIAL).count()),
+                    Boolean.toString(jointAvailable), Boolean.toString(jointEligible),
+                    String.valueOf(history.isEmpty() ? null : history.getFirst().openTime()),
+                    String.valueOf(history.isEmpty() ? null : history.getLast().closeTime()))).value();
             rows.add(new Row(bucket, decision, features, outcomes, featureEligible, jointAvailable, jointEligible,
-                    continuity, transition, exclusionReason, rowFingerprint));
+                    continuity, transition, history.isEmpty() ? null : history.getFirst().openTime(),
+                    history.isEmpty() ? null : history.getLast().closeTime(), history.size(), (int) history.stream()
+                            .filter(value -> value.strictState() == DukascopyH1Bucket.StrictState.PARTIAL).count(),
+                    exclusionReason, rowFingerprint));
         }
         rows.sort(Comparator.comparing(value -> value.bucket().openTime()));
         List<String> material = new ArrayList<>(List.of(POLICY_ID, POLICY_VERSION, FEATURE_SCHEMA_VERSION,
@@ -105,7 +123,7 @@ public final class Ml01DukascopyPreparation {
         quality.put("partitionParameters", "REQUIRES_SCIENTIFIC_APPROVAL");
         quality.put("kmeansExecuted", false);
         quality.put("modelTrainingExecuted", false);
-        String configurationFingerprint = ArtifactFingerprint.ofInputs(List.of(POLICY_ID, POLICY_VERSION,
+        String configurationFingerprint = ArtifactFingerprint.ofInputs(List.of(profile.name(), profile.version(),
                 FEATURE_SCHEMA_VERSION, OUTCOME_DEFINITION_VERSION, CONTINUITY_POLICY_ID,
                 CONTINUITY_POLICY_VERSION, startInclusive.toString(), endExclusive.toString())).value();
         String bundleFingerprint = ArtifactFingerprint.ofInputs(List.of(
@@ -113,6 +131,8 @@ public final class Ml01DukascopyPreparation {
                 rows.stream().map(Row::rowFingerprint).sorted().toList().toString())).value();
         quality.put("configurationFingerprint", configurationFingerprint);
         quality.put("bundleFingerprint", bundleFingerprint);
+        quality.put("profileName", profile.name());
+        quality.put("profileVersion", profile.version());
         return new PreparationResult(rows, ArtifactFingerprint.ofInputs(material).value(), readiness, quality);
     }
 
@@ -125,33 +145,15 @@ public final class Ml01DukascopyPreparation {
         }
         Files.createDirectories(outputDirectory);
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        List<Map<String, Object>> observations = result.rows().stream().map(row -> {
-            Map<String, Object> value = new LinkedHashMap<>();
-            value.put("provider", DukascopyOfflinePipeline.SOURCE_PROVIDER);
-            value.put("instrument", row.bucket().symbol());
-            value.put("cutoff", row.bucket().closeTime());
-            value.put("quality", row.decision().state());
-            value.put("admissibilityDecision", row.decision());
-            value.put("continuityPolicyId", CONTINUITY_POLICY_ID);
-            value.put("continuityStratum", row.continuityStratum());
-            value.put("transitionProvenance", row.transitionProvenance());
-            value.put("features", row.features());
-            value.put("outcomes", row.outcomes());
-            value.put("featureEligible", row.featureEligible());
-            value.put("jointAvailable", row.jointAvailable());
-            value.put("jointEligible", row.jointEligible());
-            value.put("exclusionReason", row.exclusionReason());
-            value.put("rowFingerprint", row.rowFingerprint());
-            return value;
-        }).toList();
+        List<Map<String, Object>> observations = result.rows().stream().map(Ml01DukascopyPreparation::observationDocument).toList();
         Files.writeString(outputDirectory.resolve("observations.jsonl"), observations.stream()
                 .map(value -> toJson(mapper, value)).reduce("", (left, right) -> left + right + "\n"));
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("provider", DukascopyOfflinePipeline.SOURCE_PROVIDER);
         manifest.put("priceSide", DukascopyOfflinePipeline.PRICE_SIDE);
         manifest.put("timeframe", "H1");
-        manifest.put("admissibilityProfile", POLICY_ID);
-        manifest.put("admissibilityPolicyVersion", POLICY_VERSION);
+        manifest.put("admissibilityProfile", result.qualityReport().get("profileName"));
+        manifest.put("admissibilityPolicyVersion", result.qualityReport().get("profileVersion"));
         manifest.put("continuityPolicyId", CONTINUITY_POLICY_ID);
         manifest.put("continuityPolicyVersion", CONTINUITY_POLICY_VERSION);
         manifest.put("featureSchemaVersion", FEATURE_SCHEMA_VERSION);
@@ -162,30 +164,183 @@ public final class Ml01DukascopyPreparation {
         manifest.put("jointAvailableCount", result.rows().stream().filter(Row::jointAvailable).count());
         manifest.put("jointEligibleCount", result.rows().stream().filter(Row::jointEligible).count());
         manifest.put("datasetFingerprint", result.datasetFingerprint());
+        manifest.put("sourceDatasetFingerprint", result.qualityReport().get("sourceDatasetFingerprint"));
         manifest.put("configurationFingerprint", result.qualityReport().get("configurationFingerprint"));
         manifest.put("bundleFingerprint", result.qualityReport().get("bundleFingerprint"));
-        manifest.put("researchBounds", Map.of("startInclusive", result.qualityReport().get("startInclusive"),
-                "endExclusive", result.qualityReport().get("endExclusive")));
+        Map<String, Object> researchBounds = new LinkedHashMap<>();
+        researchBounds.put("startInclusive", result.qualityReport().get("startInclusive"));
+        researchBounds.put("endExclusive", result.qualityReport().get("endExclusive"));
+        manifest.put("researchBounds", researchBounds);
         manifest.put("readinessStatus", result.readinessStatus());
         mapper.writeValue(outputDirectory.resolve("dataset-manifest.json").toFile(), manifest);
         mapper.writeValue(outputDirectory.resolve("quality-report.json").toFile(), result.qualityReport());
-        mapper.writeValue(outputDirectory.resolve("readiness.json").toFile(), Map.of(
-                "status", result.readinessStatus(), "kmeansExecuted", false,
-                "modelTrainingExecuted", false, "requiresScientificApproval", true,
-                "configurationFingerprint", result.qualityReport().get("configurationFingerprint"),
-                "bundleFingerprint", result.qualityReport().get("bundleFingerprint")));
-        mapper.writeValue(outputDirectory.resolve("partition-manifest.json").toFile(),
-                Map.of("status", "REQUIRES_SCIENTIFIC_APPROVAL",
-                        "configurationFingerprint", result.qualityReport().get("configurationFingerprint")));
-        mapper.writeValue(outputDirectory.resolve("source-metadata.json").toFile(), Map.of(
-                "provider", DukascopyOfflinePipeline.SOURCE_PROVIDER,
-                "priceSide", DukascopyOfflinePipeline.PRICE_SIDE,
-                "normalizationVersion", DukascopyOfflinePipeline.NORMALIZATION_VERSION,
-                "sourceDatasetFingerprint", result.qualityReport().get("sourceDatasetFingerprint"),
-                "sourceFiles", result.qualityReport().get("sourceFiles"),
-                "sourceChecksums", result.qualityReport().get("sourceChecksums"),
-                "sourceFingerprints", result.qualityReport().get("sourceFingerprints")));
+        Map<String, Object> readiness = new LinkedHashMap<>();
+        readiness.put("status", result.readinessStatus());
+        readiness.put("kmeansExecuted", false);
+        readiness.put("modelTrainingExecuted", false);
+        readiness.put("requiresScientificApproval", true);
+        readiness.put("configurationFingerprint", result.qualityReport().get("configurationFingerprint"));
+        readiness.put("bundleFingerprint", result.qualityReport().get("bundleFingerprint"));
+        mapper.writeValue(outputDirectory.resolve("readiness.json").toFile(), readiness);
+        Map<String, Object> partition = new LinkedHashMap<>();
+        partition.put("status", "REQUIRES_SCIENTIFIC_APPROVAL");
+        partition.put("configurationFingerprint", result.qualityReport().get("configurationFingerprint"));
+        mapper.writeValue(outputDirectory.resolve("partition-manifest.json").toFile(), partition);
+        Map<String, Object> sourceMetadata = new LinkedHashMap<>();
+        sourceMetadata.put("provider", DukascopyOfflinePipeline.SOURCE_PROVIDER);
+        sourceMetadata.put("priceSide", DukascopyOfflinePipeline.PRICE_SIDE);
+        sourceMetadata.put("normalizationVersion", DukascopyOfflinePipeline.NORMALIZATION_VERSION);
+        sourceMetadata.put("sourceDatasetFingerprint", result.qualityReport().get("sourceDatasetFingerprint"));
+        sourceMetadata.put("sourceFiles", result.qualityReport().get("sourceFiles"));
+        sourceMetadata.put("sourceChecksums", result.qualityReport().get("sourceChecksums"));
+        sourceMetadata.put("sourceFingerprints", result.qualityReport().get("sourceFingerprints"));
+        mapper.writeValue(outputDirectory.resolve("source-metadata.json").toFile(), sourceMetadata);
     }
+
+    public static void writePartitionedBundle(PreparationResult result,
+                                              Ml01DukascopyPartitioning.Result partitioned,
+                                              Path outputDirectory) throws IOException {
+        if (partitioned == null) throw new IllegalArgumentException("partitioned result is required");
+        writeBundle(result, outputDirectory);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        List<Map<String, Object>> observations = partitioned.rows().stream().map(value -> {
+            Map<String, Object> document = observationDocument(value.source());
+            document.put("partition", value.partition());
+            document.put("partitionExclusion", value.exclusionReason());
+            document.put("crossingHorizons", value.crossingHorizons());
+            return document;
+        }).toList();
+        String observationsFingerprint = ArtifactFingerprint.ofInputs(partitioned.rows().stream()
+                .map(value -> value.source().rowFingerprint() + "|" + value.partition() + "|"
+                        + String.valueOf(value.exclusionReason()) + "|" + value.crossingHorizons()).toList()).value();
+        Files.writeString(outputDirectory.resolve("observations.jsonl"), observations.stream()
+                .map(value -> toJson(mapper, value)).reduce("", (left, right) -> left + right + "\n"));
+        Map<String, Object> manifest = mapper.readValue(outputDirectory.resolve("dataset-manifest.json").toFile(), Map.class);
+        manifest.put("experimentSchema", "ML01_DUKASCOPY_REGIME_EVALUATION_V1");
+        manifest.put("partitions", List.of("TRAIN", "VALIDATION", "TEST"));
+        manifest.put("sourceConfigurationFingerprint", manifest.get("configurationFingerprint"));
+        manifest.put("partitionFingerprint", partitioned.fingerprint());
+        manifest.put("observationsFingerprint", observationsFingerprint);
+        manifest.put("effectivePartitionCounts", partitioned.counts());
+        manifest.put("threeWaySplitRequired", true);
+        mapper.writeValue(outputDirectory.resolve("dataset-manifest.json").toFile(), manifest);
+        Map<String, Object> readiness = new LinkedHashMap<>();
+        readiness.put("status", "BLOCKED_SCIENTIFIC_APPROVAL");
+        readiness.put("requiresScientificApproval", true);
+        readiness.put("configurationFingerprint", manifest.get("configurationFingerprint"));
+        readiness.put("bundleFingerprint", manifest.get("bundleFingerprint"));
+        mapper.writeValue(outputDirectory.resolve("readiness.json").toFile(), readiness);
+        Map<String, Object> partitionManifest = new LinkedHashMap<>();
+        partitionManifest.put("status", partitioned.ready() ? "READY_FOR_SCIENTIFIC_GATE" : "BLOCKED");
+        partitionManifest.put("policyId", Ml01DukascopyPartitioning.POLICY_ID);
+        partitionManifest.put("fingerprint", partitioned.fingerprint());
+        partitionManifest.put("counts", partitioned.counts());
+        partitionManifest.put("threeWaySplit", List.of("TRAIN", "VALIDATION", "TEST"));
+        mapper.writeValue(outputDirectory.resolve("partition-manifest.json").toFile(), partitionManifest);
+    }
+
+    public static void writePooledPartitionedBundle(List<PreparationResult> results,
+                                                    Ml01DukascopyExperimentConfiguration configuration,
+                                                    Path outputDirectory) throws IOException {
+        if (results == null || results.isEmpty() || configuration == null) {
+            throw new IllegalArgumentException("pooled results and configuration are required");
+        }
+        List<Row> rows = results.stream().flatMap(result -> result.rows().stream()).toList();
+        Ml01DukascopyPartitioning.Result partitioned = Ml01DukascopyPartitioning.partition(
+                rows, configuration.scenario(), configuration.embargo());
+        Ml01DukascopyPartitioning.requireNoProtectedBoundaryCrossing(partitioned);
+        writeBundle(results.getFirst(), outputDirectory);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        List<Map<String, Object>> observations = partitioned.rows().stream().map(value -> {
+            Map<String, Object> document = observationDocument(value.source());
+            document.put("partition", value.partition());
+            document.put("partitionExclusion", value.exclusionReason());
+            document.put("crossingHorizons", value.crossingHorizons());
+            return document;
+        }).toList();
+        String observationsFingerprint = ArtifactFingerprint.ofInputs(partitioned.rows().stream()
+                .map(value -> value.source().rowFingerprint() + "|" + value.partition() + "|"
+                        + String.valueOf(value.exclusionReason()) + "|" + value.crossingHorizons()).toList()).value();
+        Files.writeString(outputDirectory.resolve("observations.jsonl"), observations.stream()
+                .map(value -> toJson(mapper, value)).reduce("", (left, right) -> left + right + "\n"));
+        Map<String, Object> manifest = mapper.readValue(outputDirectory.resolve("dataset-manifest.json").toFile(), Map.class);
+        String sourceConfigurationFingerprint = ArtifactFingerprint.ofInputs(results.stream()
+                .map(result -> String.valueOf(result.qualityReport().get("configurationFingerprint"))).sorted().toList()).value();
+        String datasetFingerprint = ArtifactFingerprint.ofInputs(results.stream()
+                .map(PreparationResult::datasetFingerprint).sorted().toList()).value();
+        String bundleFingerprint = ArtifactFingerprint.ofInputs(List.of(datasetFingerprint,
+                configuration.fingerprint(), partitioned.fingerprint())).value();
+        manifest.put("experimentSchema", "ML01_DUKASCOPY_REGIME_EVALUATION_V1");
+        manifest.put("instruments", results.stream().flatMap(result -> result.rows().stream())
+                .map(row -> row.bucket().symbol()).distinct().sorted().toList());
+        manifest.put("pooledModel", true);
+        manifest.put("datasetFingerprint", datasetFingerprint);
+        manifest.put("sourceDatasetFingerprints", results.stream()
+                .map(result -> result.qualityReport().get("sourceDatasetFingerprint")).sorted().toList());
+        manifest.put("sourceConfigurationFingerprint", sourceConfigurationFingerprint);
+        manifest.put("configurationFingerprint", configuration.fingerprint());
+        manifest.put("bundleFingerprint", bundleFingerprint);
+        manifest.put("partitions", List.of("TRAIN", "VALIDATION", "TEST"));
+        manifest.put("partitionScenario", configuration.scenarioName());
+        manifest.put("partitionBoundaries", Map.of("trainEndExclusive", configuration.trainEndExclusive(),
+                "validationEndExclusive", configuration.validationEndExclusive(),
+                "testEndExclusive", configuration.testEndExclusive()));
+        manifest.put("embargo", configuration.embargo());
+        manifest.put("partitionFingerprint", partitioned.fingerprint());
+        manifest.put("observationsFingerprint", observationsFingerprint);
+        manifest.put("effectivePartitionCounts", partitioned.counts());
+        manifest.put("threeWaySplitRequired", true);
+        manifest.put("rowCount", rows.size());
+        mapper.writeValue(outputDirectory.resolve("dataset-manifest.json").toFile(), manifest);
+        Map<String, Object> sourceMetadata = new LinkedHashMap<>();
+        sourceMetadata.put("provider", DukascopyOfflinePipeline.SOURCE_PROVIDER);
+        sourceMetadata.put("priceSide", DukascopyOfflinePipeline.PRICE_SIDE);
+        sourceMetadata.put("normalizationVersion", DukascopyOfflinePipeline.NORMALIZATION_VERSION);
+        sourceMetadata.put("sourceDatasetFingerprints", manifest.get("sourceDatasetFingerprints"));
+        mapper.writeValue(outputDirectory.resolve("source-metadata.json").toFile(), sourceMetadata);
+        Map<String, Object> readiness = new LinkedHashMap<>();
+        readiness.put("status", configuration.scientificallyReady() && partitioned.ready()
+                ? "READY_FOR_EXECUTION" : "BLOCKED_SCIENTIFIC_APPROVAL");
+        readiness.put("requiresScientificApproval", !configuration.scientificallyReady());
+        readiness.put("configurationFingerprint", configuration.fingerprint());
+        readiness.put("bundleFingerprint", manifest.get("bundleFingerprint"));
+        mapper.writeValue(outputDirectory.resolve("readiness.json").toFile(), readiness);
+        Map<String, Object> partitionManifest = new LinkedHashMap<>();
+        partitionManifest.put("status", configuration.scientificallyReady() && partitioned.ready()
+                ? "READY_FOR_EXECUTION" : "BLOCKED_SCIENTIFIC_APPROVAL");
+        partitionManifest.put("policyId", Ml01DukascopyPartitioning.POLICY_ID);
+        partitionManifest.put("fingerprint", partitioned.fingerprint());
+        partitionManifest.put("counts", partitioned.counts());
+        partitionManifest.put("scenario", configuration.scenarioName());
+        partitionManifest.put("embargo", configuration.embargo());
+        partitionManifest.put("configurationFingerprint", configuration.fingerprint());
+        partitionManifest.put("threeWaySplit", List.of("TRAIN", "VALIDATION", "TEST"));
+        mapper.writeValue(outputDirectory.resolve("partition-manifest.json").toFile(), partitionManifest);
+    }
+
+    private static Map<String, Object> observationDocument(Row row) {
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("provider", DukascopyOfflinePipeline.SOURCE_PROVIDER);
+            value.put("instrument", row.bucket().symbol());
+            value.put("cutoff", row.bucket().closeTime());
+            value.put("quality", row.decision().state());
+            value.put("admissibilityDecision", row.decision());
+            value.put("continuityPolicyId", CONTINUITY_POLICY_ID);
+            value.put("continuityStratum", row.continuityStratum());
+            value.put("transitionProvenance", row.transitionProvenance());
+            value.put("featureLookbackStart", row.featureLookbackStart());
+            value.put("featureLookbackEnd", row.featureLookbackEnd());
+            value.put("featureWindowH1Count", row.featureWindowH1Count());
+            value.put("featureWindowPartialH1Count", row.featureWindowPartialH1Count());
+            value.put("features", row.features());
+            value.put("outcomes", row.outcomes());
+            value.put("featureEligible", row.featureEligible());
+            value.put("jointAvailable", row.jointAvailable());
+            value.put("jointEligible", row.jointEligible());
+            value.put("exclusionReason", row.exclusionReason());
+            value.put("rowFingerprint", row.rowFingerprint());
+            return value;
+        }
 
     private static String toJson(ObjectMapper mapper, Object value) {
         try {
@@ -249,14 +404,19 @@ public final class Ml01DukascopyPreparation {
         BigDecimal efficiency = path.signum() == 0 ? BigDecimal.ZERO
                 : finalClose.subtract(reference, MC).abs().divide(path, MC);
         BigDecimal absoluteReturn = finalClose.subtract(reference, MC).divide(reference, MC).abs();
-        String fingerprint = ArtifactFingerprint.ofInputs(List.of(OUTCOME_DEFINITION_VERSION,
-                reference.toPlainString(), finalClose.toPlainString(), Integer.toString(horizon))).value();
+        List<String> outcomeInputs = new ArrayList<>(List.of(OUTCOME_DEFINITION_VERSION,
+                Integer.toString(horizon), buckets.get(index).closeTime().toString(), reference.toPlainString(),
+                future.getLast().closeTime().toString()));
+        future.forEach(candle -> outcomeInputs.add(candle.openTime() + "|" + candle.closeTime() + "|"
+                + candle.close() + "|" + candle.sourceFingerprint()));
+        String fingerprint = ArtifactFingerprint.ofInputs(outcomeInputs).value();
         return new Outcome(horizon, "AVAILABLE", sumSquares.divide(BigDecimal.valueOf(horizon), MC).sqrt(MC),
-                efficiency, absoluteReturn, null, fingerprint);
+                efficiency, absoluteReturn, null, fingerprint, future.stream()
+                .map(DukascopyH1Bucket::openTime).toList(), future.getLast().closeTime());
     }
 
     private static Outcome unavailable(int horizon, String reason) {
-        return new Outcome(horizon, "UNAVAILABLE", null, null, null, reason, null);
+        return new Outcome(horizon, "UNAVAILABLE", null, null, null, reason, null, List.of(), null);
     }
 
     private static String outcomeMaterial(Map<Integer, Outcome> outcomes) {
@@ -295,13 +455,17 @@ public final class Ml01DukascopyPreparation {
         result.put("jointAvailableCount", rows.stream().filter(Row::jointAvailable).count());
         result.put("jointEligibleCount", rows.stream().filter(Row::jointEligible).count());
         result.put("profileSensitivity", sensitivity(buckets));
-        result.put("qualityEvidence", buckets.stream().map(value -> Map.of(
-                "openTime", value.openTime(), "observedMinutePositions", value.observedMinutePositions(),
-                "missingMinutePositions", value.missingMinutePositions(),
-                "exactDuplicateRows", value.exactDuplicateRows(),
-                "conflictingDuplicateRows", value.conflictingDuplicateRows(),
-                "strictState", value.strictState(),
-                "strictContinuityClassification", value.strictContinuityClassification())).toList());
+        result.put("qualityEvidence", buckets.stream().map(value -> {
+            Map<String, Object> evidence = new LinkedHashMap<>();
+            evidence.put("openTime", value.openTime());
+            evidence.put("observedMinutePositions", value.observedMinutePositions());
+            evidence.put("missingMinutePositions", value.missingMinutePositions());
+            evidence.put("exactDuplicateRows", value.exactDuplicateRows());
+            evidence.put("conflictingDuplicateRows", value.conflictingDuplicateRows());
+            evidence.put("strictState", value.strictState());
+            evidence.put("strictContinuityClassification", value.strictContinuityClassification());
+            return evidence;
+        }).toList());
         result.put("outcomeAvailabilityByHorizon", HORIZONS.stream().collect(java.util.stream.Collectors.toMap(
                 horizon -> Integer.toString(horizon), horizon -> rows.stream().filter(value ->
                         "AVAILABLE".equals(value.outcomes().get(horizon).status())).count(),
