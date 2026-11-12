@@ -1,0 +1,15 @@
+package com.hope.trading.market_intelligence.application.research.histdata;
+
+public enum Ml01DukascopyH1RejectionReason {
+    MALFORMED_OBSERVATION,
+    CONFLICTING_DUPLICATE,
+    INVALID_OHLC,
+    CHRONOLOGY_ANOMALY,
+    MISSING_FIRST_MINUTE,
+    MISSING_LAST_MINUTE,
+    INSUFFICIENT_VALID_M1_COUNT,
+    UNKNOWN_PROVENANCE,
+    CROSS_FILE_OVERLAP,
+    EMPTY_H1_BUCKET
+    ,UNKNOWN_SOURCE_INTEGRITY
+}
