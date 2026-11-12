@@ -111,6 +111,10 @@ def test_mock_analysis_is_async_and_returns_validated_result():
     assert result.status_code == 200
     assert result.json()["status"] == "COMPLETED"
     assert result.json()["result"]["suggestedDecision"] == "REVIEW_CANDIDATE"
+    assert result.json()["provenance"]["classification"] == "MOCK"
+    assert result.json()["provenance"]["provider"] == "mock"
+    assert result.json()["provenance"]["shadowMode"] is True
+    assert "token" not in result.text.lower()
 
 
 def test_execution_id_reuse_with_different_request_is_rejected():

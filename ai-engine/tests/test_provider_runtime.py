@@ -10,7 +10,8 @@ import pytest
 from app.config import Settings
 from app.infrastructure.credential_store import EncryptedCredentialStore, StoredCredential
 from app.infrastructure.oauth import ChatGptOAuthService
-from app.infrastructure.provider_registry import build_provider
+from app.infrastructure.provider_registry import FallbackLLMProvider, build_provider
+from app.infrastructure.providers.mock import MockLLMProvider
 from app.infrastructure.providers.chatgpt import ChatGptOAuthProvider, ChatGptProviderError
 from tests.test_service import evidence, request_with
 
@@ -47,6 +48,26 @@ def test_chatgpt_requires_explicit_oauth_configuration() -> None:
 def test_fallback_is_only_used_when_explicitly_configured(tmp_path: Path) -> None:
     provider = build_provider(settings(tmp_path, fallback_provider="mock"))
     assert provider.name == "openai_chatgpt"
+    assert provider.provenance_classification == "EXTERNAL_MODEL"
+
+
+def test_fallback_result_is_classified_without_exposing_failure_payload() -> None:
+    class FailingProvider:
+        name = "external-fixture"
+        model = "fixture-model"
+        provenance_classification = "EXTERNAL_MODEL"
+
+        def interpret(self, request):
+            raise RuntimeError("provider secret should not be persisted")
+
+    provider = FallbackLLMProvider(FailingProvider(), MockLLMProvider())
+    result = provider.interpret(request_with([evidence()]))
+
+    assert result.suggested_decision == "REVIEW_CANDIDATE"
+    assert provider.provenance_classification == "FALLBACK"
+    assert provider.fallback_used is True
+    assert provider.fallback_reason == "RuntimeError"
+    assert "secret" not in provider.fallback_reason.lower()
 
 
 def test_credentials_are_encrypted_and_resolved_by_opaque_handle(tmp_path: Path) -> None:

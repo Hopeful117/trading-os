@@ -10,6 +10,7 @@ from app.domain.models import InterpretationDraft, InterpretationRequest
 
 class OpenAILLMProvider:
     name = "openai"
+    provenance_classification = "EXTERNAL_MODEL"
 
     def __init__(self, settings: Settings) -> None:
         if not settings.api_key:

@@ -81,10 +81,17 @@ public class HttpAiEngineAdapter implements AiEnginePort {
                         response.result().requestedAnalysis().marketId(),
                         response.result().requestedAnalysis().reason(),
                         response.result().requestedAnalysis().expectedEvidence());
+        AiProvenance provenance = response.provenance() == null ? null : new AiProvenance(
+                response.provenance().executionId(), response.provenance().provider(),
+                response.provenance().model(), response.provenance().classification(),
+                response.provenance().shadowMode(), response.provenance().invocationAt(),
+                response.provenance().completionAt(), response.provenance().providerCorrelationId(),
+                response.provenance().fallback(), response.provenance().failureReason(),
+                response.provenance().contractVersion());
         return Optional.of(new AiStructuredResult(new AiExecutionReference(response.executionId().toString()),
                 new CapabilityAnalysisResult(List.copyOf(findings), List.of(), requested,
-                        response.result().reconciliations() == null ? List.of() : response.result().reconciliations()),
-                response.acceptedAt()));
+                        response.result().reconciliations() == null ? List.of() : response.result().reconciliations(),
+                        provenance), response.acceptedAt(), provenance));
     }
 
     @Override

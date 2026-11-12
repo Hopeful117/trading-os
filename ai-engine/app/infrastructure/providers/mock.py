@@ -10,6 +10,7 @@ from app.domain.models import (
 class MockLLMProvider:
     name = "mock"
     model = "deterministic-fixture"
+    provenance_classification = "MOCK"
 
     def interpret(self, request: InterpretationRequest) -> InterpretationDraft:
         evidence = request.thesis.evidence

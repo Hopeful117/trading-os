@@ -14,7 +14,7 @@ from app.infrastructure.provider_registry import build_provider
 def create_app(config: Settings | None = None) -> FastAPI:
     config = config or settings
     provider = build_provider(config)
-    store = ExecutionStore(InterpretationService(provider), config.max_evidence)
+    store = ExecutionStore(InterpretationService(provider), config.max_evidence, config.shadow_mode)
     app = FastAPI(title="Trading OS AI Engine", version="0.1.0")
     app.state.settings = config
     app.state.store = store

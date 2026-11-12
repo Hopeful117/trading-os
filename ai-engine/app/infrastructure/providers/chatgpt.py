@@ -19,6 +19,7 @@ class ChatGptProviderError(RuntimeError):
 
 class ChatGptOAuthProvider:
     name = "openai_chatgpt"
+    provenance_classification = "EXTERNAL_MODEL"
 
     def __init__(self, config: Settings) -> None:
         if not config.chatgpt_oauth_enabled:

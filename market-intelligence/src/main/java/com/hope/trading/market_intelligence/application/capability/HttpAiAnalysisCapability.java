@@ -90,7 +90,10 @@ public class HttpAiAnalysisCapability implements AiAnalysisCapability {
         while (Instant.now().isBefore(deadline)) {
             var result = aiEnginePort.result(reference);
             if (result.isPresent()) {
-                return result.orElseThrow().result();
+                var completed = result.orElseThrow();
+                CapabilityAnalysisResult interpreted = completed.result();
+                return new CapabilityAnalysisResult(interpreted.findings(), interpreted.warnings(),
+                        interpreted.requestedAnalysis(), interpreted.reconciliations(), completed.provenance());
             }
             AiExecutionProgress progress = aiEnginePort.progress(reference);
             if ("FAILED".equals(progress.status()) || "CANCELLED".equals(progress.status())) {

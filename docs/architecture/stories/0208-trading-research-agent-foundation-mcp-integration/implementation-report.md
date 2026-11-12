@@ -69,3 +69,35 @@
 
 The workflow does not create TradePlans, call Risk, create ExecutionIntents,
 place broker orders, mutate Market Thesis or authorize a trade.
+
+## Reliability Contract Update - 2026-11-12
+
+The bounded research contract now makes the following semantics explicit:
+
+- AI interpretation is evaluated independently per eligible market.
+- The Java workflow permits at most two AI invocations per research execution
+  and at most one invocation per market. The public research scope remains
+  bounded to exactly two markets, so a normal two-market request can account for
+  one invocation for each market.
+- `COMPLETED`, `FAILED`, `DISABLED`, `NOT_REQUESTED`, `SKIPPED_BY_BUDGET` and
+  `SKIPPED_INELIGIBLE` are distinct market-level AI statuses. Every skipped or
+  failed market carries a sanitized diagnostic reason.
+- The compatibility field `freshness` retains its prior thesis-freshness
+  meaning. Additive fields expose `thesisFreshness`, `evidenceFreshness`, thesis
+  timestamps, live evidence timestamps and the evidence evaluation cutoff.
+- AI Engine results carry non-sensitive per-execution provenance. The
+  classification distinguishes `EXTERNAL_MODEL`, `FALLBACK`, `MOCK`,
+  `INTERNAL_DETERMINISTIC`, `NOT_INVOKED` and `UNKNOWN`. Java preserves this
+  metadata per market without inferring external inference from configuration.
+- Adaptive deterministic follow-up evidence may still be collected, but final
+  AI synthesis is skipped when it would exceed the one-provider-invocation-per-
+  market policy. The report records
+  `FINAL_SYNTHESIS_SKIPPED_BY_MARKET_AI_BUDGET` rather than issuing a second
+  provider call.
+- Older persisted reports remain readable because all new report fields are
+  additive and absent provenance/freshness fields are treated as compatibility
+  defaults.
+
+The change preserves the Java-controlled research boundary, advisory-only AI
+authority, MCP/Gateway routing, actor-scoped idempotency and all trading safety
+boundaries. It does not rewrite historical reports or enable live execution.

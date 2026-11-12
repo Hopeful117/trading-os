@@ -10,10 +10,13 @@ import com.hope.trading.market_intelligence.application.capability.HttpAiAnalysi
 import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
 import com.hope.trading.market_intelligence.application.port.ResearchExecutionRepository;
 import com.hope.trading.market_intelligence.application.port.AiHypothesisReconciliation;
+import com.hope.trading.market_intelligence.application.port.AiProvenance;
 import com.hope.trading.market_intelligence.application.port.AiSynthesisContext;
 import com.hope.trading.market_intelligence.application.port.RequestedAnalysis;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
+import com.hope.trading.market_intelligence.domain.ContextSectionStatus;
+import com.hope.trading.market_intelligence.domain.ContextSectionSummary;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
@@ -45,6 +48,8 @@ public class ResearchApplicationService {
     private static final Logger log = LoggerFactory.getLogger(ResearchApplicationService.class);
     private static final int MIN_MARKETS = 2;
     private static final int MAX_MARKETS = 2;
+    private static final int MAX_AI_INVOCATIONS_PER_RESEARCH = 2;
+    private static final int MAX_AI_INVOCATIONS_PER_MARKET = 1;
     private static final int MAX_OBJECTIVE_LENGTH = 500;
     private static final Set<String> DEPTHS = Set.of("STANDARD", "DEEP");
     private static final Map<String, String> ADAPTIVE_ALLOWLIST = Map.of(
@@ -280,8 +285,7 @@ public class ResearchApplicationService {
         List<ResearchReport.AdaptiveCapabilityRecord> rejectedCapabilities = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
         boolean followUpUsed = false;
-        boolean initialAiUsed = false;
-        boolean finalAiUsed = false;
+        int aiInvocations = 0;
         for (UUID marketId : request.marketIds()) {
             progress(researchId, workerAttempt, ResearchExecutionStage.DETERMINISTIC_ANALYSIS);
             MarketResponse market;
@@ -322,6 +326,9 @@ public class ResearchApplicationService {
             String aiStatus = "DISABLED";
             JsonNode aiInterpretation = null;
             JsonNode finalAiInterpretation = null;
+            JsonNode aiProvenance = null;
+            JsonNode finalAiProvenance = null;
+            int marketAiInvocations = 0;
             List<ResearchReport.HypothesisReconciliation> reconciliations = List.of();
             JsonNode followUpEvidence = null;
             String freshness = thesis.map(value -> value.validUntil()
@@ -355,10 +362,22 @@ public class ResearchApplicationService {
             if (thesis.isEmpty()) {
                 marketDiagnostics.add("MARKET_THESIS_MISSING");
                 aiStatus = "NOT_REQUESTED";
-            } else if (ai != null && ai.getIfAvailable() != null && !initialAiUsed) {
+                marketDiagnostics.add("AI_NOT_REQUESTED_THESIS_MISSING");
+            } else if (ai == null || ai.getIfAvailable() == null) {
+                aiStatus = "DISABLED";
+                marketDiagnostics.add("AI_CAPABILITY_DISABLED");
+            } else if (deterministic == null) {
+                aiStatus = "SKIPPED_INELIGIBLE";
+                marketDiagnostics.add("AI_SKIPPED_DETERMINISTIC_ANALYSIS_UNAVAILABLE");
+            } else if (aiInvocations >= MAX_AI_INVOCATIONS_PER_RESEARCH
+                    || marketAiInvocations >= MAX_AI_INVOCATIONS_PER_MARKET) {
+                aiStatus = "SKIPPED_BY_BUDGET";
+                marketDiagnostics.add("AI_RESEARCH_BUDGET_EXHAUSTED");
+            } else {
                 progress(researchId, workerAttempt, ResearchExecutionStage.AI_INTERPRETATION);
                 HttpAiAnalysisCapability aiCapability = ai.getIfAvailable();
-                initialAiUsed = true;
+                aiInvocations++;
+                marketAiInvocations++;
                 try {
                     CapabilityAnalysisResult interpreted = aiCapability.analyzeAdaptive(
                             new IntelligenceAnalysisRequest(
@@ -430,43 +449,20 @@ public class ResearchApplicationService {
                         aiStatus = interpreted.warnings().isEmpty() ? "COMPLETED" : "PARTIAL";
                     }
                     aiInterpretation = mapper.valueToTree(interpreted);
-                    if (!finalAiUsed && requested != null && followUpId != null && followUp != null
+                    if (interpreted.provenance() != null) {
+                        aiProvenance = mapper.valueToTree(interpreted.provenance());
+                    }
+                    if (requested != null && followUpId != null && followUp != null
                             && !interpreted.findings().isEmpty()) {
-                        finalAiUsed = true;
-                        progress(researchId, workerAttempt, ResearchExecutionStage.FINAL_SYNTHESIS);
                         AiSynthesisContext synthesisContext = synthesisContext(
                                 request, marketId, thesis.orElseThrow(), interpreted, requested,
                                 followUpId, followUp);
                         followUpEvidence = mapper.valueToTree(synthesisContext.followUpEvidence());
-                        try {
-                            CapabilityAnalysisResult finalInterpretation = aiCapability.analyzeFinal(
-                                    new IntelligenceAnalysisRequest(
-                                            UUID.randomUUID(), marketId, AnalysisExecutionMode.PASSIVE,
-                                             request.objective(), null, researchId, null, null,
-                                            EvidenceAcquisitionPolicy.LIVE_CURRENT, thesis.orElseThrow()),
-                                    new com.hope.trading.market_intelligence.domain.IntelligenceContext(Map.of()),
-                                    synthesisContext);
-                            if (finalInterpretation == null || finalInterpretation.requestedAnalysis() != null) {
-                                marketDiagnostics.add("FINAL_SYNTHESIS_UNSUPPORTED");
-                            } else if (finalInterpretation.findings().isEmpty()
-                                    || !validReconciliations(finalInterpretation.reconciliations(), synthesisContext,
-                                    thesis.orElseThrow().evidence().stream()
-                                            .map(com.hope.trading.market_intelligence.domain.thesis.MarketThesisEvidence::evidenceId)
-                                            .collect(java.util.stream.Collectors.toSet()))) {
-                                marketDiagnostics.add("FINAL_SYNTHESIS_UNSUPPORTED");
-                            } else {
-                                finalAiInterpretation = mapper.valueToTree(finalInterpretation);
-                                reconciliations = finalInterpretation.reconciliations().stream()
-                                        .map(this::toReportReconciliation).toList();
-                                aiStatus = finalInterpretation.warnings().isEmpty() ? "COMPLETED" : "PARTIAL";
-                            }
-                        } catch (RuntimeException exception) {
-                            marketDiagnostics.add("FINAL_SYNTHESIS_FAILED");
-                        }
+                        marketDiagnostics.add("FINAL_SYNTHESIS_SKIPPED_BY_MARKET_AI_BUDGET");
                     }
                     if (requested != null && followUpId != null) {
                         String effect = finalAiInterpretation == null
-                                ? "FINAL_SYNTHESIS_FAILED" : interpretationEffect(reconciliations);
+                                ? "FINAL_SYNTHESIS_SKIPPED_BY_MARKET_AI_BUDGET" : interpretationEffect(reconciliations);
                         executedCapabilities.add(new ResearchReport.AdaptiveCapabilityRecord(
                                 requested.capabilityId(), requested.capabilityVersion(), requested.marketId(),
                                 requested.reason(), requested.expectedEvidence(), followUpStatus,
@@ -485,6 +481,14 @@ public class ResearchApplicationService {
                     thesis.map(MarketThesis::version).orElse(null),
                     deterministic == null ? null : mapper.valueToTree(deterministic),
                     freshness,
+                    freshness,
+                    evidenceFreshness(deterministic),
+                    thesis.map(MarketThesis::evaluatedAt).orElse(null),
+                    thesis.map(MarketThesis::validFrom).orElse(null),
+                    thesis.flatMap(MarketThesis::validUntil).orElse(null),
+                    evidenceCutoff(deterministic),
+                    evidenceSourceOccurredAt(deterministic),
+                    evidenceFetchedAt(deterministic),
                     provenance,
                     thesis.map(value -> value.supportingEvidence().stream()
                             .map(evidence -> (JsonNode) mapper.valueToTree(evidence)).toList()).orElse(List.<JsonNode>of()),
@@ -501,12 +505,60 @@ public class ResearchApplicationService {
                      marketDiagnostics,
                      finalAiInterpretation,
                       reconciliations,
-                      followUpEvidence));
+                       followUpEvidence,
+                       aiProvenance,
+                       finalAiProvenance));
             checkpoint.accept(buildReportSnapshot(request, results, requestedCapabilities,
                     executedCapabilities, rejectedCapabilities, diagnostics));
         }
         return buildReportSnapshot(request, results, requestedCapabilities,
                 executedCapabilities, rejectedCapabilities, diagnostics);
+    }
+
+    private String evidenceFreshness(ConsolidatedIntelligence deterministic) {
+        if (deterministic == null || deterministic.contextSections().isEmpty()) return "UNKNOWN";
+        if (deterministic.contextSections().stream().anyMatch(value ->
+                value.status() == ContextSectionStatus.MISSING
+                        || value.status() == ContextSectionStatus.UNAVAILABLE
+                        || value.status() == ContextSectionStatus.UNSUPPORTED
+                        || value.status() == ContextSectionStatus.INCOMPLETE)) {
+            return "MISSING";
+        }
+        if (deterministic.contextSections().stream()
+                .anyMatch(value -> value.status() == ContextSectionStatus.STALE)) {
+            return "STALE";
+        }
+        return deterministic.contextSections().stream()
+                .allMatch(value -> value.status() == ContextSectionStatus.AVAILABLE)
+                ? "CURRENT" : "UNKNOWN";
+    }
+
+    private Instant evidenceCutoff(ConsolidatedIntelligence deterministic) {
+        return evidenceSummaries(deterministic).stream()
+                .map(ContextSectionSummary::evaluationCutoff)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    private Instant evidenceSourceOccurredAt(ConsolidatedIntelligence deterministic) {
+        return evidenceSummaries(deterministic).stream()
+                .map(ContextSectionSummary::sourceOccurredAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    private Instant evidenceFetchedAt(ConsolidatedIntelligence deterministic) {
+        return evidenceSummaries(deterministic).stream()
+                .map(ContextSectionSummary::fetchedAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    private List<ContextSectionSummary> evidenceSummaries(ConsolidatedIntelligence deterministic) {
+        return deterministic == null ? List.of() : deterministic.contextSections();
     }
 
     private ResearchReport buildReportSnapshot(
