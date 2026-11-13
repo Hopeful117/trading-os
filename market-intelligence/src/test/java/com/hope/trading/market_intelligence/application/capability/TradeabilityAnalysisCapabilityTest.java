@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.application.capability;
 
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.capability.CapabilityContext;
+import com.hope.trading.market_intelligence.domain.capability.CapabilityCompleteness;
 import com.hope.trading.market_intelligence.domain.capability.CancellationToken;
 import com.hope.trading.market_intelligence.domain.capability.ArtifactCardinality;
 import com.hope.trading.market_intelligence.domain.capability.ArtifactRequirement;
@@ -50,6 +51,22 @@ class TradeabilityAnalysisCapabilityTest {
         assertThat(result.findings()).hasSize(1);
         assertThat(result.warnings()).contains("SPREAD_OBSERVED");
         assertThat(result.warnings()).contains("LIQUIDITY_UNAVAILABLE");
+    }
+
+    @Test
+    void rejectsLevelTwoProfileWithoutCutoffCompatibleOrderBook() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-10-29T03:49:15Z");
+
+        var result = new TradeabilityAnalysisCapability().analyze(
+                new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE,
+                        "live", null, null, null, cutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT)
+                        .withTradeabilityEvidenceProfile(TradeabilityEvidenceProfile.LEVEL_II_REQUIRED),
+                liveContext(marketId, "EUR", "USD", "CFD", cutoff));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.warnings()).containsExactly(
+                "LEVEL_II_REQUIRED requires cutoff-compatible order-book evidence");
     }
 
     @Test
@@ -132,6 +149,37 @@ class TradeabilityAnalysisCapabilityTest {
         assertThatThrownBy(() -> new TradeabilityAnalysisCapability().execute(context))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Tradeability requires approved non-live evidence provenance at the execution cutoff");
+    }
+
+    @Test
+    void acceptsArtifactExecutionWithLiveCurrentForexQuoteProvenance() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-10-25T00:00:00Z");
+        StoredArtifact source = artifact(
+                ProductionArtifactTypes.MARKET_SNAPSHOT, marketId,
+                new MarketSnapshotContext(marketId, "EUR/USD", BigDecimal.ONE,
+                        new BigDecimal("1.1000"), new BigDecimal("1.1002"), true,
+                        cutoff.minusSeconds(1)), cutoff);
+        StoredArtifact snapshot = new StoredArtifact(
+                source.key(), source.content(), source.freshness(),
+                source.provenance().withEvidenceContext(
+                        EvidenceAcquisitionPolicy.LIVE_CURRENT, 1, cutoff),
+                source.quality(), source.version());
+        ArtifactRequirement requirement = requirement(ProductionArtifactTypes.MARKET_SNAPSHOT, true);
+        CapabilityContext context = new CapabilityContext(
+                UUID.randomUUID(), UUID.randomUUID(), Map.of(requirement, List.of(snapshot)), Set.of(),
+                Map.of("evidencePolicy", EvidenceAcquisitionPolicy.LIVE_CURRENT,
+                        "tradeabilityEvidenceProfile", TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC),
+                List.of(snapshot.provenance()), (CancellationToken) () -> false, cutoff);
+
+        var result = new TradeabilityAnalysisCapability().execute(context);
+
+        assertThat(result.completeness()).isEqualTo(CapabilityCompleteness.COMPLETE);
+        var content = (com.hope.trading.market_intelligence.domain.tradeability.TradeabilityCapabilityContent)
+                result.artifacts().getFirst().artifact().content();
+        assertThat(content.assessment().evidence()).extracting(
+                com.hope.trading.market_intelligence.domain.tradeability.TradeabilityAssessment.Evidence::code)
+                .contains("SPREAD_OBSERVED");
     }
 
     @Test

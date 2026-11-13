@@ -40,6 +40,16 @@ class GatewayClientError(RuntimeError):
         }
 
 
+@dataclass(frozen=True)
+class AuthorityBinding:
+    """Non-secret identity of the Gateway authority trusted by this bridge."""
+
+    schema_version: int
+    gateway_authority: str
+    jwt_issuer: str | None
+    jwt_audience: str | None
+
+
 class AccessTokenProvider(Protocol):
     def token(self) -> str:
         ...
@@ -283,6 +293,101 @@ def credential_store_path() -> pathlib.Path:
     return pathlib.Path(configured).expanduser() if configured else (
         pathlib.Path.home() / ".config" / "trading-os" / "mcp-agent-credential"
     )
+
+
+def authority_binding_path() -> pathlib.Path:
+    configured = os.environ.get("TRADING_OS_AGENT_AUTHORITY_FILE")
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    credential_path = credential_store_path()
+    return credential_path.with_name(f"{credential_path.name}.binding.json")
+
+
+def normalize_gateway_authority(base_url: str) -> str:
+    parsed = urlparse(base_url)
+    if parsed.username or parsed.password or not parsed.scheme or not parsed.hostname:
+        raise RuntimeError("TRADING_OS_GATEWAY_URL is invalid")
+    hostname = parsed.hostname.lower()
+    if ":" in hostname:
+        hostname = f"[{hostname}]"
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    path = parsed.path.rstrip("/")
+    return f"{parsed.scheme.lower()}://{hostname}{port}{path}"
+
+
+def current_authority_binding(base_url: str | None = None) -> AuthorityBinding:
+    authority = normalize_gateway_authority(
+        base_url or os.environ.get("TRADING_OS_GATEWAY_URL", "http://127.0.0.1:17080")
+    )
+    issuer = os.environ.get("TRADING_OS_AGENT_JWT_ISSUER", "").strip() or None
+    audience = os.environ.get("TRADING_OS_AGENT_JWT_AUDIENCE", "").strip() or None
+    return AuthorityBinding(1, authority, issuer, audience)
+
+
+def load_authority_binding() -> AuthorityBinding | None:
+    path = authority_binding_path()
+    try:
+        if path.stat().st_mode & 0o077:
+            raise RuntimeError("MCP authority binding permissions are too broad")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("MCP authority binding is invalid") from error
+    if not isinstance(payload, dict):
+        raise RuntimeError("MCP authority binding is invalid")
+    issuer = payload.get("jwtIssuer")
+    audience = payload.get("jwtAudience")
+    if (payload.get("schemaVersion") != 1 or not isinstance(payload.get("gatewayAuthority"), str)
+            or (issuer is not None and not isinstance(issuer, str))
+            or (audience is not None and not isinstance(audience, str))):
+        raise RuntimeError("MCP authority binding is invalid")
+    return AuthorityBinding(1, payload["gatewayAuthority"], issuer, audience)
+
+
+def persist_authority_binding(binding: AuthorityBinding) -> None:
+    path = authority_binding_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            descriptor = -1
+            json.dump({
+                "schemaVersion": binding.schema_version,
+                "gatewayAuthority": binding.gateway_authority,
+                "jwtIssuer": binding.jwt_issuer,
+                "jwtAudience": binding.jwt_audience,
+            }, stream, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_name, path)
+        os.chmod(path, 0o600)
+    except BaseException:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def validate_authority_binding(base_url: str | None = None) -> bool:
+    stored = load_authority_binding()
+    if stored is None:
+        return False
+    if stored != current_authority_binding(base_url):
+        raise GatewayClientError(
+            "MCP credential belongs to a different Trading OS authentication authority",
+            code="ENVIRONMENT_MISMATCH",
+            status=409,
+            retryable=False,
+            next_action="Select the intended Gateway authority and use explicit human recovery.",
+        )
+    return True
 
 
 def load_runtime_credential() -> str | None:

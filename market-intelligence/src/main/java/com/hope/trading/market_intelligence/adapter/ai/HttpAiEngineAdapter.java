@@ -91,7 +91,12 @@ public class HttpAiEngineAdapter implements AiEnginePort {
         return Optional.of(new AiStructuredResult(new AiExecutionReference(response.executionId().toString()),
                 new CapabilityAnalysisResult(List.copyOf(findings), List.of(), requested,
                         response.result().reconciliations() == null ? List.of() : response.result().reconciliations(),
-                        provenance), response.acceptedAt(), provenance));
+                        provenance, response.result().hypothesisProposals().stream().map(value ->
+                                new AiHypothesisProposal(value.hypothesisId(), value.observedBehavior(),
+                                        value.proposedRelationship(), value.expectedOutcome(), value.evaluationHorizon(),
+                                        value.applicabilityConditions(), value.falsificationConditions(),
+                                        value.supportingEvidenceReferences(), value.limitations())).toList()),
+                response.acceptedAt(), provenance));
     }
 
     @Override

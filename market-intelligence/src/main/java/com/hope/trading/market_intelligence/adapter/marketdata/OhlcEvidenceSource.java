@@ -13,6 +13,12 @@ public interface OhlcEvidenceSource {
         return acquire(marketId, interval, limit, cutoff);
     }
 
+    default OhlcEvidenceBatch acquire(
+            UUID marketId, String interval, int limit, Instant rangeStart, Instant cutoff,
+            String selectionBinding, String role) {
+        return acquire(marketId, interval, limit, cutoff, selectionBinding, role);
+    }
+
     record OhlcEvidenceBatch(
             List<OhlcResponse> observations,
             String evidenceFingerprint,

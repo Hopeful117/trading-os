@@ -2,7 +2,8 @@
 
 ## Status
 
-Implemented locally - runtime validation completed with limitations; human review required
+Implementation locally present - deterministic validation passed; operational
+validation partial; human review required
 
 ## Changes
 
@@ -115,9 +116,74 @@ Runtime evidence:
 
 ## Documentation Outcome
 
-ADR-099, Story 0232 and this implementation report were added. ADR-099 remains
-`Proposed` pending architecture review. No existing ADR was silently
-superseded.
+ADR-099, Story 0232 and this implementation report were reconciled. ADR-099 is
+now `Accepted` under the project owner's bounded approval recorded in the ADR.
+No existing ADR was silently superseded, and no approval was inferred beyond
+that explicit project-owner instruction.
+
+## Requirement-to-Evidence Matrix
+
+| Requirement | Implementation evidence | Validation status |
+|---|---|---|
+| Persistent agent identity | `AgentIdentity` is Trading Core persistence | Implemented; standard database contains active OpenCode identities |
+| Persistent authorization grants | `AgentGrant` is Trading Core persistence | Implemented; grants remain server-owned and default-deny |
+| Root credential storage | Hashed credential in Trading Core; opaque owner-only local file | Implemented; current local file is stale and does not match the server |
+| Normal restart recovery | Bridge startup loads and exchanges persisted credential | Unit-tested; operationally passed after fresh Connect, not proven with the current stale file |
+| JWT renewal | In-memory expiry handling and one GET retry after `401` | Unit-tested |
+| Revocation | Agent and credential state checked at exchange and request validation | Unit-tested and fail-closed by design |
+| Credential rotation | Human UI issuance revokes prior active credential | Implemented; historical credential versions remain auditable |
+| Lost-credential recovery | Human Connect issues a replacement credential | Operationally demonstrated; automatic recovery is prohibited |
+| Environment switching | Gateway URL is configured, but no explicit non-secret binding record exists | Not implemented; proposed in ADR-099 and requires approval |
+| Observability | Sanitized code, status, correlation and retry diagnostics | Implemented and tested; root exchange remains intentionally non-enumerating |
+| Human authorization boundaries | Enrollment, rotation and grants remain human-controlled; execution remains separately authorized | Implemented and preserved |
+| Authority binding | Owner-only atomic binding record stores normalized Gateway authority and optional configured issuer/audience metadata | Implemented and tested; stable server authority identifier is not returned by the current token exchange contract |
+| Explicit connection semantics | Reconnect uses bridge recovery; Rotate and Recover issue replacement credentials through the existing human flow | Implemented and tested; no new REST endpoint was added |
+
+## Documentary Reconciliation
+
+The Story status now distinguishes local implementation from incomplete runtime
+validation. Implementation-level criteria supported by source and tests are
+marked complete. The OpenCode restart criterion remains open because the
+current local root credential is invalid and no uninterrupted standard-runtime
+restart proof exists. The Repository Analysis and Implementation Plan remain
+historical workflow artifacts that state their original approval gate; their
+approval was not inferred from this report.
+
+The current failure is not a JWT renewal defect. The local credential is absent
+from the checked server-side credential set, while the standard database and
+active identities remain present. Human recovery is therefore required and is
+consistent with the existing security boundary. Environment binding and a
+distinct reconnect/status workflow are proposed in ADR-099 but are not
+implemented or authorized.
+
+The approved implementation adds no privileged self-provisioning, automatic
+root rotation, grant broadening or financial authority. A separate logical
+agent identity remains the operational recommendation for each independent
+OpenCode/bridge installation and environment.
+
+## Proposed Implementation Sequence After ADR Approval
+
+1. Add non-secret local authority-binding metadata and fail-closed mismatch
+   detection.
+2. Separate status/reconnect from credential rotation in the UI and service
+   contract.
+3. Add deterministic mismatch, legacy-store and multi-instance tests.
+4. Re-run standard and isolated E2E authentication tests with separate
+   authorities.
+5. Perform controlled read-only restart validation with a human-provisioned
+   credential.
+
+## Current Implementation Validation
+
+- MCP Adapter focused suite: 48 tests passed.
+- Angular `npm run check`: 62 test files and 595 tests passed; production build
+  completed with pre-existing Angular diagnostic and bundle/style budget
+  warnings.
+- Standard-runtime validation remains pending because the persisted standard
+  root credential is still invalid and no credential rotation was performed.
+- Human recovery is required before validating standard OpenCode, bridge and
+  Gateway restart continuity. No broker mutation, synchronization, TradePlan,
+  Risk evaluation, approval or execution was performed.
 
 ## Vault Outcome
 

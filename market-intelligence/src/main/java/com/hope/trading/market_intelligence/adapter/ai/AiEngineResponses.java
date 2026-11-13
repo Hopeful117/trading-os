@@ -58,8 +58,20 @@ record InterpretationWire(
         List<String> uncertainty,
         String suggestedDecision,
         RequestedAnalysisWire requestedAnalysis,
-        List<AiHypothesisReconciliation> reconciliations
+        List<AiHypothesisReconciliation> reconciliations,
+        List<HypothesisProposalWire> hypothesisProposals
 ) {
+    InterpretationWire {
+        supportingArguments = supportingArguments == null ? List.of() : List.copyOf(supportingArguments);
+        contradictions = contradictions == null ? List.of() : List.copyOf(contradictions);
+        missingInformation = missingInformation == null ? List.of() : List.copyOf(missingInformation);
+        confirmationConditions = confirmationConditions == null ? List.of() : List.copyOf(confirmationConditions);
+        invalidationConditions = invalidationConditions == null ? List.of() : List.copyOf(invalidationConditions);
+        uncertainty = uncertainty == null ? List.of() : List.copyOf(uncertainty);
+        reconciliations = reconciliations == null ? List.of() : List.copyOf(reconciliations);
+        hypothesisProposals = hypothesisProposals == null ? List.of() : List.copyOf(hypothesisProposals);
+    }
+
     InterpretationWire(
             String marketSummary,
             String primaryScenario,
@@ -73,7 +85,7 @@ record InterpretationWire(
             RequestedAnalysisWire requestedAnalysis) {
         this(marketSummary, primaryScenario, supportingArguments, contradictions,
                 missingInformation, confirmationConditions, invalidationConditions,
-                uncertainty, suggestedDecision, requestedAnalysis, List.of());
+                uncertainty, suggestedDecision, requestedAnalysis, List.of(), List.of());
     }
 
     InterpretationWire(
@@ -88,9 +100,21 @@ record InterpretationWire(
             String suggestedDecision) {
         this(marketSummary, primaryScenario, supportingArguments, contradictions,
                 missingInformation, confirmationConditions, invalidationConditions,
-                uncertainty, suggestedDecision, null, List.of());
+                uncertainty, suggestedDecision, null, List.of(), List.of());
     }
 }
+
+record HypothesisProposalWire(
+        String hypothesisId,
+        String observedBehavior,
+        String proposedRelationship,
+        String expectedOutcome,
+        List<String> evaluationHorizon,
+        List<String> applicabilityConditions,
+        List<String> falsificationConditions,
+        List<UUID> supportingEvidenceReferences,
+        List<String> limitations
+) { }
 
 record ArgumentWire(String text, List<UUID> evidenceRefs) {
 }

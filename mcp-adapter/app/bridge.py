@@ -16,7 +16,10 @@ from app.client import (
     client_from_environment,
     load_runtime_credential,
     persist_runtime_credential,
+    persist_authority_binding,
     set_runtime_credential,
+    current_authority_binding,
+    validate_authority_binding,
 )
 from app.server import mcp
 
@@ -27,21 +30,48 @@ class BridgeState:
         self._lock = threading.Lock()
         self._challenges: dict[str, float] = {}
         self._connected = False
+        self._last_recovery_error: GatewayClientError | None = None
         if recover:
             self._recover_existing_credential()
 
-    def _recover_existing_credential(self) -> None:
+    def _recover_existing_credential(self, *, raise_errors: bool = False) -> None:
         try:
             credential = load_runtime_credential()
             if not credential:
-                return
+                raise GatewayClientError(
+                    "No persisted MCP credential is available",
+                    code="CREDENTIAL_MISSING",
+                    status=401,
+                    next_action="Use explicit human Connect or lost-credential recovery.",
+                )
+            binding_exists = validate_authority_binding()
             set_runtime_credential(credential)
             client_from_environment().token_provider.token()
-        except (OSError, RuntimeError, GatewayClientError):
+            if not binding_exists:
+                persist_authority_binding(current_authority_binding())
+        except GatewayClientError as error:
             clear_runtime_credential()
+            self._last_recovery_error = error
+            if raise_errors:
+                raise
+            return
+        except (OSError, RuntimeError) as error:
+            clear_runtime_credential()
+            self._last_recovery_error = GatewayClientError(
+                "MCP authority configuration is invalid",
+                code="CONFIGURATION_INVALID",
+                status=400,
+                next_action="Correct the bridge authority configuration and use explicit recovery.",
+            )
+            if raise_errors:
+                raise self._last_recovery_error from error
             return
         with self._lock:
             self._connected = True
+            self._last_recovery_error = None
+
+    def reconnect(self) -> None:
+        self._recover_existing_credential(raise_errors=True)
 
     def challenge(self) -> str:
         value = secrets.token_urlsafe(32)
@@ -64,11 +94,18 @@ class BridgeState:
             raise
         try:
             persist_runtime_credential(credential)
-        except OSError as error:
+            persist_authority_binding(current_authority_binding())
+        except (OSError, RuntimeError) as error:
             clear_runtime_credential()
-            raise GatewayClientError("MCP credential handoff failed") from error
+            raise GatewayClientError(
+                "MCP credential handoff failed",
+                code="CONFIGURATION_INVALID",
+                status=500,
+                next_action="Check the owner-only bridge credential store and retry explicit recovery.",
+            ) from error
         with self._lock:
             self._connected = True
+            self._last_recovery_error = None
 
     def connected(self) -> bool:
         with self._lock:
@@ -109,6 +146,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.FORBIDDEN)
             return
         if urlparse(self.path).path != "/v1/connect":
+            if urlparse(self.path).path == "/v1/reconnect":
+                try:
+                    self.state.reconnect()
+                except GatewayClientError as error:
+                    self._json(self._status_for(error), error.as_dict())
+                    return
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self._cors_headers()
+                self.end_headers()
+                return
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         try:
@@ -150,6 +197,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _status_for(self, error: GatewayClientError) -> HTTPStatus:
+        if error.code == "ENVIRONMENT_MISMATCH":
+            return HTTPStatus.CONFLICT
+        if error.code in {"CREDENTIAL_MISSING", "AUTHENTICATION_FAILED"}:
+            return HTTPStatus.UNAUTHORIZED
+        if error.code == "PERMISSION_DENIED":
+            return HTTPStatus.FORBIDDEN
+        if error.code == "UPSTREAM_UNAVAILABLE":
+            return HTTPStatus.SERVICE_UNAVAILABLE
+        return HTTPStatus.BAD_REQUEST
 
 
 def main() -> None:

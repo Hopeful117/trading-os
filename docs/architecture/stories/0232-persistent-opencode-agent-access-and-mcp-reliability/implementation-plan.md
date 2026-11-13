@@ -2,7 +2,9 @@
 
 ## Status
 
-Completed - waiting for human approval before implementation
+Historical planning status: completed - waiting for human approval before
+implementation. Later implementation evidence is recorded in the
+implementation report; this plan is not an approval record.
 
 ## Objective
 

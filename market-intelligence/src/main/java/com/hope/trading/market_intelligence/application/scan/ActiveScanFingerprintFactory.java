@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import com.hope.trading.market_intelligence.domain.scope.MarketScopeMode;
+import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
 
 @Component
 public class ActiveScanFingerprintFactory {
@@ -25,7 +26,7 @@ public class ActiveScanFingerprintFactory {
             UUID actorId, UUID accountId, String objective, List<UUID> requestedMarketIds) {
         return fingerprint(actorId, accountId, objective, requestedMarketIds,
                 requestedMarketIds != null && requestedMarketIds.stream().anyMatch(Objects::nonNull)
-                        ? MarketScopeMode.SELECTED : null);
+                        ? MarketScopeMode.SELECTED : null, TradeabilityEvidenceProfile.UNSUPPORTED);
     }
 
     public String fingerprint(
@@ -35,12 +36,26 @@ public class ActiveScanFingerprintFactory {
             List<UUID> requestedMarketIds,
             MarketScopeMode scopeMode
     ) {
+        return fingerprint(actorId, accountId, objective, requestedMarketIds, scopeMode,
+                TradeabilityEvidenceProfile.UNSUPPORTED);
+    }
+
+    public String fingerprint(
+            UUID actorId,
+            UUID accountId,
+            String objective,
+            List<UUID> requestedMarketIds,
+            MarketScopeMode scopeMode,
+            TradeabilityEvidenceProfile tradeabilityEvidenceProfile
+    ) {
         FingerprintPayload payload = new FingerprintPayload(
                 Objects.requireNonNull(actorId).toString(),
                 Objects.requireNonNull(accountId).toString(),
                 normalizeObjective(objective),
                 scopeMode,
-                normalizeRequestedMarketIds(requestedMarketIds).stream().map(UUID::toString).toList()
+                normalizeRequestedMarketIds(requestedMarketIds).stream().map(UUID::toString).toList(),
+                tradeabilityEvidenceProfile == null
+                        ? TradeabilityEvidenceProfile.UNSUPPORTED : tradeabilityEvidenceProfile
         );
         try {
             return sha256Hex(mapper.writeValueAsBytes(payload));
@@ -82,7 +97,8 @@ public class ActiveScanFingerprintFactory {
             String accountId,
             String objective,
             MarketScopeMode scopeMode,
-            List<String> requestedMarketIds
+            List<String> requestedMarketIds,
+            TradeabilityEvidenceProfile tradeabilityEvidenceProfile
     ) {
         private FingerprintPayload {
             requestedMarketIds = List.copyOf(requestedMarketIds);

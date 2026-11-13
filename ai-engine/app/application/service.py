@@ -19,9 +19,10 @@ class InterpretationService:
     provider: LLMProvider
 
     def interpret(self, request: InterpretationRequest, max_evidence: int | None = None) -> InterpretationDraft:
-        if max_evidence is not None and len(request.thesis.evidence) > max_evidence:
+        thesis_evidence = request.thesis.evidence if request.thesis is not None else []
+        if max_evidence is not None and len(thesis_evidence) > max_evidence:
             raise EvidenceLimitExceeded("evidence count exceeds configured limit")
-        evidence_ids = {item.evidence_id for item in request.thesis.evidence}
+        evidence_ids = {item.evidence_id for item in thesis_evidence}
         if request.synthesis_context is not None:
             evidence_ids.update(
                 reference
@@ -50,6 +51,26 @@ class InterpretationService:
         unknown_reconciliation = reconciliation_references - evidence_ids
         if unknown_reconciliation:
             raise InvalidInterpretation("provider returned unknown reconciliation evidence reference")
+        context_evidence_ids = set()
+        for section in request.authorized_context.sections.values():
+            if section.provenance is None:
+                continue
+            for reference in str(section.provenance.get("sourceReference", "")).split(","):
+                try:
+                    context_evidence_ids.add(UUID(reference))
+                except ValueError:
+                    continue
+        proposal_references = {
+            reference
+            for proposal in draft.hypothesis_proposals
+            for reference in proposal.supporting_evidence_references
+        }
+        unknown_proposals = proposal_references - (evidence_ids | context_evidence_ids)
+        if unknown_proposals:
+            raise InvalidInterpretation("provider returned unknown hypothesis evidence reference")
+        if request.phase == InterpretationPhase.HYPOTHESIS_DISCOVERY:
+            if draft.reconciliations:
+                raise InvalidInterpretation("hypothesis discovery cannot return reconciliations")
         if request.phase == InterpretationPhase.FINAL_SYNTHESIS and draft.requested_analysis is not None:
             raise InvalidInterpretation("final synthesis cannot request another analysis")
         return draft

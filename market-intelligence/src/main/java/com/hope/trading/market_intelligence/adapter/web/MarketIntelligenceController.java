@@ -25,6 +25,9 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import java.util.Set;
+import com.hope.trading.market_intelligence.domain.research.ResearchTemporalScope;
+import com.hope.trading.market_intelligence.domain.research.ResearchObjectiveType;
+import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 
 @RestController
 @RequestMapping("/api/v1/intelligence")
@@ -126,10 +129,25 @@ public class MarketIntelligenceController {
                 research.start(researchActorId(authentication), researchScope(authentication, request), idempotencyKey,
                         provenance(authentication, authorization),
                         new ResearchApplicationService.ResearchRequest(
-                                request.marketIds(), request.objective(), request.depth())));
+                                request.marketIds(), request.objective(), request.depth(),
+                                request.objectiveType(), temporalScope(request), request.provider(), request.productType())));
         return ResponseEntity.accepted()
                 .location(URI.create("/api/v1/intelligence/research/" + response.researchId()))
                 .body(response);
+    }
+
+    private ResearchTemporalScope temporalScope(ResearchExecutionRequest request) {
+        if (request.timeframe() == null && request.horizon() == null
+                && request.cutoffStart() == null && request.cutoffEnd() == null) {
+            return null;
+        }
+        if (request.timeframe() == null || request.horizon() == null
+                || request.cutoffStart() == null || request.cutoffEnd() == null) {
+            throw new com.hope.trading.market_intelligence.application.research.ResearchException(
+                    "INVALID_RESEARCH_SCOPE", "All temporal scope fields are required together", 400);
+        }
+        return new ResearchTemporalScope(request.timeframe().name(), new OutcomeHorizon(request.horizon()),
+                request.cutoffStart(), request.cutoffEnd());
     }
 
     @GetMapping("/research/{researchId}")
@@ -189,7 +207,8 @@ public class MarketIntelligenceController {
                                 request.brokerAccountId(),
                                 request.objective(),
                                 request.requestedMarketIds(),
-                                request.scopeMode()
+                                request.scopeMode(),
+                                request.tradeabilityEvidenceProfile()
                         )).scanId()),
                 matches);
         return ResponseEntity.accepted()

@@ -418,7 +418,8 @@ public class ActiveScanReconciliationService {
                                 pipelineRun.failureMessage(),
                                 "Analysis completed without an opportunity"
                         ),
-                        List.of()
+                        List.of(),
+                        ActiveScanResultProjection.AnalysisEvidence.from(execution)
                 ),
                 true,
                 false,
@@ -469,7 +470,8 @@ public class ActiveScanReconciliationService {
                         execution.resultQuality().orElse(null),
                         ActiveScanMarketOutcome.OPPORTUNITY_FOUND,
                         null,
-                        reconstructed
+                        reconstructed,
+                        ActiveScanResultProjection.AnalysisEvidence.from(execution)
                 ),
                 true,
                 false,

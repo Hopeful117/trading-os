@@ -36,6 +36,16 @@ describe('AgentService', () => {
     connectRequest.flush(null);
   });
 
+  it('reconnects through the bridge without issuing a credential', () => {
+    service.reconnectToOpenCode().subscribe();
+
+    const request = http.expectOne('http://127.0.0.1:17891/v1/reconnect');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({});
+    request.flush(null);
+    http.expectNone('/api/v1/agents/agent-1/credentials');
+  });
+
   it('uses the gateway contracts for agent lifecycle, grants, and operation approval', () => {
     service.list().subscribe();
     let request = http.expectOne('/api/v1/agents');

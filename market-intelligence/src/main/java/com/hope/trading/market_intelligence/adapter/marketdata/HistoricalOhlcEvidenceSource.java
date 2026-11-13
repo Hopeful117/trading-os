@@ -43,6 +43,30 @@ public class HistoricalOhlcEvidenceSource implements OhlcEvidenceSource {
                 StrictObservedOhlcEvidenceValidator.NORMALIZATION_VERSION, evidence.size());
     }
 
+    @Override
+    public OhlcEvidenceBatch acquire(UUID marketId, String interval, int limit, Instant rangeStart,
+                                     Instant cutoff, String selectionBinding, String role) {
+        if (rangeStart == null || cutoff == null || !rangeStart.isBefore(cutoff)) {
+            throw new IllegalArgumentException("A valid historical range is required");
+        }
+        HistoricalOhlcClient.HistoricalOhlcRangeResponse series = client.findHistoricalOhlcRange(
+                marketId, interval, rangeStart, cutoff, "CAPTURED");
+        if (!"AVAILABLE".equals(series.status()) && !"COMPLETE".equals(series.status())) {
+            throw new IllegalStateException("Historical OHLC range is unavailable: " + series.reason());
+        }
+        List<HistoricalOhlcClient.HistoricalOhlcEvidenceResponse> evidence = series.observations().stream()
+                .filter(value -> !value.closeTime().isBefore(rangeStart) && value.closeTime().isBefore(cutoff))
+                .limit(limit)
+                .toList();
+        if (selectionBinding != null) validateSelection(evidence, selectionBinding, role);
+        List<OhlcResponse> observations = evidence.stream().map(this::map).toList();
+        String fingerprint = ArtifactFingerprint.ofInputs(evidence.stream()
+                .map(HistoricalOhlcClient.HistoricalOhlcEvidenceResponse::observationFingerprint)
+                .sorted().toList()).value();
+        return new OhlcEvidenceBatch(observations, fingerprint,
+                StrictObservedOhlcEvidenceValidator.NORMALIZATION_VERSION, evidence.size());
+    }
+
     private void validateSelection(
             List<HistoricalOhlcClient.HistoricalOhlcEvidenceResponse> evidence,
             String selectionBinding,

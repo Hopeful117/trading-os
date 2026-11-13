@@ -2,7 +2,9 @@
 
 ## Status
 
-Completed - waiting for human approval before implementation planning
+Historical analysis status: completed - waiting for human approval before
+implementation planning. Later implementation evidence is recorded in the
+implementation report; this analysis is not an approval record.
 
 ## Context Sources
 

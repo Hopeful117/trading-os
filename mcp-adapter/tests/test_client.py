@@ -5,7 +5,18 @@ import json
 import httpx
 import pytest
 
-from app.client import AgentTokenProvider, StaticTokenProvider, TradingOsClient, client_from_environment
+from app.client import (
+    AgentTokenProvider,
+    AuthorityBinding,
+    StaticTokenProvider,
+    TradingOsClient,
+    authority_binding_path,
+    client_from_environment,
+    current_authority_binding,
+    load_authority_binding,
+    persist_authority_binding,
+    validate_authority_binding,
+)
 
 
 def test_client_requires_agent_credential(monkeypatch, tmp_path):
@@ -14,6 +25,46 @@ def test_client_requires_agent_credential(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="TRADING_OS_AGENT_CREDENTIAL is required"):
         client_from_environment()
+
+
+def test_authority_binding_is_atomic_owner_only_and_contains_no_secret(monkeypatch, tmp_path):
+    binding_path = tmp_path / "binding.json"
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(binding_path))
+    binding = AuthorityBinding(1, "https://gateway.example/api", "issuer-1", "audience-1")
+
+    persist_authority_binding(binding)
+
+    assert load_authority_binding() == binding
+    assert binding_path.stat().st_mode & 0o777 == 0o600
+    assert "credential" not in binding_path.read_text(encoding="utf-8")
+
+
+def test_authority_binding_rejects_environment_mismatch(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
+    persist_authority_binding(AuthorityBinding(1, "https://other.example", None, None))
+
+    with pytest.raises(RuntimeError, match="different Trading OS authentication authority") as error:
+        validate_authority_binding("https://gateway.example")
+
+    assert error.value.code == "ENVIRONMENT_MISMATCH"
+
+
+def test_legacy_authority_binding_is_missing_until_successful_exchange(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
+
+    assert validate_authority_binding("https://gateway.example") is False
+    assert authority_binding_path().exists() is False
+
+
+def test_authority_binding_includes_optional_server_metadata(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
+    monkeypatch.setenv("TRADING_OS_AGENT_JWT_ISSUER", "issuer-1")
+    monkeypatch.setenv("TRADING_OS_AGENT_JWT_AUDIENCE", "audience-1")
+
+    binding = current_authority_binding("https://gateway.example")
+
+    assert binding.jwt_issuer == "issuer-1"
+    assert binding.jwt_audience == "audience-1"
 
 
 def test_client_from_environment_reuses_process_client(monkeypatch):

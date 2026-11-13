@@ -54,6 +54,21 @@ class JpaResearchExecutionEntity {
     @Column(name = "depth", nullable = false, length = 32)
     String depth;
 
+    @Column(name = "objective_type", nullable = false, length = 64)
+    String objectiveType;
+
+    @Column(name = "timeframe", length = 32)
+    String timeframe;
+
+    @Column(name = "horizon_seconds")
+    Long horizonSeconds;
+
+    @Column(name = "cutoff_start")
+    Instant cutoffStart;
+
+    @Column(name = "cutoff_end")
+    Instant cutoffEnd;
+
     @Column(name = "status", nullable = false, length = 40)
     String status;
 

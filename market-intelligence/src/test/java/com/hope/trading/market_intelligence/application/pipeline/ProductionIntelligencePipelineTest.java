@@ -17,6 +17,8 @@ import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.opportunity.OpportunityId;
 import com.hope.trading.market_intelligence.domain.opportunity.TradingOpportunity;
 import com.hope.trading.market_intelligence.application.thesis.MarketThesisComposer;
+import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
+import com.hope.trading.market_intelligence.domain.thesis.MarketThesisScenario;
 import com.hope.trading.market_intelligence.strategy.application.LiveStrategyEvaluationRunner;
 import com.hope.trading.market_intelligence.strategy.application.ShadowStrategyParityMonitor;
 import com.hope.trading.market_intelligence.strategy.application.StrategyDefinitionRepository;
@@ -49,6 +51,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -113,6 +116,8 @@ class ProductionIntelligencePipelineTest {
                 any(UUID.class), anyString())).thenReturn(Optional.empty());
         when(runs.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(theses.saveIfAbsent(any())).thenAnswer(inv -> inv.getArgument(0));
+        doReturn(thesisWithDirection(MarketThesisScenario.Direction.LONG)).when(thesisComposer)
+                .compose(any(UUID.class), any(UUID.class), any(Observation.class), any());
         when(runClaims.create(any(UUID.class), anyString(), any(Instant.class)))
                 .thenAnswer(invocation -> JpaIntelligencePipelineRunEntity.running(
                         invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
@@ -241,6 +246,21 @@ class ProductionIntelligencePipelineTest {
     }
 
     @Test
+    void directionMismatchDoesNotCreateAnOpportunity() {
+        StrategyDefinition definition = enabledStrategy("Mismatched Strategy");
+        when(definitions.findAll()).thenReturn(List.of(definition));
+        doReturn(thesisWithDirection(MarketThesisScenario.Direction.SHORT)).when(thesisComposer)
+                .compose(any(UUID.class), any(UUID.class), any(Observation.class), any());
+        stubMatch(definition);
+
+        JpaIntelligencePipelineRunEntity run =
+                pipeline.process(analysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE);
+
+        assertThat(run.state()).isEqualTo("COMPLETED_NO_SIGNAL");
+        verify(opportunities, never()).create(any());
+    }
+
+    @Test
     void expiredEvidenceProducesNoSignalWithoutCreatingAnOpportunity() {
         StrategyDefinition definition = enabledStrategy("Only Strategy");
         when(definitions.findAll()).thenReturn(List.of(definition));
@@ -353,5 +373,15 @@ class ProductionIntelligencePipelineTest {
         assertThat(pipeline.process(analysisExecutionId, marketId, AnalysisExecutionMode.PASSIVE))
                 .isSameAs(existing);
         verify(observations, never()).build(any(), anyString(), any());
+    }
+
+    private MarketThesis thesisWithDirection(MarketThesisScenario.Direction direction) {
+        MarketThesis thesis = mock(MarketThesis.class);
+        MarketThesisScenario scenario = mock(MarketThesisScenario.class);
+        when(thesis.id()).thenReturn(UUID.randomUUID());
+        when(thesis.version()).thenReturn(1L);
+        when(thesis.scenario()).thenReturn(Optional.of(scenario));
+        when(scenario.direction()).thenReturn(direction);
+        return thesis;
     }
 }

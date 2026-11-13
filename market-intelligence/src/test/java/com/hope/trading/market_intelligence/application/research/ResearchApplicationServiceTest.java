@@ -15,6 +15,10 @@ import com.hope.trading.market_intelligence.application.port.AiSynthesisContext;
 import com.hope.trading.market_intelligence.domain.*;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 import com.hope.trading.market_intelligence.domain.research.ResearchReport;
+import com.hope.trading.market_intelligence.domain.research.ResearchObjectiveType;
+import com.hope.trading.market_intelligence.domain.research.ResearchTemporalScope;
+import com.hope.trading.market_intelligence.adapter.marketdata.OhlcInterval;
+import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
 import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.Test;
@@ -63,6 +67,44 @@ class ResearchApplicationServiceTest {
                         List.of(firstMarket, secondMarket, UUID.randomUUID()), "compare", "STANDARD")))
                 .isInstanceOf(ResearchException.class)
                 .hasMessageContaining("Exactly two distinct market IDs");
+    }
+
+    @Test
+    void rejectsCanonicalProviderOrProductConstraintMismatch() {
+        when(marketData.findMarket(firstMarket)).thenReturn(
+                new MarketResponse(firstMarket, "KRAKEN", "BTC/USD", "BTC", "USD", "SPOT", null));
+        when(marketData.findMarket(secondMarket)).thenReturn(market(secondMarket, "ETH/USD"));
+
+        assertThatThrownBy(() -> service.start(actor, "constraint-key",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket, secondMarket), "compare", "STANDARD",
+                        ResearchObjectiveType.COMPARATIVE_MARKET_RESEARCH, null,
+                        "CTRADER", "SPOT")))
+                .isInstanceOf(ResearchException.class)
+                .hasMessageContaining("provider/productType");
+    }
+
+    @Test
+    void acceptsSingleMarketHypothesisDiscoveryWithBoundedTemporalScope() {
+        when(marketData.findMarket(firstMarket)).thenReturn(market(firstMarket, "EUR/USD"));
+        when(theses.findByMarket(firstMarket)).thenReturn(List.of());
+        when(analysis.analyze(any(), any())).thenReturn(new ConsolidatedIntelligence(
+                UUID.randomUUID(), firstMarket, AnalysisExecutionMode.PASSIVE,
+                IntelligenceExecutionStatus.COMPLETE, List.of(), List.of(), List.of(), null));
+
+        var execution = service.start(actor, "single-discovery-key",
+                new ResearchApplicationService.ResearchRequest(
+                        List.of(firstMarket), "Find a falsifiable EUR/USD relationship", "STANDARD",
+                        ResearchObjectiveType.SINGLE_MARKET_HYPOTHESIS_DISCOVERY,
+                         new ResearchTemporalScope(OhlcInterval.ONE_HOUR.name(), OutcomeHorizon.fourHours(),
+                                Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-11-01T00:00:00Z"))));
+
+        assertThat(execution.report().get("objectiveType").asText())
+                .isEqualTo(ResearchObjectiveType.SINGLE_MARKET_HYPOTHESIS_DISCOVERY.name());
+        assertThat(execution.report().get("outcome").asText()).isEqualTo("INSUFFICIENT_EVIDENCE");
+        verify(analysis).analyze(any(), argThat(request ->
+                request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                        && request.evaluationCutoff().equals(Instant.parse("2026-11-01T00:00:00Z"))));
     }
 
     @Test

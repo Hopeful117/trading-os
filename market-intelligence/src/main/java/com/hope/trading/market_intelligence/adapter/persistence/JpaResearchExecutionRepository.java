@@ -8,6 +8,10 @@ import com.hope.trading.market_intelligence.application.port.ResearchExecutionRe
 import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStage;
+import com.hope.trading.market_intelligence.domain.research.ResearchObjectiveType;
+import com.hope.trading.market_intelligence.domain.research.ResearchTemporalScope;
+import com.hope.trading.market_intelligence.adapter.marketdata.OhlcInterval;
+import com.hope.trading.market_intelligence.domain.outcome.OutcomeHorizon;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +49,12 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
         entity.marketIds = write(value.marketIds());
         entity.objective = value.objective();
         entity.depth = value.depth();
+        entity.objectiveType = value.objectiveType().name();
+        entity.timeframe = value.temporalScope() == null ? null : value.temporalScope().timeframe();
+        entity.horizonSeconds = value.temporalScope() == null
+                ? null : value.temporalScope().horizon().value().toSeconds();
+        entity.cutoffStart = value.temporalScope() == null ? null : value.temporalScope().cutoffStart();
+        entity.cutoffEnd = value.temporalScope() == null ? null : value.temporalScope().cutoffEnd();
         entity.status = value.status().name();
         entity.requestedAt = value.requestedAt();
         entity.updatedAt = value.updatedAt();
@@ -118,11 +128,17 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
     }
 
     private ResearchExecution domain(JpaResearchExecutionEntity entity) {
+        ResearchTemporalScope temporalScope = entity.timeframe == null ? null : new ResearchTemporalScope(
+                entity.timeframe,
+                new OutcomeHorizon(java.time.Duration.ofSeconds(entity.horizonSeconds)),
+                entity.cutoffStart, entity.cutoffEnd);
         return ResearchExecution.restoreWithObservability(
                 entity.researchId, entity.actorId, entity.researchScopeId, entity.ownerUserId,
                 entity.initiatingAgentId, entity.credentialId, entity.grantId, entity.grantVersion,
                 entity.credentialVersion, entity.idempotencyKey, entity.requestFingerprint,
                 read(entity.marketIds, new TypeReference<>() {}), entity.objective, entity.depth,
+                entity.objectiveType == null ? ResearchObjectiveType.COMPARATIVE_MARKET_RESEARCH
+                        : ResearchObjectiveType.valueOf(entity.objectiveType), temporalScope,
                 ResearchExecutionStatus.valueOf(entity.status), entity.requestedAt, entity.updatedAt,
                 entity.completedAt, entity.failureCode,
                 entity.report == null ? null : read(entity.report, JsonNode.class), entity.attemptCount,
@@ -144,6 +160,12 @@ public class JpaResearchExecutionRepository implements ResearchExecutionReposito
         entity.marketIds = write(value.marketIds());
         entity.objective = value.objective();
         entity.depth = value.depth();
+        entity.objectiveType = value.objectiveType().name();
+        entity.timeframe = value.temporalScope() == null ? null : value.temporalScope().timeframe();
+        entity.horizonSeconds = value.temporalScope() == null
+                ? null : value.temporalScope().horizon().value().toSeconds();
+        entity.cutoffStart = value.temporalScope() == null ? null : value.temporalScope().cutoffStart();
+        entity.cutoffEnd = value.temporalScope() == null ? null : value.temporalScope().cutoffEnd();
         entity.status = value.status().name();
         entity.requestedAt = value.requestedAt();
         entity.updatedAt = value.updatedAt();

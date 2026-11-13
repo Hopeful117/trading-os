@@ -24,7 +24,8 @@ class OpenAILLMProvider:
 
     def interpret(self, request: InterpretationRequest) -> InterpretationDraft:
         payload = request.model_dump(mode="json", exclude={"policy", "trace"})
-        evidence_ids = {str(item.evidence_id) for item in request.thesis.evidence}
+        evidence_ids = ({str(item.evidence_id) for item in request.thesis.evidence}
+                        if request.thesis is not None else set())
         if request.synthesis_context is not None:
             for finding in request.synthesis_context.initial_findings:
                 evidence_ids.update(str(value) for value in finding.evidence_references)
@@ -36,9 +37,12 @@ class OpenAILLMProvider:
                 {
                     "role": "system",
                     "content": (
-                        "Interpret the supplied deterministic Market Thesis. "
-                        "Return only JSON matching the requested schema. "
+                        ("Interpret the supplied deterministic Market Thesis. "
+                         if request.thesis is not None
+                         else "Discover a falsifiable relationship from the supplied bounded research context. ")
+                        + "Return only JSON matching the requested schema. "
                         "Never invent prices, orders, risk decisions or evidence references. "
+                        "For HYPOTHESIS_DISCOVERY return complete hypothesis_proposals items only when supported by authorized evidence; otherwise return an empty list. "
                         f"Use only these authorized evidence references: {sorted(evidence_ids)}"
                     ),
                 },

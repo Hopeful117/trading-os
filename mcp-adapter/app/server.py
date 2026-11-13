@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 from urllib.parse import urlparse
@@ -51,6 +52,10 @@ def start_market_scan(
     objective: Annotated[str, Field(min_length=1, max_length=500, description="Bounded scan objective.")],
     market_ids: Annotated[list[UUID], Field(min_length=1, max_length=50, description="Explicit canonical market UUIDs to scan.")],
     idempotency_key: Annotated[str, Field(min_length=1, max_length=200, description="Stable key reused only when retrying the same scan request.")],
+    tradeability_evidence_profile: Annotated[
+        Literal["UNSUPPORTED", "FOREX_QUOTE_BASIC", "LEVEL_II_REQUIRED"],
+        Field(description="Explicit tradeability evidence contract for the scan."),
+    ] = "FOREX_QUOTE_BASIC",
 ) -> str:
     """Start an authorized Market Intelligence scan; this never creates a Trade Plan or executes an order."""
     if len(set(market_ids)) != len(market_ids):
@@ -68,6 +73,7 @@ def start_market_scan(
             "objective": objective,
             "requestedMarketIds": [str(value) for value in market_ids],
             "scopeMode": "SELECTED",
+            "tradeabilityEvidenceProfile": tradeability_evidence_profile,
         },
         idempotency_key,
     )
@@ -326,19 +332,63 @@ def execute_approved_agent_operation(
 @mcp.tool()
 def start_market_research(
     scope_id: Annotated[UUID, Field(description="Explicit Trading OS research-scope UUID.")],
-    market_ids: Annotated[list[UUID], Field(min_length=2, max_length=2, description="Exactly two canonical market UUIDs.")],
+    market_ids: Annotated[list[UUID], Field(min_length=1, max_length=2, description="One or two canonical market UUIDs, depending on objective type.")],
     objective: Annotated[str, Field(min_length=1, max_length=500, description="Bounded research objective.")],
     depth: Annotated[Literal["STANDARD", "DEEP"], Field(description="Research depth budget.")] = "STANDARD",
+    objective_type: Annotated[
+        Literal["COMPARATIVE_MARKET_RESEARCH", "SINGLE_MARKET_HYPOTHESIS_DISCOVERY"],
+        Field(description="Typed bounded research objective."),
+    ] = "COMPARATIVE_MARKET_RESEARCH",
+    timeframe: Annotated[str | None, Field(max_length=32, description="Required for single-market discovery.")] = None,
+    horizon: Annotated[str | None, Field(max_length=32, description="ISO-8601 duration, required for single-market discovery.")] = None,
+    cutoff_start: Annotated[str | None, Field(max_length=40, description="Inclusive UTC ISO-8601 cutoff.")] = None,
+    cutoff_end: Annotated[str | None, Field(max_length=40, description="Exclusive UTC ISO-8601 cutoff.")] = None,
+    provider: Annotated[str | None, Field(max_length=64, description="Optional canonical provider constraint.")] = None,
+    product_type: Annotated[str | None, Field(max_length=64, description="Optional canonical product constraint.")] = None,
     idempotency_key: Annotated[str, Field(min_length=1, max_length=200, description="Stable key reused for retries.")] = "",
 ) -> str:
     """Start a bounded Trading OS-owned research workflow; this never authorizes a trade."""
-    if len(market_ids) != 2 or market_ids[0] == market_ids[1]:
-        raise ValueError("market_ids must contain exactly two distinct UUIDs")
+    if len(set(market_ids)) != len(market_ids):
+        raise ValueError("market_ids must contain distinct UUIDs")
+    if objective_type == "COMPARATIVE_MARKET_RESEARCH" and len(market_ids) != 2:
+        raise ValueError("comparative research requires exactly two distinct UUIDs")
+    if objective_type == "SINGLE_MARKET_HYPOTHESIS_DISCOVERY":
+        if len(market_ids) != 1:
+            raise ValueError("single-market discovery requires exactly one UUID")
+        if not all((timeframe, horizon, cutoff_start, cutoff_end)):
+            raise ValueError("single-market discovery requires timeframe, horizon and cutoff bounds")
+        if timeframe not in {"ONE_MINUTE", "FIVE_MINUTES", "FIFTEEN_MINUTES", "THIRTY_MINUTES", "ONE_HOUR", "FOUR_HOURS", "ONE_DAY"}:
+            raise ValueError("unsupported timeframe")
+        if not horizon.startswith("P"):
+            raise ValueError("horizon must be an ISO-8601 duration")
+        try:
+            start = datetime.fromisoformat(cutoff_start.replace("Z", "+00:00"))
+            end = datetime.fromisoformat(cutoff_end.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError("cutoff bounds must be ISO-8601 timestamps") from error
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("cutoff bounds must include a timezone")
+        if start.utcoffset() != timezone.utc.utcoffset(start) or end.utcoffset() != timezone.utc.utcoffset(end):
+            raise ValueError("cutoff bounds must be UTC")
+        if not start < end or end > datetime.now(timezone.utc):
+            raise ValueError("cutoff bounds must be ordered and not future-dated")
     if not idempotency_key.strip():
         raise ValueError("idempotency_key is required and must be reused for retries")
     return _safe_post(
         "/api/v1/intelligence/research",
-        {"scopeId": str(scope_id), "marketIds": [str(value) for value in market_ids], "objective": objective, "depth": depth},
+        {
+            "scopeId": str(scope_id),
+            "marketIds": [str(value) for value in market_ids],
+            "objective": objective,
+            "depth": depth,
+            "objectiveType": objective_type,
+            "timeframe": timeframe,
+            "horizon": horizon,
+            "cutoffStart": cutoff_start,
+            "cutoffEnd": cutoff_end,
+            "provider": provider,
+            "productType": product_type,
+        },
         idempotency_key,
     )
 

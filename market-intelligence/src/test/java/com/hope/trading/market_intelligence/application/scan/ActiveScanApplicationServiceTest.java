@@ -11,6 +11,7 @@ import com.hope.trading.market_intelligence.application.strategy.AnalysisStrateg
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.ConsolidatedIntelligence;
 import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
+import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.IdempotencyKey;
 import com.hope.trading.market_intelligence.domain.scan.ActiveScan;
@@ -138,7 +139,7 @@ class ActiveScanApplicationServiceTest {
         TransactionSynchronizationManager.initSynchronization();
         ActiveScanApplicationService.ActiveScanView created = service.findOwned(actorId, service.create(
                 new CreateActiveScanCommand(actorId, "cutoff-key", accountId, "scan", List.of(marketId),
-                        MarketScopeMode.SELECTED)).scanId());
+                        MarketScopeMode.SELECTED, TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC)).scanId());
 
         executions.dispatchRegistered(created.markets().getFirst().analysisExecutionId());
 
@@ -146,6 +147,8 @@ class ActiveScanApplicationServiceTest {
         assertThat(dispatcher.request.evaluationCutoff()).isEqualTo(resolvedCutoff);
         assertThat(dispatcher.request.evidencePolicy())
                 .isEqualTo(com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy.LIVE_CURRENT);
+        assertThat(dispatcher.request.tradeabilityEvidenceProfile())
+                .isEqualTo(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC);
     }
 
     @Test
