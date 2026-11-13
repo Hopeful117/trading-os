@@ -6,6 +6,7 @@ import com.hope.trading.broker_service.connection.domain.BrokerConnection;
 import com.hope.trading.broker_service.connection.domain.BrokerPermission;
 import com.hope.trading.broker_service.connection.domain.BrokerProviderId;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderOpenApiClient;
+import com.hope.trading.broker_service.ctrader.authentication.CTraderAuthenticationException;
 import com.hope.trading.broker_service.ctrader.config.CTraderProperties;
 import com.hope.trading.broker_service.ctrader.config.CTraderSafetyProperties;
 import com.hope.trading.broker_service.ctrader.authentication.CTraderToken;
@@ -151,6 +152,120 @@ class CTraderExecutionCapabilityTest {
         assertThat(((BrokerModels.Rejected) result).reasonCode())
                 .isEqualTo("CTRADER_MARKET_PROTECTION_REFERENCE_REQUIRED");
         verifyNoInteractions(connections, secrets, client);
+    }
+
+    @Test
+    void rejectsExecutionWhenConnectionIsMissing() {
+        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.empty());
+        var result = capability().execute(requestWithFreshEvidence());
+        assertThat(result).isInstanceOf(BrokerModels.Unknown.class);
+    }
+
+    @Test
+    void rejectsExecutionWhenTokenIsExpired() {
+        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connected(true, false)));
+        when(secrets.read(any())).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.minusSeconds(1)))));
+        var result = capability().execute(requestWithFreshEvidence());
+        assertThat(((BrokerModels.Rejected) result).reasonCode()).contains("AUTHENTICATION");
+    }
+
+    @Test
+    void rejectsExecutionWhenObservationIsIncomplete() {
+        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connected(true, false)));
+        when(secrets.read(any())).thenAnswer(invocation -> new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(observation(false, NOW));
+        var result = capability().execute(requestWithFreshEvidence());
+        assertThat(((BrokerModels.Rejected) result).reasonCode())
+                .isEqualTo("CTRADER_AUTHORITATIVE_SNAPSHOT_IS_NOT_FRESH_AND_COMPLETE");
+    }
+
+    @Test
+    void unknownProviderFailureReturnsUnknownResult() {
+        givenConnectedObservation();
+        when(client.submitOrder(any(), any())).thenThrow(new CTraderAuthenticationException("transport timeout"));
+        var result = capability().execute(requestWithFreshEvidence());
+        assertThat(result).isInstanceOf(BrokerModels.Unknown.class);
+    }
+
+    @Test
+    void providerRejectionReturnsRejectedResult() {
+        givenConnectedObservation();
+        when(client.submitOrder(any(), any())).thenThrow(new CTraderAuthenticationException("invalid credentials"));
+        var result = capability().execute(requestWithFreshEvidence());
+        assertThat(result).isInstanceOf(BrokerModels.Rejected.class);
+    }
+
+    @Test
+    void reconciliationConfirmsAbsentOrder() {
+        givenConnectedObservation();
+        var result = capability().reconcile(new BrokerModels.ReconciliationRequest(
+                UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT));
+        assertThat(result).isInstanceOf(BrokerModels.ConfirmedAbsent.class);
+    }
+
+    @Test
+    void reconciliationReportsMultipleMatchingOrdersAsInconsistent() {
+        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connected(true, false)));
+        when(secrets.read(any())).thenAnswer(invocation -> new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
+        String clientId = java.util.UUID.nameUUIDFromBytes("idempotency".getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        var order = new CTraderReadOnlyObservation.Order("order-1", clientId, "FILLED", BigDecimal.ONE,
+                BigDecimal.ONE, NOW);
+        var second = new CTraderReadOnlyObservation.Order("order-2", clientId, "FILLED", BigDecimal.ONE,
+                BigDecimal.ONE, NOW);
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(observation(true, NOW, List.of(order, second)));
+        var result = capability().reconcile(new BrokerModels.ReconciliationRequest(
+                UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT));
+        assertThat(result).isInstanceOf(BrokerModels.Inconsistent.class);
+    }
+
+    @Test
+    void reconciliationMapsSingleMatchingOrderStatuses() {
+        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connected(true, false)));
+        when(secrets.read(any())).thenAnswer(invocation -> new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
+        String clientId = java.util.UUID.nameUUIDFromBytes("idempotency".getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        String[] statuses = {"ACCEPTED", "FILLED", "REJECTED", "CANCELLED", "unexpected"};
+        int[] index = {0};
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenAnswer(invocation -> {
+            String status = statuses[index[0]++];
+            var order = new CTraderReadOnlyObservation.Order("order-1", clientId, status,
+                    BigDecimal.ONE, BigDecimal.ONE, NOW);
+            return observation(true, NOW, List.of(order));
+        });
+
+        for (String status : statuses) {
+            var result = capability().reconcile(new BrokerModels.ReconciliationRequest(
+                    UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT));
+
+            assertThat(result).as(status).isInstanceOf(BrokerModels.ReconciledOrder.class);
+        }
+    }
+
+    private BrokerModels.ExecutionRequest requestWithFreshEvidence() {
+        return new BrokerModels.ExecutionRequest(UUID.randomUUID(), UUID.randomUUID(), "idempotency", ACCOUNT,
+                "EURUSD", BrokerModels.Side.BUY, BrokerModels.OrderType.LIMIT, BigDecimal.ONE,
+                BigDecimal.ONE, BigDecimal.valueOf(.99), "OPEN", true, NOW);
+    }
+
+    private void givenConnectedObservation() {
+        when(connections.findByBrokerAccountId(ACCOUNT)).thenReturn(Optional.of(connected(true, false)));
+        when(secrets.read(any())).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
+        when(client.readOnlyObservation(any(), any(), any(), any())).thenReturn(observation(true, NOW));
+    }
+
+    private CTraderReadOnlyObservation observation(boolean complete, Instant completedAt) {
+        return observation(complete, completedAt, List.of());
+    }
+
+    private CTraderReadOnlyObservation observation(boolean complete, Instant completedAt,
+                                                   List<CTraderReadOnlyObservation.Order> orders) {
+        return new CTraderReadOnlyObservation("1001", "USD", BigDecimal.valueOf(50000),
+                BigDecimal.valueOf(50000), BigDecimal.ZERO, BigDecimal.valueOf(50000),
+                List.of(), orders, List.of(), NOW, NOW, completedAt, complete, List.of());
     }
 
     private BrokerConnection connected(boolean trade, boolean live) {

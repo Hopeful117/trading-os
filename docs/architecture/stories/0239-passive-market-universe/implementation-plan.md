@@ -4,11 +4,11 @@
 
 **Story:** `0239 - Define the Bounded Passive Market Universe`
 
-**Status:** Implementation Plan complete - awaiting human approval
+**Status:** Approved and implemented; merged through PR #291
 
 **Repository Analysis:** `repository-analysis.md`
 
-**Implementation authorization:** Not granted
+**Implementation authorization:** Granted within the Story scope
 
 ## Objective
 

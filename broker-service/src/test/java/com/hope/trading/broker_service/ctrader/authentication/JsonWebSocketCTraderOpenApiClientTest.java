@@ -449,6 +449,96 @@ class JsonWebSocketCTraderOpenApiClientTest {
     }
 
     @Test
+    void recordsUnavailableFactsInsteadOfInventingMalformedProviderData() throws Exception {
+        Instant started = Instant.parse("2026-10-23T12:00:00Z");
+        JsonNode trader = mapper.readTree(
+                "{\"ctidTraderAccountId\":9001,\"trader\":{\"balance\":100000,\"depositAssetId\":1,\"moneyDigits\":2}}");
+        JsonNode assets = mapper.readTree("{\"ctidTraderAccountId\":9001,\"asset\":[{\"assetId\":1,\"name\":\"USD\"}]}");
+        JsonNode symbols = mapper.readTree("{\"ctidTraderAccountId\":9001,\"symbol\":[{\"symbolId\":7,\"symbolName\":\"EUR/USD\"}]}");
+        JsonNode reconcile = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"position":[
+                  {"positionId":1,"price":1.1,"tradeData":{"symbolId":99,"volume":100,"tradeSide":"BUY"}},
+                  {"positionId":2,"price":1.1,"tradeData":{"symbolId":7,"tradeSide":"BUY"}},
+                  {"positionId":3,"price":0,"tradeData":{"symbolId":7,"volume":100,"tradeSide":"BUY"}}
+                ],"order":[{"orderId":4,"tradeData":{}}]}
+                """);
+        JsonNode pnl = mapper.readTree("{\"ctidTraderAccountId\":9001,\"moneyDigits\":2,\"positionUnrealizedPnl\":[]}");
+        JsonNode deals = mapper.readTree("""
+                {"ctidTraderAccountId":9001,"deal":[
+                  {"dealId":1,"symbolId":99,"executionPrice":1.1,"filledVolume":100},
+                  {"dealId":2,"symbolId":7,"executionPrice":0,"filledVolume":100},
+                  {"dealId":3,"symbolId":7,"executionPrice":1.1}
+                ],"hasMore":false}
+                """);
+
+        var observation = invokeMapper(trader, assets, symbols, reconcile, pnl, deals, started);
+
+        assertThat(observation.complete()).isFalse();
+        assertThat(observation.reasons()).contains(
+                "SYMBOL_MAPPING_UNAVAILABLE:99",
+                "POSITION_VOLUME_UNAVAILABLE:2",
+                "POSITION_ENTRY_PRICE_UNAVAILABLE:3",
+                "ORDER_FACTS_UNAVAILABLE:4",
+                "DEAL_SYMBOL_MAPPING_UNAVAILABLE:99",
+                "DEAL_EXECUTION_PRICE_UNAVAILABLE:2",
+                "DEAL_FACTS_UNAVAILABLE:3");
+    }
+
+    @Test
+    void coversProviderFactFallbackAndScalarDecodingRules() throws Exception {
+        JsonNode primary = mapper.readTree("{\"name\":\"primary\",\"count\":2,\"enabled\":true}");
+        JsonNode fallback = mapper.readTree("{\"name\":\"fallback\",\"count\":3}");
+        JsonNode assets = mapper.readTree("{\"asset\":[{\"assetId\":1,\"name\":\"USD\"}]}");
+        JsonNode accounts = mapper.readTree("{\"ctidTraderAccount\":[{\"ctidTraderAccountId\":\"9001\"}]}");
+
+        assertThat(invokeWithTypes("findAuthorizedAccount", new Class<?>[]{JsonNode.class, String.class}, accounts, "9001"))
+                .isEqualTo(accounts.path("ctidTraderAccount").get(0));
+        assertThatThrownBy(() -> invokeWithTypes("findAuthorizedAccount",
+                new Class<?>[]{JsonNode.class, String.class}, accounts, "missing"))
+                .hasCauseInstanceOf(CTraderAuthenticationException.class);
+        assertThat(invokeWithTypes("assetName", new Class<?>[]{JsonNode.class, String.class}, assets, "1"))
+                .isEqualTo("USD");
+        assertThat(invokeWithTypes("assetName", new Class<?>[]{JsonNode.class, String.class}, assets, "2"))
+                .isNull();
+        assertThat(invokeWithTypes("firstText", new Class<?>[]{JsonNode.class, JsonNode.class, String.class},
+                mapper.readTree("{}"), fallback, "name")).isEqualTo("fallback");
+        assertThat(invokeWithTypes("firstLong", new Class<?>[]{JsonNode.class, JsonNode.class, String.class},
+                primary, fallback, "count")).isEqualTo(2L);
+        assertThat(invokeWithTypes("integerValue", new Class<?>[]{JsonNode.class, String.class, JsonNode.class},
+                mapper.readTree("{}"), "count", fallback)).isEqualTo(3);
+        assertThat(invokeWithTypes("booleanValue", new Class<?>[]{JsonNode.class, String.class}, primary, "enabled"))
+                .isEqualTo(true);
+        assertThat(invokeWithTypes("longValue", new Class<?>[]{JsonNode.class, String.class}, primary, "count"))
+                .isEqualTo(2L);
+        assertThat((BigDecimal) invokeWithTypes("money", new Class<?>[]{JsonNode.class, String.class, Integer.class},
+                primary, "count", 2)).isEqualByComparingTo("0.02");
+        assertThat(invokeWithTypes("instant", new Class<?>[]{JsonNode.class, Instant.class},
+                mapper.readTree("0"), Instant.EPOCH)).isEqualTo(Instant.EPOCH);
+        assertThat(invokeWithTypes("normalizeSymbol", new Class<?>[]{String.class}, " eur/usd ")).isEqualTo("EURUSD");
+        assertThat(invokeWithTypes("normalizeSymbol", new Class<?>[]{String.class}, (Object) null)).isEqualTo("");
+        assertThat(invokeWithTypes("integerValue", new Class<?>[]{JsonNode.class, String.class}, primary, "count"))
+                .isEqualTo(2);
+        assertThat(invokeWithTypes("integerValue", new Class<?>[]{JsonNode.class, String.class},
+                mapper.readTree("{\"count\":\"bad\"}"), "count"))
+                .isNull();
+        assertThat(invokeWithTypes("optionalPositiveLong", new Class<?>[]{JsonNode.class, String.class}, primary, "count"))
+                .isEqualTo(2L);
+        assertThat(invokeWithTypes("optionalPositiveLong", new Class<?>[]{JsonNode.class, String.class},
+                mapper.readTree("{\"count\":0}"), "count"))
+                .isNull();
+        assertThat(invokeWithTypes("optionalNonNegativeLong", new Class<?>[]{JsonNode.class, String.class},
+                mapper.readTree("{\"count\":0}"), "count"))
+                .isEqualTo(0L);
+        assertThat(invokeWithTypes("orderType", new Class<?>[]{String.class}, "MARKET")).isEqualTo(1);
+        assertThat(invokeWithTypes("tradeSide", new Class<?>[]{String.class}, "BUY")).isEqualTo(1);
+        assertThat(invokeWithTypes("tradeSide", new Class<?>[]{String.class}, "SELL")).isEqualTo(2);
+        assertThatThrownBy(() -> invokeWithTypes("orderType", new Class<?>[]{String.class}, "LIMIT"))
+                .hasCauseInstanceOf(CTraderAuthenticationException.class);
+        assertThatThrownBy(() -> invokeWithTypes("tradeSide", new Class<?>[]{String.class}, "UNKNOWN"))
+                .hasCauseInstanceOf(CTraderAuthenticationException.class);
+    }
+
+    @Test
     void rejectsIncompleteDealFacts() {
         assertThatThrownBy(() -> new CTraderReadOnlyObservation.Deal(
                 "88", "EUR/USD", null, "BUY", BigDecimal.ONE, null, null, null, Instant.now()))
@@ -513,6 +603,91 @@ class JsonWebSocketCTraderOpenApiClientTest {
                 "{\"symbol\":[{\"symbolId\":1,\"symbolName\":\"EURUSD\"},{\"symbolId\":2,\"symbolName\":\"EURUSD\"}]}"), "EURUSD"))
                 .isInstanceOf(CTraderAuthenticationException.class)
                 .hasMessage("CTRADER_AMBIGUOUS_INSTRUMENT");
+    }
+
+    @Test
+    void coversDeterministicProviderMappingBranches() throws Exception {
+        assertThat(invokePrivate("accountType", mapper.readTree("0"))).isEqualTo("HEDGED");
+        assertThat(invokePrivate("accountType", mapper.readTree("1"))).isEqualTo("NETTED");
+        assertThat(invokePrivate("accountType", mapper.readTree("2"))).isEqualTo("SPREAD_BETTING");
+        assertThat(invokePrivate("accountType", mapper.readTree("9"))).isEqualTo("UNKNOWN(9)");
+        assertThat(invokePrivate("accountType", mapper.readTree("\"HEDGED\""))).isEqualTo("HEDGED");
+
+        assertThat(invokePrivate("marginCalculationType", mapper.readTree("0"))).isEqualTo("MAX");
+        assertThat(invokePrivate("marginCalculationType", mapper.readTree("1"))).isEqualTo("SUM");
+        assertThat(invokePrivate("marginCalculationType", mapper.readTree("2"))).isEqualTo("NET");
+        assertThat(invokePrivate("marginCalculationType", mapper.readTree("9"))).isEqualTo("UNKNOWN(9)");
+
+        assertThat(invokePrivate("orderType", "MARKET")).isEqualTo(1);
+        assertThat(invokePrivate("tradeSide", "BUY")).isEqualTo(1);
+        assertThat(invokePrivate("tradeSide", "SELL")).isEqualTo(2);
+        assertThatThrownBy(() -> invokePrivate("orderType", "LIMIT"))
+                .hasCauseInstanceOf(CTraderAuthenticationException.class);
+        assertThatThrownBy(() -> invokePrivate("tradeSide", "OTHER"))
+                .hasCauseInstanceOf(CTraderAuthenticationException.class);
+    }
+
+    @Test
+    void classifiesCollectionAndProviderTimestampStates() throws Exception {
+        Object available = invokePrivate("collectionState", mapper.readTree("{\"items\":[1]}"), "items");
+        Object omitted = invokePrivate("collectionState", mapper.readTree("{}"), "items");
+        Object malformed = invokePrivate("collectionState", mapper.readTree("{\"items\":{}}"), "items");
+        Object truncated = invokePrivate("dealCollectionState",
+                mapper.readTree("{\"deal\":[{\"dealId\":1}],\"hasMore\":true}"));
+
+        assertThat(available.toString()).contains("AVAILABLE_NON_EMPTY");
+        assertThat(omitted.toString()).contains("AVAILABLE_EMPTY");
+        assertThat(malformed.toString()).contains("UNAVAILABLE_OR_ABSENT");
+        assertThat(truncated.toString()).contains("TRUNCATED");
+
+        Instant fallback = Instant.parse("2026-01-01T00:00:00Z");
+        Instant latest = (Instant) invokePrivate("latestProviderTimestamp",
+                mapper.readTree("{}"), mapper.readTree("{}"), mapper.readTree("{}"), fallback,
+                new java.util.ArrayList<String>());
+        assertThat(latest).isEqualTo(fallback);
+    }
+
+    @Test
+    void validatesEnvironmentAndRequiredConfiguration() throws Exception {
+        invokePrivate("validateEnvironment");
+        assertThatThrownBy(() -> invokePrivate("required", " "))
+                .hasCauseInstanceOf(CTraderAuthenticationException.class);
+
+        var mismatched = new JsonWebSocketCTraderOpenApiClient(
+                new CTraderProperties("client", "secret", "redirect", "auth", "demo", "token",
+                        "wss://live.ctraderapi.com:5035", 60),
+                new CTraderRequestSafetyGuard(mock(JdbcTemplate.class),
+                        new CTraderSafetyProperties(false, 1000, 700, 800,
+                                Duration.ofMinutes(20), Duration.ofMinutes(30)), Clock.systemUTC()), mapper);
+        assertThatThrownBy(() -> invokePrivateOn(mismatched, "validateEnvironment"))
+                .hasCauseInstanceOf(CTraderAuthenticationException.class);
+    }
+
+    private Object invokePrivate(String name, Object... args) throws Exception {
+        return invokePrivateOn(client, name, args);
+    }
+
+    private static Object invokePrivateOn(Object target, String name, Object... args) throws Exception {
+        Method method = switch (name) {
+            case "accountType", "marginCalculationType" ->
+                    JsonWebSocketCTraderOpenApiClient.class.getDeclaredMethod(name, JsonNode.class);
+            case "orderType", "tradeSide", "required" ->
+                    JsonWebSocketCTraderOpenApiClient.class.getDeclaredMethod(name, String.class);
+            case "validateEnvironment" -> JsonWebSocketCTraderOpenApiClient.class.getDeclaredMethod(name);
+            case "collectionState" -> JsonWebSocketCTraderOpenApiClient.class.getDeclaredMethod(name, JsonNode.class, String.class);
+            case "dealCollectionState" -> JsonWebSocketCTraderOpenApiClient.class.getDeclaredMethod(name, JsonNode.class);
+            case "latestProviderTimestamp" -> JsonWebSocketCTraderOpenApiClient.class.getDeclaredMethod(
+                    name, JsonNode.class, JsonNode.class, JsonNode.class, Instant.class, List.class);
+            default -> throw new IllegalArgumentException("unknown method " + name);
+        };
+        method.setAccessible(true);
+        return invoke(method, target, args);
+    }
+
+    private Object invokeWithTypes(String name, Class<?>[] parameterTypes, Object... args) throws Exception {
+        Method method = JsonWebSocketCTraderOpenApiClient.class.getDeclaredMethod(name, parameterTypes);
+        method.setAccessible(true);
+        return invoke(method, client, args);
     }
 
     private CTraderReadOnlyObservation invokeMapper(JsonNode trader, JsonNode assets, JsonNode symbols,

@@ -284,6 +284,10 @@ public class AnalysisExecutionService {
         );
     }
 
+    public boolean requeueAcceptedForRecovery(UUID executionId, Instant staleBefore, Instant requeuedAt) {
+        return repository.requeueAcceptedForRecovery(executionId, staleBefore, requeuedAt);
+    }
+
     public boolean beginProcessing(UUID executionId) {
         return repository.transitionStatus(
                 executionId,
