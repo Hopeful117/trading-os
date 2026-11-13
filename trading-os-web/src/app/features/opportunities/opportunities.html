@@ -44,7 +44,9 @@
                     <th>Direction</th>
                     <th>Type</th>
                     <th>Timeframe</th>
-                    <th title="Directional business-priority score, not probability">Signal strength</th>
+                    <th title="Directional business-priority score, not probability">
+                      Signal strength
+                    </th>
                     <th>Ref. price</th>
                     <th>Valid until</th>
                     <th>Rationale</th>
@@ -119,8 +121,8 @@
                       <td>{{ opportunity.timeframe }}</td>
 
                       <td title="{{ opportunity.scoreSemantics }}">
-                         {{ opportunity.score }}
-                       </td>
+                        {{ opportunity.score }}
+                      </td>
 
                       <td class="reference-price">
                         @if (opportunity.setup; as setup) {

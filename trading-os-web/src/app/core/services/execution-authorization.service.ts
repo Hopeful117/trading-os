@@ -14,7 +14,11 @@ export class ExecutionAuthorizationService {
     );
   }
 
-  decide(id: string, action: 'approve' | 'reject' | 'revoke', password: string): Observable<ExecutionAuthorizationResponse> {
+  decide(
+    id: string,
+    action: 'approve' | 'reject' | 'revoke',
+    password: string,
+  ): Observable<ExecutionAuthorizationResponse> {
     return this.http.post<ExecutionAuthorizationResponse>(
       `${environment.gatewayUrl}v1/execution-authorizations/${id}/${action}`,
       { password },
