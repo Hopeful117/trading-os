@@ -67,8 +67,11 @@ approved repository Story, ADRs, repository analysis and current source.
 
 Vault action: no vault action.
 
-## Remaining Gates
+## Delivery Evidence
 
-This report does not approve the implementation. The implementation is ready
-for independent code review and human review under the Engineering Story
-workflow. No commit, push or merge was performed.
+The implementation was independently reviewed and human-validated, then merged
+through PR #291 at merge commit
+`76480d09c706b348aa377e5c6ab3f76f5315e620`. This Story's scope is complete.
+
+The merge did not enable scheduling, add schema migrations, perform runtime
+scans, call brokers or authorize Story 0240 implementation.

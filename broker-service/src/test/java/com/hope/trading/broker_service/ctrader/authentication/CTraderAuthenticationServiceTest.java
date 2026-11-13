@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -163,6 +164,66 @@ class CTraderAuthenticationServiceTest {
         verify(openApi).authorizeAccount(any(), eq("1001"));
         verify(openApi, never()).readOnlyObservation(any(), any(), any(), any());
         verify(tradingCore).updateStatusWithServiceAuthorization(eq(brokerAccountId), any(), any());
+    }
+
+    @Test
+    void callbackRejectsMissingStateBeforeRepositoryAccess() {
+        assertThrows(CTraderAuthenticationException.class, () -> service().callback(" ", "code", null));
+        verifyNoInteractions(attempts);
+    }
+
+    @Test
+    void callbackFailsAnInitiatedAttemptWhenAuthorizationIsDenied() {
+        CTraderAuthorizationAttempt attempt = initiatedAttempt();
+        when(attempts.findByStateHashForUpdate(any())).thenReturn(Optional.of(attempt));
+        when(attempts.findById(attempt.id())).thenReturn(Optional.of(attempt));
+
+        assertThrows(CTraderAuthenticationException.class, () -> service().callback("state", null, "access_denied"));
+        assertEquals(CTraderAuthorizationAttemptStatus.FAILED, attempt.status());
+    }
+
+    @Test
+    void callbackFailsWhenNoAuthorizationCodeIsProvided() {
+        CTraderAuthorizationAttempt attempt = initiatedAttempt();
+        when(attempts.findByStateHashForUpdate(any())).thenReturn(Optional.of(attempt));
+        when(attempts.findById(attempt.id())).thenReturn(Optional.of(attempt));
+
+        assertThrows(CTraderAuthenticationException.class, () -> service().callback("state", " ", null));
+        assertEquals(CTraderAuthorizationAttemptStatus.FAILED, attempt.status());
+        verifyNoInteractions(tokenClient, openApi);
+    }
+
+    @Test
+    void getExpiresAnInitiatedAttemptAfterItsDeadline() {
+        CTraderAuthorizationAttempt attempt = CTraderAuthorizationAttempt.initiate(owner, brokerAccountId,
+                BrokerProviderRegistrationCatalog.CTRADER, "hash", "demo", NOW.minusSeconds(601), NOW.minusSeconds(1));
+        when(attempts.findByIdAndOwnerId(attempt.id(), owner)).thenReturn(Optional.of(attempt));
+
+        assertEquals(CTraderAuthorizationAttemptStatus.EXPIRED,
+                service().get(owner, brokerAccountId, attempt.id()).status());
+        verify(attempts).save(attempt);
+    }
+
+    @Test
+    void bindingRejectsAProviderAccountThatIsNotDemo() {
+        UUID tokenReference = UUID.randomUUID();
+        CTraderAuthorizationAttempt attempt = initiatedAttempt();
+        attempt.consume(NOW);
+        attempt.discovered(tokenReference, List.of("1001"));
+        when(attempts.findByIdAndOwnerId(attempt.id(), owner)).thenReturn(Optional.of(attempt));
+        when(tradingCore.findOwned(brokerAccountId, AUTHORIZATION)).thenReturn(account());
+        when(secretReader.read(new CredentialReference(tokenReference))).thenReturn(new PlainSecret(
+                CTraderTokenCodec.encode(new CTraderToken("access", "refresh", NOW.plusSeconds(3600)))));
+        when(openApi.isDemoAccount(any(), eq("1001"))).thenReturn(false);
+
+        assertThrows(CTraderAuthenticationException.class,
+                () -> service().bind(owner, brokerAccountId, attempt.id(), "1001", AUTHORIZATION));
+        verify(connections, never()).save(any());
+    }
+
+    private CTraderAuthorizationAttempt initiatedAttempt() {
+        return CTraderAuthorizationAttempt.initiate(owner, brokerAccountId,
+                BrokerProviderRegistrationCatalog.CTRADER, "hash", "demo", NOW, NOW.plusSeconds(600));
     }
 
     private CTraderAuthenticationService service() {
