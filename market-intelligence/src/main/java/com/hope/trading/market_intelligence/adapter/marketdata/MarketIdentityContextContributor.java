@@ -35,7 +35,8 @@ public class MarketIdentityContextContributor implements ContextContributor {
                 market.symbol(),
                 market.baseAsset(),
                 market.quoteAsset(),
-                tradable
+                tradable,
+                market.productType()
         );
         ContextSection section = sectionFactory.availableAt(
                 sectionType(),

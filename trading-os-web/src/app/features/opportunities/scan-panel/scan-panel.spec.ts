@@ -137,6 +137,7 @@ describe('ScanPanel', () => {
       type: 'INTRADAY',
       origin: 'PASSIVE_SCAN',
       score: 82.5,
+      scoreSemantics: 'BUSINESS_PRIORITY_NOT_PROBABILITY',
       explanation: 'Confirmed setup',
       observationIds: [],
       aiAnalysisIds: [],

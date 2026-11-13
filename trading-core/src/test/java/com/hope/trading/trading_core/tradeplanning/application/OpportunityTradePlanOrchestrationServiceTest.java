@@ -8,6 +8,8 @@ import com.hope.trading.trading_core.risk.application.TradePlanRiskEvaluationSer
 import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.infrastructure.MarketIntelligenceTradePlanningClient;
 import feign.FeignException;
+import feign.Request;
+import feign.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +17,8 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -206,16 +210,26 @@ class OpportunityTradePlanOrchestrationServiceTest {
 
     @Test
     void marketIntelligenceRejectionPropagatesUpstreamStatus() {
-        FeignException rejection = mock(FeignException.class);
-        when(rejection.status()).thenReturn(422);
+        var request = Request.create(Request.HttpMethod.POST, "http://market-intelligence", Map.of(),
+                null, StandardCharsets.UTF_8, null);
+        FeignException rejection = FeignException.errorStatus("POST", Response.builder()
+                .status(422)
+                .reason("Unprocessable Entity")
+                .request(request)
+                .body("{\"message\":\"MARKET_THESIS_PREPARATION_BLOCKED_NO_TRADE\"}", StandardCharsets.UTF_8)
+                .build());
         when(marketIntelligence.generateFromOpportunity(any(), any(), any()))
                 .thenThrow(rejection);
 
         assertThatThrownBy(() -> service.createFromOpportunity(
                 actorId, opportunityId, accountId, "key-1"))
                 .isInstanceOf(AnalysisTradePlanGenerationException.class)
-                .satisfies(e -> assertThat(((AnalysisTradePlanGenerationException) e).status())
-                        .isEqualTo(422));
+                .satisfies(e -> {
+                    var failure = (AnalysisTradePlanGenerationException) e;
+                    assertThat(failure.status()).isEqualTo(422);
+                    assertThat(failure.details())
+                            .containsEntry("downstreamReason", "MARKET_THESIS_PREPARATION_BLOCKED_NO_TRADE");
+                });
     }
 
     @Test

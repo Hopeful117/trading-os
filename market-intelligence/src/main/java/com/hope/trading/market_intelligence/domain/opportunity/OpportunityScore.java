@@ -5,6 +5,7 @@ import java.util.Objects;
 
 /** Business priority from 0 to 100; never a probability of success. */
 public record OpportunityScore(BigDecimal value) implements Comparable<OpportunityScore> {
+    public static final String SEMANTICS = "BUSINESS_PRIORITY_NOT_PROBABILITY";
     public OpportunityScore {
         value = Objects.requireNonNull(value, "value").setScale(2, RoundingMode.HALF_UP);
         if (value.signum() < 0 || value.compareTo(BigDecimal.valueOf(100)) > 0) {

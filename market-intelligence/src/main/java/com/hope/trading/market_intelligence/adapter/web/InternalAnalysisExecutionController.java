@@ -46,7 +46,7 @@ public class InternalAnalysisExecutionController {
                 null,
                 request.evaluationCutoff(),
                 request.evidencePolicy()
-        );
+        ).withTradeabilityEvidenceProfile(request.tradeabilityEvidenceProfile());
         AnalysisExecution execution = executions.create(
                 command,
                 new IdempotencyKey(idempotencyKey),

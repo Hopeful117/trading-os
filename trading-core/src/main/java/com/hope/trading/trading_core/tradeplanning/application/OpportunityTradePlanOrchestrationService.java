@@ -7,6 +7,8 @@ import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.infrastructure.MarketIntelligenceTradePlanningClient;
 import java.time.Clock;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.UUID;
 import feign.FeignException;
 import org.springframework.http.HttpStatus;
@@ -19,6 +21,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class OpportunityTradePlanOrchestrationService {
+    private static final Pattern DOWNSTREAM_MESSAGE =
+            Pattern.compile("\\\"message\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private final AccountRepository accounts;
     private final TradePlanningProfileService profiles;
     private final MarketIntelligenceTradePlanningClient marketIntelligence;
@@ -78,10 +82,7 @@ public class OpportunityTradePlanOrchestrationService {
             }
             return new Response(response.tradePlanId(), response.tradePlanVersion(), response.reused());
         } catch (FeignException exception) {
-            int status = exception.status() > 0 ? exception.status() : HttpStatus.SERVICE_UNAVAILABLE.value();
-            throw failure(HttpStatus.valueOf(status),
-                    "MARKET_INTELLIGENCE_REJECTED",
-                    "Market Intelligence could not generate the Trade Plan");
+            throw translate(exception);
         }
     }
 
@@ -128,13 +129,29 @@ public class OpportunityTradePlanOrchestrationService {
     private AnalysisTradePlanGenerationException translate(FeignException exception) {
         int status = exception.status() > 0
                 ? exception.status() : HttpStatus.SERVICE_UNAVAILABLE.value();
+        String downstreamReason = downstreamReason(exception);
+        Map<String, Object> details = downstreamReason == null
+                ? Map.of()
+                : Map.of("downstreamReason", downstreamReason);
         return failure(HttpStatus.valueOf(status), "MARKET_INTELLIGENCE_REJECTED",
-                "Market Intelligence rejected the Trade Plan operation");
+                "Market Intelligence rejected the Trade Plan operation", details);
     }
 
     private AnalysisTradePlanGenerationException failure(
             HttpStatus status, String code, String message) {
         return new AnalysisTradePlanGenerationException(code, message, status.value());
+    }
+
+    private AnalysisTradePlanGenerationException failure(
+            HttpStatus status, String code, String message, Map<String, Object> details) {
+        return new AnalysisTradePlanGenerationException(code, message, status.value(), details);
+    }
+
+    private String downstreamReason(FeignException exception) {
+        String body = exception.contentUTF8();
+        if (body == null || body.isBlank()) return null;
+        Matcher matcher = DOWNSTREAM_MESSAGE.matcher(body);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private String preflightKey(String idempotencyKey) {

@@ -210,6 +210,7 @@ describe('WorkspaceContextStrip', () => {
         type: 'INTRADAY',
         origin: 'ACTIVE_SCAN',
         score: 0.8,
+        scoreSemantics: 'BUSINESS_PRIORITY_NOT_PROBABILITY',
         explanation: 'Deterministic setup',
         observationIds: [],
         aiAnalysisIds: [],

@@ -10,6 +10,8 @@ import com.hope.trading.trading_core.broker.dto.BrokerAccountSnapshotV2Dto;
 import com.hope.trading.trading_core.brokeraccount.api.BrokerAccountReadOnlyStatusResponse;
 import com.hope.trading.trading_core.brokeraccount.api.BrokerAccountResponse;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountReadOnlyStatusService;
+import com.hope.trading.trading_core.broker.service.BrokerSynchronizationService;
+import com.hope.trading.trading_core.broker.service.LiveCfdReconciliationService;
 import com.hope.trading.trading_core.brokeraccount.application.BrokerAccountRepository;
 import com.hope.trading.trading_core.brokeraccount.domain.BrokerAccount;
 import com.hope.trading.trading_core.brokeraccount.domain.ExecutionMode;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import feign.FeignException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -51,6 +54,7 @@ public class AgentBusinessController {
     private final AccountMapper accountMapper;
     private final ChallengeReadinessService challengeReadiness;
     private final BrokerCapabilityQueryService brokerCapabilityQueryService;
+    private final BrokerSynchronizationService synchronization;
 
     @Autowired
     public AgentBusinessController(BrokerAccountRepository brokerAccounts, AccountRepository accounts,
@@ -61,7 +65,8 @@ public class AgentBusinessController {
                                    BrokerDashboardMapper brokerMapper,
                                    AccountMapper accountMapper,
                                    ChallengeReadinessService challengeReadiness,
-                                   BrokerCapabilityQueryService brokerCapabilityQueryService) {
+                                   BrokerCapabilityQueryService brokerCapabilityQueryService,
+                                   BrokerSynchronizationService synchronization) {
         this.brokerAccounts = brokerAccounts;
         this.accounts = accounts;
         this.authorization = authorization;
@@ -72,6 +77,7 @@ public class AgentBusinessController {
         this.accountMapper = accountMapper;
         this.challengeReadiness = challengeReadiness;
         this.brokerCapabilityQueryService = brokerCapabilityQueryService;
+        this.synchronization = synchronization;
     }
 
     public AgentBusinessController(BrokerAccountRepository brokerAccounts, AccountRepository accounts,
@@ -81,7 +87,7 @@ public class AgentBusinessController {
                                    BrokerAccountSnapshotV2Client broker,
                                    BrokerDashboardMapper brokerMapper) {
         this(brokerAccounts, accounts, authorization, readOnlyStatus, positions, broker, brokerMapper,
-                null, null, null);
+                null, null, null, null);
     }
 
     @GetMapping
@@ -158,6 +164,20 @@ public class AgentBusinessController {
         return ResponseEntity.ok(readOnlyStatus.status(agent.ownerUserId(), brokerAccountId));
     }
 
+    @GetMapping("/{brokerAccountId}/reconciliation")
+    public ResponseEntity<LiveCfdReconciliationService.Result> reconciliation(
+            @PathVariable UUID brokerAccountId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        AgentPrincipal agent = requireAgent(authentication);
+        ownedAccount(agent.ownerUserId(), brokerAccountId);
+        requireGrant(agent, AgentPermission.ACCOUNTS_READ, brokerAccountId, correlationId);
+        if (synchronization == null) {
+            return ResponseEntity.internalServerError().build();
+        }
+        return ResponseEntity.ok(synchronization.reconcileLiveCfd(agent.ownerUserId(), brokerAccountId));
+    }
+
     @GetMapping("/{brokerAccountId}/positions")
     public ResponseEntity<List<OpenPositionDashboardView>> positions(
             @PathVariable UUID brokerAccountId,
@@ -178,7 +198,7 @@ public class AgentBusinessController {
         }
 
         try {
-            BrokerAccountSnapshotV2Dto snapshot = broker.getAccountSnapshot(brokerAccountId);
+            BrokerAccountSnapshotV2Dto snapshot = snapshotForPositions(brokerAccountId);
             if (snapshot == null) {
                 throw new AgentBusinessDataUnavailableException();
             }
@@ -191,6 +211,17 @@ public class AgentBusinessController {
                 throw unavailable;
             }
             throw new AgentBusinessDataUnavailableException();
+        }
+    }
+
+    private BrokerAccountSnapshotV2Dto snapshotForPositions(UUID brokerAccountId) {
+        try {
+            return broker.getAccountSnapshot(brokerAccountId);
+        } catch (FeignException.Conflict deferred) {
+            if (!deferred.contentUTF8().contains("BROKER_SNAPSHOT_DEFERRED")) {
+                throw deferred;
+            }
+            return broker.getLatestAccountSnapshot(brokerAccountId);
         }
     }
 

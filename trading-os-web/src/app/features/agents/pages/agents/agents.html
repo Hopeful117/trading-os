@@ -156,6 +156,7 @@
     <div>
       <p class="eyebrow">Explicit grants</p>
       <h2 id="configured-agents-title">Agents configurés</h2>
+      <p class="muted">Les agents OpenCode actifs récupèrent automatiquement leur session après expiration ou redémarrage.</p>
     </div>
     <button type="button" class="secondary-button" (click)="reload()" [disabled]="busy()">
       Actualiser
@@ -242,7 +243,7 @@
                   (click)="connectAgent(agent)"
                   [disabled]="busy()"
                 >
-                  Connecter à OpenCode
+                  Rotation / récupération OpenCode
                 </button>
               }
               <button

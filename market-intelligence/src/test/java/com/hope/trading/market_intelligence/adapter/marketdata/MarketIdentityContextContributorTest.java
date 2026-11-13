@@ -35,6 +35,7 @@ class MarketIdentityContextContributorTest {
         Instant cutoff = Instant.parse("2026-10-15T12:00:01Z");
         when(client.findMarket(MARKET_ID)).thenReturn(new MarketResponse(
                 MARKET_ID, "CTRADER", "EUR/USD", "EUR", "USD",
+                "CFD",
                 new MarketResponse.MarketStateResponse("OPEN", true, null, updatedAt)));
 
         ContextSection section = contributor(client).contribute(new IntelligenceAnalysisRequest(
@@ -48,6 +49,7 @@ class MarketIdentityContextContributorTest {
         assertThat(section.provenance().evaluationCutoff()).isEqualTo(cutoff);
         assertThat(section.provenance().capturedAt()).isEqualTo(updatedAt);
         assertThat(section.provenance().knownAt()).isEqualTo(updatedAt);
+        assertThat(((MarketIdentityContext) section.payload()).productType()).isEqualTo("CFD");
     }
 
     @Test

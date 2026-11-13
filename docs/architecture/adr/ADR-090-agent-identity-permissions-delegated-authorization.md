@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted - human architecture approval completed
+Accepted - human architecture approval completed; partially superseded by ADR-098
+for exact human-approved MCP execution continuation
 
 ## Date
 

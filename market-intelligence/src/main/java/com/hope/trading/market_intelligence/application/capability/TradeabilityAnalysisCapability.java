@@ -170,8 +170,16 @@ public final class TradeabilityAnalysisCapability
     public CapabilityAnalysisResult analyze(
             IntelligenceAnalysisRequest request, IntelligenceContext context) {
         if (request.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT) {
-            return CapabilityAnalysisResult.empty(
-                    "Tradeability requires an approved live order-book source; LIVE_CURRENT is unsupported");
+            if (request.tradeabilityEvidenceProfile() == TradeabilityEvidenceProfile.UNSUPPORTED) {
+                return CapabilityAnalysisResult.empty(
+                        "Tradeability requires an explicit supported evidence profile for LIVE_CURRENT");
+            }
+            ContextSection identitySection = context.section(ContextSectionType.MARKET_IDENTITY).orElse(null);
+            if (request.tradeabilityEvidenceProfile() == TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC
+                    && !isForexCfd(identitySection)) {
+                return CapabilityAnalysisResult.empty(
+                        "FOREX_QUOTE_BASIC requires an admitted Forex CFD market identity");
+            }
         }
         Instant cutoff = context.evaluationCutoff().orElseThrow(
                 () -> new IllegalStateException("evaluationCutoff is required for deterministic tradeability analysis"));
@@ -185,10 +193,23 @@ public final class TradeabilityAnalysisCapability
                     "Tradeability requires strict observed provenance at the execution cutoff");
         }
         ContextSection snapshotSection = context.section(ContextSectionType.MARKET_SNAPSHOT).orElse(null);
-        if (request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+        if ((request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
+                || request.tradeabilityEvidenceProfile() == TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC)
                 && !cutoffCompatibleSnapshot(snapshotSection, cutoff, request.marketId())) {
             return CapabilityAnalysisResult.empty(
                     "Tradeability requires a cutoff-compatible market snapshot");
+        }
+        if (request.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                && request.tradeabilityEvidenceProfile() != TradeabilityEvidenceProfile.UNSUPPORTED
+                && !liveCurrent(snapshotSection)) {
+            return CapabilityAnalysisResult.empty(
+                    "LIVE_CURRENT tradeability requires LIVE_CURRENT market-data provenance");
+        }
+        if (request.tradeabilityEvidenceProfile() == TradeabilityEvidenceProfile.LEVEL_II_REQUIRED
+                && !cutoffCompatibleOrderBook(
+                context.section(ContextSectionType.ORDER_BOOK).orElse(null), cutoff, request.marketId())) {
+            return CapabilityAnalysisResult.empty(
+                    "LEVEL_II_REQUIRED requires cutoff-compatible order-book evidence");
         }
         if (context.sections().values().stream()
                 .map(ContextSection::payload)
@@ -203,6 +224,14 @@ public final class TradeabilityAnalysisCapability
                 && !request.marketId().equals(snapshot.marketId())) {
             return CapabilityAnalysisResult.empty(
                     "Tradeability requires a market snapshot for the requested market");
+        }
+        ContextSection identitySection = context.section(ContextSectionType.MARKET_IDENTITY).orElse(null);
+        if (identitySection != null && identitySection.payload() instanceof MarketIdentityContext identity
+                && snapshotSection != null && snapshotSection.payload() instanceof MarketSnapshotContext snapshot
+                && identity.symbol() != null && snapshot.symbol() != null
+                && !identity.symbol().equals(snapshot.symbol())) {
+            return CapabilityAnalysisResult.empty(
+                    "Tradeability requires matching canonical instrument identity and quote");
         }
         String instrument = context.section(ContextSectionType.MARKET_IDENTITY)
                 .map(ContextSection::payload).filter(MarketIdentityContext.class::isInstance)
@@ -290,11 +319,64 @@ public final class TradeabilityAnalysisCapability
         }
         ContextProvenance provenance = section.provenance();
         return provenance != null
+                && provenance.source() != null
+                && !provenance.source().isBlank()
                 && provenance.sourceOccurredAt() != null
                 && !provenance.sourceOccurredAt().isAfter(cutoff)
                 && provenance.fetchedAt() != null
                 && !provenance.fetchedAt().isAfter(cutoff);
     }
+
+    private boolean liveCurrent(ContextSection section) {
+        return section != null
+                && section.provenance() != null
+                && section.provenance().evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT;
+    }
+
+    private boolean cutoffCompatibleOrderBook(
+            ContextSection section, Instant cutoff, UUID expectedMarketId) {
+        if (section == null || section.status() != ContextSectionStatus.AVAILABLE
+                || !(section.payload() instanceof OrderBookContext orderBook)
+                || orderBook.marketId() == null
+                || !expectedMarketId.equals(orderBook.marketId())
+                || orderBook.status() != OrderBookContext.ReplayStatus.AVAILABLE
+                || orderBook.evaluationCutoff() == null
+                || !cutoff.equals(orderBook.evaluationCutoff())
+                || orderBook.latestOccurredAt() == null
+                || orderBook.latestOccurredAt().isAfter(cutoff)
+                || orderBook.latestKnownAt() == null
+                || orderBook.latestKnownAt().isAfter(cutoff)
+                || orderBook.bids().isEmpty()
+                || orderBook.asks().isEmpty()) {
+            return false;
+        }
+        ContextProvenance provenance = section.provenance();
+        return provenance != null
+                && provenance.source() != null
+                && !provenance.source().isBlank()
+                && provenance.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                && provenance.sourceOccurredAt() != null
+                && !provenance.sourceOccurredAt().isAfter(cutoff)
+                && provenance.fetchedAt() != null
+                && !provenance.fetchedAt().isAfter(cutoff);
+    }
+
+    private boolean isForexCfd(ContextSection section) {
+        if (section == null || !(section.payload() instanceof MarketIdentityContext identity)) {
+            return false;
+        }
+        return "CFD".equalsIgnoreCase(identity.productType())
+                && FIAT_CURRENCIES.contains(normalizeCurrency(identity.baseAsset()))
+                && FIAT_CURRENCIES.contains(normalizeCurrency(identity.quoteAsset()));
+    }
+
+    private String normalizeCurrency(String value) {
+        return value == null ? "" : value.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private static final Set<String> FIAT_CURRENCIES = Set.of(
+            "AUD", "CAD", "CHF", "CNH", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF",
+            "ILS", "JPY", "MXN", "NOK", "NZD", "PLN", "SEK", "SGD", "TRY", "USD", "ZAR");
 
     private ContextSectionType sectionType(ArtifactType type) {
         if (type == ProductionArtifactTypes.MARKET_SNAPSHOT) return ContextSectionType.MARKET_SNAPSHOT;

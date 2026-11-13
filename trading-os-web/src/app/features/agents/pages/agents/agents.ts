@@ -227,7 +227,7 @@ export class Agents {
       next: () => this.finishAction(`Agent ${agent.displayName} connecté à OpenCode.`),
       error: () =>
         this.failAction(
-          'La connexion OpenCode a échoué. Aucun credential n’a été affiché ni modifié dans l’interface.',
+          'La récupération OpenCode a échoué. La reconnexion automatique reste fail-closed; utilisez cette action uniquement pour une rotation ou une récupération explicite.',
         ),
     });
   }

@@ -61,10 +61,7 @@ public class BrokerAccountService {
         }
         RiskProfileReference profileReference = request.riskProfile();
         EffectiveRiskRuleSet effectiveRiskProfile = null;
-        if (request.executionMode() == ExecutionMode.PAPER) {
-            if (profileReference == null) {
-                throw new IllegalArgumentException("riskProfile is required for PAPER accounts");
-            }
+        if (profileReference != null) {
             var profile = riskPersistence.profile(profileReference.profileId(), profileReference.semanticVersion())
                     .orElseThrow(() -> new IllegalArgumentException("Risk profile does not exist"));
             try {
@@ -73,12 +70,18 @@ public class BrokerAccountService {
                 throw new IllegalArgumentException(invalid.code(), invalid);
             }
         }
+        if (request.executionMode() == ExecutionMode.PAPER) {
+            if (profileReference == null) {
+                throw new IllegalArgumentException("riskProfile is required for PAPER accounts");
+            }
+        }
         BrokerAccount account = BrokerAccount.create(
                 ownerId,
                 request.providerRegistrationReference(),
                 request.executionMode(),
-                request.displayName(),
-                clock.instant()
+                request.displayName(), clock.instant(),
+                profileReference == null ? null : profileReference.profileId(),
+                profileReference == null ? null : profileReference.semanticVersion()
         );
 
         BrokerAccount savedAccount = repository.save(account);

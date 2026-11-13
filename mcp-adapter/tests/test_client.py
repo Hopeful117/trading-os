@@ -141,11 +141,13 @@ def test_client_does_not_replay_post_after_unauthorized(monkeypatch):
     provider = StaticTokenProvider("agent-token")
     monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: Stream())
 
-    with pytest.raises(RuntimeError, match="Gateway request failed with HTTP 401"):
+    with pytest.raises(RuntimeError, match="Gateway request failed") as error:
         TradingOsClient("http://127.0.0.1", provider).post(
             "/api/v1/agent/broker-accounts/synchronize", {}, "sync-1"
         )
 
+    assert error.value.code == "AUTHENTICATION_FAILED"
+    assert error.value.status == 401
     assert len(calls) == 1
 
 
@@ -220,7 +222,9 @@ def test_client_http_error_does_not_include_jwt(monkeypatch):
         TradingOsClient("https://gateway.internal", StaticTokenProvider("secret-jwt")).get("/api/v1/markets")
     except RuntimeError as error:
         assert "secret-jwt" not in str(error)
-        assert str(error) == "Gateway request failed with HTTP 401"
+        assert str(error) == "Gateway request failed"
+        assert error.code == "AUTHENTICATION_FAILED"
+        assert error.status == 401
     else:
         raise AssertionError("HTTP error must be raised")
 
@@ -262,10 +266,12 @@ def test_client_sanitizes_gateway_status_errors(monkeypatch, status_code):
 
     monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: Stream())
 
-    with pytest.raises(RuntimeError, match=f"Gateway request failed with HTTP {status_code}") as error:
+    with pytest.raises(RuntimeError, match="Gateway request failed") as error:
         TradingOsClient("http://127.0.0.1", StaticTokenProvider("test-token")).get("/api/v1/markets")
 
     assert "must not escape" not in str(error.value)
+    assert error.value.status == status_code
+    assert error.value.code in {"PERMISSION_DENIED", "ACCOUNT_ACCESS_DENIED", "INTERNAL_ERROR", "UPSTREAM_UNAVAILABLE"}
 
 
 def test_client_sanitizes_timeout(monkeypatch):

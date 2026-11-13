@@ -30,6 +30,7 @@ final class ContextFingerprintFactory {
         components.add("market=" + request.marketId());
         components.add("mode=" + request.mode());
         components.add("evidencePolicy=" + request.evidencePolicy());
+        components.add("tradeabilityEvidenceProfile=" + request.tradeabilityEvidenceProfile());
         components.add("objective=" + request.objective());
         components.add("cutoff=" + request.evaluationCutoff());
         requirements.stream()

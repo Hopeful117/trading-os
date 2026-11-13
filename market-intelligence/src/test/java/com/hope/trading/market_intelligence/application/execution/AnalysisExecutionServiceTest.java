@@ -99,6 +99,30 @@ class AnalysisExecutionServiceTest {
     }
 
     @Test
+    void redispatchPreservesTradeabilityEvidenceProfile() {
+        Instant now = Instant.parse("2026-07-29T10:00:00Z");
+        InMemoryAnalysisExecutionRepository repository = new InMemoryAnalysisExecutionRepository();
+        CapturingDispatcher dispatcher = new CapturingDispatcher();
+        AnalysisExecutionService service = new AnalysisExecutionService(
+                repository, dispatcher, new AnalysisStrategyRegistry(List.of(strategy())),
+                new AnalysisExecutionPolicyFactory(), Clock.fixed(now, ZoneOffset.UTC));
+        IntelligenceAnalysisRequest request = new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), UUID.randomUUID(), AnalysisExecutionMode.PASSIVE, "quote",
+                null, null, null, now, EvidenceAcquisitionPolicy.LIVE_CURRENT)
+                .withTradeabilityEvidenceProfile(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC);
+
+        AnalysisExecution execution = service.register(
+                request, new IdempotencyKey("profile-redispatch"), "request", "trace");
+        service.claimForDispatch(execution.executionId());
+        service.dispatchRegistered(execution.executionId());
+
+        assertThat(execution.provenance().tradeabilityEvidenceProfile())
+                .isEqualTo(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC);
+        assertThat(dispatcher.request.tradeabilityEvidenceProfile())
+                .isEqualTo(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC);
+    }
+
+    @Test
     void historicalDispatchFailureIsTerminalAndRetryDoesNotDuplicateWork() {
         Instant now = Instant.parse("2026-07-29T10:00:00Z");
         InMemoryAnalysisExecutionRepository repository = new InMemoryAnalysisExecutionRepository();

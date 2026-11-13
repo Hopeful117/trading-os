@@ -13,6 +13,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.beans.factory.annotation.Value;
 
 import com.hope.trading.trading_core.agent.repository.AgentCredentialRepository;
 import com.hope.trading.trading_core.agent.repository.AgentIdentityRepository;
@@ -33,10 +35,13 @@ public class SpringSecurityConfig {
 
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) {
+    SecurityFilterChain securityFilterChain(HttpSecurity http,
+            HumanExecutionAuthorizationOriginFilter originFilter) {
 
         http
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .requireCsrfProtectionMatcher(new ExecutionAuthorizationCsrfMatcher()))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(sm ->
@@ -61,10 +66,16 @@ public class SpringSecurityConfig {
                 ).addFilterAfter(
                         new AgentAccessPolicyFilter(),
                         JwtAuthenticationFilter.class
-                );
+                ).addFilterBefore(originFilter, UsernamePasswordAuthenticationFilter.class);
 
 
         return http.build();
+    }
+
+    @Bean
+    HumanExecutionAuthorizationOriginFilter humanExecutionAuthorizationOriginFilter(
+            @Value("${trading-core.web-url:http://localhost:4200}") String webUrl) {
+        return new HumanExecutionAuthorizationOriginFilter(webUrl);
     }
 
     @Bean

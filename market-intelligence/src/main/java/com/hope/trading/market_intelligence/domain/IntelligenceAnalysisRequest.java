@@ -15,11 +15,24 @@ public record IntelligenceAnalysisRequest(
         Instant evaluationCutoff,
         EvidenceAcquisitionPolicy evidencePolicy,
         MarketThesis thesis,
-        String historicalEvidenceSelection
+        String historicalEvidenceSelection,
+        TradeabilityEvidenceProfile tradeabilityEvidenceProfile
 ) {
     public IntelligenceAnalysisRequest {
         evidencePolicy = evidencePolicy == null
                 ? EvidenceAcquisitionPolicy.LIVE_CURRENT : evidencePolicy;
+        tradeabilityEvidenceProfile = tradeabilityEvidenceProfile == null
+                ? TradeabilityEvidenceProfile.UNSUPPORTED : tradeabilityEvidenceProfile;
+    }
+
+    public IntelligenceAnalysisRequest(
+            UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective,
+            UUID accountId, UUID scanId, UUID scanMarketId, Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy, MarketThesis thesis,
+            String historicalEvidenceSelection) {
+        this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
+                evaluationCutoff, evidencePolicy, thesis, historicalEvidenceSelection,
+                TradeabilityEvidenceProfile.UNSUPPORTED);
     }
 
     public IntelligenceAnalysisRequest(
@@ -73,19 +86,22 @@ public record IntelligenceAnalysisRequest(
     public IntelligenceAnalysisRequest withEvaluationCutoff(Instant cutoff) {
         return new IntelligenceAnalysisRequest(
                 analysisId(), marketId(), mode(), objective(), accountId(), scanId(),
-                scanMarketId(), cutoff, evidencePolicy(), thesis(), historicalEvidenceSelection());
+                scanMarketId(), cutoff, evidencePolicy(), thesis(), historicalEvidenceSelection(),
+                tradeabilityEvidenceProfile());
     }
 
     public IntelligenceAnalysisRequest withEvidencePolicy(EvidenceAcquisitionPolicy policy) {
         return new IntelligenceAnalysisRequest(
                 analysisId(), marketId(), mode(), objective(), accountId(), scanId(),
-                scanMarketId(), evaluationCutoff(), policy, thesis(), historicalEvidenceSelection());
+                scanMarketId(), evaluationCutoff(), policy, thesis(), historicalEvidenceSelection(),
+                tradeabilityEvidenceProfile());
     }
 
     public IntelligenceAnalysisRequest withThesis(MarketThesis value) {
         return new IntelligenceAnalysisRequest(
                 analysisId(), marketId(), mode(), objective(), accountId(), scanId(), scanMarketId(),
-                evaluationCutoff(), evidencePolicy(), value, historicalEvidenceSelection());
+                evaluationCutoff(), evidencePolicy(), value, historicalEvidenceSelection(),
+                tradeabilityEvidenceProfile());
     }
 
     public IntelligenceAnalysisRequest(
@@ -107,6 +123,13 @@ public record IntelligenceAnalysisRequest(
     public IntelligenceAnalysisRequest withHistoricalEvidenceSelection(String selection) {
         return new IntelligenceAnalysisRequest(
                 analysisId(), marketId(), mode(), objective(), accountId(), scanId(), scanMarketId(),
-                evaluationCutoff(), evidencePolicy(), thesis(), selection);
+                evaluationCutoff(), evidencePolicy(), thesis(), selection, tradeabilityEvidenceProfile());
+    }
+
+    public IntelligenceAnalysisRequest withTradeabilityEvidenceProfile(
+            TradeabilityEvidenceProfile profile) {
+        return new IntelligenceAnalysisRequest(
+                analysisId(), marketId(), mode(), objective(), accountId(), scanId(), scanMarketId(),
+                evaluationCutoff(), evidencePolicy(), thesis(), historicalEvidenceSelection(), profile);
     }
 }

@@ -99,7 +99,7 @@ public class MarketIntelligenceController {
                 request.mode(),
                 request.objective(),
                 null, null, null, request.evaluationCutoff(), request.evidencePolicy()
-        );
+        ).withTradeabilityEvidenceProfile(request.tradeabilityEvidenceProfile());
         AnalysisExecution execution = executions.create(
                 command,
                 new IdempotencyKey(idempotencyKey),
