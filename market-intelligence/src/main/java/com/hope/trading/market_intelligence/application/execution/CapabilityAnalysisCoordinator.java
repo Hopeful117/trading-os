@@ -104,13 +104,23 @@ public class CapabilityAnalysisCoordinator {
                     planner.plan(new PlanningRequest(
                             analysisExecutionId, selected, Set.of(), descriptors,
                              context.fingerprint().value(), request.evaluationCutoff(),
-                             request.thesis() == null ? Map.of() : Map.of(
-                                     "marketThesis", request.thesis(), "authorizedContext", context,
-                                     "capabilityTimeout", strategy.timeout()))), control);
+                              executionParameters(request, context, strategy))), control);
             return consolidate(request, context, summary, startedAt, strategy.timeout());
         } finally {
             controls.remove(analysisExecutionId);
         }
+    }
+
+    private Map<String, Object> executionParameters(
+            IntelligenceAnalysisRequest request, IntelligenceContext context,
+            AnalysisExecutionPlan strategy) {
+        Map<String, Object> parameters = new HashMap<>();
+        if (request.thesis() != null) parameters.put("marketThesis", request.thesis());
+        parameters.put("authorizedContext", context);
+        parameters.put("capabilityTimeout", strategy.timeout());
+        parameters.put("evidencePolicy", request.evidencePolicy());
+        parameters.put("tradeabilityEvidenceProfile", request.tradeabilityEvidenceProfile());
+        return parameters;
     }
 
     private IntelligenceAnalysisRequest enrichThesis(IntelligenceAnalysisRequest request) {
@@ -272,7 +282,7 @@ public class CapabilityAnalysisCoordinator {
                 new AnalysisExecutionMetadata(
                         request.analysisId(), request.mode(), startedAt, completedAt,
                         Duration.between(startedAt, completedAt), timeout, executions,
-                        context.fingerprint().value()));
+                        context.fingerprint().value()), context);
     }
 
     private IntelligenceFinding finding(

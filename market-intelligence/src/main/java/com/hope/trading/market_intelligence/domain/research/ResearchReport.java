@@ -20,8 +20,24 @@ public record ResearchReport(
         List<String> limitations,
         String modelProvenance,
         List<String> diagnostics,
-        String conclusion
+        String conclusion,
+        ResearchObjectiveType objectiveType,
+        ResearchOutcome outcome,
+        List<HypothesisProposal> hypothesisProposals
 ) {
+    public ResearchReport(
+            String schemaVersion, String objective, String depth, Instant generatedAt,
+            Instant sourceCutoff, List<String> hypotheses, List<MarketResearchResult> markets,
+            List<AdaptiveCapabilityRecord> requestedCapabilities,
+            List<AdaptiveCapabilityRecord> executedCapabilities,
+            List<AdaptiveCapabilityRecord> rejectedCapabilities, List<String> limitations,
+            String modelProvenance, List<String> diagnostics, String conclusion) {
+        this(schemaVersion, objective, depth, generatedAt, sourceCutoff, hypotheses, markets,
+                requestedCapabilities, executedCapabilities, rejectedCapabilities, limitations,
+                modelProvenance, diagnostics, conclusion,
+                ResearchObjectiveType.COMPARATIVE_MARKET_RESEARCH, null, List.of());
+    }
+
     public ResearchReport {
         hypotheses = List.copyOf(hypotheses);
         markets = List.copyOf(markets);
@@ -30,6 +46,35 @@ public record ResearchReport(
         rejectedCapabilities = List.copyOf(rejectedCapabilities);
         limitations = List.copyOf(limitations);
         diagnostics = List.copyOf(diagnostics);
+        hypothesisProposals = hypothesisProposals == null ? List.of() : List.copyOf(hypothesisProposals);
+    }
+
+    public record HypothesisProposal(
+            UUID hypothesisId,
+            int version,
+            UUID marketId,
+            String observedBehavior,
+            String proposedRelationship,
+            String expectedOutcome,
+            String evaluationHorizon,
+            List<String> applicabilityConditions,
+            List<String> falsificationConditions,
+            List<UUID> supportingEvidenceReferences,
+            List<String> contradictions,
+            List<String> missingEvidence,
+            List<String> limitations,
+            String validationStatus,
+            String generator
+    ) {
+        public HypothesisProposal {
+            applicabilityConditions = applicabilityConditions == null ? List.of() : List.copyOf(applicabilityConditions);
+            falsificationConditions = falsificationConditions == null ? List.of() : List.copyOf(falsificationConditions);
+            supportingEvidenceReferences = supportingEvidenceReferences == null
+                    ? List.of() : List.copyOf(supportingEvidenceReferences);
+            contradictions = contradictions == null ? List.of() : List.copyOf(contradictions);
+            missingEvidence = missingEvidence == null ? List.of() : List.copyOf(missingEvidence);
+            limitations = limitations == null ? List.of() : List.copyOf(limitations);
+        }
     }
 
     public record AdaptiveCapabilityRecord(

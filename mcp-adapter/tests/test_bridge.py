@@ -39,7 +39,9 @@ def request(server, method, path, payload=None):
     return response.status, json.loads(content) if content else None
 
 
-def test_challenge_is_single_use(bridge_server, monkeypatch):
+def test_challenge_is_single_use(bridge_server, monkeypatch, tmp_path):
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(tmp_path / "credential"))
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
     monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
         "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: "token"})()}
     )())
@@ -63,6 +65,7 @@ def test_bridge_rejects_untrusted_origin(bridge_server):
 def test_successful_pairing_persists_credential_for_fresh_process(bridge_server, monkeypatch, tmp_path):
     credential_file = tmp_path / "mcp-agent-credential"
     monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
     monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
         "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: "token"})()}
     )())
@@ -77,6 +80,7 @@ def test_successful_pairing_persists_credential_for_fresh_process(bridge_server,
     )[0] == 204
     assert load_runtime_credential() == "opaque-credential"
     assert credential_file.stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "binding.json").stat().st_mode & 0o777 == 0o600
 
 
 def test_bridge_recovers_persisted_credential_on_startup(monkeypatch, tmp_path):
@@ -84,6 +88,7 @@ def test_bridge_recovers_persisted_credential_on_startup(monkeypatch, tmp_path):
     credential_file.write_text("opaque-credential", encoding="utf-8")
     credential_file.chmod(0o600)
     monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
     monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
         "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: "token"})()}
     )())
@@ -91,6 +96,24 @@ def test_bridge_recovers_persisted_credential_on_startup(monkeypatch, tmp_path):
     state = BridgeState(recover=True)
 
     assert state.connected() is True
+    assert (tmp_path / "binding.json").exists()
+
+
+def test_bridge_reconnect_does_not_issue_or_rotate_credential(monkeypatch, tmp_path):
+    credential_file = tmp_path / "mcp-agent-credential"
+    credential_file.write_text("opaque-credential", encoding="utf-8")
+    credential_file.chmod(0o600)
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
+    monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
+        "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: "token"})()}
+    )())
+
+    state = BridgeState()
+    state.reconnect()
+
+    assert state.connected() is True
+    assert load_runtime_credential() == "opaque-credential"
 
 
 def test_bridge_does_not_mark_invalid_persisted_credential_connected(monkeypatch, tmp_path):
@@ -98,6 +121,7 @@ def test_bridge_does_not_mark_invalid_persisted_credential_connected(monkeypatch
     credential_file.write_text("invalid-credential", encoding="utf-8")
     credential_file.chmod(0o600)
     monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
 
     def reject():
         from app.client import GatewayClientError
@@ -110,3 +134,47 @@ def test_bridge_does_not_mark_invalid_persisted_credential_connected(monkeypatch
     state = BridgeState(recover=True)
 
     assert state.connected() is False
+
+
+def test_bridge_reconnect_reports_environment_mismatch(monkeypatch, tmp_path):
+    credential_file = tmp_path / "mcp-agent-credential"
+    credential_file.write_text("opaque-credential", encoding="utf-8")
+    credential_file.chmod(0o600)
+    binding_file = tmp_path / "binding.json"
+    binding_file.write_text(
+        '{"gatewayAuthority":"https://other.example","jwtAudience":null,"jwtIssuer":null,"schemaVersion":1}\n',
+        encoding="utf-8",
+    )
+    binding_file.chmod(0o600)
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(binding_file))
+    monkeypatch.setenv("TRADING_OS_GATEWAY_URL", "https://gateway.example")
+
+    state = BridgeState()
+
+    with pytest.raises(Exception) as error:
+        state.reconnect()
+
+    assert error.value.code == "ENVIRONMENT_MISMATCH"
+
+
+def test_reconnect_endpoint_reports_missing_credential_without_secret(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(tmp_path / "missing"))
+    monkeypatch.setenv("TRADING_OS_AGENT_AUTHORITY_FILE", str(tmp_path / "binding.json"))
+    handler = type("MissingCredentialBridgeHandler", (BridgeHandler,), {})
+    handler.state = BridgeState()
+    handler.allowed_origins = {"http://localhost:4200"}
+    from http.server import ThreadingHTTPServer
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, payload = request(server, "POST", "/v1/reconnect", {})
+    finally:
+        server.shutdown()
+        thread.join()
+
+    assert status == 401
+    assert payload["error"]["code"] == "CREDENTIAL_MISSING"
+    assert "opaque-credential" not in json.dumps(payload["error"])

@@ -22,6 +22,8 @@ public final class ResearchExecution {
     private final List<UUID> marketIds;
     private final String objective;
     private final String depth;
+    private final ResearchObjectiveType objectiveType;
+    private final ResearchTemporalScope temporalScope;
     private final ResearchExecutionStatus status;
     private final Instant requestedAt;
     private final Instant updatedAt;
@@ -36,7 +38,8 @@ public final class ResearchExecution {
             UUID researchId, UUID actorId, UUID researchScopeId, UUID ownerUserId, UUID initiatingAgentId,
             UUID credentialId, UUID grantId, Long grantVersion, Integer credentialVersion,
             String idempotencyKey, String requestFingerprint, List<UUID> marketIds, String objective,
-            String depth, ResearchExecutionStatus status, Instant requestedAt, Instant updatedAt,
+            String depth, ResearchObjectiveType objectiveType, ResearchTemporalScope temporalScope,
+            ResearchExecutionStatus status, Instant requestedAt, Instant updatedAt,
             Instant completedAt, String failureCode, JsonNode report, int attemptCount,
             ResearchExecutionStage currentStage, Instant lastProgressAt) {
         this.researchId = Objects.requireNonNull(researchId);
@@ -53,6 +56,8 @@ public final class ResearchExecution {
         this.marketIds = List.copyOf(marketIds);
         this.objective = required(objective, "objective");
         this.depth = required(depth, "depth");
+        this.objectiveType = Objects.requireNonNull(objectiveType, "objectiveType");
+        this.temporalScope = temporalScope;
         this.status = Objects.requireNonNull(status);
         this.requestedAt = Objects.requireNonNull(requestedAt);
         this.updatedAt = Objects.requireNonNull(updatedAt);
@@ -76,6 +81,7 @@ public final class ResearchExecution {
             String requestFingerprint, List<UUID> marketIds, String objective, String depth, Instant now) {
         return new ResearchExecution(researchId, actorId, researchScopeId, null, null, null, null, null, null,
                 idempotencyKey, requestFingerprint, marketIds, objective, depth,
+                ResearchObjectiveType.COMPARATIVE_MARKET_RESEARCH, null,
                 ResearchExecutionStatus.REQUESTED, now, now, null, null, null,
                 0, ResearchExecutionStage.QUEUED, now);
     }
@@ -149,7 +155,21 @@ public final class ResearchExecution {
             String objective, String depth, Instant now) {
         return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
                 credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
-                marketIds, objective, depth, ResearchExecutionStatus.REQUESTED, now, now, null, null, null,
+                marketIds, objective, depth, ResearchObjectiveType.COMPARATIVE_MARKET_RESEARCH, null,
+                ResearchExecutionStatus.REQUESTED, now, now, null, null, null,
+                0, ResearchExecutionStage.QUEUED, now);
+    }
+
+    public static ResearchExecution requestedWithProvenance(
+            UUID researchId, UUID actorId, UUID researchScopeId, UUID ownerUserId, UUID initiatingAgentId,
+            UUID credentialId, UUID grantId, Long grantVersion, Integer credentialVersion,
+            String idempotencyKey, String requestFingerprint, List<UUID> marketIds,
+            String objective, String depth, ResearchObjectiveType objectiveType,
+            ResearchTemporalScope temporalScope, Instant now) {
+        return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
+                credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
+                marketIds, objective, depth, objectiveType, temporalScope,
+                ResearchExecutionStatus.REQUESTED, now, now, null, null, null,
                 0, ResearchExecutionStage.QUEUED, now);
     }
 
@@ -174,8 +194,23 @@ public final class ResearchExecution {
             ResearchExecutionStage currentStage, Instant lastProgressAt) {
         return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
                 credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
-                marketIds, objective, depth, status, requestedAt, updatedAt, completedAt, failureCode, report,
+                marketIds, objective, depth, ResearchObjectiveType.COMPARATIVE_MARKET_RESEARCH, null,
+                status, requestedAt, updatedAt, completedAt, failureCode, report,
                 attemptCount, currentStage, lastProgressAt);
+    }
+
+    public static ResearchExecution restoreWithObservability(
+            UUID researchId, UUID actorId, UUID researchScopeId, UUID ownerUserId, UUID initiatingAgentId,
+            UUID credentialId, UUID grantId, Long grantVersion, Integer credentialVersion,
+            String idempotencyKey, String requestFingerprint, List<UUID> marketIds, String objective,
+            String depth, ResearchObjectiveType objectiveType, ResearchTemporalScope temporalScope,
+            ResearchExecutionStatus status, Instant requestedAt, Instant updatedAt,
+            Instant completedAt, String failureCode, JsonNode report, int attemptCount,
+            ResearchExecutionStage currentStage, Instant lastProgressAt) {
+        return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
+                credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
+                marketIds, objective, depth, objectiveType, temporalScope, status, requestedAt, updatedAt,
+                completedAt, failureCode, report, attemptCount, currentStage, lastProgressAt);
     }
 
     private ResearchExecution copy(ResearchExecutionStatus nextStatus, Instant nextUpdatedAt,
@@ -184,7 +219,7 @@ public final class ResearchExecution {
                                    Instant nextProgressAt) {
         return new ResearchExecution(researchId, actorId, researchScopeId, ownerUserId, initiatingAgentId,
                 credentialId, grantId, grantVersion, credentialVersion, idempotencyKey, requestFingerprint,
-                marketIds, objective, depth, nextStatus, requestedAt, nextUpdatedAt, nextCompletedAt,
+                marketIds, objective, depth, objectiveType, temporalScope, nextStatus, requestedAt, nextUpdatedAt, nextCompletedAt,
                 nextFailureCode, nextReport, nextAttemptCount, nextStage, nextProgressAt);
     }
 
@@ -220,6 +255,8 @@ public final class ResearchExecution {
     public List<UUID> marketIds() { return marketIds; }
     public String objective() { return objective; }
     public String depth() { return depth; }
+    public ResearchObjectiveType objectiveType() { return objectiveType; }
+    public ResearchTemporalScope temporalScope() { return temporalScope; }
     public ResearchExecutionStatus status() { return status; }
     public Instant requestedAt() { return requestedAt; }
     public Instant updatedAt() { return updatedAt; }

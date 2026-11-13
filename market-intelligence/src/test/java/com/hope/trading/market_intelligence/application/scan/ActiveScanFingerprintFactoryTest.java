@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,6 +47,22 @@ class ActiveScanFingerprintFactoryTest {
         String second = factory.fingerprint(actorId, accountId, "other", List.of(marketId));
 
         assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
+    void fingerprintChangesWhenTradeabilityProfileChanges() {
+        UUID actorId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+
+        String unsupported = factory.fingerprint(actorId, accountId, "scan", List.of(marketId),
+                com.hope.trading.market_intelligence.domain.scope.MarketScopeMode.SELECTED,
+                TradeabilityEvidenceProfile.UNSUPPORTED);
+        String forexQuote = factory.fingerprint(actorId, accountId, "scan", List.of(marketId),
+                com.hope.trading.market_intelligence.domain.scope.MarketScopeMode.SELECTED,
+                TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC);
+
+        assertThat(unsupported).isNotEqualTo(forexQuote);
     }
 
     @Test

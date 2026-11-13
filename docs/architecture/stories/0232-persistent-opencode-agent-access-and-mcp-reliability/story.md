@@ -4,7 +4,8 @@
 
 **ID:** `0232`
 **Title:** Persistent OpenCode Agent Access and MCP Reliability
-**Status:** Implementation complete - runtime validation partial; review pending
+**Status:** Implementation locally present - deterministic validation passed;
+runtime validation partial; review pending
 **Priority:** P0 - Agent Platform Reliability
 **Related ADRs:** `ADR-088`, `ADR-090`, `ADR-098`, `ADR-099`
 
@@ -73,34 +74,42 @@ sanitized and traceable.
 
 ## Implementation Tasks
 
-- [ ] Confirm and implement bridge startup credential recovery.
-- [ ] Coordinate token renewal and classify revoked versus expired access.
-- [ ] Add structured MCP error and correlation contracts.
-- [ ] Preserve bounded `list_markets` filtering and response-size protection.
-- [ ] Diagnose and correct `get_authorized_positions` mapping/read behavior.
-- [ ] Separate read authorization from account facts completeness.
-- [ ] Remove only redundant ordinary reconnect UI behavior.
-- [ ] Add unit, integration and regression tests.
+- [x] Confirm and implement bridge startup credential recovery.
+- [x] Coordinate token renewal and classify revoked versus expired access.
+- [x] Add structured MCP error and correlation contracts.
+- [x] Preserve bounded `list_markets` filtering and response-size protection.
+- [x] Diagnose and correct `get_authorized_positions` mapping/read behavior.
+- [x] Separate read authorization from account facts completeness.
+- [x] Remove only redundant ordinary reconnect UI behavior; retain explicit
+      rotation/recovery.
+- [x] Persist non-secret authority binding metadata and fail closed on mismatch.
+- [x] Separate Reconnect from explicit Rotate and Recover operations.
+- [x] Add unit, integration and regression tests.
 - [ ] Run read-only LIVE validation and record evidence.
 
 ## Acceptance Criteria
 
 - [ ] An existing ACTIVE agent reconnects after OpenCode restart without UI
-      approval or creation of a new identity.
-- [ ] MCP Adapter restart reloads the valid opaque credential and exchanges a
-      fresh short-lived JWT.
-- [ ] JWT expiry renews automatically for permitted GET operations.
-- [ ] Concurrent refresh does not create a refresh storm or duplicate identity.
-- [ ] Revoked agents, credentials and grants fail closed.
-- [ ] `list_markets` succeeds for bounded EUR/USD filtering.
-- [ ] `get_authorized_positions` succeeds or returns a meaningful sanitized
+      approval or creation of a new identity. Deterministic recovery and a
+      post-Connect restart passed; uninterrupted standard-runtime continuity
+      with the current credential was not established.
+- [x] MCP Adapter restart reloads the valid opaque credential and exchanges a
+      fresh short-lived JWT in deterministic bridge tests.
+- [x] JWT expiry renews automatically for permitted GET operations.
+- [x] Concurrent refresh does not create a refresh storm or duplicate identity.
+- [x] Revoked agents, credentials and grants fail closed.
+- [x] `list_markets` succeeds for bounded EUR/USD filtering after the standard
+      service rebuild.
+- [x] `get_authorized_positions` succeeds or returns a meaningful sanitized
       domain-specific error with status and correlation information.
-- [ ] Account details and status remain readable when permitted even if risk or
+- [x] Account details and status remain readable when permitted even if risk or
       execution facts are incomplete, where the contract allows it.
-- [ ] `executionAllowed` and `riskEvaluationAllowed` are not loosened.
-- [ ] No broker mutation or execution authorization is created by validation.
-- [ ] Diagnostics contain no credential, JWT, cookie, stack trace or provider
+- [x] `executionAllowed` and `riskEvaluationAllowed` are not loosened.
+- [x] No broker mutation or execution authorization is created by validation.
+- [x] Diagnostics contain no credential, JWT, cookie, stack trace or provider
       secret.
+- [x] Independent installations use separate local authority bindings; multiple
+      active credentials per identity remain unsupported.
 
 ## Validation and Rollback
 

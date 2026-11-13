@@ -85,7 +85,8 @@ public class ActiveScanCreationTransaction {
                 command.idempotencyKey(), fingerprint, snapshot, createdAt
         );
         scans.save(scan);
-        scans.saveMarkets(buildMarkets(scan, resolved, resolved.assessmentCutoff()));
+        scans.saveMarkets(buildMarkets(scan, resolved, resolved.assessmentCutoff(),
+                command.tradeabilityEvidenceProfile()));
         registerAfterCommitIfNeeded(scan);
         return scan;
     }
@@ -99,7 +100,8 @@ public class ActiveScanCreationTransaction {
     private List<ActiveScanMarket> buildMarkets(
             ActiveScan scan,
             ActiveScanScopeResolutionResult resolved,
-            Instant now
+            Instant now,
+            com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile profile
     ) {
         List<ActiveScanMarket> markets = new ArrayList<>();
         int ordinal = 0;
@@ -125,7 +127,7 @@ public class ActiveScanCreationTransaction {
                             scanMarketId,
                             now,
                              EvidenceAcquisitionPolicy.LIVE_CURRENT
-                    ),
+                    ).withTradeabilityEvidenceProfile(profile),
                     childKeys.forMarket(scan.scanId(), decision.marketId()),
                     scan.scanId().toString(),
                     scan.scanId().toString()

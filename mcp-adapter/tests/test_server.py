@@ -93,6 +93,7 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
                 "objective": "Scan BTC",
                 "market_ids": ["00000000-0000-0000-0000-000000000001"],
                 "idempotency_key": "scan-btc-1",
+                "tradeability_evidence_profile": "FOREX_QUOTE_BASIC",
             },
         )
         await client.call_tool(
@@ -261,6 +262,7 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
     assert fake_client.post_calls[0][0] == "/api/v1/intelligence/scans"
     assert fake_client.post_calls[0][1]["accountId"] == "00000000-0000-0000-0000-000000000005"
     assert fake_client.post_calls[0][1]["brokerAccountId"] == "00000000-0000-0000-0000-000000000004"
+    assert fake_client.post_calls[0][1]["tradeabilityEvidenceProfile"] == "FOREX_QUOTE_BASIC"
     assert fake_client.post_calls[0][2] == "scan-btc-1"
     assert fake_client.post_calls[2][0].endswith("/versions/1")
     assert fake_client.post_calls[3][0] == "/api/v1/agent/trade-plan-approvals"

@@ -157,8 +157,8 @@
       <p class="eyebrow">Explicit grants</p>
       <h2 id="configured-agents-title">Agents configurés</h2>
       <p class="muted">
-        Les agents OpenCode actifs récupèrent automatiquement leur session après expiration ou
-        redémarrage.
+        Reconnecter restaure une session existante. Rotation et récupération invalident le
+        credential précédent et nécessitent une action humaine.
       </p>
     </div>
     <button type="button" class="secondary-button" (click)="reload()" [disabled]="busy()">
@@ -243,10 +243,26 @@
                 <button
                   type="button"
                   class="secondary-button"
-                  (click)="connectAgent(agent)"
+                  (click)="reconnectAgent(agent)"
                   [disabled]="busy()"
                 >
-                  Rotation / récupération OpenCode
+                  Reconnecter OpenCode
+                </button>
+                <button
+                  type="button"
+                  class="secondary-button"
+                  (click)="rotateAgent(agent)"
+                  [disabled]="busy()"
+                >
+                  Rotation credential
+                </button>
+                <button
+                  type="button"
+                  class="secondary-button"
+                  (click)="recoverAgent(agent)"
+                  [disabled]="busy()"
+                >
+                  Récupérer credential perdu
                 </button>
               }
               <button

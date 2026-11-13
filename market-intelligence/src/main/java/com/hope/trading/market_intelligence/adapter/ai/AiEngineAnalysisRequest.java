@@ -36,7 +36,8 @@ record AiEngineAnalysisRequest(
                 command.executionId(), command.capabilities(), AuthorizedContextWire.from(command.authorizedContext()),
                 MarketThesisWire.from(command.thesis()),
                 PolicyWire.from(command.policy(), contextLimitBytes, maxOutputTokens),
-                TraceWire.from(command.trace()), command.adaptive()
+                TraceWire.from(command.trace()), command.phase() == AiInterpretationPhase.HYPOTHESIS_DISCOVERY
+                        ? "HYPOTHESIS_DISCOVERY" : command.adaptive()
                         || command.phase() == AiInterpretationPhase.FINAL_SYNTHESIS
                         ? "ADAPTIVE_RESEARCH" : "THESIS_INTERPRETATION",
                 command.executionId().toString(), command.phase(), command.synthesisContext());

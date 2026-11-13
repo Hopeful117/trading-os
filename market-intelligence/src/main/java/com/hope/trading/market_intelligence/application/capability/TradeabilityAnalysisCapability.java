@@ -71,10 +71,15 @@ public final class TradeabilityAnalysisCapability
                 .flatMap(Collection::stream).toList();
         Instant cutoff = java.util.Objects.requireNonNull(context.evaluationCutoff(),
                 "evaluationCutoff is required for deterministic tradeability execution");
+        boolean forexQuoteBasicLiveCurrent = context.parameters().get("evidencePolicy")
+                == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                && context.parameters().get("tradeabilityEvidenceProfile")
+                == TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC;
         if (artifacts.isEmpty()
                 || artifacts.stream().map(StoredArtifact::provenance)
                 .anyMatch(provenance -> provenance.evidencePolicy() == null
-                        || provenance.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                        || (provenance.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
+                        && !forexQuoteBasicLiveCurrent)
                         || !cutoff.equals(provenance.evaluationCutoff()))) {
             throw new IllegalStateException(
                     "Tradeability requires approved non-live evidence provenance at the execution cutoff");

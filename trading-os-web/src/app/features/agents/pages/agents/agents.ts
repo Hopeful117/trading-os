@@ -219,16 +219,50 @@ export class Agents {
       });
   }
 
-  connectAgent(agent: Agent): void {
+  reconnectAgent(agent: Agent): void {
     if (this.busy() || agent.status !== 'ACTIVE' || agent.agentType !== 'OPENCODE') return;
     this.busy.set(true);
     this.feedback.set(null);
-    this.agentService.connectToOpenCode(agent.id).subscribe({
-      next: () => this.finishAction(`Agent ${agent.displayName} connecté à OpenCode.`),
+    this.agentService.reconnectToOpenCode().subscribe({
+      next: () => this.finishAction(`Session OpenCode rétablie pour ${agent.displayName}.`),
       error: () =>
         this.failAction(
-          'La récupération OpenCode a échoué. La reconnexion automatique reste fail-closed; utilisez cette action uniquement pour une rotation ou une récupération explicite.',
+          'La reconnexion OpenCode a échoué. Vérifiez l’autorité configurée ou utilisez une récupération humaine explicite.',
         ),
+    });
+  }
+
+  rotateAgent(agent: Agent): void {
+    if (this.busy() || agent.status !== 'ACTIVE' || agent.agentType !== 'OPENCODE') return;
+    if (
+      !window.confirm(
+        `Le credential OpenCode de « ${agent.displayName} » sera remplacé et l’ancien deviendra invalide. Continuer ?`,
+      )
+    )
+      return;
+    this.busy.set(true);
+    this.feedback.set(null);
+    this.agentService.rotateOpenCodeCredential(agent.id).subscribe({
+      next: () =>
+        this.finishAction('Credential OpenCode renouvelé; le précédent est désormais invalide.'),
+      error: () => this.failAction('La rotation du credential OpenCode a échoué.'),
+    });
+  }
+
+  recoverAgent(agent: Agent): void {
+    if (this.busy() || agent.status !== 'ACTIVE' || agent.agentType !== 'OPENCODE') return;
+    if (
+      !window.confirm(
+        `Récupérer le credential perdu de « ${agent.displayName} » ? Les grants existants seront conservés.`,
+      )
+    )
+      return;
+    this.busy.set(true);
+    this.feedback.set(null);
+    this.agentService.recoverLostOpenCodeCredential(agent.id).subscribe({
+      next: () =>
+        this.finishAction('Credential OpenCode récupéré; les grants existants sont conservés.'),
+      error: () => this.failAction('La récupération humaine du credential OpenCode a échoué.'),
     });
   }
 

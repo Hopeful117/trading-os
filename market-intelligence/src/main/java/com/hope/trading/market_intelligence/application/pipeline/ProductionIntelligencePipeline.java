@@ -11,6 +11,7 @@ import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
+import com.hope.trading.market_intelligence.domain.thesis.MarketThesisScenario;
 import com.hope.trading.market_intelligence.strategy.application.BuiltinStrategies;
 import com.hope.trading.market_intelligence.strategy.application.LiveStrategyEvaluationRunner;
 import com.hope.trading.market_intelligence.strategy.application.ShadowStrategyParityMonitor;
@@ -212,11 +213,13 @@ public class ProductionIntelligencePipeline {
                 TradingOpportunity opportunity = handleMatch(
                         evaluation, definition, analysisExecutionId, strategyEvidence,
                         instrument, mode, request, thesis);
-                createdOpportunities.add(opportunity);
-                completionEvidence = strategyEvidence;
-                log.info("Strategy {}v{} MATCH for market {}: created opportunity {}",
-                        definition.name(), definition.version(), marketId,
-                        opportunity.id());
+                if (opportunity != null) {
+                    createdOpportunities.add(opportunity);
+                    completionEvidence = strategyEvidence;
+                    log.info("Strategy {}v{} MATCH for market {}: created opportunity {}",
+                            definition.name(), definition.version(), marketId,
+                            opportunity.id());
+                }
             } else if (evaluation.status() == StrategyEvaluationStatus.NO_MATCH) {
                 log.debug("Strategy {}v{} NO_MATCH for market {}",
                         definition.name(), definition.version(), marketId);
@@ -266,6 +269,12 @@ public class ProductionIntelligencePipeline {
     ) {
         var persisted = matches.persist(
                 evaluation, analysisExecutionId, observation.id()).orElseThrow();
+        if (!directionCompatible(persisted.match(), thesis)) {
+            log.warn("Skipping opportunity for strategy match {} because its direction {} "
+                            + "does not match Market Thesis direction",
+                    persisted.match().matchId(), persisted.match().direction());
+            return null;
+        }
         ReferencePrice reference = referencePriceOf(observation);
         CreateOpportunityCommand command;
         if (request.accountId() == null) {
@@ -294,6 +303,19 @@ public class ProductionIntelligencePipeline {
         TradingOpportunity analyzed = opportunities.transition(
                 created.opportunity().id(), OpportunityStatus.ANALYZED);
         return opportunities.transition(analyzed.id(), OpportunityStatus.ACTIVE);
+    }
+
+    private static boolean directionCompatible(
+            com.hope.trading.market_intelligence.strategy.domain.StrategyMatch match,
+            MarketThesis thesis) {
+        return thesis != null && thesis.scenario()
+                .map(MarketThesisScenario::direction)
+                .map(direction -> switch (direction) {
+                    case LONG -> match.direction().name().equals("LONG");
+                    case SHORT -> match.direction().name().equals("SHORT");
+                    case NONE -> false;
+                })
+                .orElse(false);
     }
 
     /**

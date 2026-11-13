@@ -47,8 +47,12 @@ class ChatGptOAuthProvider:
                 "max_output_tokens": min(request.policy.max_output_tokens, self._config.max_output_tokens),
                 "input": [
                     {"role": "system", "content": (
-                        "Return only JSON matching the requested schema. Never invent evidence or market facts. "
-                        "Evidence references must be copied exactly from this authorized list: "
+                        ("Interpret the supplied deterministic Market Thesis. "
+                         if request.thesis is not None
+                         else "Discover a falsifiable relationship from the supplied bounded research context. ")
+                        + "Return only JSON matching the requested schema. Never invent evidence or market facts. "
+                         "For HYPOTHESIS_DISCOVERY return complete hypothesis_proposals items only when supported by authorized evidence; otherwise return an empty list. "
+                         "Evidence references must be copied exactly from this authorized list: "
                         + json.dumps(evidence_ids)
                     )},
                     {"role": "user", "content": json.dumps(request.model_dump(mode="json", exclude={"policy", "trace"}))},
@@ -65,7 +69,8 @@ class ChatGptOAuthProvider:
 
     @staticmethod
     def _authorized_evidence_ids(request: InterpretationRequest) -> list[str]:
-        evidence_ids = {str(item.evidence_id) for item in request.thesis.evidence}
+        evidence_ids = ({str(item.evidence_id) for item in request.thesis.evidence}
+                        if request.thesis is not None else set())
         if request.synthesis_context is not None:
             for finding in request.synthesis_context.initial_findings:
                 evidence_ids.update(str(value) for value in finding.evidence_references)

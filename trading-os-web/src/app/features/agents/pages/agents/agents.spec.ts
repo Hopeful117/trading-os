@@ -12,6 +12,9 @@ describe('Agents', () => {
     create: ReturnType<typeof vi.fn>;
     issueCredential: ReturnType<typeof vi.fn>;
     connectToOpenCode: ReturnType<typeof vi.fn>;
+    reconnectToOpenCode: ReturnType<typeof vi.fn>;
+    rotateOpenCodeCredential: ReturnType<typeof vi.fn>;
+    recoverLostOpenCodeCredential: ReturnType<typeof vi.fn>;
     listGrants: ReturnType<typeof vi.fn>;
     createGrant: ReturnType<typeof vi.fn>;
     listResearchScopes: ReturnType<typeof vi.fn>;
@@ -31,6 +34,9 @@ describe('Agents', () => {
       create: vi.fn(),
       issueCredential: vi.fn(),
       connectToOpenCode: vi.fn(),
+      reconnectToOpenCode: vi.fn(),
+      rotateOpenCodeCredential: vi.fn(),
+      recoverLostOpenCodeCredential: vi.fn(),
       listGrants: vi.fn(() => of([])),
       createGrant: vi.fn(),
       listResearchScopes: vi.fn(() => of([])),
@@ -213,19 +219,37 @@ describe('Agents', () => {
     );
   });
 
-  it('connects an existing active OpenCode agent without exposing a credential', () => {
+  it('reconnects an existing active OpenCode agent without issuing a credential', () => {
     const agent = {
       id: 'agent-1',
       displayName: 'Research assistant',
       agentType: 'OPENCODE',
       status: 'ACTIVE',
     } as never;
-    agentService.connectToOpenCode.mockReturnValue(of(undefined));
+    agentService.reconnectToOpenCode.mockReturnValue(of(undefined));
 
-    component.connectAgent(agent);
+    component.reconnectAgent(agent);
 
-    expect(agentService.connectToOpenCode).toHaveBeenCalledWith('agent-1');
-    expect(fixture.nativeElement.textContent).not.toContain('credential');
+    expect(agentService.reconnectToOpenCode).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.textContent).not.toContain('opaque-test-credential');
+  });
+
+  it('keeps rotation and lost-credential recovery as explicit actions', () => {
+    const agent = {
+      id: 'agent-1',
+      displayName: 'Research assistant',
+      agentType: 'OPENCODE',
+      status: 'ACTIVE',
+    } as never;
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    agentService.rotateOpenCodeCredential.mockReturnValue(of(undefined));
+    agentService.recoverLostOpenCodeCredential.mockReturnValue(of(undefined));
+
+    component.rotateAgent(agent);
+    expect(agentService.rotateOpenCodeCredential).toHaveBeenCalledWith('agent-1');
+
+    component.recoverAgent(agent);
+    expect(agentService.recoverLostOpenCodeCredential).toHaveBeenCalledWith('agent-1');
   });
 
   it('approves and rejects pending operation requests through the human workflow', () => {

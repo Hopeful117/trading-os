@@ -3,6 +3,8 @@ package com.hope.trading.market_intelligence.domain.tradeability;
 import com.hope.trading.market_intelligence.domain.ContextSection;
 import com.hope.trading.market_intelligence.domain.ContextSectionStatus;
 import com.hope.trading.market_intelligence.domain.ContextSensitivity;
+import com.hope.trading.market_intelligence.domain.ContextProvenance;
+import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.MarketSnapshotContext;
 import com.hope.trading.market_intelligence.domain.NewsContext;
 import com.hope.trading.market_intelligence.domain.NewsEventContext;
@@ -27,15 +29,24 @@ class TradeabilityCalculatorTest {
 
     @Test
     void observesSpreadWithoutInventingSuitability() {
+        ContextProvenance provenance = new ContextProvenance(
+                "ctrader-market-data", CUTOFF.minusSeconds(1), CUTOFF.minusSeconds(1),
+                "provider-symbol-1", "v1", "normalization-v1",
+                EvidenceAcquisitionPolicy.LIVE_CURRENT, "quote-fingerprint", 1, CUTOFF);
         TradeabilityAssessment result = calculator.calculate(
                 MARKET_ID, "EUR/USD", CUTOFF,
                 section(new MarketSnapshotContext(MARKET_ID, "EUR/USD",
                         new BigDecimal("1.1001"), new BigDecimal("1.1000"),
-                        new BigDecimal("1.1002"), true, CUTOFF)),
+                        new BigDecimal("1.1002"), true, CUTOFF), provenance),
                 null, null, null);
 
         assertThat(result.evidence()).anyMatch(value -> value.code().equals("SPREAD_OBSERVED")
-                && value.role() == TradeabilityAssessment.Role.INFORMATIONAL);
+                && value.role() == TradeabilityAssessment.Role.INFORMATIONAL
+                && value.provider().equals("ctrader-market-data")
+                && value.instrument().equals("EUR/USD")
+                && value.sourceCutoff().equals(CUTOFF)
+                && value.sourceFingerprint().equals("quote-fingerprint")
+                && value.observedAt().equals(CUTOFF));
         assertThat(result.evidence()).anyMatch(value -> value.code().equals("SPREAD_POLICY_UNAVAILABLE")
                 && value.availability() == MarketThesisAvailability.NOT_IMPLEMENTED);
         assertThat(result.evidence()).noneMatch(value -> value.role() == TradeabilityAssessment.Role.BLOCKING);
@@ -204,6 +215,11 @@ class TradeabilityCalculatorTest {
     }
 
     private ContextSection section(com.hope.trading.market_intelligence.domain.ContextPayload payload) {
+        return section(payload, null);
+    }
+
+    private ContextSection section(com.hope.trading.market_intelligence.domain.ContextPayload payload,
+                                   ContextProvenance provenance) {
         return new ContextSection(
                 payload instanceof MarketSnapshotContext
                         ? com.hope.trading.market_intelligence.domain.ContextSectionType.MARKET_SNAPSHOT
@@ -212,6 +228,6 @@ class TradeabilityCalculatorTest {
                         : payload instanceof OrderBookContext
                         ? com.hope.trading.market_intelligence.domain.ContextSectionType.ORDER_BOOK
                         : com.hope.trading.market_intelligence.domain.ContextSectionType.NEWS,
-                ContextSectionStatus.AVAILABLE, ContextSensitivity.PUBLIC, payload, null, null);
+                ContextSectionStatus.AVAILABLE, ContextSensitivity.PUBLIC, payload, provenance, null);
     }
 }

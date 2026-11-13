@@ -54,18 +54,30 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
     @Override
     public ContextSection contribute(IntelligenceAnalysisRequest request) {
         OhlcEvidenceSource selectedSource = source(request);
-        int limit = request.historicalEvidenceSelection() == null ? ACTIVE_LIMIT
-                : Math.toIntExact(request.historicalEvidenceSelection().lines()
+        String interval = interval(request);
+        boolean boundSelection = request.historicalEvidenceSelection() != null
+                && request.historicalEvidenceSelection().lines().anyMatch(value -> value.startsWith("TRIGGER|"));
+        int limit = boundSelection ? Math.toIntExact(request.historicalEvidenceSelection().lines()
                 .filter(value -> value.startsWith("TRIGGER|"))
-                .count());
+                .count()) : ACTIVE_LIMIT;
         if (limit <= 0) {
             throw new IllegalStateException("Historical preflight selection is missing TRIGGER evidence");
         }
-        OhlcEvidenceSource.OhlcEvidenceBatch batch = request.historicalEvidenceSelection() == null
-                ? selectedSource.acquire(request.marketId(), ACTIVE_INTERVAL, limit,
-                request.evaluationCutoff())
-                : selectedSource.acquire(request.marketId(), ACTIVE_INTERVAL, limit,
-                request.evaluationCutoff(), request.historicalEvidenceSelection(), "TRIGGER");
+        Instant rangeStart = rangeStart(request);
+        OhlcEvidenceSource.OhlcEvidenceBatch batch;
+        if (boundSelection && rangeStart != null) {
+            batch = selectedSource.acquire(request.marketId(), interval, limit, rangeStart,
+                    request.evaluationCutoff(), request.historicalEvidenceSelection(), "TRIGGER");
+        } else if (boundSelection) {
+            batch = selectedSource.acquire(request.marketId(), interval, limit,
+                    request.evaluationCutoff(), request.historicalEvidenceSelection(), "TRIGGER");
+        } else if (rangeStart != null) {
+            batch = selectedSource.acquire(request.marketId(), interval, limit, rangeStart,
+                    request.evaluationCutoff(), null, null);
+        } else {
+            batch = selectedSource.acquire(request.marketId(), interval, limit,
+                    request.evaluationCutoff());
+        }
         List<OhlcResponse> response = batch.observations();
         boolean liveCurrentActive = request.evidencePolicy() == EvidenceAcquisitionPolicy.LIVE_CURRENT
                 && request.scanId() != null;
@@ -78,7 +90,8 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
         List<OhlcResponse> accepted = response.stream()
                 .filter(candle -> hasTemporalMetadata(candle)
                         && (liveCurrentActive || request.evaluationCutoff() == null
-                        || (!isAfter(candle.occurredAt(), request.evaluationCutoff())
+                        || ((rangeStart == null || !candle.closeTime().isBefore(rangeStart))
+                        && !isAfter(candle.occurredAt(), request.evaluationCutoff())
                         && !isAfter(candle.fetchedAt(), request.evaluationCutoff()))))
                 .sorted(Comparator.comparing(OhlcResponse::closeTime,
                                 Comparator.nullsLast(Comparator.naturalOrder()))
@@ -122,15 +135,15 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
                 ? sectionFactory.available(
                 sectionType(),
                 new HistoricalOhlcContext(
-                        request.marketId(), ACTIVE_INTERVAL, candles
+                        request.marketId(), interval, candles
                 ),
                 occurredAt,
                 accepted.stream().map(OhlcResponse::fetchedAt)
                         .filter(java.util.Objects::nonNull)
                         .max(Comparator.naturalOrder()).orElse(null))
                 : sectionFactory.historicalOhlcAvailableAt(
-                new HistoricalOhlcContext(request.marketId(), ACTIVE_INTERVAL, candles),
-                ACTIVE_INTERVAL,
+                new HistoricalOhlcContext(request.marketId(), interval, candles),
+                interval,
                 latestCloseTime,
                 occurredAt,
                 accepted.stream().map(OhlcResponse::fetchedAt)
@@ -169,6 +182,23 @@ public class HistoricalOhlcContextContributor implements ContextContributor {
     private OhlcEvidenceSource source(IntelligenceAnalysisRequest request) {
         return request.evidencePolicy() == EvidenceAcquisitionPolicy.STRICT_OBSERVED
                 ? historicalSource : liveSource;
+    }
+
+    private String interval(IntelligenceAnalysisRequest request) {
+        if (request.historicalEvidenceSelection() == null) return ACTIVE_INTERVAL;
+        return request.historicalEvidenceSelection().lines()
+                .filter(value -> value.startsWith("INTERVAL|"))
+                .map(value -> value.substring("INTERVAL|".length()))
+                .findFirst()
+                .orElse(ACTIVE_INTERVAL);
+    }
+
+    private Instant rangeStart(IntelligenceAnalysisRequest request) {
+        if (request.historicalEvidenceSelection() == null) return null;
+        return request.historicalEvidenceSelection().lines()
+                .filter(value -> value.startsWith("RANGE_START|"))
+                .map(value -> Instant.parse(value.substring("RANGE_START|".length())))
+                .findFirst().orElse(null);
     }
 
     private boolean isAfter(Instant value, Instant cutoff) {

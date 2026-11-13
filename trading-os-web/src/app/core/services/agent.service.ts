@@ -46,6 +46,18 @@ export class AgentService {
     );
   }
 
+  reconnectToOpenCode(): Observable<void> {
+    return this.http.post<void>(`${environment.mcpBridgeUrl}/v1/reconnect`, {});
+  }
+
+  rotateOpenCodeCredential(agentId: string): Observable<void> {
+    return this.connectToOpenCode(agentId);
+  }
+
+  recoverLostOpenCodeCredential(agentId: string): Observable<void> {
+    return this.connectToOpenCode(agentId);
+  }
+
   suspend(agentId: string): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/${agentId}/suspend`, {});
   }

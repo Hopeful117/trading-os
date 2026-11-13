@@ -68,10 +68,15 @@ public class HttpAiAnalysisCapability implements AiAnalysisCapability {
         return execute(request, context, false, AiInterpretationPhase.FINAL_SYNTHESIS, synthesisContext);
     }
 
+    public CapabilityAnalysisResult analyzeDiscovery(
+            IntelligenceAnalysisRequest request, IntelligenceContext context) {
+        return execute(request, context, false, AiInterpretationPhase.HYPOTHESIS_DISCOVERY, null);
+    }
+
     private CapabilityAnalysisResult execute(
             IntelligenceAnalysisRequest request, IntelligenceContext context, boolean adaptive,
             AiInterpretationPhase phase, AiSynthesisContext synthesisContext) {
-        if (request.thesis() == null) {
+        if (request.thesis() == null && phase != AiInterpretationPhase.HYPOTHESIS_DISCOVERY) {
             return CapabilityAnalysisResult.empty("Market Thesis is required for AI interpretation");
         }
         Instant deadline = Instant.now().plus(Duration.ofSeconds(30));
@@ -93,7 +98,8 @@ public class HttpAiAnalysisCapability implements AiAnalysisCapability {
                 var completed = result.orElseThrow();
                 CapabilityAnalysisResult interpreted = completed.result();
                 return new CapabilityAnalysisResult(interpreted.findings(), interpreted.warnings(),
-                        interpreted.requestedAnalysis(), interpreted.reconciliations(), completed.provenance());
+                        interpreted.requestedAnalysis(), interpreted.reconciliations(), completed.provenance(),
+                        interpreted.hypothesisProposals());
             }
             AiExecutionProgress progress = aiEnginePort.progress(reference);
             if ("FAILED".equals(progress.status()) || "CANCELLED".equals(progress.status())) {

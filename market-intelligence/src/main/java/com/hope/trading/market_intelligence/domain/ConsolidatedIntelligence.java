@@ -11,8 +11,18 @@ public record ConsolidatedIntelligence(
         List<ContextSectionSummary> contextSections,
         List<IntelligenceFinding> findings,
         List<String> warnings,
-        AnalysisExecutionMetadata executionMetadata
+        AnalysisExecutionMetadata executionMetadata,
+        IntelligenceContext context
 ) {
+    public ConsolidatedIntelligence(
+            UUID analysisId, UUID marketId, AnalysisExecutionMode mode,
+            IntelligenceExecutionStatus status, List<ContextSectionSummary> contextSections,
+            List<IntelligenceFinding> findings, List<String> warnings,
+            AnalysisExecutionMetadata executionMetadata) {
+        this(analysisId, marketId, mode, status, contextSections, findings, warnings,
+                executionMetadata, null);
+    }
+
     public ConsolidatedIntelligence {
         contextSections = immutableOrEmpty(contextSections);
         findings = immutableOrEmpty(findings);

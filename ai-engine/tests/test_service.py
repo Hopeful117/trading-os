@@ -19,6 +19,7 @@ from app.domain.models import (
     FollowUpEvidence,
     SynthesisContext,
     SynthesisFinding,
+    HypothesisProposal,
 )
 
 
@@ -149,6 +150,41 @@ class FinalSynthesisProvider:
 def test_unknown_evidence_reference_is_rejected():
     with pytest.raises(InvalidInterpretation):
         InterpretationService(InvalidReferenceProvider()).interpret(request_with([evidence()]))
+
+
+class InvalidHypothesisReferenceProvider:
+    def interpret(self, request):
+        return InterpretationDraft(
+            market_summary="summary",
+            primary_scenario="scenario",
+            supporting_arguments=[],
+            contradictions=[],
+            missing_information=[],
+            confirmation_conditions=[],
+            invalidation_conditions=[],
+            uncertainty=[],
+            suggested_decision="WAIT",
+            hypothesis_proposals=[HypothesisProposal(
+                hypothesis_id="h-1",
+                observed_behavior="observed",
+                proposed_relationship="relationship",
+                expected_outcome="outcome",
+                evaluation_horizon=["4h"],
+                applicability_conditions=["condition"],
+                falsification_conditions=["falsifier"],
+                supporting_evidence_references=[uuid4()],
+            )],
+        )
+
+
+def test_unknown_hypothesis_evidence_reference_is_rejected():
+    request = request_with([evidence()]).model_copy(update={
+        "thesis": None,
+        "phase": InterpretationPhase.HYPOTHESIS_DISCOVERY,
+        "research_mode": "HYPOTHESIS_DISCOVERY",
+    })
+    with pytest.raises(InvalidInterpretation):
+        InterpretationService(InvalidHypothesisReferenceProvider()).interpret(request)
 
 
 def test_adaptive_request_is_strict_and_serializes_with_camel_case():

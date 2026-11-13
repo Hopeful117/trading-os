@@ -6,20 +6,22 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
 import com.hope.trading.market_intelligence.domain.scope.MarketScopeMode;
+import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
 
 public record CreateActiveScanRequestDto(
         @NotNull UUID accountId,
         UUID brokerAccountId,
         @Size(max = 500) String objective,
         List<UUID> requestedMarketIds,
-        MarketScopeMode scopeMode
+        MarketScopeMode scopeMode,
+        TradeabilityEvidenceProfile tradeabilityEvidenceProfile
 ) {
     public CreateActiveScanRequestDto(UUID accountId, String objective, List<UUID> requestedMarketIds) {
-        this(accountId, null, objective, requestedMarketIds, null);
+        this(accountId, null, objective, requestedMarketIds, null, null);
     }
 
     public CreateActiveScanRequestDto(UUID accountId, String objective,
                                       List<UUID> requestedMarketIds, MarketScopeMode scopeMode) {
-        this(accountId, null, objective, requestedMarketIds, scopeMode);
+        this(accountId, null, objective, requestedMarketIds, scopeMode, null);
     }
 }

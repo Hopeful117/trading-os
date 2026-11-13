@@ -150,6 +150,7 @@ class ExecutionPolicy(StrictModel):
 class InterpretationPhase(StrEnum):
     INITIAL = "INITIAL"
     FINAL_SYNTHESIS = "FINAL_SYNTHESIS"
+    HYPOTHESIS_DISCOVERY = "HYPOTHESIS_DISCOVERY"
 
 
 class Trace(StrictModel):
@@ -197,11 +198,14 @@ class InterpretationRequest(StrictModel):
     execution_id: UUID
     capabilities: list[str] = Field(min_length=1, max_length=32)
     authorized_context: AuthorizedContext
-    thesis: MarketThesisInput
+    thesis: MarketThesisInput | None = None
     policy: ExecutionPolicy
     trace: Trace
     idempotency_key: str = Field(min_length=1, max_length=128)
-    research_mode: str = Field(default="THESIS_INTERPRETATION", pattern="^(THESIS_INTERPRETATION|ADAPTIVE_RESEARCH)$")
+    research_mode: str = Field(
+        default="THESIS_INTERPRETATION",
+        pattern="^(THESIS_INTERPRETATION|ADAPTIVE_RESEARCH|HYPOTHESIS_DISCOVERY)$",
+    )
     phase: InterpretationPhase = InterpretationPhase.INITIAL
     synthesis_context: SynthesisContext | None = None
 
@@ -214,6 +218,12 @@ class InterpretationRequest(StrictModel):
 
     @model_validator(mode="after")
     def validate_context(self) -> "InterpretationRequest":
+        if self.research_mode != "HYPOTHESIS_DISCOVERY" and self.thesis is None:
+            raise ValueError("thesis is required for interpretation modes")
+        if self.thesis is None:
+            if self.phase != InterpretationPhase.HYPOTHESIS_DISCOVERY:
+                raise ValueError("hypothesis discovery requires discovery phase")
+            return self
         if self.authorized_context.market_id not in (None, self.thesis.market_id):
             raise ValueError("context market_id must match thesis market_id")
         evidence_count = len(self.thesis.evidence)
@@ -239,6 +249,18 @@ class HypothesisReconciliation(StrictModel):
     evidence_references: list[UUID] = Field(max_length=32)
 
 
+class HypothesisProposal(StrictModel):
+    hypothesis_id: str = Field(min_length=1, max_length=200)
+    observed_behavior: str = Field(min_length=1, max_length=4_000)
+    proposed_relationship: str = Field(min_length=1, max_length=4_000)
+    expected_outcome: str = Field(min_length=1, max_length=4_000)
+    evaluation_horizon: list[str] = Field(min_length=1, max_length=16)
+    applicability_conditions: list[str] = Field(min_length=1, max_length=64)
+    falsification_conditions: list[str] = Field(min_length=1, max_length=64)
+    supporting_evidence_references: list[UUID] = Field(min_length=1, max_length=32)
+    limitations: list[str] = Field(default_factory=list, max_length=64)
+
+
 class InterpretationDraft(StrictModel):
     market_summary: str = Field(min_length=1, max_length=4_000)
     primary_scenario: str = Field(min_length=1, max_length=4_000)
@@ -251,6 +273,7 @@ class InterpretationDraft(StrictModel):
     suggested_decision: SuggestedDecision
     requested_analysis: RequestedAnalysis | None = None
     reconciliations: list[HypothesisReconciliation] = Field(default_factory=list, max_length=64)
+    hypothesis_proposals: list[HypothesisProposal] = Field(default_factory=list, max_length=16)
 
 
 class AiProvenance(StrictModel):

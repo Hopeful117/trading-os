@@ -13,7 +13,9 @@ class MockLLMProvider:
     provenance_classification = "MOCK"
 
     def interpret(self, request: InterpretationRequest) -> InterpretationDraft:
-        evidence = request.thesis.evidence
+        evidence = request.thesis.evidence if request.thesis is not None else []
+        market_id = request.authorized_context.market_id
+        thesis_state = request.thesis.state if request.thesis is not None else "UNKNOWN"
         missing = [
             item.explanation
             for item in evidence
@@ -21,7 +23,7 @@ class MockLLMProvider:
         ]
         decision = (
             SuggestedDecision.INSUFFICIENT_DATA
-            if missing or request.thesis.state in {"NO_TRADE", "UNKNOWN"}
+            if missing or thesis_state in {"NO_TRADE", "UNKNOWN"}
             else SuggestedDecision.REVIEW_CANDIDATE
         )
         reconciliations = []
@@ -39,10 +41,10 @@ class MockLLMProvider:
                     "evidence_references": references,
                 })
         return InterpretationDraft(
-            market_summary=f"Deterministic thesis state: {request.thesis.state}.",
+            market_summary=f"Bounded research context state: {thesis_state}.",
             primary_scenario=(
                 request.thesis.scenario.narrative
-                if request.thesis.scenario
+                if request.thesis is not None and request.thesis.scenario
                 else "No primary scenario is available."
             ),
             supporting_arguments=[
@@ -58,11 +60,11 @@ class MockLLMProvider:
             missing_information=missing,
             confirmation_conditions=(
                 request.thesis.scenario.confirmation_conditions
-                if request.thesis.scenario else []
+                if request.thesis is not None and request.thesis.scenario else []
             ),
             invalidation_conditions=(
                 request.thesis.scenario.invalidation_conditions
-                if request.thesis.scenario else []
+                if request.thesis is not None and request.thesis.scenario else []
             ),
             uncertainty=list(request.authorized_context.diagnostics),
             suggested_decision=decision,
@@ -70,7 +72,7 @@ class MockLLMProvider:
                 {
                     "capability_id": "market-structure-analysis",
                     "capability_version": "1.1.0",
-                    "market_id": request.thesis.market_id,
+                    "market_id": request.thesis.market_id if request.thesis is not None else market_id,
                     "reason": "Test whether the supplied thesis scenario is supported by current structure evidence.",
                     "expected_evidence": "Market structure assessment for the selected market.",
                 }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecution;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStatus;
 import com.hope.trading.market_intelligence.domain.research.ResearchExecutionStage;
+import com.hope.trading.market_intelligence.domain.research.ResearchObjectiveType;
 
 import java.time.Instant;
 import java.util.List;
@@ -14,6 +15,7 @@ public record ResearchExecutionResponse(
         UUID researchId,
         ResearchExecutionStatus status,
         List<UUID> marketIds,
+        ResearchObjectiveType objectiveType,
         String objective,
         String depth,
         Instant requestedAt,
@@ -32,8 +34,8 @@ public record ResearchExecutionResponse(
 
     static ResearchExecutionResponse from(ResearchExecution execution) {
         return new ResearchExecutionResponse(
-                execution.researchId(), execution.status(), execution.marketIds(), execution.objective(),
-                execution.depth(), execution.requestedAt(), execution.updatedAt(), execution.completedAt(),
+                execution.researchId(), execution.status(), execution.marketIds(), execution.objectiveType(),
+                execution.objective(), execution.depth(), execution.requestedAt(), execution.updatedAt(), execution.completedAt(),
                 execution.failureCode(), reportValue(execution.report()), execution.attemptCount(),
                 execution.currentStage(), execution.lastProgressAt(),
                 execution.status() == ResearchExecutionStatus.REQUESTED && execution.attemptCount() > 0,

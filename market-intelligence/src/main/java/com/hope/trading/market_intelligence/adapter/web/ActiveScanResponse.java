@@ -101,7 +101,8 @@ public record ActiveScanResponse(
             List<MarketEligibilityReason> exclusionReasons,
             DiagnosticResponse diagnostic,
             List<OpportunityResponse> opportunities,
-            StrategyProvenance strategy
+            StrategyProvenance strategy,
+            ActiveScanResultProjection.AnalysisEvidence evidence
     ) {
         static MarketResponse from(
                 ActiveScanResultProjection.MarketResult market,
@@ -131,7 +132,8 @@ public record ActiveScanResponse(
                     market.exclusionReasons(),
                     DiagnosticResponse.from(market.diagnostic()),
                     market.opportunities().stream().map(OpportunityResponse::from).toList(),
-                    strategyProvenance(market.opportunities(), matches)
+                    strategyProvenance(market.opportunities(), matches),
+                    market.evidence()
             );
         }
 

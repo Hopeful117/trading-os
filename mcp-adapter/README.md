@@ -37,10 +37,13 @@ an order. Poll the returned scan ID with `get_active_scan`.
 `get_active_scan` reads an already-created, Gateway-authorized active-scan
 projection.
 
-`start_market_research` submits an explicit research-scope and two-market request
-to the public Gateway. A human owner creates and grants the exact scope before
-the agent call. The Java Market Intelligence workflow owns authorization,
-deterministic evidence assembly, lifecycle persistence and report generation.
+`start_market_research` submits an explicit research-scope request to the public
+Gateway. Comparative research uses exactly two markets; the typed
+`SINGLE_MARKET_HYPOTHESIS_DISCOVERY` objective uses exactly one market and
+requires bounded timeframe, horizon and cutoff fields. A human owner creates and
+grants the exact scope before the agent call. The Java Market Intelligence
+workflow owns authorization, deterministic evidence assembly, lifecycle
+persistence and report generation.
 The client must supply a stable `idempotency_key` and reuse it for retries.
 Poll the returned research ID with `get_research_status`, then retrieve the
 persisted report with `get_research_report`.
@@ -90,6 +93,8 @@ python3 -m venv .venv
 ```text
 TRADING_OS_GATEWAY_URL=http://127.0.0.1:17080
 TRADING_OS_AGENT_CREDENTIAL=<opaque agent credential>
+TRADING_OS_AGENT_JWT_ISSUER=<optional deployment-provided issuer>
+TRADING_OS_AGENT_JWT_AUDIENCE=<optional deployment-provided audience>
 TRADING_OS_HTTP_TIMEOUT_SECONDS=10
 TRADING_OS_MAX_RESPONSE_BYTES=262144
 ```
@@ -123,9 +128,12 @@ challenge to the authenticated Trading OS web application. The Agents page
 issues the credential and sends it directly to the bridge; it is never rendered
 or copied by the user. The bridge validates the credential through the Gateway,
 stores the opaque credential in an owner-only file under `~/.config/trading-os`
-and exposes the existing read-only MCP tools. The file is only used to
-re-authenticate a fresh local bridge process; Gateway validation still applies
-on every request.
+and exposes the existing read-only MCP tools. A separate owner-only
+`mcp-agent-credential.binding.json` record stores only the normalized Gateway
+authority and optional configured issuer/audience metadata. It never stores a
+credential, digest or JWT. A legacy credential without this record is bound
+only after a successful trusted exchange; a mismatch fails closed and requires
+explicit human recovery. Gateway validation still applies on every request.
 
 For installations without the repository configuration, the equivalent local
 server registration is:
@@ -145,6 +153,9 @@ Configure only the Gateway and bridge settings:
 ```bash
 export TRADING_OS_GATEWAY_URL=http://127.0.0.1:17080
 export TRADING_OS_MCP_BRIDGE_PORT=17891
+# Optional, when supplied by the deployment's Gateway/Trading Core authority.
+export TRADING_OS_AGENT_JWT_ISSUER=<deployment issuer>
+export TRADING_OS_AGENT_JWT_AUDIENCE=<deployment audience>
 ```
 
 The MCP server is named `trading-os-research`. The adapter does not persist
