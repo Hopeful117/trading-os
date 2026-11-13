@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TradeabilityAnalysisCapabilityTest {
     @Test
-    void rejectsLiveCurrentWithoutAnApprovedLiveOrderBookSource() {
+    void rejectsLiveCurrentWithoutAnExplicitEvidenceProfile() {
         IntelligenceAnalysisRequest request = new IntelligenceAnalysisRequest(
                 UUID.randomUUID(), UUID.randomUUID(), AnalysisExecutionMode.ACTIVE, "live");
 
@@ -32,7 +32,40 @@ class TradeabilityAnalysisCapabilityTest {
 
         assertThat(result.findings()).isEmpty();
         assertThat(result.warnings()).singleElement()
-                .isEqualTo("Tradeability requires an approved live order-book source; LIVE_CURRENT is unsupported");
+                .isEqualTo("Tradeability requires an explicit supported evidence profile for LIVE_CURRENT");
+    }
+
+    @Test
+    void acceptsLiveCurrentForAValidatedForexQuoteProfile() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-10-29T03:49:15Z");
+        IntelligenceContext context = liveContext(marketId, "EUR", "USD", "CFD", cutoff);
+
+        var result = new TradeabilityAnalysisCapability().analyze(
+                new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE,
+                        "live", null, null, null, cutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT)
+                        .withTradeabilityEvidenceProfile(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC),
+                context);
+
+        assertThat(result.findings()).hasSize(1);
+        assertThat(result.warnings()).contains("SPREAD_OBSERVED");
+        assertThat(result.warnings()).contains("LIQUIDITY_UNAVAILABLE");
+    }
+
+    @Test
+    void rejectsQuoteProfileForANonForexCfdIdentity() {
+        UUID marketId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-10-29T03:49:15Z");
+
+        var result = new TradeabilityAnalysisCapability().analyze(
+                new IntelligenceAnalysisRequest(UUID.randomUUID(), marketId, AnalysisExecutionMode.ACTIVE,
+                        "live", null, null, null, cutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT)
+                        .withTradeabilityEvidenceProfile(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC),
+                liveContext(marketId, "XAU", "USD", "CFD", cutoff));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.warnings()).containsExactly(
+                "FOREX_QUOTE_BASIC requires an admitted Forex CFD market identity");
     }
 
     @Test
@@ -245,5 +278,31 @@ class TradeabilityAnalysisCapabilityTest {
     private ArtifactRequirement requirement(ArtifactType type, boolean required) {
         return new ArtifactRequirement(type, ProductionArtifactTypes.V1,
                 VersionCompatibilityMode.EXACT, required, ArtifactCardinality.ONE, false);
+    }
+
+    private IntelligenceContext liveContext(
+            UUID marketId, String baseAsset, String quoteAsset, String productType, Instant cutoff) {
+        ContextProvenance provenance = new ContextProvenance(
+                "market-data", cutoff.minusSeconds(1), cutoff.minusSeconds(1),
+                null, "v1", "v1", EvidenceAcquisitionPolicy.LIVE_CURRENT,
+                "quote-fingerprint", 1, cutoff, cutoff.minusSeconds(1), cutoff.minusSeconds(1));
+        ContextSection identity = new ContextSection(
+                ContextSectionType.MARKET_IDENTITY, ContextSectionStatus.AVAILABLE,
+                ContextSensitivity.PUBLIC,
+                new MarketIdentityContext(marketId, "CTRADER", baseAsset + "/" + quoteAsset,
+                        baseAsset, quoteAsset, true, productType),
+                provenance, null);
+        ContextSection snapshot = new ContextSection(
+                ContextSectionType.MARKET_SNAPSHOT, ContextSectionStatus.AVAILABLE,
+                ContextSensitivity.PUBLIC,
+                new MarketSnapshotContext(marketId, baseAsset + "/" + quoteAsset,
+                        BigDecimal.ONE, new BigDecimal("1.1000"), new BigDecimal("1.1002"),
+                        true, cutoff.minusSeconds(1)),
+                provenance, null);
+        return new IntelligenceContext(
+                marketId, AnalysisExecutionMode.ACTIVE, "live", cutoff, "test",
+                ContextQuality.COMPLETE, List.of(), null,
+                Map.of(ContextSectionType.MARKET_IDENTITY, identity,
+                        ContextSectionType.MARKET_SNAPSHOT, snapshot));
     }
 }

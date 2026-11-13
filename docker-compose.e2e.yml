@@ -1,0 +1,238 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: trading-os-e2e-postgres
+    environment:
+      POSTGRES_DB: trading_os
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - trading_os_e2e:/var/lib/postgresql/data
+    networks: [trading-e2e]
+    restart: "no"
+
+  broker-db:
+    image: postgres:16
+    container_name: trading-os-e2e-broker-postgres
+    environment:
+      POSTGRES_DB: broker_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - broker_data_e2e:/var/lib/postgresql/data
+    networks: [trading-e2e]
+    restart: "no"
+
+  market-intelligence-db:
+    image: postgres:16
+    container_name: trading-os-e2e-market-intelligence-postgres
+    environment:
+      POSTGRES_DB: market_intelligence
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - market_intelligence_data_e2e:/var/lib/postgresql/data
+    networks: [trading-e2e]
+    restart: "no"
+
+  market-data-db:
+    image: postgres:16
+    container_name: trading-os-e2e-market-data-postgres
+    environment:
+      POSTGRES_DB: market_data
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - market_data_e2e:/var/lib/postgresql/data
+    networks: [trading-e2e]
+    restart: "no"
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: trading-os-e2e-eureka
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "127.0.0.1:27084:8761"
+    networks: [trading-e2e]
+    restart: "no"
+
+  broker-service:
+    build:
+      context: .
+      dockerfile: broker-service/Dockerfile
+    container_name: trading-os-e2e-broker-service
+    depends_on: [eureka-server, broker-db]
+    environment:
+      SPRING_PROFILES_ACTIVE: e2e-controlled-broker,prod
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_ISSUER: ${JWT_ISSUER:?JWT_ISSUER must be set}
+      TRADING_CORE_SERVICE_JWT_SECRET: ${TRADING_CORE_SERVICE_JWT_SECRET:?TRADING_CORE_SERVICE_JWT_SECRET must be set}
+      BROKER_SERVICE_SERVICE_JWT_SECRET: ${BROKER_SERVICE_SERVICE_JWT_SECRET:?BROKER_SERVICE_SERVICE_JWT_SECRET must be set}
+      MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET must be set}
+      SERVICE_JWT_ENABLED: "true"
+      BROKER_DATABASE_URL: jdbc:postgresql://broker-db:5432/broker_service
+      BROKER_DATABASE_USERNAME: postgres
+      BROKER_DATABASE_PASSWORD: postgres
+      BROKER_CREDENTIAL_SOURCE: stored
+      BROKER_MASTER_KEY: ${BROKER_MASTER_KEY:?BROKER_MASTER_KEY must be set}
+      BROKER_MASTER_KEY_VERSION: e2e-v1
+      CTRADER_CLIENT_ID: e2e-controlled-client
+      CTRADER_CLIENT_SECRET: e2e-controlled-secret
+      CTRADER_ENVIRONMENT: demo
+      CTRADER_ACCOUNT_PROGRAM: FTMO_FREE
+      CTRADER_AUTHORIZATION_STATE_TTL_SECONDS: 600
+      CTRADER_SAFETY_ENABLED: "true"
+      CTRADER_SAFETY_EXECUTION_ENABLED: "true"
+      CTRADER_SAFETY_DAILY_REQUEST_BUDGET: "1000"
+      CTRADER_SAFETY_ALERT_THRESHOLD: "700"
+      CTRADER_SAFETY_HARD_STOP: "800"
+      CTRADER_SAFETY_SNAPSHOT_COOLDOWN: PT0S
+      CTRADER_SAFETY_SNAPSHOT_LEASE: PT30S
+      CTRADER_WEBSOCKET_ENDPOINT: ""
+      CTRADER_TOKEN_ENDPOINT: ""
+      E2E_CONTROLLED_BROKER_OUTCOME: ${E2E_CONTROLLED_BROKER_OUTCOME:-ACCEPT}
+      EUREKA_INSTANCE_HOSTNAME: broker-service
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+    ports:
+      - "127.0.0.1:27082:8082"
+    networks: [trading-e2e]
+    restart: "no"
+
+  trading-app:
+    build:
+      context: .
+      dockerfile: trading-core/Dockerfile
+    container_name: trading-os-e2e-trading-app
+    depends_on: [postgres, eureka-server, broker-service]
+    environment:
+      SPRING_PROFILES_ACTIVE: e2e,prod
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/trading_os
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:?JWT_EXPIRATION must be set}
+      JWT_ISSUER: ${JWT_ISSUER:?JWT_ISSUER must be set}
+      AGENT_JWT_SECRET: ${AGENT_JWT_SECRET:?AGENT_JWT_SECRET must be set}
+      AGENT_JWT_ISSUER: ${AGENT_JWT_ISSUER:?AGENT_JWT_ISSUER must be set}
+      AGENT_JWT_AUDIENCE: trading-os-gateway
+      TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET: ${TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET:?TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET must be set}
+      TRADING_CORE_SERVICE_JWT_SECRET: ${TRADING_CORE_SERVICE_JWT_SECRET:?TRADING_CORE_SERVICE_JWT_SECRET must be set}
+      BROKER_SERVICE_SERVICE_JWT_SECRET: ${BROKER_SERVICE_SERVICE_JWT_SECRET:?BROKER_SERVICE_SERVICE_JWT_SECRET must be set}
+      MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET must be set}
+      MARKET_INTELLIGENCE_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_SERVICE_JWT_SECRET must be set}
+      TRADING_CORE_MI_SERVICE_JWT_SECRET: ${TRADING_CORE_MI_SERVICE_JWT_SECRET:?TRADING_CORE_MI_SERVICE_JWT_SECRET must be set}
+      SECURITY_SERVICE_JWT_TRUSTED_BROKER_SERVICE: ${BROKER_SERVICE_SERVICE_JWT_SECRET:?BROKER_SERVICE_SERVICE_JWT_SECRET must be set}
+      SECURITY_SERVICE_JWT_TRUSTED_MARKET_INTELLIGENCE: ${MARKET_INTELLIGENCE_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_SERVICE_JWT_SECRET must be set}
+      TRADING_CORE_EXECUTION_AUTHORIZATION_ENABLED: "true"
+      TRADING_CORE_EXECUTION_AUTHORIZATION_TTL_SECONDS: "300"
+      TRADING_CORE_WEB_URL: http://127.0.0.1:27085
+    ports:
+      - "127.0.0.1:27081:8081"
+    networks: [trading-e2e]
+    restart: "no"
+
+  market-intelligence:
+    build: ./market-intelligence
+    container_name: trading-os-e2e-market-intelligence
+    depends_on: [eureka-server, broker-service, market-data, market-intelligence-db]
+    environment:
+      SPRING_PROFILES_ACTIVE: e2e
+      MARKET_INTELLIGENCE_DB_URL: jdbc:postgresql://market-intelligence-db:5432/market_intelligence
+      MARKET_INTELLIGENCE_DB_USERNAME: postgres
+      MARKET_INTELLIGENCE_DB_PASSWORD: postgres
+      SECURITY_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      SECURITY_JWT_ISSUER: ${JWT_ISSUER:?JWT_ISSUER must be set}
+      AGENT_JWT_SECRET: ${AGENT_JWT_SECRET:?AGENT_JWT_SECRET must be set}
+      AGENT_JWT_ISSUER: ${AGENT_JWT_ISSUER:?AGENT_JWT_ISSUER must be set}
+      AGENT_JWT_AUDIENCE: trading-os-gateway
+      MI_SERVICE_JWT_ENABLED: "true"
+      MARKET_INTELLIGENCE_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_SERVICE_JWT_SECRET must be set}
+      TRADING_CORE_MI_SERVICE_JWT_SECRET: ${TRADING_CORE_MI_SERVICE_JWT_SECRET:?TRADING_CORE_MI_SERVICE_JWT_SECRET must be set}
+      TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET: ${TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET:?TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET must be set}
+      MARKET_INTELLIGENCE_MARKET_DATA_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_SERVICE_JWT_SECRET must be set}
+      MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_BROKER_SERVICE_JWT_SECRET must be set}
+      MARKET_INTELLIGENCE_NEWS_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_NEWS_SERVICE_JWT_SECRET:-e2e-news-secret}
+      MARKET_INTELLIGENCE_AI_ENGINE_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_AI_ENGINE_SERVICE_JWT_SECRET:-e2e-ai-secret}
+      AI_ENGINE_ENABLED: "false"
+      MARKET_INTELLIGENCE_ELIGIBILITY_INTERVAL: ONE_HOUR
+      MARKET_INTELLIGENCE_ELIGIBILITY_ACTIVITY_WINDOW_MINUTES: "180"
+      MARKET_INTELLIGENCE_ELIGIBILITY_READINESS_LOOKBACK_CANDLES: "24"
+      MARKET_INTELLIGENCE_ELIGIBILITY_MINIMUM_COMPLETED_CANDLES: "12"
+      MARKET_INTELLIGENCE_ELIGIBILITY_MAX_OBSERVATION_AGE_SECONDS: "7200"
+      MARKET_INTELLIGENCE_MAX_MARKET_FACT_EVALUATIONS_PER_SCAN: "10"
+      RESEARCH_LIFECYCLE_ENABLED: "false"
+    ports:
+      - "127.0.0.1:27083:8084"
+    networks: [trading-e2e]
+    restart: "no"
+
+  market-data:
+    build:
+      context: .
+      dockerfile: market-data/Dockerfile
+    container_name: trading-os-e2e-market-data
+    depends_on: [eureka-server, market-data-db]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      KRAKEN_BASE_URL: ${KRAKEN_BASE_URL:?KRAKEN_BASE_URL must be set}
+      KRAKEN_WEBSOCKET: ${KRAKEN_WEBSOCKET:?KRAKEN_WEBSOCKET must be set}
+      MARKET_DATA_WEBSOCKET_ALLOWED_ORIGINS: ${MARKET_DATA_WEBSOCKET_ALLOWED_ORIGINS:?MARKET_DATA_WEBSOCKET_ALLOWED_ORIGINS must be set}
+      TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET: ${TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET:?TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET must be set}
+      MARKET_INTELLIGENCE_MARKET_DATA_SERVICE_JWT_SECRET: ${MARKET_INTELLIGENCE_SERVICE_JWT_SECRET:?MARKET_INTELLIGENCE_SERVICE_JWT_SECRET must be set}
+      MARKET_DATA_MARKET_FACTS_AUTHORIZED_CALLERS: trading-core,market-intelligence
+      MARKET_DATA_SERVICE_JWT_AUTHORIZED_CALLERS: trading-core,market-intelligence
+      MARKET_DATA_ORDER_BOOK_REPLAY_AUTHORIZED_CALLERS: market-intelligence
+      ORDER_BOOK_ARTIFACT_SIGNING_KEY: ${ORDER_BOOK_ARTIFACT_SIGNING_KEY:?ORDER_BOOK_ARTIFACT_SIGNING_KEY must be set}
+      HISTORICAL_OHLC_CAPTURE_ENABLED: "false"
+      ORDER_BOOK_EVIDENCE_CAPTURE_ENABLED: "false"
+      ORDER_BOOK_ACQUISITION_STARTUP_ENABLED: "false"
+      KRAKEN_MARKET_DATA_ENABLED: "false"
+      CTRADER_MARKET_DATA_ENABLED: "true"
+      E2E_CONTROLLED_CTRADER_MARKET_DATA_ENABLED: "true"
+      MARKET_DATA_STARTUP_GRACE: PT5S
+      CTRADER_MARKET_DATA_SYMBOL_MAPPINGS_EURUSD: EUR/USD
+      CTRADER_MARKET_DATA_SYMBOL_PRODUCT_TYPES_EURUSD: SPOT
+      CTRADER_MARKET_DATA_ENVIRONMENT: DEMO
+      CTRADER_MARKET_DATA_TOKEN_ENCRYPTION_MASTER_KEY: ${BROKER_MASTER_KEY:?BROKER_MASTER_KEY must be set}
+      CTRADER_MARKET_DATA_TOKEN_ENCRYPTION_KEY_VERSION: e2e-v1
+    ports:
+      - "127.0.0.1:27086:8083"
+    networks: [trading-e2e]
+    restart: "no"
+
+  gateway:
+    build: ./gateway
+    container_name: trading-os-e2e-gateway
+    depends_on: [eureka-server, trading-app]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      GATEWAY_PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:?JWT_EXPIRATION must be set}
+      JWT_ISSUER: ${JWT_ISSUER:?JWT_ISSUER must be set}
+      AGENT_JWT_SECRET: ${AGENT_JWT_SECRET:?AGENT_JWT_SECRET must be set}
+      AGENT_JWT_ISSUER: ${AGENT_JWT_ISSUER:?AGENT_JWT_ISSUER must be set}
+      AGENT_JWT_AUDIENCE: trading-os-gateway
+      TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET: ${TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET:?TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET must be set}
+    ports:
+      - "127.0.0.1:27080:8080"
+    networks: [trading-e2e]
+    restart: "no"
+
+  trading-web:
+    build: ./trading-os-web
+    container_name: trading-os-e2e-trading-web
+    depends_on: [gateway]
+    ports:
+      - "127.0.0.1:27085:80"
+    networks: [trading-e2e]
+    restart: "no"
+
+networks:
+  trading-e2e:
+    driver: bridge
+
+volumes:
+  trading_os_e2e:
+  broker_data_e2e:
+  market_intelligence_data_e2e:
+  market_data_e2e:

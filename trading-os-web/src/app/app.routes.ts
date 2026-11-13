@@ -23,6 +23,7 @@ import { FinancialNews } from './features/financial-news/financial-news';
 import { ResearchOverview } from './features/research/research-overview';
 import { Agents } from './features/agents/pages/agents/agents';
 import { ApprovalPage } from './features/trade-planning/approval-page/approval-page';
+import { ExecutionAuthorizationPage } from './features/trade-planning/execution-authorization-page/execution-authorization-page';
 
 export const routes: Routes = [
   {
@@ -104,6 +105,11 @@ export const routes: Routes = [
   {
     path: 'trade-plan-approvals/:challengeId',
     component: ApprovalPage,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'execution-authorizations/:authorizationId',
+    component: ExecutionAuthorizationPage,
     canActivate: [authGuard],
   },
   {

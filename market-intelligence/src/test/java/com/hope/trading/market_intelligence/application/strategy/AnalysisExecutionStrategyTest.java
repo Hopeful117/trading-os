@@ -75,7 +75,20 @@ class AnalysisExecutionStrategyTest {
                  TrendContextAnalysisCapability.CAPABILITY_ID,
                  OhlcRangeAnalysisCapability.CAPABILITY_ID,
                  OhlcMomentumAnalysisCapability.CAPABILITY_ID,
-                  TradeabilityAnalysisCapability.CAPABILITY_ID);
+                TradeabilityAnalysisCapability.CAPABILITY_ID);
+    }
+
+    @Test
+    void liveForexQuoteProfileSelectsTradeabilityWithoutChangingDefaultLivePlan() {
+        IntelligenceAnalysisRequest request = request(AnalysisExecutionMode.ACTIVE)
+                .withTradeabilityEvidenceProfile(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC);
+
+        AnalysisExecutionPlan plan = new ActiveAnalysisStrategy(Duration.ofSeconds(3)).plan(request);
+
+        assertThat(plan.capabilityIds()).contains(TradeabilityAnalysisCapability.CAPABILITY_ID);
+        assertThat(new ActiveAnalysisStrategy(Duration.ofSeconds(3)).plan(
+                request(AnalysisExecutionMode.ACTIVE)).capabilityIds())
+                .doesNotContain(TradeabilityAnalysisCapability.CAPABILITY_ID);
     }
 
     @Test

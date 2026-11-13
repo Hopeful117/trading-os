@@ -120,6 +120,9 @@ class BrokerAccountControllerTest {
                 .andExpect(jsonPath("$.status").value("CONNECTED_BUT_FACTS_INCOMPLETE"))
                 .andExpect(jsonPath("$.executionAllowed").value(false))
                 .andExpect(jsonPath("$.riskEvaluationAllowed").value(false))
+                .andExpect(jsonPath("$.readiness.accountObservation").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.readiness.t0Risk").value("BLOCKED"))
+                .andExpect(jsonPath("$.readiness.liveExecution").value("BLOCKED"))
                 .andExpect(jsonPath("$.snapshot").doesNotExist());
 
         verify(readOnlyStatusService).status(userId, accountId);

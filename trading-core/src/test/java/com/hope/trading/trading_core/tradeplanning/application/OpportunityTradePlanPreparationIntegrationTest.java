@@ -8,6 +8,7 @@ import com.hope.trading.trading_core.risk.application.RiskEvaluationModels;
 import com.hope.trading.trading_core.risk.application.TradePlanRiskEvaluationService;
 import com.hope.trading.trading_core.tradeplanning.domain.TradePlanningProfile;
 import com.hope.trading.trading_core.tradeplanning.infrastructure.MarketIntelligenceTradePlanningClient;
+import feign.FeignException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,7 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -64,6 +68,23 @@ class OpportunityTradePlanPreparationIntegrationTest {
         service.createFromOpportunity(actorId, opportunityId, accountId, "integration-key");
 
         assertThat(intentIds()).containsExactlyInAnyOrderElementsOf(intentIdsBefore);
+        verify(risk).preflight(argThat(arg -> arg.tradePlanId() != null
+                && arg.tradePlanVersion() == 1
+                && arg.accountId().equals(accountId)));
+    }
+
+    @Test
+    void marketIntelligenceNoTradeRejectionDoesNotReachRisk() {
+        FeignException rejection = org.mockito.Mockito.mock(FeignException.class);
+        when(rejection.status()).thenReturn(422);
+        when(marketIntelligence.generateFromOpportunity(eq(opportunityId), eq("integration-key"), any()))
+                .thenThrow(rejection);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                service.createFromOpportunity(actorId, opportunityId, accountId, "integration-key"))
+                .isInstanceOf(AnalysisTradePlanGenerationException.class);
+
+        verify(risk, never()).preflight(any());
     }
 
     private Set<UUID> intentIds() {

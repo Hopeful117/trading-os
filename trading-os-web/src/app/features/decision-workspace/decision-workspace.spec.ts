@@ -728,6 +728,7 @@ describe('DecisionWorkspace', () => {
       type: 'INTRADAY',
       origin: 'ACTIVE_SCAN',
       score: 0.82,
+      scoreSemantics: 'BUSINESS_PRIORITY_NOT_PROBABILITY',
       explanation: 'Price holds above the protected level.',
       observationIds: ['observation-1'],
       aiAnalysisIds: [],

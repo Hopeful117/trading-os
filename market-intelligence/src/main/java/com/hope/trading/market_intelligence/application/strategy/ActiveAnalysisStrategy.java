@@ -48,23 +48,38 @@ public class ActiveAnalysisStrategy implements AnalysisExecutionStrategy {
                     timeout
             );
         }
+        boolean tradeabilityRequested = request.tradeabilityEvidenceProfile()
+                == TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC
+                || request.tradeabilityEvidenceProfile() == TradeabilityEvidenceProfile.LEVEL_II_REQUIRED;
+        List<String> liveCapabilities = tradeabilityRequested
+                ? List.of(
+                        TrendContextAnalysisCapability.CAPABILITY_ID,
+                        SpreadAnalysisCapability.CAPABILITY_ID,
+                        OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                        OhlcMomentumAnalysisCapability.CAPABILITY_ID,
+                        TradeabilityAnalysisCapability.CAPABILITY_ID,
+                        DisabledAiAnalysisCapability.CAPABILITY_ID)
+                : List.of(
+                        TrendContextAnalysisCapability.CAPABILITY_ID,
+                        SpreadAnalysisCapability.CAPABILITY_ID,
+                        OhlcRangeAnalysisCapability.CAPABILITY_ID,
+                        OhlcMomentumAnalysisCapability.CAPABILITY_ID,
+                        DisabledAiAnalysisCapability.CAPABILITY_ID);
+        List<ContextRequirement> liveRequirements = new java.util.ArrayList<>(List.of(
+                ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY),
+                ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT),
+                ContextRequirement.optionalPublic(ContextSectionType.HISTORICAL_OHLC),
+                ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT),
+                ContextRequirement.optionalPublic(ContextSectionType.ORDER_FLOW),
+                ContextRequirement.optionalPublic(ContextSectionType.ORDER_BOOK),
+                ContextRequirement.optionalPublic(ContextSectionType.NEWS)
+        ));
+        if (request.tradeabilityEvidenceProfile() == TradeabilityEvidenceProfile.LEVEL_II_REQUIRED) {
+            liveRequirements.set(5, ContextRequirement.requiredPublic(ContextSectionType.ORDER_BOOK));
+        }
         return new AnalysisExecutionPlan(
-                List.of(
-                         TrendContextAnalysisCapability.CAPABILITY_ID,
-                         SpreadAnalysisCapability.CAPABILITY_ID,
-                         OhlcRangeAnalysisCapability.CAPABILITY_ID,
-                          OhlcMomentumAnalysisCapability.CAPABILITY_ID,
-                          DisabledAiAnalysisCapability.CAPABILITY_ID
-                ),
-                List.of(
-                        ContextRequirement.requiredPublic(ContextSectionType.MARKET_IDENTITY),
-                        ContextRequirement.requiredPublic(ContextSectionType.MARKET_SNAPSHOT),
-                        ContextRequirement.optionalPublic(ContextSectionType.HISTORICAL_OHLC),
-                        ContextRequirement.optionalPublic(ContextSectionType.TREND_CONTEXT),
-                             ContextRequirement.optionalPublic(ContextSectionType.ORDER_FLOW),
-                             ContextRequirement.optionalPublic(ContextSectionType.ORDER_BOOK),
-                        ContextRequirement.optionalPublic(ContextSectionType.NEWS)
-                ),
+                 liveCapabilities,
+                 liveRequirements,
                 8,
                 timeout
         );

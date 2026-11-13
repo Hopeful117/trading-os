@@ -56,11 +56,16 @@ async def test_server_exposes_bounded_tools(fake_client):
         "list_authorized_accounts",
         "get_authorized_account",
         "get_authorized_account_status",
+        "get_authorized_account_reconciliation",
         "get_authorized_positions",
         "get_authorized_trade_plan",
         "evaluate_authorized_trade_plan_risk",
         "request_trade_plan_approval",
         "get_trade_plan_approval_status",
+        "request_trade_execution_authorization",
+        "get_trade_execution_authorization_status",
+        "execute_human_authorized_trade",
+        "get_trade_execution_status",
         "start_market_research",
         "get_research_status",
         "get_research_report",
@@ -122,6 +127,10 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
             {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
         )
         await client.call_tool(
+            "get_authorized_account_reconciliation",
+            {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
+        )
+        await client.call_tool(
             "get_authorized_positions",
             {"broker_account_id": "00000000-0000-0000-0000-000000000004"},
         )
@@ -144,6 +153,27 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
         await client.call_tool(
             "get_trade_plan_approval_status",
             {"challenge_id": "00000000-0000-0000-0000-000000000009"},
+        )
+        await client.call_tool(
+            "request_trade_execution_authorization",
+            {"trade_plan_id": "00000000-0000-0000-0000-000000000007", "trade_plan_version": 1,
+             "broker_account_id": "00000000-0000-0000-0000-000000000004",
+             "risk_evaluation_id": "00000000-0000-0000-0000-000000000008",
+             "execution_idempotency_key": "execution-key-1"},
+        )
+        await client.call_tool(
+            "get_trade_execution_authorization_status",
+            {"authorization_id": "00000000-0000-0000-0000-000000000010"},
+        )
+        await client.call_tool(
+            "execute_human_authorized_trade",
+            {"authorization_id": "00000000-0000-0000-0000-000000000010",
+             "execution_idempotency_key": "execution-key-1"},
+        )
+        await client.call_tool(
+            "get_trade_execution_status",
+            {"execution_id": "00000000-0000-0000-0000-000000000011",
+             "broker_account_id": "00000000-0000-0000-0000-000000000004"},
         )
         await client.call_tool(
             "request_account_synchronization",
@@ -210,10 +240,13 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
             "/api/v1/opportunities/00000000-0000-0000-0000-000000000010",
             "/api/v1/agent/broker-accounts",
         "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004",
-        "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/read-only-status",
-        "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/positions",
+            "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/read-only-status",
+            "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/reconciliation",
+            "/api/v1/agent/broker-accounts/00000000-0000-0000-0000-000000000004/positions",
         "/api/v1/agent/trade-plans/00000000-0000-0000-0000-000000000007/versions/1",
         "/api/v1/agent/trade-plan-approvals/00000000-0000-0000-0000-000000000009",
+        "/api/v1/agent/execution-authorizations/00000000-0000-0000-0000-000000000010",
+        "/api/v1/agent/executions/00000000-0000-0000-0000-000000000011",
         "/api/v1/agent/operation-requests/00000000-0000-0000-0000-000000000005",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003",
         "/api/v1/intelligence/research/00000000-0000-0000-0000-000000000003/report",
@@ -231,15 +264,17 @@ async def test_tools_call_only_approved_gateway_reads(fake_client):
     assert fake_client.post_calls[0][2] == "scan-btc-1"
     assert fake_client.post_calls[2][0].endswith("/versions/1")
     assert fake_client.post_calls[3][0] == "/api/v1/agent/trade-plan-approvals"
-    assert fake_client.post_calls[4][0] == "/api/v1/agent/operation-requests"
-    assert fake_client.post_calls[5][0].endswith("/execute")
-    assert fake_client.post_calls[6][0] == "/api/v1/intelligence/research"
-    assert fake_client.post_calls[6][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
-    assert fake_client.post_calls[6][2] == "research-btc-eth-1"
-    assert fake_client.post_calls[7][0] == "/api/v1/intelligence/research/readiness"
-    assert fake_client.post_calls[7][1]["brokerAccountId"] == "00000000-0000-0000-0000-000000000004"
-    assert fake_client.post_calls[8][0].endswith("/exports")
-    assert fake_client.post_calls[8][2] == "export-1"
+    assert fake_client.post_calls[4][0] == "/api/v1/agent/execution-authorizations"
+    assert fake_client.post_calls[5][0].endswith("/continue")
+    assert fake_client.post_calls[6][0] == "/api/v1/agent/operation-requests"
+    assert fake_client.post_calls[7][0].endswith("/execute")
+    assert fake_client.post_calls[8][0] == "/api/v1/intelligence/research"
+    assert fake_client.post_calls[8][1]["scopeId"] == "00000000-0000-0000-0000-000000000006"
+    assert fake_client.post_calls[8][2] == "research-btc-eth-1"
+    assert fake_client.post_calls[9][0] == "/api/v1/intelligence/research/readiness"
+    assert fake_client.post_calls[9][1]["brokerAccountId"] == "00000000-0000-0000-0000-000000000004"
+    assert fake_client.post_calls[10][0].endswith("/exports")
+    assert fake_client.post_calls[10][2] == "export-1"
 
 
 @pytest.mark.asyncio
@@ -368,10 +403,38 @@ async def test_active_scan_ownership_denial_does_not_expose_payload(fake_client,
             {"scan_id": "00000000-0000-0000-0000-000000000002"},
         )
 
-    assert result.is_error is True
-    assert result.content[0].text == "Error executing tool get_active_scan"
+    assert result.is_error is False
+    diagnostics = json.loads(result.content[0].text)
+    assert diagnostics["error"]["status"] is None
+    assert diagnostics["error"]["code"] == "INTERNAL_ERROR"
     assert "accountId" not in result.content[0].text
     assert "secret" not in result.content[0].text
+
+
+def test_authorized_position_read_returns_structured_sanitized_error(fake_client):
+    fake_client.error = GatewayClientError(
+        "Authorized broker data is temporarily unavailable",
+        code="UPSTREAM_UNAVAILABLE",
+        status=503,
+        correlation_id="corr-123",
+        retryable=True,
+        next_action="Retry after the broker service is reachable.",
+    )
+
+    result = json.loads(server.get_authorized_positions(
+        "00000000-0000-0000-0000-000000000004"
+    ))
+
+    assert result == {
+        "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "Authorized broker data is temporarily unavailable",
+            "status": 503,
+            "correlationId": "corr-123",
+            "retryable": True,
+            "nextAction": "Retry after the broker service is reachable.",
+        }
+    }
 
 
 @pytest.mark.asyncio
@@ -399,8 +462,12 @@ async def test_active_scan_http_ownership_denial_is_sanitized(monkeypatch, statu
             {"scan_id": "00000000-0000-0000-0000-000000000002"},
         )
 
-    assert result.is_error is True
-    assert result.content[0].text == "Error executing tool get_active_scan"
+    assert result.is_error is False
+    diagnostics = json.loads(result.content[0].text)
+    assert diagnostics["error"]["status"] == status_code
+    assert diagnostics["error"]["code"] in {
+        "PERMISSION_DENIED", "ACCOUNT_ACCESS_DENIED", "UPSTREAM_UNAVAILABLE"
+    }
     assert "private" not in result.content[0].text
     assert "must not escape" not in result.content[0].text
 
@@ -426,11 +493,16 @@ async def test_server_starts_over_stdio():
         "list_authorized_accounts",
         "get_authorized_account",
         "get_authorized_account_status",
+        "get_authorized_account_reconciliation",
             "get_authorized_positions",
         "get_authorized_trade_plan",
         "evaluate_authorized_trade_plan_risk",
             "request_trade_plan_approval",
             "get_trade_plan_approval_status",
+        "request_trade_execution_authorization",
+        "get_trade_execution_authorization_status",
+        "execute_human_authorized_trade",
+        "get_trade_execution_status",
         "start_market_research",
         "get_research_status",
         "get_research_report",

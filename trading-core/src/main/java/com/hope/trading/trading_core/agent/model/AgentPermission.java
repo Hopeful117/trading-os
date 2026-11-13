@@ -18,7 +18,10 @@ public enum AgentPermission {
     PLANS_CREATE("plans:create"),
     TRADE_PLAN_RISK_EVALUATE("trade-plan-risk:evaluate"),
     TRADE_PLAN_APPROVAL_REQUEST("trade-plan-approval:request"),
-    TRADE_PLAN_APPROVAL_STATUS_READ("trade-plan-approval:status:read");
+    TRADE_PLAN_APPROVAL_STATUS_READ("trade-plan-approval:status:read"),
+    EXECUTIONS_REQUEST("executions:request"),
+    EXECUTIONS_CONTINUE_APPROVED("executions:continue-approved"),
+    EXECUTIONS_STATUS_READ("executions:status:read");
 
     private final String value;
 

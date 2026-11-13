@@ -77,3 +77,36 @@ def test_successful_pairing_persists_credential_for_fresh_process(bridge_server,
     )[0] == 204
     assert load_runtime_credential() == "opaque-credential"
     assert credential_file.stat().st_mode & 0o777 == 0o600
+
+
+def test_bridge_recovers_persisted_credential_on_startup(monkeypatch, tmp_path):
+    credential_file = tmp_path / "mcp-agent-credential"
+    credential_file.write_text("opaque-credential", encoding="utf-8")
+    credential_file.chmod(0o600)
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+    monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
+        "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: "token"})()}
+    )())
+
+    state = BridgeState(recover=True)
+
+    assert state.connected() is True
+
+
+def test_bridge_does_not_mark_invalid_persisted_credential_connected(monkeypatch, tmp_path):
+    credential_file = tmp_path / "mcp-agent-credential"
+    credential_file.write_text("invalid-credential", encoding="utf-8")
+    credential_file.chmod(0o600)
+    monkeypatch.setenv("TRADING_OS_AGENT_CREDENTIAL_FILE", str(credential_file))
+
+    def reject():
+        from app.client import GatewayClientError
+        raise GatewayClientError("Agent credential exchange failed", code="AUTHENTICATION_FAILED", status=401)
+
+    monkeypatch.setattr("app.bridge.client_from_environment", lambda: type(
+        "Client", (), {"token_provider": type("Provider", (), {"token": lambda self: reject()})()}
+    )())
+
+    state = BridgeState(recover=True)
+
+    assert state.connected() is False

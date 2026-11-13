@@ -48,6 +48,10 @@ public class BrokerAccount {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)
     private ExecutionMode executionMode;
+    @Column(name = "risk_profile_id")
+    private UUID riskProfileId;
+    @Column(name = "risk_profile_semantic_version")
+    private String riskProfileSemanticVersion;
 
 
     protected BrokerAccount() {
@@ -71,6 +75,15 @@ public class BrokerAccount {
                                        String displayName, Instant now) {
         return new BrokerAccount(BrokerAccountId.newId(), ownerId, providerRegistrationReference,
                 executionMode, displayName, now);
+    }
+
+    public static BrokerAccount create(UUID ownerId, UUID providerRegistrationReference, ExecutionMode executionMode,
+                                       String displayName, Instant now, UUID riskProfileId,
+                                       String riskProfileSemanticVersion) {
+        BrokerAccount account = create(ownerId, providerRegistrationReference, executionMode, displayName, now);
+        account.riskProfileId = riskProfileId;
+        account.riskProfileSemanticVersion = riskProfileSemanticVersion;
+        return account;
     }
 
     public static BrokerAccount importConnected(UUID id, UUID ownerId, UUID providerRegistrationReference,
@@ -170,6 +183,8 @@ public class BrokerAccount {
     public UUID ownerId() { return ownerId; }
     public UUID providerRegistrationReference() { return providerRegistrationReference; }
     public UUID provider() { return providerRegistrationReference; }
+    public UUID riskProfileId() { return riskProfileId; }
+    public String riskProfileSemanticVersion() { return riskProfileSemanticVersion; }
     public String displayName() { return displayName; }
     public String externalAccountId() { return externalAccountId; }
     public BrokerConnectionStatus connectionStatus() { return connectionStatus; }

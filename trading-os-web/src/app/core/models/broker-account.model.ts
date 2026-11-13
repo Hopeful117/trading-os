@@ -32,6 +32,15 @@ export interface BrokerAccountReadOnlyStatus {
   executionAllowed: boolean;
   riskEvaluationAllowed: boolean;
   snapshot: BrokerAccountSnapshot | null;
+  readiness?: BrokerAccountReadiness;
+}
+
+export interface BrokerAccountReadiness {
+  accountObservation: string;
+  t0Risk: string;
+  liveExecution: string;
+  unavailableFacts: string[];
+  derivedFacts: string[];
 }
 
 export interface CTraderExecutionInstrumentContract {

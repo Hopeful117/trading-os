@@ -4,7 +4,9 @@ import json
 import os
 import pathlib
 import tempfile
+import threading
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -13,7 +15,29 @@ import httpx
 
 
 class GatewayClientError(RuntimeError):
-    """Sanitized error exposed to the MCP tool boundary."""
+    """Sanitized, structured error exposed to the MCP tool boundary."""
+
+    def __init__(self, message: str, *, code: str = "INTERNAL_ERROR", status: int | None = None,
+                 correlation_id: str | None = None, retryable: bool = False,
+                 next_action: str = "Inspect the error and retry only when advised."):
+        super().__init__(message)
+        self.code = code
+        self.status = status
+        self.correlation_id = correlation_id
+        self.retryable = retryable
+        self.next_action = next_action
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "error": {
+                "code": self.code,
+                "message": str(self),
+                "status": self.status,
+                "correlationId": self.correlation_id,
+                "retryable": self.retryable,
+                "nextAction": self.next_action,
+            }
+        }
 
 
 class AccessTokenProvider(Protocol):
@@ -33,6 +57,7 @@ class AgentTokenProvider:
         self._max_response_bytes = max_response_bytes
         self._access_token: str | None = None
         self._expires_at = 0.0
+        self._exchange_lock = threading.Lock()
 
     def token(self) -> str:
         if self._access_token is not None and time.monotonic() < self._expires_at:
@@ -44,37 +69,57 @@ class AgentTokenProvider:
         self._expires_at = 0.0
 
     def _exchange(self) -> str:
-        try:
-            with httpx.stream(
-                "POST",
-                f"{self._base_url.rstrip('/')}/api/v1/agents/token",
-                json={"credential": self._credential},
-                timeout=self._timeout_seconds,
-            ) as response:
-                body = bytearray()
-                for chunk in response.iter_bytes():
-                    body.extend(chunk)
-                    if len(body) > self._max_response_bytes:
-                        raise GatewayClientError(
-                            "Gateway token response exceeds the configured MCP response limit"
+        with self._exchange_lock:
+            if self._access_token is not None and time.monotonic() < self._expires_at:
+                return self._access_token
+            correlation_id = str(uuid.uuid4())
+            try:
+                with httpx.stream(
+                    "POST",
+                    f"{self._base_url.rstrip('/')}/api/v1/agents/token",
+                    json={"credential": self._credential},
+                    headers={"X-Correlation-ID": correlation_id},
+                    timeout=self._timeout_seconds,
+                ) as response:
+                    body = bytearray()
+                    for chunk in response.iter_bytes():
+                        body.extend(chunk)
+                        if len(body) > self._max_response_bytes:
+                            raise GatewayClientError(
+                                "Gateway token response exceeds the configured MCP response limit",
+                                code="UPSTREAM_UNAVAILABLE", status=response.status_code,
+                                correlation_id=correlation_id,
+                                next_action="Retry after the Gateway returns a bounded token response.",
+                            )
+                    if response.status_code >= 400:
+                        code = "AUTHENTICATION_FAILED" if response.status_code == 401 else (
+                            "PERMISSION_DENIED" if response.status_code == 403 else "UPSTREAM_UNAVAILABLE"
                         )
-                response.raise_for_status()
-                payload = json.loads(bytes(body).decode(response.encoding or "utf-8"))
-            token = payload.get("accessToken")
-            expires_in = payload.get("expiresIn")
-            if not isinstance(token, str) or not token or not isinstance(expires_in, (int, float)):
-                raise GatewayClientError("Gateway returned an invalid agent token response")
-            self._access_token = token
-            self._expires_at = time.monotonic() + max(1.0, float(expires_in) - 30.0)
-            return token
-        except GatewayClientError:
-            raise
-        except httpx.HTTPStatusError as error:
-            raise GatewayClientError("Agent credential exchange failed") from error
-        except (httpx.TimeoutException, httpx.RequestError) as error:
-            raise GatewayClientError("Gateway is unavailable") from error
-        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, KeyError) as error:
-            raise GatewayClientError("Gateway returned an invalid agent token response") from error
+                        raise GatewayClientError("Agent credential exchange failed", code=code,
+                                                 status=response.status_code, correlation_id=correlation_id,
+                                                 retryable=response.status_code >= 500,
+                                                 next_action="Rotate the credential only when it is invalid or revoked.")
+                    try:
+                        payload = json.loads(bytes(body).decode(response.encoding or "utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        raise GatewayClientError("Gateway returned an invalid agent token response",
+                                                  code="INTERNAL_ERROR", status=response.status_code,
+                                                  correlation_id=correlation_id) from error
+                token = payload.get("accessToken")
+                expires_in = payload.get("expiresIn")
+                if not isinstance(token, str) or not token or not isinstance(expires_in, (int, float)):
+                    raise GatewayClientError("Gateway returned an invalid agent token response",
+                                              code="INTERNAL_ERROR", status=200,
+                                              correlation_id=correlation_id)
+                self._access_token = token
+                self._expires_at = time.monotonic() + max(1.0, float(expires_in) - 30.0)
+                return token
+            except GatewayClientError:
+                raise
+            except (httpx.TimeoutException, httpx.RequestError) as error:
+                raise GatewayClientError("Gateway is unavailable", code="UPSTREAM_UNAVAILABLE",
+                                         correlation_id=correlation_id, retryable=True,
+                                         next_action="Retry after the Gateway is reachable.") from error
 
 
 class StaticTokenProvider:
@@ -109,6 +154,7 @@ class TradingOsClient:
         if parsed.hostname not in {"127.0.0.1", "localhost", "::1"} and parsed.scheme != "https":
             raise GatewayClientError("TRADING_OS_GATEWAY_URL must use HTTPS outside localhost")
         attempts = 2 if retry_on_unauthorized else 1
+        correlation_id = str(uuid.uuid4())
         for attempt in range(attempts):
             try:
                 with httpx.stream(
@@ -118,6 +164,7 @@ class TradingOsClient:
                     json=payload,
                     headers={
                         "Authorization": f"Bearer {self.token_provider.token()}",
+                        "X-Correlation-ID": correlation_id,
                         **({"Idempotency-Key": idempotency_key} if idempotency_key else {}),
                     },
                     timeout=self.timeout_seconds,
@@ -127,36 +174,67 @@ class TradingOsClient:
                         continue
                     if response.status_code == 401:
                         self.token_provider.invalidate()
-                    body = bytearray()
-                    for chunk in response.iter_bytes():
-                        body.extend(chunk)
-                        if len(body) > self.max_response_bytes:
-                            raise GatewayClientError(
-                                "Gateway response exceeds the configured MCP response limit"
-                            )
-                    try:
-                        response.raise_for_status()
-                    except httpx.HTTPStatusError as error:
-                        raise GatewayClientError(
-                            f"Gateway request failed with HTTP {response.status_code}"
-                        ) from error
+                    body = self._read_body(response, "Gateway response exceeds the configured MCP response limit")
+                    if response.status_code >= 400:
+                        raise self._http_error(response, body, correlation_id)
                     try:
                         text = bytes(body).decode(response.encoding or "utf-8")
                         json.loads(text)
                     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                        raise GatewayClientError("Gateway returned invalid JSON") from error
+                        raise GatewayClientError("Gateway returned invalid JSON", code="INTERNAL_ERROR",
+                                                  status=response.status_code, correlation_id=correlation_id) from error
                     return text
             except GatewayClientError:
                 raise
-            except httpx.HTTPStatusError as error:
-                raise GatewayClientError(
-                    f"Gateway request failed with HTTP {error.response.status_code}"
-                ) from error
             except httpx.TimeoutException as error:
-                raise GatewayClientError("Gateway request timed out") from error
+                raise GatewayClientError("Gateway request timed out", code="UPSTREAM_UNAVAILABLE",
+                                         correlation_id=correlation_id, retryable=True,
+                                         next_action="Retry after the Gateway is reachable.") from error
             except httpx.RequestError as error:
-                raise GatewayClientError("Gateway is unavailable") from error
-        raise GatewayClientError("Gateway request failed with HTTP 401")
+                raise GatewayClientError("Gateway is unavailable", code="UPSTREAM_UNAVAILABLE",
+                                         correlation_id=correlation_id, retryable=True,
+                                         next_action="Retry after the Gateway is reachable.") from error
+        raise GatewayClientError("Agent access token expired", code="TOKEN_EXPIRED", status=401,
+                                 correlation_id=correlation_id, retryable=False,
+                                 next_action="Reconnect only if the underlying agent credential is invalid or revoked.")
+
+    def _read_body(self, response: httpx.Response, limit_message: str) -> bytearray:
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            body.extend(chunk)
+            if len(body) > self.max_response_bytes:
+                raise GatewayClientError(limit_message, code="MARKET_DATA_UNAVAILABLE",
+                                         status=response.status_code,
+                                         correlation_id=response.headers.get("X-Correlation-ID"),
+                                         next_action="Use a bounded instrument filter or pagination.")
+        return body
+
+    def _http_error(self, response: httpx.Response, body: bytearray,
+                    correlation_id: str) -> GatewayClientError:
+        safe_code = {
+            400: "INVALID_REQUEST",
+            401: "AUTHENTICATION_FAILED",
+            403: "PERMISSION_DENIED",
+            404: "ACCOUNT_ACCESS_DENIED",
+            409: "ACCOUNT_FACTS_INCOMPLETE",
+            502: "UPSTREAM_UNAVAILABLE",
+            503: "UPSTREAM_UNAVAILABLE",
+            504: "UPSTREAM_UNAVAILABLE",
+        }.get(response.status_code, "INTERNAL_ERROR")
+        details: dict[str, Any] = {}
+        try:
+            parsed = json.loads(bytes(body).decode(response.encoding or "utf-8"))
+            if isinstance(parsed, dict):
+                details = parsed
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
+        code = details.get("code") if isinstance(details.get("code"), str) else safe_code
+        message = details.get("detail") if isinstance(details.get("detail"), str) else "Gateway request failed"
+        response_correlation = response.headers.get("X-Correlation-ID") or response.headers.get("X-Request-ID")
+        return GatewayClientError(message, code=code, status=response.status_code,
+                                   correlation_id=response_correlation or correlation_id,
+                                   retryable=response.status_code in {502, 503, 504},
+                                   next_action="Retry only when the error is marked retryable.")
 
 
 _cached_client: TradingOsClient | None = None

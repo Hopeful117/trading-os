@@ -7,6 +7,7 @@ import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.ContextProvenance;
 import com.hope.trading.market_intelligence.domain.ContextSensitivity;
 import com.hope.trading.market_intelligence.domain.ContextSectionStatus;
+import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,6 +47,18 @@ class ContextFingerprintFactoryTest {
                 Map.of(ContextSectionType.NEWS, first)))
                 .isNotEqualTo(ContextFingerprintFactory.fingerprint(request, List.of(),
                         Map.of(ContextSectionType.NEWS, changed)));
+    }
+
+    @Test
+    void fingerprintsDifferentTradeabilityProfilesDifferently() {
+        IntelligenceAnalysisRequest basic = new IntelligenceAnalysisRequest(
+                UUID.randomUUID(), UUID.randomUUID(), AnalysisExecutionMode.ACTIVE, "context")
+                .withTradeabilityEvidenceProfile(TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC);
+        IntelligenceAnalysisRequest unsupported = basic.withTradeabilityEvidenceProfile(
+                TradeabilityEvidenceProfile.UNSUPPORTED);
+
+        assertThat(ContextFingerprintFactory.fingerprint(basic, List.of(), Map.of()))
+                .isNotEqualTo(ContextFingerprintFactory.fingerprint(unsupported, List.of(), Map.of()));
     }
 
     private ContextSection section(String sourceReference) {

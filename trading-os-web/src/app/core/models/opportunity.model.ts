@@ -31,6 +31,7 @@ export interface OpportunityResponse {
   type: OpportunityType;
   origin: OpportunityOrigin;
   score: number;
+  scoreSemantics: 'BUSINESS_PRIORITY_NOT_PROBABILITY';
   explanation: string;
   observationIds: string[];
   aiAnalysisIds: string[];

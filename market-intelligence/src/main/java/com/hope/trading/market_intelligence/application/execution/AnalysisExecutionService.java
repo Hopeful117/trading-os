@@ -247,8 +247,9 @@ public class AnalysisExecutionService {
         if (!historicalBoundary) {
             return new AnalysisExecutionProvenance(
                     request.marketId(), request.mode(), request.objective(), "v1",
-                    request.accountId(), request.scanId(), request.scanMarketId(),
-                     request.evaluationCutoff(), request.evidencePolicy());
+                     request.accountId(), request.scanId(), request.scanMarketId(),
+                     request.evaluationCutoff(), request.evidencePolicy(),
+                     request.tradeabilityEvidenceProfile());
         }
         if (request.evidencePolicy() != EvidenceAcquisitionPolicy.STRICT_OBSERVED
                 || request.evaluationCutoff() == null) {
@@ -267,9 +268,10 @@ public class AnalysisExecutionService {
                 + "|selection=" + (selectionFingerprint == null ? "preflight-unavailable" : selectionFingerprint);
         return new AnalysisExecutionProvenance(
                 request.marketId(), request.mode(), request.objective(), "v1",
-                request.accountId(), request.scanId(), request.scanMarketId(),
-                 request.evaluationCutoff(), request.evidencePolicy(),
-                 ExecutionOrigin.HISTORICAL_RECONSTRUCTION, fingerprint,
+                 request.accountId(), request.scanId(), request.scanMarketId(),
+                  request.evaluationCutoff(), request.evidencePolicy(),
+                  request.tradeabilityEvidenceProfile(),
+                  ExecutionOrigin.HISTORICAL_RECONSTRUCTION, fingerprint,
                  request.historicalEvidenceSelection());
     }
 
@@ -300,10 +302,11 @@ public class AnalysisExecutionService {
                 execution.provenance().objective(),
                 execution.provenance().accountId(),
                 execution.provenance().scanId(),
-                execution.provenance().scanMarketId(),
-                execution.provenance().evaluationCutoff(),
-                execution.provenance().evidencePolicy()
-        ).withHistoricalEvidenceSelection(execution.provenance().historicalEvidenceSelection()));
+                 execution.provenance().scanMarketId(),
+                 execution.provenance().evaluationCutoff(),
+                 execution.provenance().evidencePolicy(),
+                 null, execution.provenance().historicalEvidenceSelection(),
+                 execution.provenance().tradeabilityEvidenceProfile()));
     }
 
     public AnalysisExecution find(UUID executionId) {

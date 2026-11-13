@@ -14,6 +14,7 @@ from app.client import (
     GatewayClientError,
     clear_runtime_credential,
     client_from_environment,
+    load_runtime_credential,
     persist_runtime_credential,
     set_runtime_credential,
 )
@@ -21,11 +22,26 @@ from app.server import mcp
 
 
 class BridgeState:
-    def __init__(self, ttl_seconds: float = 120.0) -> None:
+    def __init__(self, ttl_seconds: float = 120.0, recover: bool = False) -> None:
         self._ttl_seconds = ttl_seconds
         self._lock = threading.Lock()
         self._challenges: dict[str, float] = {}
         self._connected = False
+        if recover:
+            self._recover_existing_credential()
+
+    def _recover_existing_credential(self) -> None:
+        try:
+            credential = load_runtime_credential()
+            if not credential:
+                return
+            set_runtime_credential(credential)
+            client_from_environment().token_provider.token()
+        except (OSError, RuntimeError, GatewayClientError):
+            clear_runtime_credential()
+            return
+        with self._lock:
+            self._connected = True
 
     def challenge(self) -> str:
         value = secrets.token_urlsafe(32)
@@ -143,11 +159,11 @@ def main() -> None:
         origin.strip()
         for origin in os.environ.get(
             "TRADING_OS_MCP_BRIDGE_ALLOWED_ORIGINS",
-            "http://localhost:4200,http://127.0.0.1:4200",
+            "http://localhost:4200,http://127.0.0.1:4200,http://localhost:17085,http://127.0.0.1:17085",
         ).split(",")
         if origin.strip()
     }
-    state = BridgeState()
+    state = BridgeState(recover=True)
     handler = type("ConfiguredBridgeHandler", (BridgeHandler,), {})
     handler.state = state
     handler.allowed_origins = origins

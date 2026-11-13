@@ -9,6 +9,7 @@ import java.util.*;
 public record OpportunityResponse(
         UUID id, long version, String status, String instrument, String direction,
         String scenario, String timeframe, String type, String origin, BigDecimal score,
+        String scoreSemantics,
         String explanation, Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
           UUID strategyMatchId, UUID marketId, UUID accountId, UUID sourceScanId,
@@ -24,7 +25,7 @@ public record OpportunityResponse(
                 value.id().value(), value.version().value(), value.status().name(),
                 value.instrument(), value.direction().name(), value.scenario(),
                 value.timeframe(), value.type().name(), value.origin().name(),
-                value.score().value(), value.explanation(),
+                value.score().value(), OpportunityScore.SEMANTICS, value.explanation(),
                 value.observations().stream().map(ObservationReference::observationId)
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()),
                 value.aiAnalyses().stream().map(AiAnalysisReference::analysisId)

@@ -3,6 +3,7 @@ package com.hope.trading.trading_core.execution.application.service;
 import com.hope.trading.trading_core.execution.domain.aggregate.ExecutionIntent;
 import com.hope.trading.trading_core.execution.domain.repository.ExecutionIntentRepositoryPort;
 import com.hope.trading.trading_core.execution.domain.valueobject.ExecutionIntentId;
+import com.hope.trading.trading_core.execution.domain.valueobject.IdempotencyKey;
 import java.util.*;
 
 public final class QueryExecutionService {
@@ -11,6 +12,9 @@ public final class QueryExecutionService {
         this.intents = Objects.requireNonNull(intents);
     }
     public Optional<ExecutionIntent> find(ExecutionIntentId id) { return intents.findById(id); }
+    public Optional<ExecutionIntent> findByIdempotencyKey(IdempotencyKey key) {
+        return intents.findByIdempotencyKey(key);
+    }
     public Optional<ExecutionIntent> findOwned(ExecutionIntentId id, UUID initiatorId) {
         return intents.findById(id).filter(i -> i.initiatorId().equals(initiatorId));
     }

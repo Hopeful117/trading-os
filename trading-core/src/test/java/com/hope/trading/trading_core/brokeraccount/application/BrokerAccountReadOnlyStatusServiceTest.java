@@ -31,10 +31,12 @@ class BrokerAccountReadOnlyStatusServiceTest {
                 ExecutionMode.LIVE, "FTMO", "49411967", Instant.now());
         when(brokerAccounts.findByIdAndOwnerId(ACCOUNT_ID, OWNER_ID)).thenReturn(java.util.Optional.of(account));
         var snapshot = new BrokerAccountSnapshotV2Dto(ACCOUNT_ID, PROVIDER_ID, "49411967",
-                Map.of("USD", BigDecimal.TEN), List.of(), Instant.now(), null, List.of(), List.of(),
+                Map.of("USD", BigDecimal.TEN), List.of(), Instant.now(),
+                new com.hope.trading.trading_core.broker.dto.BrokerAccountFactsV2Dto(
+                        "USD", BigDecimal.TEN, null, null, null), List.of(), List.of(),
                 "INCOMPLETE", "FRESH", Instant.now(), Instant.now(),
                 List.of("EQUITY_UNAVAILABLE", "FREE_MARGIN_UNAVAILABLE"));
-        when(snapshots.getAccountSnapshot(ACCOUNT_ID)).thenReturn(snapshot);
+        when(snapshots.getLatestAccountSnapshot(ACCOUNT_ID)).thenReturn(snapshot);
 
         var result = service.status(OWNER_ID, ACCOUNT_ID);
 
@@ -42,5 +44,27 @@ class BrokerAccountReadOnlyStatusServiceTest {
         assertThat(result.executionAllowed()).isFalse();
         assertThat(result.riskEvaluationAllowed()).isFalse();
         assertThat(result.snapshot()).isSameAs(snapshot);
+        assertThat(result.readiness().accountObservation()).isEqualTo("PARTIAL");
+        assertThat(result.readiness().t0Risk()).isEqualTo("NOT_EVALUATED");
+        assertThat(result.readiness().liveExecution()).isEqualTo("BLOCKED");
+        assertThat(result.readiness().unavailableFacts())
+                .containsExactly("EQUITY_UNAVAILABLE", "FREE_MARGIN_UNAVAILABLE");
+    }
+
+    @Test
+    void reportsIncompleteStatusWhenNoSnapshotIsAvailableWithoutCallingProvider() {
+        BrokerAccount account = BrokerAccount.importConnected(ACCOUNT_ID, OWNER_ID, PROVIDER_ID,
+                ExecutionMode.LIVE, "FTMO", "49411967", Instant.now());
+        when(brokerAccounts.findByIdAndOwnerId(ACCOUNT_ID, OWNER_ID)).thenReturn(java.util.Optional.of(account));
+        when(snapshots.getLatestAccountSnapshot(ACCOUNT_ID)).thenReturn(null);
+
+        var result = service.status(OWNER_ID, ACCOUNT_ID);
+
+        assertThat(result.status()).isEqualTo("CONNECTED_BUT_FACTS_INCOMPLETE");
+        assertThat(result.executionAllowed()).isFalse();
+        assertThat(result.riskEvaluationAllowed()).isFalse();
+        assertThat(result.snapshot()).isNull();
+        assertThat(result.readiness().accountObservation()).isEqualTo("UNAVAILABLE");
+        assertThat(result.readiness().t0Risk()).isEqualTo("BLOCKED");
     }
 }

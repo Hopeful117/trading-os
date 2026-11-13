@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.time.Instant;
 import java.time.Clock;
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Component
+@ConditionalOnProperty(name = "kraken.market-data.enabled", havingValue = "true", matchIfMissing = true)
 public class KrakenMarketData implements MarketDataProvider {
     private static final int KRAKEN_MAX_OHLC_ENTRIES = 720;
     private static final Logger log = LoggerFactory.getLogger(KrakenMarketData.class);

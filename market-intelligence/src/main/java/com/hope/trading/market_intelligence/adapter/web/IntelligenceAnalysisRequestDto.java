@@ -2,6 +2,7 @@ package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
+import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -13,9 +14,10 @@ public record IntelligenceAnalysisRequestDto(
         @NotNull AnalysisExecutionMode mode,
         @Size(max = 500) String objective,
         Instant evaluationCutoff,
-        EvidenceAcquisitionPolicy evidencePolicy
+        EvidenceAcquisitionPolicy evidencePolicy,
+        TradeabilityEvidenceProfile tradeabilityEvidenceProfile
 ) {
     public IntelligenceAnalysisRequestDto(UUID marketId, AnalysisExecutionMode mode, String objective) {
-        this(marketId, mode, objective, null, null);
+        this(marketId, mode, objective, null, null, null);
     }
 }

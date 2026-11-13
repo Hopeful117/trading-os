@@ -43,7 +43,9 @@ class OpportunityControllerTest {
                         .param("page", "0").param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
-                .andExpect(jsonPath("$.items[0].version").value(2));
+                .andExpect(jsonPath("$.items[0].version").value(2))
+                .andExpect(jsonPath("$.items[0].scoreSemantics")
+                        .value(OpportunityScore.SEMANTICS));
         mvc.perform(get("/api/v1/opportunities/{id}", id.value()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
         mvc.perform(get("/api/v1/opportunities/active"))

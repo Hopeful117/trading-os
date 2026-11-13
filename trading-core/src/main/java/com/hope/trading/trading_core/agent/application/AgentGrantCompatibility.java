@@ -20,7 +20,10 @@ final class AgentGrantCompatibility {
             Map.entry(AgentPermission.PLANS_CREATE, Set.of(AgentResourceType.BROKER_ACCOUNT)),
             Map.entry(AgentPermission.TRADE_PLAN_APPROVAL_REQUEST, Set.of(AgentResourceType.BROKER_ACCOUNT)),
             Map.entry(AgentPermission.TRADE_PLAN_RISK_EVALUATE, Set.of(AgentResourceType.BROKER_ACCOUNT)),
-            Map.entry(AgentPermission.TRADE_PLAN_APPROVAL_STATUS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)));
+             Map.entry(AgentPermission.TRADE_PLAN_APPROVAL_STATUS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+             Map.entry(AgentPermission.EXECUTIONS_REQUEST, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+             Map.entry(AgentPermission.EXECUTIONS_CONTINUE_APPROVED, Set.of(AgentResourceType.BROKER_ACCOUNT)),
+             Map.entry(AgentPermission.EXECUTIONS_STATUS_READ, Set.of(AgentResourceType.BROKER_ACCOUNT)));
 
     private AgentGrantCompatibility() {
     }

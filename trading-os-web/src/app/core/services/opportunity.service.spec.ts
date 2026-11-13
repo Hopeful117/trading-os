@@ -22,6 +22,7 @@ describe('OpportunityService', () => {
     type: 'INTRADAY',
     origin: 'ACTIVE_SCAN',
     score: 0.72,
+    scoreSemantics: 'BUSINESS_PRIORITY_NOT_PROBABILITY',
     explanation: 'Upward trend conditions matched',
     observationIds: ['obs-1'],
     aiAnalysisIds: [],

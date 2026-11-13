@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import json
 import os
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
@@ -10,10 +9,24 @@ from urllib.parse import urlparse
 from mcp.server import MCPServer
 from pydantic import Field
 
-from app.client import client_from_environment
+from app.client import GatewayClientError, client_from_environment
 
 
 mcp = MCPServer("trading-os-research")
+
+
+def _safe_get(path: str, params: dict[str, object] | None = None) -> str:
+    try:
+        return client_from_environment().get(path, params)
+    except GatewayClientError as error:
+        return json.dumps(error.as_dict())
+
+
+def _safe_post(path: str, payload: dict[str, object], idempotency_key: str) -> str:
+    try:
+        return client_from_environment().post(path, payload, idempotency_key)
+    except GatewayClientError as error:
+        return json.dumps(error.as_dict())
 
 
 @mcp.tool()
@@ -21,7 +34,7 @@ def list_markets(
     instrument: Annotated[str | None, Field(description="Optional canonical or provider instrument filter.")] = None,
 ) -> str:
     """List canonical markets through the public Trading OS Gateway."""
-    return client_from_environment().get(
+    return _safe_get(
         "/api/v1/markets", {"instrument": instrument} if instrument is not None else None
     )
 
@@ -29,7 +42,7 @@ def list_markets(
 @mcp.tool()
 def get_active_scan(scan_id: Annotated[UUID, Field(description="Trading OS active scan UUID.")]) -> str:
     """Read an authorized active-scan projection without starting or changing a scan."""
-    return client_from_environment().get(f"/api/v1/intelligence/scans/{scan_id}")
+    return _safe_get(f"/api/v1/intelligence/scans/{scan_id}")
 
 
 @mcp.tool()
@@ -70,7 +83,7 @@ def get_market_thesis(
     ],
 ) -> str:
     """Read the latest deterministic Market Thesis for a market."""
-    return client_from_environment().get(
+    return _safe_get(
         "/api/v1/intelligence/market-theses/latest",
         {"marketId": str(market_id), "instrument": instrument, "direction": direction},
     )
@@ -93,7 +106,7 @@ def get_opportunities(
         "sort": "createdAt",
         "direction": "desc",
     }
-    return client_from_environment().get(
+    return _safe_get(
         "/api/v1/opportunities", {key: value for key, value in params.items() if value is not None}
     )
 
@@ -103,7 +116,7 @@ def get_opportunity(
     opportunity_id: Annotated[UUID, Field(description="Trading OS opportunity UUID.")],
 ) -> str:
     """Read one opportunity with its supporting thesis and evidence."""
-    return client_from_environment().get(f"/api/v1/opportunities/{opportunity_id}")
+    return _safe_get(f"/api/v1/opportunities/{opportunity_id}")
 
 
 @mcp.tool()
@@ -115,7 +128,7 @@ def create_trade_plan_from_opportunity(
                                           description="Stable key reused only when retrying the same request.")],
 ) -> str:
     """Create a Trade Plan from an existing opportunity; Trading Core owns planning and risk preflight."""
-    return client_from_environment().post(
+    return _safe_post(
         f"/api/v1/agent/trade-plans/opportunities/{opportunity_id}",
         {"brokerAccountId": str(broker_account_id), "opportunityVersion": opportunity_version},
         idempotency_key,
@@ -125,7 +138,7 @@ def create_trade_plan_from_opportunity(
 @mcp.tool()
 def list_authorized_accounts() -> str:
     """List only broker accounts explicitly granted to this agent."""
-    return client_from_environment().get("/api/v1/agent/broker-accounts")
+    return _safe_get("/api/v1/agent/broker-accounts")
 
 
 @mcp.tool()
@@ -133,7 +146,7 @@ def get_authorized_account(
     broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
 ) -> str:
     """Read one broker account explicitly granted to this agent."""
-    return client_from_environment().get(f"/api/v1/agent/broker-accounts/{broker_account_id}")
+    return _safe_get(f"/api/v1/agent/broker-accounts/{broker_account_id}")
 
 
 @mcp.tool()
@@ -141,8 +154,18 @@ def get_authorized_account_status(
     broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
 ) -> str:
     """Read synchronization/read-only status for an authorized broker account."""
-    return client_from_environment().get(
+    return _safe_get(
         f"/api/v1/agent/broker-accounts/{broker_account_id}/read-only-status"
+    )
+
+
+@mcp.tool()
+def get_authorized_account_reconciliation(
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
+) -> str:
+    """Read provider-vs-local reconciliation for an explicitly authorized broker account."""
+    return _safe_get(
+        f"/api/v1/agent/broker-accounts/{broker_account_id}/reconciliation"
     )
 
 
@@ -151,7 +174,7 @@ def get_authorized_positions(
     broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
 ) -> str:
     """Read positions for a broker account explicitly granted to this agent."""
-    return client_from_environment().get(
+    return _safe_get(
         f"/api/v1/agent/broker-accounts/{broker_account_id}/positions"
     )
 
@@ -163,7 +186,7 @@ def get_authorized_trade_plan(
     trade_plan_version: Annotated[int, Field(ge=1, description="Immutable Trade Plan version.")],
 ) -> str:
     """Read one Trade Plan within an explicitly authorized broker-account scope."""
-    return client_from_environment().get(
+    return _safe_get(
         f"/api/v1/agent/trade-plans/{trade_plan_id}/versions/{trade_plan_version}",
         {"accountId": str(broker_account_id)},
     )
@@ -178,7 +201,7 @@ def evaluate_authorized_trade_plan_risk(
 ) -> str:
     """Request deterministic pre-trade risk evaluation using this agent's account-scoped grant."""
     key = idempotency_key or f"trade-plan-risk:{trade_plan_id}:{trade_plan_version}:{uuid4()}"
-    return client_from_environment().post(
+    return _safe_post(
         f"/api/v1/agent/trade-plan-risk-evaluations/{trade_plan_id}/versions/{trade_plan_version}",
         {}, key,
     )
@@ -191,13 +214,15 @@ def request_trade_plan_approval(
     risk_evaluation_id: Annotated[UUID, Field(description="Approved pre-trade risk evaluation UUID.")],
 ) -> str:
     """Create a short-lived, single-use human approval challenge; this never executes a trade."""
-    response = client_from_environment().post(
+    response = _safe_post(
         "/api/v1/agent/trade-plan-approvals",
         {"tradePlanId": str(trade_plan_id), "tradePlanVersion": trade_plan_version,
          "riskEvaluationId": str(risk_evaluation_id)},
         f"trade-plan-approval:{trade_plan_id}:{trade_plan_version}:{risk_evaluation_id}",
     )
     payload = json.loads(response)
+    if "error" in payload:
+        return response
     challenge_id = payload.get("challengeId")
     if not isinstance(challenge_id, str):
         raise ValueError("Gateway returned an invalid approval challenge")
@@ -214,7 +239,58 @@ def get_trade_plan_approval_status(
     challenge_id: Annotated[UUID, Field(description="Human approval challenge UUID.")],
 ) -> str:
     """Read the status of a human approval challenge; it does not approve or execute anything."""
-    return client_from_environment().get(f"/api/v1/agent/trade-plan-approvals/{challenge_id}")
+    return _safe_get(f"/api/v1/agent/trade-plan-approvals/{challenge_id}")
+
+
+@mcp.tool()
+def request_trade_execution_authorization(
+    trade_plan_id: Annotated[UUID, Field(description="Immutable Trading OS Trade Plan UUID.")],
+    trade_plan_version: Annotated[int, Field(ge=1, description="Immutable Trade Plan version.")],
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
+    risk_evaluation_id: Annotated[UUID, Field(description="Approved pre-trade Risk evaluation UUID.")],
+    execution_idempotency_key: Annotated[str, Field(min_length=1, max_length=200,
+                                                     description="Stable key reused only for the same exact operation.")],
+) -> str:
+    """Request human authorization for one exact TradePlan execution; it never executes an order."""
+    return _safe_post(
+        "/api/v1/agent/execution-authorizations",
+        {"tradePlanId": str(trade_plan_id), "tradePlanVersion": trade_plan_version,
+         "brokerAccountId": str(broker_account_id), "riskEvaluationId": str(risk_evaluation_id),
+         "executionIdempotencyKey": execution_idempotency_key},
+        f"execution-authorization:{execution_idempotency_key}",
+    )
+
+
+@mcp.tool()
+def get_trade_execution_authorization_status(
+    authorization_id: Annotated[UUID, Field(description="Execution authorization UUID.")],
+) -> str:
+    """Read one agent-owned execution authorization without authorizing or executing it."""
+    return _safe_get(f"/api/v1/agent/execution-authorizations/{authorization_id}")
+
+
+@mcp.tool()
+def execute_human_authorized_trade(
+    authorization_id: Annotated[UUID, Field(description="Approved execution authorization UUID.")],
+    execution_idempotency_key: Annotated[str, Field(min_length=1, max_length=200,
+                                                     description="The exact key bound to the human authorization.")],
+) -> str:
+    """Continue one approved exact authorization through Trading Core; never accepts order parameters."""
+    return _safe_post(
+        f"/api/v1/agent/execution-authorizations/{authorization_id}/continue",
+        {}, execution_idempotency_key,
+    )
+
+
+@mcp.tool()
+def get_trade_execution_status(
+    execution_id: Annotated[UUID, Field(description="Trading OS ExecutionIntent UUID.")],
+    broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
+) -> str:
+    """Read a scoped execution status after human-authorized continuation."""
+    return _safe_get(
+        f"/api/v1/agent/executions/{execution_id}", {"brokerAccountId": str(broker_account_id)}
+    )
 
 
 @mcp.tool()
@@ -222,7 +298,7 @@ def request_account_synchronization(
     broker_account_id: Annotated[UUID, Field(description="Authorized broker-account UUID.")],
 ) -> str:
     """Create a pending, human-approval-required account synchronization request."""
-    return client_from_environment().post(
+    return _safe_post(
         "/api/v1/agent/operation-requests",
         {"operationType": "ACCOUNT_SYNCHRONIZATION", "resourceType": "BROKER_ACCOUNT", "resourceId": str(broker_account_id)},
         f"account-sync-request:{broker_account_id}",
@@ -234,7 +310,7 @@ def get_agent_operation_status(
     request_id: Annotated[UUID, Field(description="Agent operation request UUID.")],
 ) -> str:
     """Read the status of an operation requested by this agent."""
-    return client_from_environment().get(f"/api/v1/agent/operation-requests/{request_id}")
+    return _safe_get(f"/api/v1/agent/operation-requests/{request_id}")
 
 
 @mcp.tool()
@@ -242,7 +318,7 @@ def execute_approved_agent_operation(
     request_id: Annotated[UUID, Field(description="Approved agent operation request UUID.")],
 ) -> str:
     """Execute one approved operation; POST failures are never retried."""
-    return client_from_environment().post(
+    return _safe_post(
         f"/api/v1/agent/operation-requests/{request_id}/execute", {}, f"agent-operation-execute:{request_id}"
     )
 
@@ -260,7 +336,7 @@ def start_market_research(
         raise ValueError("market_ids must contain exactly two distinct UUIDs")
     if not idempotency_key.strip():
         raise ValueError("idempotency_key is required and must be reused for retries")
-    return client_from_environment().post(
+    return _safe_post(
         "/api/v1/intelligence/research",
         {"scopeId": str(scope_id), "marketIds": [str(value) for value in market_ids], "objective": objective, "depth": depth},
         idempotency_key,
@@ -272,7 +348,7 @@ def get_research_status(
     research_id: Annotated[UUID, Field(description="Trading OS research UUID.")],
 ) -> str:
     """Read the status of an owned Trading OS research workflow."""
-    return client_from_environment().get(f"/api/v1/intelligence/research/{research_id}")
+    return _safe_get(f"/api/v1/intelligence/research/{research_id}")
 
 
 @mcp.tool()
@@ -280,7 +356,7 @@ def get_research_report(
     research_id: Annotated[UUID, Field(description="Trading OS research UUID.")],
 ) -> str:
     """Read the structured advisory research report without any execution authority."""
-    return client_from_environment().get(f"/api/v1/intelligence/research/{research_id}/report")
+    return _safe_get(f"/api/v1/intelligence/research/{research_id}/report")
 
 
 @mcp.tool()
@@ -295,7 +371,7 @@ def inspect_historical_research_readiness(
     """Inspect deterministic historical readiness through the public Gateway."""
     if len(market_ids) not in {1, 2} or len(set(market_ids)) != len(market_ids):
         raise ValueError("market_ids must contain one or two distinct UUIDs")
-    return client_from_environment().post(
+    return _safe_post(
         "/api/v1/intelligence/research/readiness",
         {
             "brokerAccountId": str(broker_account_id),
@@ -323,7 +399,7 @@ def request_historical_dataset_export(
         raise ValueError("idempotency_key is required and must be reused for retries")
     if not isinstance(population, dict) or len(population) > 32:
         raise ValueError("population must be a bounded object")
-    return client_from_environment().post(
+    return _safe_post(
         f"/api/v1/intelligence/research/{scope_id}/exports",
         {"population": population, "maxRows": max_rows, "maxBytes": max_bytes,
          "maxDurationSeconds": max_duration_seconds},
@@ -336,7 +412,7 @@ def get_historical_dataset_export_status(
     export_id: Annotated[UUID, Field(description="Historical dataset export job UUID.")],
 ) -> str:
     """Read authorized export lifecycle and artifact metadata without filesystem paths or dataset rows."""
-    return client_from_environment().get(f"/api/v1/intelligence/research/exports/{export_id}")
+    return _safe_get(f"/api/v1/intelligence/research/exports/{export_id}")
 
 
 def main() -> None:
