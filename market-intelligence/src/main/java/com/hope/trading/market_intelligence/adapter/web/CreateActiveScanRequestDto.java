@@ -14,8 +14,17 @@ public record CreateActiveScanRequestDto(
         @Size(max = 500) String objective,
         List<UUID> requestedMarketIds,
         MarketScopeMode scopeMode,
-        TradeabilityEvidenceProfile tradeabilityEvidenceProfile
+        TradeabilityEvidenceProfile tradeabilityEvidenceProfile,
+        UUID sourcePassiveOpportunityId,
+        Long sourcePassiveOpportunityVersion
 ) {
+    public CreateActiveScanRequestDto(UUID accountId, UUID brokerAccountId, String objective,
+                                      List<UUID> requestedMarketIds, MarketScopeMode scopeMode,
+                                      TradeabilityEvidenceProfile tradeabilityEvidenceProfile) {
+        this(accountId, brokerAccountId, objective, requestedMarketIds, scopeMode,
+                tradeabilityEvidenceProfile, null, null);
+    }
+
     public CreateActiveScanRequestDto(UUID accountId, String objective, List<UUID> requestedMarketIds) {
         this(accountId, null, objective, requestedMarketIds, null, null);
     }

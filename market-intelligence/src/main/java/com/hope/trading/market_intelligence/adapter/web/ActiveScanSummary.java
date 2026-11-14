@@ -12,8 +12,14 @@ public record ActiveScanSummary(
         ActiveScanStatus status,
         String objective,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        PassiveCandidateSourceResponse sourcePassiveCandidate
 ) {
+    public ActiveScanSummary(UUID scanId, UUID accountId, ActiveScanStatus status, String objective,
+                             Instant createdAt, Instant updatedAt) {
+        this(scanId, accountId, status, objective, createdAt, updatedAt, null);
+    }
+
     public static ActiveScanSummary from(ActiveScan scan) {
         return new ActiveScanSummary(
                 scan.scanId(),
@@ -21,7 +27,8 @@ public record ActiveScanSummary(
                 scan.status(),
                 scan.objective(),
                 scan.createdAt(),
-                scan.updatedAt()
+                scan.updatedAt(),
+                PassiveCandidateSourceResponse.from(scan.passiveCandidate().orElse(null))
         );
     }
 }

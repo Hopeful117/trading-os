@@ -30,7 +30,8 @@ public record ActiveScanResponse(
         Instant createdAt,
         Instant updatedAt,
         ProgressResponse progress,
-        List<MarketResponse> markets
+        List<MarketResponse> markets,
+        PassiveCandidateSourceResponse sourcePassiveCandidate
 ) {
     static ActiveScanResponse from(
             ActiveScanResultProjection projection, StrategyMatchRepository matches) {
@@ -55,7 +56,8 @@ public record ActiveScanResponse(
                 projection.updatedAt(),
                 ProgressResponse.from(projection.progress()),
                 projection.markets().stream()
-                        .map(market -> MarketResponse.from(market, matchesById)).toList()
+                        .map(market -> MarketResponse.from(market, matchesById)).toList(),
+                PassiveCandidateSourceResponse.from(projection.sourcePassiveCandidate())
         );
     }
 

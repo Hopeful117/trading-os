@@ -11,6 +11,11 @@ import java.util.UUID;
 interface SpringDataMarketThesisRepository extends JpaRepository<JpaMarketThesisEntity, UUID> {
     Optional<JpaMarketThesisEntity> findByThesisIdAndVersion(UUID thesisId, long version);
     List<JpaMarketThesisEntity> findByThesisIdIn(List<UUID> thesisIds);
+    @Query("""
+            select distinct e.supersedes from JpaMarketThesisEntity e
+            where e.supersedes in :thesisIds
+            """)
+    List<UUID> findSupersededThesisIds(@Param("thesisIds") java.util.Collection<UUID> thesisIds);
     Optional<JpaMarketThesisEntity> findByInputFingerprint(String inputFingerprint);
     List<JpaMarketThesisEntity> findByMarketIdOrderByEvaluatedAtDesc(UUID marketId);
     @Query("""

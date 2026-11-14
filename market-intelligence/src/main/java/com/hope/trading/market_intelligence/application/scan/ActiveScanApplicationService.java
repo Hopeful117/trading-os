@@ -36,7 +36,8 @@ public class ActiveScanApplicationService {
                 command.objective(),
                 command.requestedMarketIds(),
                 command.scopeMode(),
-                command.tradeabilityEvidenceProfile()
+                command.tradeabilityEvidenceProfile(),
+                command.passiveCandidate().orElse(null)
         );
         ActiveScan existing = scans.findByActorIdAndIdempotencyKey(
                 command.actorId(),

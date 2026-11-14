@@ -6,7 +6,7 @@
 
 **Title:** Connect Passive Candidates to Active Investigation
 
-**Status:** Proposed - implementation not authorized
+**Status:** Implementation complete - code review approved 2026-11-14; awaiting human commit and PR
 
 **Priority:** P1 - Trading Intelligence
 

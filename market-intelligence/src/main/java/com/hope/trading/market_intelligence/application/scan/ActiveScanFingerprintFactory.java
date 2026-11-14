@@ -1,5 +1,6 @@
 package com.hope.trading.market_intelligence.application.scan;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
@@ -48,6 +49,23 @@ public class ActiveScanFingerprintFactory {
             MarketScopeMode scopeMode,
             TradeabilityEvidenceProfile tradeabilityEvidenceProfile
     ) {
+        return fingerprint(actorId, accountId, objective, requestedMarketIds, scopeMode,
+                tradeabilityEvidenceProfile, null);
+    }
+
+    /**
+     * Story 0243: the optional passive candidate reference participates in the
+     * fingerprint only when present, so legacy requests keep their exact hash.
+     */
+    public String fingerprint(
+            UUID actorId,
+            UUID accountId,
+            String objective,
+            List<UUID> requestedMarketIds,
+            MarketScopeMode scopeMode,
+            TradeabilityEvidenceProfile tradeabilityEvidenceProfile,
+            com.hope.trading.market_intelligence.domain.scan.PassiveCandidateReference passiveCandidate
+    ) {
         FingerprintPayload payload = new FingerprintPayload(
                 Objects.requireNonNull(actorId).toString(),
                 Objects.requireNonNull(accountId).toString(),
@@ -55,7 +73,9 @@ public class ActiveScanFingerprintFactory {
                 scopeMode,
                 normalizeRequestedMarketIds(requestedMarketIds).stream().map(UUID::toString).toList(),
                 tradeabilityEvidenceProfile == null
-                        ? TradeabilityEvidenceProfile.UNSUPPORTED : tradeabilityEvidenceProfile
+                        ? TradeabilityEvidenceProfile.UNSUPPORTED : tradeabilityEvidenceProfile,
+                passiveCandidate == null ? null : passiveCandidate.opportunityId().toString(),
+                passiveCandidate == null ? null : passiveCandidate.opportunityVersion()
         );
         try {
             return sha256Hex(mapper.writeValueAsBytes(payload));
@@ -98,7 +118,9 @@ public class ActiveScanFingerprintFactory {
             String objective,
             MarketScopeMode scopeMode,
             List<String> requestedMarketIds,
-            TradeabilityEvidenceProfile tradeabilityEvidenceProfile
+            TradeabilityEvidenceProfile tradeabilityEvidenceProfile,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String sourcePassiveOpportunityId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Long sourcePassiveOpportunityVersion
     ) {
         private FingerprintPayload {
             requestedMarketIds = List.copyOf(requestedMarketIds);

@@ -6,7 +6,7 @@
 
 **Title:** Expose the Passive Awareness Lifecycle
 
-**Status:** Proposed - implementation not authorized
+**Status:** Implementation merged (commit `41b9a741`, PR #294) - Implementation Report, independent code review and human review approval missing; see Story 0243 Repository Analysis section 2
 
 **Priority:** P1 - Trading Intelligence
 

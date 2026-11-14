@@ -159,7 +159,8 @@ public class ActiveScanReconciliationService {
                         progress.failed(),
                         progress.opportunitiesFound()
                 ),
-                classifications.stream().map(ChildClassification::projection).toList()
+                classifications.stream().map(ChildClassification::projection).toList(),
+                persisted.passiveCandidate().orElse(null)
         );
     }
 

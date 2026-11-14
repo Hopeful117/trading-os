@@ -13,9 +13,23 @@ public record CreateActiveScanCommand(
         String objective,
         List<UUID> requestedMarketIds,
         MarketScopeMode scopeMode,
-        TradeabilityEvidenceProfile tradeabilityEvidenceProfile
+        TradeabilityEvidenceProfile tradeabilityEvidenceProfile,
+        UUID sourcePassiveOpportunityId,
+        Long sourcePassiveOpportunityVersion
 ) {
     public CreateActiveScanCommand {
+        if ((sourcePassiveOpportunityId == null) != (sourcePassiveOpportunityVersion == null)) {
+            throw new ActiveScanException(
+                    "PASSIVE_CANDIDATE_REFERENCE_INCOMPLETE",
+                    "sourcePassiveOpportunityId and sourcePassiveOpportunityVersion must be provided together",
+                    400);
+        }
+        if (sourcePassiveOpportunityVersion != null && sourcePassiveOpportunityVersion < 1) {
+            throw new ActiveScanException(
+                    "PASSIVE_CANDIDATE_REFERENCE_INVALID",
+                    "sourcePassiveOpportunityVersion must be positive",
+                    400);
+        }
         if (scopeMode == null && requestedMarketIds != null
                 && requestedMarketIds.stream().anyMatch(java.util.Objects::nonNull)) {
             scopeMode = MarketScopeMode.SELECTED;
@@ -23,6 +37,21 @@ public record CreateActiveScanCommand(
         if (tradeabilityEvidenceProfile == null) {
             tradeabilityEvidenceProfile = TradeabilityEvidenceProfile.UNSUPPORTED;
         }
+    }
+
+    public CreateActiveScanCommand(UUID actorId, String idempotencyKey, UUID accountId,
+                                   UUID brokerAccountId, String objective, List<UUID> requestedMarketIds,
+                                   MarketScopeMode scopeMode,
+                                   TradeabilityEvidenceProfile tradeabilityEvidenceProfile) {
+        this(actorId, idempotencyKey, accountId, brokerAccountId, objective, requestedMarketIds, scopeMode,
+                tradeabilityEvidenceProfile, null, null);
+    }
+
+    public java.util.Optional<com.hope.trading.market_intelligence.domain.scan.PassiveCandidateReference>
+            passiveCandidate() {
+        return sourcePassiveOpportunityId == null ? java.util.Optional.empty()
+                : java.util.Optional.of(new com.hope.trading.market_intelligence.domain.scan.PassiveCandidateReference(
+                        sourcePassiveOpportunityId, sourcePassiveOpportunityVersion));
     }
 
     public CreateActiveScanCommand(UUID actorId, String idempotencyKey, UUID accountId,

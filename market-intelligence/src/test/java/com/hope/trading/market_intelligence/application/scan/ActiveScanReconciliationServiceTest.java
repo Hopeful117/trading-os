@@ -167,6 +167,41 @@ class ActiveScanReconciliationServiceTest {
     }
 
     @Test
+    void passiveCandidateScanWithNoOpportunityRetainsImmutableProvenance() {
+        AnalysisExecution execution = completedExecution(
+                IntelligenceExecutionStatus.COMPLETE,
+                AnalysisResultQuality.COMPLETE
+        );
+        ScanFixture fixture = persistSingleEligibleScan(ActiveScanStatus.DISPATCH_REQUESTED, execution);
+        ActiveScan stored = scans.findById(fixture.scanId).orElseThrow();
+        var provenance = new com.hope.trading.market_intelligence.domain.scan.PassiveCandidateProvenance(
+                UUID.randomUUID(), 3, UUID.randomUUID(), List.of(UUID.randomUUID()), UUID.randomUUID(), 1,
+                UUID.randomUUID(), execution.provenance().marketId(), UUID.randomUUID(),
+                execution.provenance().marketId(), "KRAKEN", "SPOT", now, now, now.plusSeconds(60), now, List.of());
+        scans.save(ActiveScan.restore(stored.scanId(), stored.actorId(), stored.accountId(), stored.objective(),
+                stored.idempotencyKey(), stored.requestFingerprint(), stored.scopeSnapshot(), stored.status(),
+                stored.resolvedAt(), stored.createdAt(), stored.updatedAt(), provenance));
+        pipelineRuns.put(new AnalysisPipelineRunView(
+                execution.executionId(),
+                ProductionIntelligencePipeline.VERSION,
+                "COMPLETED_NO_SIGNAL",
+                null,
+                null,
+                "NO_SIGNAL",
+                "No opportunity matched current market conditions",
+                now
+        ));
+
+        ActiveScanResultProjection projection = service.reconcileOwned(fixture.actorId, fixture.scanId);
+
+        assertThat(projection.status()).isEqualTo(ActiveScanStatus.COMPLETED);
+        assertThat(projection.markets()).singleElement().extracting(ActiveScanResultProjection.MarketResult::outcome)
+                .isEqualTo(ActiveScanMarketOutcome.COMPLETED_NO_OPPORTUNITY);
+        assertThat(projection.sourcePassiveCandidate()).isEqualTo(provenance);
+        assertThat(scans.findById(fixture.scanId).orElseThrow().passiveCandidate()).contains(provenance);
+    }
+
+    @Test
     void completedExecutionWithoutPipelineLineageBecomesTerminalFailure() {
         AnalysisExecution execution = completedExecution(
                 IntelligenceExecutionStatus.COMPLETE,
