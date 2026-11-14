@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.hope.trading.market_intelligence.application.port.PassiveScanRunRepository;
+import com.hope.trading.market_intelligence.application.port.PassiveDispatchCapacityRepository;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
 import com.hope.trading.market_intelligence.domain.context.ContextClassification;
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PassiveScanPersistenceTest {
     @Autowired PassiveScanRunRepository scans;
     @Autowired JpaAnalysisExecutionRepository executions;
+    @Autowired PassiveDispatchCapacityRepository capacity;
 
     @Test
     void persistsAndReloadsImmutableRunAndMarketSnapshot() {
@@ -76,6 +78,28 @@ class PassiveScanPersistenceTest {
         assertThat(scans.findMarketById(market.scanMarketId())).get()
                 .extracting(PassiveScanMarket::status)
                 .isEqualTo(PassiveScanMarketStatus.DISPATCH_REQUESTED);
+    }
+
+    @Test
+    void durableCapacityAllowsOnlyConfiguredConcurrentLeases() {
+        Instant now = Instant.parse("2026-11-13T00:00:00Z");
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        UUID runId = UUID.randomUUID();
+        UUID marketId = UUID.randomUUID();
+        UUID executionId = UUID.randomUUID();
+        executions.save(execution(executionId, marketId, "capacity-execution-" + executionId, now));
+        scans.saveRun(PassiveScanRun.requested(runId, "capacity-run-" + runId, "fingerprint",
+                "SYSTEM", now, now.plusSeconds(300), "v1", "sha256-v1", "universe", now, List.of(), now));
+        UUID scanMarketId = UUID.randomUUID();
+        scans.saveMarkets(List.of(PassiveScanMarket.registered(scanMarketId, runId, 0, marketId,
+                "CTRADER", "CFD", Duration.ofMinutes(5), TradeabilityEvidenceProfile.UNSUPPORTED,
+                executionId, now)));
+        assertThat(capacity.acquire(first, scanMarketId, 1, now.plusSeconds(30), now)).isTrue();
+        assertThat(capacity.acquire(second, scanMarketId, 1, now.plusSeconds(30), now)).isFalse();
+        assertThat(capacity.release(first, now.plusSeconds(1))).isTrue();
+        assertThat(capacity.acquire(second, scanMarketId, 1, now.plusSeconds(30), now.plusSeconds(1))).isTrue();
+        assertThat(capacity.release(second, now.plusSeconds(2))).isTrue();
     }
 
     private AnalysisExecution execution(UUID id, UUID marketId, String key, Instant now) {

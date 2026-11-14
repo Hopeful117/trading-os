@@ -26,6 +26,14 @@ public interface PassiveScanRunRepository {
 
     Optional<PassiveScanMarket> findMarketById(UUID scanMarketId);
 
+    Optional<PassiveScanMarket> findLatestMarketByMarketId(UUID marketId);
+
+    long countActiveMarkets();
+
+    List<PassiveScanMarket> findActiveMarkets();
+
+    long countFailedAttempts(UUID marketId);
+
     boolean transitionRunStatus(UUID runId, PassiveScanRunStatus expected,
                                 PassiveScanRunStatus target, String terminalSummary, Instant updatedAt);
 
@@ -36,8 +44,9 @@ public interface PassiveScanRunRepository {
                         long expectedVersion, UUID leaseId, Instant leaseExpiresAt, Instant updatedAt);
 
     boolean recordMarketOutcome(UUID scanMarketId, PassiveScanMarketStatus expected,
-                                UUID leaseId, long expectedVersion, PassiveScanMarketStatus target,
-                                String failureCode, String failureReason, Instant updatedAt);
+                                 UUID leaseId, long expectedVersion, PassiveScanMarketStatus target,
+                                 String failureCode, String failureReason, int attemptCount,
+                                 Instant nextRetryAt, Instant updatedAt);
 
     boolean recoverExpiredMarket(UUID scanMarketId, PassiveScanMarketStatus expected,
                                  UUID leaseId, long expectedVersion, Instant updatedAt);

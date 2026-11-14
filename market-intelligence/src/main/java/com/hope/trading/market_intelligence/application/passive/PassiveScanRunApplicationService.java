@@ -1,6 +1,8 @@
 package com.hope.trading.market_intelligence.application.passive;
 
 import com.hope.trading.market_intelligence.application.port.PassiveScanRunRepository;
+import com.hope.trading.market_intelligence.application.port.PassiveDispatchCapacityRepository;
+import com.hope.trading.market_intelligence.config.PassiveDispatchProperties;
 import com.hope.trading.market_intelligence.application.execution.AnalysisExecutionService;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecution;
 import com.hope.trading.market_intelligence.domain.execution.AnalysisExecutionStatus;
@@ -9,8 +11,12 @@ import com.hope.trading.market_intelligence.domain.passive.PassiveScanMarket;
 import com.hope.trading.market_intelligence.domain.passive.PassiveScanMarketStatus;
 import com.hope.trading.market_intelligence.domain.passive.PassiveScanRun;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.EnumMap;
 import java.util.List;
@@ -23,6 +29,9 @@ public class PassiveScanRunApplicationService {
     private final PassiveScanClaimService claims;
     private final PassiveScanReconciliationService reconciliation;
     private final AnalysisExecutionService executions;
+    private final PassiveDispatchCapacityRepository capacity;
+    private final PassiveDispatchProperties dispatchProperties;
+    private final PassiveDispatchMetrics metrics;
     private final Clock clock;
 
     public PassiveScanRunApplicationService(PassiveScanRunRepository repository,
@@ -30,12 +39,18 @@ public class PassiveScanRunApplicationService {
                                              PassiveScanClaimService claims,
                                              PassiveScanReconciliationService reconciliation,
                                              AnalysisExecutionService executions,
+                                             PassiveDispatchCapacityRepository capacity,
+                                             PassiveDispatchProperties dispatchProperties,
+                                             PassiveDispatchMetrics metrics,
                                              Clock clock) {
         this.repository = repository;
         this.creation = creation;
         this.claims = claims;
         this.reconciliation = reconciliation;
         this.executions = executions;
+        this.capacity = capacity;
+        this.dispatchProperties = dispatchProperties;
+        this.metrics = metrics;
         this.clock = clock;
     }
 
@@ -48,13 +63,27 @@ public class PassiveScanRunApplicationService {
                     }
                     return existing;
                 })
-                .orElseGet(() -> creation.create(request, universe, fingerprint));
+                .orElseGet(() -> createIdempotently(request, universe, fingerprint));
+    }
+
+    private PassiveScanRun createIdempotently(PassiveScanRunRequest request, PassiveMarketUniverse universe,
+                                               String fingerprint) {
+        try {
+            return creation.create(request, universe, fingerprint);
+        } catch (DataIntegrityViolationException race) {
+            return repository.findByIdempotencyKey(request.idempotencyKey())
+                    .filter(existing -> existing.requestFingerprint().equals(fingerprint))
+                    .orElseThrow(() -> race);
+        }
     }
 
     public UUID claim(UUID runId, UUID scanMarketId) { return claims.claim(runId, scanMarketId); }
 
     public boolean recover(UUID runId, UUID scanMarketId) { return claims.recover(runId, scanMarketId); }
 
+    public int recoverOrphanedCapacity() { return claims.recoverOrphanedCapacity(); }
+
+    @Transactional
     public boolean recordOutcome(UUID scanMarketId, PassiveScanMarketStatus expected) {
         PassiveScanMarket market = repository.findMarketById(scanMarketId).orElseThrow();
         AnalysisExecution execution = executions.find(market.analysisExecutionId());
@@ -62,8 +91,35 @@ public class PassiveScanRunApplicationService {
         String failureCode = execution.failureCode().orElse(null);
         String failureReason = target == PassiveScanMarketStatus.INSUFFICIENT_EVIDENCE
                 ? "Analysis completed without complete evidence" : failureCode;
-        return repository.recordMarketOutcome(scanMarketId, expected, market.leaseId(), market.version(),
-                target, failureCode, failureReason, clock.instant());
+        Instant now = clock.instant();
+        Instant nextRetryAt = target == PassiveScanMarketStatus.FAILED && isRetryable(failureCode)
+                && market.attemptCount() < dispatchProperties.getMaxAttempts()
+                ? now.plus(retryDelay(market.cadence(), market.attemptCount())) : null;
+        boolean recorded = repository.recordMarketOutcome(scanMarketId, expected, market.leaseId(), market.version(),
+                target, failureCode, failureReason, market.attemptCount(), nextRetryAt, now);
+        if (recorded) {
+            capacity.release(market.leaseId(), now);
+            if (nextRetryAt != null) metrics.retry();
+            if (target == PassiveScanMarketStatus.INSUFFICIENT_EVIDENCE) metrics.insufficientEvidence();
+        }
+        return recorded;
+    }
+
+    private Duration retryDelay(Duration cadence, int attemptCount) {
+        long multiplier = 1L << Math.min(10, Math.max(0, attemptCount - 1));
+        Duration candidate;
+        try { candidate = cadence.multipliedBy(multiplier); }
+        catch (ArithmeticException ignored) { candidate = dispatchProperties.getRetryMaxDelay(); }
+        return candidate.compareTo(dispatchProperties.getRetryMaxDelay()) > 0
+                ? dispatchProperties.getRetryMaxDelay() : candidate;
+    }
+
+    private boolean isRetryable(String failureCode) {
+        return "DISPATCH_FAILED".equals(failureCode)
+                || "CONTEXT_UNAVAILABLE".equals(failureCode)
+                || "CONTEXT_STALE".equals(failureCode)
+                || "MARKET_SNAPSHOT_UNAVAILABLE".equals(failureCode)
+                || "MARKET_SNAPSHOT_STALE".equals(failureCode);
     }
 
     public PassiveScanRun reconcile(UUID runId) { return reconciliation.reconcile(runId); }

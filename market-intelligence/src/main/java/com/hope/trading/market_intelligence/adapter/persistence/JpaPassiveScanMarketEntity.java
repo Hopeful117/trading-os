@@ -21,7 +21,7 @@ class JpaPassiveScanMarketEntity {
     @Column(name = "cadence_seconds", nullable = false) long cadenceSeconds;
     @Column(name = "minimum_evidence_profile", nullable = false, length = 40) String minimumEvidenceProfile;
     @Column(name = "status", nullable = false, length = 40) String status;
-    @Column(name = "analysis_execution_id", nullable = false) UUID analysisExecutionId;
+    @Column(name = "analysis_execution_id") UUID analysisExecutionId;
     @Column(name = "attempt_count", nullable = false) int attemptCount;
     @Column(name = "failure_code", length = 80) String failureCode;
     @Column(name = "failure_reason", length = 500) String failureReason;

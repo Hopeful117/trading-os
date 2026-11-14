@@ -122,7 +122,7 @@ public class PassiveMarketUniverseResolver {
                 continue;
             }
             resolved.add(new PassiveMarketEntry(entry.getMarketId(), entry.getProvider(), entry.getProductType(),
-                    entry.getCadence(), entry.getMinimumEvidenceProfile()));
+                    entry.getCadence(), entry.getMinimumEvidenceProfile(), market.marketState()));
         }
         resolved.sort(ENTRY_ORDER);
         return universe(configurationVersion, resolvedAt, resolved, diagnostics);

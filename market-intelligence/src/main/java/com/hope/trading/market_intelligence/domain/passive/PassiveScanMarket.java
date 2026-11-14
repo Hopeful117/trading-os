@@ -46,7 +46,10 @@ public final class PassiveScanMarket {
         if (cadence.isZero() || cadence.isNegative()) throw new IllegalArgumentException("cadence must be positive");
         this.minimumEvidenceProfile = Objects.requireNonNull(minimumEvidenceProfile);
         this.status = Objects.requireNonNull(status);
-        this.analysisExecutionId = Objects.requireNonNull(analysisExecutionId);
+        if (analysisExecutionId == null && status != PassiveScanMarketStatus.SKIPPED) {
+            throw new IllegalArgumentException("analysisExecutionId is required for dispatchable markets");
+        }
+        this.analysisExecutionId = analysisExecutionId;
         if (attemptCount < 1) throw new IllegalArgumentException("attemptCount must be positive");
         this.attemptCount = attemptCount;
         this.failureCode = failureCode;
@@ -65,9 +68,28 @@ public final class PassiveScanMarket {
             String productType, Duration cadence, TradeabilityEvidenceProfile profile,
             UUID analysisExecutionId, Instant createdAt
     ) {
+        return registered(scanMarketId, runId, ordinal, marketId, provider, productType, cadence,
+                profile, analysisExecutionId, 1, createdAt);
+    }
+
+    public static PassiveScanMarket registered(
+            UUID scanMarketId, UUID runId, int ordinal, UUID marketId, String provider,
+            String productType, Duration cadence, TradeabilityEvidenceProfile profile,
+            UUID analysisExecutionId, int attemptCount, Instant createdAt
+    ) {
         return new PassiveScanMarket(scanMarketId, runId, ordinal, marketId, provider, productType,
-                cadence, profile, PassiveScanMarketStatus.REGISTERED, analysisExecutionId, 1,
+                cadence, profile, PassiveScanMarketStatus.REGISTERED, analysisExecutionId, attemptCount,
                 null, null, null, null, null, 0, createdAt, createdAt);
+    }
+
+    public static PassiveScanMarket skipped(
+            UUID scanMarketId, UUID runId, int ordinal, UUID marketId, String provider,
+            String productType, Duration cadence, TradeabilityEvidenceProfile profile,
+            String reason, Instant createdAt
+    ) {
+        return new PassiveScanMarket(scanMarketId, runId, ordinal, marketId, provider, productType,
+                cadence, profile, PassiveScanMarketStatus.SKIPPED, null, 1,
+                reason, reason, null, null, null, 0, createdAt, createdAt);
     }
 
     public static PassiveScanMarket restore(
