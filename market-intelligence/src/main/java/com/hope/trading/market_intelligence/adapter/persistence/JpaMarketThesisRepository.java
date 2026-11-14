@@ -99,6 +99,13 @@ public class JpaMarketThesisRepository implements MarketThesisRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.Set<UUID> findSupersededThesisIds(java.util.Collection<UUID> thesisIds) {
+        if (thesisIds == null || thesisIds.isEmpty()) return java.util.Set.of();
+        return java.util.Set.copyOf(repository.findSupersededThesisIds(java.util.Set.copyOf(thesisIds)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<MarketThesis> findByInputFingerprint(String inputFingerprint) {
         return repository.findByInputFingerprint(inputFingerprint).map(this::domain);
     }

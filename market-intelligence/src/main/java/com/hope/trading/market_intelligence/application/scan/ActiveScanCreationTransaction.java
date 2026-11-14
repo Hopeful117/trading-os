@@ -30,6 +30,7 @@ public class ActiveScanCreationTransaction {
     private final ActiveScanChildKeyFactory childKeys;
     private final ActiveScanDispatchCoordinator dispatchCoordinator;
     private final Clock clock;
+    private final PassiveCandidateScanValidator passiveCandidates;
 
     public ActiveScanCreationTransaction(
             ActiveScanRepository scans,
@@ -39,6 +40,24 @@ public class ActiveScanCreationTransaction {
             ActiveScanDispatchCoordinator dispatchCoordinator,
             Clock clock
     ) {
+        this(scans, scopeResolution, executions, childKeys, dispatchCoordinator, clock, null);
+    }
+
+    /**
+     * Production constructor. A {@code null} validator (legacy test wiring) makes any
+     * passive-candidate request fail closed.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public ActiveScanCreationTransaction(
+            ActiveScanRepository scans,
+            ActiveScanScopeResolutionService scopeResolution,
+            AnalysisExecutionService executions,
+            ActiveScanChildKeyFactory childKeys,
+            ActiveScanDispatchCoordinator dispatchCoordinator,
+            Clock clock,
+            PassiveCandidateScanValidator passiveCandidates
+    ) {
+        this.passiveCandidates = passiveCandidates;
         this.scans = scans;
         this.scopeResolution = scopeResolution;
         this.executions = executions;
@@ -64,6 +83,9 @@ public class ActiveScanCreationTransaction {
         }
 
         Instant createdAt = clock.instant();
+        PassiveCandidateProvenance passiveCandidate = command.passiveCandidate()
+                .map(reference -> validatePassiveCandidate(reference, command, createdAt))
+                .orElse(null);
         ActiveScanScopeResolutionResult resolved = scopeResolution.resolve(
                 new ActiveScanScopeResolutionRequest(
                         command.accountId(),
@@ -78,11 +100,11 @@ public class ActiveScanCreationTransaction {
         ActiveScan scan = snapshot.effectiveMarketIds().isEmpty()
                 ? ActiveScan.completedNoWork(
                 scanId, command.actorId(), command.accountId(), resolved.objective(),
-                command.idempotencyKey(), fingerprint, snapshot, createdAt
+                command.idempotencyKey(), fingerprint, snapshot, createdAt, passiveCandidate
         )
                 : ActiveScan.readyToDispatch(
                 scanId, command.actorId(), command.accountId(), resolved.objective(),
-                command.idempotencyKey(), fingerprint, snapshot, createdAt
+                command.idempotencyKey(), fingerprint, snapshot, createdAt, passiveCandidate
         );
         scans.save(scan);
         scans.saveMarkets(buildMarkets(scan, resolved, resolved.assessmentCutoff(),
@@ -91,6 +113,16 @@ public class ActiveScanCreationTransaction {
         return scan;
     }
 
+    private PassiveCandidateProvenance validatePassiveCandidate(
+            PassiveCandidateReference reference, CreateActiveScanCommand command, Instant now) {
+        if (passiveCandidates == null) {
+            throw new ActiveScanException("PASSIVE_CANDIDATE_VALIDATION_UNAVAILABLE",
+                    "Passive candidate validation is unavailable", 503);
+        }
+        return passiveCandidates.validate(reference, command, now);
+    }
+
+    /** Idempotent replay never revalidates the passive candidate (Story 0243). */
     @Transactional
     public ActiveScan replay(ActiveScan existing) {
         registerAfterCommitIfNeeded(existing);

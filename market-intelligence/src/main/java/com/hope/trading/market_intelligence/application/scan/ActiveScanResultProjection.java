@@ -24,8 +24,18 @@ public record ActiveScanResultProjection(
         Instant createdAt,
         Instant updatedAt,
         ActiveScanProgress progress,
-        List<MarketResult> markets
+        List<MarketResult> markets,
+        com.hope.trading.market_intelligence.domain.scan.PassiveCandidateProvenance sourcePassiveCandidate
 ) {
+    public ActiveScanResultProjection(
+            UUID scanId, UUID accountId, String objective, ActiveScanStatus status,
+            List<UUID> requestedMarketIds, List<UUID> candidateMarketIds, List<UUID> effectiveMarketIds,
+            Instant resolvedAt, Instant createdAt, Instant updatedAt,
+            ActiveScanProgress progress, List<MarketResult> markets) {
+        this(scanId, accountId, objective, status, requestedMarketIds, candidateMarketIds,
+                effectiveMarketIds, resolvedAt, createdAt, updatedAt, progress, markets, null);
+    }
+
     public ActiveScanResultProjection {
         requestedMarketIds = List.copyOf(requestedMarketIds);
         candidateMarketIds = List.copyOf(candidateMarketIds);

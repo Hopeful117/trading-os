@@ -42,7 +42,7 @@ public class JpaActiveScanRepository implements ActiveScanRepository {
         entity.requestFingerprint = scan.requestFingerprint();
         entity.status = scan.status().name();
         entity.objective = scan.objective();
-        entity.payload = write(new ActiveScanPayload(scan.scopeSnapshot()));
+        entity.payload = write(new ActiveScanPayload(scan.scopeSnapshot(), scan.passiveCandidate().orElse(null)));
         entity.resolvedAt = scan.resolvedAt();
         entity.createdAt = scan.createdAt();
         entity.updatedAt = scan.updatedAt();
@@ -147,7 +147,8 @@ public class JpaActiveScanRepository implements ActiveScanRepository {
                 ActiveScanStatus.valueOf(entity.status),
                 entity.resolvedAt,
                 entity.createdAt,
-                entity.updatedAt
+                entity.updatedAt,
+                payload.passiveCandidate()
         );
     }
 
@@ -183,7 +184,13 @@ public class JpaActiveScanRepository implements ActiveScanRepository {
         }
     }
 
-    private record ActiveScanPayload(ActiveScanScopeSnapshot scopeSnapshot) {
+    /**
+     * {@code passiveCandidate} is nullable: rows written before Story 0243 omit it
+     * and deserialize to {@code null}. No schema migration is involved.
+     */
+    private record ActiveScanPayload(
+            ActiveScanScopeSnapshot scopeSnapshot,
+            com.hope.trading.market_intelligence.domain.scan.PassiveCandidateProvenance passiveCandidate) {
     }
 
     private record ActiveScanMarketPayload(List<MarketEligibilityReason> exclusionReasons) {

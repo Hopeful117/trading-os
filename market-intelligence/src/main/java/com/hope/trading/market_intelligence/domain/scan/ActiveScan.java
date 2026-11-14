@@ -16,6 +16,7 @@ public final class ActiveScan {
     private final Instant resolvedAt;
     private final Instant createdAt;
     private final Instant updatedAt;
+    private final PassiveCandidateProvenance passiveCandidate;
 
     private ActiveScan(
             UUID scanId,
@@ -28,8 +29,10 @@ public final class ActiveScan {
             ActiveScanStatus status,
             Instant resolvedAt,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            PassiveCandidateProvenance passiveCandidate
     ) {
+        this.passiveCandidate = passiveCandidate;
         this.scanId = Objects.requireNonNull(scanId);
         this.actorId = Objects.requireNonNull(actorId);
         this.accountId = Objects.requireNonNull(accountId);
@@ -53,6 +56,21 @@ public final class ActiveScan {
             ActiveScanScopeSnapshot scopeSnapshot,
             Instant createdAt
     ) {
+        return readyToDispatch(scanId, actorId, accountId, objective, idempotencyKey, requestFingerprint,
+                scopeSnapshot, createdAt, null);
+    }
+
+    public static ActiveScan readyToDispatch(
+            UUID scanId,
+            UUID actorId,
+            UUID accountId,
+            String objective,
+            String idempotencyKey,
+            String requestFingerprint,
+            ActiveScanScopeSnapshot scopeSnapshot,
+            Instant createdAt,
+            PassiveCandidateProvenance passiveCandidate
+    ) {
         return new ActiveScan(
                 scanId,
                 actorId,
@@ -64,7 +82,8 @@ public final class ActiveScan {
                 ActiveScanStatus.READY_TO_DISPATCH,
                 scopeSnapshot.resolvedAt(),
                 createdAt,
-                createdAt
+                createdAt,
+                passiveCandidate
         );
     }
 
@@ -78,6 +97,21 @@ public final class ActiveScan {
             ActiveScanScopeSnapshot scopeSnapshot,
             Instant createdAt
     ) {
+        return completedNoWork(scanId, actorId, accountId, objective, idempotencyKey, requestFingerprint,
+                scopeSnapshot, createdAt, null);
+    }
+
+    public static ActiveScan completedNoWork(
+            UUID scanId,
+            UUID actorId,
+            UUID accountId,
+            String objective,
+            String idempotencyKey,
+            String requestFingerprint,
+            ActiveScanScopeSnapshot scopeSnapshot,
+            Instant createdAt,
+            PassiveCandidateProvenance passiveCandidate
+    ) {
         return new ActiveScan(
                 scanId,
                 actorId,
@@ -89,7 +123,8 @@ public final class ActiveScan {
                 ActiveScanStatus.COMPLETED_NO_WORK,
                 scopeSnapshot.resolvedAt(),
                 createdAt,
-                createdAt
+                createdAt,
+                passiveCandidate
         );
     }
 
@@ -106,6 +141,24 @@ public final class ActiveScan {
             Instant createdAt,
             Instant updatedAt
     ) {
+        return restore(scanId, actorId, accountId, objective, idempotencyKey, requestFingerprint,
+                scopeSnapshot, status, resolvedAt, createdAt, updatedAt, null);
+    }
+
+    public static ActiveScan restore(
+            UUID scanId,
+            UUID actorId,
+            UUID accountId,
+            String objective,
+            String idempotencyKey,
+            String requestFingerprint,
+            ActiveScanScopeSnapshot scopeSnapshot,
+            ActiveScanStatus status,
+            Instant resolvedAt,
+            Instant createdAt,
+            Instant updatedAt,
+            PassiveCandidateProvenance passiveCandidate
+    ) {
         return new ActiveScan(
                 scanId,
                 actorId,
@@ -117,7 +170,8 @@ public final class ActiveScan {
                 status,
                 resolvedAt,
                 createdAt,
-                updatedAt
+                updatedAt,
+                passiveCandidate
         );
     }
 
@@ -140,7 +194,8 @@ public final class ActiveScan {
                 ActiveScanStatus.DISPATCH_REQUESTED,
                 resolvedAt,
                 createdAt,
-                at
+                at,
+                passiveCandidate
         );
     }
 
@@ -166,7 +221,8 @@ public final class ActiveScan {
                 target,
                 resolvedAt,
                 createdAt,
-                at
+                at,
+                passiveCandidate
         );
     }
 
@@ -181,6 +237,9 @@ public final class ActiveScan {
     public Instant resolvedAt() { return resolvedAt; }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
+    public java.util.Optional<PassiveCandidateProvenance> passiveCandidate() {
+        return java.util.Optional.ofNullable(passiveCandidate);
+    }
 
     private static String normalizeObjective(String value) {
         return value == null ? "" : value.strip();

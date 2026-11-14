@@ -18,7 +18,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ActiveScanScopeResolutionService {
-    private static final Duration CURRENT_MARKET_EVIDENCE_MAX_AGE = Duration.ofSeconds(30);
+    /** Maximum age of current market evidence accepted for an active investigation. */
+    public static final Duration CURRENT_MARKET_EVIDENCE_MAX_AGE = Duration.ofSeconds(30);
     private final TradingCoreAccountClient accounts;
     private final MarketDataClient marketData;
     private final Clock clock;

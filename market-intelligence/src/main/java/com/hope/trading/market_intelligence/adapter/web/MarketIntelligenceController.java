@@ -208,7 +208,9 @@ public class MarketIntelligenceController {
                                 request.objective(),
                                 request.requestedMarketIds(),
                                 request.scopeMode(),
-                                request.tradeabilityEvidenceProfile()
+                                request.tradeabilityEvidenceProfile(),
+                                request.sourcePassiveOpportunityId(),
+                                request.sourcePassiveOpportunityVersion()
                         )).scanId()),
                 matches);
         return ResponseEntity.accepted()
