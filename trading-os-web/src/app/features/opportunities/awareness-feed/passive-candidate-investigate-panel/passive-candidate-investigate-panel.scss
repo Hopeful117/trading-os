@@ -1,0 +1,213 @@
+.investigate-panel {
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  background: rgba(74, 158, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  &__title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #4a9eff;
+  }
+
+  &__close {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.5;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+
+    &:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.08);
+    }
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  &__label {
+    font-size: 0.8rem;
+    opacity: 0.75;
+  }
+
+  &__select {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.82rem;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: inherit;
+
+    &:focus {
+      outline: 2px solid #4a9eff;
+      outline-offset: 1px;
+    }
+  }
+
+  &__candidate-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  &__meta {
+    font-size: 0.75rem;
+    opacity: 0.6;
+  }
+
+  &__start-btn {
+    align-self: flex-start;
+    padding: 0.35rem 0.9rem;
+    font-size: 0.82rem;
+    border-radius: 4px;
+    border: 1px solid rgba(74, 158, 255, 0.5);
+    background: rgba(74, 158, 255, 0.1);
+    color: #4a9eff;
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      opacity 0.15s;
+
+    &:hover:not(:disabled) {
+      background: rgba(74, 158, 255, 0.2);
+    }
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.15);
+      color: inherit;
+      background: rgba(255, 255, 255, 0.04);
+    }
+  }
+
+  &__scanning {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem 0;
+    gap: 0.4rem;
+    text-align: center;
+
+    p {
+      margin: 0;
+      font-size: 0.85rem;
+    }
+  }
+
+  &__spinner {
+    display: inline-block;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-top-color: #4a9eff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-bottom: 0.25rem;
+  }
+
+  &__hint {
+    opacity: 0.55;
+    font-size: 0.75rem !important;
+  }
+
+  &__result {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+
+    &--positive {
+      background: rgba(74, 200, 120, 0.06);
+      border: 1px solid rgba(74, 200, 120, 0.2);
+    }
+
+    &--neutral {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    &--error {
+      background: rgba(255, 80, 80, 0.06);
+      border: 1px solid rgba(255, 80, 80, 0.25);
+    }
+  }
+
+  &__result-title {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  &__result-body {
+    margin: 0;
+    font-size: 0.82rem;
+    opacity: 0.75;
+  }
+
+  &__error-code {
+    margin: 0;
+    font-size: 0.72rem;
+    font-family: monospace;
+    opacity: 0.5;
+  }
+
+  &__primary-btn {
+    align-self: flex-start;
+    margin-top: 0.25rem;
+    padding: 0.35rem 0.9rem;
+    font-size: 0.82rem;
+    border-radius: 4px;
+    border: 1px solid rgba(74, 200, 120, 0.4);
+    background: rgba(74, 200, 120, 0.12);
+    color: #4ac878;
+    cursor: pointer;
+    transition: background 0.15s;
+
+    &:hover {
+      background: rgba(74, 200, 120, 0.22);
+    }
+  }
+
+  &__secondary-btn {
+    align-self: flex-start;
+    margin-top: 0.25rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.07);
+    color: inherit;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

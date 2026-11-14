@@ -120,12 +120,11 @@ residual risk; see `code-review.md`. The human approved the review on
 ## 10. Final Verdict
 
 Story 0243 is implemented, validated at module level, and independently
-reviewed, with all three human gates approved. It is ready for human commit and
-PR. Integration (commit, push, PR, merge) has not been performed.
+reviewed, with all three human gates approved. Integration is complete:
+commit 684f55fe merged to `main` via PR #295 (merge commit 97d8a865).
 
 ## 11. Recommended Next Step
 
-Commit the Story 0243 artifact set on
-`story/0243-passive-to-active-investigation` and open a PR. CI then runs the full
-multi-module quality gate and SonarQube, neither of which was executed locally.
-Story 0244 can then consume the contract in Repository Analysis section 14.
+Proceed with Story 0244 Repository Analysis. The Story 0243 backend contract
+(passive candidate fields on `CreateActiveScanRequest`, error codes, scan
+provenance) is now available on `main` for Story 0244 to consume.

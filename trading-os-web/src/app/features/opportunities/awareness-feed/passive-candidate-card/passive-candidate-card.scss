@@ -1,0 +1,131 @@
+.candidate-card {
+  padding: 0.875rem 1rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: border-color 0.15s;
+
+  &--positive {
+    border-color: rgba(74, 158, 255, 0.2);
+    background: rgba(74, 158, 255, 0.04);
+  }
+
+  &--non-positive {
+    opacity: 0.75;
+  }
+
+  &--investigating {
+    border-color: rgba(74, 158, 255, 0.4);
+  }
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  &__identity {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  &__instrument {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  &__direction {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.08);
+    text-transform: uppercase;
+
+    &.long {
+      background: rgba(74, 200, 120, 0.15);
+      color: #4ac878;
+    }
+  }
+
+  &__provider {
+    font-size: 0.8rem;
+    opacity: 0.7;
+
+    &--unavailable {
+      color: #ff9f43;
+      font-style: italic;
+    }
+  }
+
+  &__product-type {
+    font-size: 0.75rem;
+    opacity: 0.6;
+  }
+
+  &__status {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  &__meta {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    opacity: 0.65;
+  }
+
+  &__diagnostics {
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+
+    summary {
+      cursor: pointer;
+      opacity: 0.7;
+      user-select: none;
+    }
+
+    ul {
+      margin: 0.4rem 0 0;
+      padding-left: 1.25rem;
+      opacity: 0.7;
+      font-family: monospace;
+    }
+  }
+
+  &__actions {
+    margin-top: 0.75rem;
+  }
+}
+
+.investigate-button {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.82rem;
+  border-radius: 4px;
+  border: 1px solid rgba(74, 158, 255, 0.5);
+  background: rgba(74, 158, 255, 0.1);
+  color: #4a9eff;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(74, 158, 255, 0.2);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.15);
+    color: inherit;
+    background: rgba(255, 255, 255, 0.04);
+  }
+}

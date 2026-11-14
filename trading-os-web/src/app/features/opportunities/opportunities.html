@@ -2,29 +2,63 @@
   <div class="page-header">
     <div>
       <h1>Opportunities</h1>
-      <p>Active Market Intelligence opportunities</p>
+      <p>Market Intelligence — active opportunities and passive awareness</p>
     </div>
 
-    <button type="button" class="refresh-button" (click)="refreshOpportunities()">Refresh</button>
+    @if (activeTab() === 'active') {
+      <button type="button" class="refresh-button" (click)="refreshOpportunities()">Refresh</button>
+    }
   </div>
 
-  <app-scan-panel
-    (accountSelected)="accountSelected($event)"
-    (opportunitySelected)="openOpportunity($event)"
-    [openingOpportunityId]="openingOpportunityId"
-    [preparationErrors]="preparationErrors"
-    [readiness]="readiness$ | async"
-    (scanCompleted)="refreshOpportunities()"
-  />
+  <div class="tab-nav" role="tablist" aria-label="Opportunities view">
+    <button
+      type="button"
+      role="tab"
+      class="tab-nav__btn"
+      [class.tab-nav__btn--active]="activeTab() === 'active'"
+      [attr.aria-selected]="activeTab() === 'active'"
+      (click)="activeTab.set('active')"
+      data-testid="tab-active"
+    >
+      Active opportunities
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="tab-nav__btn"
+      [class.tab-nav__btn--active]="activeTab() === 'awareness'"
+      [attr.aria-selected]="activeTab() === 'awareness'"
+      (click)="activeTab.set('awareness')"
+      data-testid="tab-awareness"
+    >
+      Passive awareness
+    </button>
+  </div>
 
-  @if (view$ | async; as view) {
-    @switch (view.status) {
-      @case ('loading') {
-        <div class="state-card" data-testid="loading-state">
-          <span class="spinner"></span>
-          <p>Loading active opportunities…</p>
-        </div>
-      }
+  @if (activeTab() === 'active') {
+    <app-scan-panel
+      (accountSelected)="accountSelected($event)"
+      (opportunitySelected)="openOpportunity($event)"
+      [openingOpportunityId]="openingOpportunityId"
+      [preparationErrors]="preparationErrors"
+      [readiness]="readiness$ | async"
+      (scanCompleted)="refreshOpportunities()"
+    />
+  }
+
+  @if (activeTab() === 'awareness') {
+    <app-passive-awareness-feed />
+  }
+
+  @if (activeTab() === 'active') {
+    @if (view$ | async; as view) {
+      @switch (view.status) {
+        @case ('loading') {
+          <div class="state-card" data-testid="loading-state">
+            <span class="spinner"></span>
+            <p>Loading active opportunities…</p>
+          </div>
+        }
       @case ('error') {
         <div class="state-card error" data-testid="error-state">
           <h2>Unable to load opportunities</h2>
@@ -162,4 +196,5 @@
       }
     }
   }
+}
 </div>

@@ -6,7 +6,7 @@
 
 **Title:** Connect Passive Candidates to Active Investigation
 
-**Status:** Implementation complete - code review approved 2026-11-14; awaiting human commit and PR
+**Status:** Merged — commit 684f55fe, PR #295 (97d8a865 on main) — all gates approved 2026-11-14
 
 **Priority:** P1 - Trading Intelligence
 

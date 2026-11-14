@@ -1,0 +1,96 @@
+<div
+  class="candidate-card"
+  [class.candidate-card--positive]="item().isCandidate"
+  [class.candidate-card--non-positive]="!item().isCandidate"
+  [class.candidate-card--investigating]="investigating()"
+  data-testid="candidate-card"
+>
+  <div class="candidate-card__header">
+    <div class="candidate-card__identity">
+      <span class="candidate-card__instrument" data-testid="card-instrument">
+        {{ item().instrument }}
+      </span>
+      <span class="candidate-card__direction" [class.long]="item().direction === 'LONG'"
+        data-testid="card-direction">
+        {{ item().direction }}
+      </span>
+      @if (item().provider) {
+        <span class="candidate-card__provider" data-testid="card-provider">
+          {{ item().provider }}
+        </span>
+      } @else {
+        <span class="candidate-card__provider candidate-card__provider--unavailable"
+          data-testid="card-provider-unavailable">
+          Market data unavailable
+        </span>
+      }
+      @if (item().productType) {
+        <span class="candidate-card__product-type" data-testid="card-product-type">
+          {{ item().productType }}
+        </span>
+      }
+    </div>
+
+    <div class="candidate-card__status">
+      @if (item().isCandidate) {
+        <app-status-badge label="Candidate" tone="positive" />
+      } @else {
+        <app-status-badge
+          [label]="item().diagnosticCategory ?? 'Non-Positive'"
+          tone="warning"
+        />
+      }
+
+      @if (item().isExpired) {
+        <app-status-badge label="Expired" tone="negative" data-testid="expired-badge" />
+      }
+
+      @if (item().isSuperseded) {
+        <app-status-badge label="Superseded" tone="negative" data-testid="superseded-badge" />
+      }
+    </div>
+  </div>
+
+  <div class="candidate-card__meta">
+    <span class="candidate-card__freshness" data-testid="card-freshness">
+      Evaluated {{ item().freshnessSummary }}
+    </span>
+    @if (item().scenario) {
+      <span class="candidate-card__scenario" data-testid="card-scenario">
+        {{ item().scenario }} · {{ item().timeframe }}
+      </span>
+    }
+    @if (item().sourceCutoff) {
+      <span class="candidate-card__cutoff" data-testid="card-cutoff">
+        Evidence cutoff: {{ item().sourceCutoff | slice: 0 : 16 }}Z
+      </span>
+    }
+  </div>
+
+  @if (!item().isCandidate && item().diagnostics.length > 0) {
+    <details class="candidate-card__diagnostics" data-testid="card-diagnostics">
+      <summary>{{ item().diagnostics.length }} diagnostic(s)</summary>
+      <ul>
+        @for (code of item().diagnostics; track code) {
+          <li>{{ code }}</li>
+        }
+      </ul>
+    </details>
+  }
+
+  @if (item().isCandidate) {
+    <div class="candidate-card__actions">
+      <button
+        type="button"
+        class="investigate-button"
+        [disabled]="!canInvestigate"
+        [attr.title]="investigateDisabledReason"
+        [attr.aria-label]="'Investigate ' + item().instrument + ' passive candidate'"
+        (click)="onInvestigate()"
+        data-testid="investigate-button"
+      >
+        Investigate
+      </button>
+    </div>
+  }
+</div>

@@ -1,5 +1,5 @@
 import { AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import {
   BehaviorSubject,
@@ -20,7 +20,10 @@ import { OpportunityResponse } from '../../core/models/opportunity.model';
 import { MarketService } from '../../core/services/market.service';
 import { OpportunityService } from '../../core/services/opportunity.service';
 import { TradePreparationFailure } from '../../core/utils/trade-flow-error';
+import { PassiveAwarenessFeed } from './awareness-feed/passive-awareness-feed';
 import { ScanPanel } from './scan-panel/scan-panel';
+
+export type OpportunitiesTab = 'active' | 'awareness';
 
 export type OpportunitiesView =
   | { status: 'loading' }
@@ -29,7 +32,7 @@ export type OpportunitiesView =
 
 @Component({
   selector: 'app-opportunities',
-  imports: [AsyncPipe, DatePipe, DecimalPipe, ScanPanel],
+  imports: [AsyncPipe, DatePipe, DecimalPipe, ScanPanel, PassiveAwarenessFeed],
   templateUrl: './opportunities.html',
   styleUrl: './opportunities.scss',
 })
@@ -38,6 +41,8 @@ export class Opportunities {
   private readonly marketService = inject(MarketService);
   private readonly decisionContextService = inject(DecisionContextService);
   private readonly router = inject(Router);
+
+  activeTab = signal<OpportunitiesTab>('active');
 
   selectedAccountId = '';
   openingOpportunityId: string | null = null;

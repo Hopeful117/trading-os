@@ -24,6 +24,37 @@
   }
 }
 
+.tab-nav {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0;
+
+  &__btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    border: none;
+    background: none;
+    color: #94a3b8;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition:
+      color 0.15s,
+      border-color 0.15s;
+
+    &:hover {
+      color: #e2e8f0;
+    }
+
+    &--active {
+      color: #e2e8f0;
+      border-bottom-color: #3b82f6;
+    }
+  }
+}
+
 .refresh-button {
   padding: 0.6rem 1.2rem;
 
