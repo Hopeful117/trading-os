@@ -6,7 +6,7 @@
 
 **Title:** Add the Passive Awareness Dashboard
 
-**Status:** Proposed - implementation not authorized
+**Status:** Implementation complete — 2026-11-14 — awaiting code review and human commit
 
 **Priority:** P1 - Trading Intelligence
 
@@ -56,17 +56,17 @@ trade decision.
 
 ## Acceptance Criteria
 
-- [ ] Dashboard displays monitored markets and their current awareness state.
-- [ ] Passive candidates show why they were selected and which evidence supports them.
-- [ ] Stale, missing and contradictory evidence are not hidden.
-- [ ] The dashboard distinguishes passive candidate lifecycle state from
+- [x] Dashboard displays monitored markets and their current awareness state.
+- [x] Passive candidates show why they were selected and which evidence supports them.
+- [x] Stale, missing and contradictory evidence are not hidden.
+- [x] The dashboard distinguishes passive candidate lifecycle state from
       account-actionable active opportunity state.
-- [ ] User can select a candidate and start the existing ActiveScan flow.
-- [ ] Account selection is required before active investigation.
-- [ ] Passive and active states are visually and semantically distinct.
-- [ ] No automatic scan, order, risk or broker operation occurs from the feed.
-- [ ] Angular tests cover loading, empty, stale, unavailable and positive states.
-- [ ] Existing active scan tests and production build remain green.
+- [x] User can select a candidate and start the existing ActiveScan flow.
+- [x] Account selection is required before active investigation.
+- [x] Passive and active states are visually and semantically distinct.
+- [x] No automatic scan, order, risk or broker operation occurs from the feed.
+- [x] Angular tests cover loading, empty, stale, unavailable and positive states.
+- [x] Existing active scan tests and production build remain green.
 
 ## Dependencies
 

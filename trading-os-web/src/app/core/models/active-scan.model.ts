@@ -65,6 +65,8 @@ export interface CreateActiveScanRequest {
   objective?: string;
   requestedMarketIds?: string[];
   scopeMode?: ActiveScanScopeMode;
+  sourcePassiveOpportunityId?: string;
+  sourcePassiveOpportunityVersion?: number;
 }
 
 export interface ActiveScanProgress {

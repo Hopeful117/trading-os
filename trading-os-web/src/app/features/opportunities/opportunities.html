@@ -2,161 +2,196 @@
   <div class="page-header">
     <div>
       <h1>Opportunities</h1>
-      <p>Active Market Intelligence opportunities</p>
+      <p>Market Intelligence — active opportunities and passive awareness</p>
     </div>
 
-    <button type="button" class="refresh-button" (click)="refreshOpportunities()">Refresh</button>
+    @if (activeTab() === 'active') {
+      <button type="button" class="refresh-button" (click)="refreshOpportunities()">Refresh</button>
+    }
   </div>
 
-  <app-scan-panel
-    (accountSelected)="accountSelected($event)"
-    (opportunitySelected)="openOpportunity($event)"
-    [openingOpportunityId]="openingOpportunityId"
-    [preparationErrors]="preparationErrors"
-    [readiness]="readiness$ | async"
-    (scanCompleted)="refreshOpportunities()"
-  />
+  <div class="tab-nav" role="tablist" aria-label="Opportunities view">
+    <button
+      type="button"
+      role="tab"
+      class="tab-nav__btn"
+      [class.tab-nav__btn--active]="activeTab() === 'active'"
+      [attr.aria-selected]="activeTab() === 'active'"
+      (click)="activeTab.set('active')"
+      data-testid="tab-active"
+    >
+      Active opportunities
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="tab-nav__btn"
+      [class.tab-nav__btn--active]="activeTab() === 'awareness'"
+      [attr.aria-selected]="activeTab() === 'awareness'"
+      (click)="activeTab.set('awareness')"
+      data-testid="tab-awareness"
+    >
+      Passive awareness
+    </button>
+  </div>
 
-  @if (view$ | async; as view) {
-    @switch (view.status) {
-      @case ('loading') {
-        <div class="state-card" data-testid="loading-state">
-          <span class="spinner"></span>
-          <p>Loading active opportunities…</p>
-        </div>
-      }
-      @case ('error') {
-        <div class="state-card error" data-testid="error-state">
-          <h2>Unable to load opportunities</h2>
-          <p>Market Intelligence is temporarily unavailable. Try again later.</p>
-        </div>
-      }
-      @case ('loaded') {
-        @if (marketsById$ | async; as marketsById) {
-          @if (view.opportunities.length > 0) {
-            <div class="opportunities-card">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Decision</th>
-                    <th>Instrument</th>
-                    <th>Market</th>
-                    <th>Direction</th>
-                    <th>Type</th>
-                    <th>Timeframe</th>
-                    <th title="Directional business-priority score, not probability">
-                      Signal strength
-                    </th>
-                    <th>Ref. price</th>
-                    <th>Valid until</th>
-                    <th>Rationale</th>
-                  </tr>
-                </thead>
+  @if (activeTab() === 'active') {
+    <app-scan-panel
+      (accountSelected)="accountSelected($event)"
+      (opportunitySelected)="openOpportunity($event)"
+      [openingOpportunityId]="openingOpportunityId"
+      [preparationErrors]="preparationErrors"
+      [readiness]="readiness$ | async"
+      (scanCompleted)="refreshOpportunities()"
+    />
+  }
 
-                <tbody>
-                  @for (opportunity of view.opportunities; track opportunity.id) {
-                    <tr
-                      class="opportunity-row"
-                      [class.opening]="openingOpportunityId === opportunity.id"
-                      tabindex="0"
-                      (click)="openOpportunity(opportunity)"
-                      (keydown.enter)="openOpportunity(opportunity)"
-                    >
-                      <td class="decision-cell">
-                        @if (opportunity.thesis; as thesis) {
-                          @if (hasValidThesis(thesis)) {
-                            <span
-                              class="decision-badge"
-                              [class.no-trade]="thesis.state === 'NO_TRADE'"
-                              [class.watch]="thesis.state === 'WATCH'"
-                              [class.candidate]="thesis.state === 'CANDIDATE'"
-                            >
-                              {{ thesis.state === 'NO_TRADE' ? 'NO TRADE' : thesis.state }}
-                            </span>
-                            @if (safeList(thesis.reasons).length > 0) {
-                              <small class="decision-reason">{{
-                                safeList(thesis.reasons)[0]
-                              }}</small>
+  @if (activeTab() === 'awareness') {
+    <app-passive-awareness-feed />
+  }
+
+  @if (activeTab() === 'active') {
+    @if (view$ | async; as view) {
+      @switch (view.status) {
+        @case ('loading') {
+          <div class="state-card" data-testid="loading-state">
+            <span class="spinner"></span>
+            <p>Loading active opportunities…</p>
+          </div>
+        }
+        @case ('error') {
+          <div class="state-card error" data-testid="error-state">
+            <h2>Unable to load opportunities</h2>
+            <p>Market Intelligence is temporarily unavailable. Try again later.</p>
+          </div>
+        }
+        @case ('loaded') {
+          @if (marketsById$ | async; as marketsById) {
+            @if (view.opportunities.length > 0) {
+              <div class="opportunities-card">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Decision</th>
+                      <th>Instrument</th>
+                      <th>Market</th>
+                      <th>Direction</th>
+                      <th>Type</th>
+                      <th>Timeframe</th>
+                      <th title="Directional business-priority score, not probability">
+                        Signal strength
+                      </th>
+                      <th>Ref. price</th>
+                      <th>Valid until</th>
+                      <th>Rationale</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    @for (opportunity of view.opportunities; track opportunity.id) {
+                      <tr
+                        class="opportunity-row"
+                        [class.opening]="openingOpportunityId === opportunity.id"
+                        tabindex="0"
+                        (click)="openOpportunity(opportunity)"
+                        (keydown.enter)="openOpportunity(opportunity)"
+                      >
+                        <td class="decision-cell">
+                          @if (opportunity.thesis; as thesis) {
+                            @if (hasValidThesis(thesis)) {
+                              <span
+                                class="decision-badge"
+                                [class.no-trade]="thesis.state === 'NO_TRADE'"
+                                [class.watch]="thesis.state === 'WATCH'"
+                                [class.candidate]="thesis.state === 'CANDIDATE'"
+                              >
+                                {{ thesis.state === 'NO_TRADE' ? 'NO TRADE' : thesis.state }}
+                              </span>
+                              @if (safeList(thesis.reasons).length > 0) {
+                                <small class="decision-reason">{{
+                                  safeList(thesis.reasons)[0]
+                                }}</small>
+                              }
+                            } @else {
+                              <span class="decision-badge unavailable">Not evaluated</span>
                             }
                           } @else {
                             <span class="decision-badge unavailable">Not evaluated</span>
                           }
-                        } @else {
-                          <span class="decision-badge unavailable">Not evaluated</span>
-                        }
-                      </td>
+                        </td>
 
-                      <td class="instrument">
-                        {{ opportunity.instrument }}
-                        @if (openingOpportunityId === opportunity.id) {
-                          <span class="opening-label">Opening plan…</span>
-                        }
-                        @if (preparationErrors[opportunity.id]; as failure) {
-                          <span class="opening-label risk-failure">
-                            {{ failure.code }}
-                            @if (failure.reasons.length > 0) {
-                              · {{ failure.reasons[0].code }}
-                            }
-                            @for (metric of metricEntries(failure); track metric[0]) {
-                              · {{ metric[0] }}={{ metric[1] }}
-                            }
+                        <td class="instrument">
+                          {{ opportunity.instrument }}
+                          @if (openingOpportunityId === opportunity.id) {
+                            <span class="opening-label">Opening plan…</span>
+                          }
+                          @if (preparationErrors[opportunity.id]; as failure) {
+                            <span class="opening-label risk-failure">
+                              {{ failure.code }}
+                              @if (failure.reasons.length > 0) {
+                                · {{ failure.reasons[0].code }}
+                              }
+                              @for (metric of metricEntries(failure); track metric[0]) {
+                                · {{ metric[0] }}={{ metric[1] }}
+                              }
+                            </span>
+                          }
+                        </td>
+
+                        <td>
+                          <span class="market-type">{{
+                            marketProductType(opportunity.marketId, marketsById)
+                          }}</span>
+                        </td>
+
+                        <td>
+                          <span class="direction" [class.long]="opportunity.direction === 'LONG'">
+                            {{ opportunity.direction }}
                           </span>
-                        }
-                      </td>
+                        </td>
 
-                      <td>
-                        <span class="market-type">{{
-                          marketProductType(opportunity.marketId, marketsById)
-                        }}</span>
-                      </td>
+                        <td>{{ opportunity.type }}</td>
 
-                      <td>
-                        <span class="direction" [class.long]="opportunity.direction === 'LONG'">
-                          {{ opportunity.direction }}
-                        </span>
-                      </td>
+                        <td>{{ opportunity.timeframe }}</td>
 
-                      <td>{{ opportunity.type }}</td>
+                        <td title="{{ opportunity.scoreSemantics }}">
+                          {{ opportunity.score }}
+                        </td>
 
-                      <td>{{ opportunity.timeframe }}</td>
-
-                      <td title="{{ opportunity.scoreSemantics }}">
-                        {{ opportunity.score }}
-                      </td>
-
-                      <td class="reference-price">
-                        @if (opportunity.setup; as setup) {
-                          @if (setup.referencePrice !== null) {
-                            {{ setup.referencePrice | number: '1.2-4' }}
+                        <td class="reference-price">
+                          @if (opportunity.setup; as setup) {
+                            @if (setup.referencePrice !== null) {
+                              {{ setup.referencePrice | number: '1.2-4' }}
+                            } @else {
+                              —
+                            }
                           } @else {
                             —
                           }
-                        } @else {
-                          —
-                        }
-                      </td>
+                        </td>
 
-                      <td>
-                        @if (opportunity.validUntil; as validUntil) {
-                          {{ validUntil | date: 'MMM d, HH:mm' }}
-                        } @else {
-                          —
-                        }
-                      </td>
+                        <td>
+                          @if (opportunity.validUntil; as validUntil) {
+                            {{ validUntil | date: 'MMM d, HH:mm' }}
+                          } @else {
+                            —
+                          }
+                        </td>
 
-                      <td class="rationale" [title]="opportunity.explanation">
-                        {{ opportunity.explanation }}
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          } @else {
-            <section class="state-card" data-testid="empty-state">
-              <h2>No active trading opportunities right now</h2>
-              <p>Market Intelligence has not produced any active opportunity yet.</p>
-            </section>
+                        <td class="rationale" [title]="opportunity.explanation">
+                          {{ opportunity.explanation }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <section class="state-card" data-testid="empty-state">
+                <h2>No active trading opportunities right now</h2>
+                <p>Market Intelligence has not produced any active opportunity yet.</p>
+              </section>
+            }
           }
         }
       }

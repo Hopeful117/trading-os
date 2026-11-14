@@ -1,0 +1,128 @@
+<div class="awareness-feed">
+  <div class="feed-header">
+    <div class="feed-header__title">
+      <h2>Passive Awareness</h2>
+      <p>Monitored markets and passive scan candidates</p>
+    </div>
+    <div class="feed-header__actions">
+      <label class="filter-toggle">
+        <input
+          type="checkbox"
+          [checked]="currentOnly()"
+          (change)="setCurrentOnly($any($event.target).checked)"
+          aria-label="Show candidates only"
+        />
+        Candidates only
+      </label>
+      <input
+        type="text"
+        class="instrument-filter"
+        placeholder="Filter by instrument"
+        [value]="instrumentFilter()"
+        (input)="onInstrumentInput($any($event.target).value)"
+        aria-label="Filter by instrument"
+      />
+      <button type="button" class="refresh-button" (click)="refresh()">Refresh</button>
+    </div>
+  </div>
+
+  @if (view$ | async; as view) {
+    @switch (view.status) {
+      @case ('loading') {
+        <div class="state-card" data-testid="awareness-loading">
+          <span class="spinner" role="status" aria-label="Loading awareness feed"></span>
+          <p>Loading passive awareness…</p>
+        </div>
+      }
+
+      @case ('error') {
+        <div class="state-card error" data-testid="awareness-error">
+          <h3>Unable to load passive awareness</h3>
+          @if (view.httpStatus === 401) {
+            <p>Authentication required.</p>
+          } @else if (view.httpStatus === 503) {
+            <p>Market Intelligence is temporarily unavailable. Try again later.</p>
+          } @else {
+            <p>An error occurred ({{ view.code ?? view.httpStatus }}). Try refreshing.</p>
+          }
+        </div>
+      }
+
+      @case ('empty') {
+        <div class="state-card" data-testid="awareness-empty">
+          <h3>No passive awareness data yet</h3>
+          <p>
+            The passive scanner has not produced any results. It runs on a background schedule —
+            check back later or verify that passive markets are configured.
+          </p>
+        </div>
+      }
+
+      @case ('filtered-empty') {
+        <div class="state-card" data-testid="awareness-filtered-empty">
+          <h3>No results for the current filters</h3>
+          <p>Try clearing the instrument filter or disabling "Candidates only".</p>
+          <button
+            type="button"
+            class="clear-filters-button"
+            (click)="setCurrentOnly(false); onInstrumentInput('')"
+          >
+            Clear filters
+          </button>
+        </div>
+      }
+
+      @case ('loaded') {
+        <div class="awareness-items" data-testid="awareness-loaded">
+          @for (item of view.items; track item.opportunityId) {
+            <app-passive-candidate-card
+              [item]="item"
+              [investigating]="investigatingCandidate()?.opportunityId === item.opportunityId"
+              (investigateClicked)="openInvestigation($event)"
+            />
+            @if (investigatingCandidate()?.opportunityId === item.opportunityId) {
+              <app-passive-candidate-investigate-panel
+                [candidate]="investigatingCandidate()!"
+                (closed)="closeInvestigation()"
+              />
+            }
+          }
+
+          <div class="pagination" aria-label="Pagination">
+            <span class="pagination__info">
+              {{ view.pagination.page * view.pagination.size + 1 }}–{{
+                pageEnd(view.pagination)
+              }}
+              of {{ view.pagination.total }}
+            </span>
+            @if (view.pagination.truncated) {
+              <span class="pagination__truncated"
+                >Results truncated — apply filters to narrow.</span
+              >
+            }
+            <button
+              type="button"
+              class="pagination__prev"
+              [disabled]="view.pagination.page === 0"
+              (click)="goToPage(view.pagination.page - 1)"
+              aria-label="Previous page"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="pagination__next"
+              [disabled]="
+                (view.pagination.page + 1) * view.pagination.size >= view.pagination.total
+              "
+              (click)="goToPage(view.pagination.page + 1)"
+              aria-label="Next page"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>

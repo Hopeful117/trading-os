@@ -1,0 +1,115 @@
+<div class="investigate-panel" data-testid="investigate-panel">
+  <div class="investigate-panel__header">
+    <span class="investigate-panel__title">Investigate: {{ candidate().instrument }}</span>
+    <button
+      type="button"
+      class="investigate-panel__close"
+      aria-label="Close investigation panel"
+      (click)="close()"
+    >
+      ✕
+    </button>
+  </div>
+
+  @switch (investigationView().status) {
+    @case ('idle') {
+      <div class="investigate-panel__form">
+        <label class="investigate-panel__label" for="account-select">Select account</label>
+        <select
+          id="account-select"
+          class="investigate-panel__select"
+          [value]="selectedAccountId()"
+          (change)="selectedAccountId.set($any($event.target).value)"
+          data-testid="account-select"
+        >
+          <option value="" disabled>— choose an account —</option>
+          @for (account of accounts$ | async; track account.accountId) {
+            <option [value]="account.accountId">{{ account.name }}</option>
+          }
+        </select>
+
+        <div class="investigate-panel__candidate-info">
+          <span class="investigate-panel__meta">Market: {{ candidate().marketId }}</span>
+          <span class="investigate-panel__meta">Direction: {{ candidate().direction }}</span>
+          @if (candidate().scenario) {
+            <span class="investigate-panel__meta">Scenario: {{ candidate().scenario }}</span>
+          }
+        </div>
+
+        <button
+          type="button"
+          class="investigate-panel__start-btn"
+          [disabled]="!canStart"
+          [attr.title]="canStart ? null : 'Select an account to start investigation'"
+          (click)="startInvestigation()"
+          data-testid="start-investigation-btn"
+        >
+          Start investigation
+        </button>
+      </div>
+    }
+
+    @case ('scanning') {
+      <div class="investigate-panel__scanning" data-testid="scanning-state">
+        <div class="investigate-panel__spinner" aria-hidden="true"></div>
+        <p>
+          Scanning market <strong>{{ candidate().instrument }}</strong
+          >…
+        </p>
+        <p class="investigate-panel__hint">This may take a few seconds.</p>
+      </div>
+    }
+
+    @case ('no-opportunity') {
+      <div
+        class="investigate-panel__result investigate-panel__result--neutral"
+        data-testid="no-opportunity-state"
+      >
+        <p class="investigate-panel__result-title">Analysis complete</p>
+        <p class="investigate-panel__result-body">
+          No active opportunity found for this candidate.
+        </p>
+        <button type="button" class="investigate-panel__secondary-btn" (click)="close()">
+          Close
+        </button>
+      </div>
+    }
+
+    @case ('opportunity-found') {
+      <div
+        class="investigate-panel__result investigate-panel__result--positive"
+        data-testid="opportunity-found-state"
+      >
+        <p class="investigate-panel__result-title">Opportunity found</p>
+        <p class="investigate-panel__result-body">
+          Active opportunity detected for <strong>{{ candidate().instrument }}</strong
+          >.
+        </p>
+        <button
+          type="button"
+          class="investigate-panel__primary-btn"
+          (click)="navigateToOpportunity()"
+          data-testid="open-opportunity-btn"
+        >
+          Open opportunity
+        </button>
+      </div>
+    }
+
+    @case ('error') {
+      <div
+        class="investigate-panel__result investigate-panel__result--error"
+        data-testid="error-state"
+      >
+        <p class="investigate-panel__result-title">Investigation failed</p>
+        <p class="investigate-panel__result-body">{{ $any(investigationView()).message }}</p>
+        <p class="investigate-panel__error-code" data-testid="error-code">
+          Code: {{ $any(investigationView()).code }}
+        </p>
+        <button type="button" class="investigate-panel__secondary-btn" (click)="close()">
+          Close
+        </button>
+      </div>
+    }
+  }
+</div>
