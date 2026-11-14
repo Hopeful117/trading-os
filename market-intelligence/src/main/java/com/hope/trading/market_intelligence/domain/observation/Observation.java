@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Comparator;
 
 public final class Observation {
     private final UUID id;
@@ -86,6 +87,10 @@ public final class Observation {
     public Optional<UUID> supersededBy() { return Optional.ofNullable(supersededBy); }
     public String consolidationRuleVersion() { return consolidationRuleVersion; }
     public List<ObservationEvidence> evidence() { return evidence; }
+    public Instant observedAt() {
+        return evidence.stream().map(ObservationEvidence::observedAt)
+                .max(Comparator.naturalOrder()).orElse(createdAt);
+    }
     public ObservationConfidence confidence() { return confidence; }
     public Optional<ObservationPayload> payload() { return Optional.ofNullable(payload); }
 }

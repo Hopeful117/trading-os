@@ -69,6 +69,20 @@ public class MarketController {
         return ResponseEntity.ok( marketMapper.toDto(market));
     }
 
+    @GetMapping("/by-ids")
+    public ResponseEntity<List<MarketResponse>> findByIds(@RequestParam Set<UUID> ids) {
+        List<Market> markets = marketService.findByIds(ids);
+        Map<String, Set<String>> providerSymbolsByIdentity = markets.stream()
+                .collect(Collectors.groupingBy(this::identityKey,
+                        Collectors.mapping(Market::getProviderSymbol, Collectors.toSet())));
+        return ResponseEntity.ok(markets.stream()
+                .map(market -> marketMapper.toDto(market,
+                        providerSymbolsByIdentity.get(identityKey(market)).size() == 1
+                                && market.getProviderSymbol() != null
+                                && !market.getProviderSymbol().isBlank()))
+                .toList());
+    }
+
     @PostMapping("/synchronize")
     public ResponseEntity<Void> synchronize() {
 

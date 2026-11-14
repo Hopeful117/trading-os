@@ -6,6 +6,8 @@ import com.hope.trading.market_data.model.Market;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 public interface MarketRepository extends JpaRepository<Market, UUID> {
@@ -22,4 +24,6 @@ public interface MarketRepository extends JpaRepository<Market, UUID> {
     );
 
     boolean existsBySymbol(String symbol);
+
+    List<Market> findByMarketIdIn(Collection<UUID> marketIds);
 }

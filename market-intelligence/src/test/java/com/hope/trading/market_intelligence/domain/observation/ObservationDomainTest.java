@@ -50,4 +50,17 @@ class ObservationDomainTest {
         assertThatThrownBy(() -> ObservationTestFixtures.evidence(
                 new BigDecimal("1.01"))).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void exposesLatestEvidenceObservationTime() {
+        Observation observation = new ObservationFactory().create(
+                UUID.randomUUID(), 1, "BTC/EUR", new ObservationType("BREAKOUT"),
+                "Breakout", "Confirmed breakout", Set.of("structure"), "5m",
+                ObservationTestFixtures.NOW.minusSeconds(10),
+                ObservationTestFixtures.NOW.minusSeconds(10),
+                ObservationTestFixtures.NOW.plusSeconds(600), null, "rule-v1",
+                List.of(ObservationTestFixtures.evidence(BigDecimal.ONE)));
+
+        assertThat(observation.observedAt()).isEqualTo(ObservationTestFixtures.NOW);
+    }
 }

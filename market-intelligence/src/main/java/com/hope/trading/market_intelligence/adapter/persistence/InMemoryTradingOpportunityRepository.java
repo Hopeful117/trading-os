@@ -63,6 +63,15 @@ public final class InMemoryTradingOpportunityRepository implements TradingOpport
                 .toList();
     }
 
+    @Override public List<TradingOpportunity> findLatestPassive(int limit) {
+        return findAllLatest().stream()
+                .filter(value -> value.origin() == OpportunityOrigin.PASSIVE_SCAN)
+                .sorted(Comparator.comparing(TradingOpportunity::evaluatedAt).reversed()
+                        .thenComparing(value -> value.id().value()))
+                .limit(limit)
+                .toList();
+    }
+
     @Override
     public List<TradingOpportunity> findAllExact(Collection<TradingOpportunityVersionRef> refs) {
         return refs.stream()

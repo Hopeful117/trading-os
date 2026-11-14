@@ -122,6 +122,13 @@ class GatewayMarketIntelligenceRouteTest {
     }
 
     @Test
+    void passiveAwarenessRoutesToMarketIntelligence() {
+        Route route = matchedRoute(HttpMethod.GET, "/api/v1/passive-awareness");
+        assertThat(route.getId()).isEqualTo("passive-awareness");
+        assertThat(route.getUri()).isEqualTo(URI.create("lb://market-intelligence"));
+    }
+
+    @Test
     void publicTradePlanCreationRoutesToTradingCoreNotMarketIntelligence() {
         String path = "/api/v1/trade-plans/analyses/" + ANALYSIS_ID + "/trade-plans";
 

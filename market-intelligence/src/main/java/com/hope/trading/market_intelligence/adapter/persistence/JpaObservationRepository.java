@@ -54,6 +54,10 @@ public class JpaObservationRepository implements ObservationRepository {
     @Override @Transactional(readOnly = true)
     public Optional<Observation> findById(UUID id) { return repository.findById(id).map(this::domain); }
     @Override @Transactional(readOnly = true)
+    public List<Observation> findByIds(Collection<UUID> ids) {
+        return repository.findAllById(ids).stream().map(this::domain).toList();
+    }
+    @Override @Transactional(readOnly = true)
     public List<Observation> findByInstrument(String instrument) {
         return repository.findByInstrumentIgnoreCase(instrument).stream().map(this::domain).toList();
     }

@@ -15,6 +15,7 @@ public interface TradingOpportunityRepository {
             String instrument, OpportunityDirection direction, String scenario,
             String timeframe, Instant evaluatedAfter);
     List<TradingOpportunity> findAllLatest();
+    List<TradingOpportunity> findLatestPassive(int limit);
     List<TradingOpportunity> findAllExact(Collection<TradingOpportunityVersionRef> refs);
     List<TradingOpportunity> findByStrategyMatchIds(Collection<UUID> strategyMatchIds);
 }

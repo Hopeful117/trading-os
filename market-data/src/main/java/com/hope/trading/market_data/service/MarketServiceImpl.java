@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +26,14 @@ public class MarketServiceImpl implements  MarketService {
     @Override
     public Optional<Market> findById(UUID marketId) {
         return marketRepository.findById(marketId);
+    }
+
+    @Override
+    public List<Market> findByIds(Collection<UUID> marketIds) {
+        if (marketIds.isEmpty()) {
+            return List.of();
+        }
+        return marketRepository.findByMarketIdIn(marketIds);
     }
 
     @Override

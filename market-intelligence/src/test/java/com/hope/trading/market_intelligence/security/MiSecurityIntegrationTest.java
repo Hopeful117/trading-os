@@ -48,6 +48,12 @@ class MiSecurityIntegrationTest {
     }
 
     @Test
+    void missingJwtIsRejectedOnPassiveAwarenessRead() throws Exception {
+        mvc.perform(get("/api/v1/passive-awareness"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void missingJwtIsRejectedOnResearchReadiness() throws Exception {
         mvc.perform(get("/api/v1/intelligence/research/readiness"))
                 .andExpect(status().isUnauthorized());
@@ -79,6 +85,13 @@ class MiSecurityIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID())))
                 .andExpect(status().isOk());
         mvc.perform(get("/api/v1/opportunities/active")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID())))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void authenticatedUsersCanReadPassiveAwareness() throws Exception {
+        mvc.perform(get("/api/v1/passive-awareness")
                         .header(HttpHeaders.AUTHORIZATION, bearer(UUID.randomUUID())))
                 .andExpect(status().isOk());
     }

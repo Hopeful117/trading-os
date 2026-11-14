@@ -52,6 +52,25 @@ class TradePlanningEngineTest {
     }
 
     @Test
+    void accountlessPassiveOpportunityCannotEnterTradePlanGeneration() {
+        var environment = TradePlanTestFixtures.environment();
+        var passive = com.hope.trading.market_intelligence.application.opportunity
+                .OpportunityTestFixtures.opportunity(
+                        environment.opportunity().id(), 2, OpportunityStatus.ACTIVE,
+                        environment.opportunity().score(), TradePlanTestFixtures.NOW);
+        environment.opportunities().append(passive);
+        TradePlanningRequest request = TradePlanningRequest.withExactOpportunityVersion(
+                passive.id(), passive.version(), environment.context().id(),
+                environment.context().version(), environment.owner(), BigDecimal.valueOf(100),
+                null, null, "", "KRAKEN", "SPOT");
+
+        assertThat(environment.engine().plan(request))
+                .isInstanceOfSatisfying(TradePlanningResult.Failure.class,
+                        failure -> assertThat(failure.reason())
+                                .isEqualTo(PlanningFailureReason.INCOMPATIBLE_OPPORTUNITIES));
+    }
+
+    @Test
     void manualFlowBuildsPlanWithoutOpportunityAndPreservesAuthor() {
         var environment = TradePlanTestFixtures.environment();
         ManualTradePlanningRequest request = new ManualTradePlanningRequest(

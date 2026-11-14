@@ -48,7 +48,8 @@ public class MiSecurityConfiguration {
                         .requestMatchers("/internal/**", "/trade-plans/**").denyAll()
                         .requestMatchers("/actuator/**").denyAll()
                         .requestMatchers("/api/v1/intelligence/analyses/**").denyAll()
-                        .requestMatchers("/api/v1/intelligence/**", "/api/v1/opportunities/**")
+                         .requestMatchers("/api/v1/intelligence/**", "/api/v1/opportunities/**",
+                                 "/api/v1/passive-awareness/**")
                         .authenticated()
                         .anyRequest().denyAll())
                  .addFilterBefore(jwtAuthenticationFilter,

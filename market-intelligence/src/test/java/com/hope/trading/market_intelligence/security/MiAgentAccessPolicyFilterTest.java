@@ -43,9 +43,10 @@ class MiAgentAccessPolicyFilterTest {
                 new UsernamePasswordAuthenticationToken(agent(), "token"));
         for (String path : new String[]{
                 "/api/v1/opportunities",
-                "/api/v1/opportunities/active",
-                "/api/v1/opportunities/00000000-0000-4000-8000-000000000001",
-                "/api/v1/intelligence/market-theses/latest",
+                 "/api/v1/opportunities/active",
+                 "/api/v1/opportunities/00000000-0000-4000-8000-000000000001",
+                 "/api/v1/passive-awareness",
+                 "/api/v1/intelligence/market-theses/latest",
                 "/api/v1/intelligence/market-theses/00000000-0000-4000-8000-000000000001/versions/1"}) {
             MockHttpServletResponse response = new MockHttpServletResponse();
             MockFilterChain chain = new MockFilterChain();
