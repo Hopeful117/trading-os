@@ -6,7 +6,7 @@
 
 **Title:** Persist the PassiveScanRun Lifecycle
 
-**Status:** Implementation complete - awaiting code review
+**Status:** Implementation complete - independent code review evidence missing
 
 **Priority:** P1 - Trading Intelligence
 
@@ -25,8 +25,12 @@
 **Repository Analysis Approval:** Approved by the project owner on 2026-11-13.
 The Implementation Plan was approved by the project owner on 2026-11-13.
 Implementation is complete within the approved scope; independent code review
-and final human validation remain pending. No recurring scheduler, retry worker,
-public endpoint, broker operation or runtime activation was added.
+and final human validation remain pending. The implementation was included in
+PR #292, whose required CI checks passed, and merged into `main` at merge commit
+`c28a246d91bb0f1a77c7a053c63ea305cdb4aaef`. GitHub reports no submitted review
+for PR #292 (`reviews: []`, empty review decision), so the merge and CI results
+are not treated as proof of an independent code review. No recurring scheduler,
+retry worker, public endpoint, broker operation or runtime activation was added.
 
 ## Goal
 

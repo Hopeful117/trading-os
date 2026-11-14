@@ -6,7 +6,7 @@
 
 **Title:** Add Bounded Recurring Passive Dispatch
 
-**Status:** Proposed - implementation not authorized
+**Status:** Implementation complete - review pending
 
 **Priority:** P1 - Trading Intelligence
 
@@ -15,6 +15,13 @@
 **Related ADRs:** `ADR-021`, `ADR-033`, `ADR-087`, `ADR-100`, `ADR-102`
 
 **Predecessor:** `0240`
+
+**Repository Analysis:** `repository-analysis.md`
+
+**Implementation Plan:** `implementation-plan.md`, approved by the project
+owner on 2026-11-14.
+
+**Implementation Report:** `implementation-report.md`
 
 ## Goal
 

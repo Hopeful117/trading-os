@@ -91,6 +91,22 @@ public class JpaPassiveScanRunRepository implements PassiveScanRunRepository {
     @Override @Transactional(readOnly = true)
     public Optional<PassiveScanMarket> findMarketById(UUID id) { return markets.findById(id).map(this::toDomain); }
 
+    @Override @Transactional(readOnly = true)
+    public Optional<PassiveScanMarket> findLatestMarketByMarketId(UUID marketId) {
+        return markets.findFirstByMarketIdOrderByUpdatedAtDesc(marketId).map(this::toDomain);
+    }
+
+    @Override @Transactional(readOnly = true)
+    public long countActiveMarkets() { return markets.countActive(); }
+
+    @Override @Transactional(readOnly = true)
+    public List<PassiveScanMarket> findActiveMarkets() {
+        return markets.findActive().stream().map(this::toDomain).toList();
+    }
+
+    @Override @Transactional(readOnly = true)
+    public long countFailedAttempts(UUID marketId) { return markets.countFailedAttempts(marketId); }
+
     @Override @Transactional
     public boolean transitionRunStatus(UUID id, PassiveScanRunStatus expected, PassiveScanRunStatus target,
                                        String summary, Instant at) {
@@ -112,9 +128,10 @@ public class JpaPassiveScanRunRepository implements PassiveScanRunRepository {
 
     @Override @Transactional
     public boolean recordMarketOutcome(UUID id, PassiveScanMarketStatus expected, UUID leaseId, long expectedVersion,
-                                       PassiveScanMarketStatus target, String failureCode, String failureReason, Instant at) {
+                                       PassiveScanMarketStatus target, String failureCode, String failureReason,
+                                       int attemptCount, Instant nextRetryAt, Instant at) {
         return markets.recordOutcome(id, expected.name(), target.name(), failureCode, failureReason,
-                leaseId, expectedVersion, at) == 1;
+                attemptCount, nextRetryAt, leaseId, expectedVersion, at) == 1;
     }
 
     @Override @Transactional

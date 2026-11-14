@@ -61,8 +61,18 @@ jobs:
             chmod +x trading-core/mvnw
             MVN="./trading-core/mvnw"
           fi
-          $MVN -B -DskipTests -f secret-crypto/pom.xml install
-          $MVN -B -DskipTests -f ctrader-openapi-technical/pom.xml install
+          for module in secret-crypto ctrader-openapi-technical; do
+            for attempt in 1 2 3; do
+              if $MVN -B -Dmaven.wagon.http.retryHandler.count=5 -DskipTests -f "$module/pom.xml" install; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                exit 1
+              fi
+              echo "Maven provisioning failed for $module on attempt $attempt; retrying after a transient repository failure."
+              sleep 10
+            done
+          done
 
       # market-intelligence, news-service, and risk-domain may not have a
       # module-local wrapper. Prefer the Maven installation already provided

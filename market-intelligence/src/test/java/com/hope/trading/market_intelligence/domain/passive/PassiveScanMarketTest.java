@@ -26,4 +26,16 @@ class PassiveScanMarketTest {
         assertThatThrownBy(() -> claimed.advanceTo(PassiveScanMarketStatus.REGISTERED, now.plusSeconds(3)))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void recordsExplicitNonPositiveOutcomeWithoutCreatingDispatchableWork() {
+        PassiveScanMarket market = PassiveScanMarket.skipped(UUID.randomUUID(), UUID.randomUUID(), 0,
+                UUID.randomUUID(), "CTRADER", "CFD", Duration.ofMinutes(5),
+                TradeabilityEvidenceProfile.FOREX_QUOTE_BASIC,
+                "MARKET_CLOSED", Instant.parse("2026-11-13T00:00:00Z"));
+
+        assertThat(market.status()).isEqualTo(PassiveScanMarketStatus.SKIPPED);
+        assertThat(market.failureCode()).isEqualTo("MARKET_CLOSED");
+        assertThat(market.attemptCount()).isEqualTo(1);
+    }
 }

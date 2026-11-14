@@ -60,7 +60,17 @@ public class PassiveScanCreationTransaction {
         int ordinal = 0;
         for (PassiveMarketEntry entry : universe.entries()) {
             UUID childId = UUID.randomUUID();
-            String attemptKey = PassiveScanFingerprintFactory.attemptKey(run.runId(), entry.marketId(), 1);
+            int attemptNumber = repository.findLatestMarketByMarketId(entry.marketId())
+                    .filter(previous -> previous.status() == com.hope.trading.market_intelligence.domain.passive.PassiveScanMarketStatus.FAILED)
+                    .map(previous -> previous.attemptCount() + 1)
+                    .orElse(1);
+            if (entry.skipReason() != null) {
+                markets.add(PassiveScanMarket.skipped(childId, run.runId(), ordinal++, entry.marketId(),
+                        entry.provider(), entry.productType(), entry.cadence(), entry.minimumEvidenceProfile(),
+                        entry.skipReason(), now));
+                continue;
+            }
+            String attemptKey = PassiveScanFingerprintFactory.attemptKey(run.runId(), entry.marketId(), attemptNumber);
             AnalysisExecution execution = executions.register(
                     new IntelligenceAnalysisRequest(UUID.randomUUID(), entry.marketId(), AnalysisExecutionMode.PASSIVE,
                             "PASSIVE_SCAN", null, null, null, null, EvidenceAcquisitionPolicy.LIVE_CURRENT,
@@ -69,12 +79,13 @@ public class PassiveScanCreationTransaction {
             );
             markets.add(PassiveScanMarket.registered(childId, run.runId(), ordinal++, entry.marketId(),
                     entry.provider(), entry.productType(), entry.cadence(), entry.minimumEvidenceProfile(),
-                    execution.executionId(), now));
+                    execution.executionId(), attemptNumber, now));
         }
         repository.saveMarkets(markets);
         for (PassiveScanMarket market : markets) {
-            repository.saveAttempt(UUID.randomUUID(), market.scanMarketId(), 1, market.analysisExecutionId(),
-                    PassiveScanFingerprintFactory.attemptKey(run.runId(), market.marketId(), 1), now);
+            if (market.analysisExecutionId() == null) continue;
+            repository.saveAttempt(UUID.randomUUID(), market.scanMarketId(), market.attemptCount(), market.analysisExecutionId(),
+                    PassiveScanFingerprintFactory.attemptKey(run.runId(), market.marketId(), market.attemptCount()), now);
         }
         return run;
     }
