@@ -94,6 +94,18 @@ class MarketControllerTest {
     }
 
     @Test
+    void marketsCanBeLoadedByIdsWithoutLoadingTheWholeCatalogue() throws Exception {
+        when(marketService.findByIds(java.util.Set.of(marketId))).thenReturn(List.of(market()));
+
+        mockMvc.perform(get("/api/v1/markets/by-ids").param("ids", marketId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].marketId").value(marketId.toString()))
+                .andExpect(jsonPath("$[0].symbol").value("XBT/EUR"));
+
+        verify(marketService).findByIds(java.util.Set.of(marketId));
+    }
+
+    @Test
     void duplicateDisplaySymbolsWithDifferentProviderIdsAreNotResolvedForExecution() throws Exception {
         Market first = market();
         first.setProviderSymbol("7");

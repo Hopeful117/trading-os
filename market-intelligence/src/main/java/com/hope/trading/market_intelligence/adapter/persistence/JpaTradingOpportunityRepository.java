@@ -66,7 +66,18 @@ public class JpaTradingOpportunityRepository implements TradingOpportunityReposi
                 (left, right) -> left.version > right.version ? left : right));
         return latest.values().stream().map(this::domain)
                 .sorted(Comparator.comparing(TradingOpportunity::createdAt)
-                        .thenComparing(v -> v.id().value())).toList();
+                .thenComparing(v -> v.id().value())).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TradingOpportunity> findLatestPassive(int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be positive");
+        }
+        return repository.findLatestPassive(
+                        org.springframework.data.domain.PageRequest.of(0, limit))
+                .stream().map(this::domain).toList();
     }
 
     @Override

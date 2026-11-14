@@ -131,6 +131,7 @@ public final class TradePlanningEngine {
         TradingOpportunity first = values.getFirst();
         return values.stream().allMatch(item ->
                 item.status() == OpportunityStatus.ACTIVE
+                && (item.origin() != OpportunityOrigin.PASSIVE_SCAN || item.accountId().isPresent())
                 && item.instrument().equalsIgnoreCase(first.instrument())
                 && item.direction() == first.direction());
     }

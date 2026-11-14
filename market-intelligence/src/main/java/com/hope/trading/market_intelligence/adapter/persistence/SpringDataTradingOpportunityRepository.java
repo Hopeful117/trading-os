@@ -21,4 +21,16 @@ interface SpringDataTradingOpportunityRepository
             """)
     List<JpaTradingOpportunityEntity> findLatestByStrategyMatchIds(
             @Param("strategyMatchIds") Collection<UUID> strategyMatchIds);
+
+    @Query("""
+            select opportunity from JpaTradingOpportunityEntity opportunity
+            where opportunity.payload like '%PASSIVE_SCAN%'
+              and opportunity.version = (
+                  select max(candidate.version) from JpaTradingOpportunityEntity candidate
+                  where candidate.opportunityId = opportunity.opportunityId
+              )
+            order by opportunity.evaluatedAt desc, opportunity.opportunityId
+            """)
+    List<JpaTradingOpportunityEntity> findLatestPassive(
+            org.springframework.data.domain.Pageable pageable);
 }

@@ -143,6 +143,10 @@ public class GatewayRouteConfig {
                         .path("/api/v1/opportunities/**")
                         .uri(uriFor.apply("market-intelligence", "lb://market-intelligence"))
                 )
+                .route("passive-awareness", r -> r
+                        .path("/api/v1/passive-awareness/**")
+                        .uri(uriFor.apply("market-intelligence", "lb://market-intelligence"))
+                )
                 .route("markets", r -> r
                         .path("/api/v1/markets/**")
                                 .uri(uriFor.apply("market-data", "lb://market-data"))

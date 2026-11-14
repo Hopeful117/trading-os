@@ -7,11 +7,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collection;
 
 public interface ObservationRepository {
     Observation save(Observation observation);
     void supersede(Observation previous, Observation replacement);
     Optional<Observation> findById(UUID id);
+    default List<Observation> findByIds(Collection<UUID> ids) {
+        return ids.stream().map(this::findById).flatMap(Optional::stream).toList();
+    }
     List<Observation> findByInstrument(String instrument);
     List<Observation> findActive();
     List<Observation> findByType(ObservationType type);

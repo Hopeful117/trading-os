@@ -11,6 +11,9 @@ public interface MarketDataClient {
     @GetMapping("/api/v1/markets")
     List<MarketResponse> findAllMarkets();
 
+    @GetMapping("/api/v1/markets/by-ids")
+    List<MarketResponse> findMarketsByIds(@RequestParam("ids") List<UUID> ids);
+
     @GetMapping("/api/v1/markets/{marketId}")
     MarketResponse findMarket(@PathVariable UUID marketId);
 

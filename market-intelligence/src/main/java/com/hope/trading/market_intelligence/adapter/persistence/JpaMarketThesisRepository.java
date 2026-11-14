@@ -84,6 +84,18 @@ public class JpaMarketThesisRepository implements MarketThesisRepository {
     public Optional<MarketThesis> findByIdAndVersion(UUID id, long version) {
         return repository.findByThesisIdAndVersion(id, version).map(this::domain);
     }
+    @Override
+    @Transactional(readOnly = true)
+    public List<MarketThesis> findByIdAndVersions(
+            java.util.Collection<com.hope.trading.market_intelligence.application.port.MarketThesisReference> references) {
+        if (references.isEmpty()) return List.of();
+        var ids = references.stream().map(value -> value.thesisId()).toList();
+        var referenceSet = java.util.Set.copyOf(references);
+        return repository.findByThesisIdIn(ids).stream()
+                .filter(value -> referenceSet.contains(new com.hope.trading.market_intelligence.application.port.MarketThesisReference(
+                        value.thesisId, value.version)))
+                .map(this::domain).toList();
+    }
 
     @Override
     @Transactional(readOnly = true)

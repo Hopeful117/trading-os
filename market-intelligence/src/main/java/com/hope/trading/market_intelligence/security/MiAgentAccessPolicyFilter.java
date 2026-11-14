@@ -33,8 +33,9 @@ public class MiAgentAccessPolicyFilter extends OncePerRequestFilter {
         }
         if ("GET".equals(request.getMethod())
                 && (request.getRequestURI().equals("/api/v1/opportunities")
-                || request.getRequestURI().startsWith("/api/v1/opportunities/")
-                || request.getRequestURI().equals("/api/v1/intelligence/market-theses/latest")
+                    || request.getRequestURI().startsWith("/api/v1/opportunities/")
+                 || request.getRequestURI().equals("/api/v1/passive-awareness")
+                 || request.getRequestURI().equals("/api/v1/intelligence/market-theses/latest")
                 || request.getRequestURI().matches(
                 "/api/v1/intelligence/market-theses/[0-9a-fA-F-]+/versions/[0-9]+"))) {
             return true;
