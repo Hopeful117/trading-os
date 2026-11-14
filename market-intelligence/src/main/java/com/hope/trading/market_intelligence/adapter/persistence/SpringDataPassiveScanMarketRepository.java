@@ -31,7 +31,7 @@ interface SpringDataPassiveScanMarketRepository extends JpaRepository<JpaPassive
                          @Param("target") String target, @Param("version") long version,
                          @Param("updatedAt") Instant updatedAt);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("update JpaPassiveScanMarketEntity e set e.status = :target, e.leaseId = :leaseId, "
             + "e.leaseExpiresAt = :leaseExpiresAt, e.updatedAt = :updatedAt, e.version = e.version + 1 "
             + "where e.scanMarketId = :id and e.status = :expected and e.version = :version "
