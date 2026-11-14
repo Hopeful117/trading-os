@@ -45,6 +45,8 @@ class GatewayDownstreamRoutingIntegrationTest {
             new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> intelligenceAuthorizationHeaders =
             new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<String> intelligenceRawUris =
+            new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> tradingCoreIdempotencyHeaders =
             new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> tradingCoreAuthorizationHeaders =
@@ -65,16 +67,16 @@ class GatewayDownstreamRoutingIntegrationTest {
     @BeforeEach
     void startStubsAndGateway() throws Exception {
         intelligenceStub = stub(intelligenceRequests, "X-Actor-Id", intelligenceActorHeaders,
-                intelligenceAuthorizationHeaders, null, "intelligence");
+                intelligenceAuthorizationHeaders, null, "intelligence", intelligenceRawUris);
         intelligenceStub.start();
         intelligencePort = intelligenceStub.getAddress().getPort();
 
         tradingCoreStub = stub(tradingCoreRequests, "Idempotency-Key", tradingCoreIdempotencyHeaders,
-                tradingCoreAuthorizationHeaders, tradingCoreBodies, "trading-core");
+                tradingCoreAuthorizationHeaders, tradingCoreBodies, "trading-core", null);
         tradingCoreStub.start();
         tradingCorePort = tradingCoreStub.getAddress().getPort();
 
-        newsStub = stub(newsRequests, null, null, null, null, "news");
+        newsStub = stub(newsRequests, null, null, null, null, "news", null);
         newsStub.start();
         newsPort = newsStub.getAddress().getPort();
 
@@ -304,6 +306,27 @@ class GatewayDownstreamRoutingIntegrationTest {
     }
 
     @Test
+    void passiveAwarenessGetRoutesToMarketIntelligenceWithJwtForwarding() throws Exception {
+        HttpResponse<String> response = send("GET", "/api/v1/passive-awareness");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(intelligenceRequests).containsExactly("GET /api/v1/passive-awareness");
+        assertThat(tradingCoreRequests).isEmpty();
+        assertThat(intelligenceAuthorizationHeaders).hasSize(1);
+        assertThat(intelligenceAuthorizationHeaders.get(0)).startsWith("Bearer ");
+    }
+
+    @Test
+    void passiveAwarenessQueryParamsPreservedByGateway() throws Exception {
+        HttpResponse<String> response = send("GET",
+                "/api/v1/passive-awareness?currentOnly=true&size=5");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(intelligenceRawUris).hasSize(1);
+        assertThat(intelligenceRawUris.get(0)).contains("currentOnly=true").contains("size=5");
+    }
+
+    @Test
     void unauthenticatedResearchReadinessRequestIsRejectedBeforeDownstreamRouting()
             throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
@@ -354,12 +377,13 @@ class GatewayDownstreamRoutingIntegrationTest {
 
     private static HttpServer stub(List<String> recorded, String headerName,
             List<String> recordedHeaders, List<String> authorizationHeaders,
-            List<String> recordedBodies, String service) throws Exception {
+            List<String> recordedBodies, String service, List<String> rawUris) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath();
             String request = exchange.getRequestMethod() + " " + path;
             recorded.add(request);
+            if (rawUris != null) rawUris.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             String requestBody = new String(exchange.getRequestBody().readAllBytes(),
                     StandardCharsets.UTF_8);
             if (recordedBodies != null) recordedBodies.add(requestBody);

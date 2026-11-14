@@ -6,7 +6,7 @@
 
 **Title:** Add the Passive Awareness Dashboard
 
-**Status:** Implementation complete — 2026-11-14 — awaiting code review and human commit
+**Status:** Merged — PR #296 (c034970f on main) — 2026-11-14 — independent code review pending
 
 **Priority:** P1 - Trading Intelligence
 
