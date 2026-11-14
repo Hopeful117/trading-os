@@ -62,23 +62,33 @@ describe('PassiveCandidateCard', () => {
 
   it('renders instrument and direction', () => {
     create(makeItem());
-    expect(fixture.nativeElement.querySelector('[data-testid="card-instrument"]').textContent.trim()).toBe('EURUSD');
-    expect(fixture.nativeElement.querySelector('[data-testid="card-direction"]').textContent.trim()).toBe('LONG');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="card-instrument"]').textContent.trim(),
+    ).toBe('EURUSD');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="card-direction"]').textContent.trim(),
+    ).toBe('LONG');
   });
 
   it('renders provider', () => {
     create(makeItem());
-    expect(fixture.nativeElement.querySelector('[data-testid="card-provider"]').textContent.trim()).toBe('IC Markets');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="card-provider"]').textContent.trim(),
+    ).toBe('IC Markets');
   });
 
   it('renders provider unavailable when provider is null', () => {
     create(makeItem({ provider: null }));
-    expect(fixture.nativeElement.querySelector('[data-testid="card-provider-unavailable"]')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="card-provider-unavailable"]'),
+    ).not.toBeNull();
   });
 
   it('renders freshness summary', () => {
     create(makeItem());
-    expect(fixture.nativeElement.querySelector('[data-testid="card-freshness"]').textContent).toContain('2 min ago');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="card-freshness"]').textContent,
+    ).toContain('2 min ago');
   });
 
   it('shows Investigate button for candidates', () => {
@@ -106,11 +116,13 @@ describe('PassiveCandidateCard', () => {
   });
 
   it('shows diagnostics section for non-positive items with diagnostics', () => {
-    create(makeItem({
-      isCandidate: false,
-      presentationState: 'NON_POSITIVE',
-      diagnostics: ['OPPORTUNITY_SUPERSEDED', 'THESIS_SUPERSEDED'],
-    }));
+    create(
+      makeItem({
+        isCandidate: false,
+        presentationState: 'NON_POSITIVE',
+        diagnostics: ['OPPORTUNITY_SUPERSEDED', 'THESIS_SUPERSEDED'],
+      }),
+    );
     expect(fixture.nativeElement.querySelector('[data-testid="card-diagnostics"]')).not.toBeNull();
   });
 

@@ -5,7 +5,10 @@ import { Router } from '@angular/router';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-import { PassiveCandidateInvestigatePanel, PASSIVE_SCAN_POLL_INTERVAL_MS } from './passive-candidate-investigate-panel';
+import {
+  PassiveCandidateInvestigatePanel,
+  PASSIVE_SCAN_POLL_INTERVAL_MS,
+} from './passive-candidate-investigate-panel';
 import { AccountService } from '../../../../core/services/account.service';
 import { ActiveScanService } from '../../../../core/services/active-scan.service';
 import { PassiveAwarenessItem } from '../../../../core/models/passive-awareness.model';
@@ -62,7 +65,15 @@ function makeCompletedScan(withOpportunity: boolean): ActiveScanResponse {
     resolvedAt: '2026-11-14T10:00:00Z',
     createdAt: '2026-11-14T10:00:00Z',
     updatedAt: '2026-11-14T10:01:00Z',
-    progress: { totalCandidates: 1, eligible: 1, excluded: 0, running: 0, completed: 1, failed: 0, opportunitiesFound: withOpportunity ? 1 : 0 },
+    progress: {
+      totalCandidates: 1,
+      eligible: 1,
+      excluded: 0,
+      running: 0,
+      completed: 1,
+      failed: 0,
+      opportunitiesFound: withOpportunity ? 1 : 0,
+    },
     markets: withOpportunity
       ? [
           {
@@ -178,7 +189,9 @@ describe('PassiveCandidateInvestigatePanel', () => {
 
   it('shows no-opportunity state after scan with no results', async () => {
     const polls: Subject<ActiveScanResponse>[] = [];
-    activeScanServiceMock.createScan.mockReturnValue(of({ scanId: 'scan-new-1', status: 'RUNNING' }));
+    activeScanServiceMock.createScan.mockReturnValue(
+      of({ scanId: 'scan-new-1', status: 'RUNNING' }),
+    );
     activeScanServiceMock.findScan.mockImplementation(() => {
       const poll = new Subject<ActiveScanResponse>();
       polls.push(poll);
@@ -194,12 +207,16 @@ describe('PassiveCandidateInvestigatePanel', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="no-opportunity-state"]')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="no-opportunity-state"]'),
+    ).not.toBeNull();
   });
 
   it('shows opportunity-found state and Open button when scan finds opportunity', async () => {
     const polls: Subject<ActiveScanResponse>[] = [];
-    activeScanServiceMock.createScan.mockReturnValue(of({ scanId: 'scan-new-1', status: 'RUNNING' }));
+    activeScanServiceMock.createScan.mockReturnValue(
+      of({ scanId: 'scan-new-1', status: 'RUNNING' }),
+    );
     activeScanServiceMock.findScan.mockImplementation(() => {
       const poll = new Subject<ActiveScanResponse>();
       polls.push(poll);
@@ -215,13 +232,19 @@ describe('PassiveCandidateInvestigatePanel', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="opportunity-found-state"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="open-opportunity-btn"]')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="opportunity-found-state"]'),
+    ).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="open-opportunity-btn"]'),
+    ).not.toBeNull();
   });
 
   it('navigates to decision-workspace when Open opportunity is clicked', async () => {
     const polls: Subject<ActiveScanResponse>[] = [];
-    activeScanServiceMock.createScan.mockReturnValue(of({ scanId: 'scan-new-1', status: 'RUNNING' }));
+    activeScanServiceMock.createScan.mockReturnValue(
+      of({ scanId: 'scan-new-1', status: 'RUNNING' }),
+    );
     activeScanServiceMock.findScan.mockImplementation(() => {
       const poll = new Subject<ActiveScanResponse>();
       polls.push(poll);

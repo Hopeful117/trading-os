@@ -74,13 +74,11 @@ export class PassiveAwarenessFeed implements OnInit {
   );
 
   ngOnInit(): void {
-    this.instrumentSubject
-      .pipe(debounceTime(300), distinctUntilChanged())
-      .subscribe((value) => {
-        this.instrumentFilter.set(value);
-        this.currentPage.set(0);
-        this.refreshSubject.next();
-      });
+    this.instrumentSubject.pipe(debounceTime(300), distinctUntilChanged()).subscribe((value) => {
+      this.instrumentFilter.set(value);
+      this.currentPage.set(0);
+      this.refreshSubject.next();
+    });
   }
 
   refresh(): void {

@@ -10,8 +10,11 @@
       <span class="candidate-card__instrument" data-testid="card-instrument">
         {{ item().instrument }}
       </span>
-      <span class="candidate-card__direction" [class.long]="item().direction === 'LONG'"
-        data-testid="card-direction">
+      <span
+        class="candidate-card__direction"
+        [class.long]="item().direction === 'LONG'"
+        data-testid="card-direction"
+      >
         {{ item().direction }}
       </span>
       @if (item().provider) {
@@ -19,8 +22,10 @@
           {{ item().provider }}
         </span>
       } @else {
-        <span class="candidate-card__provider candidate-card__provider--unavailable"
-          data-testid="card-provider-unavailable">
+        <span
+          class="candidate-card__provider candidate-card__provider--unavailable"
+          data-testid="card-provider-unavailable"
+        >
           Market data unavailable
         </span>
       }
@@ -35,10 +40,7 @@
       @if (item().isCandidate) {
         <app-status-badge label="Candidate" tone="positive" />
       } @else {
-        <app-status-badge
-          [label]="item().diagnosticCategory ?? 'Non-Positive'"
-          tone="warning"
-        />
+        <app-status-badge [label]="item().diagnosticCategory ?? 'Non-Positive'" tone="warning" />
       }
 
       @if (item().isExpired) {

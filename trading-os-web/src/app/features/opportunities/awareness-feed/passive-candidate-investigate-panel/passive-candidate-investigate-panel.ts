@@ -1,5 +1,14 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, DestroyRef, inject, input, InjectionToken, OnInit, output, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  inject,
+  input,
+  InjectionToken,
+  OnInit,
+  output,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { catchError, of, switchMap, takeWhile, timer } from 'rxjs';
@@ -10,7 +19,10 @@ export const PASSIVE_SCAN_POLL_INTERVAL_MS = new InjectionToken<number>(
 );
 
 import { Account } from '../../../../core/models/account.model';
-import { ActiveScanResponse, isActiveScanTerminal } from '../../../../core/models/active-scan.model';
+import {
+  ActiveScanResponse,
+  isActiveScanTerminal,
+} from '../../../../core/models/active-scan.model';
 import { PassiveAwarenessItem } from '../../../../core/models/passive-awareness.model';
 import { AccountService } from '../../../../core/services/account.service';
 import { ActiveScanService } from '../../../../core/services/active-scan.service';
@@ -19,7 +31,13 @@ type InvestigationView =
   | { status: 'idle' }
   | { status: 'scanning'; scanId: string }
   | { status: 'no-opportunity' }
-  | { status: 'opportunity-found'; opportunityId: string; opportunityVersion: number; marketId: string; accountId: string }
+  | {
+      status: 'opportunity-found';
+      opportunityId: string;
+      opportunityVersion: number;
+      marketId: string;
+      accountId: string;
+    }
   | { status: 'error'; code: string; message: string };
 
 @Component({
@@ -38,9 +56,7 @@ export class PassiveCandidateInvestigatePanel implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly pollIntervalMs = inject(PASSIVE_SCAN_POLL_INTERVAL_MS);
 
-  readonly accounts$ = this.accountService.getAccounts().pipe(
-    catchError(() => of<Account[]>([])),
-  );
+  readonly accounts$ = this.accountService.getAccounts().pipe(catchError(() => of<Account[]>([])));
 
   selectedAccountId = signal('');
   investigationView = signal<InvestigationView>({ status: 'idle' });

@@ -126,9 +126,7 @@ describe('PassiveAwarenessFeed', () => {
   });
 
   it('renders error state on 503', async () => {
-    awarenessServiceMock.query.mockReturnValue(
-      throwError(() => ({ status: 503, error: {} })),
-    );
+    awarenessServiceMock.query.mockReturnValue(throwError(() => ({ status: 503, error: {} })));
     fixture = TestBed.createComponent(PassiveAwarenessFeed);
     await fixture.whenStable();
 

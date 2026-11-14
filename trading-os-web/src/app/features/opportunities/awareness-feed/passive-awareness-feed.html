@@ -61,9 +61,7 @@
       @case ('filtered-empty') {
         <div class="state-card" data-testid="awareness-filtered-empty">
           <h3>No results for the current filters</h3>
-          <p>
-            Try clearing the instrument filter or disabling "Candidates only".
-          </p>
+          <p>Try clearing the instrument filter or disabling "Candidates only".</p>
           <button
             type="button"
             class="clear-filters-button"
@@ -98,7 +96,9 @@
               of {{ view.pagination.total }}
             </span>
             @if (view.pagination.truncated) {
-              <span class="pagination__truncated">Results truncated — apply filters to narrow.</span>
+              <span class="pagination__truncated"
+                >Results truncated — apply filters to narrow.</span
+              >
             }
             <button
               type="button"

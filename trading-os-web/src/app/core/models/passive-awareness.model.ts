@@ -114,11 +114,7 @@ const DIAGNOSTIC_CATEGORIES: Array<{ codes: Set<string>; label: string }> = [
     label: 'Reference missing',
   },
   {
-    codes: new Set([
-      'OPPORTUNITY_NOT_ACTIVE',
-      'THESIS_NOT_CANDIDATE',
-      'OBSERVATION_NOT_CURRENT',
-    ]),
+    codes: new Set(['OPPORTUNITY_NOT_ACTIVE', 'THESIS_NOT_CANDIDATE', 'OBSERVATION_NOT_CURRENT']),
     label: 'No longer active',
   },
   {

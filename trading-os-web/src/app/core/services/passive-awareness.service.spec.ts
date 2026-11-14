@@ -62,7 +62,13 @@ describe('PassiveAwarenessService', () => {
   });
 
   it('returns the page response on success', () => {
-    const page: PassiveAwarenessPageResponse = { items: [], page: 0, size: 20, total: 5, truncated: false };
+    const page: PassiveAwarenessPageResponse = {
+      items: [],
+      page: 0,
+      size: 20,
+      total: 5,
+      truncated: false,
+    };
     let result: PassiveAwarenessPageResponse | undefined;
     service.query().subscribe((r) => (result = r));
     httpMock.expectOne((r) => r.url === BASE_URL).flush(page);
