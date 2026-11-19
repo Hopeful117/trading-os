@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.adapter.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hope.trading.market_intelligence.application.evidencequality.EvidenceQualityEvaluator;
 import com.hope.trading.market_intelligence.domain.thesis.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +41,13 @@ class MarketThesisJpaPersistenceTest {
                 MarketThesisState.NO_TRADE, null, List.of(evidence),
                 List.of("MOMENTUM_UNAVAILABLE"), NOW, NOW, NOW, null,
                 UUID.randomUUID(), "market-thesis-composer/v1", "b".repeat(64), null);
+        var quality = new EvidenceQualityEvaluator().assess(thesis);
+        thesis = new MarketThesis(
+                thesis.id(), thesis.lineageId(), thesis.version(), thesis.marketId(), thesis.instrument(),
+                thesis.state(), thesis.scenario().orElse(null), thesis.evidence(), thesis.reasons(),
+                thesis.evaluatedAt(), thesis.sourceCutoff(), thesis.validFrom(), thesis.validUntil().orElse(null),
+                thesis.analysisExecutionId().orElse(null), thesis.composerVersion(), thesis.inputFingerprint(),
+                thesis.supersedes().orElse(null), quality);
 
         repository.save(thesis);
         MarketThesis reloaded = repository.findByIdAndVersion(thesis.id(), 1).orElseThrow();
@@ -50,9 +58,11 @@ class MarketThesisJpaPersistenceTest {
         assertThat(reloaded.state()).isEqualTo(MarketThesisState.NO_TRADE);
         assertThat(reloaded.evidence()).containsExactly(evidence);
         assertThat(reloaded.reasons()).containsExactly("MOMENTUM_UNAVAILABLE");
+        assertThat(reloaded.evidenceQuality()).contains(quality);
         assertThat(existing.id()).isEqualTo(thesis.id());
+        UUID persistedThesisId = thesis.id();
         assertThat(repository.findLatest(marketId, "BTC/EUR", "NONE"))
-                .hasValueSatisfying(value -> assertThat(value.id()).isEqualTo(thesis.id()));
+                .hasValueSatisfying(value -> assertThat(value.id()).isEqualTo(persistedThesisId));
     }
 
     @Test

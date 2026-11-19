@@ -144,7 +144,8 @@ public class JpaMarketThesisRepository implements MarketThesisRepository {
         entity.validUntil = thesis.validUntil().orElse(null);
         entity.supersedes = thesis.supersedes().orElse(null);
         entity.payload = write(new Details(
-                thesis.scenario().orElse(null), thesis.evidence(), thesis.reasons()));
+                thesis.scenario().orElse(null), thesis.evidence(), thesis.reasons(),
+                thesis.evidenceQuality().orElse(null)));
         return entity;
     }
 
@@ -156,7 +157,7 @@ public class JpaMarketThesisRepository implements MarketThesisRepository {
                         .valueOf(entity.state), details.scenario(), details.evidence(), details.reasons(),
                 entity.evaluatedAt, entity.sourceCutoff, entity.validFrom, entity.validUntil,
                 entity.analysisExecutionId, entity.composerVersion, entity.inputFingerprint,
-                entity.supersedes);
+                entity.supersedes, details.evidenceQuality());
     }
 
     private String write(Details details) {
@@ -182,6 +183,7 @@ public class JpaMarketThesisRepository implements MarketThesisRepository {
     private record Details(
             MarketThesisScenario scenario,
             List<MarketThesisEvidence> evidence,
-            List<String> reasons
+            List<String> reasons,
+            com.hope.trading.market_intelligence.domain.evidencequality.EvidenceQualityAssessment evidenceQuality
     ) { }
 }
