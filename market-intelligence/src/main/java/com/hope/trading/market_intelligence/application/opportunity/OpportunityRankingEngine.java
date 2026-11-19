@@ -6,6 +6,17 @@ import java.util.*;
 import java.util.function.Predicate;
 
 public final class OpportunityRankingEngine {
+    public List<OpportunityRankingEntry> rankCandidates(
+            Collection<OpportunityRankingCandidate> candidates,
+            OpportunityRankingPolicy policy) {
+        Objects.requireNonNull(candidates, "candidates");
+        Objects.requireNonNull(policy, "policy");
+        return candidates.stream()
+                .map(policy::evaluate)
+                .sorted(policy.comparator())
+                .toList();
+    }
+
     public List<TradingOpportunity> rank(
             Collection<TradingOpportunity> opportunities,
             OpportunityRankingStrategy strategy,
