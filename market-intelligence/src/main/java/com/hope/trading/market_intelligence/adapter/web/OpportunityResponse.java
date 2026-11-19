@@ -12,15 +12,21 @@ public record OpportunityResponse(
         String scoreSemantics,
         String explanation, Set<UUID> observationIds, Set<UUID> aiAnalysisIds,
         Instant evaluatedAt, Instant validFrom, Instant validUntil, Instant createdAt,
-          UUID strategyMatchId, UUID marketId, UUID accountId, UUID sourceScanId,
-          UUID sourceScanMarketId, UUID analysisExecutionId, MarketThesisReference marketThesis,
-          OpportunitySetupResponse setup, MarketThesisResponse thesis
+           UUID strategyMatchId, UUID marketId, UUID accountId, UUID sourceScanId,
+           UUID sourceScanMarketId, UUID analysisExecutionId, MarketThesisReference marketThesis,
+           OpportunitySetupResponse setup, MarketThesisResponse thesis,
+           OpportunityRankingResponse ranking
 ) {
     static OpportunityResponse from(TradingOpportunity value) {
-        return from(value, null);
+        return from(value, null, null);
     }
 
     static OpportunityResponse from(TradingOpportunity value, MarketThesisResponse thesis) {
+        return from(value, thesis, null);
+    }
+
+    static OpportunityResponse from(TradingOpportunity value, MarketThesisResponse thesis,
+                                     OpportunityRankingResponse ranking) {
         return new OpportunityResponse(
                 value.id().value(), value.version().value(), value.status().name(),
                 value.instrument(), value.direction().name(), value.scenario(),
@@ -33,8 +39,8 @@ public record OpportunityResponse(
                 value.evaluatedAt(), value.validFrom(), value.validUntil().orElse(null),
                   value.createdAt(), value.strategyMatchId().orElse(null), value.marketId().orElse(null),
                    value.accountId().orElse(null), value.sourceScanId().orElse(null),
-                   value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null),
-                   value.marketThesis().orElse(null),
-                   OpportunitySetupResponse.from(value.setup().orElse(null)).orElse(null), thesis);
+                value.sourceScanMarketId().orElse(null), value.analysisExecutionId().orElse(null),
+                value.marketThesis().orElse(null),
+                    OpportunitySetupResponse.from(value.setup().orElse(null)).orElse(null), thesis, ranking);
     }
 }

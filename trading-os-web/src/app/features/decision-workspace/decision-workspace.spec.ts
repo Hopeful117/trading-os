@@ -290,6 +290,104 @@ describe('DecisionWorkspace', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="manual-trade-ticket"]')).toBeNull();
   });
 
+  it('renders ranking rationale and evidence provenance when an opportunity is loaded', () => {
+    component.opportunity = {
+      id: 'opportunity-1',
+      version: 1,
+      status: 'ACTIVE',
+      instrument: 'BTC/EUR',
+      direction: 'LONG',
+      scenario: 'OHLC_TREND',
+      timeframe: 'H1',
+      type: 'INTRADAY',
+      origin: 'ACTIVE_SCAN',
+      score: 0.8,
+      scoreSemantics: 'BUSINESS_PRIORITY_NOT_PROBABILITY',
+      explanation: 'Evidence-backed opportunity',
+      observationIds: ['observation-1'],
+      aiAnalysisIds: [],
+      evaluatedAt: '2026-09-20T10:00:00Z',
+      validFrom: '2026-09-20T10:00:00Z',
+      validUntil: null,
+      createdAt: '2026-09-20T10:00:00Z',
+      strategyMatchId: null,
+      marketId: 'market-1',
+      thesis: {
+        id: 'thesis-1',
+        lineageId: 'lineage-1',
+        marketId: 'market-1',
+        instrument: 'BTC/EUR',
+        version: 1,
+        state: 'CANDIDATE',
+        scenario: null,
+        evidence: [],
+        supportingEvidence: [],
+        contradictingEvidence: [],
+        missingEvidence: [],
+        reasons: [],
+        evaluatedAt: '2026-09-20T10:00:00Z',
+        sourceCutoff: '2026-09-20T09:59:00Z',
+        validFrom: '2026-09-20T10:00:00Z',
+        validUntil: null,
+        analysisExecutionId: null,
+        composerVersion: 'composer-v1',
+        inputFingerprint: 'thesis-input',
+        supersedes: null,
+        evidenceQuality: {
+          policyVersion: 'evidence-quality/v1',
+          evaluatedAt: '2026-09-20T10:00:00Z',
+          sourceCutoff: '2026-09-20T09:59:00Z',
+          status: 'SUPPORTED',
+          dimensions: [],
+          reasons: [],
+          provenance: [{
+            evidenceId: 'evidence-1',
+            source: 'TREND_BARS',
+            provider: 'KRAKEN',
+            instrument: 'BTC/EUR',
+            timeframe: 'H1',
+            observedAt: '2026-09-20T09:58:00Z',
+            validUntil: '2026-09-20T10:03:00Z',
+            sourceCutoff: '2026-09-20T09:59:00Z',
+            sourceFingerprint: 'source-fingerprint',
+            ruleVersion: 'rule-v1',
+          }],
+          inputFingerprint: 'quality-input',
+          resultFingerprint: 'quality-result',
+        },
+      },
+      ranking: {
+        policyVersion: 'opportunity-ranking/v1',
+        outcome: 'RANKED',
+        position: 1,
+        rationale: {
+          policyVersion: 'opportunity-ranking/v1',
+          evidenceQualityPolicyVersion: 'evidence-quality/v1',
+          qualityStatus: 'SUPPORTED',
+          dimensions: [],
+          reasons: [],
+          evidenceQualityFingerprint: 'quality-result',
+          thesisInputFingerprint: 'thesis-input',
+          orderingExplanation: 'Ordered by quality status and deterministic evidence dimensions.',
+        },
+        exclusionCode: null,
+        exclusionExplanation: null,
+      },
+    };
+    component.selectAccount(account.accountId);
+    component.selectMarket('market-1', context);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('TREND_BARS');
+    expect(fixture.nativeElement.textContent).toContain('KRAKEN');
+    expect(fixture.nativeElement.textContent).toContain('quality-result');
+    expect(fixture.nativeElement.textContent)
+      .toContain('Ordered by quality status and deterministic evidence dimensions.');
+    const qualityLedger = fixture.nativeElement.querySelector('details.thesis-quality-ledger');
+    expect(qualityLedger).toBeTruthy();
+    expect(qualityLedger?.querySelector('summary')).toBeTruthy();
+  });
+
   it('resolves account-scoped markets after account selection', async () => {
     component.selectAccount(account.accountId);
     fixture.detectChanges();

@@ -2,6 +2,9 @@ package com.hope.trading.market_intelligence.adapter.web;
 
 import com.hope.trading.market_intelligence.application.port.TradingOpportunityRepository;
 import com.hope.trading.market_intelligence.application.port.MarketThesisRepository;
+import com.hope.trading.market_intelligence.application.opportunity.OpportunityRankingEntry;
+import com.hope.trading.market_intelligence.application.opportunity.OpportunityRankingResult;
+import com.hope.trading.market_intelligence.application.opportunity.OpportunityRankingService;
 import com.hope.trading.market_intelligence.domain.opportunity.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -19,16 +22,24 @@ import java.util.*;
 public final class OpportunityController {
     private final TradingOpportunityRepository repository;
     private final MarketThesisRepository theses;
+    private final OpportunityRankingService rankingService;
 
     @Autowired
     public OpportunityController(TradingOpportunityRepository repository,
-                                 MarketThesisRepository theses) {
+                                  MarketThesisRepository theses,
+                                  OpportunityRankingService rankingService) {
         this.repository = repository;
         this.theses = theses;
+        this.rankingService = rankingService;
+    }
+
+    public OpportunityController(TradingOpportunityRepository repository,
+                                  MarketThesisRepository theses) {
+        this(repository, theses, null);
     }
 
     public OpportunityController(TradingOpportunityRepository repository) {
-        this(repository, null);
+        this(repository, null, null);
     }
 
     @GetMapping
@@ -69,14 +80,40 @@ public final class OpportunityController {
     @GetMapping("/{id}")
     public ResponseEntity<OpportunityResponse> latest(@PathVariable UUID id) {
         return repository.findLatest(new OpportunityId(id))
-                .map(value -> response(value, true)).map(ResponseEntity::ok)
+                .map(value -> response(value, true, ranking(value)))
+                .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/active")
     public ResponseEntity<List<OpportunityResponse>> active() {
-        return ResponseEntity.ok(repository.findActive().stream()
-                .map(value -> response(value, true)).toList());
+        List<TradingOpportunity> active = repository.findActive();
+        if (rankingService == null) {
+            return ResponseEntity.ok(active.stream().map(value -> response(value, true, null)).toList());
+        }
+
+        OpportunityRankingResult result = rankingService.rank(active);
+        Map<OpportunityKey, TradingOpportunity> byKey = active.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        value -> new OpportunityKey(value.id().value(), value.version().value()),
+                        value -> value));
+        List<OpportunityResponse> responses = new ArrayList<>();
+        for (int index = 0; index < result.ranked().size(); index++) {
+            OpportunityRankingEntry entry = result.ranked().get(index);
+            TradingOpportunity opportunity = entry.candidate().opportunity();
+            responses.add(response(opportunity, true, OpportunityRankingResponse.ranked(
+                    result.policyVersion(), index + 1,
+                    OpportunityRankingRationaleResponse.from(entry.rationale()))));
+        }
+        for (OpportunityRankingResult.ExcludedOpportunity excluded : result.excluded()) {
+            TradingOpportunity opportunity = byKey.get(
+                    new OpportunityKey(excluded.opportunityId(), excluded.opportunityVersion()));
+            if (opportunity != null) {
+                responses.add(response(opportunity, true, OpportunityRankingResponse.excluded(
+                        result.policyVersion(), excluded)));
+            }
+        }
+        return ResponseEntity.ok(responses);
     }
 
     @GetMapping("/history/{id}")
@@ -88,16 +125,34 @@ public final class OpportunityController {
     }
 
     private OpportunityResponse response(TradingOpportunity value) {
-        return response(value, true);
+        return response(value, true, null);
     }
 
     private OpportunityResponse response(TradingOpportunity value, boolean includeThesis) {
+        return response(value, includeThesis, null);
+    }
+
+    private OpportunityResponse response(TradingOpportunity value, boolean includeThesis,
+                                         OpportunityRankingResponse ranking) {
         MarketThesisResponse thesis = !includeThesis || theses == null ? null : value.marketThesis()
                 .flatMap(reference -> theses.findByIdAndVersion(
                         reference.thesisId(), reference.thesisVersion()))
                 .map(MarketThesisResponse::from)
                 .orElse(null);
-        return OpportunityResponse.from(value, thesis);
+        return OpportunityResponse.from(value, thesis, ranking);
+    }
+
+    private OpportunityRankingResponse ranking(TradingOpportunity value) {
+        if (rankingService == null) return null;
+        OpportunityRankingResult result = rankingService.rank(List.of(value));
+        return result.ranked().stream().findFirst()
+                .map(entry -> OpportunityRankingResponse.ranked(
+                        result.policyVersion(), 1,
+                        OpportunityRankingRationaleResponse.from(entry.rationale())))
+                .orElseGet(() -> result.excluded().stream().findFirst()
+                        .map(excluded -> OpportunityRankingResponse.excluded(
+                                result.policyVersion(), excluded))
+                        .orElse(null));
     }
 
     private Comparator<TradingOpportunity> comparator(String sort) {
@@ -108,5 +163,8 @@ public final class OpportunityController {
             case "createdAt" -> Comparator.comparing(TradingOpportunity::createdAt);
             default -> throw new IllegalArgumentException("Unsupported sort: " + sort);
         };
+    }
+
+    private record OpportunityKey(UUID id, long version) {
     }
 }

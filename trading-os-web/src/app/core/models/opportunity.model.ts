@@ -48,6 +48,7 @@ export interface OpportunityResponse {
   marketThesis?: MarketThesisReference | null;
   thesis?: MarketThesisResponse | null;
   setup?: OpportunitySetup | null;
+  ranking?: OpportunityRankingResponse | null;
 }
 
 export interface OpportunityPageResponse {
@@ -56,4 +57,39 @@ export interface OpportunityPageResponse {
   size: number;
   total: number;
 }
-import { MarketThesisReference, MarketThesisResponse } from './market-thesis.model';
+import {
+  EvidenceQualityDimension,
+  EvidenceQualityDimensionState,
+  EvidenceQualityReason,
+  EvidenceQualityStatus,
+  MarketThesisReference,
+  MarketThesisResponse,
+} from './market-thesis.model';
+
+export type OpportunityRankingOutcome = 'RANKED' | 'EXCLUDED';
+
+export interface OpportunityRankingResponse {
+  policyVersion: string;
+  outcome: OpportunityRankingOutcome;
+  position: number | null;
+  rationale: OpportunityRankingRationale | null;
+  exclusionCode: string | null;
+  exclusionExplanation: string | null;
+}
+
+export interface OpportunityRankingRationale {
+  policyVersion: string;
+  evidenceQualityPolicyVersion: string;
+  qualityStatus: EvidenceQualityStatus;
+  dimensions: OpportunityRankingDimensionDecision[];
+  reasons: EvidenceQualityReason[];
+  evidenceQualityFingerprint: string;
+  thesisInputFingerprint: string;
+  orderingExplanation: string;
+}
+
+export interface OpportunityRankingDimensionDecision {
+  dimension: EvidenceQualityDimension;
+  state: EvidenceQualityDimensionState;
+  precedence: number;
+}

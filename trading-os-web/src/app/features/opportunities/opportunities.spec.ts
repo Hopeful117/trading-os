@@ -51,7 +51,35 @@ describe('Opportunities', () => {
         id: 'thesis-1',
         version: 5,
         state: 'NO_TRADE',
-      } as OpportunityResponse['thesis'],
+        evidenceQuality: {
+          policyVersion: 'evidence-quality/v1',
+          evaluatedAt: '2026-08-24T10:00:00Z',
+          sourceCutoff: '2026-08-24T09:59:00Z',
+          status: 'SUPPORTED',
+          dimensions: [],
+          reasons: [],
+          provenance: [],
+          inputFingerprint: 'input-fingerprint',
+          resultFingerprint: 'result-fingerprint',
+        },
+      } as unknown as OpportunityResponse['thesis'],
+      ranking: {
+        policyVersion: 'opportunity-ranking/v1',
+        outcome: 'RANKED',
+        position: 1,
+        rationale: {
+          policyVersion: 'opportunity-ranking/v1',
+          evidenceQualityPolicyVersion: 'evidence-quality/v1',
+          qualityStatus: 'SUPPORTED',
+          dimensions: [],
+          reasons: [],
+          evidenceQualityFingerprint: 'result-fingerprint',
+          thesisInputFingerprint: 'input-fingerprint',
+          orderingExplanation: 'Ordered by quality status, then deterministic evidence dimensions.',
+        },
+        exclusionCode: null,
+        exclusionExplanation: null,
+      },
       setup: {
         referencePrice: 64120.5,
         referencePriceAt: '2026-08-24T09:59:00Z',
@@ -80,6 +108,14 @@ describe('Opportunities', () => {
       validUntil: null,
       createdAt: '2026-08-24T10:00:00Z',
       strategyMatchId: null,
+      ranking: {
+        policyVersion: 'opportunity-ranking/v1',
+        outcome: 'EXCLUDED',
+        position: null,
+        rationale: null,
+        exclusionCode: 'MISSING_EXACT_EVIDENCE_REFERENCE',
+        exclusionExplanation: 'An exact evidence reference is required.',
+      },
     },
   ];
 
@@ -188,6 +224,16 @@ describe('Opportunities', () => {
     it('renders the setup reference price with an honest fallback for legacy rows', () => {
       const priceCell = fixture.nativeElement.querySelector('.reference-price');
       expect(priceCell.textContent).toContain('64,120.5');
+    });
+
+    it('renders deterministic ranking outcomes and quality status', () => {
+      const rows = fixture.nativeElement.querySelectorAll('.opportunity-row');
+
+      expect(rows[0].querySelector('.ranking-badge').textContent).toContain('Rank #1');
+      expect(rows[0].querySelector('.ranking-detail').textContent).toContain('SUPPORTED');
+      expect(rows[1].querySelector('.ranking-badge').textContent).toContain('Not ranked');
+      expect(rows[1].querySelector('.ranking-detail').textContent)
+        .toContain('MISSING_EXACT_EVIDENCE_REFERENCE');
     });
 
     it('renders the empty state when no active opportunity exists', async () => {
