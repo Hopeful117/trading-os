@@ -46,6 +46,14 @@ public class OpportunityConfiguration {
     @Bean OpportunityRankingEngine opportunityRankingEngine() {
         return new OpportunityRankingEngine();
     }
+    @Bean OpportunityRankingPolicy opportunityRankingPolicy() {
+        return new EvidenceBasedOpportunityRankingPolicy();
+    }
+    @Bean OpportunityRankingService opportunityRankingService(
+            TradingOpportunityRepository opportunities, MarketThesisRepository theses,
+            OpportunityRankingEngine engine, OpportunityRankingPolicy policy) {
+        return new OpportunityRankingService(opportunities, theses, engine, policy);
+    }
     @Bean OpportunityExpirationPolicy opportunityExpirationPolicy() {
         return new ValidityWindowExpirationPolicy();
     }
