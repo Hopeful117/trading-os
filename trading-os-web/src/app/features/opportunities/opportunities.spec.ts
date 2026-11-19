@@ -232,8 +232,9 @@ describe('Opportunities', () => {
       expect(rows[0].querySelector('.ranking-badge').textContent).toContain('Rank #1');
       expect(rows[0].querySelector('.ranking-detail').textContent).toContain('SUPPORTED');
       expect(rows[1].querySelector('.ranking-badge').textContent).toContain('Not ranked');
-      expect(rows[1].querySelector('.ranking-detail').textContent)
-        .toContain('MISSING_EXACT_EVIDENCE_REFERENCE');
+      expect(rows[1].querySelector('.ranking-detail').textContent).toContain(
+        'MISSING_EXACT_EVIDENCE_REFERENCE',
+      );
     });
 
     it('renders the empty state when no active opportunity exists', async () => {

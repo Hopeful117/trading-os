@@ -340,18 +340,20 @@ describe('DecisionWorkspace', () => {
           status: 'SUPPORTED',
           dimensions: [],
           reasons: [],
-          provenance: [{
-            evidenceId: 'evidence-1',
-            source: 'TREND_BARS',
-            provider: 'KRAKEN',
-            instrument: 'BTC/EUR',
-            timeframe: 'H1',
-            observedAt: '2026-09-20T09:58:00Z',
-            validUntil: '2026-09-20T10:03:00Z',
-            sourceCutoff: '2026-09-20T09:59:00Z',
-            sourceFingerprint: 'source-fingerprint',
-            ruleVersion: 'rule-v1',
-          }],
+          provenance: [
+            {
+              evidenceId: 'evidence-1',
+              source: 'TREND_BARS',
+              provider: 'KRAKEN',
+              instrument: 'BTC/EUR',
+              timeframe: 'H1',
+              observedAt: '2026-09-20T09:58:00Z',
+              validUntil: '2026-09-20T10:03:00Z',
+              sourceCutoff: '2026-09-20T09:59:00Z',
+              sourceFingerprint: 'source-fingerprint',
+              ruleVersion: 'rule-v1',
+            },
+          ],
           inputFingerprint: 'quality-input',
           resultFingerprint: 'quality-result',
         },
@@ -381,8 +383,9 @@ describe('DecisionWorkspace', () => {
     expect(fixture.nativeElement.textContent).toContain('TREND_BARS');
     expect(fixture.nativeElement.textContent).toContain('KRAKEN');
     expect(fixture.nativeElement.textContent).toContain('quality-result');
-    expect(fixture.nativeElement.textContent)
-      .toContain('Ordered by quality status and deterministic evidence dimensions.');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Ordered by quality status and deterministic evidence dimensions.',
+    );
     const qualityLedger = fixture.nativeElement.querySelector('details.thesis-quality-ledger');
     expect(qualityLedger).toBeTruthy();
     expect(qualityLedger?.querySelector('summary')).toBeTruthy();
