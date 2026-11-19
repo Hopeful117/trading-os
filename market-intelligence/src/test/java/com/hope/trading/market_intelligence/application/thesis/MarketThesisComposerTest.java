@@ -55,6 +55,7 @@ class MarketThesisComposerTest {
         assertEquals(1, thesis.evidence().stream()
                 .filter(value -> value.source().equals("MOMENTUM"))
                 .count());
+        assertThat(thesis.evidenceQuality()).isPresent();
     }
 
     @Test
@@ -71,6 +72,7 @@ class MarketThesisComposerTest {
         assertEquals(first.inputFingerprint(), second.inputFingerprint());
         assertEquals(first.evidence(), second.evidence());
         assertEquals(first.reasons(), second.reasons());
+        assertThat(first.evidenceQuality()).isEqualTo(second.evidenceQuality());
     }
 
     @Test

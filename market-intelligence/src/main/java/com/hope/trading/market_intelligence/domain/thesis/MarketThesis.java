@@ -1,5 +1,7 @@
 package com.hope.trading.market_intelligence.domain.thesis;
 
+import com.hope.trading.market_intelligence.domain.evidencequality.EvidenceQualityAssessment;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -24,6 +26,7 @@ public final class MarketThesis {
     private final String composerVersion;
     private final String inputFingerprint;
     private final UUID supersedes;
+    private final EvidenceQualityAssessment evidenceQuality;
 
     public MarketThesis(
             UUID id, UUID lineageId, long version, UUID marketId, String instrument,
@@ -32,6 +35,18 @@ public final class MarketThesis {
             Instant evaluatedAt, Instant sourceCutoff, Instant validFrom,
             Instant validUntil, UUID analysisExecutionId, String composerVersion,
             String inputFingerprint, UUID supersedes) {
+        this(id, lineageId, version, marketId, instrument, state, scenario, evidence, reasons,
+                evaluatedAt, sourceCutoff, validFrom, validUntil, analysisExecutionId,
+                composerVersion, inputFingerprint, supersedes, null);
+    }
+
+    public MarketThesis(
+            UUID id, UUID lineageId, long version, UUID marketId, String instrument,
+            MarketThesisState state, MarketThesisScenario scenario,
+            List<MarketThesisEvidence> evidence, List<String> reasons,
+            Instant evaluatedAt, Instant sourceCutoff, Instant validFrom,
+            Instant validUntil, UUID analysisExecutionId, String composerVersion,
+            String inputFingerprint, UUID supersedes, EvidenceQualityAssessment evidenceQuality) {
         this.id = Objects.requireNonNull(id, "id");
         this.lineageId = Objects.requireNonNull(lineageId, "lineageId");
         if (version < 1) throw new IllegalArgumentException("version starts at 1");
@@ -65,6 +80,7 @@ public final class MarketThesis {
         this.composerVersion = required(composerVersion, "composerVersion");
         this.inputFingerprint = required(inputFingerprint, "inputFingerprint");
         this.supersedes = supersedes;
+        this.evidenceQuality = evidenceQuality;
         if (hasBlockingContradiction() && state == MarketThesisState.CANDIDATE) {
             throw new IllegalArgumentException("Blocking contradiction cannot produce CANDIDATE");
         }
@@ -124,4 +140,7 @@ public final class MarketThesis {
     public String composerVersion() { return composerVersion; }
     public String inputFingerprint() { return inputFingerprint; }
     public Optional<UUID> supersedes() { return Optional.ofNullable(supersedes); }
+    public Optional<EvidenceQualityAssessment> evidenceQuality() {
+        return Optional.ofNullable(evidenceQuality);
+    }
 }

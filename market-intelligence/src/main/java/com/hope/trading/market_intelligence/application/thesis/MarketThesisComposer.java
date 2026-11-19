@@ -1,6 +1,7 @@
 package com.hope.trading.market_intelligence.application.thesis;
 
 import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
+import com.hope.trading.market_intelligence.application.evidencequality.EvidenceQualityEvaluator;
 import com.hope.trading.market_intelligence.domain.observation.Observation;
 import com.hope.trading.market_intelligence.domain.observation.ObservationEvidence;
 import com.hope.trading.market_intelligence.domain.observation.TrendContextObservationPayload;
@@ -27,6 +28,7 @@ public final class MarketThesisComposer {
     private final TrendContextProfile trendContextProfile;
     private final StructuralLevelObjectiveComposer structuralLevels =
             new StructuralLevelObjectiveComposer();
+    private final EvidenceQualityEvaluator evidenceQualityEvaluator = new EvidenceQualityEvaluator();
 
     public MarketThesisComposer(Clock clock) {
         this(clock, defaultProfile());
@@ -120,11 +122,12 @@ public final class MarketThesisComposer {
         UUID lineageId = deterministicId("lineage", marketId, observation.lineageId(),
                 observation.id());
         UUID thesisId = deterministicId("thesis", lineageId, observation.version(), fingerprint);
-        return new MarketThesis(
+        MarketThesis thesis = new MarketThesis(
                 thesisId, lineageId, observation.version(), marketId, observation.instrument(),
                 state, scenario, evidence, reasons, evaluatedAt, sourceCutoff,
                 observation.validFrom(), observation.validUntil().orElse(null),
                 analysisExecutionId, VERSION, fingerprint, null);
+        return withEvidenceQuality(thesis, evidenceQualityEvaluator.assess(thesis));
     }
 
     public MarketThesis composeDegraded(
@@ -142,11 +145,23 @@ public final class MarketThesisComposer {
                 evaluatedAt.toString())).value();
         UUID lineageId = deterministicId("degraded-lineage", marketId, normalizedInstrument,
                 fingerprint);
-        return new MarketThesis(
+        MarketThesis thesis = new MarketThesis(
                 deterministicId("degraded-thesis", lineageId, fingerprint), lineageId, 1,
                 marketId, normalizedInstrument, MarketThesisState.NO_TRADE, null,
                 List.of(missing), List.of("DEGRADED_COMPOSITION"), evaluatedAt, evaluatedAt,
                 evaluatedAt, null, analysisExecutionId, VERSION, fingerprint, null);
+        return withEvidenceQuality(thesis, evidenceQualityEvaluator.assess(thesis));
+    }
+
+    private static MarketThesis withEvidenceQuality(
+            MarketThesis thesis,
+            com.hope.trading.market_intelligence.domain.evidencequality.EvidenceQualityAssessment assessment) {
+        return new MarketThesis(
+                thesis.id(), thesis.lineageId(), thesis.version(), thesis.marketId(), thesis.instrument(),
+                thesis.state(), thesis.scenario().orElse(null), thesis.evidence(), thesis.reasons(),
+                thesis.evaluatedAt(), thesis.sourceCutoff(), thesis.validFrom(),
+                thesis.validUntil().orElse(null), thesis.analysisExecutionId().orElse(null),
+                thesis.composerVersion(), thesis.inputFingerprint(), thesis.supersedes().orElse(null), assessment);
     }
 
     private static MarketThesisEvidence observationEvidence(
