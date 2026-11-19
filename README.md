@@ -1,433 +1,118 @@
 # Trading OS
 
-Trading OS est un assistant de trading intelligent destiné aux traders discrétionnaires. Il centralise les données de marché, les comptes broker, les règles de risque, la préparation, l'exécution contrôlée et l'analyse des trades afin de réduire la charge cognitive et d'améliorer la discipline.
+Trading OS est un poste de travail d'assistance au trading pour traders
+discrétionnaires. Il centralise les données de marché, le contexte de compte,
+l'analyse déterministe, le risque, la préparation des décisions et l'exécution
+explicitement autorisée.
 
-Le produit n'est ni un bot autonome, ni une plateforme HFT, ni un outil limité aux challenges de prop firms. Les règles déterministes ont toujours priorité sur les recommandations de l'IA et toute exécution reste soumise à une validation humaine explicite.
+Trading OS n'est ni un bot autonome, ni une plateforme HFT, ni un système qui
+promet une rentabilité. Le trader conserve l'autorité finale. Les règles
+déterministes de risque, d'éligibilité et d'exécution priment sur toute
+recommandation d'IA.
 
-Le projet est en développement actif. L'architecture microservices, l'authentification, la synchronisation Kraken, le moteur de risque, le Dashboard, l'interface Angular, les fondations de Market Intelligence et le pipeline d'exécution broker sont présents. Les comptes PAPER peuvent être provisionnés, recevoir une exécution simulée persistée et exposer leurs positions locales via l'API. Aucun AI Engine réel ni mécanisme de décision ou d'exécution autonome n'est actuellement intégré : une exécution doit provenir d'une intention explicitement autorisée.
+## État actuel
 
-## Principes directeurs
-
-- Le produit et le workflow du trader déterminent l'architecture, pas les API des fournisseurs.
-- Le domaine Trading OS reste indépendant de Kraken et des futurs brokers ou fournisseurs.
-- Les décisions critiques de risque et d'éligibilité restent déterministes, explicables et reproductibles.
-- L'IA interprète et explique des informations structurées ; elle ne contourne jamais les règles et n'exécute aucun ordre.
-- Le trader demeure le décideur final pour ouvrir, modifier ou fermer une position.
-- Seules les données ayant une valeur métier mesurable sont collectées et conservées.
+- Architecture microservices, authentification JWT et Gateway disponibles.
+- Comptes PAPER : provisioning, entrée simulée, positions locales, valorisation,
+  clôture et historique décisionnel disponibles.
+- Market Data : catalogue, état de marché, ticker, OHLC, carnet d'ordres et
+  transactions récentes avec identité provider-aware.
+- Market Intelligence : analyses déterministes, Active Scan, opportunités,
+  Trade Plans et pipeline de validation du risque disponibles.
+- Passive Scanning V1 : univers configuré, dispatch borné, awareness projection
+  et parcours d'investigation explicite disponibles. La clôture de l'Epic 0238
+  reste soumise à l'approbation humaine documentée dans le
+  [rapport de clôture](docs/architecture/epics/0238-passive-market-scanning/closure-report.md).
+- AI Engine : fondation shadow-mode disponible, désactivée par défaut, sans
+  autorité de décision, de risque ou d'exécution.
+- News Service : fondation provider-neutral disponible ; synchronisation avec
+  un fournisseur réel non activée.
+- Validation LIVE, sandbox broker et parcours déployés restent des validations
+  opérationnelles distinctes du parcours PAPER.
 
 ## Architecture
 
-| Service | Port hôte | Port conteneur | Responsabilité |
-| --- | ---: | ---: | --- |
-| `gateway` | 17080 | 8080 | Point d'entrée HTTP, sécurité JWT et routage |
-| `trading-core` | 17081 | 8081 | Utilisateurs, comptes, règles, trades, dashboard, statistiques et domaine d'exécution |
-| `broker-service` | 17082 | 8082 | Connexions broker, credentials chiffrés, capacités broker-neutres et exécution Kraken |
-| `market-data` | 17083 | 8083 | Référentiel de marchés, OHLC, snapshots de prix et flux Kraken |
-| `market-intelligence` | interne | 8084 | Analyses, observations, opportunités, trade plans, orchestration et artefacts d'intelligence |
-| `news-service` | 17086 | 8085 | Événements économiques et actualités normalisés, persistés et provider-neutral |
-| `eureka-server` | 17084 | 8761 | Découverte des services |
-| `trading-web` | 17085 | 80 | Application Angular servie par Nginx |
-| PostgreSQL | interne | 5432 | Bases séparées `trading_os`, `market_data`, `broker_service` et `market_intelligence` |
+| Composant | Responsabilité | État |
+| --- | --- | --- |
+| `gateway` | Entrée HTTP, JWT et routage | Disponible |
+| `trading-core` | Comptes, Trade Plans, risque, exécution et état PAPER | Disponible |
+| `broker-service` | Contrats broker-neutres et adaptateurs broker | Disponible, validation LIVE distincte |
+| `market-data` | Marchés, prix, OHLC et données temps réel | Disponible |
+| `market-intelligence` | Analyse, scans, observations, opportunités et plans | Disponible, capacités en évolution |
+| `news-service` | Événements économiques et actualités normalisés | Fondation disponible |
+| `eureka-server` | Découverte de services | Disponible |
+| `trading-os-web` | Interface Angular du workflow humain | Disponible |
+| `ai-engine` | Interprétation advisory shadow-mode | Désactivé par défaut |
 
-Les ports hôtes utilisent la plage `1708x` afin de laisser les ports standards
-disponibles pour d'autres applications développées en parallèle sur la même
-machine. Seuls les mappings hôtes du Compose ont été déplacés ; les ports
-internes des conteneurs et la communication inter-services restent inchangés.
+Le domaine reste indépendant des API fournisseurs. Trading Core et Risk Domain
+conservent l'autorité sur les comptes, le risque, l'autorisation et l'exécution ;
+Market Intelligence interprète les preuves mais ne place pas directement de broker orders.
 
-Services ou composants encore incomplets dans l'architecture cible :
-
-| Service ou composant | Responsabilité cible |
-| --- | --- |
-| `news-service` | Calendrier économique, actualités et contexte macroéconomique normalisés (fondation implémentée, provider réel à intégrer) |
-| `ai-engine` | Interprétation shadow-mode de Market Thesis, scénarios et explications |
-| Passive Scanner | Planification continue de la stratégie passive Market Intelligence |
-| Active Scanner UI | Déclenchement et présentation de l'analyse approfondie |
-| Position Monitoring | Surveillance des positions et recommandations sans exécution automatique |
-
-La stack utilise Java 21, Spring Boot 4, Spring Cloud, PostgreSQL 16, Angular 21 et Docker Compose.
-
-## État fonctionnel
-
-- Authentification et autorisation JWT : disponible.
-- Comptes broker et synchronisation Kraken : disponible.
-- Identité financière et routage canoniques : `Account.accountId` et `BrokerAccount.id` sont des identités distinctes reliées par `Account.brokerAccountId`, avec contrôle d'appartenance côté serveur.
-- Comptes PAPER : provisioning persistant, simulation d'entrée, mise à jour locale des balances/equity et persistance des trades ouverts disponibles.
-- Positions PAPER : `GET /api/v1/accounts/{accountId}/positions` lit les `Trade` locaux `OPEN` après rechargement de la persistance, sans dépendre de Broker Service. La valorisation utilise Market Data, avec bid pour les positions BUY, ask pour les positions SELL et un statut explicite en cas de prix indisponible.
-- Référentiel et affichage des marchés Kraken : disponible.
-- Marchés Kraken Linear Perpetual : catalogue provider-aware avec `providerSymbol`,
-  OHLC Futures via Charts REST, ticker/carnet d'ordres/trades via WebSocket Futures,
-  parsing provider-specific isolé et reconnexion avec replay des abonnements actifs.
-- Interface Marchés : filtres et tri par produit (`Spot` ou `Futures`) avec
-  contexte produit propagé vers les opportunités et les Trade Plans.
-- Règles et moteur de risque : première version implémentée ; les profils configurables complets restent à construire.
-- Cycle de vie local des trades et statistiques : API implémentée, positions PAPER observables dans l'interface, fermeture PAPER, settlement et historique décisionnel account-scoped disponibles.
-- Exécution broker : intentions, tentatives, idempotence, soumission Kraken, annulation, récupération et réconciliation implémentées. La validation contractuelle contre le sandbox Kraken et le parcours déployé de bout en bout restent à exécuter ; ils ne sont pas requis pour le parcours PAPER V1.
-- Flux temps réel : ticker, OHLC, carnet d'ordres et transactions récentes avec abonnements dynamiques.
-
-Les flux Kraken Spot et Linear Perpetual utilisent des endpoints et des payloads
-distincts. Le symbole canonique Trading OS reste exposé au domaine ; le symbole
-provider Kraken Futures est persisté séparément et est obligatoire pour toute
-souscription Futures. Les abonnements WebSocket sont comptés par flux, profondeur
-et symbole afin de préserver les consommateurs lors d'un désabonnement partiel.
-- Dashboard : orchestration dans Trading Core, valorisation des positions, risque, fraîcheur et états dégradés.
-- Fondation Market Intelligence ADR-020 : contexte modulaire, modes passif/actif, analyses déterministes, provenance et consolidation partielle.
-- Gouvernance ADR-021 : `AnalysisExecution` asynchrone, idempotence, politique d'exécution, annulation, classification du contexte et contrat AI Engine désactivé.
-- Artefacts ADR-022 : identités et scopes fortement typés, fraîcheur métier, résolution de réutilisation, dépendances et stockage V1 en mémoire.
-- Capability Engine ADR-023 : contrat atomique, planner DAG immuable, moteur local parallèle, lifecycle, propagation ciblée, retries et annulation coopérative.
-- Credentials ADR-024 : stockage chiffré et versionné, validation, rotation et statut technique par compte broker.
-- Observations ADR-025 : modèle normalisé, construction, requêtes et repository local en mémoire.
-- Opportunités ADR-026 : détection, ranking, projections utilisateur et API de consultation.
-- Trade Planning ADR-027 : génération déterministe, versionnement et replanification ; adaptateur IA désactivé.
-- Risk Domain ADR-028 : moteur déterministe autonome et testé ; autorisation des Trade Plans via le pipeline Trading Core, rendue accessible à travers le Gateway (Story 0003).
-- Execution Domain ADR-029 : cycle de vie, idempotence, audit, retry contrôlé, annulation et récupération dans Trading Core.
-- Broker Architecture ADR-030 : contrats broker-neutres, capacités, registre de providers, adaptateur Kraken, résilience et observabilité.
-- News Service : fondation provider-neutral implémentée ; fournisseur externe et synchronisation réelle non commencés.
-- Scheduling passif et interface Scanner : non commencés. L'AI Engine possède
-  désormais une fondation FastAPI/Pydantic shadow-mode, désactivée par défaut,
-  sans route Gateway ni accès direct aux données métier.
-
-### AI Engine local
-
-Le service Python est intégré à la stack Docker sous le nom `ai-engine` et peut
-également être lancé indépendamment pour les validations hors ligne :
-
-```bash
-cd ai-engine
-python3 -m venv .venv
-.venv/bin/pip install -e '.[test]'
-.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8086
-```
-
-La stack expose localement le port `127.0.0.1:8086` pour le flux OAuth opérateur
-interne et conserve les stores AI Engine dans le volume Docker `ai_engine_data`.
-Le service reste désactivé par défaut tant que `AI_ENGINE_ENABLED` n'est pas
-activé explicitement.
-
-Le service reste désactivé par défaut (`AI_ENGINE_ENABLED=false`). Le provider
-`mock` permet les tests locaux sans réseau externe. Le provider API-key
-`openai` reste disponible pour compatibilité. Le premier provider OAuth réel est
-`openai_chatgpt` : il nécessite `AI_ENGINE_ENABLED=true`,
-`AI_ENGINE_CHATGPT_OAUTH_ENABLED=true`, un `AI_ENGINE_MODEL`, un
-`AI_ENGINE_CHATGPT_CREDENTIAL_HANDLE` et une clé de chiffrement fournie par
-l'environnement dans `AI_ENGINE_CREDENTIAL_ENCRYPTION_KEY`.
-Pour une premiere inscription d'application, configurer aussi
-`AI_ENGINE_CHATGPT_AGENT_NAME=Trading OS` et un identifiant stable non-secret
-dans `AI_ENGINE_CHATGPT_EXT_AGENT_HOST_ID`.
-
-Les credentials OAuth sont stockés chiffrés dans le stockage local de l'AI
-Engine. Le flux opérateur limité est `GET /internal/v1/oauth/chatgpt/start`
-puis le callback configuré ; ces routes ne sont pas exposées par le Gateway ou
-MCP. Les tokens ne doivent jamais être ajoutés au dépôt, aux prompts, aux
-rapports ou aux logs. Toute validation LLM réelle nécessite une autorisation
-séparée pour le modèle, le contexte, le nombre de requêtes et le budget.
-
-### Avancées récentes
-
-Les dernières Stories ont consolidé le premier parcours PAPER sans modifier
-l'autorité broker des comptes LIVE :
-
-- [Story 0038](docs/architecture/stories/0038-persisted-paper-execution-regression/story.md) : exécution PAPER simulée et état final persisté après rechargement.
-- [Story 0039](docs/architecture/stories/0039-persisted-account-identity-explicit-paper-provisioning/story.md) : provisioning PAPER explicite et relation canonique entre compte financier et compte de routage.
-- [Story 0040](docs/architecture/stories/0040-mode-aware-neutral-risk-facts/story.md) : séparation des sources de Risk Facts selon le mode, avec comportement fail-closed pour les faits PAPER incomplets.
-- [Story 0041](docs/architecture/stories/0041-paper-local-position-query-valuation/story.md) : consultation HTTP des positions PAPER locales après `flush/clear`, identité basée sur le `Trade`, valorisation Market Data et suppression des actions de clôture LIVE pour PAPER.
-
-Le parcours PAPER couvert à ce stade est donc :
+## Parcours de décision
 
 ```text
-provisioning PAPER
-    -> entrée simulée
-    -> Trade OPEN persisté
-    -> consultation des positions après reload
-    -> valorisation Market Data
-    -> clôture PAPER explicite
-    -> settlement persisté
-    -> historique décisionnel account-scoped
+Market Data
+    -> Market Intelligence
+    -> Observation / MarketThesis / Opportunity
+    -> TradePlan
+    -> Risk déterministe
+    -> Validation humaine
+    -> Trading Core
+    -> Broker Service ou exécution PAPER
 ```
 
-La sortie PAPER reste une capacité de lecture et de simulation, sans exécution
-autonome. La clôture et le settlement réalisés sont persistés par Trading Core ;
-le suivi actif des positions reste volontairement limité à la consultation,
-la valorisation et l'action explicite de clôture.
+Le Passive Scanner peut proposer une investigation Active Scan, mais ne crée
+pas automatiquement de scan, de TradePlan ou d'opération broker.
 
-### Market Intelligence
+## Démarrage rapide
 
-Le service distingue explicitement :
-
-- l'exécution technique `AnalysisExecution` ;
-- le résultat consolidé `ConsolidatedIntelligence` ;
-- la connaissance métier durable `IntelligenceObservation` ;
-- les artefacts dérivés réutilisables.
-
-Les analyses déterministes et IA sont des capacités de premier rang travaillant en parallèle sur les sections de contexte qui leur sont autorisées. L'adaptateur AI Engine est volontairement indisponible : aucun résultat IA fictif n'est produit.
-
-Contrat REST asynchrone :
-
-```text
-POST /api/v1/intelligence/analyses
-GET  /api/v1/intelligence/analyses/{executionId}
-GET  /api/v1/intelligence/analyses/{executionId}/result
-POST /api/v1/intelligence/analyses/{executionId}/cancel
-```
-
-La création exige un en-tête `Idempotency-Key` et retourne `202 Accepted`.
-
-Résolution déterministe du périmètre Active Scan :
-
-```text
-POST /api/v1/intelligence/scans/scope
-```
-
-Cet endpoint calcule le scope effectif à partir du compte sélectionné, du
-catalogue de marchés et des règles d'eligibilité déterministes. Il ne crée
-pas d'`AnalysisExecution` et ne déclenche pas le pipeline d'intelligence.
-
-La gestion des artefacts reste indépendante de Redis, Caffeine ou SQL. L'implémentation actuelle utilise uniquement un store en mémoire pour valider les règles de clé, scope, provenance, fraîcheur, réutilisation et invalidation ciblée. Elle n'est ni durable ni distribuée.
-
-## Pipeline de décision
-
-```text
-Market Data et contexte
-    ├── Analyse déterministe ──┐
-    └── Interprétation IA ─────┤
-                              ↓
-                   Market Intelligence consolidée
-    → Validation des règles et du risque
-    → Validation humaine
-    → Exécution par le Broker Service
-```
-
-Chaque couche enrichit les informations reçues sans remplacer les responsabilités des couches précédentes. Une recommandation doit rester explicable et un refus du moteur de risque doit être traçable.
-
-Les briques Market Intelligence, Risk, Execution et Broker existent. L'autorisation
-déterministe des Trade Plans par le Risk Domain est connectée et exposée via le
-Gateway. Le parcours PAPER MANUAL complet, de la préparation à la clôture et à
-l'historique post-trade, est validé par Story 0061 et les Stories de Decision
-History. L'exécution LIVE, le sandbox broker et les parcours déployés restent
-des validations opérationnelles distinctes.
-
-## Configuration
-
-Initialiser la configuration locale avec le script idempotent suivant. Il crée
-`.env` si nécessaire, génère les secrets JWT manquants et applique le mode
-`600`. Le fichier n'est jamais versionné.
+Initialiser l'environnement local puis démarrer la stack :
 
 ```bash
 ./scripts/bootstrap-local-env.sh
-```
-
-Le fichier généré contient notamment les valeurs suivantes :
-
-```dotenv
-JWT_SECRET=change-me-with-at-least-32-random-bytes
-JWT_EXPIRATION=3600000
-JWT_ISSUER=trading-os
-KRAKEN_BASE_URL=https://api.kraken.com
-KRAKEN_WEBSOCKET=wss://ws.kraken.com/v2
-KRAKEN_API_KEY=
-KRAKEN_API_SECRET=
-BROKER_MASTER_KEY=
-BROKER_MASTER_KEY_VERSION=v1
-TRADING_CORE_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
-BROKER_SERVICE_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
-MARKET_INTELLIGENCE_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
-TRADING_CORE_MI_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
-TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET=<generated-by-bootstrap-script>
-SPRING_PROFILES_ACTIVE=prod
-```
-
-`BROKER_MASTER_KEY` doit contenir exactement 32 octets aléatoires encodés en
-Base64. Elle peut être générée hors du dépôt avec `openssl rand -base64 32`.
-Elle ne doit jamais être commitée. Le profil production utilise
-`BROKER_CREDENTIAL_SOURCE=stored`; le mode `environment` est réservé au
-développement et aux démonstrations explicitement configurées.
-
-`TRADING_CORE_MARKET_DATA_SERVICE_JWT_SECRET` est une clé Base64 de 32 octets
-partagée uniquement par Trading Core et Market Data pour les appels internes.
-Elle doit être distincte de la clé JWT utilisateur et ne doit jamais être
-exposée au frontend.
-
-Les secrets `TRADING_CORE_SERVICE_JWT_SECRET`,
-`BROKER_SERVICE_SERVICE_JWT_SECRET`, `MARKET_INTELLIGENCE_SERVICE_JWT_SECRET`
-et `TRADING_CORE_MI_SERVICE_JWT_SECRET` servent aux identités et relations de
-confiance inter-services. Ils doivent être renseignés en production-like,
-être distincts des clés utilisateur et ne doivent jamais être journalisés,
-committés ou exposés au frontend.
-
-Ne jamais journaliser ni committer les clés Kraken, le JWT, les mots de passe ou les en-têtes `Authorization`.
-Compose refuse désormais explicitement de démarrer lorsque la configuration
-JWT obligatoire est absente ou vide.
-
-## Démarrage
-
-```bash
 docker compose up --build
 ```
 
-Points d'accès principaux :
+Points d'accès locaux :
 
-- application : <http://localhost:17085>
-- API Gateway : <http://localhost:17080>
+- Application : <http://localhost:17085>
+- Gateway : <http://localhost:17080>
 - Eureka : <http://localhost:17084>
 
-Le fichier Compose est adapté au développement et à la validation locale. Pour une production exposée, les secrets, TLS, sauvegardes PostgreSQL, healthchecks et limites de ressources doivent être fournis par la plateforme de déploiement.
+Les prérequis, ports, tests, validations qualité, services Python et règles de sécurité sont dans [`TOOLS.md`](TOOLS.md).
 
-## Politique de journalisation
+## Documentation
 
-Les applications écrivent uniquement sur la sortie standard afin que Docker ou la plateforme d'orchestration assure la collecte et la rétention.
+- [Architecture](docs/architecture/README.md)
+- [ADR](docs/architecture/adr/README.md)
+- [Domaines](docs/architecture/domains/README.md)
+- [Concepts](docs/architecture/concepts/README.md)
+- [Stories](docs/architecture/stories/README.md)
+- [Rapports d'ingénierie](docs/architecture/reports/)
+- [Epic 0238 — clôture conditionnelle](docs/architecture/epics/0238-passive-market-scanning/closure-report.md)
+- [Epic 0247 — qualité des preuves et des opportunités](docs/architecture/epics/0247-trading-intelligence-evidence-and-opportunity-quality-v1/epic.md)
+- [MCP Adapter](mcp-adapter/README.md)
+- [Interface Web](trading-os-web/README.md)
+- [Risk Domain](risk-domain/README.md)
 
-- `ERROR` : panne ou opération abandonnée nécessitant une action.
-- `WARN` : événement anormal géré, refus de sécurité ou dépendance dégradée.
-- `INFO` : démarrage, arrêt et événements métier importants à faible volume.
-- `DEBUG` : détails de diagnostic, désactivés en production.
-- `TRACE` : investigation locale temporaire uniquement.
+Les ADR décrivent les décisions, les Stories le périmètre, les rapports les résultats et leurs limites ;
+le code reste la source de vérité pour le comportement courant.
 
-Le profil `prod` active le JSON Logstash, une ligne par événement. Les niveaux se règlent sans reconstruire les images :
+## Prochaine direction
 
-```dotenv
-LOG_LEVEL_ROOT=INFO
-LOG_LEVEL_APP=INFO
-LOG_LEVEL_SPRING=WARN
-LOG_LEVEL_HIBERNATE=WARN
-LOG_LEVEL_EUREKA=WARN
-```
+Le draft [Epic 0247](docs/architecture/epics/0247-trading-intelligence-evidence-and-opportunity-quality-v1/epic.md)
+propose de mesurer la qualité des preuves, d'évaluer les résultats et d'améliorer le classement explicable.
+Il est soumis à approbation humaine et n'autorise pas encore l'implémentation.
 
-Une requête réussie génère une ligne Gateway avec méthode, chemin, statut et durée. Les query strings, corps, tokens, données personnelles et secrets ne doivent pas apparaître dans les logs. Le SQL Hibernate est désactivé par défaut.
+## Contributions et sécurité
 
-## Politique de tests
+Toute modification significative suit le workflow décrit dans [`AGENTS.md`](AGENTS.md).
+Les commits, pushes, merges et opérations broker restent soumis au contrôle humain.
 
-Toute correction doit être accompagnée d'un test qui échoue avant la correction. Toute nouvelle règle métier doit couvrir au minimum le cas nominal, les limites et le refus attendu.
-
-La pyramide visée est :
-
-1. tests unitaires rapides pour services, mappers, validateurs, guards et composants ;
-2. tests d'intégration ciblés pour JPA, sécurité, contrôleurs et routes ;
-3. tests de contrat pour les échanges entre microservices et Kraken ;
-4. quelques parcours de bout en bout sur la stack Docker.
-
-Les tests unitaires et d'intégration standards doivent être déterministes, sans réseau, sans clés Kraken et sans Docker. Les services persistants utilisent H2 en mémoire avec le profil `test`; Eureka et la découverte de services y sont désactivés.
-
-Exécuter toute la validation :
-
-```bash
-./scripts/test-all.sh
-```
-
-Le script couvre les sept applications Maven et le frontend, ainsi que le
-module autonome `risk-domain` qui réutilise le wrapper de `trading-core` :
-
-```bash
-cd risk-domain && mvn test
-```
-
-Ou par application :
-
-```bash
-cd trading-core && ./mvnw test
-cd market-intelligence && ../trading-core/mvnw test
-cd trading-os-web && npm run check
-```
-
-Une branche n'est intégrable que si les neuf modules Maven, les tests Angular
-et le build Angular passent. Les tests
-`contextLoads` constituent seulement un smoke test : la couverture métier doit
-progresser avec chaque fonctionnalité.
-
-## Validation qualité
-
-Les services Maven sont vérifiés indépendamment : le dépôt ne contient pas de
-build Maven racine. La validation complète génère les rapports JaCoCo backend,
-le rapport LCOV Angular, vérifie le formatage frontend et construit l'application
-de production :
-
-```bash
-./scripts/quality-verify.sh
-```
-
-Pour exécuter ensuite les analyses SonarQube et attendre le Quality Gate de
-chaque module :
-
-```bash
-export SONAR_HOST_URL=http://localhost:9000
-export SONAR_TOKEN='<analysis-token>'
-./scripts/quality-scan.sh
-```
-
-Le Quality Gate sur le nouveau code exige au minimum 80 % de couverture, au
-maximum 3 % de duplication et aucune nouvelle violation. Le token SonarQube
-reste uniquement dans l'environnement local ou le gestionnaire de secrets CI ;
-il ne doit jamais être ajouté au dépôt.
-
-## Roadmap
-
-- [x] Structure microservices et découverte Eureka
-- [x] Authentification JWT et interface de connexion
-- [x] Première intégration Kraken et synchronisation des comptes
-- [x] Référentiel de marchés et affichage Angular
-- [x] Provisioning des comptes PAPER et entrée simulée persistée
-- [x] Consultation des positions PAPER locales et valorisation Market Data
-- [ ] Stabilisation Docker, healthchecks et migrations de base
-- [x] Domaine de risque déterministe et tests métier associés
-- [x] Parcours PAPER complet: préparation, Risk déterministe, validation humaine, exécution idempotente, position, clôture et historique décisionnel
-- [ ] Routage Gateway de toutes les API publiques
-- [ ] Profils de règles configurables, versionnables et indépendants des prop firms
-- [x] Abonnements temps réel dynamiques
-- [ ] Événements de marché distribuables entre instances
-- [ ] Validation LIVE/sandbox et parcours déployé Trading Core → Broker Service → Kraken
-- [x] Market Detail avec OHLC, ticker, carnet d'ordres et transactions récentes
-- [x] Première version du dashboard de compte
-- [x] Historique décisionnel PAPER account-scoped et consultation des positions
-- [ ] Journal analytique, historique d'equity et analytics avancées
-- [ ] News Service et calendrier économique
-- [x] Fondation d'orchestration Market Intelligence et première analyse déterministe
-- [x] Gouvernance asynchrone et idempotente des `AnalysisExecution`
-- [x] Première fondation de gestion et de réutilisation des artefacts en mémoire
-- [ ] Intégration de l'`ArtifactResolver` dans l'orchestrateur et les capacités
-- [x] Fondation locale du Capability Engine et planification par DAG
-- [ ] Migration des capacités ADR-020 vers le contrat atomique ADR-023
-- [ ] Intégration Planner → Engine dans le cycle `AnalysisExecution`
-- [ ] Stockage durable et cohérence multi-instance des exécutions et artefacts
-- [x] Modèle, repository local et requêtes d'observations Market Intelligence
-- [ ] Persistance durable et réutilisation distribuée des observations Market Intelligence
-- [x] Modèle d'opportunités, ranking et projections utilisateur
-- [x] Trade Planning déterministe, versionnement et replanification
-- [x] Risk Domain ADR-028
-- [x] Autorisation déterministe des Trade Plans via le Risk Domain, exposée à travers le Gateway (Story 0003)
-- [x] Execution Domain ADR-029
-- [x] Architecture broker-neutre et provider Kraken ADR-030
-- [ ] Tests contractuels sandbox et E2E déployé Trading Core → Broker Service → Kraken
-- [ ] Passive Scanner, Active Scanner et surveillance des positions
-- [ ] AI Engine explicable consommant les données normalisées
-
-## Décisions d'architecture
-
-Les décisions structurantes et la vision produit sont consignées dans les [ADR](docs/architecture/adr/ADR-001.md). Les ADR décrivent l'architecture cible ; leur statut `Accepted` signifie que la décision est adoptée, pas que son implémentation est terminée.
-
-Les principaux axes couverts sont :
-
-- vision produit, architecture microservices et approche AI-first ;
-- responsabilités de Trading Core, Market Data, Broker et News Service ;
-- profils de règles et Risk Engine déterministe ;
-- modèle `MarketState` et abonnements temps réel dynamiques ;
-- modélisation métier indépendante des fournisseurs ;
-- architecture Angular réactive ;
-- pipeline de décision avec validation humaine ;
-- architecture pilotée par la valeur produit.
-- orchestration Market Intelligence, gouvernance des exécutions et gestion des artefacts dérivés.
-
-Les documents d'implémentation actuels sont :
-
-- [ADR-020 — fondation Market Intelligence](docs/implementation/ADR-020-implementation.md) ;
-- [ADR-021 — gouvernance des exécutions](docs/implementation/ADR-021-implementation.md) ;
-- [ADR-022 — gestion des artefacts](docs/implementation/ADR-022-implementation.md) ;
-- [ADR-023 — Capability Engine local](docs/implementation/ADR-023-implementation.md) ;
-- [ADR-024 — gestion des credentials broker](docs/implementation/ADR-024-implementation.md) ;
-- [ADR-025 — modèle d'observation](docs/implementation/ADR-025-implementation.md) ;
-- [ADR-026 — opportunités de trading](docs/implementation/ADR-026-implementation.md) ;
-- [ADR-027 — Trade Planning](docs/implementation/ADR-027-implementation.md) ;
-- [ADR-028 — Risk Domain](docs/implementation/ADR-028-implementation.md) ;
-- [ADR-029 — Execution Domain](docs/implementation/ADR-029-implementation.md) ;
-- [ADR-030 — Broker Service Architecture](docs/implementation/ADR-030-implementation.md).
+Ne jamais committer de secrets, credentials broker, clés API, JWT ou tokens.
+Ne jamais utiliser un compte cTrader LIVE pour valider le comportement PAPER.
 
 ## Avertissement
 
-Ce projet est un outil de simulation et d'assistance au trading. Il ne constitue pas un conseil financier.
+Trading OS est un outil logiciel d'assistance et de simulation. Il ne constitue
+pas un conseil financier et ne garantit aucun résultat de trading.
