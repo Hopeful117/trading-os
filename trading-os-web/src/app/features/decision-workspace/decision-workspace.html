@@ -911,6 +911,141 @@
                                   </article>
                                 </div>
 
+                                @if (activeOpportunity.ranking; as ranking) {
+                                  <section
+                                    class="thesis-quality-summary"
+                                    aria-labelledby="ranking-title"
+                                  >
+                                    <div class="thesis-card-heading">
+                                      <span class="eyebrow" id="ranking-title"
+                                        >Investigation priority</span
+                                      >
+                                      <span>{{ ranking.policyVersion }}</span>
+                                    </div>
+                                    @if (ranking.outcome === 'RANKED') {
+                                      <p class="thesis-quality-copy">
+                                        Ranked #{{ ranking.position }} using deterministic evidence
+                                        quality. This is not a probability, profitability estimate
+                                        or execution authorization.
+                                      </p>
+                                    } @else {
+                                      <p class="thesis-quality-copy thesis-quality-copy--warning">
+                                        This opportunity is not ranked:
+                                        {{ ranking.exclusionExplanation }}
+                                      </p>
+                                    }
+                                    @if (ranking.rationale; as rationale) {
+                                      <div class="thesis-quality-meta">
+                                        <span
+                                          >Quality policy
+                                          {{ rationale.evidenceQualityPolicyVersion }}</span
+                                        >
+                                        <span>Quality status {{ rationale.qualityStatus }}</span>
+                                      </div>
+                                    }
+                                  </section>
+                                }
+
+                                @if (thesis.evidenceQuality; as quality) {
+                                  <details class="thesis-quality-ledger">
+                                    <summary>
+                                      Evidence quality dimensions
+                                      <span
+                                        >{{ quality.status }} · {{ quality.policyVersion }}</span
+                                      >
+                                    </summary>
+                                    <div class="thesis-quality-grid">
+                                      @for (
+                                        dimension of quality.dimensions;
+                                        track dimension.dimension
+                                      ) {
+                                        <article class="thesis-quality-card">
+                                          <span class="eyebrow">{{ dimension.dimension }}</span>
+                                          <strong>{{ dimension.state }}</strong>
+                                          @if (dimension.evidenceReferences.length > 0) {
+                                            <small>{{
+                                              dimension.evidenceReferences.join(', ')
+                                            }}</small>
+                                          } @else {
+                                            <small>No evidence reference</small>
+                                          }
+                                        </article>
+                                      }
+                                    </div>
+                                    @if (quality.reasons.length > 0) {
+                                      <div class="thesis-quality-reasons">
+                                        <span class="eyebrow">Quality reasons</span>
+                                        @for (reason of quality.reasons; track reason.code) {
+                                          <span
+                                            ><strong>{{ reason.code }}</strong> ·
+                                            {{ reason.explanation }}</span
+                                          >
+                                        }
+                                      </div>
+                                    }
+                                    <div class="thesis-provenance">
+                                      <span
+                                        >Quality evaluated
+                                        {{ quality.evaluatedAt | date: 'medium' }}</span
+                                      >
+                                      <span
+                                        >Quality cut-off
+                                        {{ quality.sourceCutoff | date: 'medium' }}</span
+                                      >
+                                      <span
+                                        >Result fingerprint {{ quality.resultFingerprint }}</span
+                                      >
+                                    </div>
+                                    @if (quality.provenance.length > 0) {
+                                      <div class="thesis-quality-grid">
+                                        @for (
+                                          source of quality.provenance;
+                                          track source.evidenceId
+                                        ) {
+                                          <article class="thesis-quality-card">
+                                            <span class="eyebrow">Evidence provenance</span>
+                                            <strong>{{ source.source }}</strong>
+                                            <small>
+                                              {{ source.evidenceId }} ·
+                                              {{ source.provider ?? 'Provider unknown' }} ·
+                                              {{ source.instrument ?? 'Instrument unknown' }} ·
+                                              {{ source.timeframe ?? 'Timeframe unknown' }}
+                                            </small>
+                                            <small>
+                                              Observed {{ source.observedAt | date: 'medium' }} ·
+                                              Valid until
+                                              {{
+                                                source.validUntil
+                                                  ? (source.validUntil | date: 'medium')
+                                                  : 'No expiry'
+                                              }}
+                                            </small>
+                                            <small>
+                                              Cut-off
+                                              {{
+                                                source.sourceCutoff
+                                                  ? (source.sourceCutoff | date: 'medium')
+                                                  : 'Unknown'
+                                              }}
+                                              · Fingerprint
+                                              {{ source.sourceFingerprint ?? 'Unavailable' }} · Rule
+                                              {{ source.ruleVersion ?? 'Unknown' }}
+                                            </small>
+                                          </article>
+                                        }
+                                      </div>
+                                    } @else {
+                                      <p class="thesis-empty">
+                                        No evidence provenance is available.
+                                      </p>
+                                    }
+                                  </details>
+                                } @else {
+                                  <p class="thesis-empty thesis-empty--prominent">
+                                    Evidence quality assessment is unavailable for this thesis.
+                                  </p>
+                                }
+
                                 @if (thesis.scenario; as scenario) {
                                   <p class="thesis-statement">{{ scenario.statement }}</p>
 
@@ -1000,6 +1135,39 @@
                                   <p class="thesis-empty thesis-empty--prominent">
                                     No actionable scenario is available for this thesis.
                                   </p>
+                                }
+
+                                @if (activeOpportunity.ranking?.rationale; as rationale) {
+                                  <details class="thesis-ranking-ledger">
+                                    <summary>
+                                      Ranking rationale
+                                      <span>{{ rationale.policyVersion }}</span>
+                                    </summary>
+                                    <div class="thesis-quality-grid">
+                                      @for (
+                                        dimension of rationale.dimensions;
+                                        track dimension.dimension
+                                      ) {
+                                        <article class="thesis-quality-card">
+                                          <span class="eyebrow">{{ dimension.dimension }}</span>
+                                          <strong>{{ dimension.state }}</strong>
+                                          <small>Precedence {{ dimension.precedence }}</small>
+                                        </article>
+                                      }
+                                    </div>
+                                    <p class="thesis-empty">{{ rationale.orderingExplanation }}</p>
+                                    @if (rationale.reasons.length > 0) {
+                                      <div class="thesis-quality-reasons">
+                                        <span class="eyebrow">Ranking reasons</span>
+                                        @for (reason of rationale.reasons; track reason.code) {
+                                          <span
+                                            ><strong>{{ reason.code }}</strong> ·
+                                            {{ reason.explanation }}</span
+                                          >
+                                        }
+                                      </div>
+                                    }
+                                  </details>
                                 }
 
                                 <details class="thesis-evidence-ledger">

@@ -1,5 +1,25 @@
 export type MarketThesisState = 'NO_TRADE' | 'WATCH' | 'CANDIDATE';
 
+export type EvidenceQualityStatus = 'SUPPORTED' | 'DEGRADED' | 'BLOCKED' | 'UNAVAILABLE';
+
+export type EvidenceQualityDimension =
+  | 'COMPLETENESS'
+  | 'FRESHNESS'
+  | 'PROVENANCE'
+  | 'CONTRADICTION'
+  | 'APPLICABILITY'
+  | 'MISSING_POLICY';
+
+export type EvidenceQualityDimensionState =
+  | 'SATISFIED'
+  | 'PARTIAL'
+  | 'MISSING'
+  | 'STALE'
+  | 'CONTRADICTED'
+  | 'UNAVAILABLE'
+  | 'NOT_IMPLEMENTED'
+  | 'NOT_APPLICABLE';
+
 export interface MarketThesisReference {
   thesisId: string;
   thesisVersion: number;
@@ -72,4 +92,41 @@ export interface MarketThesisResponse {
   composerVersion: string;
   inputFingerprint: string;
   supersedes: string | null;
+  evidenceQuality?: EvidenceQualityResponse | null;
+}
+
+export interface EvidenceQualityResponse {
+  policyVersion: string;
+  evaluatedAt: string;
+  sourceCutoff: string;
+  status: EvidenceQualityStatus;
+  dimensions: EvidenceQualityDimensionResponse[];
+  reasons: EvidenceQualityReason[];
+  provenance: EvidenceQualityProvenance[];
+  inputFingerprint: string;
+  resultFingerprint: string;
+}
+
+export interface EvidenceQualityDimensionResponse {
+  dimension: EvidenceQualityDimension;
+  state: EvidenceQualityDimensionState;
+  evidenceReferences: string[];
+}
+
+export interface EvidenceQualityReason {
+  code: string;
+  explanation: string;
+}
+
+export interface EvidenceQualityProvenance {
+  evidenceId: string;
+  source: string;
+  provider: string | null;
+  instrument: string | null;
+  timeframe: string | null;
+  observedAt: string;
+  validUntil: string | null;
+  sourceCutoff: string | null;
+  sourceFingerprint: string | null;
+  ruleVersion: string | null;
 }

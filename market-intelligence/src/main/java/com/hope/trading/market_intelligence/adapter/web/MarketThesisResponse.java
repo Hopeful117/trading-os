@@ -29,7 +29,8 @@ public record MarketThesisResponse(
         UUID analysisExecutionId,
         String composerVersion,
         String inputFingerprint,
-        UUID supersedes
+        UUID supersedes,
+        EvidenceQualityResponse evidenceQuality
 ) {
     public static MarketThesisResponse from(MarketThesis thesis) {
         return new MarketThesisResponse(
@@ -39,6 +40,7 @@ public record MarketThesisResponse(
                 thesis.missingEvidence(), thesis.reasons(), thesis.evaluatedAt(),
                 thesis.sourceCutoff(), thesis.validFrom(), thesis.validUntil().orElse(null),
                 thesis.analysisExecutionId().orElse(null), thesis.composerVersion(),
-                thesis.inputFingerprint(), thesis.supersedes().orElse(null));
+                thesis.inputFingerprint(), thesis.supersedes().orElse(null),
+                thesis.evidenceQuality().map(EvidenceQualityResponse::from).orElse(null));
     }
 }

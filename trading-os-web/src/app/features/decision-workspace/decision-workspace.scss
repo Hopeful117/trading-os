@@ -516,7 +516,8 @@ dd {
 
 .thesis-signal-grid,
 .thesis-gates,
-.thesis-evidence-grid {
+.thesis-evidence-grid,
+.thesis-quality-grid {
   display: grid;
   gap: 0.55rem;
 }
@@ -532,8 +533,14 @@ dd {
   margin-top: 0.6rem;
 }
 
+.thesis-quality-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.6rem;
+}
+
 .thesis-signal,
-.thesis-evidence-card {
+.thesis-evidence-card,
+.thesis-quality-card {
   display: grid;
   align-content: start;
   gap: 0.3rem;
@@ -555,6 +562,33 @@ dd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.thesis-quality-summary,
+.thesis-quality-ledger,
+.thesis-ranking-ledger {
+  border: 1px solid #294662;
+  border-radius: 0.5rem;
+  background: #122235;
+  padding: 0.75rem;
+}
+
+.thesis-quality-ledger,
+.thesis-ranking-ledger {
+  margin-top: 0.6rem;
+}
+
+.thesis-quality-ledger summary,
+.thesis-ranking-ledger summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  color: #c8d9ea;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .thesis-signal--direction strong {
   color: #8fc8f5;
   font-size: 1.05rem;
@@ -731,6 +765,13 @@ dd {
   }
 
   .trend-context-roles {
+    grid-template-columns: 1fr;
+  }
+
+  .thesis-signal-grid,
+  .thesis-gates,
+  .thesis-evidence-grid,
+  .thesis-quality-grid {
     grid-template-columns: 1fr;
   }
 

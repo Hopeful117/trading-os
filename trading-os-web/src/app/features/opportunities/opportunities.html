@@ -81,6 +81,7 @@
                       <th title="Directional business-priority score, not probability">
                         Signal strength
                       </th>
+                      <th>Evidence priority</th>
                       <th>Ref. price</th>
                       <th>Valid until</th>
                       <th>Rationale</th>
@@ -156,6 +157,25 @@
 
                         <td title="{{ opportunity.scoreSemantics }}">
                           {{ opportunity.score }}
+                        </td>
+
+                        <td class="ranking-cell">
+                          @if (opportunity.ranking; as ranking) {
+                            @if (ranking.outcome === 'RANKED') {
+                              <span class="ranking-badge ranked">Rank #{{ ranking.position }}</span>
+                              <small class="ranking-detail">
+                                {{ ranking.rationale?.qualityStatus ?? 'UNKNOWN' }} evidence
+                              </small>
+                            } @else {
+                              <span class="ranking-badge excluded">Not ranked</span>
+                              <small class="ranking-detail">
+                                {{ ranking.exclusionCode ?? 'Evidence unavailable' }}
+                              </small>
+                            }
+                          } @else {
+                            <span class="ranking-badge unavailable">Unavailable</span>
+                            <small class="ranking-detail">No ranking rationale</small>
+                          }
                         </td>
 
                         <td class="reference-price">
