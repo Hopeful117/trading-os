@@ -1,10 +1,10 @@
 # Epic 0247 — Trading Intelligence Evidence and Opportunity Quality V1
 
-**Status:** `DRAFT — PENDING HUMAN APPROVAL`
+**Status:** `APPROVED`
 **Date:** 2026-11-19
 **Priority:** Trading Intelligence product usefulness
 **Predecessor:** Epic 0238 — Passive Market Scanning V1
-**Authorization:** Planning and architectural discussion only; implementation is not authorized
+**Authorization:** Epic scope and Story 0247-03 preparation approved; implementation remains gated by Story Repository Analysis and implementation approval
 
 ## 1. Problem
 

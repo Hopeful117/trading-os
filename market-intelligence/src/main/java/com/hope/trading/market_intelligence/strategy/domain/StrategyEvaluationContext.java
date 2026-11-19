@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Objects;
+import com.hope.trading.market_intelligence.domain.replay.ReplayContextProvenance;
 
 /**
  * Semantic evaluation context supplied to a StrategyEvaluator.
@@ -28,6 +29,7 @@ public final class StrategyEvaluationContext {
     private final Instant evaluatedAt;
     private final Map<RequiredSemanticInput, SemanticValue> inputs;
     private final StrategyEvidenceProvenance provenance;
+    private final ReplayContextProvenance replayProvenance;
     private final String digest;
 
     private StrategyEvaluationContext(
@@ -36,7 +38,8 @@ public final class StrategyEvaluationContext {
             StrategyApplicability.Timeframe timeframe,
             Instant evaluatedAt,
             Map<RequiredSemanticInput, SemanticValue> inputs,
-            StrategyEvidenceProvenance provenance
+            StrategyEvidenceProvenance provenance,
+            ReplayContextProvenance replayProvenance
     ) {
         this.marketId = Objects.requireNonNull(marketId, "marketId is required");
         this.instrument = requireText(instrument, "instrument");
@@ -44,6 +47,7 @@ public final class StrategyEvaluationContext {
         this.evaluatedAt = Objects.requireNonNull(evaluatedAt, "evaluatedAt is required");
         this.inputs = Map.copyOf(inputs);
         this.provenance = provenance;
+        this.replayProvenance = replayProvenance;
         this.digest = computeDigest();
     }
 
@@ -64,6 +68,13 @@ public final class StrategyEvaluationContext {
     public Instant evaluatedAt() { return evaluatedAt; }
 
     public StrategyEvidenceProvenance provenance() { return provenance; }
+
+    public ReplayContextProvenance replayProvenance() { return replayProvenance; }
+
+    public StrategyEvaluationContext withReplayProvenance(ReplayContextProvenance value) {
+        return new StrategyEvaluationContext(marketId, instrument, timeframe, evaluatedAt,
+                inputs, provenance, Objects.requireNonNull(value, "replay provenance is required"));
+    }
 
     public boolean has(RequiredSemanticInput input) {
         return inputs.containsKey(input);
@@ -90,12 +101,13 @@ public final class StrategyEvaluationContext {
                 && timeframe == context.timeframe
                 && evaluatedAt.equals(context.evaluatedAt)
                 && inputs.equals(context.inputs)
-                && Objects.equals(provenance, context.provenance);
+                && Objects.equals(provenance, context.provenance)
+                && Objects.equals(replayProvenance, context.replayProvenance);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(marketId, instrument, timeframe, evaluatedAt, inputs, provenance);
+        return Objects.hash(marketId, instrument, timeframe, evaluatedAt, inputs, provenance, replayProvenance);
     }
 
     private String computeDigest() {
@@ -106,6 +118,9 @@ public final class StrategyEvaluationContext {
                 .append("evaluatedAt=").append(evaluatedAt);
         if (provenance != null) {
             canonical.append(';').append("provenance=").append(provenance);
+        }
+        if (replayProvenance != null) {
+            canonical.append(';').append("replayProvenance=").append(replayProvenance);
         }
         List<Map.Entry<RequiredSemanticInput, SemanticValue>> ordered = new ArrayList<>(inputs.entrySet());
         ordered.sort(Map.Entry.comparingByKey());
@@ -212,6 +227,7 @@ public final class StrategyEvaluationContext {
         private Instant evaluatedAt;
         private final Map<RequiredSemanticInput, SemanticValue> inputs = new LinkedHashMap<>();
         private StrategyEvidenceProvenance provenance;
+        private ReplayContextProvenance replayProvenance;
 
         private Builder() {
         }
@@ -248,9 +264,14 @@ public final class StrategyEvaluationContext {
             return this;
         }
 
+        public Builder replayProvenance(ReplayContextProvenance replayProvenance) {
+            this.replayProvenance = replayProvenance;
+            return this;
+        }
+
         public StrategyEvaluationContext build() {
             return new StrategyEvaluationContext(marketId, instrument, timeframe,
-                    evaluatedAt, inputs, provenance);
+                    evaluatedAt, inputs, provenance, replayProvenance);
         }
     }
 }

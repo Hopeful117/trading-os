@@ -10,6 +10,7 @@ import com.hope.trading.market_intelligence.strategy.domain.StrategyApplicabilit
 import com.hope.trading.market_intelligence.strategy.domain.StrategyDefinition;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvaluationContext;
 import com.hope.trading.market_intelligence.strategy.domain.StrategyEvidenceProvenance;
+import com.hope.trading.market_intelligence.domain.replay.ReplayContextProvenance;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -63,6 +64,22 @@ public class StrategyEvaluationContextFactory {
         }
 
         return builder.build();
+    }
+
+    /**
+     * Resolves the normal semantic context and binds it to a strict historical
+     * evidence selection. The replay service validates this binding before
+     * evaluating the strategy.
+     */
+    public StrategyEvaluationContext resolveStrict(
+            StrategyDefinition definition,
+            Observation observation,
+            UUID marketId,
+            Instant evaluatedAt,
+            ReplayContextProvenance replayProvenance
+    ) {
+        return resolve(definition, observation, marketId, evaluatedAt)
+                .withReplayProvenance(replayProvenance);
     }
 
     private StrategyEvidenceProvenance provenanceOf(
