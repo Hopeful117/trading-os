@@ -7,6 +7,8 @@ import com.hope.trading.market_intelligence.application.execution.AnalysisExecut
 import com.hope.trading.market_intelligence.application.scope.ActiveScanScopeResolutionException;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanRiskHandoffException;
 import com.hope.trading.market_intelligence.application.tradeplan.TradePlanIdempotencyException;
+import com.hope.trading.market_intelligence.application.ai.OpportunityInterpretationRejectedException;
+import com.hope.trading.market_intelligence.application.ai.OpportunityInterpretationIdempotencyException;
 import com.hope.trading.market_intelligence.domain.execution.IllegalExecutionTransitionException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -64,9 +66,26 @@ public class MarketIntelligenceExceptionHandler {
                 "code", exception.code(), ERROR, exception.getMessage()));
     }
 
-    @ExceptionHandler({IllegalExecutionTransitionException.class, IllegalArgumentException.class})
+    @ExceptionHandler(IllegalExecutionTransitionException.class)
     ResponseEntity<Map<String, String>> conflict(RuntimeException exception) {
         log.warn("Runtime request rejected as conflict: {}", exception.getMessage());
         return ResponseEntity.status(409).body(Map.of(ERROR, exception.getMessage()));
+    }
+
+    @ExceptionHandler(OpportunityInterpretationRejectedException.class)
+    ResponseEntity<Map<String, String>> opportunityInterpretationRejected(
+            OpportunityInterpretationRejectedException exception) {
+        return ResponseEntity.status(exception.status()).body(Map.of("code", exception.code(), ERROR, exception.getMessage()));
+    }
+
+    @ExceptionHandler(OpportunityInterpretationIdempotencyException.class)
+    ResponseEntity<Map<String, String>> opportunityInterpretationIdempotency(
+            OpportunityInterpretationIdempotencyException exception) {
+        return ResponseEntity.status(409).body(Map.of(ERROR, exception.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<Map<String, String>> invalidRequest(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(Map.of(ERROR, exception.getMessage()));
     }
 }

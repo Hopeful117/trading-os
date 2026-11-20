@@ -10,6 +10,7 @@ import com.hope.trading.market_intelligence.domain.IntelligenceAnalysisRequest;
 import com.hope.trading.market_intelligence.domain.execution.*;
 import com.hope.trading.market_intelligence.domain.security.*;
 import com.hope.trading.market_intelligence.application.research.HistoricalReconstructionPolicy;
+import com.hope.trading.market_intelligence.application.ai.OpportunityInterpretationIdempotencyException;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -164,7 +165,7 @@ public class AnalysisExecutionService {
                 AnalysisExecutionProvenance expected = provenance(request, true, selectionFingerprint);
                 AnalysisExecution current = existing.get();
                 if (!sameHistoricalRequest(current.provenance(), expected)) {
-                    throw new IllegalStateException(
+                    throw new OpportunityInterpretationIdempotencyException(
                             "Conflicting historical reconstruction request for idempotency key");
                 }
                 if (!current.isExpiredAt(now)
@@ -174,6 +175,23 @@ public class AnalysisExecutionService {
                 }
                 throw new IllegalStateException(
                         "Historical reconstruction idempotency key already has a terminal or expired execution; use a new key");
+            }
+        }
+        if (request.interpretationMetadata() != null) {
+            var existing = repository.findByIdempotencyKey(idempotencyKey);
+            if (existing.isPresent()) {
+                AnalysisExecutionProvenance expected = provenance(request, false, null);
+                if (!java.util.Objects.equals(existing.get().provenance(), expected)) {
+                    throw new OpportunityInterpretationIdempotencyException(
+                        "Conflicting opportunity interpretation request for idempotency key");
+                }
+                if (!existing.get().isExpiredAt(now)
+                        && (existing.get().status() == AnalysisExecutionStatus.COMPLETED
+                        || !existing.get().status().isTerminal())) {
+                    return existing.get();
+                }
+                throw new OpportunityInterpretationIdempotencyException(
+                        "Opportunity interpretation idempotency key already has a terminal or expired execution; use a new key");
             }
         }
         var reusable = repository.findReusable(idempotencyKey, now);
@@ -205,8 +223,20 @@ public class AnalysisExecutionService {
                     provenance(request, historicalBoundary, selectionFingerprint),
                     new AnalysisTraceMetadata(List.of(trace))
             );
-            repository.save(execution);
-            return execution;
+            try {
+                repository.save(execution);
+                return execution;
+            } catch (RuntimeException saveFailure) {
+                if (request.interpretationMetadata() == null) throw saveFailure;
+                var winner = repository.findByIdempotencyKey(idempotencyKey);
+                if (winner.isEmpty()) throw saveFailure;
+                AnalysisExecutionProvenance expected = provenance(request, false, null);
+                if (!java.util.Objects.equals(winner.get().provenance(), expected)) {
+                    throw new OpportunityInterpretationIdempotencyException(
+                            "Conflicting opportunity interpretation request for idempotency key");
+                }
+                return winner.get();
+            }
     }
 
     private boolean sameHistoricalRequest(
@@ -249,7 +279,7 @@ public class AnalysisExecutionService {
                     request.marketId(), request.mode(), request.objective(), "v1",
                      request.accountId(), request.scanId(), request.scanMarketId(),
                      request.evaluationCutoff(), request.evidencePolicy(),
-                     request.tradeabilityEvidenceProfile());
+                     request.tradeabilityEvidenceProfile(), request.interpretationMetadata());
         }
         if (request.evidencePolicy() != EvidenceAcquisitionPolicy.STRICT_OBSERVED
                 || request.evaluationCutoff() == null) {
@@ -272,7 +302,7 @@ public class AnalysisExecutionService {
                   request.evaluationCutoff(), request.evidencePolicy(),
                   request.tradeabilityEvidenceProfile(),
                   ExecutionOrigin.HISTORICAL_RECONSTRUCTION, fingerprint,
-                 request.historicalEvidenceSelection());
+                  request.historicalEvidenceSelection(), null);
     }
 
     public boolean claimForDispatch(UUID executionId) {
@@ -307,10 +337,11 @@ public class AnalysisExecutionService {
                 execution.provenance().accountId(),
                 execution.provenance().scanId(),
                  execution.provenance().scanMarketId(),
-                 execution.provenance().evaluationCutoff(),
-                 execution.provenance().evidencePolicy(),
-                 null, execution.provenance().historicalEvidenceSelection(),
-                 execution.provenance().tradeabilityEvidenceProfile()));
+                  execution.provenance().evaluationCutoff(),
+                  execution.provenance().evidencePolicy(),
+                  null, execution.provenance().historicalEvidenceSelection(),
+                  execution.provenance().tradeabilityEvidenceProfile())
+                        .withInterpretationMetadata(execution.provenance().interpretationMetadata()));
     }
 
     public AnalysisExecution find(UUID executionId) {
