@@ -23,18 +23,21 @@ public final class AnalysisExecution {
                     AnalysisExecutionStatus.ACCEPTED, EnumSet.of(
                             AnalysisExecutionStatus.REQUESTED,
                             AnalysisExecutionStatus.CONTEXT_BUILDING,
+                            AnalysisExecutionStatus.RECOVERY_REQUIRED,
                             AnalysisExecutionStatus.FAILED,
                             AnalysisExecutionStatus.CANCELLED,
                             AnalysisExecutionStatus.EXPIRED
                     ),
                     AnalysisExecutionStatus.CONTEXT_BUILDING, EnumSet.of(
                             AnalysisExecutionStatus.RUNNING,
+                            AnalysisExecutionStatus.RECOVERY_REQUIRED,
                             AnalysisExecutionStatus.FAILED,
                             AnalysisExecutionStatus.CANCELLED,
                             AnalysisExecutionStatus.EXPIRED
                     ),
                     AnalysisExecutionStatus.RUNNING, EnumSet.of(
                             AnalysisExecutionStatus.PARTIALLY_COMPLETED,
+                            AnalysisExecutionStatus.RECOVERY_REQUIRED,
                             AnalysisExecutionStatus.COMPLETED,
                             AnalysisExecutionStatus.FAILED,
                             AnalysisExecutionStatus.CANCELLED,
@@ -42,7 +45,16 @@ public final class AnalysisExecution {
                     ),
                     AnalysisExecutionStatus.PARTIALLY_COMPLETED, EnumSet.of(
                             AnalysisExecutionStatus.RUNNING,
+                            AnalysisExecutionStatus.RECOVERY_REQUIRED,
                             AnalysisExecutionStatus.COMPLETED,
+                            AnalysisExecutionStatus.FAILED,
+                            AnalysisExecutionStatus.CANCELLED,
+                            AnalysisExecutionStatus.EXPIRED
+                    ),
+                    AnalysisExecutionStatus.RECOVERY_REQUIRED, EnumSet.of(
+                            AnalysisExecutionStatus.ACCEPTED,
+                            AnalysisExecutionStatus.CONTEXT_BUILDING,
+                            AnalysisExecutionStatus.RUNNING,
                             AnalysisExecutionStatus.FAILED,
                             AnalysisExecutionStatus.CANCELLED,
                             AnalysisExecutionStatus.EXPIRED
@@ -169,6 +181,35 @@ public final class AnalysisExecution {
                 transitioned.result,
                 code
         );
+    }
+
+    public AnalysisExecution requireRecovery(String reason, Instant at) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Recovery reason is required");
+        }
+        AnalysisExecution transitioned = transitionTo(AnalysisExecutionStatus.RECOVERY_REQUIRED, at);
+        return transitioned.copy(
+                transitioned.status,
+                transitioned.resultQuality,
+                at,
+                null,
+                transitioned.retryMetadata,
+                transitioned.result,
+                reason
+        );
+    }
+
+    public AnalysisExecution reconcileRecovery(AnalysisExecutionStatus target, Instant at) {
+        if (status != AnalysisExecutionStatus.RECOVERY_REQUIRED) {
+            throw new IllegalExecutionTransitionException(status, target);
+        }
+        if (target == AnalysisExecutionStatus.COMPLETED
+                || target == AnalysisExecutionStatus.PARTIALLY_COMPLETED
+                || target == AnalysisExecutionStatus.REQUESTED
+                || target == AnalysisExecutionStatus.RECOVERY_REQUIRED) {
+            throw new IllegalArgumentException("Recovery reconciliation requires an explicit execution state");
+        }
+        return transitionTo(target, at);
     }
 
     public AnalysisExecution partiallyComplete(

@@ -286,7 +286,7 @@ public class ActiveScanReconciliationService {
         return switch (execution.status()) {
             case REQUESTED -> runningClassification(market, execution, null, null, false, false);
             case ACCEPTED -> runningClassification(market, execution, null, null, true, false);
-            case CONTEXT_BUILDING, RUNNING, PARTIALLY_COMPLETED ->
+            case CONTEXT_BUILDING, RUNNING, PARTIALLY_COMPLETED, RECOVERY_REQUIRED ->
                     runningClassification(market, execution, null, null, true, true);
             case FAILED -> failureClassification(
                     market,
