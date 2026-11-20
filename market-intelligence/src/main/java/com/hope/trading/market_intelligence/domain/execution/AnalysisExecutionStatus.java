@@ -6,6 +6,7 @@ public enum AnalysisExecutionStatus {
     CONTEXT_BUILDING,
     RUNNING,
     PARTIALLY_COMPLETED,
+    RECOVERY_REQUIRED,
     COMPLETED,
     FAILED,
     CANCELLED,
