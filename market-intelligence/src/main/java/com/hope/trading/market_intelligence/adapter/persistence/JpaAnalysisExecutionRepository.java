@@ -34,10 +34,11 @@ public class JpaAnalysisExecutionRepository implements AnalysisExecutionReposito
                     .map(this::domain)
                     .orElseThrow(() -> new IllegalStateException(
                             "Concurrent execution insert has no durable idempotent result", race));
-            if (value.provenance().executionOrigin() == ExecutionOrigin.HISTORICAL_RECONSTRUCTION
+            if ((value.provenance().executionOrigin() == ExecutionOrigin.HISTORICAL_RECONSTRUCTION
+                    || value.provenance().interpretationMetadata() != null)
                     && !value.provenance().equals(winner.provenance())) {
                 throw new IllegalStateException(
-                        "Concurrent historical execution has conflicting provenance", race);
+                        "Concurrent execution has conflicting provenance", race);
             }
             return winner;
         }

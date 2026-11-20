@@ -3,6 +3,7 @@ package com.hope.trading.market_intelligence.domain.execution;
 import com.hope.trading.market_intelligence.domain.AnalysisExecutionMode;
 import com.hope.trading.market_intelligence.domain.EvidenceAcquisitionPolicy;
 import com.hope.trading.market_intelligence.domain.TradeabilityEvidenceProfile;
+import com.hope.trading.market_intelligence.domain.ai.OpportunityInterpretationMetadata;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -21,13 +22,14 @@ public record AnalysisExecutionProvenance(
         TradeabilityEvidenceProfile tradeabilityEvidenceProfile,
         ExecutionOrigin executionOrigin,
         String reconstructionRequestFingerprint,
-        String historicalEvidenceSelection
+        String historicalEvidenceSelection,
+        OpportunityInterpretationMetadata interpretationMetadata
 ) {
     public AnalysisExecutionProvenance(
             UUID marketId, AnalysisExecutionMode mode, String objective, String strategyVersion) {
         this(marketId, mode, objective, strategyVersion, null, null, null, null,
                 EvidenceAcquisitionPolicy.LIVE_CURRENT, TradeabilityEvidenceProfile.UNSUPPORTED,
-                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null);
+                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null, null);
     }
 
     public AnalysisExecutionProvenance(
@@ -41,7 +43,7 @@ public record AnalysisExecutionProvenance(
     ) {
         this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
                 null, EvidenceAcquisitionPolicy.LIVE_CURRENT, TradeabilityEvidenceProfile.UNSUPPORTED,
-                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null);
+                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null, null);
     }
 
     public AnalysisExecutionProvenance(
@@ -57,7 +59,7 @@ public record AnalysisExecutionProvenance(
     ) {
         this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
                 evaluationCutoff, evidencePolicy, TradeabilityEvidenceProfile.UNSUPPORTED,
-                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null);
+                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null, null);
     }
 
     public AnalysisExecutionProvenance(
@@ -74,7 +76,7 @@ public record AnalysisExecutionProvenance(
     ) {
         this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
                 evaluationCutoff, evidencePolicy, tradeabilityEvidenceProfile,
-                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null);
+                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null, null);
     }
 
     public AnalysisExecutionProvenance(
@@ -93,7 +95,7 @@ public record AnalysisExecutionProvenance(
     ) {
         this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
                 evaluationCutoff, evidencePolicy, TradeabilityEvidenceProfile.UNSUPPORTED, executionOrigin,
-                reconstructionRequestFingerprint, null);
+                reconstructionRequestFingerprint, null, null);
     }
 
     public AnalysisExecutionProvenance(
@@ -112,7 +114,17 @@ public record AnalysisExecutionProvenance(
     ) {
         this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
                 evaluationCutoff, evidencePolicy, TradeabilityEvidenceProfile.UNSUPPORTED,
-                executionOrigin, reconstructionRequestFingerprint, historicalEvidenceSelection);
+                executionOrigin, reconstructionRequestFingerprint, historicalEvidenceSelection, null);
+    }
+
+    public AnalysisExecutionProvenance(
+            UUID marketId, AnalysisExecutionMode mode, String objective, String strategyVersion,
+            UUID accountId, UUID scanId, UUID scanMarketId, Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy, TradeabilityEvidenceProfile tradeabilityEvidenceProfile,
+            OpportunityInterpretationMetadata interpretationMetadata) {
+        this(marketId, mode, objective, strategyVersion, accountId, scanId, scanMarketId,
+                evaluationCutoff, evidencePolicy, tradeabilityEvidenceProfile,
+                ExecutionOrigin.CONTEMPORARY_ANALYSIS, null, null, interpretationMetadata);
     }
 
     public AnalysisExecutionProvenance {

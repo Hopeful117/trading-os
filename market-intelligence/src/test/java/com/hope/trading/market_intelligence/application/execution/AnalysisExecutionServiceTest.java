@@ -4,6 +4,8 @@ import com.hope.trading.market_intelligence.adapter.persistence.InMemoryAnalysis
 import com.hope.trading.market_intelligence.application.port.AnalysisExecutionDispatcher;
 import com.hope.trading.market_intelligence.application.strategy.*;
 import com.hope.trading.market_intelligence.domain.*;
+import com.hope.trading.market_intelligence.domain.ai.*;
+import com.hope.trading.market_intelligence.domain.artifact.ArtifactFingerprint;
 import com.hope.trading.market_intelligence.domain.execution.*;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +42,57 @@ class AnalysisExecutionServiceTest {
 
         assertThat(second.executionId()).isEqualTo(first.executionId());
         assertThat(dispatcher.dispatches).hasValue(1);
+    }
+
+    @Test
+    void opportunityInterpretationReusesOnlyEquivalentFingerprint() {
+        Instant now = Instant.parse("2026-07-29T10:00:00Z");
+        InMemoryAnalysisExecutionRepository repository = new InMemoryAnalysisExecutionRepository();
+        CountingDispatcher dispatcher = new CountingDispatcher();
+        AnalysisExecutionService service = service(repository, dispatcher, Clock.fixed(now, ZoneOffset.UTC));
+        UUID marketId = UUID.randomUUID();
+        OpportunityVersionReference opportunity = new OpportunityVersionReference(UUID.randomUUID(), 3);
+        OpportunityInterpretationMetadata metadata = new OpportunityInterpretationMetadata(
+                opportunity, AiInterpretationMode.OPPORTUNITY_ASSESSMENT,
+                new ContextPackId(UUID.randomUUID()), ArtifactFingerprint.empty());
+        IdempotencyKey key = new IdempotencyKey("interpretation-key");
+
+        AnalysisExecution first = service.create(
+                request(UUID.randomUUID(), marketId).withInterpretationMetadata(metadata),
+                key, "request-1", "trace-1");
+        AnalysisExecution second = service.create(
+                request(UUID.randomUUID(), marketId).withInterpretationMetadata(metadata),
+                key, "request-2", "trace-2");
+
+        assertThat(second.executionId()).isEqualTo(first.executionId());
+        assertThat(dispatcher.dispatches).hasValue(1);
+        OpportunityInterpretationMetadata conflicting = new OpportunityInterpretationMetadata(
+                new OpportunityVersionReference(opportunity.opportunityId(), 4),
+                metadata.mode(), metadata.contextPackId(), metadata.contextPackFingerprint());
+
+        assertThatThrownBy(() -> service.create(
+                request(UUID.randomUUID(), marketId).withInterpretationMetadata(conflicting),
+                key, "request-3", "trace-3"))
+                .isInstanceOf(com.hope.trading.market_intelligence.application.ai.OpportunityInterpretationIdempotencyException.class);
+    }
+
+    @Test
+    void redispatchPreservesOpportunityInterpretationMetadata() {
+        Instant now = Instant.parse("2026-07-29T10:00:00Z");
+        InMemoryAnalysisExecutionRepository repository = new InMemoryAnalysisExecutionRepository();
+        CapturingDispatcher dispatcher = new CapturingDispatcher();
+        AnalysisExecutionService service = service(repository, dispatcher, Clock.fixed(now, ZoneOffset.UTC));
+        OpportunityInterpretationMetadata metadata = new OpportunityInterpretationMetadata(
+                new OpportunityVersionReference(UUID.randomUUID(), 1), AiInterpretationMode.DIAGNOSTIC,
+                new ContextPackId(UUID.randomUUID()), ArtifactFingerprint.empty());
+
+        AnalysisExecution execution = service.register(
+                request(UUID.randomUUID(), UUID.randomUUID()).withInterpretationMetadata(metadata),
+                new IdempotencyKey("interpretation-dispatch"), "request", "trace");
+        service.claimForDispatch(execution.executionId());
+        service.dispatchRegistered(execution.executionId());
+
+        assertThat(dispatcher.request.interpretationMetadata()).isEqualTo(metadata);
     }
 
     @Test

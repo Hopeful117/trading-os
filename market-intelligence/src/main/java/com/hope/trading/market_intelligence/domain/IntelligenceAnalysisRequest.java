@@ -1,8 +1,10 @@
 package com.hope.trading.market_intelligence.domain;
 
-import java.util.UUID;
-import java.time.Instant;
+import com.hope.trading.market_intelligence.domain.ai.OpportunityInterpretationMetadata;
 import com.hope.trading.market_intelligence.domain.thesis.MarketThesis;
+
+import java.time.Instant;
+import java.util.UUID;
 
 public record IntelligenceAnalysisRequest(
         UUID analysisId,
@@ -16,7 +18,8 @@ public record IntelligenceAnalysisRequest(
         EvidenceAcquisitionPolicy evidencePolicy,
         MarketThesis thesis,
         String historicalEvidenceSelection,
-        TradeabilityEvidenceProfile tradeabilityEvidenceProfile
+        TradeabilityEvidenceProfile tradeabilityEvidenceProfile,
+        OpportunityInterpretationMetadata interpretationMetadata
 ) {
     public IntelligenceAnalysisRequest {
         evidencePolicy = evidencePolicy == null
@@ -29,107 +32,97 @@ public record IntelligenceAnalysisRequest(
             UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective,
             UUID accountId, UUID scanId, UUID scanMarketId, Instant evaluationCutoff,
             EvidenceAcquisitionPolicy evidencePolicy, MarketThesis thesis,
+            String historicalEvidenceSelection, TradeabilityEvidenceProfile tradeabilityEvidenceProfile) {
+        this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId, evaluationCutoff,
+                evidencePolicy, thesis, historicalEvidenceSelection, tradeabilityEvidenceProfile, null);
+    }
+
+    public IntelligenceAnalysisRequest(
+            UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective,
+            UUID accountId, UUID scanId, UUID scanMarketId, Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy, MarketThesis thesis,
             String historicalEvidenceSelection) {
         this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
                 evaluationCutoff, evidencePolicy, thesis, historicalEvidenceSelection,
-                TradeabilityEvidenceProfile.UNSUPPORTED);
+                TradeabilityEvidenceProfile.UNSUPPORTED, null);
     }
 
     public IntelligenceAnalysisRequest(
             UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective) {
         this(analysisId, marketId, mode, objective, null, null, null, null,
-                EvidenceAcquisitionPolicy.LIVE_CURRENT, null, null);
+                EvidenceAcquisitionPolicy.LIVE_CURRENT, null, null,
+                TradeabilityEvidenceProfile.UNSUPPORTED, null);
     }
 
     public IntelligenceAnalysisRequest(
-            UUID analysisId,
-            UUID marketId,
-            AnalysisExecutionMode mode,
-            String objective,
-            UUID accountId,
-            UUID scanId,
-            UUID scanMarketId
-    ) {
-        this(analysisId, marketId, mode, objective,
-                accountId, scanId, scanMarketId, null, EvidenceAcquisitionPolicy.LIVE_CURRENT, null, null);
+            UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective,
+            UUID accountId, UUID scanId, UUID scanMarketId) {
+        this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId, null,
+                EvidenceAcquisitionPolicy.LIVE_CURRENT, null, null,
+                TradeabilityEvidenceProfile.UNSUPPORTED, null);
     }
 
     public IntelligenceAnalysisRequest(
-            UUID analysisId,
-            UUID marketId,
-            AnalysisExecutionMode mode,
-            String objective,
-            UUID accountId,
-            UUID scanId,
-            UUID scanMarketId,
-            Instant evaluationCutoff
-    ) {
+            UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective,
+            UUID accountId, UUID scanId, UUID scanMarketId, Instant evaluationCutoff) {
         this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
-                evaluationCutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT, null, null);
+                evaluationCutoff, EvidenceAcquisitionPolicy.LIVE_CURRENT, null, null,
+                TradeabilityEvidenceProfile.UNSUPPORTED, null);
     }
 
     public IntelligenceAnalysisRequest(
-            UUID analysisId,
-            UUID marketId,
-            AnalysisExecutionMode mode,
-            String objective,
-            UUID accountId,
-            UUID scanId,
-            UUID scanMarketId,
-            Instant evaluationCutoff,
-            EvidenceAcquisitionPolicy evidencePolicy
-    ) {
+            UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective,
+            UUID accountId, UUID scanId, UUID scanMarketId, Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy) {
         this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
-                evaluationCutoff, evidencePolicy, null, null);
+                evaluationCutoff, evidencePolicy, null, null,
+                TradeabilityEvidenceProfile.UNSUPPORTED, null);
+    }
+
+    public IntelligenceAnalysisRequest(
+            UUID analysisId, UUID marketId, AnalysisExecutionMode mode, String objective,
+            UUID accountId, UUID scanId, UUID scanMarketId, Instant evaluationCutoff,
+            EvidenceAcquisitionPolicy evidencePolicy, MarketThesis thesis) {
+        this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
+                evaluationCutoff, evidencePolicy, thesis, null,
+                TradeabilityEvidenceProfile.UNSUPPORTED, null);
     }
 
     public IntelligenceAnalysisRequest withEvaluationCutoff(Instant cutoff) {
-        return new IntelligenceAnalysisRequest(
-                analysisId(), marketId(), mode(), objective(), accountId(), scanId(),
-                scanMarketId(), cutoff, evidencePolicy(), thesis(), historicalEvidenceSelection(),
-                tradeabilityEvidenceProfile());
+        return copy(cutoff, evidencePolicy(), thesis(), historicalEvidenceSelection(),
+                tradeabilityEvidenceProfile(), interpretationMetadata());
     }
 
     public IntelligenceAnalysisRequest withEvidencePolicy(EvidenceAcquisitionPolicy policy) {
-        return new IntelligenceAnalysisRequest(
-                analysisId(), marketId(), mode(), objective(), accountId(), scanId(),
-                scanMarketId(), evaluationCutoff(), policy, thesis(), historicalEvidenceSelection(),
-                tradeabilityEvidenceProfile());
+        return copy(evaluationCutoff(), policy, thesis(), historicalEvidenceSelection(),
+                tradeabilityEvidenceProfile(), interpretationMetadata());
     }
 
     public IntelligenceAnalysisRequest withThesis(MarketThesis value) {
-        return new IntelligenceAnalysisRequest(
-                analysisId(), marketId(), mode(), objective(), accountId(), scanId(), scanMarketId(),
-                evaluationCutoff(), evidencePolicy(), value, historicalEvidenceSelection(),
-                tradeabilityEvidenceProfile());
-    }
-
-    public IntelligenceAnalysisRequest(
-            UUID analysisId,
-            UUID marketId,
-            AnalysisExecutionMode mode,
-            String objective,
-            UUID accountId,
-            UUID scanId,
-            UUID scanMarketId,
-            Instant evaluationCutoff,
-            EvidenceAcquisitionPolicy evidencePolicy,
-            MarketThesis thesis
-    ) {
-        this(analysisId, marketId, mode, objective, accountId, scanId, scanMarketId,
-                evaluationCutoff, evidencePolicy, thesis, null);
+        return copy(evaluationCutoff(), evidencePolicy(), value, historicalEvidenceSelection(),
+                tradeabilityEvidenceProfile(), interpretationMetadata());
     }
 
     public IntelligenceAnalysisRequest withHistoricalEvidenceSelection(String selection) {
-        return new IntelligenceAnalysisRequest(
-                analysisId(), marketId(), mode(), objective(), accountId(), scanId(), scanMarketId(),
-                evaluationCutoff(), evidencePolicy(), thesis(), selection, tradeabilityEvidenceProfile());
+        return copy(evaluationCutoff(), evidencePolicy(), thesis(), selection,
+                tradeabilityEvidenceProfile(), interpretationMetadata());
     }
 
-    public IntelligenceAnalysisRequest withTradeabilityEvidenceProfile(
-            TradeabilityEvidenceProfile profile) {
-        return new IntelligenceAnalysisRequest(
-                analysisId(), marketId(), mode(), objective(), accountId(), scanId(), scanMarketId(),
-                evaluationCutoff(), evidencePolicy(), thesis(), historicalEvidenceSelection(), profile);
+    public IntelligenceAnalysisRequest withTradeabilityEvidenceProfile(TradeabilityEvidenceProfile profile) {
+        return copy(evaluationCutoff(), evidencePolicy(), thesis(), historicalEvidenceSelection(),
+                profile, interpretationMetadata());
+    }
+
+    public IntelligenceAnalysisRequest withInterpretationMetadata(OpportunityInterpretationMetadata metadata) {
+        return copy(evaluationCutoff(), evidencePolicy(), thesis(), historicalEvidenceSelection(),
+                tradeabilityEvidenceProfile(), metadata);
+    }
+
+    private IntelligenceAnalysisRequest copy(
+            Instant cutoff, EvidenceAcquisitionPolicy policy, MarketThesis value,
+            String selection, TradeabilityEvidenceProfile profile,
+            OpportunityInterpretationMetadata metadata) {
+        return new IntelligenceAnalysisRequest(analysisId(), marketId(), mode(), objective(), accountId(), scanId(),
+                scanMarketId(), cutoff, policy, value, selection, profile, metadata);
     }
 }
